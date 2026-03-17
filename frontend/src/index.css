@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #E8E9FC;
+  --color-primary-100: #D0D2F9;
+  --color-primary-200: #A1A5F3;
+  --color-primary-300: #8388EE;
+  --color-primary-400: #7279E8;
+  --color-primary-500: #606BDF;
+  --color-primary-600: #4A54C8;
+  --color-primary-700: #3944B8;
+  --color-primary-800: #2830A0;
+  --color-primary-900: #000668;
+
+  --color-secondary-50: #F5F6FA;
+  --color-secondary-100: #ECEDF5;
+  --color-secondary-200: #D5D7E8;
+  --color-secondary-300: #B0B3CC;
+  --color-secondary-400: #8A8EB0;
+  --color-secondary-500: #5B6178;
+  --color-secondary-600: #474D64;
+  --color-secondary-700: #343A50;
+  --color-secondary-800: #21273C;
+  --color-secondary-900: #131828;
+
+  --color-success-50: #E6F7ED;
+  --color-success-100: #C0EBCF;
+  --color-success-500: #2CA87F;
+  --color-success-700: #1B7A56;
+
+  --color-warning-50: #FFF8E6;
+  --color-warning-100: #FFEDB3;
+  --color-warning-500: #E58A00;
+  --color-warning-700: #B36B00;
+
+  --color-danger-50: #FDECEC;
+  --color-danger-100: #F9CCCC;
+  --color-danger-500: #DB4437;
+  --color-danger-700: #B02A1E;
+
+  --color-surface: #F6F8FC;
+  --color-card: #FFFFFF;
+  --color-sidebar: #FFFFFF;
+  --color-sidebar-active: #F0F1FE;
+  --color-border: #E8EBF0;
+  --color-text: #1D2630;
+  --color-text-secondary: #5B6B79;
+  --color-text-muted: #8C9BAB;
+
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --radius-card: 12px;
+  --radius-btn: 8px;
+  --radius-input: 8px;
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 4px 12px 0 rgba(0, 0, 0, 0.06);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme="dark"] {
+  --color-surface: #0f1117;
+  --color-card: #1a1d27;
+  --color-sidebar: #141620;
+  --color-sidebar-active: #252840;
+  --color-border: #2a2d3a;
+  --color-text: #e4e6eb;
+  --color-text-secondary: #9ca3b0;
+  --color-text-muted: #6b7280;
+  --color-secondary-50: #1e2130;
+  --color-secondary-100: #252840;
+}

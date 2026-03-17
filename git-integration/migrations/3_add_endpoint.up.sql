@@ -1,0 +1,1 @@
+ALTER TABLE git_connections ADD COLUMN IF NOT EXISTS endpoint TEXT NOT NULL DEFAULT '';

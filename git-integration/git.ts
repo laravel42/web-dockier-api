@@ -1,0 +1,1092 @@
+import { api, APIError } from "encore.dev/api";
+import { SQLDatabase } from "encore.dev/storage/sqldb";
+import { v4 as uuidv4 } from "uuid";
+import { getAuthData } from "~encore/auth";
+
+const db = new SQLDatabase("gitintegration", { migrations: "./migrations" });
+
+// ─── Interfaces ───
+
+interface GitRepo {
+  name: string;
+  fullName: string;
+  url: string;
+  defaultBranch: string;
+  private: boolean;
+}
+
+interface GitConnectionResponse {
+  id: string;
+  userId: string;
+  provider: string;
+  label: string;
+  repoUrl: string;
+  endpoint: string;
+  createdAt: string;
+}
+
+// ─── Store Personal Token ───
+
+export const addConnection = api(
+  { method: "POST", path: "/git/connections", auth: true },
+  async (params: {
+    provider: "github" | "gitlab" | "gitlab_self_hosted" | "bitbucket";
+    personalToken: string;
+    label: string;
+    repoUrl: string;
+    endpoint: string;
+  }): Promise<GitConnectionResponse> => {
+    const authData = getAuthData()!;
+    const id = uuidv4();
+
+    const existing = await db.queryRow<{ id: string }>`
+      SELECT id FROM git_connections WHERE user_id = ${authData.userID} AND provider = ${params.provider} AND label = ${params.label}`;
+    if (existing) throw APIError.alreadyExists(`A ${params.provider} connection with label "${params.label}" already exists`);
+
+    await db.exec`
+      INSERT INTO git_connections (id, user_id, provider, personal_token, label, repo_url, endpoint, created_at)
+      VALUES (${id}, ${authData.userID}, ${params.provider}, ${params.personalToken}, ${params.label}, ${params.repoUrl}, ${params.endpoint || ""}, NOW())`;
+
+    return {
+      id, userId: authData.userID, provider: params.provider,
+      label: params.label, repoUrl: params.repoUrl, endpoint: params.endpoint || "", createdAt: new Date().toISOString(),
+    };
+  }
+);
+
+// ─── List Connections ───
+
+export const listConnections = api(
+  { method: "GET", path: "/git/connections", auth: true },
+  async (): Promise<{ connections: GitConnectionResponse[] }> => {
+    const authData = getAuthData()!;
+    const rows = db.query<{
+      id: string; user_id: string; provider: string; label: string; repo_url: string; endpoint: string; created_at: Date;
+    }>`SELECT id, user_id, provider, label, repo_url, endpoint, created_at
+       FROM git_connections WHERE user_id = ${authData.userID} ORDER BY created_at DESC`;
+
+    const connections: GitConnectionResponse[] = [];
+    for await (const row of rows) {
+      connections.push({
+        id: row.id, userId: row.user_id, provider: row.provider,
+        label: row.label, repoUrl: row.repo_url, endpoint: row.endpoint, createdAt: row.created_at.toISOString(),
+      });
+    }
+    return { connections };
+  }
+);
+
+// ─── Delete Connection ───
+
+export const deleteConnection = api(
+  { method: "DELETE", path: "/git/connections/:connectionId", auth: true },
+  async (params: { connectionId: string }): Promise<{ success: boolean }> => {
+    await db.exec`DELETE FROM git_connections WHERE id = ${params.connectionId}`;
+    return { success: true };
+  }
+);
+
+export const updateConnection = api(
+  { method: "PUT", path: "/git/connections/:connectionId", auth: true },
+  async (params: { connectionId: string; label: string }): Promise<GitConnectionResponse> => {
+    const row = await db.queryRow<{
+      id: string; user_id: string; provider: string; label: string; repo_url: string; endpoint: string; created_at: Date;
+    }>`SELECT id, user_id, provider, label, repo_url, endpoint, created_at FROM git_connections WHERE id = ${params.connectionId}`;
+    if (!row) throw APIError.notFound("Connection not found");
+
+    await db.exec`UPDATE git_connections SET label = ${params.label} WHERE id = ${params.connectionId}`;
+
+    return {
+      id: row.id, userId: row.user_id, provider: row.provider,
+      label: params.label, repoUrl: row.repo_url, endpoint: row.endpoint, createdAt: row.created_at.toISOString(),
+    };
+  }
+);
+
+// ─── Helper: map provider HTTP errors to proper APIError ───
+
+function throwProviderError(provider: string, status: number, statusText: string): never {
+  const msg = `${provider} API error: ${status} ${statusText}`;
+  if (status === 401) throw APIError.unauthenticated(`${provider} token is invalid or expired. Please update your connection.`);
+  if (status === 403) throw APIError.permissionDenied(`${provider} token lacks required permissions. ${statusText}`);
+  if (status === 404) throw APIError.notFound(`${provider} resource not found. ${statusText}`);
+  throw APIError.internal(msg);
+}
+
+// ─── List Repos from Provider ───
+
+export const listRepos = api(
+  { method: "GET", path: "/git/connections/:connectionId/repos", auth: true },
+  async (params: { connectionId: string }): Promise<{ repos: GitRepo[] }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const repos: GitRepo[] = [];
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const res = await fetch(`${baseUrl}/user/repos?per_page=100&sort=updated`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+      });
+      if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
+      for (const r of data) {
+        repos.push({ name: r.name, fullName: r.full_name, url: r.html_url, defaultBranch: r.default_branch, private: r.private });
+      }
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const res = await fetch(`${baseUrl}/api/v4/projects?membership=true&per_page=100&order_by=updated_at`, {
+        headers: { "PRIVATE-TOKEN": conn.personal_token },
+      });
+      if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
+      for (const r of data) {
+        repos.push({ name: r.name, fullName: r.path_with_namespace, url: r.web_url, defaultBranch: r.default_branch || "main", private: r.visibility === "private" });
+      }
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const res = await fetch(`${baseUrl}/2.0/repositories?role=member&pagelen=100`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}` },
+      });
+      if (!res.ok) throwProviderError("Bitbucket", res.status, res.statusText);
+      const data = (await res.json()) as { values?: Array<any> };
+      for (const r of data.values || []) {
+        repos.push({ name: r.name, fullName: r.full_name, url: r.links.html.href, defaultBranch: r.mainbranch?.name || "main", private: r.is_private });
+      }
+    }
+
+    return { repos };
+  }
+);
+
+// ─── Get Branches ───
+
+export const listBranches = api(
+  { method: "GET", path: "/git/connections/:connectionId/repo-branches", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string }): Promise<{ branches: string[] }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const branches: string[] = [];
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/branches`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}` },
+      });
+      if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
+      for (const b of data) branches.push(b.name);
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+      const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches`, {
+        headers: { "PRIVATE-TOKEN": conn.personal_token },
+      });
+      if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
+      for (const b of data) branches.push(b.name);
+    }
+
+    return { branches };
+  }
+);
+
+// ─── Helper: parse owner/repo from URL ───
+
+function parseRepoUrl(url: string): { baseUrl: string; owner: string; repo: string } | null {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/");
+    if (parts.length < 2) return null;
+    return { baseUrl: `${u.protocol}//${u.host}`, owner: parts[0], repo: parts[1] };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Get Branches for a connection (auto from stored repo_url) ───
+
+export const getConnectionBranches = api(
+  { method: "GET", path: "/git/connections/:connectionId/branches", auth: true },
+  async (params: { connectionId: string }): Promise<{ branches: string[] }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; repo_url: string; endpoint: string;
+    }>`SELECT provider, personal_token, repo_url, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+    if (!conn.repo_url) throw APIError.failedPrecondition("No repo URL configured");
+
+    const parsed = parseRepoUrl(conn.repo_url);
+    if (!parsed) throw APIError.invalidArgument("Could not parse owner/repo from URL");
+
+    const branches: string[] = [];
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const res = await fetch(`${baseUrl}/repos/${parsed.owner}/${parsed.repo}/branches?per_page=100`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+      });
+      if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
+      for (const b of data) branches.push(b.name);
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const gitlabBase = conn.endpoint || (conn.provider === "gitlab_self_hosted" ? parsed.baseUrl : "https://gitlab.com");
+      const projectPath = encodeURIComponent(`${parsed.owner}/${parsed.repo}`);
+      const res = await fetch(`${gitlabBase}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, {
+        headers: { "PRIVATE-TOKEN": conn.personal_token },
+      });
+      if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
+      const data = await res.json();
+      if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
+      for (const b of data) branches.push(b.name);
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const res = await fetch(`${baseUrl}/2.0/repositories/${parsed.owner}/${parsed.repo}/refs/branches?pagelen=100`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}` },
+      });
+      if (!res.ok) throwProviderError("Bitbucket", res.status, res.statusText);
+      const data = (await res.json()) as { values?: Array<{ name: string }> };
+      for (const b of data.values || []) branches.push(b.name);
+    }
+
+    return { branches };
+  }
+);
+
+// ─── Repo Stats / KPIs ───
+
+interface RepoStats {
+  stars: number;
+  forks: number;
+  openIssues: number;
+  watchers: number;
+  language: string;
+  languages: Record<string, number>;
+  lastCommitDate: string;
+  lastCommitMessage: string;
+  lastCommitAuthor: string;
+  totalCommits: number;
+}
+
+export const getRepoStats = api(
+  { method: "GET", path: "/git/connections/:connectionId/repo-stats", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<RepoStats> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const branch = params.branch || "main";
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
+
+      // Fetch repo info
+      const repoRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}`, { headers });
+      if (!repoRes.ok) throwProviderError("GitHub", repoRes.status, repoRes.statusText);
+      const repoData = await repoRes.json() as any;
+
+      // Fetch latest commit on branch
+      const commitsRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=1`, { headers });
+      let lastCommitDate = "";
+      let lastCommitMessage = "";
+      let lastCommitAuthor = "";
+      let totalCommits = 0;
+      if (commitsRes.ok) {
+        const commits = await commitsRes.json() as any[];
+        if (Array.isArray(commits) && commits.length > 0) {
+          lastCommitDate = commits[0].commit?.committer?.date || commits[0].commit?.author?.date || "";
+          lastCommitMessage = commits[0].commit?.message?.split("\n")[0] || "";
+          lastCommitAuthor = commits[0].commit?.author?.name || commits[0].author?.login || "";
+        }
+        // Parse total from Link header (GitHub pagination)
+        const link = commitsRes.headers.get("link") || "";
+        const match = link.match(/page=(\d+)>; rel="last"/);
+        if (match) {
+          totalCommits = parseInt(match[1], 10);
+        } else {
+          // Fallback: use contributors endpoint to estimate commit count
+          try {
+            const contribRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contributors?per_page=1&anon=true`, { headers });
+            if (contribRes.ok) {
+              const contribLink = contribRes.headers.get("link") || "";
+              const contribMatch = contribLink.match(/page=(\d+)>; rel="last"/);
+              if (contribMatch) {
+                // Sum commits from all contributors is complex; use repo stats API instead
+              }
+            }
+          } catch {}
+          // Use the commit count from the repo's default branch participation stats
+          try {
+            const participationRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/stats/participation`, { headers });
+            if (participationRes.ok) {
+              const participation = await participationRes.json() as any;
+              if (Array.isArray(participation.all)) {
+                totalCommits = participation.all.reduce((sum: number, n: number) => sum + n, 0);
+              }
+            }
+          } catch {}
+        }
+      }
+
+      // Fetch languages breakdown
+      let language = repoData.language || "";
+      let languages: Record<string, number> = {};
+      try {
+        const langRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/languages`, { headers });
+        if (langRes.ok) {
+          const langData = await langRes.json() as Record<string, number>;
+          if (langData && typeof langData === "object") {
+            const total = Object.values(langData).reduce((s, v) => s + v, 0);
+            if (total > 0) {
+              languages = Object.fromEntries(
+                Object.entries(langData).map(([k, v]) => [k, Math.round((v / total) * 100)])
+              );
+            }
+            if (!language && Object.keys(langData).length > 0) {
+              language = Object.keys(langData)[0];
+            }
+          }
+        }
+      } catch {}
+
+      return {
+        stars: repoData.stargazers_count ?? 0,
+        forks: repoData.forks_count ?? 0,
+        openIssues: repoData.open_issues_count ?? 0,
+        watchers: repoData.subscribers_count ?? 0,
+        language,
+        languages,
+        lastCommitDate,
+        lastCommitMessage,
+        lastCommitAuthor,
+        totalCommits,
+      };
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token };
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+
+      const repoRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}?statistics=true`, { headers });
+      if (!repoRes.ok) throwProviderError("GitLab", repoRes.status, repoRes.statusText);
+      const repoData = await repoRes.json() as any;
+
+      // Fetch latest commit
+      const commitsRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=1`, { headers });
+      let lastCommitDate = "";
+      let lastCommitMessage = "";
+      let lastCommitAuthor = "";
+      let totalCommits = 0;
+      if (commitsRes.ok) {
+        const commits = await commitsRes.json() as any[];
+        if (Array.isArray(commits) && commits.length > 0) {
+          lastCommitDate = commits[0].committed_date || commits[0].created_at || "";
+          lastCommitMessage = commits[0].title || commits[0].message?.split("\n")[0] || "";
+          lastCommitAuthor = commits[0].author_name || "";
+        }
+        const total = commitsRes.headers.get("x-total");
+        totalCommits = total ? parseInt(total, 10) : 0;
+      }
+
+      // GitLab statistics.commit_count is more reliable when available
+      if (repoData.statistics?.commit_count) {
+        totalCommits = repoData.statistics.commit_count;
+      }
+
+      // Fetch languages breakdown
+      let language = repoData.predominant_language || "";
+      let languages: Record<string, number> = {};
+      try {
+        const langRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/languages`, { headers });
+        if (langRes.ok) {
+          const langData = await langRes.json() as Record<string, number>;
+          if (langData && typeof langData === "object") {
+            // GitLab returns percentages directly (e.g. { "TypeScript": 85.5, "CSS": 14.5 })
+            languages = Object.fromEntries(
+              Object.entries(langData).map(([k, v]) => [k, Math.round(v)])
+            );
+            if (!language && Object.keys(langData).length > 0) {
+              language = Object.keys(langData)[0];
+            }
+          }
+        }
+      } catch {}
+
+      return {
+        stars: repoData.star_count ?? 0,
+        forks: repoData.forks_count ?? 0,
+        openIssues: repoData.open_issues_count ?? 0,
+        watchers: repoData.star_count ?? 0,
+        language,
+        languages,
+        lastCommitDate,
+        lastCommitMessage,
+        lastCommitAuthor,
+        totalCommits,
+      };
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const headers = { Authorization: `Bearer ${conn.personal_token}` };
+
+      // Fetch repo info
+      const repoRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}`, { headers });
+      if (!repoRes.ok) throwProviderError("Bitbucket", repoRes.status, repoRes.statusText);
+      const repoData = await repoRes.json() as any;
+
+      // Fetch latest commit on branch
+      const commitsRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/commits/${encodeURIComponent(branch)}?pagelen=1`, { headers });
+      let lastCommitDate = "";
+      let lastCommitMessage = "";
+      let lastCommitAuthor = "";
+      let totalCommits = 0;
+      if (commitsRes.ok) {
+        const commitsData = await commitsRes.json() as any;
+        if (Array.isArray(commitsData.values) && commitsData.values.length > 0) {
+          lastCommitDate = commitsData.values[0].date || "";
+          lastCommitMessage = commitsData.values[0].message?.split("\n")[0] || "";
+          lastCommitAuthor = commitsData.values[0].author?.user?.display_name || commitsData.values[0].author?.raw?.split("<")[0]?.trim() || "";
+        }
+        // Bitbucket doesn't provide total count easily; use size if available
+        totalCommits = commitsData.size || 0;
+      }
+
+      // Fetch watchers count
+      let watchers = 0;
+      try {
+        const watchersRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/watchers?pagelen=0`, { headers });
+        if (watchersRes.ok) {
+          const watchersData = await watchersRes.json() as any;
+          watchers = watchersData.size || 0;
+        }
+      } catch {}
+
+      return {
+        stars: 0, // Bitbucket doesn't have stars
+        forks: 0, // Would need separate API call to /forks
+        openIssues: repoData.has_issues ? 0 : 0, // Bitbucket issues need separate query
+        watchers,
+        language: repoData.language || "",
+        languages: repoData.language ? { [repoData.language]: 100 } : {},
+        lastCommitDate,
+        lastCommitMessage,
+        lastCommitAuthor,
+        totalCommits,
+      };
+    }
+
+    throw APIError.unimplemented("Stats not supported for this provider");
+  }
+);
+
+// ─── Repo Analysis & Deployment Suggestions ───
+
+interface TechStackItem {
+  name: string;
+  category: "language" | "framework" | "runtime" | "database" | "tool" | "infra";
+  confidence: number; // 0-100
+}
+
+interface DeployOption {
+  provider: string;
+  type: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  estimatedMonthlyCost: string;
+  bestFor: string;
+}
+
+interface RepoAnalysis {
+  techStack: TechStackItem[];
+  deployOptions: DeployOption[];
+  repoSize: number;
+  primaryLanguage: string;
+  hasDocker: boolean;
+  hasCi: boolean;
+}
+
+// File-pattern → tech stack detection rules
+const TECH_DETECTORS: Array<{ pattern: RegExp; tech: Omit<TechStackItem, "confidence"> & { confidence?: number } }> = [
+  // Languages
+  { pattern: /package\.json$/i, tech: { name: "Node.js", category: "runtime" } },
+  { pattern: /tsconfig\.json$/i, tech: { name: "TypeScript", category: "language" } },
+  { pattern: /requirements\.txt$/i, tech: { name: "Python", category: "language" } },
+  { pattern: /Pipfile$/i, tech: { name: "Python", category: "language" } },
+  { pattern: /pyproject\.toml$/i, tech: { name: "Python", category: "language" } },
+  { pattern: /go\.mod$/i, tech: { name: "Go", category: "language" } },
+  { pattern: /Cargo\.toml$/i, tech: { name: "Rust", category: "language" } },
+  { pattern: /Gemfile$/i, tech: { name: "Ruby", category: "language" } },
+  { pattern: /pom\.xml$/i, tech: { name: "Java", category: "language" } },
+  { pattern: /build\.gradle/i, tech: { name: "Java", category: "language" } },
+  { pattern: /\.csproj$/i, tech: { name: "C#/.NET", category: "language" } },
+  { pattern: /composer\.json$/i, tech: { name: "PHP", category: "language" } },
+  { pattern: /\.php$/i, tech: { name: "PHP", category: "language", confidence: 80 } },
+  { pattern: /mix\.exs$/i, tech: { name: "Elixir", category: "language" } },
+  // PHP Frameworks
+  { pattern: /artisan$/i, tech: { name: "Laravel", category: "framework" } },
+  { pattern: /app\/Http\/Kernel\.php$/i, tech: { name: "Laravel", category: "framework" } },
+  { pattern: /routes\/web\.php$/i, tech: { name: "Laravel", category: "framework", confidence: 95 } },
+  { pattern: /config\/app\.php$/i, tech: { name: "Laravel", category: "framework", confidence: 85 } },
+  { pattern: /config\/twill\.php$/i, tech: { name: "Twill CMS", category: "framework" } },
+  { pattern: /config\/twill-navigation\.php$/i, tech: { name: "Twill CMS", category: "framework" } },
+  { pattern: /app\/Twill\//i, tech: { name: "Twill CMS", category: "framework", confidence: 95 } },
+  { pattern: /symfony\.lock$/i, tech: { name: "Symfony", category: "framework" } },
+  { pattern: /config\/bundles\.php$/i, tech: { name: "Symfony", category: "framework", confidence: 85 } },
+  { pattern: /wp-config\.php$/i, tech: { name: "WordPress", category: "framework" } },
+  { pattern: /wp-content\//i, tech: { name: "WordPress", category: "framework", confidence: 90 } },
+  { pattern: /craft\/config\//i, tech: { name: "Craft CMS", category: "framework" } },
+  { pattern: /config\/statamic\//i, tech: { name: "Statamic", category: "framework" } },
+  { pattern: /config\/filament\.php$/i, tech: { name: "Filament", category: "framework" } },
+  { pattern: /config\/livewire\.php$/i, tech: { name: "Livewire", category: "framework" } },
+  { pattern: /resources\/views\/livewire\//i, tech: { name: "Livewire", category: "framework", confidence: 90 } },
+  { pattern: /config\/inertia\.php$/i, tech: { name: "Inertia.js", category: "framework" } },
+  // JS/TS Frameworks
+  { pattern: /next\.config\./i, tech: { name: "Next.js", category: "framework" } },
+  { pattern: /nuxt\.config\./i, tech: { name: "Nuxt", category: "framework" } },
+  { pattern: /vite\.config\./i, tech: { name: "Vite", category: "tool" } },
+  { pattern: /angular\.json$/i, tech: { name: "Angular", category: "framework" } },
+  { pattern: /svelte\.config\./i, tech: { name: "SvelteKit", category: "framework" } },
+  { pattern: /remix\.config\./i, tech: { name: "Remix", category: "framework" } },
+  { pattern: /astro\.config\./i, tech: { name: "Astro", category: "framework" } },
+  // Python Frameworks
+  { pattern: /manage\.py$/i, tech: { name: "Django", category: "framework" } },
+  { pattern: /app\.py$/i, tech: { name: "Flask", category: "framework", confidence: 60 } },
+  { pattern: /fastapi/i, tech: { name: "FastAPI", category: "framework", confidence: 60 } },
+  // Ruby
+  { pattern: /config\/routes\.rb$/i, tech: { name: "Rails", category: "framework" } },
+  // Encore
+  { pattern: /encore\.app$/i, tech: { name: "Encore.ts", category: "framework" } },
+  // Databases
+  { pattern: /prisma\/schema\.prisma$/i, tech: { name: "Prisma (PostgreSQL)", category: "database" } },
+  { pattern: /drizzle\.config\./i, tech: { name: "Drizzle ORM", category: "database" } },
+  { pattern: /\.sql$/i, tech: { name: "SQL Database", category: "database", confidence: 60 } },
+  { pattern: /mongod/i, tech: { name: "MongoDB", category: "database", confidence: 50 } },
+  { pattern: /redis/i, tech: { name: "Redis", category: "database", confidence: 50 } },
+  // Infra / Tools
+  { pattern: /Dockerfile$/i, tech: { name: "Docker", category: "infra" } },
+  { pattern: /docker-compose/i, tech: { name: "Docker Compose", category: "infra" } },
+  { pattern: /\.github\/workflows\//i, tech: { name: "GitHub Actions", category: "tool" } },
+  { pattern: /\.gitlab-ci\.yml$/i, tech: { name: "GitLab CI", category: "tool" } },
+  { pattern: /Jenkinsfile$/i, tech: { name: "Jenkins", category: "tool" } },
+  { pattern: /terraform\//i, tech: { name: "Terraform", category: "infra" } },
+  { pattern: /serverless\.yml$/i, tech: { name: "Serverless Framework", category: "infra" } },
+  { pattern: /vercel\.json$/i, tech: { name: "Vercel", category: "infra" } },
+  { pattern: /netlify\.toml$/i, tech: { name: "Netlify", category: "infra" } },
+  { pattern: /fly\.toml$/i, tech: { name: "Fly.io", category: "infra" } },
+  { pattern: /render\.yaml$/i, tech: { name: "Render", category: "infra" } },
+  { pattern: /kubernetes|k8s/i, tech: { name: "Kubernetes", category: "infra" } },
+  // PHP tools
+  { pattern: /phpunit\.xml/i, tech: { name: "PHPUnit", category: "tool", confidence: 70 } },
+  { pattern: /phpstan\.neon/i, tech: { name: "PHPStan", category: "tool", confidence: 70 } },
+  { pattern: /\.env\.example$/i, tech: { name: "Env Config", category: "tool", confidence: 40 } },
+  { pattern: /nginx\.conf/i, tech: { name: "Nginx", category: "infra", confidence: 70 } },
+  { pattern: /\.htaccess$/i, tech: { name: "Apache", category: "infra", confidence: 70 } },
+];
+
+function detectTechStack(files: string[]): TechStackItem[] {
+  const found = new Map<string, TechStackItem>();
+  for (const file of files) {
+    for (const detector of TECH_DETECTORS) {
+      if (detector.pattern.test(file) && !found.has(detector.tech.name)) {
+        found.set(detector.tech.name, {
+          name: detector.tech.name,
+          category: detector.tech.category,
+          confidence: detector.tech.confidence ?? 90,
+        });
+      }
+    }
+  }
+
+  // ── Context-aware adjustments ──
+  // When a server-side language (PHP, Python, Ruby, Go, Java, etc.) is the primary backend,
+  // Node.js from package.json is likely just for frontend asset tooling (npm/Vite/Webpack).
+  // Downgrade Node.js to a tool with lower confidence so deploy options target the real runtime.
+  const serverLangs = ["PHP", "Python", "Go", "Ruby", "Java", "Rust", "C#/.NET", "Elixir"];
+  const hasServerLang = serverLangs.some(l => found.has(l));
+  if (hasServerLang && found.has("Node.js")) {
+    // Check if there's an actual Node.js backend (e.g. server.js, index.ts at root)
+    const hasNodeBackend = files.some(f =>
+      /^(server|index|app)\.(js|ts|mjs)$/i.test(f) ||
+      /^src\/(server|index|app)\.(js|ts|mjs)$/i.test(f)
+    );
+    if (!hasNodeBackend) {
+      found.set("Node.js", { name: "Node.js", category: "tool", confidence: 40 });
+    }
+  }
+
+  // Vite in a PHP project is an asset bundler, not a framework
+  const phpFrameworks = ["Laravel", "Symfony", "WordPress", "Craft CMS", "Statamic"];
+  const hasPHPFramework = phpFrameworks.some(f => found.has(f));
+  if (hasPHPFramework && found.has("Vite")) {
+    found.set("Vite", { name: "Vite", category: "tool", confidence: 50 });
+  }
+
+  return Array.from(found.values()).sort((a, b) => b.confidence - a.confidence);
+}
+
+function suggestDeployOptions(tech: TechStackItem[], hasDocker: boolean, repoSize: number): DeployOption[] {
+  const options: DeployOption[] = [];
+  const names = new Set(tech.map(t => t.name));
+  const techMap = new Map(tech.map(t => [t.name, t]));
+
+  // Node.js counts as a real runtime only if it's not downgraded to a tool
+  const nodeIsRuntime = techMap.get("Node.js")?.category === "runtime";
+  const hasNode = names.has("Node.js") && nodeIsRuntime;
+  const hasPHP = names.has("PHP");
+  const hasLaravel = names.has("Laravel");
+  const hasWordPress = names.has("WordPress");
+  const hasSymfony = names.has("Symfony");
+  const hasPHPFramework = hasLaravel || hasWordPress || hasSymfony || names.has("Craft CMS") || names.has("Statamic") || names.has("Twill CMS");
+  const isStatic = !hasNode && !hasPHP && !names.has("Python") && !names.has("Go") && !names.has("Ruby") && !names.has("Java") && !names.has("Rust") && !names.has("C#/.NET") && !names.has("Elixir");
+  const hasNextjs = names.has("Next.js");
+  const hasPython = names.has("Python") || names.has("Django") || names.has("FastAPI") || names.has("Flask");
+  const hasEncore = names.has("Encore.ts");
+  const hasK8s = names.has("Kubernetes");
+  const hasBackend = hasNode || hasPython || hasPHP || names.has("Go") || names.has("Rust") || names.has("Java") || names.has("Ruby") || names.has("C#/.NET") || names.has("Elixir");
+
+  // ─── AWS ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "AWS",
+      type: "Elastic Beanstalk",
+      description: "Managed platform that auto-handles capacity provisioning, load balancing, and deployment for Docker or native runtimes.",
+      pros: ["Supports Docker, Node.js, Python, Java, Go, .NET, Ruby, PHP", "Auto-scaling & load balancing included", "Integrated with RDS, ElastiCache, S3", "No extra charge (pay for underlying EC2/RDS)"],
+      cons: ["Complex AWS console & IAM setup", "Slower deployments than PaaS alternatives", "Debugging requires CloudWatch knowledge", "Opinionated environment configuration"],
+      estimatedMonthlyCost: "$10 – $50/mo (single instance) | $50 – $200+/mo (load balanced)",
+      bestFor: "Teams already on AWS, production workloads needing auto-scaling",
+    });
+    options.push({
+      provider: "AWS",
+      type: "ECS Fargate (Container)",
+      description: "Serverless container orchestration — run Docker containers without managing servers.",
+      pros: ["No server management (serverless containers)", "Fine-grained CPU/memory allocation", "Integrates with ALB, RDS, ECR, CloudWatch", "Scales to zero with Fargate Spot"],
+      cons: ["Complex networking (VPC, subnets, security groups)", "Higher cost than EC2 for steady workloads", "Steep learning curve", "Cold starts on scale-from-zero"],
+      estimatedMonthlyCost: "$15 – $70/mo (small) | $100 – $500+/mo (production)",
+      bestFor: "Containerized microservices, variable traffic workloads",
+    });
+    options.push({
+      provider: "AWS",
+      type: "App Runner (Container)",
+      description: "Simplified container hosting — deploy from source or container image with minimal config.",
+      pros: ["Simplest AWS container option", "Auto-scaling & HTTPS built-in", "Deploy from ECR or GitHub", "No VPC setup required"],
+      cons: ["Limited configuration options", "No GPU support", "Fewer integrations than ECS", "Higher per-request cost than Fargate"],
+      estimatedMonthlyCost: "$5 – $25/mo (small) | $50 – $200+/mo (production)",
+      bestFor: "Simple containerized APIs, teams wanting AWS without complexity",
+    });
+  }
+  if (isStatic || names.has("Vite") || names.has("Astro") || hasNextjs) {
+    options.push({
+      provider: "AWS",
+      type: "Amplify Hosting",
+      description: "Managed hosting for static sites and SSR frameworks with CI/CD from Git.",
+      pros: ["Git-based CI/CD", "SSR support for Next.js", "Global CDN (CloudFront)", "Free tier (1000 build minutes/mo)"],
+      cons: ["Limited build customization", "Slower builds than Vercel/Netlify", "AWS billing complexity", "Less community than Vercel"],
+      estimatedMonthlyCost: "Free tier | $5 – $20/mo (typical)",
+      bestFor: "Frontend apps on AWS, Next.js SSR on AWS",
+    });
+  }
+  if (hasK8s || (hasDocker && repoSize > 50000)) {
+    options.push({
+      provider: "AWS",
+      type: "EKS (Kubernetes)",
+      description: "Managed Kubernetes with deep AWS integration for large-scale container orchestration.",
+      pros: ["Full Kubernetes API compatibility", "Deep AWS service integration", "Fargate mode (serverless nodes)", "Enterprise-grade security & compliance"],
+      cons: ["$0.10/hr ($73/mo) control plane cost", "Complex setup & networking", "Requires Kubernetes expertise", "Expensive at small scale"],
+      estimatedMonthlyCost: "$73/mo (control plane) + $50 – $300+/mo (nodes)",
+      bestFor: "Enterprise Kubernetes, large-scale microservices",
+    });
+  }
+
+  // ─── DigitalOcean ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "DigitalOcean",
+      type: "App Platform (Container)",
+      description: "Managed PaaS that builds and runs containers from Git with auto-scaling and managed databases.",
+      pros: ["Deploy from GitHub/GitLab in clicks", "Built-in managed databases (Postgres, Redis, MySQL)", "Auto-scaling & zero-downtime deploys", "Predictable pricing"],
+      cons: ["Less flexible than raw droplets", "Limited regions (8)", "No GPU instances", "Smaller ecosystem than AWS"],
+      estimatedMonthlyCost: "$5 – $25/mo (basic) | $25 – $100+/mo (production)",
+      bestFor: "Full-stack apps, startups wanting simplicity",
+    });
+    options.push({
+      provider: "DigitalOcean",
+      type: "VPS (Droplet)",
+      description: "Flexible VPS with predictable pricing — run Docker, K8s, or bare metal.",
+      pros: ["Predictable pricing ($4/mo for 512MB)", "Full root access", "Managed databases available", "Good documentation & community"],
+      cons: ["Requires server management", "No auto-scaling on basic droplets", "Manual SSL/load balancer setup"],
+      estimatedMonthlyCost: "$4 – $12/mo (basic) | $24 – $96/mo (production)",
+      bestFor: "Budget-friendly Docker hosting, self-managed servers",
+    });
+  }
+  if (hasK8s || (hasDocker && repoSize > 50000)) {
+    options.push({
+      provider: "DigitalOcean",
+      type: "Managed Kubernetes (DOKS)",
+      description: "Managed K8s cluster with simple pricing and integrated container registry.",
+      pros: ["Free control plane", "Simple pricing ($12/mo per node)", "Integrated container registry", "1-click marketplace apps"],
+      cons: ["Smaller node options than AWS/GCP", "Less enterprise features", "Limited regions"],
+      estimatedMonthlyCost: "$12 – $48/mo (per node)",
+      bestFor: "Small-to-medium K8s workloads",
+    });
+  }
+
+  // ─── Hetzner ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "Hetzner",
+      type: "Cloud Server (VPS)",
+      description: "Best price-to-performance VPS in Europe — run Docker containers with full control.",
+      pros: ["Cheapest VPS (€3.29/mo for 2GB RAM)", "Excellent performance per dollar", "EU data centers (GDPR friendly)", "ARM64 options available"],
+      cons: ["No managed PaaS / app platform", "Requires server administration", "Limited US presence (only Ashburn)", "No managed container service"],
+      estimatedMonthlyCost: "€3.29 – €10/mo (VPS) | €40+/mo (dedicated)",
+      bestFor: "Cost-optimized European hosting, self-managed Docker",
+    });
+  }
+  if (hasK8s || (hasDocker && repoSize > 30000)) {
+    options.push({
+      provider: "Hetzner",
+      type: "Managed Kubernetes (K8s)",
+      description: "Affordable managed Kubernetes with Hetzner's price-performance advantage.",
+      pros: ["Cheapest managed K8s available", "Free control plane", "Hetzner Cloud integration", "EU data centers"],
+      cons: ["Smaller ecosystem", "Limited regions", "Less enterprise tooling", "Community-driven support"],
+      estimatedMonthlyCost: "€3.29+/mo (per node)",
+      bestFor: "Budget Kubernetes in Europe",
+    });
+  }
+
+  // ─── Vultr ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "Vultr",
+      type: "Cloud Compute / Container",
+      description: "High-performance cloud VPS with Kubernetes and container registry support.",
+      pros: ["Competitive pricing ($2.50/mo entry)", "32 global locations", "Managed Kubernetes available", "Bare metal & GPU options"],
+      cons: ["Smaller community than DO/AWS", "No managed PaaS", "Requires server management", "Support can be slow"],
+      estimatedMonthlyCost: "$2.50 – $12/mo (VPS) | $20+/mo (K8s)",
+      bestFor: "Global presence on a budget, GPU workloads",
+    });
+  }
+
+  // ─── Linode (Akamai) ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "Linode",
+      type: "Cloud Instance / LKE",
+      description: "Reliable cloud VPS with managed Kubernetes (LKE) and Akamai CDN integration.",
+      pros: ["Predictable pricing ($5/mo for 1GB)", "Free managed Kubernetes control plane", "Akamai CDN integration", "Good support reputation"],
+      cons: ["No managed PaaS", "Smaller marketplace than AWS/DO", "Requires server management", "Fewer managed database options"],
+      estimatedMonthlyCost: "$5 – $12/mo (VPS) | $12+/mo (LKE node)",
+      bestFor: "Reliable VPS hosting, Kubernetes with CDN",
+    });
+  }
+
+  // ─── UpCloud ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "UpCloud",
+      type: "Cloud Server",
+      description: "High-performance European cloud with MaxIOPS storage and managed databases.",
+      pros: ["MaxIOPS storage (fast I/O)", "EU & US data centers", "Managed databases (Postgres, MySQL, Redis)", "100% uptime SLA"],
+      cons: ["No managed container service", "Smaller community", "Requires server management", "Higher entry price than Hetzner"],
+      estimatedMonthlyCost: "$5 – $20/mo (VPS) | $30+/mo (production)",
+      bestFor: "I/O-intensive workloads, European hosting",
+    });
+  }
+
+  // ─── Hostinger ───
+  if (hasBackend || hasDocker || isStatic) {
+    options.push({
+      provider: "Hostinger",
+      type: "VPS / Cloud Hosting",
+      description: "Budget-friendly VPS and managed hosting with global data centers.",
+      pros: ["Very affordable ($3.99/mo VPS)", "Managed WordPress hosting", "Global data centers", "Easy control panel"],
+      cons: ["Limited advanced features", "No managed containers or K8s", "Shared hosting limitations", "Less developer-focused"],
+      estimatedMonthlyCost: "$3.99 – $12/mo (VPS) | $16+/mo (cloud)",
+      bestFor: "Budget hosting, WordPress, small projects",
+    });
+  }
+
+  // ─── Katapult ───
+  if (hasBackend || hasDocker) {
+    options.push({
+      provider: "Katapult",
+      type: "Cloud VM",
+      description: "Developer-focused cloud with API-first approach and fast VM provisioning.",
+      pros: ["Fast VM provisioning (<60s)", "API-first design", "Simple pricing", "UK & EU data centers"],
+      cons: ["Smaller provider", "Limited regions", "No managed K8s or PaaS", "Smaller community"],
+      estimatedMonthlyCost: "$5 – $20/mo (VM)",
+      bestFor: "API-driven infrastructure, UK/EU hosting",
+    });
+  }
+
+  // ─── Static / Edge (Vercel, Netlify, Cloudflare) ───
+  if (isStatic || names.has("Vite") || names.has("Astro")) {
+    options.push({
+      provider: "Vercel",
+      type: "Static / Edge",
+      description: "Optimized for frontend frameworks with edge CDN, instant rollbacks, and preview deployments.",
+      pros: ["Free tier generous (100GB bandwidth)", "Automatic HTTPS & CDN", "Preview deploys per PR", "Zero config for Vite/Next/Astro"],
+      cons: ["Serverless functions have cold starts", "Vendor lock-in on edge functions", "100GB bandwidth limit on free tier"],
+      estimatedMonthlyCost: "Free – $20/mo (Pro)",
+      bestFor: "Frontend apps, marketing sites, JAMstack",
+    });
+    options.push({
+      provider: "Netlify",
+      type: "Static / Edge",
+      description: "Similar to Vercel with built-in forms, identity, and serverless functions.",
+      pros: ["Free tier with 100GB bandwidth", "Built-in form handling", "Split testing built-in", "Plugin ecosystem"],
+      cons: ["Build minutes limited (300/mo free)", "Serverless functions limited to 10s execution", "Less optimized for SSR than Vercel"],
+      estimatedMonthlyCost: "Free – $19/mo (Pro)",
+      bestFor: "Static sites, blogs, marketing pages",
+    });
+    options.push({
+      provider: "Cloudflare Pages",
+      type: "Static / Edge",
+      description: "Unlimited bandwidth on free tier with Workers for edge compute.",
+      pros: ["Unlimited bandwidth (free)", "Global edge network (300+ cities)", "Workers for server logic", "Fast builds"],
+      cons: ["Workers have 10ms CPU limit (free)", "Less framework-specific optimizations", "Smaller ecosystem than Vercel/Netlify"],
+      estimatedMonthlyCost: "Free – $5/mo (Workers paid)",
+      bestFor: "High-traffic static sites, cost-sensitive projects",
+    });
+  }
+
+  // ─── Next.js specific ───
+  if (hasNextjs) {
+    options.push({
+      provider: "Vercel",
+      type: "Serverless + Edge",
+      description: "First-party hosting for Next.js with ISR, edge middleware, and image optimization.",
+      pros: ["Best Next.js support (built by same team)", "ISR & on-demand revalidation", "Edge middleware", "Automatic code splitting"],
+      cons: ["Can get expensive at scale ($20/seat)", "Vendor lock-in for some features", "Serverless cold starts on free tier"],
+      estimatedMonthlyCost: "$0 – $20/mo per seat (Pro)",
+      bestFor: "Next.js apps of any size",
+    });
+  }
+
+  // ─── PaaS (Railway, Render, Fly.io) ───
+  if (hasNode && !isStatic) {
+    options.push({
+      provider: "Railway",
+      type: "PaaS (Container)",
+      description: "Simple container hosting with built-in PostgreSQL, Redis, and auto-scaling.",
+      pros: ["Deploy from GitHub in seconds", "Built-in databases (Postgres, Redis, MySQL)", "Usage-based pricing", "Private networking between services"],
+      cons: ["No free tier (trial $5 credit)", "Less control than VPS", "Smaller community than Heroku"],
+      estimatedMonthlyCost: "$5 – $20/mo (hobby) | $20+/mo (production)",
+      bestFor: "Full-stack Node.js apps with databases",
+    });
+    options.push({
+      provider: "Render",
+      type: "PaaS (Container)",
+      description: "Heroku alternative with free tier, auto-deploy from Git, and managed databases.",
+      pros: ["Free tier for web services", "Auto-deploy from Git", "Managed PostgreSQL & Redis", "Built-in cron jobs"],
+      cons: ["Free tier spins down after 15min inactivity", "Limited to 750 hours/mo free", "Slower builds than Railway"],
+      estimatedMonthlyCost: "Free – $7/mo (Starter) | $25+/mo (Pro)",
+      bestFor: "Side projects, startups, Heroku migration",
+    });
+    options.push({
+      provider: "Fly.io",
+      type: "Container (Edge)",
+      description: "Run containers close to users globally with built-in Postgres and Upstash Redis.",
+      pros: ["Global edge deployment", "Built-in Postgres (Fly Postgres)", "Generous free tier (3 shared VMs)", "WebSocket & long-running process support"],
+      cons: ["More complex setup than Railway/Render", "Postgres is user-managed", "Debugging can be harder"],
+      estimatedMonthlyCost: "Free – $5/mo (per VM) | $30+/mo (production)",
+      bestFor: "Latency-sensitive apps, global user base",
+    });
+  }
+
+  // ─── Python PaaS ───
+  if (hasPython) {
+    options.push({
+      provider: "Railway",
+      type: "PaaS (Container)",
+      description: "One-click Python deployment with built-in databases and environment management.",
+      pros: ["Auto-detects Python/Django/FastAPI", "Built-in PostgreSQL", "Usage-based pricing", "Easy environment variables"],
+      cons: ["No free tier", "Less Python-specific tooling", "Limited cron on hobby plan"],
+      estimatedMonthlyCost: "$5 – $20/mo (hobby) | $20+/mo (production)",
+      bestFor: "Django, FastAPI, Flask apps",
+    });
+    options.push({
+      provider: "Render",
+      type: "PaaS (Container)",
+      description: "Free tier Python hosting with managed databases and background workers.",
+      pros: ["Free tier available", "Native Python buildpack", "Background workers support", "Managed PostgreSQL"],
+      cons: ["Free tier sleeps after inactivity", "Slower cold starts", "Limited compute on free tier"],
+      estimatedMonthlyCost: "Free – $7/mo (Starter) | $25+/mo (Pro)",
+      bestFor: "Python APIs, Django apps, data services",
+    });
+  }
+
+  // ─── PHP / Laravel PaaS ───
+  if (hasPHP || hasPHPFramework) {
+    if (hasLaravel || hasPHPFramework) {
+      options.push({
+        provider: "Railway",
+        type: "PaaS (Container)",
+        description: "One-click Laravel/PHP deployment with built-in MySQL, PostgreSQL, and Redis.",
+        pros: ["Auto-detects PHP/Laravel", "Built-in MySQL & PostgreSQL", "Usage-based pricing", "Easy environment variables & queues"],
+        cons: ["No free tier (trial $5 credit)", "Less PHP-specific tooling than Laravel Forge", "Limited cron on hobby plan"],
+        estimatedMonthlyCost: "$5 – $20/mo (hobby) | $20+/mo (production)",
+        bestFor: "Laravel, Symfony, PHP apps with databases",
+      });
+      options.push({
+        provider: "Render",
+        type: "PaaS (Container)",
+        description: "Docker-based PHP hosting with managed databases and background workers.",
+        pros: ["Free tier available", "Docker-based PHP support", "Managed PostgreSQL & Redis", "Background workers for queues"],
+        cons: ["Free tier sleeps after inactivity", "PHP needs Docker config", "Slower cold starts"],
+        estimatedMonthlyCost: "Free – $7/mo (Starter) | $25+/mo (Pro)",
+        bestFor: "Laravel APIs, PHP microservices",
+      });
+      options.push({
+        provider: "Fly.io",
+        type: "Container (Edge)",
+        description: "Run PHP/Laravel containers close to users globally with built-in Postgres.",
+        pros: ["Global edge deployment", "Built-in Postgres (Fly Postgres)", "Generous free tier (3 shared VMs)", "Great for Laravel with queues"],
+        cons: ["Requires Dockerfile", "Postgres is user-managed", "More complex setup"],
+        estimatedMonthlyCost: "Free – $5/mo (per VM) | $30+/mo (production)",
+        bestFor: "Latency-sensitive Laravel apps, global user base",
+      });
+    }
+    if (hasWordPress) {
+      options.push({
+        provider: "Hostinger",
+        type: "Managed WordPress",
+        description: "Optimized WordPress hosting with LiteSpeed, staging, and automatic updates.",
+        pros: ["LiteSpeed web server (fast)", "1-click staging environment", "Automatic WordPress updates", "Free SSL & CDN"],
+        cons: ["Limited to WordPress", "Shared resources on lower plans", "Less developer control"],
+        estimatedMonthlyCost: "$2.99 – $11.99/mo",
+        bestFor: "WordPress sites, blogs, WooCommerce",
+      });
+    }
+  }
+
+  // ─── Encore.ts ───
+  if (hasEncore) {
+    options.push({
+      provider: "Encore Cloud",
+      type: "PaaS (Managed)",
+      description: "Native hosting for Encore.ts apps with automatic infrastructure provisioning.",
+      pros: ["Zero-config deployment", "Auto-provisions databases & pub/sub", "Built-in tracing & monitoring", "Preview environments per PR"],
+      cons: ["Encore-specific (vendor lock-in)", "Limited to Encore framework", "Pricing scales with usage"],
+      estimatedMonthlyCost: "Free (dev) | $50+/mo (production on AWS/GCP)",
+      bestFor: "Encore.ts microservices",
+    });
+  }
+
+  // Fallback
+  if (options.length === 0) {
+    options.push({
+      provider: "DigitalOcean",
+      type: "VPS",
+      description: "General-purpose cloud VPS with predictable pricing.",
+      pros: ["Simple pricing", "Good documentation", "Managed databases available", "Global data centers"],
+      cons: ["Requires server management", "No auto-scaling on basic droplets"],
+      estimatedMonthlyCost: "$4 – $24/mo",
+      bestFor: "General-purpose hosting",
+    });
+    options.push({
+      provider: "Hetzner",
+      type: "VPS",
+      description: "Best value VPS hosting in Europe.",
+      pros: ["Cheapest VPS available", "Great performance", "EU data centers"],
+      cons: ["Requires server management", "Limited US presence"],
+      estimatedMonthlyCost: "€3.29 – €10/mo",
+      bestFor: "Budget hosting",
+    });
+  }
+
+  return options;
+}
+
+export const analyzeRepo = api(
+  { method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<RepoAnalysis> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const branch = params.branch || "main";
+    let files: string[] = [];
+    let repoSize = 0;
+    let primaryLanguage = "";
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
+
+      // Get repo info for size & language
+      const repoRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}`, { headers });
+      if (!repoRes.ok) throwProviderError("GitHub", repoRes.status, repoRes.statusText);
+      const repoData = await repoRes.json() as any;
+      repoSize = repoData.size || 0;
+      primaryLanguage = repoData.language || "";
+
+      // Get file tree (recursive)
+      const treeRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/git/trees/${branch}?recursive=1`, { headers });
+      if (treeRes.ok) {
+        const treeData = await treeRes.json() as any;
+        if (Array.isArray(treeData.tree)) {
+          files = treeData.tree.filter((f: any) => f.type === "blob").map((f: any) => f.path);
+        }
+      }
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const headers = { "PRIVATE-TOKEN": conn.personal_token };
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+
+      // Get repo info
+      const repoRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}`, { headers });
+      if (!repoRes.ok) throwProviderError("GitLab", repoRes.status, repoRes.statusText);
+      const repoData = await repoRes.json() as any;
+      primaryLanguage = repoData.predominant_language || "";
+
+      // Get file tree (recursive)
+      const treeRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/tree?ref=${branch}&recursive=true&per_page=100`, { headers });
+      if (treeRes.ok) {
+        const treeData = await treeRes.json() as any[];
+        if (Array.isArray(treeData)) {
+          files = treeData.filter((f: any) => f.type === "blob").map((f: any) => f.path);
+        }
+      }
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const headers = { Authorization: `Bearer ${conn.personal_token}` };
+
+      const srcRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/src/${branch}/?pagelen=100`, { headers });
+      if (srcRes.ok) {
+        const srcData = await srcRes.json() as any;
+        if (Array.isArray(srcData.values)) {
+          files = srcData.values.filter((f: any) => f.type === "commit_file").map((f: any) => f.path);
+        }
+      }
+    }
+
+    const techStack = detectTechStack(files);
+    const hasDocker = files.some(f => /Dockerfile/i.test(f));
+    const hasCi = files.some(f => /\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|\.circleci/i.test(f));
+    const deployOptions = suggestDeployOptions(techStack, hasDocker, repoSize);
+
+    // Use the highest-confidence language/runtime from tech stack as primary language
+    // This is more accurate than the API's language field for mixed-language repos
+    const detectedLang = techStack.find(t => t.category === "language" || (t.category === "runtime" && t.confidence > 50));
+    const effectivePrimaryLanguage = detectedLang?.name || primaryLanguage;
+
+    return { techStack, deployOptions, repoSize, primaryLanguage: effectivePrimaryLanguage, hasDocker, hasCi };
+  }
+);
