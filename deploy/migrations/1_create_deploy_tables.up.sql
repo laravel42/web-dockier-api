@@ -17,7 +17,8 @@ CREATE TABLE deployments (
     repo TEXT NOT NULL,
     branch TEXT NOT NULL DEFAULT 'main',
     status TEXT NOT NULL DEFAULT 'pending',
-    logs TEXT NOT NULAMP NOT NULL DEFAULT NOW()
+    logs TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_server_providers_user ON server_providers(user_id);
