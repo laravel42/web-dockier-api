@@ -1,4 +1,4 @@
-# SaaS Boilerplate
+# SaaS Starter
 
 A full-stack SaaS application boilerplate with EncoreJS backend and React + Tailwind frontend.
 
