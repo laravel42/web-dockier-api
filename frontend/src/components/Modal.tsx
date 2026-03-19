@@ -5,9 +5,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  size?: "default" | "lg" | "xl";
 }
 
-export default function Modal({ open, onClose, title, children }: ModalProps) {
+export default function Modal({ open, onClose, title, children, size = "default" }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -27,13 +28,15 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
 
   if (!open) return null;
 
+  const widthCls = size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-lg";
+
   return (
     <dialog
       ref={dialogRef}
-      className="backdrop:bg-black/40 bg-transparent p-0 m-auto rounded-[var(--radius-card)] outline-none max-w-lg w-full"
+      className={`backdrop:bg-black/40 bg-transparent p-0 m-auto rounded-[var(--radius-card)] outline-none ${widthCls} w-full overflow-visible`}
       onClick={(e) => { if (e.target === dialogRef.current) onClose(); }}
     >
-      <div className="bg-card rounded-[var(--radius-card)] shadow-xl p-6">
+      <div className="bg-card rounded-[var(--radius-card)] shadow-xl p-6 overflow-visible max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold text-text">{title}</h2>
           <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors" aria-label="Close">

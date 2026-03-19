@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { usersApi } from "../services/api";
 import ConfirmModal from "../components/ConfirmModal";
+import UserFormModal from "../components/UserFormModal";
 
 interface User { id: string; email: string; name: string; avatarUrl?: string; createdAt: string; }
 
@@ -9,6 +10,7 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -26,6 +28,12 @@ export default function Users() {
     fetchUsers();
   };
 
+  const handleCreate = async (data: { email: string; name: string; country: string; language: string; timezone: string }) => {
+    await usersApi.create(data);
+    setShowCreate(false);
+    fetchUsers();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -35,6 +43,7 @@ export default function Users() {
             aria-label="Search users"
             className="h-9 w-56 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors" />
           <button type="submit" className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors">Search</button>
+          <button type="button" onClick={() => setShowCreate(true)} className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors">New User</button>
         </form>
       </div>
 
@@ -70,6 +79,7 @@ export default function Users() {
         </div>
       )}
       <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) handleDelete(deleteId); }} message="Are you sure you want to delete this user?" />
+      <UserFormModal open={showCreate} onClose={() => setShowCreate(false)} onSubmit={handleCreate} />
     </div>
   );
 }

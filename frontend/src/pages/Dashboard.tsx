@@ -7,7 +7,7 @@ export default function Dashboard() {
     { label: "Users", value: "23", change: "+12.5%", up: true },
     { label: "Deployments", value: "8", change: "+4.2%", up: true },
     { label: "Notifications", value: "15", change: "-2.1%", up: false },
-    { label: "Groups", value: "5", change: "+8.0%", up: true },
+    { label: "Roles", value: "5", change: "+8.0%", up: true },
   ];
 
   return (
@@ -45,9 +45,9 @@ export default function Dashboard() {
             className="h-9 px-4 border border-border text-text-secondary text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-50 transition-colors">
             Connect Repository
           </button>
-          <button onClick={() => navigate("/groups")}
+          <button onClick={() => navigate("/settings")}
             className="h-9 px-4 bg-success-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-success-700 transition-colors">
-            Manage Groups
+            Manage Roles
           </button>
         </div>
       </div>

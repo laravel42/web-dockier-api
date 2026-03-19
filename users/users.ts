@@ -86,6 +86,34 @@ async function ensureUser(userId: string): Promise<UserRow> {
   return user;
 }
 
+// ─── Create User ───
+
+export const createUser = api(
+  { method: "POST", path: "/users", auth: true },
+  async (params: {
+    email: string;
+    name: string;
+    country?: string;
+    language?: string;
+    timezone?: string;
+  }): Promise<User> => {
+    const { v4: uuidv4 } = await import("uuid");
+    const id = uuidv4();
+
+    const existing = await db.queryRow<{ id: string }>`SELECT id FROM users WHERE email = ${params.email}`;
+    if (existing) throw APIError.alreadyExists("A user with this email already exists");
+
+    await db.exec`
+      INSERT INTO users (id, email, name, country, language, timezone, created_at)
+      VALUES (${id}, ${params.email}, ${params.name}, ${params.country || ""}, ${params.language || "en"}, ${params.timezone || "UTC"}, NOW())`;
+
+    const row = await db.queryRow<UserRow>`
+      SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users WHERE id = ${id}`;
+    if (!row) throw APIError.internal("Failed to create user");
+    return toUser(row);
+  }
+);
+
 // ─── Get User ───
 
 export const getUser = api(

@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { projectsApi, gitApi } from "../services/api";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
+import PlatformSelect from "../components/PlatformSelect";
+import SourceControlSelect from "../components/SourceControlSelect";
+import RepoSelect from "../components/RepoSelect";
+import BranchSelect from "../components/BranchSelect";
 
 const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
 const selectCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors appearance-none cursor-pointer";
@@ -18,7 +22,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
-  const [form, setForm] = useState({ name: "", repository: "", branch: "" });
+  const [form, setForm] = useState({ name: "", repository: "", branch: "", platform: "" });
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -107,7 +111,7 @@ export default function Projects() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", repository: "", branch: "" });
+    setForm({ name: "", repository: "", branch: "", platform: "" });
     resetSelections();
     setShowForm(true);
     fetchConnections();
@@ -115,7 +119,7 @@ export default function Projects() {
 
   const openEdit = (p: any) => {
     setEditing(p);
-    setForm({ name: p.name, repository: p.repository, branch: p.branch || "" });
+    setForm({ name: p.name, repository: p.repository, branch: p.branch || "", platform: p.platform || "" });
     resetSelections();
     setShowForm(true);
     fetchConnections();
@@ -129,6 +133,7 @@ export default function Projects() {
       repository: editing ? form.repository : (repo?.url || form.repository),
       branch: editing ? form.branch : (selectedBranch || form.branch),
       connectionId: editing ? (form as any).connectionId : selectedConnectionId,
+      platform: form.platform,
     };
     if (editing) {
       await projectsApi.update(editing.id, submitData);
@@ -168,26 +173,21 @@ export default function Projects() {
             <input id="project-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} placeholder="My App" required />
           </div>
 
+          {/* Platform */}
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Platform</label>
+            <PlatformSelect value={form.platform} onChange={(slug) => setForm({ ...form, platform: slug })} />
+          </div>
+
           {/* Step 1: Source Control */}
           <div>
-            <label htmlFor="source-control" className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</label>
-            {loadingConnections ? <Spinner /> : (
-              connections.length === 0 ? (
-                <p className="text-sm text-text-muted py-2">No git connections found. Add one in Settings → Git Integration.</p>
-              ) : (
-                <select
-                  id="source-control"
-                  value={selectedConnectionId}
-                  onChange={(e) => setSelectedConnectionId(e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="">Select a source control…</option>
-                  {connections.map((c) => (
-                    <option key={c.id} value={c.id}>{c.label} ({providerIcon(c.provider)})</option>
-                  ))}
-                </select>
-              )
-            )}
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</label>
+            <SourceControlSelect
+              value={selectedConnectionId}
+              onChange={setSelectedConnectionId}
+              connections={connections}
+              loading={loadingConnections}
+            />
           </div>
 
           {/* Error message */}
@@ -200,50 +200,26 @@ export default function Projects() {
           {/* Step 2: Repository */}
           {selectedConnectionId && (
             <div>
-              <label htmlFor="repository" className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
-              {loadingRepos ? <Spinner /> : (
-                repos.length === 0 ? (
-                  <p className="text-sm text-text-muted py-2">No repositories found for this connection.</p>
-                ) : (
-                  <select
-                    id="repository"
-                    value={selectedRepo}
-                    onChange={(e) => setSelectedRepo(e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">Select a repository…</option>
-                    {repos.map((r) => (
-                      <option key={r.fullName} value={r.fullName}>
-                        {r.fullName}{r.private ? " 🔒" : ""}
-                      </option>
-                    ))}
-                  </select>
-                )
-              )}
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
+              <RepoSelect
+                value={selectedRepo}
+                onChange={setSelectedRepo}
+                repos={repos}
+                loading={loadingRepos}
+              />
             </div>
           )}
 
           {/* Step 3: Branch */}
           {selectedRepo && (
             <div>
-              <label htmlFor="branch" className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
-              {loadingBranches ? <Spinner /> : (
-                branches.length === 0 ? (
-                  <p className="text-sm text-text-muted py-2">No branches found.</p>
-                ) : (
-                  <select
-                    id="branch"
-                    value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">Select a branch…</option>
-                    {branches.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                )
-              )}
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
+              <BranchSelect
+                value={selectedBranch}
+                onChange={setSelectedBranch}
+                branches={branches}
+                loading={loadingBranches}
+              />
             </div>
           )}
 

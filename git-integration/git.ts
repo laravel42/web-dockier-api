@@ -277,6 +277,7 @@ interface RepoStats {
   lastCommitDate: string;
   lastCommitMessage: string;
   lastCommitAuthor: string;
+  lastCommitHash: string;
   totalCommits: number;
 }
 
@@ -305,6 +306,7 @@ export const getRepoStats = api(
       let lastCommitDate = "";
       let lastCommitMessage = "";
       let lastCommitAuthor = "";
+      let lastCommitHash = "";
       let totalCommits = 0;
       if (commitsRes.ok) {
         const commits = await commitsRes.json() as any[];
@@ -312,6 +314,7 @@ export const getRepoStats = api(
           lastCommitDate = commits[0].commit?.committer?.date || commits[0].commit?.author?.date || "";
           lastCommitMessage = commits[0].commit?.message?.split("\n")[0] || "";
           lastCommitAuthor = commits[0].commit?.author?.name || commits[0].author?.login || "";
+          lastCommitHash = commits[0].sha || "";
         }
         // Parse total from Link header (GitHub pagination)
         const link = commitsRes.headers.get("link") || "";
@@ -374,6 +377,7 @@ export const getRepoStats = api(
         lastCommitDate,
         lastCommitMessage,
         lastCommitAuthor,
+        lastCommitHash,
         totalCommits,
       };
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
@@ -390,6 +394,7 @@ export const getRepoStats = api(
       let lastCommitDate = "";
       let lastCommitMessage = "";
       let lastCommitAuthor = "";
+      let lastCommitHash = "";
       let totalCommits = 0;
       if (commitsRes.ok) {
         const commits = await commitsRes.json() as any[];
@@ -397,6 +402,7 @@ export const getRepoStats = api(
           lastCommitDate = commits[0].committed_date || commits[0].created_at || "";
           lastCommitMessage = commits[0].title || commits[0].message?.split("\n")[0] || "";
           lastCommitAuthor = commits[0].author_name || "";
+          lastCommitHash = commits[0].id || commits[0].short_id || "";
         }
         const total = commitsRes.headers.get("x-total");
         totalCommits = total ? parseInt(total, 10) : 0;
@@ -436,6 +442,7 @@ export const getRepoStats = api(
         lastCommitDate,
         lastCommitMessage,
         lastCommitAuthor,
+        lastCommitHash,
         totalCommits,
       };
     } else if (conn.provider === "bitbucket") {
@@ -452,6 +459,7 @@ export const getRepoStats = api(
       let lastCommitDate = "";
       let lastCommitMessage = "";
       let lastCommitAuthor = "";
+      let lastCommitHash = "";
       let totalCommits = 0;
       if (commitsRes.ok) {
         const commitsData = await commitsRes.json() as any;
@@ -459,6 +467,7 @@ export const getRepoStats = api(
           lastCommitDate = commitsData.values[0].date || "";
           lastCommitMessage = commitsData.values[0].message?.split("\n")[0] || "";
           lastCommitAuthor = commitsData.values[0].author?.user?.display_name || commitsData.values[0].author?.raw?.split("<")[0]?.trim() || "";
+          lastCommitHash = commitsData.values[0].hash || "";
         }
         // Bitbucket doesn't provide total count easily; use size if available
         totalCommits = commitsData.size || 0;
@@ -484,11 +493,117 @@ export const getRepoStats = api(
         lastCommitDate,
         lastCommitMessage,
         lastCommitAuthor,
+        lastCommitHash,
         totalCommits,
       };
     }
 
     throw APIError.unimplemented("Stats not supported for this provider");
+  }
+);
+
+// ─── Repo File Tree ───
+
+interface RepoFile {
+  path: string;
+  type: "file" | "dir";
+  size: number;
+}
+
+export const getRepoTree = api(
+  { method: "GET", path: "/git/connections/:connectionId/repo-tree", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<{ files: RepoFile[] }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const branch = params.branch || "main";
+    const files: RepoFile[] = [];
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
+      const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, { headers });
+      if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
+      const data = await res.json() as any;
+      for (const item of data.tree || []) {
+        if (item.type === "blob") files.push({ path: item.path, type: "file", size: item.size || 0 });
+      }
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token };
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+      // Paginate through all pages (GitLab defaults to 20 per page, max 100)
+      let page = 1;
+      const maxPages = 20; // safety cap: 20 pages × 100 = 2000 files
+      while (page <= maxPages) {
+        const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/tree?ref=${encodeURIComponent(branch)}&recursive=true&per_page=100&page=${page}`, { headers });
+        if (!res.ok) {
+          if (page === 1) throwProviderError("GitLab", res.status, res.statusText);
+          break; // stop paginating on error for subsequent pages
+        }
+        const data = await res.json() as any[];
+        if (!Array.isArray(data) || data.length === 0) break;
+        for (const item of data) {
+          if (item.type === "blob") files.push({ path: item.path, type: "file", size: 0 });
+        }
+        // Check x-next-page header or if we got fewer than per_page
+        const nextPage = res.headers.get("x-next-page");
+        if (!nextPage || nextPage === "" || data.length < 100) break;
+        page++;
+      }
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const headers = { Authorization: `Bearer ${conn.personal_token}` };
+      const res = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/src/${encodeURIComponent(branch)}/?pagelen=100&max_depth=10`, { headers });
+      if (!res.ok) throwProviderError("Bitbucket", res.status, res.statusText);
+      const data = await res.json() as any;
+      for (const item of data.values || []) {
+        if (item.type === "commit_file") files.push({ path: item.path, type: "file", size: item.size || 0 });
+      }
+    }
+
+    return { files };
+  }
+);
+
+// ─── Repo File Content ───
+
+export const getFileContent = api(
+  { method: "GET", path: "/git/connections/:connectionId/file-content", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string; branch: string; path: string }): Promise<{ content: string }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contents/${params.path}?ref=${encodeURIComponent(params.branch)}`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3.raw" },
+      });
+      if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
+      return { content: await res.text() };
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+      const filePath = encodeURIComponent(params.path);
+      const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/files/${filePath}/raw?ref=${encodeURIComponent(params.branch)}`, {
+        headers: { "PRIVATE-TOKEN": conn.personal_token },
+      });
+      if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
+      return { content: await res.text() };
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const res = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/src/${encodeURIComponent(params.branch)}/${params.path}`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}` },
+      });
+      if (!res.ok) throwProviderError("Bitbucket", res.status, res.statusText);
+      return { content: await res.text() };
+    }
+
+    throw APIError.unimplemented("File content not supported for this provider");
   }
 );
 
@@ -510,9 +625,18 @@ interface DeployOption {
   bestFor: string;
 }
 
+interface DetectedService {
+  type: "database" | "cache" | "queue" | "storage" | "search" | "mail" | "broadcasting" | "scheduler";
+  name: string;
+  provider: string;
+  confidence: number;
+  configFile?: string;
+}
+
 interface RepoAnalysis {
   techStack: TechStackItem[];
   deployOptions: DeployOption[];
+  detectedServices: DetectedService[];
   repoSize: number;
   primaryLanguage: string;
   hasDocker: boolean;
@@ -1012,6 +1136,109 @@ function suggestDeployOptions(tech: TechStackItem[], hasDocker: boolean, repoSiz
   return options;
 }
 
+// ─── Service Detection Rules ───
+
+interface ServiceDetector {
+  filePattern?: RegExp;
+  contentPattern?: RegExp;
+  service: Omit<DetectedService, "confidence"> & { confidence?: number };
+}
+
+const SERVICE_DETECTORS: ServiceDetector[] = [
+  // ── Database ──
+  { filePattern: /config\/database\.php$/i, service: { type: "database", name: "MySQL/PostgreSQL", provider: "Laravel DB" } },
+  { filePattern: /prisma\/schema\.prisma$/i, service: { type: "database", name: "PostgreSQL", provider: "Prisma" } },
+  { filePattern: /drizzle\.config\./i, service: { type: "database", name: "PostgreSQL", provider: "Drizzle ORM" } },
+  { filePattern: /knexfile\./i, service: { type: "database", name: "PostgreSQL", provider: "Knex.js" } },
+  { filePattern: /sequelize/i, service: { type: "database", name: "PostgreSQL/MySQL", provider: "Sequelize" } },
+  { filePattern: /typeorm/i, service: { type: "database", name: "PostgreSQL/MySQL", provider: "TypeORM" } },
+  { filePattern: /migrations?\//i, service: { type: "database", name: "SQL Database", provider: "Migrations", confidence: 80 } },
+  { filePattern: /\.sql$/i, service: { type: "database", name: "SQL Database", provider: "SQL Files", confidence: 60 } },
+  { filePattern: /mongod|mongoose/i, service: { type: "database", name: "MongoDB", provider: "MongoDB" } },
+  { filePattern: /settings\.py$/i, service: { type: "database", name: "PostgreSQL", provider: "Django ORM", confidence: 70 } },
+  { filePattern: /config\/database\.yml$/i, service: { type: "database", name: "PostgreSQL", provider: "Rails ActiveRecord" } },
+  { filePattern: /alembic/i, service: { type: "database", name: "PostgreSQL", provider: "Alembic (SQLAlchemy)" } },
+  // ── Cache ──
+  { filePattern: /config\/cache\.php$/i, service: { type: "cache", name: "Redis/Memcached", provider: "Laravel Cache" } },
+  { filePattern: /redis/i, service: { type: "cache", name: "Redis", provider: "Redis", confidence: 70 } },
+  { filePattern: /memcached/i, service: { type: "cache", name: "Memcached", provider: "Memcached" } },
+  // ── Queue ──
+  { filePattern: /config\/queue\.php$/i, service: { type: "queue", name: "Redis/SQS/Database", provider: "Laravel Queue" } },
+  { filePattern: /config\/horizon\.php$/i, service: { type: "queue", name: "Redis Queue", provider: "Laravel Horizon" } },
+  { filePattern: /app\/Jobs\//i, service: { type: "queue", name: "Queue Worker", provider: "Laravel Jobs" } },
+  { filePattern: /celery/i, service: { type: "queue", name: "Celery", provider: "Celery (Python)" } },
+  { filePattern: /bullmq|bull\//i, service: { type: "queue", name: "BullMQ", provider: "BullMQ (Node.js)" } },
+  { filePattern: /sidekiq/i, service: { type: "queue", name: "Sidekiq", provider: "Sidekiq (Ruby)" } },
+  { filePattern: /rabbitmq/i, service: { type: "queue", name: "RabbitMQ", provider: "RabbitMQ" } },
+  // ── Storage ──
+  { filePattern: /config\/filesystems\.php$/i, service: { type: "storage", name: "S3/Local", provider: "Laravel Filesystem" } },
+  { filePattern: /storage\/app\//i, service: { type: "storage", name: "File Storage", provider: "Local Storage", confidence: 60 } },
+  { filePattern: /aws-sdk|@aws-sdk\/client-s3/i, service: { type: "storage", name: "S3", provider: "AWS S3" } },
+  { filePattern: /minio/i, service: { type: "storage", name: "MinIO/S3", provider: "MinIO" } },
+  { filePattern: /uploads?\//i, service: { type: "storage", name: "File Uploads", provider: "Upload Directory", confidence: 50 } },
+  // ── Search ──
+  { filePattern: /config\/scout\.php$/i, service: { type: "search", name: "Algolia/Meilisearch", provider: "Laravel Scout" } },
+  { filePattern: /elasticsearch|elastic/i, service: { type: "search", name: "Elasticsearch", provider: "Elasticsearch" } },
+  { filePattern: /meilisearch/i, service: { type: "search", name: "Meilisearch", provider: "Meilisearch" } },
+  { filePattern: /typesense/i, service: { type: "search", name: "Typesense", provider: "Typesense" } },
+  // ── Mail ──
+  { filePattern: /config\/mail\.php$/i, service: { type: "mail", name: "SMTP/Mailgun/SES", provider: "Laravel Mail" } },
+  { filePattern: /app\/Mail\//i, service: { type: "mail", name: "Transactional Email", provider: "Laravel Mailable" } },
+  { filePattern: /resources\/views\/(?:emails|mail)\//i, service: { type: "mail", name: "Email Templates", provider: "Email Views" } },
+  { filePattern: /nodemailer/i, service: { type: "mail", name: "SMTP", provider: "Nodemailer" } },
+  { filePattern: /sendgrid/i, service: { type: "mail", name: "SendGrid", provider: "SendGrid" } },
+  { filePattern: /mailgun/i, service: { type: "mail", name: "Mailgun", provider: "Mailgun" } },
+  { filePattern: /postmark/i, service: { type: "mail", name: "Postmark", provider: "Postmark" } },
+  // ── Broadcasting ──
+  { filePattern: /config\/broadcasting\.php$/i, service: { type: "broadcasting", name: "Pusher/Redis/Ably", provider: "Laravel Broadcasting" } },
+  { filePattern: /pusher/i, service: { type: "broadcasting", name: "Pusher", provider: "Pusher" } },
+  { filePattern: /socket\.io|socketio/i, service: { type: "broadcasting", name: "Socket.IO", provider: "Socket.IO" } },
+  { filePattern: /laravel-echo/i, service: { type: "broadcasting", name: "Laravel Echo", provider: "Laravel Echo" } },
+  { filePattern: /ably/i, service: { type: "broadcasting", name: "Ably", provider: "Ably" } },
+  // ── Scheduler / Cron ──
+  { filePattern: /app\/Console\/Kernel\.php$/i, service: { type: "scheduler", name: "Task Scheduler", provider: "Laravel Scheduler" } },
+  { filePattern: /crontab|cron/i, service: { type: "scheduler", name: "Cron Jobs", provider: "Cron", confidence: 60 } },
+  { filePattern: /node-cron|agenda/i, service: { type: "scheduler", name: "Scheduled Tasks", provider: "Node Cron" } },
+];
+
+function detectServices(files: string[]): DetectedService[] {
+  const found = new Map<string, DetectedService>();
+  for (const file of files) {
+    for (const det of SERVICE_DETECTORS) {
+      if (det.filePattern && det.filePattern.test(file)) {
+        const key = `${det.service.type}:${det.service.name}`;
+        if (!found.has(key) || (det.service.confidence ?? 90) > (found.get(key)!.confidence)) {
+          found.set(key, {
+            type: det.service.type,
+            name: det.service.name,
+            provider: det.service.provider,
+            confidence: det.service.confidence ?? 90,
+            configFile: file,
+          });
+        }
+      }
+    }
+  }
+  // Deduplicate by type — keep highest confidence per type
+  const byType = new Map<string, DetectedService[]>();
+  for (const svc of found.values()) {
+    const arr = byType.get(svc.type) || [];
+    arr.push(svc);
+    byType.set(svc.type, arr);
+  }
+  const result: DetectedService[] = [];
+  for (const [, svcs] of byType) {
+    svcs.sort((a, b) => b.confidence - a.confidence);
+    // Keep the top entry per type, but merge names if multiple high-confidence
+    const top = svcs[0];
+    if (svcs.length > 1 && svcs[1].confidence >= 70 && svcs[1].name !== top.name) {
+      top.name = `${top.name} + ${svcs[1].name}`;
+    }
+    result.push(top);
+  }
+  return result.sort((a, b) => b.confidence - a.confidence);
+}
+
 export const analyzeRepo = api(
   { method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<RepoAnalysis> => {
@@ -1056,13 +1283,20 @@ export const analyzeRepo = api(
       const repoData = await repoRes.json() as any;
       primaryLanguage = repoData.predominant_language || "";
 
-      // Get file tree (recursive)
-      const treeRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/tree?ref=${branch}&recursive=true&per_page=100`, { headers });
-      if (treeRes.ok) {
+      // Get file tree (recursive, paginated)
+      let page = 1;
+      const maxPages = 20;
+      while (page <= maxPages) {
+        const treeRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/tree?ref=${encodeURIComponent(branch)}&recursive=true&per_page=100&page=${page}`, { headers });
+        if (!treeRes.ok) break;
         const treeData = await treeRes.json() as any[];
-        if (Array.isArray(treeData)) {
-          files = treeData.filter((f: any) => f.type === "blob").map((f: any) => f.path);
+        if (!Array.isArray(treeData) || treeData.length === 0) break;
+        for (const f of treeData) {
+          if (f.type === "blob") files.push(f.path);
         }
+        const nextPage = treeRes.headers.get("x-next-page");
+        if (!nextPage || nextPage === "" || treeData.length < 100) break;
+        page++;
       }
     } else if (conn.provider === "bitbucket") {
       const baseUrl = conn.endpoint || "https://api.bitbucket.org";
@@ -1081,12 +1315,26 @@ export const analyzeRepo = api(
     const hasDocker = files.some(f => /Dockerfile/i.test(f));
     const hasCi = files.some(f => /\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|\.circleci/i.test(f));
     const deployOptions = suggestDeployOptions(techStack, hasDocker, repoSize);
+    const detectedServices = detectServices(files);
 
-    // Use the highest-confidence language/runtime from tech stack as primary language
-    // This is more accurate than the API's language field for mixed-language repos
     const detectedLang = techStack.find(t => t.category === "language" || (t.category === "runtime" && t.confidence > 50));
     const effectivePrimaryLanguage = detectedLang?.name || primaryLanguage;
 
-    return { techStack, deployOptions, repoSize, primaryLanguage: effectivePrimaryLanguage, hasDocker, hasCi };
+    return { techStack, deployOptions, detectedServices, repoSize, primaryLanguage: effectivePrimaryLanguage, hasDocker, hasCi };
+  }
+);
+
+// ─── Get Connection Details for Scan (service-to-service) ───
+
+export const getConnectionForScan = api(
+  { method: "GET", path: "/git/connections/:connectionId/scan-auth", auth: true },
+  async (params: { connectionId: string }): Promise<{ provider: string; token: string; endpoint: string }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint || "" };
   }
 );

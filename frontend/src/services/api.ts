@@ -11,6 +11,9 @@ async function request<T>(
     ...(options.headers as Record<string, string>),
   };
 
+  // Allow callers to strip Authorization by setting it to empty
+  if (!headers.Authorization) delete headers.Authorization;
+
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
@@ -40,6 +43,7 @@ export const authApi = {
     request<{ token: string; userId: string }>("/auth/2fa/verify", {
       method: "POST",
       body: JSON.stringify(data),
+      headers: { Authorization: "" },
     }),
 
   setup2FA: () =>
@@ -91,6 +95,9 @@ export const usersApi = {
       createdAt: string;
     }>(`/users/${userId}`),
 
+  create: (data: { email: string; name: string; country?: string; language?: string; timezone?: string }) =>
+    request("/users", { method: "POST", body: JSON.stringify(data) }),
+
   update: (userId: string, data: { name?: string; avatarUrl?: string; country?: string; language?: string; timezone?: string }) =>
     request(`/users/${userId}`, {
       method: "PUT",
@@ -101,53 +108,7 @@ export const usersApi = {
     request(`/users/${userId}`, { method: "DELETE" }),
 };
 
-// ─── Groups & Roles ───
-
-export const groupsApi = {
-  list: () =>
-    request<{
-      groups: Array<{
-        id: string;
-        name: string;
-        description: string;
-        createdAt: string;
-      }>;
-    }>("/groups"),
-
-  create: (data: { name: string; description?: string }) =>
-    request("/groups", { method: "POST", body: JSON.stringify(data) }),
-
-  get: (groupId: string) => request<any>(`/groups/${groupId}`),
-
-  update: (groupId: string, data: { name?: string; description?: string }) =>
-    request(`/groups/${groupId}`, {
-      method: "PUT",
-      body: JSON.stringify({ groupId, ...data }),
-    }),
-
-  delete: (groupId: string) =>
-    request(`/groups/${groupId}`, { method: "DELETE" }),
-
-  listMembers: (groupId: string) =>
-    request<{
-      members: Array<{
-        userId: string;
-        groupId: string;
-        roleId: string;
-        roleName: string;
-        joinedAt: string;
-      }>;
-    }>(`/groups/${groupId}/members`),
-
-  addMember: (groupId: string, userId: string, roleId: string) =>
-    request(`/groups/${groupId}/members`, {
-      method: "POST",
-      body: JSON.stringify({ groupId, userId, roleId }),
-    }),
-
-  removeMember: (groupId: string, userId: string) =>
-    request(`/groups/${groupId}/members/${userId}`, { method: "DELETE" }),
-};
+// ─── Roles ───
 
 export const rolesApi = {
   list: () =>
@@ -239,6 +200,7 @@ export const gitApi = {
       lastCommitDate: string;
       lastCommitMessage: string;
       lastCommitAuthor: string;
+      lastCommitHash: string;
       totalCommits: number;
     }>(`/git/connections/${connectionId}/repo-stats?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
@@ -254,11 +216,28 @@ export const gitApi = {
         estimatedMonthlyCost: string;
         bestFor: string;
       }>;
+      detectedServices: Array<{
+        type: string;
+        name: string;
+        provider: string;
+        confidence: number;
+        configFile?: string;
+      }>;
       repoSize: number;
       primaryLanguage: string;
       hasDocker: boolean;
       hasCi: boolean;
     }>(`/git/connections/${connectionId}/repo-analyze?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
+
+  getRepoTree: (connectionId: string, owner: string, repo: string, branch?: string) =>
+    request<{
+      files: Array<{ path: string; type: string; size: number }>;
+    }>(`/git/connections/${connectionId}/repo-tree?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
+
+  getFileContent: (connectionId: string, owner: string, repo: string, branch: string, path: string) =>
+    request<{ content: string }>(
+      `/git/connections/${connectionId}/file-content?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`
+    ),
 };
 
 // ─── Notifications ───
@@ -395,6 +374,28 @@ export const deployApi = {
       createdAt: string;
       updatedAt: string;
     }>(`/deploy/deployments/${deploymentId}`),
+
+  generateTofu: (data: {
+    providerId: string;
+    repo: string;
+    branch: string;
+    techStack: string[];
+    primaryLanguage: string;
+    hasDocker: boolean;
+    appName?: string;
+    region?: string;
+    services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+  }) =>
+    request<{
+      script: string;
+      provider: string;
+      region: string;
+      appName: string;
+      estimatedResources: string[];
+    }>("/deploy/tofu/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // ─── Projects ───
@@ -422,12 +423,89 @@ export const projectsApi = {
       createdAt: string;
     }>(`/projects/${projectId}`),
 
-  create: (data: { name: string; repository: string; branch: string; connectionId: string }) =>
+  create: (data: { name: string; repository: string; branch: string; connectionId: string; platform: string }) =>
     request("/projects", { method: "POST", body: JSON.stringify(data) }),
 
-  update: (projectId: string, data: { name?: string; repository?: string; branch?: string; connectionId?: string }) =>
+  update: (projectId: string, data: { name?: string; repository?: string; branch?: string; connectionId?: string; platform?: string }) =>
     request(`/projects/${projectId}`, { method: "PUT", body: JSON.stringify({ projectId, ...data }) }),
 
   delete: (projectId: string) =>
     request(`/projects/${projectId}`, { method: "DELETE" }),
+};
+
+// ─── Code Analysis ───
+
+type ScanSummaryApi = {
+  totalFindings: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+  filesScanned: number;
+  filesInRepo: number;
+  progress?: { phase: "cloning" | "scanning" | "persisting" | "done"; currentFile?: string; filesScanned: number; filesInRepo: number; findingsCount: number };
+  error?: string;
+};
+
+export const codeAnalysisApi = {
+  createScan: (data: { projectId: string; connectionId: string; repo: string; branch: string }) =>
+    request<{
+      id: string;
+      projectId: string;
+      repo: string;
+      branch: string;
+      status: string;
+      summary: ScanSummaryApi;
+      createdAt: string;
+    }>("/code-analysis/scans", { method: "POST", body: JSON.stringify(data) }),
+
+  listScans: (projectId?: string) =>
+    request<{
+      scans: Array<{
+        id: string;
+        projectId: string;
+        repo: string;
+        branch: string;
+        status: string;
+        summary: ScanSummaryApi;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    }>(`/code-analysis/scans${projectId ? `?projectId=${projectId}` : ""}`),
+
+  getScan: (scanId: string) =>
+    request<{
+      id: string;
+      projectId: string;
+      repo: string;
+      branch: string;
+      status: string;
+      summary: ScanSummaryApi;
+      createdAt: string;
+      updatedAt: string;
+    }>(`/code-analysis/scans/${scanId}`),
+
+  runScan: (scanId: string) =>
+    request<{
+      id: string;
+      status: string;
+      summary: ScanSummaryApi;
+    }>(`/code-analysis/scans/${scanId}/run`, { method: "POST" }),
+
+  listFindings: (scanId: string, severity?: string) =>
+    request<{
+      findings: Array<{
+        id: string;
+        ruleId: string;
+        severity: string;
+        message: string;
+        filePath: string;
+        startLine: number;
+        endLine: number;
+        snippet: string;
+        createdAt: string;
+      }>;
+    }>(`/code-analysis/scans/${scanId}/findings${severity ? `?severity=${severity}` : ""}`),
+
+  deleteScan: (scanId: string) =>
+    request(`/code-analysis/scans/${scanId}`, { method: "DELETE" }),
 };

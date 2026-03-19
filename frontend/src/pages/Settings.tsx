@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { countries } from "../data/countries";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
+import RoleFormModal from "../components/RoleFormModal";
 
 type Tab = "profile" | "security" | "roles" | "providers" | "source-control" | "channels";
 
@@ -174,23 +175,9 @@ function SecurityTab() {
 
 function RolesTab() {
   const [roles, setRoles] = useState<any[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingRole, setEditingRole] = useState<any | null>(null);
-  const [form, setForm] = useState({ name: "", description: "" });
-  const [perms, setPerms] = useState<Record<string, boolean>>({});
+  const [showRoleModal, setShowRoleModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const sections = ["users", "deployments", "notifications", "settings", "roles", "providers", "source_control"];
-  const actions = ["view", "create", "edit", "delete"];
-
-  const togglePerm = (key: string) => setPerms((prev) => ({ ...prev, [key]: !prev[key] }));
-  const toggleSection = (section: string) => {
-    const allOn = actions.every((a) => perms[`${section}.${a}`]);
-    const updated = { ...perms };
-    actions.forEach((a) => { updated[`${section}.${a}`] = !allOn; });
-    setPerms(updated);
-  };
 
   const fetch_ = async () => {
     setLoading(true);
@@ -201,36 +188,15 @@ function RolesTab() {
 
   useEffect(() => { fetch_(); }, []);
 
-  const openCreate = () => {
-    setEditingRole(null);
-    setForm({ name: "", description: "" });
-    setPerms({});
-    setShowForm(true);
-  };
-
-  const openEdit = (role: any) => {
-    setEditingRole(role);
-    setForm({ name: role.name, description: role.description || "" });
-    const p: Record<string, boolean> = {};
-    (role.permissions || []).forEach((perm: string) => { p[perm] = true; });
-    setPerms(p);
-    setShowForm(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const permissions = Object.entries(perms).filter(([, v]) => v).map(([k]) => k);
-    if (editingRole) {
-      await rolesApi.update(editingRole.id, { name: form.name, description: form.description, permissions });
-    } else {
-      await rolesApi.create({ name: form.name, description: form.description, permissions });
-    }
-    setShowForm(false); setEditingRole(null); setForm({ name: "", description: "" }); setPerms({}); fetch_();
+  const handleCreateRole = async (data: { name: string; description: string; permissions: string[] }) => {
+    await rolesApi.create(data);
+    setShowRoleModal(false); fetch_();
   };
 
   const formatPerm = (p: string) => {
+    if (p.includes(":")) return p;
     const [section, action] = p.split(".");
-    if (!section || !action) return null;
+    if (!section || !action) return p;
     return `${section.replace("_", " ")}:${action}`;
   };
 
@@ -238,55 +204,10 @@ function RolesTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-text">Roles</h2>
-        <button onClick={openCreate} className={btnPrimary}>Add Role</button>
+        <button onClick={() => setShowRoleModal(true)} className={btnPrimary}>Add Role</button>
       </div>
 
-      <Modal open={showForm} onClose={() => { setShowForm(false); setEditingRole(null); }} title={editingRole ? "Edit Role" : "Add Role"}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="role-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
-            <input id="role-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} required />
-          </div>
-          <div>
-            <label htmlFor="role-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
-            <input id="role-desc" type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={inputCls} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text-secondary mb-2">Permissions</p>
-            <div className="border border-border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-secondary-50">
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-text-muted uppercase">Section</th>
-                    {actions.map((a) => <th key={a} className="px-3 py-2 text-center text-xs font-semibold text-text-muted uppercase w-16">{a}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sections.map((section) => (
-                    <tr key={section} className="border-t border-border">
-                      <td className="px-3 py-2">
-                        <button type="button" onClick={() => toggleSection(section)} className="text-sm font-medium text-text capitalize hover:text-primary-500 transition-colors">
-                          {section.replace("_", " ")}
-                        </button>
-                      </td>
-                      {actions.map((action) => {
-                        const key = `${section}.${action}`;
-                        return (
-                          <td key={key} className="px-3 py-2 text-center">
-                            <input type="checkbox" checked={!!perms[key]} onChange={() => togglePerm(key)}
-                              className="w-4 h-4 rounded border-border text-primary-500 focus:ring-primary-500/20" />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <button type="submit" className={btnPrimary}>{editingRole ? "Save Changes" : "Create Role"}</button>
-        </form>
-      </Modal>
+      <RoleFormModal open={showRoleModal} onClose={() => setShowRoleModal(false)} onSubmit={handleCreateRole} />
 
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -305,17 +226,14 @@ function RolesTab() {
                   <p className="text-sm text-text-secondary mt-0.5">{r.description}</p>
                   {r.permissions?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      {r.permissions.filter((p: string) => p && p.includes(".")).map((p: string) => (
+                      {r.permissions.map((p: string) => (
                         <span key={p} className="px-2 py-0.5 bg-primary-50 text-primary-600 rounded text-xs font-medium">{formatPerm(p)}</span>
                       ))}
                     </div>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <button onClick={() => openEdit(r)} className="text-sm text-primary-500 hover:text-primary-700 font-medium transition-colors">Edit</button>
-                <button onClick={() => setDeleteId(r.id)} className={btnDanger}>Remove</button>
-              </div>
+              <button onClick={() => setDeleteId(r.id)} className={btnDanger}>Remove</button>
             </div>
           ))}
           {roles.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No roles configured yet</p>}
