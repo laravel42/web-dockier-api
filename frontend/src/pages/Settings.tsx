@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { authApi, deployApi, gitApi, usersApi, rolesApi, notificationsApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { countries } from "../data/countries";
+import { INTEGRATION_CATALOG, CATEGORY_COLORS } from "../data/integrations";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
 import RoleFormModal from "../components/RoleFormModal";
 
-type Tab = "profile" | "security" | "roles" | "providers" | "source-control" | "channels";
+type Tab = "profile" | "security" | "roles" | "providers" | "source-control" | "channels" | "integrations";
 
 const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
@@ -20,7 +21,7 @@ export default function Settings() {
     <div>
       <h1 className="text-2xl font-semibold text-text mb-6">Settings</h1>
       <div className="flex gap-2 mb-6" role="tablist">
-        {([["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["source-control", "Source Control"], ["channels", "Notification Channels"]] as [Tab, string][]).map(([key, label]) => (
+        {([["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"]] as [Tab, string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={tabCls(tab === key)}>{label}</button>
         ))}
       </div>
@@ -30,6 +31,7 @@ export default function Settings() {
       {tab === "providers" && <ProvidersTab />}
       {tab === "source-control" && <SourceControlTab />}
       {tab === "channels" && <NotificationChannelsTab />}
+      {tab === "integrations" && <IntegrationsTab />}
     </div>
   );
 }
@@ -693,6 +695,220 @@ function NotificationChannelsTab() {
         </div>
       )}
       <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) notificationsApi.deleteChannel(deleteId).then(fetch_); }} message="Are you sure you want to remove this channel?" />
+    </div>
+  );
+}
+
+interface Integration {
+  id: string;
+  type: string;
+  name: string;
+  config: Record<string, string>;
+  enabled: boolean;
+}
+
+function IntegrationsTab() {
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [formConfig, setFormConfig] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Integrations are stored in localStorage for now (no backend endpoint yet)
+  useEffect(() => {
+    setLoading(true);
+    try {
+      const stored = localStorage.getItem("integrations");
+      if (stored) setIntegrations(JSON.parse(stored));
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  const persist = (items: Integration[]) => {
+    setIntegrations(items);
+    localStorage.setItem("integrations", JSON.stringify(items));
+  };
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedType) return;
+    const catalog = INTEGRATION_CATALOG.find(c => c.type === selectedType);
+    if (!catalog) return;
+    setSaving(true);
+    const newItem: Integration = {
+      id: crypto.randomUUID(),
+      type: selectedType,
+      name: catalog.name,
+      config: { ...formConfig },
+      enabled: true,
+    };
+    persist([...integrations, newItem]);
+    setSaving(false);
+    setShowAdd(false);
+    setSelectedType(null);
+    setFormConfig({});
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    persist(integrations.filter(i => i.id !== deleteId));
+    setDeleteId(null);
+  };
+
+  const toggleEnabled = (id: string) => {
+    persist(integrations.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i));
+  };
+
+  const openAdd = () => {
+    setShowAdd(true);
+    setSelectedType(null);
+    setFormConfig({});
+  };
+
+  const catalog = selectedType ? INTEGRATION_CATALOG.find(c => c.type === selectedType) : null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-text">Integrations</h2>
+          <p className="text-sm text-text-secondary mt-0.5">Connect external services like databases, caches, storage, and more.</p>
+        </div>
+        <button onClick={openAdd} className={btnPrimary}>Add Integration</button>
+      </div>
+
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Integration" size="lg">
+        {!selectedType ? (
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search integrations..."
+              className={inputCls}
+            />
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={() => setCategoryFilter("")} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${!categoryFilter ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-secondary hover:bg-secondary-200"}`}>All</button>
+              {Object.keys(CATEGORY_COLORS).map((c) => (
+                <button key={c} type="button" onClick={() => setCategoryFilter(categoryFilter === c ? "" : c)} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${categoryFilter === c ? "bg-primary-500 text-white" : CATEGORY_COLORS[c] + " hover:opacity-80"}`}>{c}</button>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto">
+              {INTEGRATION_CATALOG
+                .filter((cat) => (!categoryFilter || cat.category === categoryFilter) && (!searchQuery || cat.name.toLowerCase().includes(searchQuery.toLowerCase()) || cat.category.toLowerCase().includes(searchQuery.toLowerCase()) || cat.description.toLowerCase().includes(searchQuery.toLowerCase())))
+                .map((cat) => {
+                const alreadyAdded = integrations.some(i => i.type === cat.type);
+                return (
+                  <button
+                    key={cat.type}
+                    type="button"
+                    disabled={alreadyAdded}
+                    onClick={() => { setSelectedType(cat.type); setFormConfig({}); }}
+                    className={`flex items-center gap-3 p-3 rounded-lg border border-border text-left transition-colors ${alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-secondary-50 hover:border-primary-300"}`}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0 text-primary-500">
+                      {cat.logoUrl ? <img src={cat.logoUrl} className="w-5 h-5" alt="" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-text">{cat.name}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CATEGORY_COLORS[cat.category] || "bg-secondary-100 text-text-muted"}`}>{cat.category}</span>
+                      </div>
+                      <p className="text-xs text-text-muted mt-0.5 truncate">{cat.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : catalog ? (
+          <form onSubmit={handleAdd} className="space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-border">
+              <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0 text-primary-500">
+                {catalog.logoUrl ? <img src={catalog.logoUrl} className="w-5 h-5" alt="" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text">{catalog.name}</p>
+                <p className="text-xs text-text-muted">{catalog.description}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedType(null)} className="ml-auto text-xs text-primary-500 hover:text-primary-700 transition-colors">← Back</button>
+            </div>
+            {catalog.fields.map((f) => (
+              <div key={f.key}>
+                <label htmlFor={`int-${f.key}`} className="block text-sm font-medium text-text-secondary mb-1.5">{f.label}</label>
+                <input
+                  id={`int-${f.key}`}
+                  type={f.secret ? "password" : "text"}
+                  value={formConfig[f.key] || ""}
+                  onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
+                  className={inputCls}
+                  placeholder={f.placeholder}
+                  required
+                />
+              </div>
+            ))}
+            <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
+              {saving ? "Saving..." : "Add Integration"}
+            </button>
+          </form>
+        ) : null}
+      </Modal>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : integrations.length > 0 ? (
+        <div className="space-y-3">
+          {integrations.map((intg) => {
+            const cat = INTEGRATION_CATALOG.find(c => c.type === intg.type);
+            const visibleFields = cat?.fields.filter(f => !f.secret) || [];
+            return (
+              <div key={intg.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 hover:shadow-[var(--shadow-card-hover)] transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0 text-primary-500">
+                      {cat?.logoUrl ? <img src={cat.logoUrl} className="w-5 h-5" alt="" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-base font-bold text-text">{intg.name}</p>
+                        {cat && <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CATEGORY_COLORS[cat.category] || "bg-secondary-100 text-text-muted"}`}>{cat.category}</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                        {visibleFields.map(f => (
+                          <span key={f.key} className="text-xs text-text-muted">
+                            {f.label}: <span className="text-text-secondary font-mono">{intg.config[f.key] || "—"}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0 ml-4">
+                    <button
+                      onClick={() => toggleEnabled(intg.id)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${intg.enabled ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}
+                    >
+                      {intg.enabled ? "Enabled" : "Disabled"}
+                    </button>
+                    <button onClick={() => setDeleteId(intg.id)} className={btnDanger}>Remove</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-12 text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 mx-auto text-text-muted mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          <p className="text-sm text-text-muted">No integrations configured yet. Add one to connect external services like databases, caches, or storage.</p>
+        </div>
+      )}
+      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} message="Are you sure you want to remove this integration?" />
     </div>
   );
 }

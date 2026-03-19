@@ -202,6 +202,8 @@ export const gitApi = {
       lastCommitAuthor: string;
       lastCommitHash: string;
       totalCommits: number;
+      contributors: number;
+      topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
     }>(`/git/connections/${connectionId}/repo-stats?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
   analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string) =>
@@ -233,6 +235,23 @@ export const gitApi = {
     request<{
       files: Array<{ path: string; type: string; size: number }>;
     }>(`/git/connections/${connectionId}/repo-tree?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
+
+  pullOrigin: (connectionId: string, owner: string, repo: string, branch: string) =>
+    request<{ log: string[] }>(`/git/connections/${connectionId}/pull`, {
+      method: "POST",
+      body: JSON.stringify({ connectionId, owner, repo, branch }),
+    }),
+
+  createFixMR: (connectionId: string, data: {
+    owner: string; repo: string; branch: string;
+    filePath: string; startLine: number; endLine: number;
+    ruleId: string; severity: string; message: string; snippet: string;
+    aiType?: string; aiConfig?: Record<string, string>;
+  }) =>
+    request<{ mrUrl: string; mrId: string; mrTitle: string }>(`/git/connections/${connectionId}/create-mr`, {
+      method: "POST",
+      body: JSON.stringify({ connectionId, ...data }),
+    }),
 
   getFileContent: (connectionId: string, owner: string, repo: string, branch: string, path: string) =>
     request<{ content: string }>(
@@ -458,8 +477,12 @@ export const codeAnalysisApi = {
       createdAt: string;
     }>("/code-analysis/scans", { method: "POST", body: JSON.stringify(data) }),
 
-  listScans: (projectId?: string) =>
-    request<{
+  listScans: (projectId?: string, branch?: string) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    if (branch) params.set("branch", branch);
+    const qs = params.toString();
+    return request<{
       scans: Array<{
         id: string;
         projectId: string;
@@ -470,7 +493,8 @@ export const codeAnalysisApi = {
         createdAt: string;
         updatedAt: string;
       }>;
-    }>(`/code-analysis/scans${projectId ? `?projectId=${projectId}` : ""}`),
+    }>(`/code-analysis/scans${qs ? `?${qs}` : ""}`);
+  },
 
   getScan: (scanId: string) =>
     request<{
@@ -508,4 +532,36 @@ export const codeAnalysisApi = {
 
   deleteScan: (scanId: string) =>
     request(`/code-analysis/scans/${scanId}`, { method: "DELETE" }),
+};
+
+// ─── Integrations ───
+
+export const integrationsApi = {
+  listPMTeams: (type: string, config: Record<string, string>) =>
+    request<{
+      teams: Array<{ id: string; name: string; key?: string }>;
+      teamLabel: string;
+      projectLabel: string;
+    }>("/integrations/pm/teams", {
+      method: "POST",
+      body: JSON.stringify({ type, config }),
+    }),
+
+  listPMTeamProjects: (type: string, config: Record<string, string>, teamId: string) =>
+    request<{
+      projects: Array<{ id: string; name: string; key?: string }>;
+    }>("/integrations/pm/team-projects", {
+      method: "POST",
+      body: JSON.stringify({ type, config, teamId }),
+    }),
+
+  createPMIssue: (data: { type: string; config: Record<string, string>; teamId: string; projectId: string; title: string; description: string }) =>
+    request<{
+      issueId: string;
+      issueKey: string;
+      issueUrl: string;
+    }>("/integrations/pm/issues", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

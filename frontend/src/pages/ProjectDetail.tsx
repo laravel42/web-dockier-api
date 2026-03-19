@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { projectsApi, gitApi, deployApi, codeAnalysisApi } from "../services/api";
+import { projectsApi, gitApi, deployApi, codeAnalysisApi, integrationsApi } from "../services/api";
+import { INTEGRATION_CATALOG } from "../data/integrations";
 import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/Modal";
 
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
-const btnDanger = "h-9 px-4 bg-danger-500/10 text-danger-500 text-sm font-medium rounded-[var(--radius-btn)] hover:bg-danger-500/20 transition-colors";
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
 
 interface Project {
@@ -30,6 +30,8 @@ interface RepoStats {
   lastCommitAuthor: string;
   lastCommitHash: string;
   totalCommits: number;
+  contributors: number;
+  topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
 }
 
 interface DetectedService {
@@ -72,15 +74,6 @@ function parseOwnerRepo(repoUrl: string): { owner: string; repo: string } | null
   return null;
 }
 
-const categoryColors: Record<string, string> = {
-  language: "bg-blue-50 text-blue-600",
-  framework: "bg-purple-50 text-purple-600",
-  runtime: "bg-green-50 text-green-600",
-  database: "bg-amber-50 text-amber-600",
-  tool: "bg-slate-100 text-slate-600",
-  infra: "bg-cyan-50 text-cyan-600",
-};
-
 const langColors = [
   "bg-blue-500", "bg-amber-500", "bg-emerald-500", "bg-purple-500",
   "bg-rose-500", "bg-cyan-500", "bg-orange-500", "bg-indigo-500",
@@ -113,6 +106,13 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showDelete, setShowDelete] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [pullLog, setPullLog] = useState<string[] | null>(null);
+  const [pullLoading, setPullLoading] = useState(false);
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [branchList, setBranchList] = useState<string[]>([]);
+  const [branchLoading, setBranchLoading] = useState(false);
+  const [branchSearch, setBranchSearch] = useState("");
   const [stats, setStats] = useState<RepoStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState("");
@@ -151,6 +151,45 @@ export default function ProjectDetail() {
   const [severityFilter, setSeverityFilter] = useState<string>("");
   const [scanError, setScanError] = useState("");
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+
+  // PM integration for creating issues from findings
+  interface PMIntegration { id: string; type: string; name: string; config: Record<string, string>; enabled: boolean; }
+  const [pmIntegrations, setPmIntegrations] = useState<PMIntegration[]>([]);
+  const [issueModal, setIssueModal] = useState<{ open: boolean; finding: FindingItem | null }>({ open: false, finding: null });
+  const [issueTitle, setIssueTitle] = useState("");
+  const [issueDescription, setIssueDescription] = useState("");
+  const [issueIntegration, setIssueIntegration] = useState("");
+  const [issueCreating, setIssueCreating] = useState(false);
+  const [issueSuccess, setIssueSuccess] = useState("");
+  const [pmProjects, setPmProjects] = useState<Array<{ id: string; name: string; key?: string }>>([]);
+  const [pmProjectsLoading, setPmProjectsLoading] = useState(false);
+  const [selectedPmProject, setSelectedPmProject] = useState("");
+  const [pmTeamLabel, setPmTeamLabel] = useState("Project");
+  const [pmProjectLabel, setPmProjectLabel] = useState("");
+  const [pmSubProjects, setPmSubProjects] = useState<Array<{ id: string; name: string; key?: string }>>([]);
+  const [pmSubProjectsLoading, setPmSubProjectsLoading] = useState(false);
+  const [selectedPmSubProject, setSelectedPmSubProject] = useState("");
+  const [issueError, setIssueError] = useState("");
+  const [mrCreating, setMrCreating] = useState<string | null>(null); // finding id being processed
+
+  // Load PM integrations and AI integrations from localStorage
+  interface AIIntegration { id: string; type: string; name: string; config: Record<string, string>; enabled: boolean; }
+  const [aiIntegration, setAiIntegration] = useState<AIIntegration | null>(null);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("integrations");
+      if (stored) {
+        const all: PMIntegration[] = JSON.parse(stored);
+        const pmTypes = INTEGRATION_CATALOG.filter(c => c.category === "Project Management" || c.category === "DevOps").map(c => c.type);
+        const pm = all.filter(i => i.enabled && pmTypes.includes(i.type));
+        setPmIntegrations(pm);
+        // Find first enabled AI integration
+        const aiTypes = INTEGRATION_CATALOG.filter(c => c.category === "AI").map(c => c.type);
+        const ai = all.find(i => i.enabled && aiTypes.includes(i.type)) as AIIntegration | undefined;
+        setAiIntegration(ai || null);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (!projectId) return;
@@ -195,13 +234,54 @@ export default function ProjectDetail() {
     navigate("/projects");
   };
 
+  const handlePullOrigin = async () => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    setPullLoading(true);
+    setPullLog(["$ git pull origin " + (project.branch || "main"), "Connecting to remote…"]);
+    try {
+      const res = await gitApi.pullOrigin(project.connectionId, parsed.owner, parsed.repo, project.branch || "main");
+      setPullLog(res.log);
+    } catch (err: any) {
+      setPullLog((prev) => [...(prev || []), `error: ${err.message || "Pull failed"}`]);
+    } finally {
+      setPullLoading(false);
+    }
+  };
+
+  const handleOpenBranchModal = async () => {
+    if (!project) return;
+    setShowBranchModal(true);
+    setBranchSearch("");
+    setBranchLoading(true);
+    try {
+      const parsed = parseOwnerRepo(project.repository);
+      if (parsed) {
+        const res = await gitApi.listBranches(project.connectionId, parsed.owner, parsed.repo);
+        setBranchList(res.branches);
+      }
+    } catch {
+      setBranchList([]);
+    } finally {
+      setBranchLoading(false);
+    }
+  };
+
+  const handleSwitchBranch = async (branch: string) => {
+    if (!project || !projectId) return;
+    await projectsApi.update(projectId, { branch });
+    setShowBranchModal(false);
+    window.location.reload();
+  };
+
   // ─── Code Analysis helpers ───
 
   const fetchScans = async () => {
-    if (!projectId) return;
+    if (!projectId || !project) return;
     setScansLoading(true);
     try {
-      const res = await codeAnalysisApi.listScans(projectId);
+      const res = await codeAnalysisApi.listScans(projectId, project.branch || undefined);
       setScans(res.scans);
     } catch {}
     finally { setScansLoading(false); }
@@ -220,7 +300,7 @@ export default function ProjectDetail() {
     if (!project) return;
     setScanRunning(true);
     setScanError("");
-    setScanProgress(null);
+    setScanProgress({ phase: "cloning", filesScanned: 0, filesInRepo: 0, findingsCount: 0 });
     setFindings([]);
     setSeverityFilter("");
     try {
@@ -295,10 +375,169 @@ export default function ProjectDetail() {
     if (activeScanId) fetchFindings(activeScanId, severity);
   };
 
-  // Load scans when project loads
+  const openIssueModal = (f: FindingItem) => {
+    const title = `[${f.severity.toUpperCase()}] ${f.message}`;
+    const desc = [
+      `**Security Finding** from Opengrep scan`,
+      ``,
+      `**Severity:** ${f.severity}`,
+      `**File:** \`${f.filePath}\` (line ${f.startLine}${f.endLine !== f.startLine ? `-${f.endLine}` : ""})`,
+      `**Rule:** \`${f.ruleId}\``,
+      f.snippet ? `\n\`\`\`\n${f.snippet}\n\`\`\`` : "",
+      ``,
+      `**Project:** ${project?.name || ""}`,
+      `**Repository:** ${project?.repository || ""}`,
+    ].filter(Boolean).join("\n");
+    setIssueTitle(title);
+    setIssueDescription(desc);
+    const firstPm = pmIntegrations[0];
+    setIssueIntegration(firstPm?.id || "");
+    setIssueCreating(false);
+    setIssueSuccess("");
+    setIssueError("");
+    setPmProjects([]);
+    setSelectedPmProject("");
+    setPmSubProjects([]);
+    setSelectedPmSubProject("");
+    setPmTeamLabel("Project");
+    setPmProjectLabel("");
+    setIssueModal({ open: true, finding: f });
+    if (firstPm) fetchPmTeams(firstPm);
+  };
+
+  const handleCreateMR = async (f: FindingItem) => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    if (!aiIntegration) {
+      alert("No AI integration configured. Add one in Settings → Integrations (OpenAI, Anthropic, or Gemini).");
+      return;
+    }
+    setMrCreating(f.id);
+    try {
+      const result = await gitApi.createFixMR(project.connectionId, {
+        owner: parsed.owner,
+        repo: parsed.repo,
+        branch: project.branch || "main",
+        filePath: f.filePath,
+        startLine: f.startLine,
+        endLine: f.endLine,
+        ruleId: f.ruleId,
+        severity: f.severity,
+        message: f.message,
+        snippet: f.snippet || "",
+        aiType: aiIntegration.type,
+        aiConfig: aiIntegration.config,
+      });
+      window.open(result.mrUrl, "_blank");
+    } catch (err: any) {
+      alert(`Failed to create MR: ${err.message || "Unknown error"}`);
+    } finally {
+      setMrCreating(null);
+    }
+  };
+
+  const fetchPmTeams = async (pm: PMIntegration) => {
+    setPmProjectsLoading(true);
+    setPmProjects([]);
+    setSelectedPmProject("");
+    setPmSubProjects([]);
+    setSelectedPmSubProject("");
+    try {
+      const res = await integrationsApi.listPMTeams(pm.type, pm.config);
+      setPmProjects(res.teams);
+      setPmTeamLabel(res.teamLabel);
+      setPmProjectLabel(res.projectLabel);
+      if (res.teams.length > 0) {
+        setSelectedPmProject(res.teams[0].id);
+        if (res.projectLabel) fetchPmSubProjects(pm, res.teams[0].id);
+      }
+    } catch {}
+    finally { setPmProjectsLoading(false); }
+  };
+
+  const fetchPmSubProjects = async (pm: PMIntegration, teamId: string) => {
+    setPmSubProjectsLoading(true);
+    setPmSubProjects([]);
+    setSelectedPmSubProject("");
+    try {
+      const res = await integrationsApi.listPMTeamProjects(pm.type, pm.config, teamId);
+      setPmSubProjects(res.projects);
+      if (res.projects.length > 0) setSelectedPmSubProject(res.projects[0].id);
+    } catch {}
+    finally { setPmSubProjectsLoading(false); }
+  };
+
+  const handleIntegrationChange = (integrationId: string) => {
+    setIssueIntegration(integrationId);
+    const pm = pmIntegrations.find(i => i.id === integrationId);
+    if (pm) fetchPmTeams(pm);
+  };
+
+  const handleTeamChange = (teamId: string) => {
+    setSelectedPmProject(teamId);
+    setPmSubProjects([]);
+    setSelectedPmSubProject("");
+    if (pmProjectLabel) {
+      const pm = pmIntegrations.find(i => i.id === issueIntegration);
+      if (pm) fetchPmSubProjects(pm, teamId);
+    }
+  };
+
+  const handleCreateIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pm = pmIntegrations.find(i => i.id === issueIntegration);
+    if (!pm) return;
+    setIssueCreating(true);
+    setIssueSuccess("");
+    setIssueError("");
+    try {
+      const result = await integrationsApi.createPMIssue({
+        type: pm.type,
+        config: pm.config,
+        teamId: selectedPmProject,
+        projectId: selectedPmSubProject,
+        title: issueTitle,
+        description: issueDescription,
+      });
+      // Also store locally for tracking
+      const issueRecord = {
+        id: result.issueId,
+        issueKey: result.issueKey,
+        issueUrl: result.issueUrl,
+        integrationId: pm.id,
+        integrationName: pm.name,
+        integrationType: pm.type,
+        pmProjectId: selectedPmProject,
+        pmProjectName: pmProjects.find(p => p.id === selectedPmProject)?.name || "",
+        pmSubProjectId: selectedPmSubProject,
+        pmSubProjectName: pmSubProjects.find(p => p.id === selectedPmSubProject)?.name || "",
+        title: issueTitle,
+        findingId: issueModal.finding?.id,
+        ruleId: issueModal.finding?.ruleId,
+        severity: issueModal.finding?.severity,
+        filePath: issueModal.finding?.filePath,
+        createdAt: new Date().toISOString(),
+      };
+      const existing = JSON.parse(localStorage.getItem("created_issues") || "[]");
+      existing.push(issueRecord);
+      localStorage.setItem("created_issues", JSON.stringify(existing));
+      const label = result.issueKey || result.issueId;
+      setIssueSuccess(result.issueUrl
+        ? `Issue ${label} created in ${pm.name}`
+        : `Issue created in ${pm.name}`);
+      setTimeout(() => setIssueModal({ open: false, finding: null }), 2000);
+    } catch (err: any) {
+      setIssueError(err.message || "Failed to create issue");
+    } finally {
+      setIssueCreating(false);
+    }
+  };
+
+  // Load scans when project loads or branch changes
   useEffect(() => {
     if (project?.id) fetchScans();
-  }, [project?.id]);
+  }, [project?.id, project?.branch]);
 
   // Initialize service modes when analysis loads
   useEffect(() => {
@@ -470,9 +709,9 @@ export default function ProjectDetail() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
       </svg>
     )},
-    { label: "Language", value: stats?.language || "-", icon: (
+    { label: "Contributors", value: stats?.contributors ?? "-", icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
       </svg>
     )},
   ];
@@ -499,9 +738,55 @@ export default function ProjectDetail() {
             <p className="text-sm text-text-muted">Created {new Date(project.createdAt).toLocaleDateString()}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate(`/projects`)} className={btnPrimary}>Edit</button>
-          <button onClick={() => setShowDelete(true)} className={btnDanger}>Delete</button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
+            className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-secondary-50 hover:bg-secondary-100 transition-colors text-sm font-medium text-text"
+          >
+            Actions
+            <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 transition-transform ${headerMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+          {headerMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setHeaderMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg bg-white shadow-lg border border-border py-1">
+                <button
+                  type="button"
+                  onClick={() => { setHeaderMenuOpen(false); handlePullOrigin(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-secondary-50 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Pull from origin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setHeaderMenuOpen(false); handleOpenBranchModal(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-secondary-50 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                  </svg>
+                  Switch branch
+                </button>
+                <div className="border-t border-border my-1" />
+                <button
+                  type="button"
+                  onClick={() => { setHeaderMenuOpen(false); setShowDelete(true); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger-500 hover:bg-danger-500/5 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  Delete project
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -624,10 +909,38 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Code Analysis & Deployment Suggestions */}
+      {/* Contributors */}
+      {stats && stats.topContributors && stats.topContributors.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Contributors</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {stats.topContributors.map((c) => (
+              <div key={c.name} className={`${cardCls} p-4 flex items-center gap-3`}>
+                {c.avatarUrl ? (
+                  <img src={c.avatarUrl} alt={c.name} className="w-10 h-10 rounded-full shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm shrink-0">
+                    {c.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  {c.profileUrl ? (
+                    <a href={c.profileUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-text hover:text-primary-500 transition-colors truncate block">{c.name}</a>
+                  ) : (
+                    <p className="text-sm font-medium text-text truncate">{c.name}</p>
+                  )}
+                  <p className="text-xs text-text-muted">{c.commits} commit{c.commits !== 1 ? "s" : ""}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Deployment Options */}
       {project.connectionId && project.repository && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Code Analysis & Deployment Options</h2>
+          <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Deployment Options</h2>
           {analysisLoading ? (
             <div className="flex flex-col items-center py-10 gap-3">
               <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -637,42 +950,8 @@ export default function ProjectDetail() {
             <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-4 py-3 text-sm text-danger-500">{analysisError}</div>
           ) : analysis ? (
             <div className="space-y-6">
-              {/* Tech Stack */}
-              <div className={`${cardCls} p-5`}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-text">Detected Tech Stack</h3>
-                  <div className="flex items-center gap-3 text-xs text-text-muted">
-                    {analysis.hasDocker && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-cyan-50 text-cyan-600 rounded">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" /></svg>
-                        Docker
-                      </span>
-                    )}
-                    {analysis.hasCi && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 rounded">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        CI/CD
-                      </span>
-                    )}
-                    {analysis.repoSize > 0 && (
-                      <span>{analysis.repoSize > 1024 ? `${(analysis.repoSize / 1024).toFixed(1)} MB` : `${analysis.repoSize} KB`}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {analysis.techStack.map((t) => (
-                    <span key={t.name} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium ${categoryColors[t.category] || "bg-secondary-100 text-text-secondary"}`}>
-                      {t.name}
-                      <span className="opacity-50">{t.confidence}%</span>
-                    </span>
-                  ))}
-                  {analysis.techStack.length === 0 && <p className="text-sm text-text-muted">No technologies detected</p>}
-                </div>
-              </div>
-
               {/* Deployment Options */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-text">Recommended Deployment Options</h3>
                 {(() => {
                   const filtered = userProviders.length > 0
                     ? analysis.deployOptions.filter((opt) => {
@@ -778,7 +1057,7 @@ export default function ProjectDetail() {
       {project.connectionId && project.repository && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide">Opengrep Security Scan</h2>
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide">Security Scan</h2>
             <button
               type="button"
               onClick={handleRunScan}
@@ -859,7 +1138,7 @@ export default function ProjectDetail() {
               <div className={`${cardCls} p-4`}>
                 <p className="text-xs text-text-muted mb-2">Scan History</p>
                 <div className="flex flex-wrap gap-2">
-                  {scans.map((s) => (
+                  {scans.slice(0, 5).map((s) => (
                     <button
                       key={s.id}
                       type="button"
@@ -888,9 +1167,9 @@ export default function ProjectDetail() {
                 return (
                   <div className="space-y-4">
                     {/* Summary cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       {[
-                        { label: "Files Scanned", value: `${scan.summary.filesScanned ?? 0}/${scan.summary.filesInRepo ?? 0}`, color: "text-text-secondary", bg: "bg-secondary-50", filter: null },
+                        { label: "Files", value: `${scan.summary.filesScanned ?? 0}/${scan.summary.filesInRepo ?? 0}`, color: "text-text-secondary", bg: "bg-secondary-50", filter: null },
                         { label: "Total", value: scan.summary.totalFindings, color: "text-text", bg: "bg-secondary-50", filter: "" },
                         { label: "Errors", value: scan.summary.errors, color: "text-danger-500", bg: "bg-danger-500/10", filter: "error" },
                         { label: "Warnings", value: scan.summary.warnings, color: "text-warning-500", bg: "bg-warning-50", filter: "warning" },
@@ -900,10 +1179,10 @@ export default function ProjectDetail() {
                           key={c.label}
                           type="button"
                           onClick={() => c.filter !== null && handleSeverityFilter(c.filter)}
-                          className={`${cardCls} p-4 text-center transition-all ${c.filter !== null && severityFilter === c.filter ? "ring-2 ring-primary-500" : "hover:shadow-md"} ${c.filter === null ? "cursor-default" : ""}`}
+                          className={`${cardCls} px-3 py-2 text-center transition-all ${c.filter !== null && severityFilter === c.filter ? "ring-2 ring-primary-500" : "hover:shadow-md"} ${c.filter === null ? "cursor-default" : ""}`}
                         >
-                          <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
-                          <p className="text-xs text-text-muted mt-1">{c.label}</p>
+                          <p className={`text-lg font-bold ${c.color}`}>{c.value}</p>
+                          <p className="text-[10px] text-text-muted">{c.label}</p>
                         </button>
                       ))}
                     </div>
@@ -914,7 +1193,7 @@ export default function ProjectDetail() {
                         <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
                       </div>
                     ) : findings.length > 0 ? (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {Object.entries(
                           findings.reduce<Record<string, FindingItem[]>>((acc, f) => {
                             (acc[f.filePath] ||= []).push(f);
@@ -924,27 +1203,24 @@ export default function ProjectDetail() {
                           .sort(([, a], [, b]) => b.length - a.length)
                           .map(([filePath, fileFindings]) => (
                           <details key={filePath} className={`${cardCls} group`}>
-                            <summary className="flex items-center gap-3 p-4 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-text-muted shrink-0 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text-muted shrink-0 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                               </svg>
-                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                              </svg>
-                              <span className="text-sm font-mono text-text truncate">{filePath}</span>
-                              <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                              <span className="text-xs font-mono text-text truncate">{filePath}</span>
+                              <div className="flex items-center gap-1 ml-auto shrink-0">
                                 {fileFindings.filter(f => f.severity === "error").length > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-danger-500/10 text-danger-500">
+                                  <span className="px-1 py-px rounded text-[10px] font-semibold bg-danger-500/10 text-danger-500">
                                     {fileFindings.filter(f => f.severity === "error").length}
                                   </span>
                                 )}
                                 {fileFindings.filter(f => f.severity === "warning").length > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-warning-50 text-warning-500">
+                                  <span className="px-1 py-px rounded text-[10px] font-semibold bg-warning-50 text-warning-500">
                                     {fileFindings.filter(f => f.severity === "warning").length}
                                   </span>
                                 )}
                                 {fileFindings.filter(f => f.severity === "info").length > 0 && (
-                                  <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-primary-50 text-primary-500">
+                                  <span className="px-1 py-px rounded text-[10px] font-semibold bg-primary-50 text-primary-500">
                                     {fileFindings.filter(f => f.severity === "info").length}
                                   </span>
                                 )}
@@ -952,9 +1228,9 @@ export default function ProjectDetail() {
                             </summary>
                             <div className="divide-y divide-border border-t border-border">
                               {fileFindings.map((f) => (
-                                <div key={f.id} className="px-4 py-3 pl-11">
-                                  <div className="flex items-start gap-3">
-                                    <span className={`mt-0.5 px-2 py-0.5 rounded text-xs font-semibold uppercase shrink-0 ${
+                                <div key={f.id} className="px-3 py-2 pl-9">
+                                  <div className="flex items-start gap-2">
+                                    <span className={`mt-px px-1.5 py-px rounded text-[10px] font-semibold uppercase shrink-0 ${
                                       f.severity === "error" ? "bg-danger-500/10 text-danger-500" :
                                       f.severity === "warning" ? "bg-warning-50 text-warning-500" :
                                       "bg-primary-50 text-primary-500"
@@ -962,13 +1238,38 @@ export default function ProjectDetail() {
                                       {f.severity}
                                     </span>
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-sm font-medium text-text">{f.message}</p>
-                                      <div className="flex items-center gap-3 mt-1 text-xs text-text-muted">
-                                        <span className="font-mono">line {f.startLine}</span>
-                                        <span className="px-1.5 py-0.5 bg-secondary-50 rounded font-mono">{f.ruleId}</span>
+                                      <p className="text-xs text-text leading-snug">{f.message}</p>
+                                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                                        <span className="font-mono">L{f.startLine}</span>
+                                        <span className="px-1 py-px bg-secondary-50 rounded font-mono">{f.ruleId}</span>
+                                        {pmIntegrations.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => openIssueModal(f)}
+                                            className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-md bg-primary-500 text-white text-xs font-semibold hover:bg-primary-600 transition-colors"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                            </svg>
+                                            Create issue
+                                          </button>
+                                        )}
+                                        {project.connectionId && aiIntegration && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCreateMR(f)}
+                                            disabled={mrCreating === f.id}
+                                            className={`${pmIntegrations.length === 0 ? "ml-auto" : ""} flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors`}
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                                            </svg>
+                                            {mrCreating === f.id ? "Fixing…" : "Fix with AI"}
+                                          </button>
+                                        )}
                                       </div>
                                       {f.snippet && (
-                                        <pre className="mt-2 p-2.5 rounded-md bg-gray-900 text-gray-300 text-xs font-mono overflow-x-auto">
+                                        <pre className="mt-1 p-1.5 rounded bg-gray-900 text-gray-300 text-[11px] font-mono overflow-x-auto leading-tight">
                                           <code>{f.snippet}</code>
                                         </pre>
                                       )}
@@ -1302,7 +1603,164 @@ export default function ProjectDetail() {
         })()}
       </Modal>
 
+      {/* Create Issue from Finding Modal */}
+      <Modal open={issueModal.open} onClose={() => setIssueModal({ open: false, finding: null })} title="Create Issue from Finding">
+        {issueSuccess ? (
+          <div className="flex flex-col items-center py-6 gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <p className="text-sm font-medium text-success-500">{issueSuccess}</p>
+          </div>
+        ) : (
+          <form onSubmit={handleCreateIssue} className="space-y-4">
+            {pmIntegrations.length > 1 && (
+              <div>
+                <label htmlFor="issue-integration" className="block text-sm font-medium text-text-secondary mb-1.5">Integration</label>
+                <select id="issue-integration" value={issueIntegration} onChange={(e) => handleIntegrationChange(e.target.value)} className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors">
+                  {pmIntegrations.map((pm) => (
+                    <option key={pm.id} value={pm.id}>{pm.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {pmIntegrations.length === 1 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary-50 text-sm text-text-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-primary-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Z" />
+                </svg>
+                Creating in {pmIntegrations[0].name}
+              </div>
+            )}
+            {/* Team / top-level select */}
+            <div>
+              <label htmlFor="issue-pm-team" className="block text-sm font-medium text-text-secondary mb-1.5">
+                {pmTeamLabel}
+                {pmProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
+              </label>
+              {pmProjectsLoading ? (
+                <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
+                  <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-text-muted">Fetching {pmTeamLabel.toLowerCase()}s…</span>
+                </div>
+              ) : pmProjects.length > 0 ? (
+                <select id="issue-pm-team" value={selectedPmProject} onChange={(e) => handleTeamChange(e.target.value)} className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors">
+                  {pmProjects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50 text-sm text-text-muted">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                  </svg>
+                  No {pmTeamLabel.toLowerCase()}s found — check your integration credentials
+                </div>
+              )}
+            </div>
+            {/* Sub-project select (only for two-level tools) */}
+            {pmProjectLabel && (
+              <div>
+                <label htmlFor="issue-pm-project" className="block text-sm font-medium text-text-secondary mb-1.5">
+                  {pmProjectLabel}
+                  {pmSubProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
+                </label>
+                {pmSubProjectsLoading ? (
+                  <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
+                    <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-text-muted">Fetching {pmProjectLabel.toLowerCase()}s…</span>
+                  </div>
+                ) : pmSubProjects.length > 0 ? (
+                  <select id="issue-pm-project" value={selectedPmSubProject} onChange={(e) => setSelectedPmSubProject(e.target.value)} className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors">
+                    <option value="">None (create at {pmTeamLabel.toLowerCase()} level)</option>
+                    {pmSubProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-text-muted py-1">No {pmProjectLabel.toLowerCase()}s in this {pmTeamLabel.toLowerCase()}</p>
+                )}
+              </div>
+            )}
+            <div>
+              <label htmlFor="issue-title" className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
+              <input id="issue-title" type="text" value={issueTitle} onChange={(e) => setIssueTitle(e.target.value)} className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors" required />
+            </div>
+            <div>
+              <label htmlFor="issue-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
+              <textarea id="issue-desc" value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} rows={8} className="w-full px-3 py-2 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
+            </div>
+            {issueError && (
+              <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{issueError}</div>
+            )}
+            <button type="submit" disabled={issueCreating || !issueIntegration || (!selectedPmProject && pmProjects.length > 0)} className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 transition-colors">
+              {issueCreating ? "Creating..." : "Create Issue"}
+            </button>
+          </form>
+        )}
+      </Modal>
+
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />
+
+      {/* Pull from origin log modal */}
+      <Modal open={pullLog !== null} onClose={() => setPullLog(null)} title="Pull from Origin">
+        <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs leading-relaxed text-green-400 max-h-80 overflow-y-auto">
+          {pullLog?.map((line, i) => (
+            <div key={i} className={line.startsWith("error:") ? "text-red-400" : ""}>{line}</div>
+          ))}
+          {pullLoading && (
+            <div className="flex items-center gap-2 mt-1 text-gray-400">
+              <div className="w-3 h-3 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+              Fetching…
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end mt-4">
+          <button type="button" onClick={() => setPullLog(null)} className={btnSecondary}>Close</button>
+        </div>
+      </Modal>
+
+      {/* Switch branch modal */}
+      <Modal open={showBranchModal} onClose={() => setShowBranchModal(false)} title="Switch Branch">
+        <input
+          type="text"
+          placeholder="Search branches…"
+          value={branchSearch}
+          onChange={(e) => setBranchSearch(e.target.value)}
+          className="w-full h-9 px-3 rounded-lg border border-border bg-secondary-50 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500/30 mb-3"
+        />
+        {branchLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {branchList
+              .filter((b) => b.toLowerCase().includes(branchSearch.toLowerCase()))
+              .map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => handleSwitchBranch(b)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
+                    b === project.branch
+                      ? "bg-primary-50 text-primary-600 font-medium"
+                      : "text-text hover:bg-secondary-50"
+                  }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                  </svg>
+                  {b}
+                  {b === project.branch && <span className="ml-auto text-xs text-primary-500">current</span>}
+                </button>
+              ))}
+            {branchList.filter((b) => b.toLowerCase().includes(branchSearch.toLowerCase())).length === 0 && (
+              <p className="text-sm text-text-muted text-center py-4">No branches found</p>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -235,10 +235,18 @@ export const createScan = api(
 
 export const listScans = api(
   { method: "GET", path: "/code-analysis/scans", auth: true },
-  async (params: { projectId?: string }): Promise<{ scans: Scan[] }> => {
+  async (params: { projectId?: string; branch?: string }): Promise<{ scans: Scan[] }> => {
     const authData = getAuthData()!;
 
-    const rows = params.projectId
+    const rows = params.projectId && params.branch
+      ? db.query<{
+          id: string; user_id: string; project_id: string; connection_id: string;
+          repo: string; branch: string; status: string; summary: ScanSummary;
+          created_at: Date; updated_at: Date;
+        }>`SELECT id, user_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+           FROM scans WHERE user_id = ${authData.userID} AND project_id = ${params.projectId} AND branch = ${params.branch}
+           ORDER BY created_at DESC LIMIT 50`
+      : params.projectId
       ? db.query<{
           id: string; user_id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;

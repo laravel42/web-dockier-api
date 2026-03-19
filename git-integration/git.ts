@@ -265,7 +265,384 @@ export const getConnectionBranches = api(
   }
 );
 
+// ─── Pull from Origin ───
+
+export const pullOrigin = api(
+  { method: "POST", path: "/git/connections/:connectionId/pull", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string; branch: string }): Promise<{ log: string[] }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const log: string[] = [];
+    const branch = params.branch || "main";
+    log.push(`$ git pull origin ${branch}`);
+    log.push(`From ${conn.endpoint || "remote"}:${params.owner}/${params.repo}`);
+
+    try {
+      if (conn.provider === "github") {
+        const baseUrl = conn.endpoint || "https://api.github.com";
+        const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
+        const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=10`, { headers });
+        if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
+        const commits = await res.json() as any[];
+        if (commits.length === 0) {
+          log.push("Already up to date.");
+        } else {
+          log.push(` * branch            ${branch} -> FETCH_HEAD`);
+          const latest = commits[0];
+          const oldest = commits[commits.length - 1];
+          log.push(`Updating ${oldest.sha?.substring(0, 7)}..${latest.sha?.substring(0, 7)}`);
+          log.push("Fast-forward");
+          for (const c of commits) {
+            const date = c.commit?.author?.date ? new Date(c.commit.author.date).toLocaleString() : "";
+            log.push(` ${c.sha?.substring(0, 7)} ${c.commit?.message?.split("\n")[0] || ""} (${c.commit?.author?.name || "unknown"}, ${date})`);
+          }
+          // Fetch changed files from latest commit
+          try {
+            const detailRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits/${latest.sha}`, { headers });
+            if (detailRes.ok) {
+              const detail = await detailRes.json() as any;
+              const files = detail.files || [];
+              log.push(`  ${files.length} file${files.length !== 1 ? "s" : ""} changed`);
+              for (const f of files.slice(0, 20)) {
+                const stat = `+${f.additions || 0} -${f.deletions || 0}`;
+                log.push(`    ${f.status?.charAt(0)?.toUpperCase() || "M"}  ${f.filename} (${stat})`);
+              }
+              if (files.length > 20) log.push(`    ... and ${files.length - 20} more files`);
+            }
+          } catch {}
+        }
+      } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+        const baseUrl = conn.endpoint || "https://gitlab.com";
+        const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token };
+        const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+        const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=10`, { headers });
+        if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
+        const commits = await res.json() as any[];
+        if (commits.length === 0) {
+          log.push("Already up to date.");
+        } else {
+          log.push(` * branch            ${branch} -> FETCH_HEAD`);
+          const latest = commits[0];
+          const oldest = commits[commits.length - 1];
+          log.push(`Updating ${oldest.short_id || oldest.id?.substring(0, 7)}..${latest.short_id || latest.id?.substring(0, 7)}`);
+          log.push("Fast-forward");
+          for (const c of commits) {
+            const date = c.committed_date ? new Date(c.committed_date).toLocaleString() : "";
+            log.push(` ${c.short_id || c.id?.substring(0, 7)} ${c.title || c.message?.split("\n")[0] || ""} (${c.author_name || "unknown"}, ${date})`);
+          }
+          // Fetch diff stats from latest commit
+          try {
+            const diffRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits/${latest.id}/diff?per_page=50`, { headers });
+            if (diffRes.ok) {
+              const diffs = await diffRes.json() as any[];
+              log.push(`  ${diffs.length} file${diffs.length !== 1 ? "s" : ""} changed`);
+              for (const d of diffs.slice(0, 20)) {
+                const status = d.new_file ? "A" : d.deleted_file ? "D" : d.renamed_file ? "R" : "M";
+                log.push(`    ${status}  ${d.new_path || d.old_path}`);
+              }
+              if (diffs.length > 20) log.push(`    ... and ${diffs.length - 20} more files`);
+            }
+          } catch {}
+        }
+      } else if (conn.provider === "bitbucket") {
+        const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+        const headers = { Authorization: `Bearer ${conn.personal_token}` };
+        const res = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/commits/${encodeURIComponent(branch)}?pagelen=10`, { headers });
+        if (!res.ok) throwProviderError("Bitbucket", res.status, res.statusText);
+        const data = await res.json() as any;
+        const commits = data.values || [];
+        if (commits.length === 0) {
+          log.push("Already up to date.");
+        } else {
+          log.push(` * branch            ${branch} -> FETCH_HEAD`);
+          log.push("Fast-forward");
+          for (const c of commits) {
+            const date = c.date ? new Date(c.date).toLocaleString() : "";
+            log.push(` ${c.hash?.substring(0, 7)} ${c.message?.split("\n")[0] || ""} (${c.author?.user?.display_name || "unknown"}, ${date})`);
+          }
+        }
+      } else {
+        log.push("Provider not supported for pull.");
+      }
+    } catch (err: any) {
+      log.push(`error: ${err.message || "Unknown error"}`);
+    }
+
+    return { log };
+  }
+);
+
+// ─── Helper: call AI to generate fix ───
+
+async function aiRequest(url: string, options: RequestInit, maxRetries = 3): Promise<any> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok) return res.json();
+    if (res.status === 429 && attempt < maxRetries) {
+      const retryAfter = parseInt(res.headers.get("retry-after") || "0", 10);
+      const delay = retryAfter > 0 ? retryAfter * 1000 : Math.min(2000 * Math.pow(2, attempt), 30000);
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    const body = await res.json().catch(() => ({})) as any;
+    throw new Error(body.error?.message || res.statusText);
+  }
+  throw new Error("Max retries exceeded");
+}
+
+async function generateAIFix(aiType: string, aiConfig: Record<string, string>, filePath: string, fileContent: string, finding: { ruleId: string; severity: string; message: string; snippet: string; startLine: number; endLine: number }): Promise<string> {
+  const prompt = `You are a senior security engineer. Fix the following security vulnerability in the code.
+
+**File:** \`${filePath}\`
+**Rule:** \`${finding.ruleId}\`
+**Severity:** ${finding.severity}
+**Issue:** ${finding.message}
+**Lines:** ${finding.startLine}–${finding.endLine}
+
+**Vulnerable code snippet:**
+\`\`\`
+${finding.snippet}
+\`\`\`
+
+**Full file content:**
+\`\`\`
+${fileContent}
+\`\`\`
+
+Return ONLY the complete fixed file content. Do not include any explanation, markdown fences, or commentary — just the raw file content.`;
+
+  if (aiType === "openai") {
+    const headers = { Authorization: `Bearer ${aiConfig.apiKey}`, "Content-Type": "application/json" };
+    // Try gpt-4o first, fall back to gpt-4o-mini on rate limit
+    const models = ["gpt-4o", "gpt-4o-mini"];
+    let lastErr: Error | null = null;
+    for (const model of models) {
+      try {
+        const data = await aiRequest("https://api.openai.com/v1/chat/completions", {
+          method: "POST", headers,
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
+        });
+        return data.choices?.[0]?.message?.content?.trim() || "";
+      } catch (e: any) {
+        lastErr = e;
+        if (!e.message?.includes("429") && !e.message?.toLowerCase().includes("rate")) throw e;
+        // rate limited on this model, try next
+      }
+    }
+    throw lastErr || new Error("OpenAI API failed");
+  } else if (aiType === "anthropic") {
+    const data = await aiRequest("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": aiConfig.apiKey, "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8192, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
+    });
+    return data.content?.[0]?.text?.trim() || "";
+  } else if (aiType === "google-gemini") {
+    const data = await aiRequest(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiConfig.apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2 } }),
+    });
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  }
+  throw new Error(`Unsupported AI provider: ${aiType}`);
+}
+
+// ─── Create PR/MR with AI Fix ───
+
+export const createFixMR = api(
+  { method: "POST", path: "/git/connections/:connectionId/create-mr", auth: true },
+  async (params: {
+    connectionId: string;
+    owner: string;
+    repo: string;
+    branch: string;
+    filePath: string;
+    startLine: number;
+    endLine: number;
+    ruleId: string;
+    severity: string;
+    message: string;
+    snippet: string;
+    aiType?: string;
+    aiConfig?: Record<string, string>;
+  }): Promise<{ mrUrl: string; mrId: string; mrTitle: string }> => {
+    const conn = await db.queryRow<{
+      provider: string; personal_token: string; endpoint: string;
+    }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+
+    if (!conn) throw APIError.notFound("Connection not found");
+
+    const fixBranch = `fix/${params.ruleId.replace(/[^a-zA-Z0-9._-]/g, "-")}-${Date.now()}`;
+    const title = `Fix: [${params.severity.toUpperCase()}] ${params.message.substring(0, 80)}`;
+    const hasAI = params.aiType && params.aiConfig?.apiKey;
+
+    const bodyParts = [
+      `## Security Fix`,
+      ``,
+      `**Rule:** \`${params.ruleId}\``,
+      `**Severity:** ${params.severity}`,
+      `**File:** \`${params.filePath}\` (L${params.startLine}–L${params.endLine})`,
+      ``,
+      `**Finding:** ${params.message}`,
+      ``,
+      params.snippet ? `\`\`\`\n${params.snippet}\n\`\`\`` : "",
+      ``,
+      `---`,
+      hasAI ? `*Fix generated by AI (${params.aiType}) from security scan*` : `*Created automatically from security scan*`,
+    ];
+    const body = bodyParts.filter(Boolean).join("\n");
+
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json" };
+
+      // Get the SHA of the source branch
+      const refRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/git/ref/heads/${encodeURIComponent(params.branch)}`, { headers });
+      if (!refRes.ok) throw APIError.internal("Could not get branch ref");
+      const refData = await refRes.json() as any;
+      const sha = refData.object?.sha;
+
+      // Create the fix branch
+      const createRefRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/git/refs`, {
+        method: "POST", headers,
+        body: JSON.stringify({ ref: `refs/heads/${fixBranch}`, sha }),
+      });
+      if (!createRefRes.ok) {
+        const err = await createRefRes.json().catch(() => ({})) as any;
+        throw APIError.internal(`Failed to create branch: ${err.message || createRefRes.statusText}`);
+      }
+
+      // If AI is available, fetch file, generate fix, and commit
+      if (hasAI) {
+        // Get file content
+        const fileRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contents/${encodeURIComponent(params.filePath)}?ref=${encodeURIComponent(fixBranch)}`, { headers });
+        if (fileRes.ok) {
+          const fileData = await fileRes.json() as any;
+          const originalContent = Buffer.from(fileData.content || "", "base64").toString("utf-8");
+          const fixedContent = await generateAIFix(params.aiType!, params.aiConfig!, params.filePath, originalContent, params);
+          if (fixedContent && fixedContent !== originalContent) {
+            // Commit the fix
+            await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contents/${encodeURIComponent(params.filePath)}`, {
+              method: "PUT", headers,
+              body: JSON.stringify({
+                message: `fix: ${params.ruleId} — ${params.message.substring(0, 60)}`,
+                content: Buffer.from(fixedContent).toString("base64"),
+                sha: fileData.sha,
+                branch: fixBranch,
+              }),
+            });
+          }
+        }
+      }
+
+      // Create the PR
+      const prRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/pulls`, {
+        method: "POST", headers,
+        body: JSON.stringify({ title, body, head: fixBranch, base: params.branch }),
+      });
+      if (!prRes.ok) {
+        const err = await prRes.json().catch(() => ({})) as any;
+        throw APIError.internal(`Failed to create PR: ${err.message || prRes.statusText}`);
+      }
+      const pr = await prRes.json() as any;
+      return { mrUrl: pr.html_url || "", mrId: String(pr.number || pr.id), mrTitle: title };
+
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token, "Content-Type": "application/json" };
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+
+      // Create the fix branch
+      const branchRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches`, {
+        method: "POST", headers,
+        body: JSON.stringify({ branch: fixBranch, ref: params.branch }),
+      });
+      if (!branchRes.ok) {
+        const err = await branchRes.json().catch(() => ({})) as any;
+        throw APIError.internal(`Failed to create branch: ${err.message || err.error || branchRes.statusText}`);
+      }
+
+      // If AI is available, fetch file, generate fix, and commit
+      if (hasAI) {
+        const fileRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/files/${encodeURIComponent(params.filePath)}?ref=${encodeURIComponent(fixBranch)}`, { headers });
+        if (fileRes.ok) {
+          const fileData = await fileRes.json() as any;
+          const originalContent = Buffer.from(fileData.content || "", "base64").toString("utf-8");
+          const fixedContent = await generateAIFix(params.aiType!, params.aiConfig!, params.filePath, originalContent, params);
+          if (fixedContent && fixedContent !== originalContent) {
+            await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/files/${encodeURIComponent(params.filePath)}`, {
+              method: "PUT", headers,
+              body: JSON.stringify({
+                branch: fixBranch,
+                commit_message: `fix: ${params.ruleId} — ${params.message.substring(0, 60)}`,
+                content: fixedContent,
+                encoding: "text",
+              }),
+            });
+          }
+        }
+      }
+
+      // Create the MR
+      const mrRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/merge_requests`, {
+        method: "POST", headers,
+        body: JSON.stringify({ source_branch: fixBranch, target_branch: params.branch, title, description: body }),
+      });
+      if (!mrRes.ok) {
+        const err = await mrRes.json().catch(() => ({})) as any;
+        throw APIError.internal(`Failed to create MR: ${err.message || err.error || mrRes.statusText}`);
+      }
+      const mr = await mrRes.json() as any;
+      return { mrUrl: mr.web_url || "", mrId: String(mr.iid || mr.id), mrTitle: title };
+
+    } else if (conn.provider === "bitbucket") {
+      const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+      const headers = { Authorization: `Bearer ${conn.personal_token}`, "Content-Type": "application/json" };
+
+      // Create the fix branch
+      const branchRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/refs/branches`, {
+        method: "POST", headers,
+        body: JSON.stringify({ name: fixBranch, target: { hash: params.branch } }),
+      });
+      if (!branchRes.ok) {
+        const err = await branchRes.json().catch(() => ({})) as any;
+        throw APIError.internal(`Failed to create branch: ${err.error?.message || branchRes.statusText}`);
+      }
+
+      // Create the PR
+      const prRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/pullrequests`, {
+        method: "POST", headers,
+        body: JSON.stringify({
+          title, description: body,
+          source: { branch: { name: fixBranch } },
+          destination: { branch: { name: params.branch } },
+        }),
+      });
+      if (!prRes.ok) {
+        const err = await prRes.json().catch(() => ({})) as any;
+        throw APIError.internal(`Failed to create PR: ${err.error?.message || prRes.statusText}`);
+      }
+      const pr = await prRes.json() as any;
+      return { mrUrl: pr.links?.html?.href || "", mrId: String(pr.id), mrTitle: title };
+    }
+
+    throw APIError.unimplemented("PR/MR creation not supported for this provider");
+  }
+);
+
 // ─── Repo Stats / KPIs ───
+
+interface ContributorInfo {
+  name: string;
+  avatarUrl: string;
+  commits: number;
+  profileUrl: string;
+}
 
 interface RepoStats {
   stars: number;
@@ -279,6 +656,8 @@ interface RepoStats {
   lastCommitAuthor: string;
   lastCommitHash: string;
   totalCommits: number;
+  contributors: number;
+  topContributors: ContributorInfo[];
 }
 
 export const getRepoStats = api(
@@ -367,6 +746,34 @@ export const getRepoStats = api(
         }
       } catch {}
 
+      // Fetch contributors from commits on the selected branch
+      let contributors = 0;
+      let topContributors: ContributorInfo[] = [];
+      try {
+        // Fetch up to 100 recent commits on the branch and aggregate by author
+        const commitsForContrib = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=100`, { headers });
+        if (commitsForContrib.ok) {
+          const commits = await commitsForContrib.json() as any[];
+          const authorMap = new Map<string, { name: string; avatarUrl: string; commits: number; profileUrl: string }>();
+          for (const c of commits) {
+            const login = c.author?.login || c.commit?.author?.name || "Anonymous";
+            const existing = authorMap.get(login);
+            if (existing) {
+              existing.commits++;
+            } else {
+              authorMap.set(login, {
+                name: login,
+                avatarUrl: c.author?.avatar_url || "",
+                commits: 1,
+                profileUrl: c.author?.html_url || "",
+              });
+            }
+          }
+          topContributors = Array.from(authorMap.values()).sort((a, b) => b.commits - a.commits).slice(0, 20);
+          contributors = authorMap.size;
+        }
+      } catch {}
+
       return {
         stars: repoData.stargazers_count ?? 0,
         forks: repoData.forks_count ?? 0,
@@ -379,6 +786,8 @@ export const getRepoStats = api(
         lastCommitAuthor,
         lastCommitHash,
         totalCommits,
+        contributors,
+        topContributors,
       };
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
@@ -432,6 +841,41 @@ export const getRepoStats = api(
         }
       } catch {}
 
+      // Fetch contributors from commits on the selected branch
+      let contributors = 0;
+      let topContributors: ContributorInfo[] = [];
+      try {
+        const contribRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=100`, { headers });
+        if (contribRes.ok) {
+          const commits = await contribRes.json() as any[];
+          const authorMap = new Map<string, { name: string; avatarUrl: string; commits: number; profileUrl: string }>();
+          for (const c of commits) {
+            const name = c.author_name || "Anonymous";
+            const existing = authorMap.get(name);
+            if (existing) {
+              existing.commits++;
+            } else {
+              authorMap.set(name, { name, avatarUrl: "", commits: 1, profileUrl: "" });
+            }
+          }
+          topContributors = Array.from(authorMap.values()).sort((a, b) => b.commits - a.commits).slice(0, 20);
+          contributors = authorMap.size;
+        }
+      } catch {}
+
+      // Enrich GitLab contributors with avatar URLs via members API
+      try {
+        const membersRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/members/all?per_page=100`, { headers });
+        if (membersRes.ok) {
+          const members = await membersRes.json() as any[];
+          const memberMap = new Map(members.map((m: any) => [m.name, { avatar: m.avatar_url || "", web: m.web_url || "" }]));
+          topContributors = topContributors.map((c) => {
+            const m = memberMap.get(c.name);
+            return m ? { ...c, avatarUrl: m.avatar, profileUrl: m.web } : c;
+          });
+        }
+      } catch {}
+
       return {
         stars: repoData.star_count ?? 0,
         forks: repoData.forks_count ?? 0,
@@ -444,6 +888,8 @@ export const getRepoStats = api(
         lastCommitAuthor,
         lastCommitHash,
         totalCommits,
+        contributors,
+        topContributors,
       };
     } else if (conn.provider === "bitbucket") {
       const baseUrl = conn.endpoint || "https://api.bitbucket.org";
@@ -495,6 +941,8 @@ export const getRepoStats = api(
         lastCommitAuthor,
         lastCommitHash,
         totalCommits,
+        contributors: 0, // Bitbucket doesn't expose contributor count easily
+        topContributors: [],
       };
     }
 
