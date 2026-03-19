@@ -1089,6 +1089,35 @@ interface RepoAnalysis {
   primaryLanguage: string;
   hasDocker: boolean;
   hasCi: boolean;
+  aiAnalysis?: AIRepoAnalysis;
+}
+
+interface AIRepoAnalysis {
+  runtime: string;
+  runtimeVersion: string;
+  framework: string;
+  frameworkVersion: string;
+  phpExtensions?: string[];
+  nodeVersion?: string;
+  buildCommand: string;
+  startCommand: string;
+  port: number;
+  needsScheduler: boolean;
+  needsQueueWorker: boolean;
+  needsWebsockets: boolean;
+  envVars: string[];
+  postDeployCommands: string[];
+  nginxConfig: "php-fpm" | "reverse-proxy" | "static";
+  summary: string;
+  deployOptions?: Array<{
+    provider: string;
+    type: string;
+    description: string;
+    pros: string[];
+    cons: string[];
+    estimatedMonthlyCost: string;
+    bestFor: string;
+  }>;
 }
 
 // File-pattern → tech stack detection rules
@@ -1123,9 +1152,25 @@ const TECH_DETECTORS: Array<{ pattern: RegExp; tech: Omit<TechStackItem, "confid
   { pattern: /craft\/config\//i, tech: { name: "Craft CMS", category: "framework" } },
   { pattern: /config\/statamic\//i, tech: { name: "Statamic", category: "framework" } },
   { pattern: /config\/filament\.php$/i, tech: { name: "Filament", category: "framework" } },
+  { pattern: /app\/Filament\//i, tech: { name: "Filament", category: "framework", confidence: 95 } },
   { pattern: /config\/livewire\.php$/i, tech: { name: "Livewire", category: "framework" } },
   { pattern: /resources\/views\/livewire\//i, tech: { name: "Livewire", category: "framework", confidence: 90 } },
   { pattern: /config\/inertia\.php$/i, tech: { name: "Inertia.js", category: "framework" } },
+  // Laravel ecosystem packages
+  { pattern: /config\/horizon\.php$/i, tech: { name: "Laravel Horizon", category: "tool" } },
+  { pattern: /config\/octane\.php$/i, tech: { name: "Laravel Octane", category: "framework" } },
+  { pattern: /config\/reverb\.php$/i, tech: { name: "Laravel Reverb", category: "framework" } },
+  { pattern: /config\/telescope\.php$/i, tech: { name: "Laravel Telescope", category: "tool" } },
+  { pattern: /config\/sanctum\.php$/i, tech: { name: "Laravel Sanctum", category: "tool" } },
+  { pattern: /config\/passport\.php$/i, tech: { name: "Laravel Passport", category: "tool" } },
+  { pattern: /config\/jetstream\.php$/i, tech: { name: "Jetstream", category: "framework" } },
+  { pattern: /config\/breeze\.php$/i, tech: { name: "Breeze", category: "framework", confidence: 80 } },
+  { pattern: /docker-compose\.yml$/i, tech: { name: "Docker Compose", category: "infra" } },
+  { pattern: /docker-compose\.sail\.yml$/i, tech: { name: "Laravel Sail", category: "tool" } },
+  { pattern: /config\/scout\.php$/i, tech: { name: "Laravel Scout", category: "tool" } },
+  { pattern: /config\/broadcasting\.php$/i, tech: { name: "Broadcasting", category: "tool", confidence: 70 } },
+  { pattern: /supervisor\.conf$/i, tech: { name: "Supervisor", category: "infra" } },
+  { pattern: /supervisord\.conf$/i, tech: { name: "Supervisor", category: "infra" } },
   // JS/TS Frameworks
   { pattern: /next\.config\./i, tech: { name: "Next.js", category: "framework" } },
   { pattern: /nuxt\.config\./i, tech: { name: "Nuxt", category: "framework" } },
@@ -1167,6 +1212,28 @@ const TECH_DETECTORS: Array<{ pattern: RegExp; tech: Omit<TechStackItem, "confid
   { pattern: /\.env\.example$/i, tech: { name: "Env Config", category: "tool", confidence: 40 } },
   { pattern: /nginx\.conf/i, tech: { name: "Nginx", category: "infra", confidence: 70 } },
   { pattern: /\.htaccess$/i, tech: { name: "Apache", category: "infra", confidence: 70 } },
+  // Additional PHP ecosystem
+  { pattern: /config\/cashier\.php$/i, tech: { name: "Laravel Cashier", category: "tool" } },
+  { pattern: /config\/nova\.php$/i, tech: { name: "Laravel Nova", category: "framework" } },
+  { pattern: /config\/pulse\.php$/i, tech: { name: "Laravel Pulse", category: "tool" } },
+  { pattern: /config\/pennant\.php$/i, tech: { name: "Laravel Pennant", category: "tool" } },
+  { pattern: /config\/socialite\.php$/i, tech: { name: "Laravel Socialite", category: "tool" } },
+  { pattern: /phpstan\.neon\.dist$/i, tech: { name: "PHPStan", category: "tool", confidence: 70 } },
+  { pattern: /pint\.json$/i, tech: { name: "Laravel Pint", category: "tool", confidence: 60 } },
+  { pattern: /rector\.php$/i, tech: { name: "Rector", category: "tool", confidence: 60 } },
+  // Additional JS ecosystem
+  { pattern: /tailwind\.config\./i, tech: { name: "Tailwind CSS", category: "tool" } },
+  { pattern: /postcss\.config\./i, tech: { name: "PostCSS", category: "tool", confidence: 50 } },
+  { pattern: /webpack\.config\./i, tech: { name: "Webpack", category: "tool" } },
+  { pattern: /turbo\.json$/i, tech: { name: "Turborepo", category: "tool" } },
+  { pattern: /pnpm-workspace\.yaml$/i, tech: { name: "pnpm", category: "tool", confidence: 60 } },
+  { pattern: /\.nvmrc$/i, tech: { name: "nvm", category: "tool", confidence: 40 } },
+  // Go ecosystem
+  { pattern: /cmd\/.*\/main\.go$/i, tech: { name: "Go CLI", category: "tool", confidence: 60 } },
+  { pattern: /internal\//i, tech: { name: "Go Modules", category: "tool", confidence: 40 } },
+  // Rust ecosystem
+  { pattern: /Rocket\.toml$/i, tech: { name: "Rocket", category: "framework" } },
+  { pattern: /shuttle\.toml$/i, tech: { name: "Shuttle", category: "infra" } },
 ];
 
 function detectTechStack(files: string[]): TechStackItem[] {
@@ -1687,9 +1754,150 @@ function detectServices(files: string[]): DetectedService[] {
   return result.sort((a, b) => b.confidence - a.confidence);
 }
 
+// ─── Internal file content fetcher (reusable) ───
+
+async function fetchRepoFile(provider: string, token: string, endpoint: string, owner: string, repo: string, branch: string, path: string): Promise<string | null> {
+  try {
+    if (provider === "github") {
+      const baseUrl = endpoint || "https://api.github.com";
+      const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3.raw" },
+      });
+      if (!res.ok) return null;
+      return await res.text();
+    } else if (provider === "gitlab" || provider === "gitlab_self_hosted") {
+      const baseUrl = endpoint || "https://gitlab.com";
+      const projectPath = encodeURIComponent(`${owner}/${repo}`);
+      const filePath = encodeURIComponent(path);
+      const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/files/${filePath}/raw?ref=${encodeURIComponent(branch)}`, {
+        headers: { "PRIVATE-TOKEN": token },
+      });
+      if (!res.ok) return null;
+      return await res.text();
+    } else if (provider === "bitbucket") {
+      const baseUrl = endpoint || "https://api.bitbucket.org";
+      const res = await fetch(`${baseUrl}/2.0/repositories/${owner}/${repo}/src/${encodeURIComponent(branch)}/${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return await res.text();
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+// ─── AI-powered repo analysis ───
+
+const CONFIG_FILES_TO_FETCH = [
+  "composer.json", "package.json", "Dockerfile", "docker-compose.yml",
+  ".env.example", "requirements.txt", "Pipfile", "pyproject.toml",
+  "go.mod", "Cargo.toml", "Gemfile", "pom.xml", "build.gradle",
+  "nginx.conf", "supervisor.conf", "supervisord.conf",
+];
+
+async function analyzeWithAI(
+  aiType: string,
+  aiConfig: Record<string, string>,
+  files: string[],
+  configContents: Record<string, string>,
+  techStack: TechStackItem[],
+  detectedServices: DetectedService[],
+): Promise<AIRepoAnalysis | null> {
+  const configSummary = Object.entries(configContents)
+    .map(([f, c]) => `── ${f} ──\n${c.slice(0, 3000)}`)
+    .join("\n\n");
+
+  const prompt = `You are a DevOps architect. Analyze this repository and return a JSON object for deployment configuration.
+
+**Detected tech stack:** ${techStack.map(t => `${t.name} (${t.category})`).join(", ")}
+**Detected services:** ${detectedServices.map(s => `${s.name} (${s.type})`).join(", ") || "none"}
+**File tree (sample):** ${files.slice(0, 200).join(", ")}
+
+**Config file contents:**
+${configSummary}
+
+Return ONLY a valid JSON object (no markdown, no explanation) with these exact fields:
+{
+  "runtime": "php|node|python|go|ruby|java|rust|dotnet",
+  "runtimeVersion": "exact version string e.g. 8.3 or 20",
+  "framework": "framework name e.g. Laravel, Next.js, Django",
+  "frameworkVersion": "exact version e.g. 11.x",
+  "phpExtensions": ["array of required PHP extensions if PHP, else empty"],
+  "nodeVersion": "node version if needed for asset building, else empty string",
+  "buildCommand": "full build command for production",
+  "startCommand": "full start command for production",
+  "port": 8080,
+  "needsScheduler": true/false,
+  "needsQueueWorker": true/false,
+  "needsWebsockets": true/false,
+  "envVars": ["KEY=default_or_placeholder for essential env vars"],
+  "postDeployCommands": ["commands to run after deploy e.g. php artisan migrate --force"],
+  "nginxConfig": "php-fpm|reverse-proxy|static",
+  "summary": "1-2 sentence summary of the architecture",
+  "deployOptions": [
+    {
+      "provider": "provider name e.g. Hetzner, DigitalOcean, AWS, Vultr, Linode, Vercel, Railway, Render, Fly.io",
+      "type": "deployment type e.g. Cloud Server (VPS), App Platform, ECS Fargate, Managed Kubernetes",
+      "description": "1-2 sentence description of why this option fits this specific project",
+      "pros": ["3-4 specific pros for THIS project, not generic"],
+      "cons": ["2-3 specific cons for THIS project, not generic"],
+      "estimatedMonthlyCost": "realistic cost range based on detected services",
+      "bestFor": "one sentence on when to pick this option"
+    }
+  ]
+}
+
+IMPORTANT for deployOptions:
+- Suggest 5-10 realistic options ranked by fit for this specific project
+- Consider the detected services (database, cache, queue, etc.) when estimating costs
+- For PHP/Laravel projects: prioritize VPS providers (Hetzner, Vultr, DigitalOcean) and PaaS that support PHP well
+- For Node.js/Python: include serverless and container options
+- For static sites: prioritize Vercel, Netlify, Cloudflare Pages
+- Include at least one budget option and one premium/enterprise option
+- Be specific about WHY each option fits (or doesn't) based on the actual tech stack and services detected
+- Cost estimates should account for: compute + database + cache + storage needs
+
+Be precise with versions — read them from composer.json/package.json/etc.`;
+
+  try {
+    let data: any;
+    if (aiType === "openai") {
+      const headers = { Authorization: `Bearer ${aiConfig.apiKey}`, "Content-Type": "application/json" };
+      data = await aiRequest("https://api.openai.com/v1/chat/completions", {
+        method: "POST", headers,
+        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }], temperature: 0.1, response_format: { type: "json_object" } }),
+      });
+      const text = data.choices?.[0]?.message?.content?.trim() || "";
+      return JSON.parse(text) as AIRepoAnalysis;
+    } else if (aiType === "anthropic") {
+      data = await aiRequest("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": aiConfig.apiKey, "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2048, messages: [{ role: "user", content: prompt }], temperature: 0.1 }),
+      });
+      const text = data.content?.[0]?.text?.trim() || "";
+      // Extract JSON from potential markdown fences
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      return jsonMatch ? JSON.parse(jsonMatch[0]) as AIRepoAnalysis : null;
+    } else if (aiType === "google-gemini") {
+      data = await aiRequest(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiConfig.apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } }),
+      });
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      const jsonMatch2 = text.match(/\{[\s\S]*\}/);
+      return jsonMatch2 ? JSON.parse(jsonMatch2[0]) as AIRepoAnalysis : null;
+    }
+  } catch (e: any) {
+    console.error("AI analysis failed:", e.message);
+  }
+  return null;
+}
+
 export const analyzeRepo = api(
   { method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
-  async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<RepoAnalysis> => {
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string; aiType?: string; aiApiKey?: string }): Promise<RepoAnalysis> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
     }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -1768,7 +1976,63 @@ export const analyzeRepo = api(
     const detectedLang = techStack.find(t => t.category === "language" || (t.category === "runtime" && t.confidence > 50));
     const effectivePrimaryLanguage = detectedLang?.name || primaryLanguage;
 
-    return { techStack, deployOptions, detectedServices, repoSize, primaryLanguage: effectivePrimaryLanguage, hasDocker, hasCi };
+    // ── AI-powered deep analysis (if AI config provided) ──
+    let aiAnalysis: AIRepoAnalysis | undefined;
+    if (params.aiType && params.aiApiKey) {
+      // Fetch key config files from repo
+      const configContents: Record<string, string> = {};
+      const filesToFetch = CONFIG_FILES_TO_FETCH.filter(cf =>
+        files.some(f => f.toLowerCase().endsWith(cf.toLowerCase()) || f.toLowerCase() === cf.toLowerCase())
+      );
+      // Also fetch Laravel-specific files if detected
+      const laravelFiles = ["config/app.php", "config/database.php", "config/queue.php", "config/cache.php", "config/horizon.php", "config/octane.php"];
+      const djangoFiles = ["settings.py", "requirements.txt"];
+      const allFetchFiles = [...filesToFetch];
+      if (techStack.some(t => t.name === "Laravel")) {
+        for (const lf of laravelFiles) {
+          if (files.some(f => f === lf) && !allFetchFiles.includes(lf)) allFetchFiles.push(lf);
+        }
+      }
+      if (techStack.some(t => t.name === "Django")) {
+        for (const df of djangoFiles) {
+          if (files.some(f => f.endsWith(df)) && !allFetchFiles.includes(df)) {
+            const match = files.find(f => f.endsWith(df));
+            if (match) allFetchFiles.push(match);
+          }
+        }
+      }
+
+      // Fetch up to 10 config files in parallel
+      const fetchPromises = allFetchFiles.slice(0, 10).map(async (cf) => {
+        const actualPath = files.find(f => f.toLowerCase().endsWith(cf.toLowerCase())) || cf;
+        const content = await fetchRepoFile(conn.provider, conn.personal_token, conn.endpoint || "", params.owner, params.repo, branch, actualPath);
+        if (content) configContents[actualPath] = content;
+      });
+      await Promise.all(fetchPromises);
+
+      if (Object.keys(configContents).length > 0) {
+        const result = await analyzeWithAI(
+          params.aiType,
+          { apiKey: params.aiApiKey },
+          files,
+          configContents,
+          techStack,
+          detectedServices,
+        );
+        if (result) aiAnalysis = result;
+      }
+    }
+
+    return {
+      techStack,
+      deployOptions: aiAnalysis?.deployOptions?.length ? aiAnalysis.deployOptions : deployOptions,
+      detectedServices,
+      repoSize,
+      primaryLanguage: effectivePrimaryLanguage,
+      hasDocker,
+      hasCi,
+      aiAnalysis,
+    };
   }
 );
 

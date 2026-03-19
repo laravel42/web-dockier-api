@@ -206,7 +206,7 @@ export const gitApi = {
       topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
     }>(`/git/connections/${connectionId}/repo-stats?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
-  analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string) =>
+  analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string, aiType?: string, aiApiKey?: string) =>
     request<{
       techStack: Array<{ name: string; category: string; confidence: number }>;
       deployOptions: Array<{
@@ -229,7 +229,34 @@ export const gitApi = {
       primaryLanguage: string;
       hasDocker: boolean;
       hasCi: boolean;
-    }>(`/git/connections/${connectionId}/repo-analyze?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
+      aiAnalysis?: {
+        runtime: string;
+        runtimeVersion: string;
+        framework: string;
+        frameworkVersion: string;
+        phpExtensions?: string[];
+        nodeVersion?: string;
+        buildCommand: string;
+        startCommand: string;
+        port: number;
+        needsScheduler: boolean;
+        needsQueueWorker: boolean;
+        needsWebsockets: boolean;
+        envVars: string[];
+        postDeployCommands: string[];
+        nginxConfig: "php-fpm" | "reverse-proxy" | "static";
+        summary: string;
+        deployOptions?: Array<{
+          provider: string;
+          type: string;
+          description: string;
+          pros: string[];
+          cons: string[];
+          estimatedMonthlyCost: string;
+          bestFor: string;
+        }>;
+      };
+    }>(`/git/connections/${connectionId}/repo-analyze?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}${aiType ? `&aiType=${encodeURIComponent(aiType)}` : ""}${aiApiKey ? `&aiApiKey=${encodeURIComponent(aiApiKey)}` : ""}`),
 
   getRepoTree: (connectionId: string, owner: string, repo: string, branch?: string) =>
     request<{
@@ -367,6 +394,7 @@ export const deployApi = {
     gitConnectionId: string;
     repo: string;
     branch: string;
+    tofuScript?: string;
   }) =>
     request<{
       id: string;
@@ -404,6 +432,7 @@ export const deployApi = {
     appName?: string;
     region?: string;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+    aiAnalysis?: Record<string, any>;
   }) =>
     request<{
       script: string;

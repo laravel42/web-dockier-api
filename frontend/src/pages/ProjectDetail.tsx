@@ -58,6 +58,33 @@ interface RepoAnalysis {
   primaryLanguage: string;
   hasDocker: boolean;
   hasCi: boolean;
+  aiAnalysis?: {
+    runtime: string;
+    runtimeVersion: string;
+    framework: string;
+    frameworkVersion: string;
+    phpExtensions?: string[];
+    nodeVersion?: string;
+    buildCommand: string;
+    startCommand: string;
+    port: number;
+    needsScheduler: boolean;
+    needsQueueWorker: boolean;
+    needsWebsockets: boolean;
+    envVars: string[];
+    postDeployCommands: string[];
+    nginxConfig: "php-fpm" | "reverse-proxy" | "static";
+    summary: string;
+    deployOptions?: Array<{
+      provider: string;
+      type: string;
+      description: string;
+      pros: string[];
+      cons: string[];
+      estimatedMonthlyCost: string;
+      bestFor: string;
+    }>;
+  };
 }
 
 function parseOwnerRepo(repoUrl: string): { owner: string; repo: string } | null {
@@ -214,10 +241,17 @@ export default function ProjectDetail() {
               .then(setStats)
               .catch((err: any) => setStatsError(err.message || "Failed to load stats"))
               .finally(() => setStatsLoading(false));
-            // Fetch analysis
+            // Fetch analysis (with AI if configured)
             setAnalysisLoading(true);
             setAnalysisError("");
-            gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined)
+            let aiType: string | undefined;
+            let aiApiKey: string | undefined;
+            try {
+              const stored = JSON.parse(localStorage.getItem("integrations") || "[]");
+              const aiInteg = stored.find((i: any) => ["openai", "anthropic", "google-gemini"].includes(i.type) && i.config?.apiKey);
+              if (aiInteg) { aiType = aiInteg.type; aiApiKey = aiInteg.config.apiKey; }
+            } catch { /* ignore */ }
+            gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, aiType, aiApiKey)
               .then(setAnalysis)
               .catch((err: any) => setAnalysisError(err.message || "Failed to analyze repo"))
               .finally(() => setAnalysisLoading(false));
@@ -605,6 +639,7 @@ export default function ProjectDetail() {
         services: analysis?.detectedServices?.length
           ? analysis.detectedServices.map(s => ({ type: s.type, name: s.name, mode: modes[s.type] || "vps" }))
           : undefined,
+        aiAnalysis: analysis?.aiAnalysis || undefined,
       });
       setTofuScript(res.script);
       setTofuResources(res.estimatedResources);
@@ -633,6 +668,7 @@ export default function ProjectDetail() {
         gitConnectionId: project.connectionId,
         repo,
         branch: project.branch || "main",
+        tofuScript: tofuScript || undefined,
       });
       // Poll for status & logs
       const pollId = deployment.id;
@@ -940,7 +976,17 @@ export default function ProjectDetail() {
       {/* Deployment Options */}
       {project.connectionId && project.repository && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Deployment Options</h2>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide">Deployment Options</h2>
+            {analysis?.aiAnalysis?.deployOptions?.length ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-600 rounded-full text-[10px] font-semibold uppercase tracking-wider">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+                AI
+              </span>
+            ) : null}
+          </div>
           {analysisLoading ? (
             <div className="flex flex-col items-center py-10 gap-3">
               <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -1495,6 +1541,24 @@ export default function ProjectDetail() {
 
               {tofuScript && !deployStatus && (
                 <div className="space-y-3">
+                  {/* AI Analysis summary */}
+                  {analysis?.aiAnalysis?.summary && (
+                    <div className="flex items-start gap-2 p-2.5 bg-violet-50 border border-violet-200 rounded-lg">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                      </svg>
+                      <div className="text-xs text-violet-700">
+                        <span className="font-semibold">AI Analysis:</span> {analysis.aiAnalysis.summary}
+                        {analysis.aiAnalysis.runtime && (
+                          <span className="ml-1 text-violet-500">
+                            ({analysis.aiAnalysis.runtime} {analysis.aiAnalysis.runtimeVersion}
+                            {analysis.aiAnalysis.framework ? ` / ${analysis.aiAnalysis.framework} ${analysis.aiAnalysis.frameworkVersion}` : ""})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Estimated resources */}
                   {tofuResources.length > 0 && (
                     <div>
