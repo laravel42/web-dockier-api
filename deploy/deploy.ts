@@ -51,6 +51,7 @@ export interface DeployEvent {
   gitConnectionId: string;
   repo: string;
   branch: string;
+  tofuScript: string;
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {
@@ -137,14 +138,16 @@ export const createDeployment = api(
     gitConnectionId: string;
     repo: string;
     branch: string;
+    tofuScript?: string;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
+    const script = params.tofuScript || "";
 
     await db.exec`
-      INSERT INTO deployments (id, user_id, provider_id, git_connection_id, repo, branch, status, logs, created_at, updated_at)
+      INSERT INTO deployments (id, user_id, provider_id, git_connection_id, repo, branch, status, logs, tofu_script, created_at, updated_at)
       VALUES (${id}, ${authData.userID}, ${params.providerId}, ${params.gitConnectionId},
-              ${params.repo}, ${params.branch}, 'pending', '', NOW(), NOW())`;
+              ${params.repo}, ${params.branch}, 'pending', '', ${script}, NOW(), NOW())`;
 
     // Publish deploy event
     await deployTopic.publish({
@@ -154,6 +157,7 @@ export const createDeployment = api(
       gitConnectionId: params.gitConnectionId,
       repo: params.repo,
       branch: params.branch,
+      tofuScript: script,
     });
 
     return {
@@ -212,7 +216,7 @@ export const getDeployment = api(
   }
 );
 
-// ─── Deploy Processor (Pub/Sub) ───
+// ─── Deploy Processor (Pub/Sub) — Real OpenTofu execution ───
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
@@ -220,70 +224,157 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const repoName = event.repo.split("/").pop() || "app";
     const shortId = deploymentId.slice(0, 8);
 
-    // Look up provider to generate a realistic URL
-    const providerRow = await db.queryRow<{ provider: string; region: string }>`
-      SELECT provider, region FROM server_providers WHERE id = ${event.providerId}`;
+    // Look up provider for API key + region
+    const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string }>`
+      SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
     const region = providerRow?.region || "us-east-1";
 
     try {
-      // ── Step 1: Pending → Building ──
       await db.exec`UPDATE deployments SET status = 'building', updated_at = NOW() WHERE id = ${deploymentId}`;
       await appendLog(deploymentId, `[${ts()}] ▶ Starting deployment pipeline...`);
       await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${region}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
-      await appendLog(deploymentId, `[${ts()}]`);
 
-      // Clone
-      await appendLog(deploymentId, `[${ts()}] ── Clone ──────────────────────────`);
-      await appendLog(deploymentId, `[${ts()}] Cloning ${event.repo}@${event.branch}...`);
-      await appendLog(deploymentId, `[${ts()}] Receiving objects: 100% (247/247), 1.82 MiB | 12.4 MiB/s, done.`);
-      await appendLog(deploymentId, `[${ts()}] Resolving deltas: 100% (138/138), done.`);
-      await appendLog(deploymentId, `[${ts()}] ✓ Clone complete`);
-      await appendLog(deploymentId, `[${ts()}]`);
+      if (!event.tofuScript) {
+        throw new Error("No OpenTofu script provided. Generate a script first, then deploy.");
+      }
 
-      // Install
-      await appendLog(deploymentId, `[${ts()}] ── Install ────────────────────────`);
-      await appendLog(deploymentId, `[${ts()}] Detecting runtime... Node.js 20.x`);
-      await appendLog(deploymentId, `[${ts()}] Installing dependencies...`);
-      await appendLog(deploymentId, `[${ts()}] added 847 packages in 14s`);
-      await appendLog(deploymentId, `[${ts()}] ✓ Dependencies installed`);
-      await appendLog(deploymentId, `[${ts()}]`);
+      // ── Write .tf file to temp directory ──
+      const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+      const { join } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+      const { spawn } = await import("node:child_process");
 
-      // Build
-      await appendLog(deploymentId, `[${ts()}] ── Build ──────────────────────────`);
-      await appendLog(deploymentId, `[${ts()}] Running build command...`);
-      await appendLog(deploymentId, `[${ts()}] Compiling TypeScript...`);
-      await appendLog(deploymentId, `[${ts()}] Bundling assets...`);
-      await appendLog(deploymentId, `[${ts()}] Build output: dist/ (2.4 MB)`);
-      await appendLog(deploymentId, `[${ts()}] ✓ Build succeeded`);
-      await appendLog(deploymentId, `[${ts()}]`);
+      const workDir = await mkdtemp(join(tmpdir(), `deploy-${shortId}-`));
+      const tfFile = join(workDir, "main.tf");
+      await writeFile(tfFile, event.tofuScript, "utf-8");
+      await appendLog(deploymentId, `[${ts()}] ✓ OpenTofu script written to workspace`);
 
-      // ── Step 2: Building → Deploying ──
+      // ── Build tfvars from provider credentials ──
+      const tfVars: string[] = [];
+      if (provider === "hetzner" && providerRow?.api_key) {
+        tfVars.push(`hcloud_token=${providerRow.api_key}`);
+        // Use api_secret as SSH public key if provided, otherwise placeholder
+        if (providerRow.api_secret) tfVars.push(`ssh_public_key=${providerRow.api_secret}`);
+      } else if (provider === "digitalocean" && providerRow?.api_key) {
+        tfVars.push(`do_token=${providerRow.api_key}`);
+      } else if (provider === "vultr" && providerRow?.api_key) {
+        tfVars.push(`vultr_api_key=${providerRow.api_key}`);
+        if (providerRow.api_secret) tfVars.push(`ssh_public_key=${providerRow.api_secret}`);
+      } else if (provider === "linode" && providerRow?.api_key) {
+        tfVars.push(`linode_token=${providerRow.api_key}`);
+        if (providerRow.api_secret) tfVars.push(`ssh_public_key=${providerRow.api_secret}`);
+        tfVars.push(`root_password=Ch4ng3M3-${shortId}!`);
+      } else if (provider === "aws") {
+        // AWS uses env vars instead of tfvars
+      }
+
+      // ── Helper to run a command and stream output ──
+      const runCmd = (cmd: string, args: string[], env?: Record<string, string>): Promise<{ code: number; output: string }> => {
+        return new Promise((resolve) => {
+          const proc = spawn(cmd, args, {
+            cwd: workDir,
+            env: { ...process.env, ...env },
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+          let output = "";
+          const onData = async (data: Buffer) => {
+            const lines = data.toString().split("\n").filter(Boolean);
+            for (const line of lines) {
+              output += line + "\n";
+              await appendLog(deploymentId, `[${ts()}] ${line}`);
+            }
+          };
+          proc.stdout.on("data", onData);
+          proc.stderr.on("data", onData);
+          proc.on("close", (code) => resolve({ code: code ?? 1, output }));
+          proc.on("error", (err) => resolve({ code: 1, output: err.message }));
+        });
+      };
+
+      // ── Step 1: tofu init ──
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── OpenTofu Init ──────────────────`);
+      const initResult = await runCmd("tofu", ["init", "-no-color"], provider === "aws" ? {
+        AWS_ACCESS_KEY_ID: providerRow?.api_key || "",
+        AWS_SECRET_ACCESS_KEY: providerRow?.api_secret || "",
+        AWS_DEFAULT_REGION: region,
+      } : undefined);
+
+      if (initResult.code !== 0) {
+        throw new Error(`tofu init failed (exit code ${initResult.code})`);
+      }
+      await appendLog(deploymentId, `[${ts()}] ✓ OpenTofu initialized`);
+
+      // ── Step 2: tofu apply ──
       await db.exec`UPDATE deployments SET status = 'deploying', updated_at = NOW() WHERE id = ${deploymentId}`;
-      await appendLog(deploymentId, `[${ts()}] ── Deploy ─────────────────────────`);
-      await appendLog(deploymentId, `[${ts()}] Creating container image...`);
-      await appendLog(deploymentId, `[${ts()}] Image: ${repoName}:${event.branch}-${shortId} (89 MB)`);
-      await appendLog(deploymentId, `[${ts()}] Pushing image to registry...`);
-      await appendLog(deploymentId, `[${ts()}] ✓ Image pushed`);
       await appendLog(deploymentId, `[${ts()}]`);
-      await appendLog(deploymentId, `[${ts()}] Provisioning resources on ${provider}...`);
-      await appendLog(deploymentId, `[${ts()}] Creating service: ${repoName}-${shortId}`);
-      await appendLog(deploymentId, `[${ts()}] Configuring networking & TLS...`);
-      await appendLog(deploymentId, `[${ts()}] Starting health checks...`);
-      await appendLog(deploymentId, `[${ts()}] Health check passed (HTTP 200 in 1.2s)`);
+      await appendLog(deploymentId, `[${ts()}] ── OpenTofu Apply ─────────────────`);
+
+      const applyArgs = ["apply", "-auto-approve", "-no-color"];
+      for (const v of tfVars) {
+        applyArgs.push("-var", v);
+      }
+
+      const applyEnv: Record<string, string> = {};
+      if (provider === "aws") {
+        applyEnv.AWS_ACCESS_KEY_ID = providerRow?.api_key || "";
+        applyEnv.AWS_SECRET_ACCESS_KEY = providerRow?.api_secret || "";
+        applyEnv.AWS_DEFAULT_REGION = region;
+      }
+
+      const applyResult = await runCmd("tofu", applyArgs, Object.keys(applyEnv).length > 0 ? applyEnv : undefined);
+
+      if (applyResult.code !== 0) {
+        throw new Error(`tofu apply failed (exit code ${applyResult.code})`);
+      }
+
+      // ── Step 3: Extract outputs ──
       await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Extracting outputs ──────────────`);
+      const outputResult = await runCmd("tofu", ["output", "-json", "-no-color"], Object.keys(applyEnv).length > 0 ? applyEnv : undefined);
 
-      // Generate app URL
-      const appUrl = generateAppUrl(provider, repoName, shortId, region);
+      let appUrl = "";
+      try {
+        const outputs = JSON.parse(outputResult.output);
+        // Try common output names
+        appUrl = outputs.app_url?.value || outputs.server_ip?.value || outputs.deployed_to?.value || "";
+        if (appUrl && !appUrl.startsWith("http")) {
+          appUrl = `http://${appUrl}`;
+        }
+        for (const [key, val] of Object.entries(outputs)) {
+          await appendLog(deploymentId, `[${ts()}]   ${key} = ${(val as any).value}`);
+        }
+      } catch {
+        // output parsing failed, not critical
+        await appendLog(deploymentId, `[${ts()}]   (could not parse outputs)`);
+      }
 
+      // ── Save tofu state for future destroy ──
+      try {
+        const { readFile: readFs } = await import("node:fs/promises");
+        const stateFile = join(workDir, "terraform.tfstate");
+        const state = await readFs(stateFile, "utf-8");
+        // Store state in tofu_script column (reuse it) for destroy later
+        await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + state} WHERE id = ${deploymentId}`;
+      } catch {
+        // state save failed, not critical
+      }
+
+      // ── Cleanup temp dir ──
+      try { await rm(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+
+      const finalUrl = appUrl || generateAppUrl(provider, repoName, shortId, region);
+      await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
       await appendLog(deploymentId, `[${ts()}] ✓ Deployment successful!`);
-      await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${appUrl}`);
+      await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${finalUrl}`);
 
-      await db.exec`UPDATE deployments SET status = 'success', app_url = ${appUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
-    } catch (e) {
-      await appendLog(deploymentId, `[${ts()}] ✗ Deployment failed: ${e}`);
+      await db.exec`UPDATE deployments SET status = 'success', app_url = ${finalUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
+    } catch (e: any) {
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ✗ Deployment failed: ${e.message || e}`);
       await db.exec`UPDATE deployments SET status = 'failed', updated_at = NOW() WHERE id = ${deploymentId}`;
     }
   },
@@ -331,6 +422,24 @@ interface TofuRequest {
   appName?: string;
   region?: string;
   services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+  aiAnalysis?: {
+    runtime: string;
+    runtimeVersion: string;
+    framework: string;
+    frameworkVersion: string;
+    phpExtensions?: string[];
+    nodeVersion?: string;
+    buildCommand: string;
+    startCommand: string;
+    port: number;
+    needsScheduler: boolean;
+    needsQueueWorker: boolean;
+    needsWebsockets: boolean;
+    envVars: string[];
+    postDeployCommands: string[];
+    nginxConfig: "php-fpm" | "reverse-proxy" | "static";
+    summary: string;
+  };
 }
 
 interface TofuResponse {
@@ -353,7 +462,15 @@ export const generateTofu = api(
     const region = params.region || providerRow.region || getDefaultRegion(provider);
     const repoName = params.repo.split("/").pop() || "app";
     const appName = params.appName || repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-    const runtime = detectRuntime(params.primaryLanguage, params.techStack);
+    const runtime = params.aiAnalysis
+      ? {
+          name: params.aiAnalysis.runtime,
+          version: params.aiAnalysis.runtimeVersion,
+          buildCmd: params.aiAnalysis.buildCommand,
+          startCmd: params.aiAnalysis.startCommand,
+          port: params.aiAnalysis.port,
+        }
+      : detectRuntime(params.primaryLanguage, params.techStack);
 
     const script = buildTofuScript({
       provider,
@@ -365,6 +482,7 @@ export const generateTofu = api(
       hasDocker: params.hasDocker,
       techStack: params.techStack,
       services: params.services || [],
+      aiAnalysis: params.aiAnalysis,
     });
 
     return {
@@ -485,6 +603,7 @@ interface TofuBuildParams {
   hasDocker: boolean;
   techStack: string[];
   services: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+  aiAnalysis?: TofuRequest["aiAnalysis"];
 }
 
 function buildTofuScript(p: TofuBuildParams): string {
@@ -581,29 +700,60 @@ output "app_id" {
 }
 
 function buildHetzner(p: TofuBuildParams): string {
+  const ai = p.aiAnalysis;
   const vpsSvcs = p.services.filter(s => s.mode === "vps");
   const managedSvcs = p.services.filter(s => s.mode === "managed");
   const hasVpsDb = vpsSvcs.some(s => s.type === "database");
   const hasVpsCache = vpsSvcs.some(s => s.type === "cache");
-  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue");
+  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue") || (ai?.needsQueueWorker ?? false);
   const hasVpsSearch = vpsSvcs.some(s => s.type === "search");
+  const needsScheduler = ai?.needsScheduler ?? p.techStack.some(s => s.toLowerCase() === "laravel");
+  const needsWebsockets = ai?.needsWebsockets ?? false;
+  const isPhp = p.runtime.name === "php";
+  const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
+  const usePhpFpm = isPhp && (ai?.nginxConfig === "php-fpm" || isLaravel);
+  const phpVer = p.runtime.version; // e.g. "8.3"
 
-  // Build install packages based on runtime + VPS services
-  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx"];
-  if (p.runtime.name === "php") {
-    packages.push(`php${p.runtime.version}-fpm`, `php${p.runtime.version}-cli`, `php${p.runtime.version}-mbstring`, `php${p.runtime.version}-xml`, `php${p.runtime.version}-curl`, `php${p.runtime.version}-zip`, "composer");
-    if (hasVpsDb) packages.push(`php${p.runtime.version}-pgsql`, `php${p.runtime.version}-mysql`);
-    if (hasVpsCache) packages.push(`php${p.runtime.version}-redis`);
+  // Build install packages
+  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx", "unzip", "curl", "acl"];
+  if (isPhp) {
+    const phpExts = ai?.phpExtensions?.length
+      ? ai.phpExtensions.map(e => e.startsWith("php") ? e : `php${phpVer}-${e}`)
+      : [`php${phpVer}-fpm`, `php${phpVer}-cli`, `php${phpVer}-mbstring`, `php${phpVer}-xml`, `php${phpVer}-curl`, `php${phpVer}-zip`, `php${phpVer}-bcmath`, `php${phpVer}-intl`, `php${phpVer}-gd`, `php${phpVer}-tokenizer`];
+    // Ensure fpm and cli are always present
+    if (!phpExts.some(e => e.includes("fpm"))) phpExts.unshift(`php${phpVer}-fpm`);
+    if (!phpExts.some(e => e.includes("cli"))) phpExts.unshift(`php${phpVer}-cli`);
+    packages.push(...phpExts);
+    if (hasVpsDb) packages.push(`php${phpVer}-pgsql`, `php${phpVer}-mysql`);
+    if (hasVpsCache || hasVpsQueue) packages.push(`php${phpVer}-redis`);
+    // Composer installed separately via installer
   } else if (p.runtime.name === "node") {
-    packages.push("nodejs");
+    packages.push("nodejs", "npm");
   } else if (p.runtime.name === "python") {
     packages.push(`python${p.runtime.version}`, "python3-pip", "python3-venv");
+  } else if (p.runtime.name === "go") {
+    packages.push("golang");
+  } else if (p.runtime.name === "ruby") {
+    packages.push("ruby", "ruby-dev", "build-essential");
   }
   if (hasVpsDb) packages.push("postgresql", "postgresql-contrib");
   if (hasVpsCache || hasVpsQueue) packages.push("redis-server");
   if (hasVpsSearch) packages.push("meilisearch");
+  if (needsWebsockets) packages.push("supervisor");
+  if (hasVpsQueue && isPhp) packages.push("supervisor");
 
-  const nodeSetup = p.runtime.name === "node" ? `\n    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -` : "";
+  // Node setup for asset building (even in PHP projects)
+  const needsNode = isPhp && (p.techStack.some(s => ["vite", "node.js", "inertia.js", "livewire", "tailwind css"].includes(s.toLowerCase())) || ai?.nodeVersion);
+  const nodeVer = ai?.nodeVersion || "20";
+  const nodeSetup = p.runtime.name === "node"
+    ? `\n    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -`
+    : needsNode
+      ? `\n    curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -\n    apt-get install -y nodejs`
+      : "";
+
+  const composerSetup = isPhp ? `
+    # ── Install Composer ──
+    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer` : "";
 
   // VPS service setup scripts
   const dbSetup = hasVpsDb ? `
@@ -621,51 +771,205 @@ function buildHetzner(p: TofuBuildParams): string {
     systemctl enable redis-server
     systemctl restart redis-server` : "";
 
-  // Managed service blocks (external)
+  // Managed service blocks
   const managedBlocks: string[] = [];
   if (managedSvcs.some(s => s.type === "database")) {
     managedBlocks.push(`
 # ── Managed Database (external) ──
-# Option A: Use Hetzner's managed database (not yet in TF provider)
-# Option B: Use PlanetScale, Neon, Supabase, or AWS RDS
-# Set DATABASE_URL in the app environment:
-#   DATABASE_URL = "postgresql://user:pass@managed-host:5432/${p.appName}"
+# Use PlanetScale, Neon, Supabase, or AWS RDS
+# Set DATABASE_URL in the app .env file
 `);
   }
   if (managedSvcs.some(s => s.type === "cache")) {
     managedBlocks.push(`
 # ── Managed Redis (external) ──
 # Use Upstash, Redis Cloud, or AWS ElastiCache
-# Set REDIS_URL in the app environment:
-#   REDIS_URL = "redis://user:pass@managed-host:6379"
+# Set REDIS_URL in the app .env file
 `);
   }
   if (managedSvcs.some(s => s.type === "storage")) {
     managedBlocks.push(`
 # ── Object Storage ──
 # Use Hetzner Object Storage, AWS S3, or Cloudflare R2
-# Set in app environment:
-#   S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET
+# Set S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET in .env
 `);
   }
   if (managedSvcs.some(s => s.type === "mail")) {
     managedBlocks.push(`
 # ── Email Service (external) ──
 # Use Mailgun, Postmark, SendGrid, or AWS SES
-# Set MAIL_* environment variables in the app
+# Set MAIL_* environment variables in .env
 `);
   }
 
-  const envVars: string[] = ["APP_ENV=production", `PORT=${p.runtime.port}`];
-  if (hasVpsDb) envVars.push(`DATABASE_URL=postgresql://${p.appName}:CHANGE_ME_SECURE_PASSWORD@127.0.0.1:5432/${p.appName}`);
-  if (hasVpsCache || hasVpsQueue) envVars.push("REDIS_URL=redis://127.0.0.1:6379");
+  const envVars: string[] = ai?.envVars?.length ? [...ai.envVars] : ["APP_ENV=production", `PORT=${p.runtime.port}`];
+  if (hasVpsDb && !envVars.some(e => e.startsWith("DATABASE_URL"))) {
+    envVars.push(`DATABASE_URL=postgresql://${p.appName}:CHANGE_ME_SECURE_PASSWORD@127.0.0.1:5432/${p.appName}`);
+  }
+  if ((hasVpsCache || hasVpsQueue) && !envVars.some(e => e.startsWith("REDIS_URL") || e.startsWith("REDIS_HOST"))) {
+    envVars.push("REDIS_URL=redis://127.0.0.1:6379");
+  }
+
+  // Post-deploy commands from AI
+  const postDeploy = ai?.postDeployCommands?.length
+    ? ai.postDeployCommands.map(c => `    ${c}`).join("\n")
+    : isLaravel
+      ? `    php artisan migrate --force
+    php artisan config:cache
+    php artisan route:cache
+    php artisan view:cache
+    php artisan storage:link
+    php artisan optimize`
+      : "";
+
+  // ── Nginx config: PHP-FPM vs reverse proxy ──
+  const nginxConfig = usePhpFpm
+    ? `    server {
+        listen 80;
+        server_name _;
+        root /opt/${p.appName}/public;
+        index index.php index.html;
+
+        add_header X-Frame-Options "SAMEORIGIN";
+        add_header X-Content-Type-Options "nosniff";
+
+        charset utf-8;
+        client_max_body_size 64M;
+
+        location / {
+            try_files \\$uri \\$uri/ /index.php?\\$query_string;
+        }
+
+        location = /favicon.ico { access_log off; log_not_found off; }
+        location = /robots.txt  { access_log off; log_not_found off; }
+
+        error_page 404 /index.php;
+
+        location ~ \\.php$ {
+            fastcgi_pass unix:/run/php/php${phpVer}-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME \\$realpath_root\\$fastcgi_script_name;
+            include fastcgi_params;
+            fastcgi_hide_header X-Powered-By;
+        }
+
+        location ~ /\\.(?!well-known).* {
+            deny all;
+        }
+    }`
+    : `    server {
+        listen 80;
+        server_name _;
+
+        location / {
+            proxy_pass http://127.0.0.1:${p.runtime.port};
+            proxy_set_header Host \\$host;
+            proxy_set_header X-Real-IP \\$remote_addr;
+            proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \\$scheme;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \\$http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }`;
+
+  // ── Queue worker (supervisor for PHP, systemd for others) ──
+  const queueWorkerSetup = hasVpsQueue
+    ? isPhp
+      ? `
+    # ── Queue Worker (Supervisor) ──
+    cat > /etc/supervisor/conf.d/${p.appName}-worker.conf <<'SUP'
+    [program:${p.appName}-worker]
+    process_name=%(program_name)s_%(process_num)02d
+    command=php /opt/${p.appName}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    autostart=true
+    autorestart=true
+    stopasgroup=true
+    killasgroup=true
+    user=www-data
+    numprocs=2
+    redirect_stderr=true
+    stdout_logfile=/var/log/${p.appName}-worker.log
+    stopwaitsecs=3600
+    SUP
+
+    supervisorctl reread
+    supervisorctl update`
+      : `
+    # ── Queue Worker Service ──
+    cat > /etc/systemd/system/${p.appName}-worker.service <<'WORKER'
+    [Unit]
+    Description=${p.appName} Queue Worker
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory=/opt/${p.appName}
+    ExecStart=${p.runtime.name === "python" ? "celery -A app worker --loglevel=info" : "npm run worker"}
+    Restart=always
+${envVars.map(e => `    Environment=${e}`).join("\n")}
+
+    [Install]
+    WantedBy=multi-user.target
+    WORKER
+
+    systemctl daemon-reload
+    systemctl enable --now ${p.appName}-worker`
+    : "";
+
+  // ── Scheduler cron ──
+  const schedulerSetup = needsScheduler && isPhp ? `
+    # ── Laravel Scheduler (Cron) ──
+    echo "* * * * * www-data cd /opt/${p.appName} && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/${p.appName}-scheduler
+    chmod 0644 /etc/cron.d/${p.appName}-scheduler` : "";
+
+  // ── Websocket setup ──
+  const websocketSetup = needsWebsockets && isPhp ? `
+    # ── Websocket Server (Supervisor) ──
+    cat > /etc/supervisor/conf.d/${p.appName}-websocket.conf <<'WS'
+    [program:${p.appName}-websocket]
+    command=php /opt/${p.appName}/artisan reverb:start --host=0.0.0.0 --port=8080
+    autostart=true
+    autorestart=true
+    user=www-data
+    redirect_stderr=true
+    stdout_logfile=/var/log/${p.appName}-websocket.log
+    WS
+
+    supervisorctl reread
+    supervisorctl update` : "";
+
+  // ── PHP ownership fix ──
+  const ownershipFix = isPhp ? `
+    # ── Set permissions ──
+    chown -R www-data:www-data /opt/${p.appName}
+    chmod -R 775 /opt/${p.appName}/storage /opt/${p.appName}/bootstrap/cache` : "";
+
+  // ── .env generation for Laravel ──
+  const envFileSetup = isLaravel ? `
+    # ── Generate .env ──
+    cp /opt/${p.appName}/.env.example /opt/${p.appName}/.env
+    sed -i 's|APP_ENV=.*|APP_ENV=production|' /opt/${p.appName}/.env
+    sed -i 's|APP_DEBUG=.*|APP_DEBUG=false|' /opt/${p.appName}/.env
+    sed -i 's|APP_URL=.*|APP_URL=http://\\$(hostname -I | awk "{print \\$1}")|' /opt/${p.appName}/.env
+${hasVpsDb ? `    sed -i 's|DB_CONNECTION=.*|DB_CONNECTION=pgsql|' /opt/${p.appName}/.env
+    sed -i 's|DB_HOST=.*|DB_HOST=127.0.0.1|' /opt/${p.appName}/.env
+    sed -i 's|DB_DATABASE=.*|DB_DATABASE=${p.appName}|' /opt/${p.appName}/.env
+    sed -i 's|DB_USERNAME=.*|DB_USERNAME=${p.appName}|' /opt/${p.appName}/.env
+    sed -i 's|DB_PASSWORD=.*|DB_PASSWORD=CHANGE_ME_SECURE_PASSWORD|' /opt/${p.appName}/.env` : ""}
+${hasVpsCache || hasVpsQueue ? `    sed -i 's|CACHE_STORE=.*|CACHE_STORE=redis|' /opt/${p.appName}/.env
+    sed -i 's|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=redis|' /opt/${p.appName}/.env
+    sed -i 's|SESSION_DRIVER=.*|SESSION_DRIVER=redis|' /opt/${p.appName}/.env` : ""}
+    php artisan key:generate --force` : "";
+
+  const aiSummary = ai?.summary ? `\n# AI Analysis: ${ai.summary}` : "";
 
   return `# ─────────────────────────────────────────────────
 # OpenTofu — Hetzner Cloud VPS
 # App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
 # Generated for: ${p.repo}@${p.branch}
 # Services on VPS: ${vpsSvcs.map(s => s.name).join(", ") || "none"}
-# Managed services: ${managedSvcs.map(s => s.name).join(", ") || "none"}
+# Managed services: ${managedSvcs.map(s => s.name).join(", ") || "none"}${aiSummary}
 # ─────────────────────────────────────────────────
 
 terraform {
@@ -731,39 +1035,40 @@ resource "hcloud_server" "${p.appName}" {
   user_data = <<-EOF
     #!/bin/bash
     set -e
+
+    export DEBIAN_FRONTEND=noninteractive
+${isPhp ? `    add-apt-repository -y ppa:ondrej/php` : ""}
 ${nodeSetup}
-    # Install packages
+
+    # ── Install packages ──
     apt-get update && apt-get install -y ${packages.join(" ")}
+${composerSetup}
 ${dbSetup}${cacheSetup}
 
-    # Clone repository
+    # ── Clone repository ──
     git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}
     cd /opt/${p.appName}
+${envFileSetup}
 
-    # Build
+    # ── Build ──
     ${p.runtime.buildCmd}
+${needsNode && isPhp ? `\n    # ── Build frontend assets ──\n    npm ci && npm run build` : ""}
+${ownershipFix}
 
-    # Configure Nginx reverse proxy
+    # ── Post-deploy commands ──
+${postDeploy}
+
+    # ── Configure Nginx ──
     cat > /etc/nginx/sites-available/${p.appName} <<'NGINX'
-    server {
-        listen 80;
-        server_name _;
-
-        location / {
-            proxy_pass http://127.0.0.1:${p.runtime.port};
-            proxy_set_header Host \\$host;
-            proxy_set_header X-Real-IP \\$remote_addr;
-            proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \\$scheme;
-        }
-    }
+${nginxConfig}
     NGINX
 
     ln -sf /etc/nginx/sites-available/${p.appName} /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
+${isPhp ? `    systemctl enable php${phpVer}-fpm\n    systemctl restart php${phpVer}-fpm` : ""}
     systemctl restart nginx
-
-    # Create systemd service
+${!usePhpFpm ? `
+    # ── Create systemd service ──
     cat > /etc/systemd/system/${p.appName}.service <<'SVC'
     [Unit]
     Description=${p.appName}
@@ -782,28 +1087,8 @@ ${envVars.map(e => `    Environment=${e}`).join("\n")}
     SVC
 
     systemctl daemon-reload
-    systemctl enable --now ${p.appName}
-${hasVpsQueue ? `
-    # ── Queue Worker Service ──
-    cat > /etc/systemd/system/${p.appName}-worker.service <<'WORKER'
-    [Unit]
-    Description=${p.appName} Queue Worker
-    After=network.target
-
-    [Service]
-    Type=simple
-    User=root
-    WorkingDirectory=/opt/${p.appName}
-    ExecStart=${p.runtime.name === "php" ? "php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600" : "npm run worker"}
-    Restart=always
-${envVars.map(e => `    Environment=${e}`).join("\n")}
-
-    [Install]
-    WantedBy=multi-user.target
-    WORKER
-
-    systemctl daemon-reload
-    systemctl enable --now ${p.appName}-worker` : ""}
+    systemctl enable --now ${p.appName}` : ""}
+${queueWorkerSetup}${schedulerSetup}${websocketSetup}
   EOF
 }
 ${managedBlocks.join("")}
@@ -905,10 +1190,65 @@ output "service_arn" {
 }
 
 function buildVultr(p: TofuBuildParams): string {
+  const ai = p.aiAnalysis;
+  const isPhp = p.runtime.name === "php";
+  const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
+  const usePhpFpm = isPhp && (ai?.nginxConfig === "php-fpm" || isLaravel);
+  const phpVer = p.runtime.version;
+  const vpsSvcs = p.services.filter(s => s.mode === "vps");
+  const hasVpsDb = vpsSvcs.some(s => s.type === "database");
+  const hasVpsCache = vpsSvcs.some(s => s.type === "cache");
+  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue") || (ai?.needsQueueWorker ?? false);
+
+  // Build packages
+  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx", "unzip", "curl"];
+  if (isPhp) {
+    packages.push(`php${phpVer}-fpm`, `php${phpVer}-cli`, `php${phpVer}-mbstring`, `php${phpVer}-xml`, `php${phpVer}-curl`, `php${phpVer}-zip`, `php${phpVer}-bcmath`, `php${phpVer}-intl`, `php${phpVer}-gd`);
+    if (hasVpsDb) packages.push(`php${phpVer}-pgsql`, `php${phpVer}-mysql`);
+    if (hasVpsCache || hasVpsQueue) packages.push(`php${phpVer}-redis`);
+    if (hasVpsQueue) packages.push("supervisor");
+  } else if (p.runtime.name === "node") {
+    packages.push("nodejs", "npm");
+  } else if (p.runtime.name === "python") {
+    packages.push("python3", "python3-pip", "python3-venv");
+  }
+  if (hasVpsDb) packages.push("postgresql", "postgresql-contrib");
+  if (hasVpsCache || hasVpsQueue) packages.push("redis-server");
+
+  const needsNode = isPhp && p.techStack.some(s => ["vite", "node.js", "inertia.js", "tailwind css"].includes(s.toLowerCase()));
+  const nodeVer = ai?.nodeVersion || "20";
+
+  const nginxBlock = usePhpFpm
+    ? `server {
+        listen 80;
+        server_name _;
+        root /opt/${p.appName}/public;
+        index index.php index.html;
+        client_max_body_size 64M;
+        location / { try_files \\\\$uri \\\\$uri/ /index.php?\\\\$query_string; }
+        location ~ \\\\.php$ {
+            fastcgi_pass unix:/run/php/php${phpVer}-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME \\\\$realpath_root\\\\$fastcgi_script_name;
+            include fastcgi_params;
+        }
+        location ~ /\\\\.(?!well-known).* { deny all; }
+    }`
+    : `server {
+        listen 80;
+        server_name _;
+        location / {
+            proxy_pass http://127.0.0.1:${p.runtime.port};
+            proxy_set_header Host \\\\$host;
+            proxy_set_header X-Real-IP \\\\$remote_addr;
+            proxy_set_header X-Forwarded-For \\\\$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \\\\$scheme;
+        }
+    }`;
+
   return `# ─────────────────────────────────────────────────
 # OpenTofu — Vultr Cloud Compute
 # App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}
+# Generated for: ${p.repo}@${p.branch}${ai?.summary ? `\n# AI Analysis: ${ai.summary}` : ""}
 # ─────────────────────────────────────────────────
 
 terraform {
@@ -970,7 +1310,7 @@ resource "vultr_firewall_rule" "${p.appName}_https" {
 }
 
 resource "vultr_instance" "${p.appName}" {
-  plan              = "vc2-1c-1gb"
+  plan              = "${vpsSvcs.length > 2 ? "vc2-2c-4gb" : "vc2-1c-2gb"}"
   region            = "${p.region}"
   os_id             = 2284  # Ubuntu 24.04
   label             = "${p.appName}"
@@ -982,11 +1322,74 @@ resource "vultr_instance" "${p.appName}" {
   user_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
-    apt-get update && apt-get install -y git nginx
+    export DEBIAN_FRONTEND=noninteractive
+${isPhp ? "    add-apt-repository -y ppa:ondrej/php" : ""}
+${p.runtime.name === "node" ? `    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -` : ""}
+${needsNode ? `    curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -\n    apt-get install -y nodejs` : ""}
+
+    apt-get update && apt-get install -y ${packages.join(" ")}
+${isPhp ? "    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer" : ""}
+${hasVpsDb ? `
+    systemctl enable postgresql && systemctl start postgresql
+    sudo -u postgres createuser ${p.appName}
+    sudo -u postgres createdb ${p.appName} -O ${p.appName}
+    sudo -u postgres psql -c "ALTER USER ${p.appName} PASSWORD 'CHANGE_ME_SECURE_PASSWORD';"` : ""}
+${hasVpsCache || hasVpsQueue ? `
+    systemctl enable redis-server && systemctl restart redis-server` : ""}
+
     git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}
     cd /opt/${p.appName}
+${isLaravel ? `
+    cp .env.example .env
+    sed -i 's|APP_ENV=.*|APP_ENV=production|' .env
+    sed -i 's|APP_DEBUG=.*|APP_DEBUG=false|' .env
+${hasVpsDb ? `    sed -i 's|DB_CONNECTION=.*|DB_CONNECTION=pgsql|' .env\n    sed -i 's|DB_DATABASE=.*|DB_DATABASE=${p.appName}|' .env\n    sed -i 's|DB_USERNAME=.*|DB_USERNAME=${p.appName}|' .env\n    sed -i 's|DB_PASSWORD=.*|DB_PASSWORD=CHANGE_ME_SECURE_PASSWORD|' .env` : ""}
+${hasVpsCache || hasVpsQueue ? `    sed -i 's|CACHE_STORE=.*|CACHE_STORE=redis|' .env\n    sed -i 's|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=redis|' .env` : ""}` : ""}
+
     ${p.runtime.buildCmd}
-    # Start app via systemd (similar to Hetzner setup)
+${needsNode && isPhp ? "    npm ci && npm run build" : ""}
+${isLaravel ? `    php artisan key:generate --force\n    php artisan migrate --force\n    php artisan config:cache\n    php artisan route:cache\n    php artisan view:cache\n    php artisan storage:link\n    php artisan optimize` : ""}
+${isPhp ? `    chown -R www-data:www-data /opt/${p.appName}\n    chmod -R 775 /opt/${p.appName}/storage /opt/${p.appName}/bootstrap/cache` : ""}
+
+    cat > /etc/nginx/sites-available/${p.appName} <<'NGINX'
+    ${nginxBlock}
+    NGINX
+    ln -sf /etc/nginx/sites-available/${p.appName} /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+${isPhp ? `    systemctl enable php${phpVer}-fpm && systemctl restart php${phpVer}-fpm` : ""}
+    systemctl restart nginx
+${!usePhpFpm ? `
+    cat > /etc/systemd/system/${p.appName}.service <<'SVC'
+    [Unit]
+    Description=${p.appName}
+    After=network.target
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory=/opt/${p.appName}
+    ExecStart=${p.runtime.startCmd}
+    Restart=always
+    Environment=APP_ENV=production
+    [Install]
+    WantedBy=multi-user.target
+    SVC
+    systemctl daemon-reload && systemctl enable --now ${p.appName}` : ""}
+${hasVpsQueue && isPhp ? `
+    cat > /etc/supervisor/conf.d/${p.appName}-worker.conf <<'SUP'
+    [program:${p.appName}-worker]
+    process_name=%(program_name)s_%(process_num)02d
+    command=php /opt/${p.appName}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    autostart=true
+    autorestart=true
+    user=www-data
+    numprocs=2
+    redirect_stderr=true
+    stdout_logfile=/var/log/${p.appName}-worker.log
+    SUP
+    supervisorctl reread && supervisorctl update` : ""}
+${isLaravel ? `
+    echo "* * * * * www-data cd /opt/${p.appName} && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/${p.appName}-scheduler
+    chmod 0644 /etc/cron.d/${p.appName}-scheduler` : ""}
   EOF
   )
 }
@@ -994,14 +1397,143 @@ resource "vultr_instance" "${p.appName}" {
 output "server_ip" {
   value = vultr_instance.${p.appName}.main_ip
 }
+
+output "ssh_command" {
+  value = "ssh root@\${vultr_instance.${p.appName}.main_ip}"
+}
 `;
 }
 
 function buildLinode(p: TofuBuildParams): string {
+  const ai = p.aiAnalysis;
+  const isPhp = p.runtime.name === "php";
+  const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
+  const usePhpFpm = isPhp && (ai?.nginxConfig === "php-fpm" || isLaravel);
+  const phpVer = p.runtime.version;
+  const vpsSvcs = p.services.filter(s => s.mode === "vps");
+  const hasVpsDb = vpsSvcs.some(s => s.type === "database");
+  const hasVpsCache = vpsSvcs.some(s => s.type === "cache");
+  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue") || (ai?.needsQueueWorker ?? false);
+
+  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx", "unzip", "curl"];
+  if (isPhp) {
+    packages.push(`php${phpVer}-fpm`, `php${phpVer}-cli`, `php${phpVer}-mbstring`, `php${phpVer}-xml`, `php${phpVer}-curl`, `php${phpVer}-zip`, `php${phpVer}-bcmath`, `php${phpVer}-intl`, `php${phpVer}-gd`);
+    if (hasVpsDb) packages.push(`php${phpVer}-pgsql`, `php${phpVer}-mysql`);
+    if (hasVpsCache || hasVpsQueue) packages.push(`php${phpVer}-redis`);
+    if (hasVpsQueue) packages.push("supervisor");
+  } else if (p.runtime.name === "node") {
+    packages.push("nodejs", "npm");
+  } else if (p.runtime.name === "python") {
+    packages.push("python3", "python3-pip", "python3-venv");
+  }
+  if (hasVpsDb) packages.push("postgresql", "postgresql-contrib");
+  if (hasVpsCache || hasVpsQueue) packages.push("redis-server");
+
+  const needsNode = isPhp && p.techStack.some(s => ["vite", "node.js", "inertia.js", "tailwind css"].includes(s.toLowerCase()));
+  const nodeVer = ai?.nodeVersion || "20";
+
+  const nginxBlock = usePhpFpm
+    ? `server {
+        listen 80;
+        server_name _;
+        root /opt/${p.appName}/public;
+        index index.php index.html;
+        client_max_body_size 64M;
+        location / { try_files \\\\$uri \\\\$uri/ /index.php?\\\\$query_string; }
+        location ~ \\\\.php$ {
+            fastcgi_pass unix:/run/php/php${phpVer}-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME \\\\$realpath_root\\\\$fastcgi_script_name;
+            include fastcgi_params;
+        }
+        location ~ /\\\\.(?!well-known).* { deny all; }
+    }`
+    : `server {
+        listen 80;
+        server_name _;
+        location / {
+            proxy_pass http://127.0.0.1:${p.runtime.port};
+            proxy_set_header Host \\\\$host;
+            proxy_set_header X-Real-IP \\\\$remote_addr;
+            proxy_set_header X-Forwarded-For \\\\$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \\\\$scheme;
+        }
+    }`;
+
+  // Build the provisioning script
+  const provisionScript = `#!/bin/bash
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+${isPhp ? "    add-apt-repository -y ppa:ondrej/php" : ""}
+${p.runtime.name === "node" ? `    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -` : ""}
+${needsNode ? `    curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -\n    apt-get install -y nodejs` : ""}
+
+    apt-get update && apt-get install -y ${packages.join(" ")}
+${isPhp ? "    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer" : ""}
+${hasVpsDb ? `
+    systemctl enable postgresql && systemctl start postgresql
+    sudo -u postgres createuser ${p.appName}
+    sudo -u postgres createdb ${p.appName} -O ${p.appName}
+    sudo -u postgres psql -c "ALTER USER ${p.appName} PASSWORD 'CHANGE_ME_SECURE_PASSWORD';"` : ""}
+${hasVpsCache || hasVpsQueue ? "    systemctl enable redis-server && systemctl restart redis-server" : ""}
+
+    git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}
+    cd /opt/${p.appName}
+${isLaravel ? `
+    cp .env.example .env
+    sed -i 's|APP_ENV=.*|APP_ENV=production|' .env
+    sed -i 's|APP_DEBUG=.*|APP_DEBUG=false|' .env
+${hasVpsDb ? `    sed -i 's|DB_CONNECTION=.*|DB_CONNECTION=pgsql|' .env\n    sed -i 's|DB_DATABASE=.*|DB_DATABASE=${p.appName}|' .env\n    sed -i 's|DB_USERNAME=.*|DB_USERNAME=${p.appName}|' .env\n    sed -i 's|DB_PASSWORD=.*|DB_PASSWORD=CHANGE_ME_SECURE_PASSWORD|' .env` : ""}
+${hasVpsCache || hasVpsQueue ? `    sed -i 's|CACHE_STORE=.*|CACHE_STORE=redis|' .env\n    sed -i 's|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=redis|' .env` : ""}` : ""}
+
+    ${p.runtime.buildCmd}
+${needsNode && isPhp ? "    npm ci && npm run build" : ""}
+${isLaravel ? `    php artisan key:generate --force\n    php artisan migrate --force\n    php artisan config:cache\n    php artisan route:cache\n    php artisan view:cache\n    php artisan storage:link\n    php artisan optimize` : ""}
+${isPhp ? `    chown -R www-data:www-data /opt/${p.appName}\n    chmod -R 775 /opt/${p.appName}/storage /opt/${p.appName}/bootstrap/cache` : ""}
+
+    cat > /etc/nginx/sites-available/${p.appName} <<'NGINX'
+    ${nginxBlock}
+    NGINX
+    ln -sf /etc/nginx/sites-available/${p.appName} /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
+${isPhp ? `    systemctl enable php${phpVer}-fpm && systemctl restart php${phpVer}-fpm` : ""}
+    systemctl restart nginx
+${!usePhpFpm ? `
+    cat > /etc/systemd/system/${p.appName}.service <<'SVC'
+    [Unit]
+    Description=${p.appName}
+    After=network.target
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory=/opt/${p.appName}
+    ExecStart=${p.runtime.startCmd}
+    Restart=always
+    Environment=APP_ENV=production
+    [Install]
+    WantedBy=multi-user.target
+    SVC
+    systemctl daemon-reload && systemctl enable --now ${p.appName}` : ""}
+${hasVpsQueue && isPhp ? `
+    cat > /etc/supervisor/conf.d/${p.appName}-worker.conf <<'SUP'
+    [program:${p.appName}-worker]
+    process_name=%(program_name)s_%(process_num)02d
+    command=php /opt/${p.appName}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    autostart=true
+    autorestart=true
+    user=www-data
+    numprocs=2
+    redirect_stderr=true
+    stdout_logfile=/var/log/${p.appName}-worker.log
+    SUP
+    supervisorctl reread && supervisorctl update` : ""}
+${isLaravel ? `
+    echo "* * * * * www-data cd /opt/${p.appName} && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/${p.appName}-scheduler
+    chmod 0644 /etc/cron.d/${p.appName}-scheduler` : ""}`;
+
   return `# ─────────────────────────────────────────────────
 # OpenTofu — Linode (Akamai Cloud)
 # App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}
+# Generated for: ${p.repo}@${p.branch}${ai?.summary ? `\n# AI Analysis: ${ai.summary}` : ""}
 # ─────────────────────────────────────────────────
 
 terraform {
@@ -1075,7 +1607,7 @@ resource "linode_firewall" "${p.appName}_fw" {
 resource "linode_instance" "${p.appName}" {
   label           = "${p.appName}"
   region          = "${p.region}"
-  type            = "g6-nanode-1"
+  type            = "${vpsSvcs.length > 2 ? "g6-standard-1" : "g6-nanode-1"}"
   image           = "linode/ubuntu24.04"
   root_pass       = var.root_password
   authorized_keys = [linode_sshkey.${p.appName}_key.ssh_key]
@@ -1085,8 +1617,30 @@ resource "linode_instance" "${p.appName}" {
   tags = ["${p.appName}", "opentofu"]
 }
 
+resource "null_resource" "${p.appName}_provision" {
+  depends_on = [linode_instance.${p.appName}]
+
+  connection {
+    type        = "ssh"
+    host        = linode_instance.${p.appName}.ip_address
+    user        = "root"
+    password    = var.root_password
+  }
+
+  provisioner "remote-exec" {
+    inline = [<<-SCRIPT
+${provisionScript}
+    SCRIPT
+    ]
+  }
+}
+
 output "server_ip" {
   value = linode_instance.${p.appName}.ip_address
+}
+
+output "ssh_command" {
+  value = "ssh root@\${linode_instance.${p.appName}.ip_address}"
 }
 `;
 }
