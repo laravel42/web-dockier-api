@@ -4,6 +4,7 @@ import { projectsApi, gitApi, deployApi, codeAnalysisApi, integrationsApi } from
 import { INTEGRATION_CATALOG } from "../data/integrations";
 import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/Modal";
+import DeployWizard from "../components/DeployWizard";
 
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
@@ -107,25 +108,6 @@ const langColors = [
   "bg-teal-500", "bg-pink-500", "bg-lime-500", "bg-sky-500",
 ];
 
-// Map deploy option display names to server_providers slugs
-const providerSlugMap: Record<string, string[]> = {
-  "DigitalOcean": ["digitalocean"],
-  "Hetzner": ["hetzner"],
-  "Vultr": ["vultr"],
-  "Linode": ["linode"],
-  "AWS": ["aws"],
-  "UpCloud": ["upcloud"],
-  "Katapult": ["katapult"],
-  "Hostinger": ["hostinger"],
-  "Vercel": ["vercel"],
-  "Netlify": ["netlify"],
-  "Cloudflare Pages": ["cloudflare"],
-  "Railway": ["railway"],
-  "Render": ["render"],
-  "Fly.io": ["flyio"],
-  "Encore Cloud": ["encore"],
-};
-
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -146,23 +128,15 @@ export default function ProjectDetail() {
   const [analysis, setAnalysis] = useState<RepoAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
-  const [expandedOption, setExpandedOption] = useState<number | null>(null);
-  const [userProviders, setUserProviders] = useState<string[]>([]);
+  const [_expandedOption, _setExpandedOption] = useState<number | null>(null);
+  const [_userProviders, setUserProviders] = useState<string[]>([]);
   const [allProviders, setAllProviders] = useState<Array<{ id: string; provider: string; label: string }>>([]);
-  const [deployModal, setDeployModal] = useState<{ open: boolean; option: RepoAnalysis["deployOptions"][0] | null }>({ open: false, option: null });
-  const [deployProviderId, setDeployProviderId] = useState("");
-  const [deploying, setDeploying] = useState(false);
-  const [deployError, setDeployError] = useState("");
-  const [deploySuccess, setDeploySuccess] = useState("");
-  const [deployLogs, setDeployLogs] = useState<string[]>([]);
-  const [deployStatus, setDeployStatus] = useState<string>("");
-  const [deployAppUrl, setDeployAppUrl] = useState("");
-  const [tofuScript, setTofuScript] = useState("");
-  const [tofuResources, setTofuResources] = useState<string[]>([]);
-  const [tofuLoading, setTofuLoading] = useState(false);
-  const [tofuAppName, setTofuAppName] = useState("");
-  const [tofuRegion, setTofuRegion] = useState("");
-  const [servicesModes, setServicesModes] = useState<Record<string, "vps" | "managed">>({});
+  const [showDeployWizard, setShowDeployWizard] = useState(false);
+
+  // Deployment history
+  interface DeployHistoryItem { id: string; providerId: string; repo: string; branch: string; status: string; logs: string; appUrl: string; commitHash: string; dockerImage: string; createdAt: string; }
+  const [deployHistory, setDeployHistory] = useState<DeployHistoryItem[]>([]);
+  const [expandedDeployLog, setExpandedDeployLog] = useState<string | null>(null);
 
   // Code Analysis (Opengrep)
   interface ScanProgress { phase: "cloning" | "scanning" | "persisting" | "done"; currentFile?: string; filesScanned: number; filesInRepo: number; findingsCount: number; }
@@ -227,6 +201,9 @@ export default function ProjectDetail() {
         setUserProviders(res.providers.map((p: any) => p.provider));
         setAllProviders(res.providers.map((p: any) => ({ id: p.id, provider: p.provider, label: p.label })));
       })
+      .catch(() => {});
+    deployApi.listDeployments()
+      .then((res) => setDeployHistory(res.deployments))
       .catch(() => {});
     projectsApi.get(projectId)
       .then((p) => {
@@ -573,134 +550,6 @@ export default function ProjectDetail() {
     if (project?.id) fetchScans();
   }, [project?.id, project?.branch]);
 
-  // Initialize service modes when analysis loads
-  useEffect(() => {
-    if (analysis?.detectedServices?.length) {
-      const modes: Record<string, "vps" | "managed"> = {};
-      analysis.detectedServices.forEach((s) => { modes[s.type] = "vps"; });
-      setServicesModes(modes);
-    }
-  }, [analysis]);
-
-  const getMatchingProviders = (opt: RepoAnalysis["deployOptions"][0]) => {
-    const slugs = providerSlugMap[opt.provider];
-    if (!slugs) return [];
-    return allProviders.filter((p) => slugs.includes(p.provider));
-  };
-
-  const openDeployModal = (opt: RepoAnalysis["deployOptions"][0]) => {
-    const matching = getMatchingProviders(opt);
-    const firstProvider = matching.length === 1 ? matching[0].id : "";
-    setDeployModal({ open: true, option: opt });
-    setDeployProviderId(firstProvider);
-    setDeployError("");
-    setDeploySuccess("");
-    setDeployLogs([]);
-    setDeployStatus("");
-    setDeployAppUrl("");
-    setTofuScript("");
-    setTofuResources([]);
-    setTofuLoading(false);
-    setTofuAppName("");
-    setTofuRegion("");
-
-    // Reset service modes from analysis
-    if (analysis?.detectedServices?.length) {
-      const modes: Record<string, "vps" | "managed"> = {};
-      analysis.detectedServices.forEach((s) => { modes[s.type] = "vps"; });
-      setServicesModes(modes);
-    }
-
-    // Auto-generate tofu script if we have a single matching provider
-    if (firstProvider && project) {
-      generateTofuScript(firstProvider);
-    }
-  };
-
-  const generateTofuScript = async (providerId?: string, overrideModes?: Record<string, "vps" | "managed">) => {
-    if (!project || !deployModal.option && !providerId) return;
-    const pid = providerId || deployProviderId;
-    if (!pid) return;
-    const modes = overrideModes || servicesModes;
-    setTofuLoading(true);
-    setTofuScript("");
-    try {
-      const parsed = parseOwnerRepo(project.repository);
-      const repo = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
-      const res = await deployApi.generateTofu({
-        providerId: pid,
-        repo,
-        branch: project.branch || "main",
-        techStack: analysis?.techStack.map(t => t.name) || [],
-        primaryLanguage: analysis?.primaryLanguage || stats?.language || "",
-        hasDocker: analysis?.hasDocker || false,
-        appName: tofuAppName || undefined,
-        region: tofuRegion || undefined,
-        services: analysis?.detectedServices?.length
-          ? analysis.detectedServices.map(s => ({ type: s.type, name: s.name, mode: modes[s.type] || "vps" }))
-          : undefined,
-        aiAnalysis: analysis?.aiAnalysis || undefined,
-      });
-      setTofuScript(res.script);
-      setTofuResources(res.estimatedResources);
-      setTofuAppName(res.appName);
-      setTofuRegion(res.region);
-    } catch (err: any) {
-      setDeployError(err.message || "Failed to generate OpenTofu script");
-    } finally {
-      setTofuLoading(false);
-    }
-  };
-
-  const handleDeploy = async () => {
-    if (!project || !deployModal.option || !deployProviderId) return;
-    setDeploying(true);
-    setDeployError("");
-    setDeploySuccess("");
-    setDeployLogs([]);
-    setDeployStatus("pending");
-    setDeployAppUrl("");
-    try {
-      const parsed = parseOwnerRepo(project.repository);
-      const repo = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
-      const deployment = await deployApi.createDeployment({
-        providerId: deployProviderId,
-        gitConnectionId: project.connectionId,
-        repo,
-        branch: project.branch || "main",
-        tofuScript: tofuScript || undefined,
-      });
-      // Poll for status & logs
-      const pollId = deployment.id;
-      const poll = async () => {
-        try {
-          const d = await deployApi.getDeployment(pollId);
-          setDeployStatus(d.status);
-          if (d.logs) setDeployLogs(d.logs.split("\n").filter(Boolean));
-          if (d.appUrl) setDeployAppUrl(d.appUrl);
-          if (d.status === "success") {
-            setDeploySuccess("Deployment completed successfully!");
-            setDeploying(false);
-            return;
-          }
-          if (d.status === "failed") {
-            setDeployError("Deployment failed. Check logs for details.");
-            setDeploying(false);
-            return;
-          }
-          // Keep polling
-          setTimeout(poll, 1500);
-        } catch {
-          setTimeout(poll, 2000);
-        }
-      };
-      setTimeout(poll, 1000);
-    } catch (err: any) {
-      setDeployError(err.message || "Failed to start deployment");
-      setDeploying(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -774,7 +623,17 @@ export default function ProjectDetail() {
             <p className="text-sm text-text-muted">Created {new Date(project.createdAt).toLocaleDateString()}</p>
           </div>
         </div>
-        <div className="relative">
+        <div className="relative flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowDeployWizard(true)}
+            className={btnPrimary + " flex items-center gap-1.5"}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+            </svg>
+            Deploy
+          </button>
           <button
             type="button"
             onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
@@ -788,7 +647,7 @@ export default function ProjectDetail() {
           {headerMenuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setHeaderMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg bg-white shadow-lg border border-border py-1">
+              <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg bg-card shadow-lg border border-border py-1">
                 <button
                   type="button"
                   onClick={() => { setHeaderMenuOpen(false); handlePullOrigin(); }}
@@ -973,131 +832,52 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Deployment Options */}
-      {project.connectionId && project.repository && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide">Deployment Options</h2>
-            {analysis?.aiAnalysis?.deployOptions?.length ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-600 rounded-full text-[10px] font-semibold uppercase tracking-wider">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                </svg>
-                AI
-              </span>
-            ) : null}
+      {/* Deployment History */}
+      {project.connectionId && project.repository && (() => {
+        const parsed = parseOwnerRepo(project.repository);
+        const repoKey = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
+        const projectDeploys = deployHistory.filter(d => d.repo === repoKey);
+        if (projectDeploys.length === 0) return null;
+        const statusColors: Record<string, string> = { success: "bg-success-500/10 text-success-500", failed: "bg-danger-500/10 text-danger-500", building: "bg-warning-500/10 text-warning-500", deploying: "bg-primary-500/10 text-primary-500", pending: "bg-secondary-100 text-text-muted" };
+        return (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Deployment History</h2>
+            <div className="space-y-2">
+              {projectDeploys.slice(0, 10).map((d) => (
+                <div key={d.id} className={`${cardCls} overflow-hidden`}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDeployLog(expandedDeployLog === d.id ? null : d.id)}
+                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-secondary-50/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[d.status] || "bg-secondary-100 text-text-muted"}`}>{d.status}</span>
+                      <span className="text-sm text-text truncate">{d.branch}</span>
+                      {d.commitHash && <span className="text-xs text-text-muted font-mono">{d.commitHash.slice(0, 8)}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-4">
+                      {d.appUrl && (
+                        <a href={d.appUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-primary-500 hover:text-primary-700 transition-colors">
+                          {d.appUrl.replace(/^https?:\/\//, "").slice(0, 30)}
+                        </a>
+                      )}
+                      <span className="text-xs text-text-muted">{new Date(d.createdAt).toLocaleDateString()} {new Date(d.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 text-text-muted transition-transform ${expandedDeployLog === d.id ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                      </svg>
+                    </div>
+                  </button>
+                  {expandedDeployLog === d.id && d.logs && (
+                    <div className="border-t border-border bg-gray-950 px-4 py-3 max-h-72 overflow-y-auto">
+                      <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap leading-relaxed">{d.logs}</pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-          {analysisLoading ? (
-            <div className="flex flex-col items-center py-10 gap-3">
-              <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-text-muted">Analyzing repository code…</p>
-            </div>
-          ) : analysisError ? (
-            <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-4 py-3 text-sm text-danger-500">{analysisError}</div>
-          ) : analysis ? (
-            <div className="space-y-6">
-              {/* Deployment Options */}
-              <div className="space-y-3">
-                {(() => {
-                  const filtered = userProviders.length > 0
-                    ? analysis.deployOptions.filter((opt) => {
-                        const slugs = providerSlugMap[opt.provider];
-                        return slugs ? slugs.some((s) => userProviders.includes(s)) : false;
-                      })
-                    : analysis.deployOptions;
-                  if (filtered.length === 0) {
-                    return (
-                      <div className={`${cardCls} p-5 text-center`}>
-                        <p className="text-sm text-text-muted">
-                          {userProviders.length > 0
-                            ? "None of your configured providers match the recommendations for this tech stack. Add more providers in Settings → Providers."
-                            : "No providers configured. Add providers in Settings → Providers to see deployment recommendations."}
-                        </p>
-                      </div>
-                    );
-                  }
-                  return filtered.map((opt, i) => (
-                  <div key={`${opt.provider}-${opt.type}`} className={`${cardCls} overflow-hidden`}>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedOption(expandedOption === i ? null : i)}
-                      className="w-full p-5 flex items-center justify-between text-left hover:bg-secondary-50/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0 text-primary-500 font-bold text-sm">
-                          {opt.provider.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-semibold text-text">{opt.provider}</p>
-                            <span className="px-2 py-0.5 bg-secondary-100 text-text-muted rounded text-xs">{opt.type}</span>
-                          </div>
-                          <p className="text-sm text-text-secondary mt-0.5 truncate">{opt.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0 ml-4">
-                        <span className="text-sm font-semibold text-primary-500 whitespace-nowrap">{opt.estimatedMonthlyCost}</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" className={`w-5 h-5 text-text-muted transition-transform ${expandedOption === i ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                        </svg>
-                      </div>
-                    </button>
-                    {expandedOption === i && (
-                      <div className="px-5 pb-5 border-t border-border">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-                          <div>
-                            <p className="text-xs font-semibold text-success-500 uppercase tracking-wide mb-2">Pros</p>
-                            <ul className="space-y-1.5">
-                              {opt.pros.map((pro, j) => (
-                                <li key={j} className="flex items-start gap-2 text-sm text-text-secondary">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-success-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                  </svg>
-                                  {pro}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-danger-500 uppercase tracking-wide mb-2">Cons</p>
-                            <ul className="space-y-1.5">
-                              {opt.cons.map((con, j) => (
-                                <li key={j} className="flex items-start gap-2 text-sm text-text-secondary">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                  {con}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                          <div>
-                            <p className="text-xs text-text-muted">Best for</p>
-                            <p className="text-sm text-text-secondary">{opt.bestFor}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); openDeployModal(opt); }}
-                            className={btnPrimary + " flex items-center gap-1.5"}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                            </svg>
-                            Deploy
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ));
-                })()}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      )}
+        );
+      })()}
 
       {/* Opengrep Code Analysis */}
       {project.connectionId && project.repository && (
@@ -1347,325 +1127,19 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Deploy Modal — OpenTofu */}
-      <Modal open={deployModal.open} onClose={() => { if (!deploying) setDeployModal({ open: false, option: null }); }} title={deployModal.option ? `Deploy with ${deployModal.option.provider} — ${deployModal.option.type}` : "Deploy"} size="xl">
-        {deployModal.option && (() => {
-          const matching = getMatchingProviders(deployModal.option);
-          const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
-          const statusColors: Record<string, string> = {
-            pending: "bg-warning-50 text-warning-500",
-            building: "bg-primary-50 text-primary-500",
-            deploying: "bg-primary-100 text-primary-700",
-            success: "bg-success-50 text-success-500",
-            failed: "bg-danger-50 text-danger-500",
-          };
-          return (
-            <div className="space-y-4">
-              {/* Summary */}
-              <div className="rounded-lg bg-secondary-50 p-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-text-muted">Repository:</span>
-                  <span className="text-text font-medium truncate">{project?.repository}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-text-muted">Branch:</span>
-                  <span className="text-text font-medium">{project?.branch || "main"}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-text-muted">Type:</span>
-                  <span className="text-text font-medium">{deployModal.option.type}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-text-muted">Est. cost:</span>
-                  <span className="text-primary-500 font-medium">{deployModal.option.estimatedMonthlyCost}</span>
-                </div>
-              </div>
-
-              {/* Provider select */}
-              {!deployStatus && (
-                <div>
-                  <label htmlFor="deploy-provider-select" className="block text-sm font-medium text-text-secondary mb-1.5">Select Provider Account</label>
-                  {matching.length === 0 ? (
-                    <p className="text-sm text-danger-500">No matching provider configured. Add a {deployModal.option.provider} provider in Settings → Providers first.</p>
-                  ) : (
-                    <select
-                      id="deploy-provider-select"
-                      value={deployProviderId}
-                      onChange={(e) => { setDeployProviderId(e.target.value); if (e.target.value) generateTofuScript(e.target.value); }}
-                      className={inputCls}
-                      required
-                    >
-                      {matching.length > 1 && <option value="">Select account...</option>}
-                      {matching.map((p) => (
-                        <option key={p.id} value={p.id}>{p.label} ({p.provider})</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
-
-              {/* Detected Services — VPS vs Managed toggle */}
-              {!deployStatus && analysis?.detectedServices && analysis.detectedServices.length > 0 && (() => {
-                const provider = deployModal.option?.provider || "";
-                // Managed service names & estimated costs per provider + service type
-                const managedInfo: Record<string, Record<string, { service: string; cost: string }>> = {
-                  Hetzner: {
-                    database: { service: "Hetzner Managed Database (Postgres)", cost: "~€15/mo" },
-                    cache: { service: "Self-managed Redis on VPS", cost: "included in VPS" },
-                    queue: { service: "Self-managed RabbitMQ on VPS", cost: "included in VPS" },
-                    storage: { service: "Hetzner Object Storage (S3-compatible)", cost: "~€5/mo per TB" },
-                    search: { service: "Self-managed Meilisearch on VPS", cost: "included in VPS" },
-                    mail: { service: "External SMTP (Mailgun/Postmark)", cost: "~$15/mo" },
-                    broadcasting: { service: "Self-managed Soketi on VPS", cost: "included in VPS" },
-                    scheduler: { service: "Systemd timer on VPS", cost: "included in VPS" },
-                  },
-                  DigitalOcean: {
-                    database: { service: "DigitalOcean Managed Database", cost: "~$15/mo" },
-                    cache: { service: "DigitalOcean Managed Redis", cost: "~$15/mo" },
-                    queue: { service: "External (CloudAMQP / Amazon SQS)", cost: "~$10/mo" },
-                    storage: { service: "DigitalOcean Spaces (S3-compatible)", cost: "$5/mo 250GB" },
-                    search: { service: "External (Meilisearch Cloud / Algolia)", cost: "~$30/mo" },
-                    mail: { service: "External SMTP (Mailgun/Postmark)", cost: "~$15/mo" },
-                    broadcasting: { service: "External (Pusher / Ably)", cost: "~$10/mo" },
-                    scheduler: { service: "App Platform Worker", cost: "~$5/mo" },
-                  },
-                  AWS: {
-                    database: { service: "Amazon RDS (Postgres/MySQL)", cost: "~$15/mo (db.t3.micro)" },
-                    cache: { service: "Amazon ElastiCache (Redis)", cost: "~$15/mo (t3.micro)" },
-                    queue: { service: "Amazon SQS", cost: "~$1/mo (pay-per-use)" },
-                    storage: { service: "Amazon S3", cost: "~$2/mo per 100GB" },
-                    search: { service: "Amazon OpenSearch", cost: "~$25/mo (t3.small)" },
-                    mail: { service: "Amazon SES", cost: "~$1/mo (pay-per-use)" },
-                    broadcasting: { service: "External (Pusher / Ably)", cost: "~$10/mo" },
-                    scheduler: { service: "Amazon EventBridge Scheduler", cost: "~$1/mo" },
-                  },
-                  Vultr: {
-                    database: { service: "Vultr Managed Database", cost: "~$15/mo" },
-                    cache: { service: "Self-managed Redis on VPS", cost: "included in VPS" },
-                    queue: { service: "Self-managed RabbitMQ on VPS", cost: "included in VPS" },
-                    storage: { service: "Vultr Object Storage", cost: "$5/mo 250GB" },
-                    search: { service: "Self-managed Meilisearch on VPS", cost: "included in VPS" },
-                    mail: { service: "External SMTP (Mailgun/Postmark)", cost: "~$15/mo" },
-                    broadcasting: { service: "Self-managed Soketi on VPS", cost: "included in VPS" },
-                    scheduler: { service: "Systemd timer on VPS", cost: "included in VPS" },
-                  },
-                  Linode: {
-                    database: { service: "Akamai Managed Database", cost: "~$15/mo" },
-                    cache: { service: "Self-managed Redis on VPS", cost: "included in VPS" },
-                    queue: { service: "Self-managed RabbitMQ on VPS", cost: "included in VPS" },
-                    storage: { service: "Linode Object Storage", cost: "$5/mo 250GB" },
-                    search: { service: "Self-managed Meilisearch on VPS", cost: "included in VPS" },
-                    mail: { service: "External SMTP (Mailgun/Postmark)", cost: "~$15/mo" },
-                    broadcasting: { service: "Self-managed Soketi on VPS", cost: "included in VPS" },
-                    scheduler: { service: "Systemd timer on VPS", cost: "included in VPS" },
-                  },
-                };
-                const fallback: Record<string, { service: string; cost: string }> = {
-                  database: { service: "Provider Managed Database", cost: "~$15/mo" },
-                  cache: { service: "Managed Redis", cost: "~$15/mo" },
-                  queue: { service: "Managed Message Queue", cost: "~$10/mo" },
-                  storage: { service: "Object Storage (S3-compatible)", cost: "~$5/mo" },
-                  search: { service: "Managed Search Service", cost: "~$25/mo" },
-                  mail: { service: "External SMTP Provider", cost: "~$15/mo" },
-                  broadcasting: { service: "WebSocket Service (Pusher/Ably)", cost: "~$10/mo" },
-                  scheduler: { service: "Cron / Scheduler Service", cost: "~$5/mo" },
-                };
-                const getManaged = (type: string) => managedInfo[provider]?.[type] || fallback[type] || { service: "Managed Service", cost: "varies" };
-
-                return (
-                  <div>
-                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Detected Services</p>
-                    <div className="space-y-2">
-                      {analysis.detectedServices.map((svc) => {
-                        const managed = getManaged(svc.type);
-                        const isManaged = servicesModes[svc.type] === "managed";
-                        return (
-                          <div key={svc.type} className="rounded-lg border border-border px-3 py-2.5">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-sm font-medium text-text">{svc.name}</span>
-                                <span className="text-xs text-text-muted">({svc.type})</span>
-                              </div>
-                              <div className="flex rounded-md overflow-hidden border border-border shrink-0 ml-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const next = { ...servicesModes, [svc.type]: "vps" as const };
-                                    setServicesModes(next);
-                                    if (deployProviderId) generateTofuScript(deployProviderId, next);
-                                  }}
-                                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${!isManaged ? "bg-primary-500 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
-                                >
-                                  VPS
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const next = { ...servicesModes, [svc.type]: "managed" as const };
-                                    setServicesModes(next);
-                                    if (deployProviderId) generateTofuScript(deployProviderId, next);
-                                  }}
-                                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${isManaged ? "bg-primary-500 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
-                                >
-                                  Managed
-                                </button>
-                              </div>
-                            </div>
-                            {isManaged && (
-                              <div className="mt-2 flex items-center gap-3 pl-0.5">
-                                <span className="text-xs text-primary-600 font-medium">{managed.service}</span>
-                                <span className="text-xs text-text-muted">·</span>
-                                <span className="text-xs font-semibold text-amber-600">{managed.cost}</span>
-                              </div>
-                            )}
-                            {!isManaged && (
-                              <div className="mt-1.5 pl-0.5">
-                                <span className="text-xs text-text-muted">Installed on the same VPS — no extra cost</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* OpenTofu Script */}
-              {tofuLoading && (
-                <div className="flex items-center gap-2 py-4 justify-center">
-                  <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm text-text-muted">Generating OpenTofu script…</span>
-                </div>
-              )}
-
-              {tofuScript && !deployStatus && (
-                <div className="space-y-3">
-                  {/* AI Analysis summary */}
-                  {analysis?.aiAnalysis?.summary && (
-                    <div className="flex items-start gap-2 p-2.5 bg-violet-50 border border-violet-200 rounded-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                      </svg>
-                      <div className="text-xs text-violet-700">
-                        <span className="font-semibold">AI Analysis:</span> {analysis.aiAnalysis.summary}
-                        {analysis.aiAnalysis.runtime && (
-                          <span className="ml-1 text-violet-500">
-                            ({analysis.aiAnalysis.runtime} {analysis.aiAnalysis.runtimeVersion}
-                            {analysis.aiAnalysis.framework ? ` / ${analysis.aiAnalysis.framework} ${analysis.aiAnalysis.frameworkVersion}` : ""})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Estimated resources */}
-                  {tofuResources.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1.5">Resources to create</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {tofuResources.map((r, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-primary-50 text-primary-600 rounded text-xs font-medium">{r}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Script preview */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">OpenTofu Script</p>
-                      <button
-                        type="button"
-                        onClick={() => { navigator.clipboard.writeText(tofuScript); }}
-                        className="text-xs text-primary-500 hover:text-primary-700 transition-colors flex items-center gap-1"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                        </svg>
-                        Copy
-                      </button>
-                    </div>
-                    <div className="rounded-lg bg-gray-900 p-3 max-h-80 overflow-y-auto font-mono text-xs leading-relaxed">
-                      <pre className="text-gray-300 whitespace-pre-wrap">{tofuScript}</pre>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Status badge (during deploy) */}
-              {deployStatus && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted uppercase tracking-wide">Status:</span>
-                  <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${statusColors[deployStatus] || "bg-secondary-100 text-text-muted"}`}>
-                    {deployStatus}
-                  </span>
-                  {deploying && <div className="w-3.5 h-3.5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />}
-                </div>
-              )}
-
-              {/* Live logs */}
-              {deployLogs.length > 0 && (
-                <div className="rounded-lg bg-gray-900 p-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed">
-                  {deployLogs.map((line, i) => (
-                    <div key={i} className={
-                      line.includes("✓") ? "text-green-400" :
-                      line.includes("✗") ? "text-red-400" :
-                      line.includes("──") ? "text-cyan-400" :
-                      line.includes("ℹ") ? "text-blue-300" :
-                      line.includes("▶") ? "text-yellow-300" :
-                      "text-gray-300"
-                    }>
-                      {line}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* App URL */}
-              {deployAppUrl && (
-                <div className="rounded-lg bg-success-500/10 border border-success-500/20 p-3">
-                  <p className="text-xs text-success-500 font-semibold uppercase tracking-wide mb-1">Application URL</p>
-                  <a href={deployAppUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                    </svg>
-                    {deployAppUrl}
-                  </a>
-                </div>
-              )}
-
-              {deployError && (
-                <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{deployError}</div>
-              )}
-              {deploySuccess && !deployAppUrl && (
-                <div className="rounded-lg bg-success-500/10 border border-success-500/20 px-3 py-2 text-sm text-success-500">{deploySuccess}</div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                {!deploying && (
-                  <button type="button" onClick={() => setDeployModal({ open: false, option: null })} className={btnSecondary}>
-                    {deployStatus === "success" || deployStatus === "failed" ? "Close" : "Cancel"}
-                  </button>
-                )}
-                {!deployStatus && tofuScript && (
-                  <button
-                    type="button"
-                    onClick={handleDeploy}
-                    disabled={!deployProviderId || deploying || matching.length === 0}
-                    className={`${btnPrimary} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5`}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                    </svg>
-                    Apply & Deploy
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-      </Modal>
+      {/* Deploy Wizard */}
+      <DeployWizard
+        open={showDeployWizard}
+        onClose={() => setShowDeployWizard(false)}
+        project={project}
+        analysis={analysis}
+        analysisLoading={analysisLoading}
+        analysisError={analysisError}
+        providers={allProviders}
+        onDeployComplete={() => {
+          deployApi.listDeployments().then((res) => setDeployHistory(res.deployments)).catch(() => {});
+        }}
+      />
 
       {/* Create Issue from Finding Modal */}
       <Modal open={issueModal.open} onClose={() => setIssueModal({ open: false, finding: null })} title="Create Issue from Finding">

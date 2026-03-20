@@ -3,6 +3,7 @@ import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { Topic, Subscription } from "encore.dev/pubsub";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
+import { git_integration } from "~encore/clients";
 
 const db = new SQLDatabase("deploy", { migrations: "./migrations" });
 
@@ -29,6 +30,8 @@ interface Deployment {
   status: "pending" | "building" | "deploying" | "success" | "failed";
   logs: string;
   appUrl: string;
+  commitHash: string;
+  dockerImage: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +55,10 @@ export interface DeployEvent {
   repo: string;
   branch: string;
   tofuScript: string;
+  techStack: string[];
+  primaryLanguage: string;
+  registryUrl: string;
+  deployStrategy: string;
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {
@@ -139,6 +146,10 @@ export const createDeployment = api(
     repo: string;
     branch: string;
     tofuScript?: string;
+    techStack?: string[];
+    primaryLanguage?: string;
+    registryUrl?: string;
+    deployStrategy?: string;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -158,12 +169,17 @@ export const createDeployment = api(
       repo: params.repo,
       branch: params.branch,
       tofuScript: script,
+      techStack: params.techStack || [],
+      primaryLanguage: params.primaryLanguage || "",
+      registryUrl: params.registryUrl || "",
+      deployStrategy: params.deployStrategy || "managed",
     });
 
     return {
       id, userId: authData.userID, providerId: params.providerId,
       gitConnectionId: params.gitConnectionId, repo: params.repo,
       branch: params.branch, status: "pending", logs: "", appUrl: "",
+      commitHash: "", dockerImage: "",
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
   }
@@ -177,11 +193,11 @@ export const listDeployments = api(
     const rows = params.providerId
       ? db.query<{
           id: string; user_id: string; provider_id: string; git_connection_id: string;
-          repo: string; branch: string; status: string; logs: string; app_url: string; created_at: Date; updated_at: Date;
+          repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; created_at: Date; updated_at: Date;
         }>`SELECT * FROM deployments WHERE user_id = ${authData.userID} AND provider_id = ${params.providerId} ORDER BY created_at DESC LIMIT 50`
       : db.query<{
           id: string; user_id: string; provider_id: string; git_connection_id: string;
-          repo: string; branch: string; status: string; logs: string; app_url: string; created_at: Date; updated_at: Date;
+          repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; created_at: Date; updated_at: Date;
         }>`SELECT * FROM deployments WHERE user_id = ${authData.userID} ORDER BY created_at DESC LIMIT 50`;
 
     const deployments: Deployment[] = [];
@@ -190,6 +206,7 @@ export const listDeployments = api(
         id: row.id, userId: row.user_id, providerId: row.provider_id,
         gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
         status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
+        commitHash: row.commit_hash, dockerImage: row.docker_image,
         createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
       });
     }
@@ -202,7 +219,7 @@ export const getDeployment = api(
   async (params: { deploymentId: string }): Promise<Deployment> => {
     const row = await db.queryRow<{
       id: string; user_id: string; provider_id: string; git_connection_id: string;
-      repo: string; branch: string; status: string; logs: string; app_url: string; created_at: Date; updated_at: Date;
+      repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; created_at: Date; updated_at: Date;
     }>`SELECT * FROM deployments WHERE id = ${params.deploymentId}`;
 
     if (!row) throw APIError.notFound("Deployment not found");
@@ -211,24 +228,57 @@ export const getDeployment = api(
       id: row.id, userId: row.user_id, providerId: row.provider_id,
       gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
       status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
+      commitHash: row.commit_hash, dockerImage: row.docker_image,
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     };
   }
 );
 
-// ─── Deploy Processor (Pub/Sub) — Real OpenTofu execution ───
+// ─── Deploy Processor (Pub/Sub) — Docker + Pulumi ───
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
     const { deploymentId } = event;
     const repoName = event.repo.split("/").pop() || "app";
     const shortId = deploymentId.slice(0, 8);
+    const imageName = `${repoName}:${shortId}`;
 
     // Look up provider for API key + region
     const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string }>`
       SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
     const region = providerRow?.region || "us-east-1";
+
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { spawn } = await import("node:child_process");
+    const { execSync } = await import("node:child_process");
+
+    // ── Helper to run a command and stream output ──
+    const runCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Promise<{ code: number; output: string }> => {
+      return new Promise((resolve) => {
+        const proc = spawn(cmd, args, {
+          cwd: opts?.cwd || undefined,
+          env: { ...process.env, ...opts?.env },
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        let output = "";
+        const onData = async (data: Buffer) => {
+          const lines = data.toString().split("\n").filter(Boolean);
+          for (const line of lines) {
+            output += line + "\n";
+            // Skip Pulumi progress noise (dots, "@ updating..." lines)
+            if (/^\s*\.+\s*$/.test(line) || /^@ updating/.test(line)) continue;
+            await appendLog(deploymentId, `[${ts()}] ${line}`);
+          }
+        };
+        proc.stdout.on("data", onData);
+        proc.stderr.on("data", onData);
+        proc.on("close", (code) => resolve({ code: code ?? 1, output }));
+        proc.on("error", (err) => resolve({ code: 1, output: err.message }));
+      });
+    };
 
     try {
       await db.exec`UPDATE deployments SET status = 'building', updated_at = NOW() WHERE id = ${deploymentId}`;
@@ -237,138 +287,542 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
 
       if (!event.tofuScript) {
-        throw new Error("No OpenTofu script provided. Generate a script first, then deploy.");
+        throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
       }
 
-      // ── Write .tf file to temp directory ──
-      const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
-      const { join } = await import("node:path");
-      const { tmpdir } = await import("node:os");
-      const { spawn } = await import("node:child_process");
+      // ── Step 1: Clone repository ──
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Clone Repository ───────────────`);
+
+      const conn = await git_integration.getConnectionForScan({ connectionId: event.gitConnectionId });
+      let cloneUrl: string;
+      if (conn.provider === "github") {
+        cloneUrl = `https://x-access-token:${conn.token}@github.com/${event.repo}.git`;
+      } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+        const host = new URL(conn.endpoint || "https://gitlab.com").host;
+        cloneUrl = `https://oauth2:${conn.token}@${host}/${event.repo}.git`;
+      } else if (conn.provider === "bitbucket") {
+        cloneUrl = `https://x-token-auth:${conn.token}@bitbucket.org/${event.repo}.git`;
+      } else {
+        throw new Error(`Unsupported git provider: ${conn.provider}`);
+      }
 
       const workDir = await mkdtemp(join(tmpdir(), `deploy-${shortId}-`));
-      const tfFile = join(workDir, "main.tf");
-      await writeFile(tfFile, event.tofuScript, "utf-8");
-      await appendLog(deploymentId, `[${ts()}] ✓ OpenTofu script written to workspace`);
+      const repoDir = join(workDir, "repo");
 
-      // ── Build tfvars from provider credentials ──
-      const tfVars: string[] = [];
-      if (provider === "hetzner" && providerRow?.api_key) {
-        tfVars.push(`hcloud_token=${providerRow.api_key}`);
-        // Use api_secret as SSH public key if provided, otherwise placeholder
-        if (providerRow.api_secret) tfVars.push(`ssh_public_key=${providerRow.api_secret}`);
-      } else if (provider === "digitalocean" && providerRow?.api_key) {
-        tfVars.push(`do_token=${providerRow.api_key}`);
-      } else if (provider === "vultr" && providerRow?.api_key) {
-        tfVars.push(`vultr_api_key=${providerRow.api_key}`);
-        if (providerRow.api_secret) tfVars.push(`ssh_public_key=${providerRow.api_secret}`);
-      } else if (provider === "linode" && providerRow?.api_key) {
-        tfVars.push(`linode_token=${providerRow.api_key}`);
-        if (providerRow.api_secret) tfVars.push(`ssh_public_key=${providerRow.api_secret}`);
-        tfVars.push(`root_password=Ch4ng3M3-${shortId}!`);
-      } else if (provider === "aws") {
-        // AWS uses env vars instead of tfvars
+      execSync(
+        `git clone --depth 1 --branch ${JSON.stringify(event.branch)} ${JSON.stringify(cloneUrl)} repo`,
+        { cwd: workDir, timeout: 120_000, stdio: "pipe" }
+      );
+
+      // Get the commit hash
+      const commitHash = execSync("git rev-parse HEAD", { cwd: repoDir, timeout: 5_000 }).toString().trim();
+      await appendLog(deploymentId, `[${ts()}] ✓ Repository cloned (commit: ${commitHash.slice(0, 8)})`);
+      await db.exec`UPDATE deployments SET commit_hash = ${commitHash} WHERE id = ${deploymentId}`;
+
+      // ── Step 2: Build Docker image with Cloud Native Buildpacks ──
+      // Check if we already have a built image for this repo+branch+commit
+      const cachedImage = await db.queryRow<{ docker_image: string }>`
+        SELECT docker_image FROM deployments
+        WHERE repo = ${event.repo} AND branch = ${event.branch} AND commit_hash = ${commitHash}
+          AND docker_image != '' AND id != ${deploymentId}
+        ORDER BY created_at DESC LIMIT 1`;
+
+      let imageName: string;
+      let skipBuild = false;
+      let buildDir = repoDir;
+      let detectedPM = "";
+      const { existsSync } = await import("node:fs");
+      const { readFile: readFs } = await import("node:fs/promises");
+      const { readdirSync } = await import("node:fs");
+
+      if (cachedImage?.docker_image) {
+        // Verify the image still exists locally
+        try {
+          execSync(`docker image inspect ${JSON.stringify(cachedImage.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
+          imageName = cachedImage.docker_image;
+          skipBuild = true;
+          await appendLog(deploymentId, `[${ts()}]`);
+          await appendLog(deploymentId, `[${ts()}] ── Build Image (Buildpacks) ───────`);
+          await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image for commit ${commitHash.slice(0, 8)}`);
+          await appendLog(deploymentId, `[${ts()}] ✓ Docker image: ${imageName}`);
+        } catch {
+          // Image was pruned, need to rebuild
+          imageName = `${repoName}:${shortId}`;
+        }
+      } else {
+        imageName = `${repoName}:${shortId}`;
       }
 
-      // ── Helper to run a command and stream output ──
-      const runCmd = (cmd: string, args: string[], env?: Record<string, string>): Promise<{ code: number; output: string }> => {
-        return new Promise((resolve) => {
-          const proc = spawn(cmd, args, {
-            cwd: workDir,
-            env: { ...process.env, ...env },
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-          let output = "";
-          const onData = async (data: Buffer) => {
-            const lines = data.toString().split("\n").filter(Boolean);
-            for (const line of lines) {
-              output += line + "\n";
-              await appendLog(deploymentId, `[${ts()}] ${line}`);
+      // ── Prepare Dockerfile (always, even if skipping local build for AWS) ──
+      {
+      const rootFiles = readdirSync(repoDir);
+      const frameworkConfigs = ["next.config.js", "next.config.ts", "next.config.mjs", "nuxt.config.ts", "vite.config.ts", "angular.json", "remix.config.js", "astro.config.mjs"];
+      const hasRootFramework = frameworkConfigs.some(f => rootFiles.includes(f));
+      if (!hasRootFramework) {
+        const subdirs = ["app", "frontend", "web", "client", "packages/app", "packages/web", "apps/web", "apps/frontend"];
+        for (const sub of subdirs) {
+          const subPath = join(repoDir, sub);
+          if (existsSync(subPath) && existsSync(join(subPath, "package.json"))) {
+            const subFiles = readdirSync(subPath);
+            if (frameworkConfigs.some(f => subFiles.includes(f))) {
+              buildDir = subPath;
+              await appendLog(deploymentId, `[${ts()}] ℹ Detected app in subdirectory: ${sub}/`);
+              break;
             }
-          };
-          proc.stdout.on("data", onData);
-          proc.stderr.on("data", onData);
-          proc.on("close", (code) => resolve({ code: code ?? 1, output }));
-          proc.on("error", (err) => resolve({ code: 1, output: err.message }));
-        });
-      };
-
-      // ── Step 1: tofu init ──
-      await appendLog(deploymentId, `[${ts()}]`);
-      await appendLog(deploymentId, `[${ts()}] ── OpenTofu Init ──────────────────`);
-      const initResult = await runCmd("tofu", ["init", "-no-color"], provider === "aws" ? {
-        AWS_ACCESS_KEY_ID: providerRow?.api_key || "",
-        AWS_SECRET_ACCESS_KEY: providerRow?.api_secret || "",
-        AWS_DEFAULT_REGION: region,
-      } : undefined);
-
-      if (initResult.code !== 0) {
-        throw new Error(`tofu init failed (exit code ${initResult.code})`);
+          }
+        }
       }
-      await appendLog(deploymentId, `[${ts()}] ✓ OpenTofu initialized`);
 
-      // ── Step 2: tofu apply ──
+      // Detect package manager
+      if (existsSync(join(buildDir, "pnpm-lock.yaml"))) detectedPM = "pnpm";
+      else if (existsSync(join(buildDir, "yarn.lock"))) detectedPM = "yarn";
+      else if (existsSync(join(buildDir, "bun.lockb"))) detectedPM = "bun";
+      if (!detectedPM && buildDir !== repoDir) {
+        if (existsSync(join(repoDir, "pnpm-lock.yaml"))) detectedPM = "pnpm";
+        else if (existsSync(join(repoDir, "yarn.lock"))) detectedPM = "yarn";
+        else if (existsSync(join(repoDir, "bun.lockb"))) detectedPM = "bun";
+        if (detectedPM) {
+          const lockFiles: Record<string, string> = { pnpm: "pnpm-lock.yaml", yarn: "yarn.lock", bun: "bun.lockb" };
+          try { const { copyFile } = await import("node:fs/promises"); await copyFile(join(repoDir, lockFiles[detectedPM]), join(buildDir, lockFiles[detectedPM])); } catch {}
+        }
+      }
+      if (!detectedPM) {
+        const stackLowerPM = event.techStack.map(s => s.toLowerCase());
+        if (stackLowerPM.includes("pnpm")) detectedPM = "pnpm";
+        else if (stackLowerPM.includes("yarn")) detectedPM = "yarn";
+      }
+
+      if (detectedPM) {
+        try {
+          const pkgPath = join(buildDir, "package.json");
+          const pkg = JSON.parse(await readFs(pkgPath, "utf-8"));
+          if (!pkg.packageManager) {
+            const pmVersions: Record<string, string> = { pnpm: "pnpm@10.14.0", yarn: "yarn@4.5.0", bun: "bun@1.1.0" };
+            pkg.packageManager = pmVersions[detectedPM] || `${detectedPM}@latest`;
+            await writeFile(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
+            await appendLog(deploymentId, `[${ts()}] ℹ Detected ${detectedPM} — added packageManager field`);
+          } else {
+            await appendLog(deploymentId, `[${ts()}] ℹ Package manager: ${pkg.packageManager}`);
+          }
+        } catch {}
+      }
+
+      const stackLower = event.techStack.map(s => s.toLowerCase());
+      const isNextJs = stackLower.includes("next.js") || existsSync(join(buildDir, "next.config.js")) || existsSync(join(buildDir, "next.config.ts")) || existsSync(join(buildDir, "next.config.mjs"));
+      const runtime = detectRuntime(event.primaryLanguage, event.techStack);
+
+      let hasStandalone = false;
+      if (isNextJs) {
+        for (const cfgName of ["next.config.ts", "next.config.mjs", "next.config.js"]) {
+          const cfgPath = join(buildDir, cfgName);
+          if (existsSync(cfgPath)) {
+            try { hasStandalone = (await readFs(cfgPath, "utf-8")).includes("standalone"); } catch {}
+            break;
+          }
+        }
+      }
+
+      // Compute relative subdirectory path (e.g. "frontend" or "" if root)
+      const { relative } = await import("node:path");
+      const subDir = buildDir !== repoDir ? relative(repoDir, buildDir) : "";
+      const copyPrefix = subDir ? `${subDir}/` : "";
+
+      // Extract actual pnpm version from packageManager field
+      let pnpmVersion = "9.15.0";
+      try {
+        const pkgContent = JSON.parse(await readFs(join(buildDir, "package.json"), "utf-8"));
+        if (pkgContent.packageManager && pkgContent.packageManager.startsWith("pnpm@")) {
+          // Extract version without hash (e.g. "pnpm@10.14.0+sha512..." → "10.14.0")
+          const ver = pkgContent.packageManager.replace("pnpm@", "").split("+")[0];
+          if (ver) pnpmVersion = ver;
+        }
+      } catch {}
+
+      let df = `FROM node:20-slim AS builder\nWORKDIR /app\n`;
+      if (detectedPM === "pnpm") {
+        df += `COPY ${copyPrefix}package.json ${copyPrefix}pnpm-lock.yaml ./\nRUN corepack enable && corepack prepare pnpm@${pnpmVersion} --activate\nRUN pnpm install --no-frozen-lockfile\nCOPY ${copyPrefix}. .\nRUN pnpm run build\n`;
+      } else if (detectedPM === "yarn") {
+        df += `COPY ${copyPrefix}package.json ${copyPrefix}yarn.lock ./\nRUN corepack enable\nRUN yarn install --immutable\nCOPY ${copyPrefix}. .\nRUN yarn build\n`;
+      } else {
+        df += `COPY ${copyPrefix}package.json ${copyPrefix}package-lock.json* ./\nRUN npm ci\nCOPY ${copyPrefix}. .\nRUN npm run build\n`;
+      }
+      df += `\nFROM node:20-slim\nWORKDIR /app\n`;
+      if (isNextJs && hasStandalone) {
+        df += `COPY --from=builder /app/.next/standalone ./\nCOPY --from=builder /app/.next/static ./.next/static\nCOPY --from=builder /app/public ./public\nENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ["node", "server.js"]\n`;
+      } else if (isNextJs) {
+        df += `COPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/public ./public\nCOPY --from=builder /app/package.json ./\n`;
+        df += `ENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ${JSON.stringify([detectedPM || "npm", "start"])}\n`;
+      } else {
+        df += `COPY --from=builder /app .\nENV PORT=${runtime.port}\nEXPOSE ${runtime.port}\nCMD ${JSON.stringify(runtime.startCmd.split(" "))}\n`;
+      }
+
+      // Verify package.json exists, find it if not
+      if (!existsSync(join(buildDir, "package.json"))) {
+        const findPkg = (dir: string, depth: number): string | null => {
+          if (depth > 3) return null;
+          try {
+            const entries = readdirSync(dir, { withFileTypes: true });
+            for (const e of entries) {
+              if (e.name === "package.json") return dir;
+              if (e.isDirectory() && !["node_modules", ".git", ".next", "dist"].includes(e.name)) {
+                const found = findPkg(join(dir, e.name), depth + 1);
+                if (found) return found;
+              }
+            }
+          } catch {}
+          return null;
+        };
+        const pkgDir = findPkg(repoDir, 0);
+        if (pkgDir) {
+          buildDir = pkgDir;
+          await appendLog(deploymentId, `[${ts()}] ℹ Found package.json in: ${buildDir.replace(workDir, ".")}`);
+        }
+      }
+
+      await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
+      await writeFile(join(repoDir, ".dockerignore"), "node_modules\n.next\n.git\n", "utf-8");
+      await appendLog(deploymentId, `[${ts()}] ℹ Generated Dockerfile in repo root (pm: ${detectedPM || "npm"}, subDir: ${subDir || "/"})`);
+      }
+
+      // ── Docker build (non-AWS-ECS only — AWS ECS uses @pulumi/docker to build+push) ──
+      const isAwsEcs = provider === "aws" && event.deployStrategy !== "vps";
+      if (!skipBuild && !isAwsEcs) {
+        const buildResult = await runCmd("docker", [
+          "build", "-t", imageName, "."
+        ], { cwd: repoDir });
+        if (buildResult.code !== 0) {
+          throw new Error(`docker build failed (exit code ${buildResult.code})`);
+        }
+        await appendLog(deploymentId, `[${ts()}] ✓ Docker image built: ${imageName}`);
+      } else if (skipBuild) {
+        await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image, skipping build`);
+      } else {
+        await appendLog(deploymentId, `[${ts()}] ℹ Skipping local build — Pulumi will build+push to ECR`);
+      }
+
+      // Save docker image name to DB
+      await db.exec`UPDATE deployments SET docker_image = ${imageName} WHERE id = ${deploymentId}`;
+
+      // ── Step 2b: Push image to registry (if registry configured) ──
+      let remoteImage = imageName;
+      if (event.registryUrl) {
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── Push Image to Registry ─────────`);
+        remoteImage = `${event.registryUrl}/${imageName}`;
+        // Tag the image for the remote registry
+        const tagResult = await runCmd("docker", ["tag", imageName, remoteImage], { cwd: workDir });
+        if (tagResult.code !== 0) {
+          await appendLog(deploymentId, `[${ts()}] ⚠ docker tag failed, continuing with local image`);
+          remoteImage = imageName;
+        } else {
+          const pushResult = await runCmd("docker", ["push", remoteImage], { cwd: workDir });
+          if (pushResult.code !== 0) {
+            await appendLog(deploymentId, `[${ts()}] ⚠ docker push failed, continuing with local image`);
+            remoteImage = imageName;
+          } else {
+            await appendLog(deploymentId, `[${ts()}] ✓ Image pushed: ${remoteImage}`);
+          }
+        }
+      }
+      // ── Step 3: Pulumi up ──
       await db.exec`UPDATE deployments SET status = 'deploying', updated_at = NOW() WHERE id = ${deploymentId}`;
       await appendLog(deploymentId, `[${ts()}]`);
-      await appendLog(deploymentId, `[${ts()}] ── OpenTofu Apply ─────────────────`);
+      await appendLog(deploymentId, `[${ts()}] ── Pulumi Setup ───────────────────`);
 
-      const applyArgs = ["apply", "-auto-approve", "-no-color"];
-      for (const v of tfVars) {
-        applyArgs.push("-var", v);
-      }
+      const pulumiDir = join(workDir, "pulumi");
+      const { mkdir } = await import("node:fs/promises");
+      await mkdir(pulumiDir, { recursive: true });
 
-      const applyEnv: Record<string, string> = {};
+      // Write Pulumi program files
+      const { generatePulumiProject, generatePackageJson, generateTsConfig } = await import("./pulumi-templates/index");
+      await writeFile(join(pulumiDir, "index.ts"), event.tofuScript, "utf-8");
+      await writeFile(join(pulumiDir, "Pulumi.yaml"), generatePulumiProject(repoName, provider), "utf-8");
+      await writeFile(join(pulumiDir, "package.json"), generatePackageJson(repoName, provider), "utf-8");
+      await writeFile(join(pulumiDir, "tsconfig.json"), generateTsConfig(), "utf-8");
+
+      // Build provider env vars
+      const providerEnv: Record<string, string> = {};
       if (provider === "aws") {
-        applyEnv.AWS_ACCESS_KEY_ID = providerRow?.api_key || "";
-        applyEnv.AWS_SECRET_ACCESS_KEY = providerRow?.api_secret || "";
-        applyEnv.AWS_DEFAULT_REGION = region;
+        providerEnv.AWS_ACCESS_KEY_ID = providerRow?.api_key || "";
+        providerEnv.AWS_SECRET_ACCESS_KEY = providerRow?.api_secret || "";
+        providerEnv.AWS_DEFAULT_REGION = region;
+      } else if (provider === "digitalocean") {
+        providerEnv.DIGITALOCEAN_TOKEN = providerRow?.api_key || "";
+      } else if (provider === "hetzner") {
+        providerEnv.HCLOUD_TOKEN = providerRow?.api_key || "";
+      } else if (provider === "vultr") {
+        providerEnv.VULTR_API_KEY = providerRow?.api_key || "";
+      } else if (provider === "linode") {
+        providerEnv.LINODE_TOKEN = providerRow?.api_key || "";
+      }
+      // Use local backend (file state) to avoid needing Pulumi Cloud login
+      const stateDir = join(pulumiDir, ".pulumi-state");
+      await mkdir(stateDir, { recursive: true });
+      providerEnv.PULUMI_BACKEND_URL = `file://${stateDir}`;
+      providerEnv.PULUMI_CONFIG_PASSPHRASE = "";
+
+      // npm install
+      await appendLog(deploymentId, `[${ts()}] ℹ Installing Pulumi dependencies...`);
+      const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
+      if (installResult.code !== 0) {
+        throw new Error(`npm install failed (exit code ${installResult.code})`);
+      }
+      await appendLog(deploymentId, `[${ts()}] ✓ Dependencies installed`);
+
+      // pulumi stack init
+      const stackName = `${repoName}-${shortId}`;
+      await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+      // Set config values
+      if (providerRow?.api_secret && (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "aws" && event.deployStrategy === "vps"))) {
+        await runCmd("pulumi", ["config", "set", "sshPublicKey", providerRow.api_secret, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      }
+      if (provider === "linode") {
+        await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      }
+      await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+      // For AWS ECS deploys, tell @pulumi/docker where the Dockerfile is (repo root)
+      if (isAwsEcs) {
+        await runCmd("pulumi", ["config", "set", "buildContext", repoDir, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
       }
 
-      const applyResult = await runCmd("tofu", applyArgs, Object.keys(applyEnv).length > 0 ? applyEnv : undefined);
-
-      if (applyResult.code !== 0) {
-        throw new Error(`tofu apply failed (exit code ${applyResult.code})`);
+      // Restore state from previous deployment if available
+      let hasValidState = false;
+      const prevDeploy = await db.queryRow<{ tofu_script: string }>`
+        SELECT tofu_script FROM deployments
+        WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
+          AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
+        ORDER BY created_at DESC LIMIT 1`;
+      if (prevDeploy?.tofu_script) {
+        const stateMarker = prevDeploy.tofu_script.indexOf("/* STATE */\n");
+        if (stateMarker !== -1) {
+          const savedState = prevDeploy.tofu_script.slice(stateMarker + "/* STATE */\n".length);
+          try {
+            // Only attempt import if it looks like valid Pulumi state (has "deployment" key)
+            if (savedState.includes('"deployment"')) {
+              const stateFile = join(pulumiDir, "prev-state.json");
+              await writeFile(stateFile, savedState, "utf-8");
+              const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
+              if (importResult.code === 0) {
+                hasValidState = true;
+                await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
+              }
+            }
+          } catch { /* non-critical */ }
+        }
       }
 
-      // ── Step 3: Extract outputs ──
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Pulumi Up ──────────────────────`);
+
+      // Clean up leftover AWS ECS resources from previous (non-Pulumi) deploys
+      if (isAwsEcs && !hasValidState) {
+        const appName = repoName;
+        await appendLog(deploymentId, `[${ts()}] ℹ Cleaning up pre-existing AWS resources...`);
+
+        // Silently clean up — errors are expected if resources don't exist
+        const silentCmd = async (cmd: string, args: string[], env?: Record<string, string>) => {
+          const result = await new Promise<{ code: number; output: string }>((resolve) => {
+            const proc = spawn(cmd, args, {
+              env: { ...process.env, ...env },
+              stdio: ["ignore", "pipe", "pipe"],
+            });
+            let output = "";
+            proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
+            proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+            proc.on("close", (code) => resolve({ code: code ?? 1, output }));
+            proc.on("error", (err) => resolve({ code: 1, output: err.message }));
+          });
+          return result;
+        };
+
+        await silentCmd("aws", ["logs", "delete-log-group", "--log-group-name", `/ecs/${appName}`, "--region", region], providerEnv);
+        await silentCmd("aws", ["iam", "detach-role-policy", "--role-name", `${appName}-exec`, "--policy-arn", "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"], providerEnv);
+        await silentCmd("aws", ["iam", "delete-role", "--role-name", `${appName}-exec`], providerEnv);
+        await silentCmd("aws", ["ecs", "update-service", "--cluster", appName, "--service", appName, "--desired-count", "0", "--region", region], providerEnv);
+        await silentCmd("aws", ["ecs", "delete-service", "--cluster", appName, "--service", appName, "--force", "--region", region], providerEnv);
+        const tdListResult = await silentCmd("aws", ["ecs", "list-task-definitions", "--family-prefix", appName, "--query", "taskDefinitionArns", "--output", "text", "--region", region], providerEnv);
+        if (tdListResult.code === 0 && tdListResult.output.trim()) {
+          for (const arn of tdListResult.output.trim().split(/\s+/)) {
+            if (arn.startsWith("arn:")) await silentCmd("aws", ["ecs", "deregister-task-definition", "--task-definition", arn, "--region", region], providerEnv);
+          }
+        }
+        await silentCmd("aws", ["ecs", "delete-cluster", "--cluster", appName, "--region", region], providerEnv);
+        const sgResult = await silentCmd("aws", ["ec2", "describe-security-groups", "--filters", `Name=group-name,Values=${appName}-sg`, "--query", "SecurityGroups[0].GroupId", "--output", "text", "--region", region], providerEnv);
+        if (sgResult.code === 0 && sgResult.output.trim() && sgResult.output.trim() !== "None") {
+          await silentCmd("aws", ["ec2", "delete-security-group", "--group-id", sgResult.output.trim(), "--region", region], providerEnv);
+        }
+        await silentCmd("aws", ["ecr", "delete-repository", "--repository-name", appName, "--force", "--region", region], providerEnv);
+        await appendLog(deploymentId, `[${ts()}] ✓ Cleaned up pre-existing resources`);
+      }
+
+      const upResult = await runCmd("pulumi", ["up", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+      if (upResult.code !== 0) {
+        throw new Error(`pulumi up failed (exit code ${upResult.code})`);
+      }
+
+      // ── Step 4: Extract outputs ──
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Extracting outputs ──────────────`);
-      const outputResult = await runCmd("tofu", ["output", "-json", "-no-color"], Object.keys(applyEnv).length > 0 ? applyEnv : undefined);
+      const outputResult = await runCmd("pulumi", ["stack", "output", "--json", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
       let appUrl = "";
+      let serverIp = "";
       try {
         const outputs = JSON.parse(outputResult.output);
-        // Try common output names
-        appUrl = outputs.app_url?.value || outputs.server_ip?.value || outputs.deployed_to?.value || "";
-        if (appUrl && !appUrl.startsWith("http")) {
-          appUrl = `http://${appUrl}`;
-        }
+        appUrl = outputs.appUrl || outputs.serverIp || "";
+        serverIp = outputs.serverIp || "";
+        if (appUrl && !appUrl.startsWith("http") && !appUrl.startsWith("ecs-fargate://")) appUrl = `http://${appUrl}`;
         for (const [key, val] of Object.entries(outputs)) {
-          await appendLog(deploymentId, `[${ts()}]   ${key} = ${(val as any).value}`);
+          await appendLog(deploymentId, `[${ts()}]   ${key} = ${val}`);
         }
       } catch {
-        // output parsing failed, not critical
         await appendLog(deploymentId, `[${ts()}]   (could not parse outputs)`);
       }
 
-      // ── Save tofu state for future destroy ──
-      try {
-        const { readFile: readFs } = await import("node:fs/promises");
-        const stateFile = join(workDir, "terraform.tfstate");
-        const state = await readFs(stateFile, "utf-8");
-        // Store state in tofu_script column (reuse it) for destroy later
-        await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + state} WHERE id = ${deploymentId}`;
-      } catch {
-        // state save failed, not critical
+      // ── Step 5: Wait for ECS task public IP (AWS ECS deploys only) ──
+      if (isAwsEcs) {
+        let ecsClusterName = "";
+        let ecsServiceName = "";
+        try {
+          const outputs = JSON.parse(outputResult.output);
+          ecsClusterName = outputs.clusterName || "";
+          ecsServiceName = outputs.serviceName || "";
+        } catch {}
+
+        if (ecsClusterName && ecsServiceName) {
+          await appendLog(deploymentId, `[${ts()}]`);
+          await appendLog(deploymentId, `[${ts()}] ── Waiting for ECS Task ────────────`);
+          await appendLog(deploymentId, `[${ts()}] ℹ Image was built & pushed to ECR by Pulumi`);
+
+          let taskPublicIp = "";
+          for (let attempt = 0; attempt < 20; attempt++) {
+            await new Promise(r => setTimeout(r, 15_000));
+            const listResult = await runCmd("aws", [
+              "ecs", "list-tasks",
+              "--cluster", ecsClusterName,
+              "--service-name", ecsServiceName,
+              "--desired-status", "RUNNING",
+              "--region", region,
+              "--output", "json"
+            ], { cwd: workDir, env: providerEnv });
+            try {
+              const listOutput = JSON.parse(listResult.output);
+              const taskArns: string[] = listOutput.taskArns || [];
+              if (taskArns.length > 0) {
+                await appendLog(deploymentId, `[${ts()}] ✓ ECS task is running`);
+                const descResult = await runCmd("aws", [
+                  "ecs", "describe-tasks",
+                  "--cluster", ecsClusterName,
+                  "--tasks", taskArns[0],
+                  "--region", region,
+                  "--output", "json"
+                ], { cwd: workDir, env: providerEnv });
+                try {
+                  const descOutput = JSON.parse(descResult.output);
+                  const attachments = descOutput.tasks?.[0]?.attachments || [];
+                  for (const att of attachments) {
+                    if (att.type === "ElasticNetworkInterface") {
+                      const eniDetail = (att.details || []).find((d: any) => d.name === "networkInterfaceId");
+                      if (eniDetail) {
+                        const eniResult = await runCmd("aws", [
+                          "ec2", "describe-network-interfaces",
+                          "--network-interface-ids", eniDetail.value,
+                          "--query", "NetworkInterfaces[0].Association.PublicIp",
+                          "--output", "text",
+                          "--region", region
+                        ], { cwd: workDir, env: providerEnv });
+                        const ip = eniResult.output.trim();
+                        if (ip && ip !== "None") {
+                          taskPublicIp = ip;
+                          await appendLog(deploymentId, `[${ts()}] ✓ Public IP: ${taskPublicIp}`);
+                        }
+                      }
+                    }
+                  }
+                } catch { /* parse error */ }
+                break;
+              }
+            } catch { /* parse error */ }
+            if (attempt === 5 || attempt === 10 || attempt === 15) {
+              const stoppedResult = await runCmd("aws", [
+                "ecs", "describe-services",
+                "--cluster", ecsClusterName,
+                "--services", ecsServiceName,
+                "--region", region,
+                "--output", "json"
+              ], { cwd: workDir, env: providerEnv });
+              try {
+                const svcOutput = JSON.parse(stoppedResult.output);
+                const events = svcOutput.services?.[0]?.events?.slice(0, 3) || [];
+                for (const ev of events) {
+                  await appendLog(deploymentId, `[${ts()}]   ECS event: ${ev.message}`);
+                }
+              } catch {}
+            }
+            await appendLog(deploymentId, `[${ts()}] ℹ Waiting for task... (attempt ${attempt + 1}/20)`);
+          }
+          if (taskPublicIp) {
+            appUrl = `http://${taskPublicIp}:${3000}`;
+          }
+        }
       }
 
-      // ── Cleanup temp dir ──
+      // ── Step 5b: Transfer Docker image to server (VPS, if no registry) ──
+      if (event.techStack.length > 0 && serverIp && !event.registryUrl && provider !== "aws") {
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── Transfer Docker Image ──────────`);
+        const tarPath = join(workDir, `${imageName.replace(":", "-")}.tar`);
+        const saveResult = await runCmd("docker", ["save", "-o", tarPath, imageName], { cwd: workDir });
+        if (saveResult.code === 0) {
+          // Wait for SSH to be ready (VPS just provisioned)
+          await appendLog(deploymentId, `[${ts()}] ℹ Waiting for server SSH to be ready...`);
+          await new Promise(r => setTimeout(r, 30_000));
+
+          // SCP the image to the server
+          const scpResult = await runCmd("scp", [
+            "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=30",
+            tarPath, `root@${serverIp}:/tmp/app-image.tar`
+          ], { cwd: workDir });
+
+          if (scpResult.code === 0) {
+            // Load the image on the server
+            const loadResult = await runCmd("ssh", [
+              "-o", "StrictHostKeyChecking=no",
+              `root@${serverIp}`,
+              `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; docker run -d --name ${repoName} --restart=always -p 127.0.0.1:8080:8080 --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=8080 ${imageName}`
+            ], { cwd: workDir });
+            if (loadResult.code === 0) {
+              await appendLog(deploymentId, `[${ts()}] ✓ Docker image transferred and running on server`);
+            } else {
+              await appendLog(deploymentId, `[${ts()}] ⚠ Failed to load image on server (deploy may still work via user_data)`);
+            }
+          } else {
+            await appendLog(deploymentId, `[${ts()}] ⚠ SCP failed — server may still pull image via user_data`);
+          }
+        } else {
+          await appendLog(deploymentId, `[${ts()}] ⚠ docker save failed, skipping image transfer`);
+        }
+      }
+
+      // ── Save state ──
+      try {
+        const stateResult = await runCmd("pulumi", ["stack", "export", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+        if (stateResult.code === 0) {
+          await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateResult.output} WHERE id = ${deploymentId}`;
+        }
+      } catch { /* not critical */ }
+
+      // ── Cleanup ──
       try { await rm(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
       const finalUrl = appUrl || generateAppUrl(provider, repoName, shortId, region);
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
-      await appendLog(deploymentId, `[${ts()}] ✓ Deployment successful!`);
+      await appendLog(deploymentId, `[${ts()}] ✓ Docker image: ${remoteImage}`);
+      await appendLog(deploymentId, `[${ts()}] ✓ Infrastructure provisioned via Pulumi`);
       await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${finalUrl}`);
 
       await db.exec`UPDATE deployments SET status = 'success', app_url = ${finalUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
@@ -410,7 +864,9 @@ async function appendLog(deploymentId: string, line: string) {
   await db.exec`UPDATE deployments SET logs = logs || ${line + "\n"} WHERE id = ${deploymentId}`;
 }
 
-// ─── OpenTofu Script Generator ───
+// ─── Pulumi Program Generator ───
+
+import { generatePulumiProgram } from "./pulumi-templates/index";
 
 interface TofuRequest {
   providerId: string;
@@ -421,6 +877,9 @@ interface TofuRequest {
   hasDocker: boolean;
   appName?: string;
   region?: string;
+  deployStrategy?: "vps" | "managed" | "serverless";
+  useDocker?: boolean;
+  dockerImage?: string;
   services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
   aiAnalysis?: {
     runtime: string;
@@ -472,7 +931,7 @@ export const generateTofu = api(
         }
       : detectRuntime(params.primaryLanguage, params.techStack);
 
-    const script = buildTofuScript({
+    const script = generatePulumiProgram({
       provider,
       region,
       appName,
@@ -483,6 +942,9 @@ export const generateTofu = api(
       techStack: params.techStack,
       services: params.services || [],
       aiAnalysis: params.aiAnalysis,
+      deployStrategy: params.deployStrategy,
+      useDocker: params.useDocker,
+      dockerImage: params.dockerImage,
     });
 
     return {
@@ -593,1118 +1055,3 @@ function getEstimatedResources(provider: string, runtime: { name: string }, hasD
   return resources;
 }
 
-interface TofuBuildParams {
-  provider: string;
-  region: string;
-  appName: string;
-  repo: string;
-  branch: string;
-  runtime: { name: string; version: string; buildCmd: string; startCmd: string; port: number };
-  hasDocker: boolean;
-  techStack: string[];
-  services: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
-  aiAnalysis?: TofuRequest["aiAnalysis"];
-}
-
-function buildTofuScript(p: TofuBuildParams): string {
-  switch (p.provider) {
-    case "digitalocean": return buildDigitalOcean(p);
-    case "hetzner": return buildHetzner(p);
-    case "aws": return buildAws(p);
-    case "vultr": return buildVultr(p);
-    case "linode": return buildLinode(p);
-    default: return buildGenericVPS(p);
-  }
-}
-
-function buildDigitalOcean(p: TofuBuildParams): string {
-  const hasDb = p.techStack.some(s => ["laravel", "django", "rails", "spring", "prisma", "typeorm"].includes(s.toLowerCase()));
-  return `# ─────────────────────────────────────────────────
-# OpenTofu — DigitalOcean App Platform
-# App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}
-# ─────────────────────────────────────────────────
-
-terraform {
-  required_providers {
-    digitalocean = {
-      source  = "digitalocean/digitalocean"
-      version = "~> 2.36"
-    }
-  }
-}
-
-variable "do_token" {
-  type      = string
-  sensitive = true
-}
-
-variable "app_domain" {
-  type    = string
-  default = ""
-}
-
-provider "digitalocean" {
-  token = var.do_token
-}
-
-resource "digitalocean_app" "${p.appName}" {
-  spec {
-    name   = "${p.appName}"
-    region = "${p.region}"
-
-    service {
-      name               = "${p.appName}-web"
-      instance_count     = 1
-      instance_size_slug = "apps-s-1vcpu-0.5gb"
-
-      git {
-        repo_clone_url = "https://github.com/${p.repo}.git"
-        branch         = "${p.branch}"
-      }
-
-      build_command = "${p.runtime.buildCmd}"
-      run_command   = "${p.runtime.startCmd}"
-
-      http_port = ${p.runtime.port}
-
-      env {
-        key   = "APP_ENV"
-        value = "production"
-      }
-
-      env {
-        key   = "PORT"
-        value = "${p.runtime.port}"
-      }
-    }
-${hasDb ? `
-    database {
-      name       = "${p.appName}-db"
-      engine     = "PG"
-      version    = "16"
-      size       = "db-s-dev-database"
-      production = false
-    }
-` : ""}  }
-}
-
-output "app_url" {
-  value = digitalocean_app.${p.appName}.live_url
-}
-
-output "app_id" {
-  value = digitalocean_app.${p.appName}.id
-}
-`;
-}
-
-function buildHetzner(p: TofuBuildParams): string {
-  const ai = p.aiAnalysis;
-  const vpsSvcs = p.services.filter(s => s.mode === "vps");
-  const managedSvcs = p.services.filter(s => s.mode === "managed");
-  const hasVpsDb = vpsSvcs.some(s => s.type === "database");
-  const hasVpsCache = vpsSvcs.some(s => s.type === "cache");
-  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue") || (ai?.needsQueueWorker ?? false);
-  const hasVpsSearch = vpsSvcs.some(s => s.type === "search");
-  const needsScheduler = ai?.needsScheduler ?? p.techStack.some(s => s.toLowerCase() === "laravel");
-  const needsWebsockets = ai?.needsWebsockets ?? false;
-  const isPhp = p.runtime.name === "php";
-  const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
-  const usePhpFpm = isPhp && (ai?.nginxConfig === "php-fpm" || isLaravel);
-  const phpVer = p.runtime.version; // e.g. "8.3"
-
-  // Build install packages
-  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx", "unzip", "curl", "acl"];
-  if (isPhp) {
-    const phpExts = ai?.phpExtensions?.length
-      ? ai.phpExtensions.map(e => e.startsWith("php") ? e : `php${phpVer}-${e}`)
-      : [`php${phpVer}-fpm`, `php${phpVer}-cli`, `php${phpVer}-mbstring`, `php${phpVer}-xml`, `php${phpVer}-curl`, `php${phpVer}-zip`, `php${phpVer}-bcmath`, `php${phpVer}-intl`, `php${phpVer}-gd`, `php${phpVer}-tokenizer`];
-    // Ensure fpm and cli are always present
-    if (!phpExts.some(e => e.includes("fpm"))) phpExts.unshift(`php${phpVer}-fpm`);
-    if (!phpExts.some(e => e.includes("cli"))) phpExts.unshift(`php${phpVer}-cli`);
-    packages.push(...phpExts);
-    if (hasVpsDb) packages.push(`php${phpVer}-pgsql`, `php${phpVer}-mysql`);
-    if (hasVpsCache || hasVpsQueue) packages.push(`php${phpVer}-redis`);
-    // Composer installed separately via installer
-  } else if (p.runtime.name === "node") {
-    packages.push("nodejs", "npm");
-  } else if (p.runtime.name === "python") {
-    packages.push(`python${p.runtime.version}`, "python3-pip", "python3-venv");
-  } else if (p.runtime.name === "go") {
-    packages.push("golang");
-  } else if (p.runtime.name === "ruby") {
-    packages.push("ruby", "ruby-dev", "build-essential");
-  }
-  if (hasVpsDb) packages.push("postgresql", "postgresql-contrib");
-  if (hasVpsCache || hasVpsQueue) packages.push("redis-server");
-  if (hasVpsSearch) packages.push("meilisearch");
-  if (needsWebsockets) packages.push("supervisor");
-  if (hasVpsQueue && isPhp) packages.push("supervisor");
-
-  // Node setup for asset building (even in PHP projects)
-  const needsNode = isPhp && (p.techStack.some(s => ["vite", "node.js", "inertia.js", "livewire", "tailwind css"].includes(s.toLowerCase())) || ai?.nodeVersion);
-  const nodeVer = ai?.nodeVersion || "20";
-  const nodeSetup = p.runtime.name === "node"
-    ? `\n    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -`
-    : needsNode
-      ? `\n    curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -\n    apt-get install -y nodejs`
-      : "";
-
-  const composerSetup = isPhp ? `
-    # ── Install Composer ──
-    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer` : "";
-
-  // VPS service setup scripts
-  const dbSetup = hasVpsDb ? `
-    # ── Database Setup ──
-    systemctl enable postgresql
-    systemctl start postgresql
-    sudo -u postgres createuser ${p.appName}
-    sudo -u postgres createdb ${p.appName} -O ${p.appName}
-    sudo -u postgres psql -c "ALTER USER ${p.appName} PASSWORD 'CHANGE_ME_SECURE_PASSWORD';"` : "";
-
-  const cacheSetup = (hasVpsCache || hasVpsQueue) ? `
-    # ── Redis Setup (Cache${hasVpsQueue ? " + Queue" : ""}) ──
-    sed -i 's/^# maxmemory .*/maxmemory 256mb/' /etc/redis/redis.conf
-    sed -i 's/^# maxmemory-policy .*/maxmemory-policy allkeys-lru/' /etc/redis/redis.conf
-    systemctl enable redis-server
-    systemctl restart redis-server` : "";
-
-  // Managed service blocks
-  const managedBlocks: string[] = [];
-  if (managedSvcs.some(s => s.type === "database")) {
-    managedBlocks.push(`
-# ── Managed Database (external) ──
-# Use PlanetScale, Neon, Supabase, or AWS RDS
-# Set DATABASE_URL in the app .env file
-`);
-  }
-  if (managedSvcs.some(s => s.type === "cache")) {
-    managedBlocks.push(`
-# ── Managed Redis (external) ──
-# Use Upstash, Redis Cloud, or AWS ElastiCache
-# Set REDIS_URL in the app .env file
-`);
-  }
-  if (managedSvcs.some(s => s.type === "storage")) {
-    managedBlocks.push(`
-# ── Object Storage ──
-# Use Hetzner Object Storage, AWS S3, or Cloudflare R2
-# Set S3_ENDPOINT, S3_BUCKET, S3_KEY, S3_SECRET in .env
-`);
-  }
-  if (managedSvcs.some(s => s.type === "mail")) {
-    managedBlocks.push(`
-# ── Email Service (external) ──
-# Use Mailgun, Postmark, SendGrid, or AWS SES
-# Set MAIL_* environment variables in .env
-`);
-  }
-
-  const envVars: string[] = ai?.envVars?.length ? [...ai.envVars] : ["APP_ENV=production", `PORT=${p.runtime.port}`];
-  if (hasVpsDb && !envVars.some(e => e.startsWith("DATABASE_URL"))) {
-    envVars.push(`DATABASE_URL=postgresql://${p.appName}:CHANGE_ME_SECURE_PASSWORD@127.0.0.1:5432/${p.appName}`);
-  }
-  if ((hasVpsCache || hasVpsQueue) && !envVars.some(e => e.startsWith("REDIS_URL") || e.startsWith("REDIS_HOST"))) {
-    envVars.push("REDIS_URL=redis://127.0.0.1:6379");
-  }
-
-  // Post-deploy commands from AI
-  const postDeploy = ai?.postDeployCommands?.length
-    ? ai.postDeployCommands.map(c => `    ${c}`).join("\n")
-    : isLaravel
-      ? `    php artisan migrate --force
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
-    php artisan storage:link
-    php artisan optimize`
-      : "";
-
-  // ── Nginx config: PHP-FPM vs reverse proxy ──
-  const nginxConfig = usePhpFpm
-    ? `    server {
-        listen 80;
-        server_name _;
-        root /opt/${p.appName}/public;
-        index index.php index.html;
-
-        add_header X-Frame-Options "SAMEORIGIN";
-        add_header X-Content-Type-Options "nosniff";
-
-        charset utf-8;
-        client_max_body_size 64M;
-
-        location / {
-            try_files \\$uri \\$uri/ /index.php?\\$query_string;
-        }
-
-        location = /favicon.ico { access_log off; log_not_found off; }
-        location = /robots.txt  { access_log off; log_not_found off; }
-
-        error_page 404 /index.php;
-
-        location ~ \\.php$ {
-            fastcgi_pass unix:/run/php/php${phpVer}-fpm.sock;
-            fastcgi_param SCRIPT_FILENAME \\$realpath_root\\$fastcgi_script_name;
-            include fastcgi_params;
-            fastcgi_hide_header X-Powered-By;
-        }
-
-        location ~ /\\.(?!well-known).* {
-            deny all;
-        }
-    }`
-    : `    server {
-        listen 80;
-        server_name _;
-
-        location / {
-            proxy_pass http://127.0.0.1:${p.runtime.port};
-            proxy_set_header Host \\$host;
-            proxy_set_header X-Real-IP \\$remote_addr;
-            proxy_set_header X-Forwarded-For \\$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \\$scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade \\$http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-    }`;
-
-  // ── Queue worker (supervisor for PHP, systemd for others) ──
-  const queueWorkerSetup = hasVpsQueue
-    ? isPhp
-      ? `
-    # ── Queue Worker (Supervisor) ──
-    cat > /etc/supervisor/conf.d/${p.appName}-worker.conf <<'SUP'
-    [program:${p.appName}-worker]
-    process_name=%(program_name)s_%(process_num)02d
-    command=php /opt/${p.appName}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
-    autostart=true
-    autorestart=true
-    stopasgroup=true
-    killasgroup=true
-    user=www-data
-    numprocs=2
-    redirect_stderr=true
-    stdout_logfile=/var/log/${p.appName}-worker.log
-    stopwaitsecs=3600
-    SUP
-
-    supervisorctl reread
-    supervisorctl update`
-      : `
-    # ── Queue Worker Service ──
-    cat > /etc/systemd/system/${p.appName}-worker.service <<'WORKER'
-    [Unit]
-    Description=${p.appName} Queue Worker
-    After=network.target
-
-    [Service]
-    Type=simple
-    User=root
-    WorkingDirectory=/opt/${p.appName}
-    ExecStart=${p.runtime.name === "python" ? "celery -A app worker --loglevel=info" : "npm run worker"}
-    Restart=always
-${envVars.map(e => `    Environment=${e}`).join("\n")}
-
-    [Install]
-    WantedBy=multi-user.target
-    WORKER
-
-    systemctl daemon-reload
-    systemctl enable --now ${p.appName}-worker`
-    : "";
-
-  // ── Scheduler cron ──
-  const schedulerSetup = needsScheduler && isPhp ? `
-    # ── Laravel Scheduler (Cron) ──
-    echo "* * * * * www-data cd /opt/${p.appName} && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/${p.appName}-scheduler
-    chmod 0644 /etc/cron.d/${p.appName}-scheduler` : "";
-
-  // ── Websocket setup ──
-  const websocketSetup = needsWebsockets && isPhp ? `
-    # ── Websocket Server (Supervisor) ──
-    cat > /etc/supervisor/conf.d/${p.appName}-websocket.conf <<'WS'
-    [program:${p.appName}-websocket]
-    command=php /opt/${p.appName}/artisan reverb:start --host=0.0.0.0 --port=8080
-    autostart=true
-    autorestart=true
-    user=www-data
-    redirect_stderr=true
-    stdout_logfile=/var/log/${p.appName}-websocket.log
-    WS
-
-    supervisorctl reread
-    supervisorctl update` : "";
-
-  // ── PHP ownership fix ──
-  const ownershipFix = isPhp ? `
-    # ── Set permissions ──
-    chown -R www-data:www-data /opt/${p.appName}
-    chmod -R 775 /opt/${p.appName}/storage /opt/${p.appName}/bootstrap/cache` : "";
-
-  // ── .env generation for Laravel ──
-  const envFileSetup = isLaravel ? `
-    # ── Generate .env ──
-    cp /opt/${p.appName}/.env.example /opt/${p.appName}/.env
-    sed -i 's|APP_ENV=.*|APP_ENV=production|' /opt/${p.appName}/.env
-    sed -i 's|APP_DEBUG=.*|APP_DEBUG=false|' /opt/${p.appName}/.env
-    sed -i 's|APP_URL=.*|APP_URL=http://\\$(hostname -I | awk "{print \\$1}")|' /opt/${p.appName}/.env
-${hasVpsDb ? `    sed -i 's|DB_CONNECTION=.*|DB_CONNECTION=pgsql|' /opt/${p.appName}/.env
-    sed -i 's|DB_HOST=.*|DB_HOST=127.0.0.1|' /opt/${p.appName}/.env
-    sed -i 's|DB_DATABASE=.*|DB_DATABASE=${p.appName}|' /opt/${p.appName}/.env
-    sed -i 's|DB_USERNAME=.*|DB_USERNAME=${p.appName}|' /opt/${p.appName}/.env
-    sed -i 's|DB_PASSWORD=.*|DB_PASSWORD=CHANGE_ME_SECURE_PASSWORD|' /opt/${p.appName}/.env` : ""}
-${hasVpsCache || hasVpsQueue ? `    sed -i 's|CACHE_STORE=.*|CACHE_STORE=redis|' /opt/${p.appName}/.env
-    sed -i 's|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=redis|' /opt/${p.appName}/.env
-    sed -i 's|SESSION_DRIVER=.*|SESSION_DRIVER=redis|' /opt/${p.appName}/.env` : ""}
-    php artisan key:generate --force` : "";
-
-  const aiSummary = ai?.summary ? `\n# AI Analysis: ${ai.summary}` : "";
-
-  return `# ─────────────────────────────────────────────────
-# OpenTofu — Hetzner Cloud VPS
-# App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}
-# Services on VPS: ${vpsSvcs.map(s => s.name).join(", ") || "none"}
-# Managed services: ${managedSvcs.map(s => s.name).join(", ") || "none"}${aiSummary}
-# ─────────────────────────────────────────────────
-
-terraform {
-  required_providers {
-    hcloud = {
-      source  = "hetznercloud/hcloud"
-      version = "~> 1.47"
-    }
-  }
-}
-
-variable "hcloud_token" {
-  type      = string
-  sensitive = true
-}
-
-variable "ssh_public_key" {
-  type = string
-}
-
-provider "hcloud" {
-  token = var.hcloud_token
-}
-
-resource "hcloud_ssh_key" "${p.appName}_key" {
-  name       = "${p.appName}-deploy-key"
-  public_key = var.ssh_public_key
-}
-
-resource "hcloud_firewall" "${p.appName}_fw" {
-  name = "${p.appName}-firewall"
-
-  rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
-    source_ips = ["0.0.0.0/0", "::/0"]
-  }
-
-  rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
-    source_ips = ["0.0.0.0/0", "::/0"]
-  }
-
-  rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
-    source_ips = ["0.0.0.0/0", "::/0"]
-  }
-}
-
-resource "hcloud_server" "${p.appName}" {
-  name        = "${p.appName}"
-  server_type = "${vpsSvcs.length > 2 ? "cx32" : "cx22"}"
-  image       = "ubuntu-24.04"
-  location    = "${p.region}"
-  ssh_keys    = [hcloud_ssh_key.${p.appName}_key.id]
-  firewall_ids = [hcloud_firewall.${p.appName}_fw.id]
-
-  user_data = <<-EOF
-    #!/bin/bash
-    set -e
-
-    export DEBIAN_FRONTEND=noninteractive
-${isPhp ? `    add-apt-repository -y ppa:ondrej/php` : ""}
-${nodeSetup}
-
-    # ── Install packages ──
-    apt-get update && apt-get install -y ${packages.join(" ")}
-${composerSetup}
-${dbSetup}${cacheSetup}
-
-    # ── Clone repository ──
-    git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}
-    cd /opt/${p.appName}
-${envFileSetup}
-
-    # ── Build ──
-    ${p.runtime.buildCmd}
-${needsNode && isPhp ? `\n    # ── Build frontend assets ──\n    npm ci && npm run build` : ""}
-${ownershipFix}
-
-    # ── Post-deploy commands ──
-${postDeploy}
-
-    # ── Configure Nginx ──
-    cat > /etc/nginx/sites-available/${p.appName} <<'NGINX'
-${nginxConfig}
-    NGINX
-
-    ln -sf /etc/nginx/sites-available/${p.appName} /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default
-${isPhp ? `    systemctl enable php${phpVer}-fpm\n    systemctl restart php${phpVer}-fpm` : ""}
-    systemctl restart nginx
-${!usePhpFpm ? `
-    # ── Create systemd service ──
-    cat > /etc/systemd/system/${p.appName}.service <<'SVC'
-    [Unit]
-    Description=${p.appName}
-    After=network.target
-
-    [Service]
-    Type=simple
-    User=root
-    WorkingDirectory=/opt/${p.appName}
-    ExecStart=${p.runtime.startCmd}
-    Restart=always
-${envVars.map(e => `    Environment=${e}`).join("\n")}
-
-    [Install]
-    WantedBy=multi-user.target
-    SVC
-
-    systemctl daemon-reload
-    systemctl enable --now ${p.appName}` : ""}
-${queueWorkerSetup}${schedulerSetup}${websocketSetup}
-  EOF
-}
-${managedBlocks.join("")}
-output "server_ip" {
-  value = hcloud_server.${p.appName}.ipv4_address
-}
-
-output "ssh_command" {
-  value = "ssh root@\${hcloud_server.${p.appName}.ipv4_address}"
-}
-`;
-}
-
-function buildAws(p: TofuBuildParams): string {
-  return `# ─────────────────────────────────────────────────
-# OpenTofu — AWS App Runner
-# App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}
-# ─────────────────────────────────────────────────
-
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.40"
-    }
-  }
-}
-
-variable "aws_region" {
-  type    = string
-  default = "${p.region}"
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
-resource "aws_apprunner_service" "${p.appName}" {
-  service_name = "${p.appName}"
-
-  source_configuration {
-    auto_deployments_enabled = true
-
-    code_repository {
-      repository_url = "https://github.com/${p.repo}"
-
-      source_code_version {
-        type  = "BRANCH"
-        value = "${p.branch}"
-      }
-
-      code_configuration {
-        configuration_source = "API"
-
-        code_configuration_values {
-          runtime      = "${p.runtime.name === "node" ? "NODEJS_20" : p.runtime.name === "python" ? "PYTHON_312" : p.runtime.name === "php" ? "PHP_81" : "NODEJS_20"}"
-          build_command = "${p.runtime.buildCmd}"
-          start_command = "${p.runtime.startCmd}"
-          port          = "${p.runtime.port}"
-
-          runtime_environment_variables = {
-            APP_ENV = "production"
-          }
-        }
-      }
-    }
-  }
-
-  instance_configuration {
-    cpu    = "0.25 vCPU"
-    memory = "0.5 GB"
-  }
-
-  health_check_configuration {
-    protocol            = "HTTP"
-    path                = "/"
-    interval            = 10
-    timeout             = 5
-    healthy_threshold   = 1
-    unhealthy_threshold = 5
-  }
-
-  tags = {
-    Name        = "${p.appName}"
-    Environment = "production"
-    ManagedBy   = "opentofu"
-  }
-}
-
-output "app_url" {
-  value = "https://\${aws_apprunner_service.${p.appName}.service_url}"
-}
-
-output "service_arn" {
-  value = aws_apprunner_service.${p.appName}.arn
-}
-`;
-}
-
-function buildVultr(p: TofuBuildParams): string {
-  const ai = p.aiAnalysis;
-  const isPhp = p.runtime.name === "php";
-  const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
-  const usePhpFpm = isPhp && (ai?.nginxConfig === "php-fpm" || isLaravel);
-  const phpVer = p.runtime.version;
-  const vpsSvcs = p.services.filter(s => s.mode === "vps");
-  const hasVpsDb = vpsSvcs.some(s => s.type === "database");
-  const hasVpsCache = vpsSvcs.some(s => s.type === "cache");
-  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue") || (ai?.needsQueueWorker ?? false);
-
-  // Build packages
-  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx", "unzip", "curl"];
-  if (isPhp) {
-    packages.push(`php${phpVer}-fpm`, `php${phpVer}-cli`, `php${phpVer}-mbstring`, `php${phpVer}-xml`, `php${phpVer}-curl`, `php${phpVer}-zip`, `php${phpVer}-bcmath`, `php${phpVer}-intl`, `php${phpVer}-gd`);
-    if (hasVpsDb) packages.push(`php${phpVer}-pgsql`, `php${phpVer}-mysql`);
-    if (hasVpsCache || hasVpsQueue) packages.push(`php${phpVer}-redis`);
-    if (hasVpsQueue) packages.push("supervisor");
-  } else if (p.runtime.name === "node") {
-    packages.push("nodejs", "npm");
-  } else if (p.runtime.name === "python") {
-    packages.push("python3", "python3-pip", "python3-venv");
-  }
-  if (hasVpsDb) packages.push("postgresql", "postgresql-contrib");
-  if (hasVpsCache || hasVpsQueue) packages.push("redis-server");
-
-  const needsNode = isPhp && p.techStack.some(s => ["vite", "node.js", "inertia.js", "tailwind css"].includes(s.toLowerCase()));
-  const nodeVer = ai?.nodeVersion || "20";
-
-  const nginxBlock = usePhpFpm
-    ? `server {
-        listen 80;
-        server_name _;
-        root /opt/${p.appName}/public;
-        index index.php index.html;
-        client_max_body_size 64M;
-        location / { try_files \\\\$uri \\\\$uri/ /index.php?\\\\$query_string; }
-        location ~ \\\\.php$ {
-            fastcgi_pass unix:/run/php/php${phpVer}-fpm.sock;
-            fastcgi_param SCRIPT_FILENAME \\\\$realpath_root\\\\$fastcgi_script_name;
-            include fastcgi_params;
-        }
-        location ~ /\\\\.(?!well-known).* { deny all; }
-    }`
-    : `server {
-        listen 80;
-        server_name _;
-        location / {
-            proxy_pass http://127.0.0.1:${p.runtime.port};
-            proxy_set_header Host \\\\$host;
-            proxy_set_header X-Real-IP \\\\$remote_addr;
-            proxy_set_header X-Forwarded-For \\\\$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \\\\$scheme;
-        }
-    }`;
-
-  return `# ─────────────────────────────────────────────────
-# OpenTofu — Vultr Cloud Compute
-# App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}${ai?.summary ? `\n# AI Analysis: ${ai.summary}` : ""}
-# ─────────────────────────────────────────────────
-
-terraform {
-  required_providers {
-    vultr = {
-      source  = "vultr/vultr"
-      version = "~> 2.19"
-    }
-  }
-}
-
-variable "vultr_api_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "ssh_public_key" {
-  type = string
-}
-
-provider "vultr" {
-  api_key = var.vultr_api_key
-}
-
-resource "vultr_ssh_key" "${p.appName}_key" {
-  name    = "${p.appName}-deploy-key"
-  ssh_key = var.ssh_public_key
-}
-
-resource "vultr_firewall_group" "${p.appName}_fw" {
-  description = "${p.appName} firewall"
-}
-
-resource "vultr_firewall_rule" "${p.appName}_ssh" {
-  firewall_group_id = vultr_firewall_group.${p.appName}_fw.id
-  protocol          = "tcp"
-  ip_type           = "v4"
-  subnet            = "0.0.0.0"
-  subnet_size       = 0
-  port              = "22"
-}
-
-resource "vultr_firewall_rule" "${p.appName}_http" {
-  firewall_group_id = vultr_firewall_group.${p.appName}_fw.id
-  protocol          = "tcp"
-  ip_type           = "v4"
-  subnet            = "0.0.0.0"
-  subnet_size       = 0
-  port              = "80"
-}
-
-resource "vultr_firewall_rule" "${p.appName}_https" {
-  firewall_group_id = vultr_firewall_group.${p.appName}_fw.id
-  protocol          = "tcp"
-  ip_type           = "v4"
-  subnet            = "0.0.0.0"
-  subnet_size       = 0
-  port              = "443"
-}
-
-resource "vultr_instance" "${p.appName}" {
-  plan              = "${vpsSvcs.length > 2 ? "vc2-2c-4gb" : "vc2-1c-2gb"}"
-  region            = "${p.region}"
-  os_id             = 2284  # Ubuntu 24.04
-  label             = "${p.appName}"
-  hostname          = "${p.appName}"
-  ssh_key_ids       = [vultr_ssh_key.${p.appName}_key.id]
-  firewall_group_id = vultr_firewall_group.${p.appName}_fw.id
-  backups           = "disabled"
-
-  user_data = base64encode(<<-EOF
-    #!/bin/bash
-    set -e
-    export DEBIAN_FRONTEND=noninteractive
-${isPhp ? "    add-apt-repository -y ppa:ondrej/php" : ""}
-${p.runtime.name === "node" ? `    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -` : ""}
-${needsNode ? `    curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -\n    apt-get install -y nodejs` : ""}
-
-    apt-get update && apt-get install -y ${packages.join(" ")}
-${isPhp ? "    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer" : ""}
-${hasVpsDb ? `
-    systemctl enable postgresql && systemctl start postgresql
-    sudo -u postgres createuser ${p.appName}
-    sudo -u postgres createdb ${p.appName} -O ${p.appName}
-    sudo -u postgres psql -c "ALTER USER ${p.appName} PASSWORD 'CHANGE_ME_SECURE_PASSWORD';"` : ""}
-${hasVpsCache || hasVpsQueue ? `
-    systemctl enable redis-server && systemctl restart redis-server` : ""}
-
-    git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}
-    cd /opt/${p.appName}
-${isLaravel ? `
-    cp .env.example .env
-    sed -i 's|APP_ENV=.*|APP_ENV=production|' .env
-    sed -i 's|APP_DEBUG=.*|APP_DEBUG=false|' .env
-${hasVpsDb ? `    sed -i 's|DB_CONNECTION=.*|DB_CONNECTION=pgsql|' .env\n    sed -i 's|DB_DATABASE=.*|DB_DATABASE=${p.appName}|' .env\n    sed -i 's|DB_USERNAME=.*|DB_USERNAME=${p.appName}|' .env\n    sed -i 's|DB_PASSWORD=.*|DB_PASSWORD=CHANGE_ME_SECURE_PASSWORD|' .env` : ""}
-${hasVpsCache || hasVpsQueue ? `    sed -i 's|CACHE_STORE=.*|CACHE_STORE=redis|' .env\n    sed -i 's|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=redis|' .env` : ""}` : ""}
-
-    ${p.runtime.buildCmd}
-${needsNode && isPhp ? "    npm ci && npm run build" : ""}
-${isLaravel ? `    php artisan key:generate --force\n    php artisan migrate --force\n    php artisan config:cache\n    php artisan route:cache\n    php artisan view:cache\n    php artisan storage:link\n    php artisan optimize` : ""}
-${isPhp ? `    chown -R www-data:www-data /opt/${p.appName}\n    chmod -R 775 /opt/${p.appName}/storage /opt/${p.appName}/bootstrap/cache` : ""}
-
-    cat > /etc/nginx/sites-available/${p.appName} <<'NGINX'
-    ${nginxBlock}
-    NGINX
-    ln -sf /etc/nginx/sites-available/${p.appName} /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default
-${isPhp ? `    systemctl enable php${phpVer}-fpm && systemctl restart php${phpVer}-fpm` : ""}
-    systemctl restart nginx
-${!usePhpFpm ? `
-    cat > /etc/systemd/system/${p.appName}.service <<'SVC'
-    [Unit]
-    Description=${p.appName}
-    After=network.target
-    [Service]
-    Type=simple
-    User=root
-    WorkingDirectory=/opt/${p.appName}
-    ExecStart=${p.runtime.startCmd}
-    Restart=always
-    Environment=APP_ENV=production
-    [Install]
-    WantedBy=multi-user.target
-    SVC
-    systemctl daemon-reload && systemctl enable --now ${p.appName}` : ""}
-${hasVpsQueue && isPhp ? `
-    cat > /etc/supervisor/conf.d/${p.appName}-worker.conf <<'SUP'
-    [program:${p.appName}-worker]
-    process_name=%(program_name)s_%(process_num)02d
-    command=php /opt/${p.appName}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
-    autostart=true
-    autorestart=true
-    user=www-data
-    numprocs=2
-    redirect_stderr=true
-    stdout_logfile=/var/log/${p.appName}-worker.log
-    SUP
-    supervisorctl reread && supervisorctl update` : ""}
-${isLaravel ? `
-    echo "* * * * * www-data cd /opt/${p.appName} && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/${p.appName}-scheduler
-    chmod 0644 /etc/cron.d/${p.appName}-scheduler` : ""}
-  EOF
-  )
-}
-
-output "server_ip" {
-  value = vultr_instance.${p.appName}.main_ip
-}
-
-output "ssh_command" {
-  value = "ssh root@\${vultr_instance.${p.appName}.main_ip}"
-}
-`;
-}
-
-function buildLinode(p: TofuBuildParams): string {
-  const ai = p.aiAnalysis;
-  const isPhp = p.runtime.name === "php";
-  const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
-  const usePhpFpm = isPhp && (ai?.nginxConfig === "php-fpm" || isLaravel);
-  const phpVer = p.runtime.version;
-  const vpsSvcs = p.services.filter(s => s.mode === "vps");
-  const hasVpsDb = vpsSvcs.some(s => s.type === "database");
-  const hasVpsCache = vpsSvcs.some(s => s.type === "cache");
-  const hasVpsQueue = vpsSvcs.some(s => s.type === "queue") || (ai?.needsQueueWorker ?? false);
-
-  const packages = ["git", "nginx", "certbot", "python3-certbot-nginx", "unzip", "curl"];
-  if (isPhp) {
-    packages.push(`php${phpVer}-fpm`, `php${phpVer}-cli`, `php${phpVer}-mbstring`, `php${phpVer}-xml`, `php${phpVer}-curl`, `php${phpVer}-zip`, `php${phpVer}-bcmath`, `php${phpVer}-intl`, `php${phpVer}-gd`);
-    if (hasVpsDb) packages.push(`php${phpVer}-pgsql`, `php${phpVer}-mysql`);
-    if (hasVpsCache || hasVpsQueue) packages.push(`php${phpVer}-redis`);
-    if (hasVpsQueue) packages.push("supervisor");
-  } else if (p.runtime.name === "node") {
-    packages.push("nodejs", "npm");
-  } else if (p.runtime.name === "python") {
-    packages.push("python3", "python3-pip", "python3-venv");
-  }
-  if (hasVpsDb) packages.push("postgresql", "postgresql-contrib");
-  if (hasVpsCache || hasVpsQueue) packages.push("redis-server");
-
-  const needsNode = isPhp && p.techStack.some(s => ["vite", "node.js", "inertia.js", "tailwind css"].includes(s.toLowerCase()));
-  const nodeVer = ai?.nodeVersion || "20";
-
-  const nginxBlock = usePhpFpm
-    ? `server {
-        listen 80;
-        server_name _;
-        root /opt/${p.appName}/public;
-        index index.php index.html;
-        client_max_body_size 64M;
-        location / { try_files \\\\$uri \\\\$uri/ /index.php?\\\\$query_string; }
-        location ~ \\\\.php$ {
-            fastcgi_pass unix:/run/php/php${phpVer}-fpm.sock;
-            fastcgi_param SCRIPT_FILENAME \\\\$realpath_root\\\\$fastcgi_script_name;
-            include fastcgi_params;
-        }
-        location ~ /\\\\.(?!well-known).* { deny all; }
-    }`
-    : `server {
-        listen 80;
-        server_name _;
-        location / {
-            proxy_pass http://127.0.0.1:${p.runtime.port};
-            proxy_set_header Host \\\\$host;
-            proxy_set_header X-Real-IP \\\\$remote_addr;
-            proxy_set_header X-Forwarded-For \\\\$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \\\\$scheme;
-        }
-    }`;
-
-  // Build the provisioning script
-  const provisionScript = `#!/bin/bash
-    set -e
-    export DEBIAN_FRONTEND=noninteractive
-${isPhp ? "    add-apt-repository -y ppa:ondrej/php" : ""}
-${p.runtime.name === "node" ? `    curl -fsSL https://deb.nodesource.com/setup_${p.runtime.version}.x | bash -` : ""}
-${needsNode ? `    curl -fsSL https://deb.nodesource.com/setup_${nodeVer}.x | bash -\n    apt-get install -y nodejs` : ""}
-
-    apt-get update && apt-get install -y ${packages.join(" ")}
-${isPhp ? "    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer" : ""}
-${hasVpsDb ? `
-    systemctl enable postgresql && systemctl start postgresql
-    sudo -u postgres createuser ${p.appName}
-    sudo -u postgres createdb ${p.appName} -O ${p.appName}
-    sudo -u postgres psql -c "ALTER USER ${p.appName} PASSWORD 'CHANGE_ME_SECURE_PASSWORD';"` : ""}
-${hasVpsCache || hasVpsQueue ? "    systemctl enable redis-server && systemctl restart redis-server" : ""}
-
-    git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}
-    cd /opt/${p.appName}
-${isLaravel ? `
-    cp .env.example .env
-    sed -i 's|APP_ENV=.*|APP_ENV=production|' .env
-    sed -i 's|APP_DEBUG=.*|APP_DEBUG=false|' .env
-${hasVpsDb ? `    sed -i 's|DB_CONNECTION=.*|DB_CONNECTION=pgsql|' .env\n    sed -i 's|DB_DATABASE=.*|DB_DATABASE=${p.appName}|' .env\n    sed -i 's|DB_USERNAME=.*|DB_USERNAME=${p.appName}|' .env\n    sed -i 's|DB_PASSWORD=.*|DB_PASSWORD=CHANGE_ME_SECURE_PASSWORD|' .env` : ""}
-${hasVpsCache || hasVpsQueue ? `    sed -i 's|CACHE_STORE=.*|CACHE_STORE=redis|' .env\n    sed -i 's|QUEUE_CONNECTION=.*|QUEUE_CONNECTION=redis|' .env` : ""}` : ""}
-
-    ${p.runtime.buildCmd}
-${needsNode && isPhp ? "    npm ci && npm run build" : ""}
-${isLaravel ? `    php artisan key:generate --force\n    php artisan migrate --force\n    php artisan config:cache\n    php artisan route:cache\n    php artisan view:cache\n    php artisan storage:link\n    php artisan optimize` : ""}
-${isPhp ? `    chown -R www-data:www-data /opt/${p.appName}\n    chmod -R 775 /opt/${p.appName}/storage /opt/${p.appName}/bootstrap/cache` : ""}
-
-    cat > /etc/nginx/sites-available/${p.appName} <<'NGINX'
-    ${nginxBlock}
-    NGINX
-    ln -sf /etc/nginx/sites-available/${p.appName} /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default
-${isPhp ? `    systemctl enable php${phpVer}-fpm && systemctl restart php${phpVer}-fpm` : ""}
-    systemctl restart nginx
-${!usePhpFpm ? `
-    cat > /etc/systemd/system/${p.appName}.service <<'SVC'
-    [Unit]
-    Description=${p.appName}
-    After=network.target
-    [Service]
-    Type=simple
-    User=root
-    WorkingDirectory=/opt/${p.appName}
-    ExecStart=${p.runtime.startCmd}
-    Restart=always
-    Environment=APP_ENV=production
-    [Install]
-    WantedBy=multi-user.target
-    SVC
-    systemctl daemon-reload && systemctl enable --now ${p.appName}` : ""}
-${hasVpsQueue && isPhp ? `
-    cat > /etc/supervisor/conf.d/${p.appName}-worker.conf <<'SUP'
-    [program:${p.appName}-worker]
-    process_name=%(program_name)s_%(process_num)02d
-    command=php /opt/${p.appName}/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
-    autostart=true
-    autorestart=true
-    user=www-data
-    numprocs=2
-    redirect_stderr=true
-    stdout_logfile=/var/log/${p.appName}-worker.log
-    SUP
-    supervisorctl reread && supervisorctl update` : ""}
-${isLaravel ? `
-    echo "* * * * * www-data cd /opt/${p.appName} && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/${p.appName}-scheduler
-    chmod 0644 /etc/cron.d/${p.appName}-scheduler` : ""}`;
-
-  return `# ─────────────────────────────────────────────────
-# OpenTofu — Linode (Akamai Cloud)
-# App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}${ai?.summary ? `\n# AI Analysis: ${ai.summary}` : ""}
-# ─────────────────────────────────────────────────
-
-terraform {
-  required_providers {
-    linode = {
-      source  = "linode/linode"
-      version = "~> 2.20"
-    }
-  }
-}
-
-variable "linode_token" {
-  type      = string
-  sensitive = true
-}
-
-variable "root_password" {
-  type      = string
-  sensitive = true
-}
-
-variable "ssh_public_key" {
-  type = string
-}
-
-provider "linode" {
-  token = var.linode_token
-}
-
-resource "linode_sshkey" "${p.appName}_key" {
-  label   = "${p.appName}-deploy-key"
-  ssh_key = var.ssh_public_key
-}
-
-resource "linode_firewall" "${p.appName}_fw" {
-  label = "${p.appName}-firewall"
-
-  inbound {
-    label    = "allow-ssh"
-    action   = "ACCEPT"
-    protocol = "TCP"
-    ports    = "22"
-    ipv4     = ["0.0.0.0/0"]
-    ipv6     = ["::/0"]
-  }
-
-  inbound {
-    label    = "allow-http"
-    action   = "ACCEPT"
-    protocol = "TCP"
-    ports    = "80"
-    ipv4     = ["0.0.0.0/0"]
-    ipv6     = ["::/0"]
-  }
-
-  inbound {
-    label    = "allow-https"
-    action   = "ACCEPT"
-    protocol = "TCP"
-    ports    = "443"
-    ipv4     = ["0.0.0.0/0"]
-    ipv6     = ["::/0"]
-  }
-
-  inbound_policy  = "DROP"
-  outbound_policy = "ACCEPT"
-
-  linodes = [linode_instance.${p.appName}.id]
-}
-
-resource "linode_instance" "${p.appName}" {
-  label           = "${p.appName}"
-  region          = "${p.region}"
-  type            = "${vpsSvcs.length > 2 ? "g6-standard-1" : "g6-nanode-1"}"
-  image           = "linode/ubuntu24.04"
-  root_pass       = var.root_password
-  authorized_keys = [linode_sshkey.${p.appName}_key.ssh_key]
-
-  stackscript_id = null
-
-  tags = ["${p.appName}", "opentofu"]
-}
-
-resource "null_resource" "${p.appName}_provision" {
-  depends_on = [linode_instance.${p.appName}]
-
-  connection {
-    type        = "ssh"
-    host        = linode_instance.${p.appName}.ip_address
-    user        = "root"
-    password    = var.root_password
-  }
-
-  provisioner "remote-exec" {
-    inline = [<<-SCRIPT
-${provisionScript}
-    SCRIPT
-    ]
-  }
-}
-
-output "server_ip" {
-  value = linode_instance.${p.appName}.ip_address
-}
-
-output "ssh_command" {
-  value = "ssh root@\${linode_instance.${p.appName}.ip_address}"
-}
-`;
-}
-
-function buildGenericVPS(p: TofuBuildParams): string {
-  return `# ─────────────────────────────────────────────────
-# OpenTofu — ${p.provider} (Generic VPS)
-# App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-# Generated for: ${p.repo}@${p.branch}
-# ─────────────────────────────────────────────────
-#
-# This provider does not have a dedicated Terraform/OpenTofu provider.
-# Below is a template using null_resource with local-exec provisioners
-# to deploy via SSH to an existing server.
-#
-
-terraform {
-  required_providers {
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
-    }
-  }
-}
-
-variable "server_ip" {
-  type        = string
-  description = "IP address of the ${p.provider} server"
-}
-
-variable "ssh_private_key_path" {
-  type    = string
-  default = "~/.ssh/id_rsa"
-}
-
-resource "null_resource" "${p.appName}_deploy" {
-  triggers = {
-    always_run = timestamp()
-  }
-
-  connection {
-    type        = "ssh"
-    host        = var.server_ip
-    user        = "root"
-    private_key = file(var.ssh_private_key_path)
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "set -e",
-      "apt-get update -qq",
-      "apt-get install -y -qq git nginx",
-      "rm -rf /opt/${p.appName}",
-      "git clone --depth 1 --branch ${p.branch} https://github.com/${p.repo}.git /opt/${p.appName}",
-      "cd /opt/${p.appName}",
-      "${p.runtime.buildCmd}",
-      "# Configure systemd service and nginx reverse proxy",
-      "systemctl restart nginx",
-    ]
-  }
-}
-
-output "deployed_to" {
-  value = var.server_ip
-}
-`;
-}

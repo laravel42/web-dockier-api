@@ -74,4 +74,14 @@ body {
   --color-text-muted: #6b7280;
   --color-secondary-50: #1e2130;
   --color-secondary-100: #252840;
+  --color-primary-50: #1e1f3a;
+  --color-primary-100: #2a2c52;
+  --color-primary-200: #3d4078;
+  --color-success-50: #132a1e;
+  --color-warning-50: #2a2010;
+  --color-danger-50: #2a1515;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

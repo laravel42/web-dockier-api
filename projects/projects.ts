@@ -18,7 +18,7 @@ interface Project {
 
 export const createProject = api(
   { method: "POST", path: "/projects", auth: true },
-  async (params: { name: string; repository: string; branch: string; connectionId: string; platform: string }): Promise<Project> => {
+  async (params: { name: string; repository: string; branch: string; connectionId: string; platform?: string }): Promise<Project> => {
     const authData = getAuthData()!;
     const id = uuidv4();
     await db.exec`

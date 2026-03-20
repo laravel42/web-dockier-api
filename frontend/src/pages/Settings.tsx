@@ -116,9 +116,11 @@ function ProfileTab() {
             {timezones.map((tz) => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
           </select>
         </div>
-        <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
-          {saving ? "Saving..." : "Save Changes"}
-        </button>
+        <div className="flex justify-end pt-2">
+          <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -165,9 +167,11 @@ function SecurityTab() {
               <label htmlFor="verify-token" className="block text-sm font-medium text-text-secondary mb-1.5">Verification Code</label>
               <input id="verify-token" type="text" value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} className={inputCls} placeholder="Enter 6-digit code" required />
             </div>
-            <button type="submit" disabled={loading} className="h-9 px-4 bg-success-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-success-700 disabled:opacity-50 transition-colors">
-              {loading ? "Verifying..." : "Enable 2FA"}
-            </button>
+            <div className="flex justify-end">
+              <button type="submit" disabled={loading} className="h-9 px-4 bg-success-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-success-700 disabled:opacity-50 transition-colors">
+                {loading ? "Verifying..." : "Enable 2FA"}
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -396,7 +400,9 @@ function ProvidersTab() {
               </button>
             </div>
           </div>}
-          <button type="submit" className={btnPrimary}>Add Provider</button>
+          <div className="flex justify-end">
+            <button type="submit" className={btnPrimary}>Add Provider</button>
+          </div>
         </form>
       </Modal>
 
@@ -406,7 +412,9 @@ function ProvidersTab() {
             <label htmlFor="edit-provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
             <input id="edit-provider-label" type="text" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} className={inputCls} required />
           </div>
-          <button type="submit" className={btnPrimary}>Save Changes</button>
+          <div className="flex justify-end">
+            <button type="submit" className={btnPrimary}>Save Changes</button>
+          </div>
         </form>
       </Modal>
 
@@ -539,7 +547,9 @@ function SourceControlTab() {
             />
             <p className="text-xs text-text-muted mt-1">Leave empty for default. Set for self-hosted instances.</p>
           </div>
-          <button type="submit" className={btnPrimary}>Connect</button>
+          <div className="flex justify-end">
+            <button type="submit" className={btnPrimary}>Connect</button>
+          </div>
         </form>
       </Modal>
 
@@ -549,7 +559,9 @@ function SourceControlTab() {
             <label htmlFor="edit-conn-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
             <input id="edit-conn-label" type="text" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} className={inputCls} required />
           </div>
-          <button type="submit" className={btnPrimary}>Save Changes</button>
+          <div className="flex justify-end">
+            <button type="submit" className={btnPrimary}>Save Changes</button>
+          </div>
         </form>
       </Modal>
 
@@ -620,7 +632,7 @@ function NotificationChannelsTab() {
         <button onClick={() => setShowForm(true)} className={btnPrimary}>Add Channel</button>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Channel">
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Channel" compact>
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="channel-type" className="block text-sm font-medium text-text-secondary mb-1.5">Channel Type</label>
@@ -637,7 +649,9 @@ function NotificationChannelsTab() {
               <input id="channel-config" type="text" value={formData.configValue} onChange={(e) => setFormData({ ...formData, configValue: e.target.value })} className={inputCls} required />
             </div>
           )}
-          <button type="submit" className={btnPrimary}>Add Channel</button>
+          <div className="flex justify-end">
+            <button type="submit" className={btnPrimary}>Add Channel</button>
+          </div>
         </form>
       </Modal>
 
@@ -715,7 +729,7 @@ function IntegrationsTab() {
   const [formConfig, setFormConfig] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Integrations are stored in localStorage for now (no backend endpoint yet)
@@ -781,25 +795,49 @@ function IntegrationsTab() {
         <button onClick={openAdd} className={btnPrimary}>Add Integration</button>
       </div>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Integration" size="lg">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Integration" size="xl">
         {!selectedType ? (
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search integrations..."
-              className={inputCls}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" onClick={() => setCategoryFilter("")} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${!categoryFilter ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-secondary hover:bg-secondary-200"}`}>All</button>
-              {Object.keys(CATEGORY_COLORS).map((c) => (
-                <button key={c} type="button" onClick={() => setCategoryFilter(categoryFilter === c ? "" : c)} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${categoryFilter === c ? "bg-primary-500 text-white" : CATEGORY_COLORS[c] + " hover:opacity-80"}`}>{c}</button>
-              ))}
+          <div className="flex gap-4">
+            {/* Sidebar filters */}
+            <div className="w-44 shrink-0 border-r border-border pr-4">
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">Categories</p>
+              <label className="flex items-center gap-2 py-1.5 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={categoryFilter.length === 0}
+                  onChange={() => setCategoryFilter([])}
+                  className="w-3.5 h-3.5 rounded border-border text-primary-500 focus:ring-primary-500/20 cursor-pointer"
+                />
+                <span className={`text-sm ${categoryFilter.length === 0 ? "font-medium text-text" : "text-text-secondary group-hover:text-text"}`}>All</span>
+              </label>
+              {Object.keys(CATEGORY_COLORS).map((c) => {
+                const checked = categoryFilter.includes(c);
+                return (
+                  <label key={c} className="flex items-center gap-2 py-1.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setCategoryFilter(checked ? categoryFilter.filter(f => f !== c) : [...categoryFilter, c])}
+                      className="w-3.5 h-3.5 rounded border-border text-primary-500 focus:ring-primary-500/20 cursor-pointer"
+                    />
+                    <span className={`text-sm ${checked ? "font-medium text-text" : "text-text-secondary group-hover:text-text"}`}>{c}</span>
+                  </label>
+                );
+              })}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto">
+
+            {/* Main content */}
+            <div className="flex-1 min-w-0 space-y-3">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search integrations..."
+                className={inputCls}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: "none" }}>
               {INTEGRATION_CATALOG
-                .filter((cat) => (!categoryFilter || cat.category === categoryFilter) && (!searchQuery || cat.name.toLowerCase().includes(searchQuery.toLowerCase()) || cat.category.toLowerCase().includes(searchQuery.toLowerCase()) || cat.description.toLowerCase().includes(searchQuery.toLowerCase())))
+                .filter((cat) => (categoryFilter.length === 0 || categoryFilter.includes(cat.category)) && (!searchQuery || cat.name.toLowerCase().includes(searchQuery.toLowerCase()) || cat.category.toLowerCase().includes(searchQuery.toLowerCase()) || cat.description.toLowerCase().includes(searchQuery.toLowerCase())))
                 .map((cat) => {
                 const alreadyAdded = integrations.some(i => i.type === cat.type);
                 return (
@@ -823,6 +861,7 @@ function IntegrationsTab() {
                   </button>
                 );
               })}
+              </div>
             </div>
           </div>
         ) : catalog ? (
@@ -851,9 +890,11 @@ function IntegrationsTab() {
                 />
               </div>
             ))}
-            <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
-              {saving ? "Saving..." : "Add Integration"}
-            </button>
+            <div className="flex justify-end">
+              <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
+                {saving ? "Saving..." : "Add Integration"}
+              </button>
+            </div>
           </form>
         ) : null}
       </Modal>

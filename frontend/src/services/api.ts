@@ -383,6 +383,10 @@ export const deployApi = {
         repo: string;
         branch: string;
         status: string;
+        logs: string;
+        appUrl: string;
+        commitHash: string;
+        dockerImage: string;
         createdAt: string;
       }>;
     }>(
@@ -395,6 +399,10 @@ export const deployApi = {
     repo: string;
     branch: string;
     tofuScript?: string;
+    techStack?: string[];
+    primaryLanguage?: string;
+    registryUrl?: string;
+    deployStrategy?: string;
   }) =>
     request<{
       id: string;
@@ -418,6 +426,8 @@ export const deployApi = {
       status: string;
       logs: string;
       appUrl: string;
+      commitHash: string;
+      dockerImage: string;
       createdAt: string;
       updatedAt: string;
     }>(`/deploy/deployments/${deploymentId}`),
@@ -431,6 +441,9 @@ export const deployApi = {
     hasDocker: boolean;
     appName?: string;
     region?: string;
+    deployStrategy?: "vps" | "managed" | "serverless";
+    useDocker?: boolean;
+    dockerImage?: string;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
     aiAnalysis?: Record<string, any>;
   }) =>
@@ -471,7 +484,7 @@ export const projectsApi = {
       createdAt: string;
     }>(`/projects/${projectId}`),
 
-  create: (data: { name: string; repository: string; branch: string; connectionId: string; platform: string }) =>
+  create: (data: { name: string; repository: string; branch: string; connectionId: string; platform?: string }) =>
     request("/projects", { method: "POST", body: JSON.stringify(data) }),
 
   update: (projectId: string, data: { name?: string; repository?: string; branch?: string; connectionId?: string; platform?: string }) =>

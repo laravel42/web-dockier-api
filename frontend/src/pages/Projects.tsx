@@ -3,13 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { projectsApi, gitApi } from "../services/api";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
-import PlatformSelect from "../components/PlatformSelect";
 import SourceControlSelect from "../components/SourceControlSelect";
 import RepoSelect from "../components/RepoSelect";
 import BranchSelect from "../components/BranchSelect";
 
 const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
-const selectCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors appearance-none cursor-pointer";
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 const btnDanger = "text-sm text-danger-500 hover:text-danger-700 font-medium transition-colors";
@@ -22,7 +20,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
-  const [form, setForm] = useState({ name: "", repository: "", branch: "", platform: "" });
+  const [form, setForm] = useState({ name: "", repository: "", branch: "" });
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -111,7 +109,7 @@ export default function Projects() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", repository: "", branch: "", platform: "" });
+    setForm({ name: "", repository: "", branch: "" });
     resetSelections();
     setShowForm(true);
     fetchConnections();
@@ -119,7 +117,7 @@ export default function Projects() {
 
   const openEdit = (p: any) => {
     setEditing(p);
-    setForm({ name: p.name, repository: p.repository, branch: p.branch || "", platform: p.platform || "" });
+    setForm({ name: p.name, repository: p.repository, branch: p.branch || "" });
     resetSelections();
     setShowForm(true);
     fetchConnections();
@@ -133,7 +131,6 @@ export default function Projects() {
       repository: editing ? form.repository : (repo?.url || form.repository),
       branch: editing ? form.branch : (selectedBranch || form.branch),
       connectionId: editing ? (form as any).connectionId : selectedConnectionId,
-      platform: form.platform,
     };
     if (editing) {
       await projectsApi.update(editing.id, submitData);
@@ -143,22 +140,6 @@ export default function Projects() {
     setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
   };
 
-  const providerIcon = (provider: string) => {
-    switch (provider) {
-      case "github": return "GitHub";
-      case "gitlab": case "gitlab_self_hosted": return "GitLab";
-      case "bitbucket": return "Bitbucket";
-      default: return provider;
-    }
-  };
-
-  const Spinner = () => (
-    <div className="flex items-center gap-2 py-2 text-sm text-text-muted">
-      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      Loading…
-    </div>
-  );
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -166,17 +147,11 @@ export default function Projects() {
         <button onClick={openCreate} className={btnPrimary}>New Project</button>
       </div>
 
-      <Modal open={showForm} onClose={() => { setShowForm(false); setEditing(null); resetSelections(); }} title={editing ? "Edit Project" : "New Project"}>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <Modal open={showForm} onClose={() => { setShowForm(false); setEditing(null); resetSelections(); }} title={editing ? "Edit Project" : "New Project"} size="xl">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
           <div>
             <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
             <input id="project-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} placeholder="My App" required />
-          </div>
-
-          {/* Platform */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Platform</label>
-            <PlatformSelect value={form.platform} onChange={(slug) => setForm({ ...form, platform: slug })} />
           </div>
 
           {/* Step 1: Source Control */}
@@ -194,6 +169,18 @@ export default function Projects() {
           {error && (
             <div className="rounded-[var(--radius-input)] bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
               {error}
+            </div>
+          )}
+
+          {!selectedConnectionId && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
+              <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center text-primary-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
+              <p className="text-xs text-text-muted max-w-xs">Select a source control provider above to browse your repositories and pick a branch.</p>
             </div>
           )}
 
@@ -223,7 +210,8 @@ export default function Projects() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-2 mt-auto">
+            <button type="button" onClick={() => { setShowForm(false); setEditing(null); resetSelections(); }} className={btnSecondary}>Cancel</button>
             <button
               type="submit"
               className={btnPrimary}
@@ -231,7 +219,6 @@ export default function Projects() {
             >
               {editing ? "Save Changes" : "Create Project"}
             </button>
-            <button type="button" onClick={() => { setShowForm(false); setEditing(null); resetSelections(); }} className={btnSecondary}>Cancel</button>
           </div>
         </form>
       </Modal>
