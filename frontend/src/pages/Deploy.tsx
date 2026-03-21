@@ -1,97 +1,165 @@
 import { useState, useEffect } from "react";
-import { deployApi, gitApi } from "../services/api";
+import { useNavigate } from "react-router-dom";
+import { deployApi, projectsApi } from "../services/api";
+
+const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
+const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
+
+interface Deployment {
+  id: string;
+  providerId: string;
+  repo: string;
+  branch: string;
+  status: string;
+  logs: string;
+  appUrl: string;
+  commitHash: string;
+  dockerImage: string;
+  deployStrategy: string;
+  createdAt: string;
+}
+
+interface Provider {
+  id: string;
+  provider: string;
+  label: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  repository: string;
+  branch: string;
+}
+
+function repoKey(repoUrl: string): string {
+  try {
+    const u = new URL(repoUrl);
+    const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
+    if (parts.length >= 2) return parts.join("/");
+  } catch {}
+  return repoUrl;
+}
+
+const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
+  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
+  digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
+  hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
+  vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
+  linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode" },
+};
 
 export default function Deploy() {
-  const [providers, setProviders] = useState<any[]>([]);
-  const [deployments, setDeployments] = useState<any[]>([]);
-  const [connections, setConnections] = useState<any[]>([]);
-  const [showDeployForm, setShowDeployForm] = useState(false);
-  const [deployForm, setDeployForm] = useState({ providerId: "", gitConnectionId: "", repo: "", branch: "main" });
+  const navigate = useNavigate();
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [p, d, c] = await Promise.all([deployApi.listProviders(), deployApi.listDeployments(), gitApi.listConnections()]);
-      setProviders(p.providers); setDeployments(d.deployments); setConnections(c.connections);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [dRes, pRes, projRes] = await Promise.all([
+          deployApi.listDeployments(),
+          deployApi.listProviders(),
+          projectsApi.list(),
+        ]);
+        setDeployments(dRes.deployments);
+        setProviders(pRes.providers);
+        setProjects(projRes.projects);
+      } catch {}
+      finally { setLoading(false); }
+    };
+    load();
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  // Match deployments to projects by repo key
+  const projectByRepo: Record<string, Project> = {};
+  for (const p of projects) {
+    const key = repoKey(p.repository);
+    projectByRepo[key] = p;
+  }
 
-  const handleDeploy = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await deployApi.createDeployment(deployForm);
-    setShowDeployForm(false); setDeployForm({ providerId: "", gitConnectionId: "", repo: "", branch: "main" }); fetchData();
-  };
-
-  const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
-
-  const statusStyle: Record<string, string> = {
-    pending: "bg-warning-50 text-warning-500",
-    building: "bg-primary-50 text-primary-500",
-    deploying: "bg-primary-100 text-primary-700",
-    success: "bg-success-50 text-success-500",
-    failed: "bg-danger-50 text-danger-500",
-  };
+  // Group deployments by repo
+  const grouped = deployments.reduce<Record<string, Deployment[]>>((acc, d) => {
+    (acc[d.repo] ||= []).push(d);
+    return acc;
+  }, {});
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Deployments</h1>
-        <button onClick={() => setShowDeployForm(!showDeployForm)}
-          className="h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm">
-          {showDeployForm ? "Cancel" : "New Deployment"}
-        </button>
       </div>
 
-      {showDeployForm && (
-        <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 mb-8 border border-border/50">
-          <form onSubmit={handleDeploy} className="space-y-4">
-            <div>
-              <label htmlFor="deploy-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Server Provider</label>
-              <select id="deploy-provider" value={deployForm.providerId} onChange={(e) => setDeployForm({ ...deployForm, providerId: e.target.value })} className={inputCls} required>
-                <option value="">Select provider...</option>
-                {providers.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.provider})</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="deploy-git" className="block text-sm font-medium text-text-secondary mb-1.5">Source Control Connection</label>
-              <select id="deploy-git" value={deployForm.gitConnectionId} onChange={(e) => setDeployForm({ ...deployForm, gitConnectionId: e.target.value })} className={inputCls} required>
-                <option value="">Select connection...</option>
-                {connections.map((c) => <option key={c.id} value={c.id}>{c.label} ({c.provider})</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="deploy-repo" className="block text-sm font-medium text-text-secondary mb-1.5">Repository (owner/repo)</label>
-              <input id="deploy-repo" type="text" value={deployForm.repo} onChange={(e) => setDeployForm({ ...deployForm, repo: e.target.value })} className={inputCls} placeholder="owner/repo" required />
-            </div>
-            <div>
-              <label htmlFor="deploy-branch" className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
-              <input id="deploy-branch" type="text" value={deployForm.branch} onChange={(e) => setDeployForm({ ...deployForm, branch: e.target.value })} className={inputCls} />
-            </div>
-            <button type="submit" className="h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm">Deploy</button>
-          </form>
-        </div>
-      )}
-
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16">
+          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : deployments.length === 0 ? (
+        <div className={`${cardCls} p-12 text-center`}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-text-muted mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+          </svg>
+          <p className="text-sm text-text-muted mb-4">No deployments yet. Deploy from a project page to get started.</p>
+          <button onClick={() => navigate("/projects")} className={btnSecondary}>Go to Projects</button>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {deployments.map((d) => (
-            <div key={d.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-all border border-transparent hover:border-border/50">
-              <div>
-                <h3 className="text-sm font-semibold text-text">{d.repo}</h3>
-                <p className="text-sm text-text-secondary mt-0.5">Branch: {d.branch} · {new Date(d.createdAt).toLocaleString()}</p>
-              </div>
-              <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${statusStyle[d.status] || "bg-secondary-100 text-text-muted"}`}>
-                {d.status}
-              </span>
-            </div>
-          ))}
-          {deployments.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No deployments yet. Configure providers and source control in Settings first.</p>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {Object.entries(grouped)
+            .sort(([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime())
+            .map(([repo, repoDeploys]) => {
+              const proj = projectByRepo[repo];
+              const sorted = repoDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              const latest = sorted[0];
+              const prov = providers.find(p => p.id === latest.providerId);
+              const provKey = prov?.provider || "";
+              const ps = providerStyles[provKey] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
+              const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
+              const statusDot = latest.status === "success" ? "bg-success-500"
+                : latest.status === "failed" ? "bg-danger-500"
+                : latest.status === "building" || latest.status === "deploying" ? "bg-primary-500"
+                : "bg-secondary-400";
+
+              const successCount = sorted.filter(d => d.status === "success").length;
+              const failedCount = sorted.filter(d => d.status === "failed").length;
+
+              return (
+                <div
+                  key={repo}
+                  onClick={() => navigate(`/deploy/${latest.id}`)}
+                  className="bg-card border border-border rounded-[var(--radius-card)] p-5 flex flex-col gap-4 hover:border-primary-500/30 transition-all overflow-hidden shadow-[var(--shadow-card)] cursor-pointer"
+                >
+                  {/* Header: rocket icon + deploy count */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 shrink-0 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                    </svg>
+                    <span className="text-base text-text-secondary truncate">{sorted.length} deploy{sorted.length !== 1 ? "s" : ""}</span>
+                  </div>
+
+                  {/* Project name + branch */}
+                  <div className="min-w-0">
+                    <h3 className="text-xl font-bold text-text truncate">{proj?.name || repo}</h3>
+                    <p className="flex items-center gap-1.5 text-sm text-text-muted mt-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                      </svg>
+                      {latest.branch}
+                    </p>
+                  </div>
+
+                  {/* Last deploy status */}
+                  <div className="flex items-center gap-2 mt-auto">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDot}`} />
+                    <span className="text-xs text-text-muted">
+                      Last deploy: {new Date(latest.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

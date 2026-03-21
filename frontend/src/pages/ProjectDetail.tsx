@@ -133,10 +133,9 @@ export default function ProjectDetail() {
   const [allProviders, setAllProviders] = useState<Array<{ id: string; provider: string; label: string }>>([]);
   const [showDeployWizard, setShowDeployWizard] = useState(false);
 
-  // Deployment history
-  interface DeployHistoryItem { id: string; providerId: string; repo: string; branch: string; status: string; logs: string; appUrl: string; commitHash: string; dockerImage: string; deployStrategy: string; createdAt: string; }
-  const [deployHistory, setDeployHistory] = useState<DeployHistoryItem[]>([]);
-  const [expandedDeployLog, setExpandedDeployLog] = useState<string | null>(null);
+  // Last deploy
+  interface DeployInfo { id: string; providerId: string; repo: string; branch: string; status: string; appUrl: string; commitHash: string; dockerImage: string; deployStrategy: string; createdAt: string; }
+  const [lastDeploy, setLastDeploy] = useState<DeployInfo | null>(null);
 
   useEffect(() => {
     if ((location.state as { openDeploy?: boolean })?.openDeploy) {
@@ -154,9 +153,6 @@ export default function ProjectDetail() {
         setUserProviders(res.providers.map((p: any) => p.provider));
         setAllProviders(res.providers.map((p: any) => ({ id: p.id, provider: p.provider, label: p.label })));
       })
-      .catch(() => {});
-    deployApi.listDeployments()
-      .then((res) => setDeployHistory(res.deployments))
       .catch(() => {});
     projectsApi.get(projectId)
       .then((p) => {
@@ -191,6 +187,20 @@ export default function ProjectDetail() {
       .catch((err: any) => setError(err.message || "Failed to load project"))
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  // Fetch last deploy for this project
+  useEffect(() => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    const repoKey = `${parsed.owner}/${parsed.repo}`;
+    deployApi.listDeployments()
+      .then((res) => {
+        const match = res.deployments.filter((d: DeployInfo) => d.repo === repoKey);
+        setLastDeploy(match.length > 0 ? match[0] : null);
+      })
+      .catch(() => {});
+  }, [project]);
 
   const handleDelete = async () => {
     if (!projectId) return;
@@ -528,70 +538,64 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Deployment History */}
-      {project.connectionId && project.repository && (() => {
-        const parsed = parseOwnerRepo(project.repository);
-        const repoKey = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
-        const projectDeploys = deployHistory.filter(d => d.repo === repoKey);
-        if (projectDeploys.length === 0) return null;
+      {/* Last Deploy */}
+      {lastDeploy && (() => {
+        const prov = allProviders.find(p => p.id === lastDeploy.providerId);
+        const provKey = prov?.provider || "";
+        const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
+          aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
+          digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
+          hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
+          vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
+          linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode" },
+        };
+        const ps = providerStyles[provKey] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
+        const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
         const statusColors: Record<string, string> = { success: "bg-success-500/10 text-success-500", failed: "bg-danger-500/10 text-danger-500", building: "bg-warning-500/10 text-warning-500", deploying: "bg-primary-500/10 text-primary-500", pending: "bg-secondary-100 text-text-muted" };
         return (
           <div className="mb-6">
-            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Deployment History</h2>
-            <div className="space-y-2">
-              {projectDeploys.slice(0, 10).map((d) => {
-                const prov = allProviders.find(p => p.id === d.providerId);
-                const provKey = prov?.provider || "";
-                const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
-                const infraLabel = [
-                  strategyLabels[d.deployStrategy] || d.deployStrategy,
-                ].filter(Boolean).join("");
-                const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-                  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
-                  digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
-                  hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
-                  vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
-                  linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode" },
-                };
-                const ps = providerStyles[provKey] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
-                return (
-                <div key={d.id} className={`${cardCls} overflow-hidden`}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedDeployLog(expandedDeployLog === d.id ? null : d.id)}
-                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-secondary-50/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[d.status] || "bg-secondary-100 text-text-muted"}`}>{d.status}</span>
-                      <span className="text-sm text-text truncate">{d.branch}</span>
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium ${ps.bg} ${ps.text}`}>
-                        {ps.icon && <img src={`https://cdn.simpleicons.org/${ps.icon}`} alt="" className="w-3 h-3" />}
-                        {provKey.toUpperCase()}{infraLabel ? ` · ${infraLabel}` : ""}
-                      </span>
-                      {d.dockerImage && (
-                        <span className="text-[10px] text-text-muted font-mono truncate max-w-[200px]" title={d.dockerImage}>{d.dockerImage.split("/").pop()?.split(":")[0] || d.dockerImage}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0 ml-4">
-                      {d.appUrl && (
-                        <a href={d.appUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-xs text-primary-500 hover:text-primary-700 transition-colors">
-                          {d.appUrl.replace(/^https?:\/\//, "").slice(0, 30)}
-                        </a>
-                      )}
-                      <span className="text-xs text-text-muted">{new Date(d.createdAt).toLocaleDateString()} {new Date(d.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 text-text-muted transition-transform ${expandedDeployLog === d.id ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                      </svg>
-                    </div>
-                  </button>
-                  {expandedDeployLog === d.id && d.logs && (
-                    <div className="border-t border-border bg-gray-950 px-4 py-3 max-h-72 overflow-y-auto">
-                      <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap leading-relaxed">{d.logs}</pre>
-                    </div>
-                  )}
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Last Deploy</h2>
+            <div className={`${cardCls} p-5`}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[lastDeploy.status] || "bg-secondary-100 text-text-muted"}`}>{lastDeploy.status}</span>
+                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium ${ps.bg} ${ps.text}`}>
+                  {ps.icon && <img src={`https://cdn.simpleicons.org/${ps.icon}`} alt="" className="w-3 h-3" />}
+                  {provKey.toUpperCase()} · {strategyLabels[lastDeploy.deployStrategy] || lastDeploy.deployStrategy}
+                </span>
+                <span className="text-xs text-text-muted ml-auto">{new Date(lastDeploy.createdAt).toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-text-muted">Branch</p>
+                  <p className="text-sm text-text font-medium mt-0.5">{lastDeploy.branch}</p>
                 </div>
-                );
-              })}
+                {lastDeploy.commitHash && (
+                  <div>
+                    <p className="text-xs text-text-muted">Commit</p>
+                    <p className="text-sm text-text font-mono mt-0.5">{lastDeploy.commitHash.slice(0, 8)}</p>
+                  </div>
+                )}
+                {lastDeploy.appUrl && (
+                  <div>
+                    <p className="text-xs text-text-muted">App URL</p>
+                    <a href={lastDeploy.appUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors mt-0.5 block truncate">
+                      {lastDeploy.appUrl.replace(/^https?:\/\//, "")}
+                    </a>
+                  </div>
+                )}
+                {lastDeploy.dockerImage && (
+                  <div>
+                    <p className="text-xs text-text-muted">Docker Image</p>
+                    <p className="text-sm text-text font-mono mt-0.5 truncate" title={lastDeploy.dockerImage}>{lastDeploy.dockerImage.split("/").pop()?.split(":")[0] || lastDeploy.dockerImage}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+                <span className="text-xs text-text-muted">{prov?.label || provKey}</span>
+                <button onClick={() => navigate(`/deploy/${lastDeploy.id}`)} className="text-xs text-primary-500 hover:text-primary-700 font-medium transition-colors">
+                  View details →
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -606,9 +610,7 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         analysisError={analysisError}
         providers={allProviders}
-        onDeployComplete={() => {
-          deployApi.listDeployments().then((res) => setDeployHistory(res.deployments)).catch(() => {});
-        }}
+        onDeployComplete={() => {}}
       />
 
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />

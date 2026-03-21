@@ -34,12 +34,12 @@ export default function Modal({ open, onClose, title, children, size = "default"
   return (
     <dialog
       ref={dialogRef}
-      className={`backdrop:bg-black/50 backdrop-blur-sm bg-transparent p-0 m-auto rounded-[var(--radius-card)] outline-none ${widthCls} w-full overflow-visible`}
+      className={`backdrop:bg-black/50 backdrop-blur-sm bg-transparent p-0 m-auto rounded-[var(--radius-card)] outline-none ${widthCls} w-full max-h-[90vh] overflow-hidden`}
       onClick={(e) => { e.stopPropagation(); }}
       onCancel={(e) => { e.preventDefault(); }}
     >
-      <div className={`bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)] border border-border/50 p-6 ${compact ? "" : "min-h-[40vh]"} flex flex-col overflow-visible`}>
-        <div className="flex items-center justify-between mb-5">
+      <div className={`bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)] border border-border/50 p-6 ${compact ? "" : "min-h-[40vh]"} max-h-[90vh] flex flex-col overflow-hidden`}>
+        <div className="flex items-center justify-between mb-5 shrink-0">
           <h2 className="text-base font-display font-semibold text-text">{title}</h2>
           <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors" aria-label="Close">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -47,7 +47,9 @@ export default function Modal({ open, onClose, title, children, size = "default"
             </svg>
           </button>
         </div>
-        {children}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {children}
+        </div>
       </div>
     </dialog>
   );

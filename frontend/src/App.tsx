@@ -8,6 +8,7 @@ import AuthCallback from "./pages/AuthCallback";
 import Dashboard from "./pages/Dashboard";
 import Notifications from "./pages/Notifications";
 import Deploy from "./pages/Deploy";
+import DeployDetail from "./pages/DeployDetail";
 import Settings from "./pages/Settings";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/security" element={<SecurityScans />} />
             <Route path="/security/:scanId" element={<ScanDetail />} />
             <Route path="/deploy" element={<Deploy />} />
+            <Route path="/deploy/:deployId" element={<DeployDetail />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

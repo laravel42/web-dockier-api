@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../services/api";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
@@ -59,6 +59,7 @@ function getRepoKey(repoUrl: string): string | null {
 
 export default function Projects() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [projects, setProjects] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
@@ -161,6 +162,14 @@ export default function Projects() {
     setShowForm(true);
     fetchConnections();
   };
+
+  // Auto-open create modal when navigated with state
+  useEffect(() => {
+    if ((location.state as { openCreate?: boolean })?.openCreate) {
+      openCreate();
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   const openEdit = (p: any) => {
     setEditing(p);
