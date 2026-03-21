@@ -363,6 +363,7 @@ export const deployApi = {
     apiKey: string;
     apiSecret: string;
     region?: string;
+    appRunnerConnectionArn?: string;
   }) =>
     request("/deploy/providers", {
       method: "POST",
@@ -372,8 +373,8 @@ export const deployApi = {
   deleteProvider: (providerId: string) =>
     request(`/deploy/providers/${providerId}`, { method: "DELETE" }),
 
-  updateProvider: (providerId: string, data: { label: string }) =>
-    request(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify({ providerId, ...data }) }),
+  updateProvider: (providerId: string, data: { label?: string; appRunnerConnectionArn?: string; apiSecret?: string }) =>
+    request(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listDeployments: (providerId?: string) =>
     request<{
@@ -387,6 +388,7 @@ export const deployApi = {
         appUrl: string;
         commitHash: string;
         dockerImage: string;
+        deployStrategy: string;
         createdAt: string;
       }>;
     }>(
@@ -428,6 +430,7 @@ export const deployApi = {
       appUrl: string;
       commitHash: string;
       dockerImage: string;
+      deployStrategy: string;
       createdAt: string;
       updatedAt: string;
     }>(`/deploy/deployments/${deploymentId}`),
@@ -457,6 +460,19 @@ export const deployApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  // SSH Keys
+  listSshKeys: () =>
+    request<{ keys: Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }> }>("/deploy/ssh-keys"),
+
+  addSshKey: (data: { label: string; publicKey: string }) =>
+    request<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }>("/deploy/ssh-keys", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  deleteSshKey: (keyId: string) =>
+    request<{ success: boolean }>(`/deploy/ssh-keys/${keyId}`, { method: "DELETE" }),
 };
 
 // ─── Projects ───

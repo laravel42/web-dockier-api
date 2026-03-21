@@ -18,8 +18,8 @@ export default function Notifications() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-text">Notifications</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Notifications</h1>
       </div>
 
       {loading ? (
@@ -27,7 +27,7 @@ export default function Notifications() {
       ) : (
         <div className="space-y-2">
           {notifications.map((n) => (
-            <div key={n.id} className={`bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-4 flex items-start justify-between ${!n.read ? "border-l-3 border-l-primary-500" : ""}`}>
+            <div key={n.id} className={`bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-4 flex items-start justify-between border border-border/50 ${!n.read ? "border-l-4 border-l-primary-500" : ""}`}>
               <div>
                 <h3 className={`text-sm font-medium ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
                 <p className="text-sm text-text-secondary mt-0.5">{n.message}</p>

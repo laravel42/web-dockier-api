@@ -32,6 +32,7 @@ interface Deployment {
   appUrl: string;
   commitHash: string;
   dockerImage: string;
+  deployStrategy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +43,7 @@ interface ProviderResponse {
   provider: string;
   label: string;
   region: string;
+  appRunnerConnectionArn?: string;
   createdAt: string;
 }
 
@@ -75,14 +77,16 @@ export const addProvider = api(
     apiKey: string;
     apiSecret: string;
     region?: string;
+    appRunnerConnectionArn?: string;
   }): Promise<ProviderResponse> => {
     const authData = getAuthData()!;
     const id = uuidv4();
     const region = params.region || "";
+    const arn = params.appRunnerConnectionArn?.trim() || "";
 
     await db.exec`
-      INSERT INTO server_providers (id, user_id, provider, label, api_key, api_secret, region, created_at)
-      VALUES (${id}, ${authData.userID}, ${params.provider}, ${params.label}, ${params.apiKey}, ${params.apiSecret}, ${region}, NOW())`;
+      INSERT INTO server_providers (id, user_id, provider, label, api_key, api_secret, region, app_runner_connection_arn, created_at)
+      VALUES (${id}, ${authData.userID}, ${params.provider}, ${params.label}, ${params.apiKey}, ${params.apiSecret}, ${region}, ${arn}, NOW())`;
 
     return {
       id, userId: authData.userID, provider: params.provider,
@@ -96,15 +100,15 @@ export const listProviders = api(
   async (): Promise<{ providers: ProviderResponse[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{
-      id: string; user_id: string; provider: string; label: string; region: string; created_at: Date;
-    }>`SELECT id, user_id, provider, label, region, created_at
+      id: string; user_id: string; provider: string; label: string; region: string; app_runner_connection_arn: string; created_at: Date;
+    }>`SELECT id, user_id, provider, label, region, COALESCE(app_runner_connection_arn, '') as app_runner_connection_arn, created_at
        FROM server_providers WHERE user_id = ${authData.userID}`;
 
     const providers: ProviderResponse[] = [];
     for await (const row of rows) {
       providers.push({
         id: row.id, userId: row.user_id, provider: row.provider,
-        label: row.label, region: row.region, createdAt: row.created_at.toISOString(),
+        label: row.label, region: row.region, appRunnerConnectionArn: row.app_runner_connection_arn || undefined, createdAt: row.created_at.toISOString(),
       });
     }
     return { providers };
@@ -121,18 +125,63 @@ export const deleteProvider = api(
 
 export const updateProvider = api(
   { method: "PUT", path: "/deploy/providers/:providerId", auth: true },
-  async (params: { providerId: string; label: string }): Promise<ProviderResponse> => {
+  async (params: { providerId: string; label?: string; appRunnerConnectionArn?: string; apiSecret?: string }): Promise<ProviderResponse> => {
     const row = await db.queryRow<{
-      id: string; user_id: string; provider: string; label: string; region: string; created_at: Date;
-    }>`SELECT id, user_id, provider, label, region, created_at FROM server_providers WHERE id = ${params.providerId}`;
+      id: string; user_id: string; provider: string; label: string; region: string; app_runner_connection_arn: string; created_at: Date;
+    }>`SELECT id, user_id, provider, label, region, COALESCE(app_runner_connection_arn, '') as app_runner_connection_arn, created_at FROM server_providers WHERE id = ${params.providerId}`;
     if (!row) throw APIError.notFound("Provider not found");
 
-    await db.exec`UPDATE server_providers SET label = ${params.label} WHERE id = ${params.providerId}`;
+    if (params.label !== undefined) await db.exec`UPDATE server_providers SET label = ${params.label} WHERE id = ${params.providerId}`;
+    if (params.appRunnerConnectionArn !== undefined) await db.exec`UPDATE server_providers SET app_runner_connection_arn = ${params.appRunnerConnectionArn.trim()} WHERE id = ${params.providerId}`;
+    if (params.apiSecret !== undefined) await db.exec`UPDATE server_providers SET api_secret = ${params.apiSecret.trim()} WHERE id = ${params.providerId}`;
 
     return {
       id: row.id, userId: row.user_id, provider: row.provider,
-      label: params.label, region: row.region, createdAt: row.created_at.toISOString(),
+      label: params.label ?? row.label, region: row.region, appRunnerConnectionArn: (params.appRunnerConnectionArn !== undefined ? params.appRunnerConnectionArn : row.app_runner_connection_arn) || undefined, createdAt: row.created_at.toISOString(),
     };
+  }
+);
+
+// ─── SSH Keys ───
+
+export const listSshKeys = api(
+  { method: "GET", path: "/deploy/ssh-keys", auth: true },
+  async (): Promise<{ keys: Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }> }> => {
+    const authData = getAuthData()!;
+    const rows = db.query<{ id: string; label: string; public_key: string; fingerprint: string; created_at: Date }>`
+      SELECT id, label, public_key, fingerprint, created_at FROM ssh_keys WHERE user_id = ${authData.userID} ORDER BY created_at DESC`;
+    const keys: Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }> = [];
+    for await (const row of rows) {
+      keys.push({ id: row.id, label: row.label, publicKey: row.public_key, fingerprint: row.fingerprint, createdAt: row.created_at.toISOString() });
+    }
+    return { keys };
+  }
+);
+
+export const addSshKey = api(
+  { method: "POST", path: "/deploy/ssh-keys", auth: true },
+  async (params: { label: string; publicKey: string }): Promise<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }> => {
+    const authData = getAuthData()!;
+    const id = uuidv4();
+    const pubKey = params.publicKey.trim();
+    // Basic validation
+    if (!pubKey.startsWith("ssh-") && !pubKey.startsWith("ecdsa-")) {
+      throw APIError.invalidArgument("Invalid SSH public key format. Must start with ssh-rsa, ssh-ed25519, or ecdsa-sha2.");
+    }
+    // Simple fingerprint: take the base64 part and hash it
+    const parts = pubKey.split(/\s+/);
+    const fingerprint = parts.length >= 2 ? `SHA256:${parts[1].slice(0, 16)}...` : "";
+    await db.exec`INSERT INTO ssh_keys (id, user_id, label, public_key, fingerprint, created_at) VALUES (${id}, ${authData.userID}, ${params.label}, ${pubKey}, ${fingerprint}, NOW())`;
+    return { id, label: params.label, publicKey: pubKey, fingerprint, createdAt: new Date().toISOString() };
+  }
+);
+
+export const deleteSshKey = api(
+  { method: "DELETE", path: "/deploy/ssh-keys/:keyId", auth: true },
+  async (params: { keyId: string }): Promise<{ success: boolean }> => {
+    const authData = getAuthData()!;
+    await db.exec`DELETE FROM ssh_keys WHERE id = ${params.keyId} AND user_id = ${authData.userID}`;
+    return { success: true };
   }
 );
 
@@ -156,9 +205,9 @@ export const createDeployment = api(
     const script = params.tofuScript || "";
 
     await db.exec`
-      INSERT INTO deployments (id, user_id, provider_id, git_connection_id, repo, branch, status, logs, tofu_script, created_at, updated_at)
+      INSERT INTO deployments (id, user_id, provider_id, git_connection_id, repo, branch, status, logs, tofu_script, deploy_strategy, created_at, updated_at)
       VALUES (${id}, ${authData.userID}, ${params.providerId}, ${params.gitConnectionId},
-              ${params.repo}, ${params.branch}, 'pending', '', ${script}, NOW(), NOW())`;
+              ${params.repo}, ${params.branch}, 'pending', '', ${script}, ${params.deployStrategy || "managed"}, NOW(), NOW())`;
 
     // Publish deploy event
     await deployTopic.publish({
@@ -179,7 +228,7 @@ export const createDeployment = api(
       id, userId: authData.userID, providerId: params.providerId,
       gitConnectionId: params.gitConnectionId, repo: params.repo,
       branch: params.branch, status: "pending", logs: "", appUrl: "",
-      commitHash: "", dockerImage: "",
+      commitHash: "", dockerImage: "", deployStrategy: params.deployStrategy || "managed",
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
   }
@@ -193,11 +242,11 @@ export const listDeployments = api(
     const rows = params.providerId
       ? db.query<{
           id: string; user_id: string; provider_id: string; git_connection_id: string;
-          repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; created_at: Date; updated_at: Date;
+          repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
         }>`SELECT * FROM deployments WHERE user_id = ${authData.userID} AND provider_id = ${params.providerId} ORDER BY created_at DESC LIMIT 50`
       : db.query<{
           id: string; user_id: string; provider_id: string; git_connection_id: string;
-          repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; created_at: Date; updated_at: Date;
+          repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
         }>`SELECT * FROM deployments WHERE user_id = ${authData.userID} ORDER BY created_at DESC LIMIT 50`;
 
     const deployments: Deployment[] = [];
@@ -207,6 +256,7 @@ export const listDeployments = api(
         gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
         status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
         commitHash: row.commit_hash, dockerImage: row.docker_image,
+        deployStrategy: row.deploy_strategy || "managed",
         createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
       });
     }
@@ -219,7 +269,7 @@ export const getDeployment = api(
   async (params: { deploymentId: string }): Promise<Deployment> => {
     const row = await db.queryRow<{
       id: string; user_id: string; provider_id: string; git_connection_id: string;
-      repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; created_at: Date; updated_at: Date;
+      repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
     }>`SELECT * FROM deployments WHERE id = ${params.deploymentId}`;
 
     if (!row) throw APIError.notFound("Deployment not found");
@@ -229,6 +279,7 @@ export const getDeployment = api(
       gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
       status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
       commitHash: row.commit_hash, dockerImage: row.docker_image,
+      deployStrategy: row.deploy_strategy || "managed",
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     };
   }
@@ -244,8 +295,8 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const imageName = `${repoName}:${shortId}`;
 
     // Look up provider for API key + region
-    const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string }>`
-      SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
+    const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string; app_runner_connection_arn: string }>`
+      SELECT provider, region, api_key, api_secret, COALESCE(app_runner_connection_arn, '') as app_runner_connection_arn FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
     const region = providerRow?.region || "us-east-1";
 
@@ -284,10 +335,20 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       await db.exec`UPDATE deployments SET status = 'building', updated_at = NOW() WHERE id = ${deploymentId}`;
       await appendLog(deploymentId, `[${ts()}] ▶ Starting deployment pipeline...`);
       await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${region}`);
+      await appendLog(deploymentId, `[${ts()}] ℹ Strategy: ${event.deployStrategy || "managed (default)"}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
 
       if (!event.tofuScript) {
         throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
+      }
+
+      // AWS App Runner requires a GitHub connection ARN; fail early if missing
+      const isAppRunner = provider === "aws" && event.deployStrategy === "serverless";
+      const appRunnerArn = providerRow?.app_runner_connection_arn?.trim() || "";
+      if (isAppRunner && !appRunnerArn) {
+        throw new Error(
+          "AWS App Runner requires a GitHub connection. Go to Settings → Providers, edit your AWS provider, and add the App Runner connection ARN from AWS Console → App Runner → GitHub connections."
+        );
       }
 
       // ── Step 1: Clone repository ──
@@ -439,22 +500,51 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         }
       } catch {}
 
-      let df = `FROM node:20-slim AS builder\nWORKDIR /app\n`;
-      if (detectedPM === "pnpm") {
-        df += `COPY ${copyPrefix}package.json ${copyPrefix}pnpm-lock.yaml ./\nRUN corepack enable && corepack prepare pnpm@${pnpmVersion} --activate\nRUN pnpm install --no-frozen-lockfile\nCOPY ${copyPrefix}. .\nRUN pnpm run build\n`;
-      } else if (detectedPM === "yarn") {
-        df += `COPY ${copyPrefix}package.json ${copyPrefix}yarn.lock ./\nRUN corepack enable\nRUN yarn install --immutable\nCOPY ${copyPrefix}. .\nRUN yarn build\n`;
-      } else {
-        df += `COPY ${copyPrefix}package.json ${copyPrefix}package-lock.json* ./\nRUN npm ci\nCOPY ${copyPrefix}. .\nRUN npm run build\n`;
+      const hasComposer = existsSync(join(buildDir, "composer.json"));
+      let phpVersion = "8.4";
+      if (hasComposer) {
+        try {
+          const composerJson = JSON.parse(await readFs(join(buildDir, "composer.json"), "utf-8"));
+          const phpReq = composerJson?.require?.["php"];
+          if (typeof phpReq === "string") {
+            const matches = [...phpReq.matchAll(/8\.(\d+)/g)];
+            if (matches.length) {
+              const minMinor = Math.min(...matches.map((m) => parseInt(m[1], 10)));
+              const minor = Math.min(4, Math.max(2, minMinor));
+              phpVersion = `8.${minor}`;
+            }
+          }
+        } catch {}
+        await appendLog(deploymentId, `[${ts()}] ℹ Detected composer.json — will run composer install (PHP ${phpVersion}) before JS build`);
       }
-      df += `\nFROM node:20-slim\nWORKDIR /app\n`;
-      if (isNextJs && hasStandalone) {
-        df += `COPY --from=builder /app/.next/standalone ./\nCOPY --from=builder /app/.next/static ./.next/static\nCOPY --from=builder /app/public ./public\nENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ["node", "server.js"]\n`;
-      } else if (isNextJs) {
-        df += `COPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/public ./public\nCOPY --from=builder /app/package.json ./\n`;
-        df += `ENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ${JSON.stringify([detectedPM || "npm", "start"])}\n`;
+      const composerStage = hasComposer
+        ? `FROM php:${phpVersion}-cli AS composer\nWORKDIR /app\nCOPY ${copyPrefix}composer.json ${copyPrefix}composer.lock* ./\nRUN apt-get update && apt-get install -y --no-install-recommends curl git && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && rm -rf /var/lib/apt/lists/*\nRUN composer install --no-interaction --optimize-autoloader --ignore-platform-reqs --prefer-dist --no-scripts\n`
+        : "";
+      const composerCopy = hasComposer ? `COPY --from=composer /app/vendor ./vendor\n` : "";
+
+      let df = hasComposer ? composerStage : "";
+      df += `FROM node:20-slim AS builder\nWORKDIR /app\n`;
+      if (detectedPM === "pnpm") {
+        df += `COPY ${copyPrefix}package.json ${copyPrefix}pnpm-lock.yaml ./\nRUN corepack enable && corepack prepare pnpm@${pnpmVersion} --activate\nRUN pnpm install --no-frozen-lockfile\nCOPY ${copyPrefix}. .\n${composerCopy}RUN pnpm run build\n`;
+      } else if (detectedPM === "yarn") {
+        df += `COPY ${copyPrefix}package.json ${copyPrefix}yarn.lock ./\nRUN corepack enable\nRUN yarn install --immutable\nCOPY ${copyPrefix}. .\n${composerCopy}RUN yarn build\n`;
       } else {
-        df += `COPY --from=builder /app .\nENV PORT=${runtime.port}\nEXPOSE ${runtime.port}\nCMD ${JSON.stringify(runtime.startCmd.split(" "))}\n`;
+        df += `COPY ${copyPrefix}package.json ${copyPrefix}package-lock.json* ./\nRUN npm ci\nCOPY ${copyPrefix}. .\n${composerCopy}RUN npm run build\n`;
+      }
+      if (runtime.name === "php") {
+        df += `\nFROM php:${phpVersion}-cli\nWORKDIR /app\n`;
+        df += `COPY --from=builder /app .\nENV PORT=${runtime.port}\nEXPOSE ${runtime.port}\n`;
+        df += `CMD ${JSON.stringify(runtime.startCmd.split(" "))}\n`;
+      } else {
+        df += `\nFROM node:20-slim\nWORKDIR /app\n`;
+        if (isNextJs && hasStandalone) {
+          df += `COPY --from=builder /app/.next/standalone ./\nCOPY --from=builder /app/.next/static ./.next/static\nCOPY --from=builder /app/public ./public\nENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ["node", "server.js"]\n`;
+        } else if (isNextJs) {
+          df += `COPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/public ./public\nCOPY --from=builder /app/package.json ./\n`;
+          df += `ENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ${JSON.stringify([detectedPM || "npm", "start"])}\n`;
+        } else {
+          df += `COPY --from=builder /app .\nENV PORT=${runtime.port}\nEXPOSE ${runtime.port}\nCMD ${JSON.stringify(runtime.startCmd.split(" "))}\n`;
+        }
       }
 
       // Verify package.json exists, find it if not
@@ -481,13 +571,22 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       }
 
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
-      await writeFile(join(repoDir, ".dockerignore"), "node_modules\n.next\n.git\n", "utf-8");
+      const dockerignore = [
+        "node_modules", ".next", ".git", ".gitignore",
+        "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store",
+        "vendor", ".env", ".env.*", "*.log",
+        "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv",
+        "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor",
+        "Dockerfile*", ".dockerignore", "pulumi", ".pulumi-state",
+      ].join("\n");
+      await writeFile(join(repoDir, ".dockerignore"), dockerignore, "utf-8");
       await appendLog(deploymentId, `[${ts()}] ℹ Generated Dockerfile in repo root (pm: ${detectedPM || "npm"}, subDir: ${subDir || "/"})`);
       }
 
-      // ── Docker build (non-AWS-ECS only — AWS ECS uses @pulumi/docker to build+push) ──
-      const isAwsEcs = provider === "aws" && event.deployStrategy !== "vps";
-      if (!skipBuild && !isAwsEcs) {
+      // ── Docker build (skip for AWS managed/serverless — both ECS and App Runner use Pulumi docker → ECR) ──
+      const isAwsEcs = provider === "aws" && event.deployStrategy !== "vps" && event.deployStrategy !== "serverless";
+      const skipAwsBuild = provider === "aws" && event.deployStrategy !== "vps";
+      if (!skipBuild && !skipAwsBuild) {
         const buildResult = await runCmd("docker", [
           "build", "-t", imageName, "."
         ], { cwd: repoDir });
@@ -497,8 +596,10 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         await appendLog(deploymentId, `[${ts()}] ✓ Docker image built: ${imageName}`);
       } else if (skipBuild) {
         await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image, skipping build`);
-      } else {
+      } else if (isAwsEcs) {
         await appendLog(deploymentId, `[${ts()}] ℹ Skipping local build — Pulumi will build+push to ECR`);
+      } else {
+        await appendLog(deploymentId, `[${ts()}] ℹ Skipping local build — Pulumi will build+push to ECR for App Runner`);
       }
 
       // Save docker image name to DB
@@ -534,9 +635,18 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       const { mkdir } = await import("node:fs/promises");
       await mkdir(pulumiDir, { recursive: true });
 
-      // Write Pulumi program files
+      // Write Pulumi program files (use unique app names for AWS ECS to avoid resource conflicts)
       const { generatePulumiProject, generatePackageJson, generateTsConfig } = await import("./pulumi-templates/index");
-      await writeFile(join(pulumiDir, "index.ts"), event.tofuScript, "utf-8");
+      let pulumiScript = event.tofuScript;
+      // Normalize AWS App Runner runtimes (NODEJS_20/PYTHON_312 not supported — use NODEJS_22/PYTHON_311)
+      pulumiScript = pulumiScript.replace(/NODEJS_20/g, "NODEJS_22").replace(/PYTHON_312/g, "PYTHON_311");
+      if (provider === "aws" && event.deployStrategy !== "vps") {
+        const uniqueAppName = `${repoName}-${shortId}`;
+        const quotedRepo = repoName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        pulumiScript = pulumiScript.replace(new RegExp(`"${quotedRepo}(-[a-zA-Z0-9-]*)?"`, "g"), (_, suffix) => `"${uniqueAppName}${suffix || ""}"`);
+        await appendLog(deploymentId, `[${ts()}] ℹ Using unique resource prefix: ${uniqueAppName}`);
+      }
+      await writeFile(join(pulumiDir, "index.ts"), pulumiScript, "utf-8");
       await writeFile(join(pulumiDir, "Pulumi.yaml"), generatePulumiProject(repoName, provider), "utf-8");
       await writeFile(join(pulumiDir, "package.json"), generatePackageJson(repoName, provider), "utf-8");
       await writeFile(join(pulumiDir, "tsconfig.json"), generateTsConfig(), "utf-8");
@@ -574,18 +684,31 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       const stackName = `${repoName}-${shortId}`;
       await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
-      // Set config values
-      if (providerRow?.api_secret && (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "aws" && event.deployStrategy === "vps"))) {
-        await runCmd("pulumi", ["config", "set", "sshPublicKey", providerRow.api_secret, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      // Set config values — SSH public key for VPS providers (from ssh_keys table)
+      if (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "aws" && event.deployStrategy === "vps")) {
+        const sshKeyRow = await db.queryRow<{ public_key: string }>`
+          SELECT public_key FROM ssh_keys WHERE user_id = ${event.userId} ORDER BY created_at DESC LIMIT 1`;
+        if (!sshKeyRow) {
+          throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
+        }
+        await runCmd("pulumi", ["config", "set", "sshPublicKey", sshKeyRow.public_key.trim(), "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+        if (provider === "aws" && event.deployStrategy === "vps") {
+          await runCmd("pulumi", ["config", "set", "keyPairSuffix", shortId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+        }
       }
       if (provider === "linode") {
         await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
       }
       await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
-      // For AWS ECS deploys, tell @pulumi/docker where the Dockerfile is (repo root)
-      if (isAwsEcs) {
+      // For AWS ECS/App Runner deploys, tell @pulumi/docker where the Dockerfile is (repo root)
+      if (provider === "aws" && event.deployStrategy !== "vps") {
         await runCmd("pulumi", ["config", "set", "buildContext", repoDir, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      }
+
+      // AWS App Runner requires the GitHub connection ARN for source authentication
+      if (isAppRunner && appRunnerArn) {
+        await runCmd("pulumi", ["config", "set", "appRunnerConnectionArn", appRunnerArn, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
       }
 
       // Restore state from previous deployment if available
@@ -608,6 +731,10 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
               if (importResult.code === 0) {
                 hasValidState = true;
                 await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
+                // Remove stale config keys only when not using App Runner (ECS doesn't need it)
+                if (!isAppRunner) {
+                  await runCmd("pulumi", ["config", "rm", "appRunnerConnectionArn", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+                }
               }
             }
           } catch { /* non-critical */ }

@@ -7,9 +7,9 @@ import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
 import RoleFormModal from "../components/RoleFormModal";
 
-type Tab = "profile" | "security" | "roles" | "providers" | "source-control" | "channels" | "integrations";
+type Tab = "profile" | "security" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations";
 
-const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
+const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
 const btnDanger = "text-sm text-danger-500 hover:text-danger-700 font-medium transition-colors";
 
@@ -19,9 +19,9 @@ export default function Settings() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-text mb-6">Settings</h1>
+      <h1 className="text-2xl font-display font-semibold text-text mb-8 tracking-tight">Settings</h1>
       <div className="flex gap-2 mb-6" role="tablist">
-        {([["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"]] as [Tab, string][]).map(([key, label]) => (
+        {([["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["ssh-keys", "SSH Keys"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"]] as [Tab, string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={tabCls(tab === key)}>{label}</button>
         ))}
       </div>
@@ -29,6 +29,7 @@ export default function Settings() {
       {tab === "security" && <SecurityTab />}
       {tab === "roles" && <RolesTab />}
       {tab === "providers" && <ProvidersTab />}
+      {tab === "ssh-keys" && <SshKeysTab />}
       {tab === "source-control" && <SourceControlTab />}
       {tab === "channels" && <NotificationChannelsTab />}
       {tab === "integrations" && <IntegrationsTab />}
@@ -269,17 +270,20 @@ function ProvidersTab() {
 
   useEffect(() => { fetch_(); }, []);
 
-  const apiKeyOnlyProviders = ["digitalocean", "hetzner", "vultr", "linode", "hostinger"];
+  const apiKeyOnlyProviders = ["digitalocean", "hostinger"];
   const isUpCloud = form.provider === "upcloud";
   const isKatapult = form.provider === "katapult";
-  const needsSecret = !apiKeyOnlyProviders.includes(form.provider) && !isUpCloud && !isKatapult;
+  const needsSecret = !apiKeyOnlyProviders.includes(form.provider) && !isUpCloud && !isKatapult && !["hetzner", "vultr", "linode"].includes(form.provider);
 
   const credLabel1 = isUpCloud ? "Username" : "API Key";
   const credLabel2 = isUpCloud ? "Password" : isKatapult ? "Organization ID" : "API Secret";
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    await deployApi.addProvider({ provider: form.provider, label: form.label, apiKey: form.apiKey, apiSecret: (needsSecret || isUpCloud || isKatapult) ? form.apiSecret : "" });
+    await deployApi.addProvider({
+      provider: form.provider, label: form.label, apiKey: form.apiKey,
+      apiSecret: (needsSecret || isUpCloud || isKatapult) ? form.apiSecret : "",
+    });
     setShowForm(false); setForm({ provider: "digitalocean", label: "", apiKey: "", apiSecret: "" }); fetch_();
   };
 
@@ -379,6 +383,7 @@ function ProvidersTab() {
             <label htmlFor="provider-key" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel1}</label>
             <input id="provider-key" type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} className={inputCls} required />
           </div>
+
           {(needsSecret || isUpCloud || isKatapult) && <div>
             <label htmlFor="provider-secret" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel2}</label>
             <div className="relative">
@@ -412,6 +417,7 @@ function ProvidersTab() {
             <label htmlFor="edit-provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
             <input id="edit-provider-label" type="text" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} className={inputCls} required />
           </div>
+
           <div className="flex justify-end">
             <button type="submit" className={btnPrimary}>Save Changes</button>
           </div>
@@ -447,6 +453,106 @@ function ProvidersTab() {
         </div>
       )}
       <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) deployApi.deleteProvider(deleteId).then(fetch_); }} message="Are you sure you want to remove this provider?" />
+    </div>
+  );
+}
+
+function SshKeysTab() {
+  const [keys, setKeys] = useState<Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }>>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ label: "", publicKey: "" });
+  const [loading, setLoading] = useState(true);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const fetchKeys = async () => {
+    setLoading(true);
+    try { const res = await deployApi.listSshKeys(); setKeys(res.keys); }
+    catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchKeys(); }, []);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await deployApi.addSshKey({ label: form.label, publicKey: form.publicKey });
+      setShowForm(false);
+      setForm({ label: "", publicKey: "" });
+      fetchKeys();
+    } catch (err: any) {
+      setError(err.message || "Failed to add SSH key");
+    }
+  };
+
+  const truncateKey = (key: string) => {
+    const parts = key.split(/\s+/);
+    if (parts.length >= 2) {
+      const type = parts[0];
+      const b64 = parts[1];
+      const comment = parts[2] || "";
+      return `${type} ${b64.slice(0, 20)}...${b64.slice(-8)}${comment ? ` ${comment}` : ""}`;
+    }
+    return key.length > 60 ? key.slice(0, 60) + "..." : key;
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-text">SSH Keys</h2>
+          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (Hetzner, Vultr, Linode, AWS EC2)</p>
+        </div>
+        <button onClick={() => setShowForm(true)} className={btnPrimary}>Add SSH Key</button>
+      </div>
+
+      <Modal open={showForm} onClose={() => { setShowForm(false); setError(""); }} title="Add SSH Key">
+        <form onSubmit={handleAdd} className="space-y-4">
+          <div>
+            <label htmlFor="ssh-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
+            <input id="ssh-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} placeholder="e.g. MacBook Pro" required />
+          </div>
+          <div>
+            <label htmlFor="ssh-pubkey" className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
+            <textarea id="ssh-pubkey" value={form.publicKey} onChange={(e) => setForm({ ...form, publicKey: e.target.value })}
+              className={`${inputCls} h-28 py-2.5 font-mono text-xs resize-none`}
+              placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host" required />
+            <p className="text-xs text-text-muted mt-1">Paste the contents of your public key file (e.g. ~/.ssh/id_ed25519.pub)</p>
+          </div>
+          {error && <p className="text-sm text-danger-500">{error}</p>}
+          <div className="flex justify-end">
+            <button type="submit" className={btnPrimary}>Add Key</button>
+          </div>
+        </form>
+      </Modal>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : (
+        <div className="space-y-3">
+          {keys.map((k) => (
+            <div key={k.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-shadow">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center shrink-0 text-primary-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-base font-bold text-text">{k.label}</p>
+                  <p className="text-xs text-text-muted font-mono mt-0.5">{truncateKey(k.publicKey)}</p>
+                  <p className="text-xs text-text-muted mt-0.5">Added {new Date(k.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <button onClick={() => setDeleteId(k.id)} className={btnDanger}>Remove</button>
+            </div>
+          ))}
+          {keys.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No SSH keys added yet</p>}
+        </div>
+      )}
+      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) deployApi.deleteSshKey(deleteId).then(fetchKeys); setDeleteId(null); }} message="Are you sure you want to remove this SSH key?" />
     </div>
   );
 }

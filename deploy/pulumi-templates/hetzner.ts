@@ -40,12 +40,12 @@ const server = new hcloud.Server("${p.appName}", {
   serverType: "cx22",
   image: "ubuntu-24.04",
   location: region,
-  sshKeys: [sshKey.id],
-  firewallIds: [firewall.id],
+  sshKeys: [sshKey.id.apply((id) => String(id))],
+  firewallIds: [firewall.id.apply((id) => String(id))],
   userData: \`${userData.replace(/`/g, "\\`").replace(/\$/g, "\\$")}\`,
 });
 
 export const serverIp = server.ipv4Address;
-export const appUrl = pulumi.interpolate\`http://\${server.ipv4Address}\`;
+export const appUrl = server.ipv4Address.apply((ip) => \`http://\${ip}\`);
 `;
 }

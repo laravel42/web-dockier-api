@@ -89,6 +89,6 @@ new linode.FirewallDevice("${p.appName}-fw-device", {
 });
 ${dbBlock}${storageBlock}
 export const serverIp = instance.ipAddress;
-export const appUrl = pulumi.interpolate\`http://\${instance.ipAddress}\`;
+export const appUrl = instance.ipAddress.apply((ip) => \`http://\${ip}\`);
 `;
 }

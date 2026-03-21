@@ -1,12 +1,12 @@
 import type { DeployParams } from "./types";
 import { buildDockerUserData } from "./user-data";
 
-/** Generate a Pulumi TypeScript program for AWS ECS Fargate (Docker) or App Runner */
+/** Generate a Pulumi TypeScript program for AWS */
 export function buildAws(p: DeployParams): string {
-  // If user explicitly chose VPS strategy, use EC2 instead of ECS
   if (p.deployStrategy === "vps") return buildAwsEc2(p);
-  if (p.useDocker) return buildAwsEcsFargate(p);
-  return buildAwsAppRunner(p);
+  if (p.deployStrategy === "serverless") return buildAwsAppRunner(p);
+  // "managed" or default → ECS Fargate
+  return buildAwsEcsFargate(p);
 }
 
 function buildAwsEcsFargate(p: DeployParams): string {
@@ -49,7 +49,7 @@ const image = new docker.Image("${p.appName}-image", {
   build: {
     context: buildContext,
     dockerfile: buildContext + "/Dockerfile",
-    builderVersion: docker.BuilderVersion.BuilderV1,
+    builderVersion: docker.BuilderVersion.BuilderBuildKit,
   },
   registry: {
     server: ecrRepo.repositoryUrl.apply(url => url.split("/")[0]),
@@ -164,40 +164,86 @@ export const appUrl = pulumi.interpolate\`ecs-fargate://\${cluster.name}.\${regi
 }
 
 function buildAwsAppRunner(p: DeployParams): string {
-  const runtimeMap: Record<string, string> = {
-    node: "NODEJS_20", python: "PYTHON_312", php: "PHP_81",
-  };
-  const rt = runtimeMap[p.runtime.name] || "NODEJS_20";
-
   return `import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import * as docker from "@pulumi/docker";
 
 // ─────────────────────────────────────────────────
-// AWS App Runner
+// AWS App Runner (Docker via ECR)
 // App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
 // Repo: ${p.repo}@${p.branch}
 // ─────────────────────────────────────────────────
 
+const config = new pulumi.Config();
+const region = config.get("region") || "${p.region}";
+const buildContext = config.get("buildContext") || ".";
+
+// ── ECR Repository ──
+const ecrRepo = new aws.ecr.Repository("${p.appName}", {
+  name: "${p.appName}",
+  imageTagMutability: "MUTABLE",
+  forceDelete: true,
+  imageScanningConfiguration: { scanOnPush: false },
+});
+
+// ── ECR Auth ──
+const authToken = aws.ecr.getAuthorizationTokenOutput({
+  registryId: ecrRepo.registryId,
+});
+
+// ── Build & Push Docker Image to ECR ──
+const image = new docker.Image("${p.appName}-image", {
+  imageName: pulumi.interpolate\`\${ecrRepo.repositoryUrl}:latest\`,
+  build: {
+    context: buildContext,
+    dockerfile: buildContext + "/Dockerfile",
+    builderVersion: docker.BuilderVersion.BuilderV1,
+  },
+  registry: {
+    server: ecrRepo.repositoryUrl.apply(url => url.split("/")[0]),
+    username: authToken.userName,
+    password: authToken.password,
+  },
+});
+
+// ── IAM Role for App Runner ECR access ──
+const accessRole = new aws.iam.Role("${p.appName}-apprunner-ecr", {
+  name: "${p.appName}-apprunner-ecr",
+  assumeRolePolicy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{
+      Action: "sts:AssumeRole",
+      Effect: "Allow",
+      Principal: { Service: "build.apprunner.amazonaws.com" },
+    }],
+  }),
+});
+
+new aws.iam.RolePolicyAttachment("${p.appName}-apprunner-ecr-policy", {
+  role: accessRole.name,
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
+});
+
+// ── App Runner Service (from ECR image) ──
 const appRunner = new aws.apprunner.Service("${p.appName}", {
   serviceName: "${p.appName}",
   sourceConfiguration: {
-    autoDeploymentsEnabled: true,
-    codeRepository: {
-      repositoryUrl: "https://github.com/${p.repo}",
-      sourceCodeVersion: { type: "BRANCH", value: "${p.branch}" },
-      codeConfiguration: {
-        configurationSource: "API",
-        codeConfigurationValues: {
-          runtime: "${rt}",
-          buildCommand: ${JSON.stringify(p.runtime.buildCmd)},
-          startCommand: ${JSON.stringify(p.runtime.startCmd)},
-          port: "${p.runtime.port}",
-          runtimeEnvironmentVariables: { APP_ENV: "production" },
+    authenticationConfiguration: { accessRoleArn: accessRole.arn },
+    autoDeploymentsEnabled: false,
+    imageRepository: {
+      imageIdentifier: image.repoDigest,
+      imageRepositoryType: "ECR",
+      imageConfiguration: {
+        port: "${p.runtime.port}",
+        runtimeEnvironmentVariables: {
+          PORT: "${p.runtime.port}",
+          NODE_ENV: "production",
+          HOSTNAME: "0.0.0.0",
         },
       },
     },
   },
-  instanceConfiguration: { cpu: "0.25 vCPU", memory: "0.5 GB" },
+  instanceConfiguration: { cpu: "1024", memory: "2048" },
   healthCheckConfiguration: {
     protocol: "HTTP",
     path: "/",
@@ -209,7 +255,9 @@ const appRunner = new aws.apprunner.Service("${p.appName}", {
   tags: { Name: "${p.appName}", Environment: "production", ManagedBy: "pulumi" },
 });
 
-export const appUrl = pulumi.interpolate\`https://\${appRunner.serviceUrl}\`;
+export const ecrRepositoryUrl = ecrRepo.repositoryUrl;
+export const imageDigest = image.repoDigest;
+export const appUrl = appRunner.serviceUrl.apply((url) => \`https://\${url}\`);
 export const serviceArn = appRunner.arn;
 `;
 }
@@ -228,17 +276,27 @@ import * as aws from "@pulumi/aws";
 
 const config = new pulumi.Config();
 const region = config.get("region") || "${p.region}";
+const suffix = config.get("keyPairSuffix") || "";
+const name = (base: string) => suffix ? \`${p.appName}-\${suffix}-\${base}\` : \`${p.appName}-\${base}\`;
+
+// ── Default VPC & Subnet (avoids "No default subnet for AZ" when us-east-1a has none) ──
+const defaultVpc = aws.ec2.getVpcOutput({ default: true });
+const defaultSubnets = aws.ec2.getSubnetsOutput({
+  filters: [{ name: "vpc-id", values: [defaultVpc.id] }],
+});
+const subnetId = defaultSubnets.ids.apply(ids => ids[0]);
 
 // ── Key Pair ──
 const keyPair = new aws.ec2.KeyPair("${p.appName}-key", {
-  keyName: "${p.appName}-key",
+  keyName: name("key"),
   publicKey: config.require("sshPublicKey"),
 });
 
 // ── Security Group ──
 const sg = new aws.ec2.SecurityGroup("${p.appName}-sg", {
-  name: "${p.appName}-sg",
+  name: name("sg"),
   description: "Allow HTTP/HTTPS/SSH for ${p.appName}",
+  vpcId: defaultVpc.id,
   ingress: [
     { fromPort: 22, toPort: 22, protocol: "tcp", cidrBlocks: ["0.0.0.0/0"] },
     { fromPort: 80, toPort: 80, protocol: "tcp", cidrBlocks: ["0.0.0.0/0"] },
@@ -257,19 +315,20 @@ const ami = aws.ec2.getAmiOutput({
   ],
 });
 
-// ── EC2 Instance ──
+// ── EC2 Instance (use subnet from default VPC; avoids "No default subnet for AZ" errors) ──
 const server = new aws.ec2.Instance("${p.appName}", {
   ami: ami.id,
   instanceType: "t4g.small",
+  subnetId,
   keyName: keyPair.keyName,
   vpcSecurityGroupIds: [sg.id],
   associatePublicIpAddress: true,
   rootBlockDevice: { volumeSize: 30, volumeType: "gp3" },
   userData: \`${userData.replace(/`/g, "\\`").replace(/\$/g, "\\$")}\`,
-  tags: { Name: "${p.appName}", ManagedBy: "pulumi" },
+  tags: { Name: name("instance"), ManagedBy: "pulumi" },
 });
 
 export const serverIp = server.publicIp;
-export const appUrl = pulumi.interpolate\`http://\${server.publicIp}\`;
+export const appUrl = server.publicIp.apply((ip) => \`http://\${ip}\`);
 `;
 }

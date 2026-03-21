@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import Editor from "react-simple-code-editor";
+import { highlight, languages } from "prismjs";
+import "prismjs/components/prism-properties";
+import "prismjs/themes/prism.css";
 import { deployApi } from "../services/api";
 import Modal from "./Modal";
 
@@ -581,37 +585,98 @@ interface Plan {
   breakdown: Array<{ item: string; cost: string }>;
 }
 
-function getPlans(provider: string, environment: "staging" | "production", servicesModes: Record<string, "vps" | "managed">): Plan[] {
+function getPlans(
+  provider: string,
+  environment: "staging" | "production",
+  servicesModes: Record<string, "vps" | "managed">,
+  deployStrategy: "vps" | "managed" | "serverless"
+): Plan[] {
   const managedSvcs = Object.entries(servicesModes).filter(([, m]) => m === "managed").map(([t]) => t);
   const isProd = environment === "production";
 
+  const awsEc2Plans: Plan[] = [
+    {
+      tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+      instance: isProd ? "t3.small" : "t3.micro", cpu: isProd ? "2 vCPU" : "2 vCPU (burstable)", ram: isProd ? "2 GB" : "1 GB",
+      storage: "20 GB gp3", network: "Up to 5 Gbps",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$20/mo" : "~$10/mo",
+      breakdown: [{ item: "EC2 Instance", cost: isProd ? "$15" : "$8" }, { item: "EBS", cost: "$2" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$5" }))],
+    },
+    {
+      tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
+      instance: isProd ? "t3.medium" : "t3.small", cpu: isProd ? "2 vCPU" : "2 vCPU", ram: isProd ? "4 GB" : "2 GB",
+      storage: "30 GB gp3", network: "Up to 5 Gbps",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$40/mo" : "~$20/mo",
+      breakdown: [{ item: "EC2 Instance", cost: isProd ? "$30" : "$15" }, { item: "EBS", cost: "$3" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$10" }))],
+    },
+    {
+      tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
+      instance: isProd ? "m6g.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
+      storage: "50 GB gp3", network: "Up to 10 Gbps",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$80/mo" : "~$40/mo",
+      breakdown: [{ item: "EC2 Instance", cost: isProd ? "$60" : "$30" }, { item: "EBS", cost: "$5" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$15" }))],
+    },
+  ];
+
+  const awsEcsPlans: Plan[] = [
+    {
+      tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+      instance: isProd ? "t3.small" : "t3.micro", cpu: isProd ? "2 vCPU" : "2 vCPU (burstable)", ram: isProd ? "2 GB" : "1 GB",
+      storage: "20 GB gp3", network: "Up to 5 Gbps",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$25/mo" : "~$10/mo",
+      breakdown: [{ item: "ECS Fargate", cost: isProd ? "$18" : "$5" }, { item: "ECR", cost: "$1" }, { item: "CloudWatch", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$5" }))],
+    },
+    {
+      tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
+      instance: isProd ? "t3.medium" : "t3.small", cpu: isProd ? "2 vCPU" : "2 vCPU", ram: isProd ? "4 GB" : "2 GB",
+      storage: "30 GB gp3", network: "Up to 5 Gbps",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$50/mo" : "~$25/mo",
+      breakdown: [{ item: "ECS Fargate", cost: isProd ? "$35" : "$18" }, { item: "ECR", cost: "$1" }, { item: "CloudWatch", cost: "$2" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$10" }))],
+    },
+    {
+      tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
+      instance: isProd ? "m6g.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
+      storage: "50 GB gp3", network: "Up to 10 Gbps",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$100/mo" : "~$50/mo",
+      breakdown: [{ item: "ECS Fargate", cost: isProd ? "$70" : "$35" }, { item: "ECR", cost: "$1" }, { item: "CloudWatch", cost: "$3" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$15" }))],
+    },
+  ];
+
+  const awsAppRunnerPlans: Plan[] = [
+    {
+      tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+      instance: "0.25 vCPU / 0.5 GB", cpu: "0.25 vCPU", ram: "0.5 GB",
+      storage: "Included", network: "Included",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$25/mo" : "~$10/mo",
+      breakdown: [{ item: "App Runner", cost: isProd ? "$20" : "$8" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$5" }))],
+    },
+    {
+      tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
+      instance: "0.5 vCPU / 1 GB", cpu: "0.5 vCPU", ram: "1 GB",
+      storage: "Included", network: "Included",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$50/mo" : "~$25/mo",
+      breakdown: [{ item: "App Runner", cost: isProd ? "$45" : "$22" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$10" }))],
+    },
+    {
+      tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
+      instance: "1 vCPU / 2 GB", cpu: "1 vCPU", ram: "2 GB",
+      storage: "Included", network: "Included",
+      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
+      monthlyPrice: isProd ? "~$100/mo" : "~$50/mo",
+      breakdown: [{ item: "App Runner", cost: isProd ? "$90" : "$45" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$15" }))],
+    },
+  ];
+
   const plans: Record<string, Plan[]> = {
-    aws: [
-      {
-        tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
-        instance: isProd ? "t3.small" : "t3.micro", cpu: isProd ? "2 vCPU" : "2 vCPU (burstable)", ram: isProd ? "2 GB" : "1 GB",
-        storage: "20 GB gp3", network: "Up to 5 Gbps",
-        managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
-        monthlyPrice: isProd ? "~$25/mo" : "~$10/mo",
-        breakdown: [{ item: "ECS Fargate", cost: isProd ? "$18" : "$5" }, { item: "ECR", cost: "$1" }, { item: "CloudWatch", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$5" }))],
-      },
-      {
-        tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
-        instance: isProd ? "t3.medium" : "t3.small", cpu: isProd ? "2 vCPU" : "2 vCPU", ram: isProd ? "4 GB" : "2 GB",
-        storage: "30 GB gp3", network: "Up to 5 Gbps",
-        managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
-        monthlyPrice: isProd ? "~$50/mo" : "~$25/mo",
-        breakdown: [{ item: "ECS Fargate", cost: isProd ? "$35" : "$18" }, { item: "ECR", cost: "$1" }, { item: "CloudWatch", cost: "$2" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$10" }))],
-      },
-      {
-        tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
-        instance: isProd ? "m6g.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
-        storage: "50 GB gp3", network: "Up to 10 Gbps",
-        managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
-        monthlyPrice: isProd ? "~$100/mo" : "~$50/mo",
-        breakdown: [{ item: "ECS Fargate", cost: isProd ? "$70" : "$35" }, { item: "ECR", cost: "$1" }, { item: "CloudWatch", cost: "$3" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$15" }))],
-      },
-    ],
+    aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : awsEcsPlans,
     digitalocean: [
       {
         tier: "value", label: "Basic Droplet", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
@@ -676,7 +741,7 @@ function StepEnvironment({ state, onChange, onRegionChange }: {
   onChange: (env: "staging" | "production", plan: number) => void;
   onRegionChange: (region: string) => void;
 }) {
-  const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes);
+  const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
   const regions = PROVIDER_REGIONS[state.selectedProvider] || [];
 
   return (
@@ -789,6 +854,30 @@ function StepEnvironment({ state, onChange, onRegionChange }: {
 
 // ─── Step 5: Pulumi Program Review ───
 
+function parseEnvContent(text: string): Array<{ name: string; value: string }> {
+  const rows: Array<{ name: string; value: string }> = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    const name = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    }
+    if (name) rows.push({ name, value });
+  }
+  return rows;
+}
+
+function formatEnvContent(rows: Array<{ name: string; value: string }>): string {
+  return rows.map(({ name, value }) => {
+    const needsQuotes = /[\s#"'$]/.test(value) || value.includes("=");
+    return needsQuotes ? `${name}="${value.replace(/"/g, '\\"').replace(/\n/g, "\\n")}"` : `${name}=${value}`;
+  }).join("\n");
+}
+
 function StepCompose({ state, loading, error, onToggleDocker, onEnvChange }: {
   state: WizardState;
   loading: boolean;
@@ -796,10 +885,28 @@ function StepCompose({ state, loading, error, onToggleDocker, onEnvChange }: {
   onToggleDocker: () => void;
   onEnvChange: (envVars: Array<{ name: string; value: string }>) => void;
 }) {
-  const addRow = () => onEnvChange([...state.envVars, { name: "", value: "" }]);
-  const removeRow = (idx: number) => onEnvChange(state.envVars.filter((_, i) => i !== idx));
-  const updateRow = (idx: number, field: "name" | "value", val: string) =>
-    onEnvChange(state.envVars.map((r, i) => i === idx ? { ...r, [field]: val } : r));
+  const [rawEnv, setRawEnv] = useState(() => formatEnvContent(state.envVars));
+  const isInternalEditRef = useRef(false);
+
+  useEffect(() => {
+    if (isInternalEditRef.current) {
+      isInternalEditRef.current = false;
+      return;
+    }
+    const formatted = formatEnvContent(state.envVars);
+    setRawEnv((prev) => {
+      const parsed = parseEnvContent(prev);
+      const same = state.envVars.length === parsed.length &&
+        state.envVars.every((r, i) => r.name === parsed[i]?.name && r.value === parsed[i]?.value);
+      return same ? prev : formatted;
+    });
+  }, [state.envVars]);
+
+  const handleEnvEdit = (text: string) => {
+    isInternalEditRef.current = true;
+    setRawEnv(text);
+    onEnvChange(parseEnvContent(text));
+  };
 
   return (
     <div className="space-y-4">
@@ -851,58 +958,27 @@ function StepCompose({ state, loading, error, onToggleDocker, onEnvChange }: {
       {/* Environment Variables */}
       {!loading && (
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Environment Variables</p>
-            <button type="button" onClick={addRow} className="text-xs text-primary-500 hover:text-primary-700 transition-colors flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Add variable
-            </button>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Environment Variables</p>
+          <div className="rounded-lg border border-border overflow-hidden focus-within:ring-1 focus-within:ring-primary-500/40 focus-within:border-primary-500/40 bg-card">
+            <Editor
+              value={rawEnv}
+              onValueChange={handleEnvEdit}
+              highlight={(code) => highlight(code, languages.properties, "properties")}
+              padding={12}
+              placeholder="# Paste your .env file content
+KEY=value
+ANOTHER=value
+# Comments are ignored"
+              textareaClassName="!outline-none"
+              preClassName="!m-0 !bg-transparent"
+              style={{
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: 14,
+                minHeight: 140,
+              }}
+            />
           </div>
-          {state.envVars.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-6 text-center">
-              <p className="text-sm text-text-muted mb-2">No environment variables configured.</p>
-              <button type="button" onClick={addRow} className="text-xs text-primary-500 hover:text-primary-700 transition-colors">
-                + Add your first variable
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {state.envVars.map((row, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={row.name}
-                    onChange={(e) => updateRow(i, "name", e.target.value)}
-                    placeholder="NAME"
-                    className="flex-1 h-8 px-2.5 rounded-md border border-border bg-card text-text text-xs font-mono placeholder:text-text-muted outline-none focus:ring-1 focus:ring-primary-500/40"
-                    spellCheck={false}
-                  />
-                  <span className="text-text-muted text-xs sr-only">=</span>
-                  <input
-                    type="text"
-                    value={row.value}
-                    onChange={(e) => updateRow(i, "value", e.target.value)}
-                    placeholder="value"
-                    className="flex-[2] h-8 px-2.5 rounded-md border border-border bg-card text-text text-xs font-mono placeholder:text-text-muted outline-none focus:ring-1 focus:ring-primary-500/40"
-                    spellCheck={false}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    className="p-1 rounded text-text-muted hover:text-danger-500 hover:bg-danger-50 transition-colors shrink-0"
-                    aria-label="Remove variable"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-[10px] text-text-muted mt-2">These will be injected as environment variables into your container at runtime.</p>
+          <p className="text-[10px] text-text-muted mt-2">Paste your .env file content. Each line should be KEY=value. Comments (#) and empty lines are ignored.</p>
         </div>
       )}
     </div>

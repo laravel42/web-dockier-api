@@ -105,6 +105,6 @@ const instance = new vultr.Instance("${p.appName}", {
 });
 ${dbBlock}${storageBlock}
 export const serverIp = instance.mainIp;
-export const appUrl = pulumi.interpolate\`http://\${instance.mainIp}\`;
+export const appUrl = instance.mainIp.apply((ip) => \`http://\${ip}\`);
 `;
 }

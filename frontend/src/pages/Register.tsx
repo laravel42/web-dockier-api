@@ -27,18 +27,18 @@ export default function Register() {
     }
   };
 
-  const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
+  const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface">
-      <div className="w-full max-w-[420px] bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-8">
-        <div className="flex items-center justify-center gap-2.5 mb-6">
-          <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">S</span>
+      <div className="w-full max-w-[420px] bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)] p-8 border border-border/50">
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-primary-500 flex items-center justify-center shadow-sm">
+            <span className="text-white font-display font-semibold text-sm">S</span>
           </div>
-          <span className="text-lg font-semibold text-text">SaaS App</span>
+          <span className="text-lg font-display font-semibold text-text tracking-tight">SaaS App</span>
         </div>
-        <h1 className="text-xl font-semibold text-text text-center mb-1">Create Account</h1>
+        <h1 className="text-xl font-display font-semibold text-text text-center mb-1">Create Account</h1>
         <p className="text-sm text-text-secondary text-center mb-6">Get started with your free account</p>
 
         {error && <div className="mb-4 p-3 rounded-[var(--radius-btn)] bg-danger-50 text-danger-500 text-sm" role="alert">{error}</div>}
@@ -57,7 +57,7 @@ export default function Register() {
             <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} required minLength={8} />
           </div>
           <button type="submit" disabled={loading}
-            className="w-full h-11 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 transition-colors">
+            className="w-full h-11 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
             {loading ? "Creating account..." : "Sign Up"}
           </button>
         </form>

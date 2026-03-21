@@ -6,12 +6,13 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import AuthCallback from "./pages/AuthCallback";
 import Dashboard from "./pages/Dashboard";
-import Users from "./pages/Users";
 import Notifications from "./pages/Notifications";
 import Deploy from "./pages/Deploy";
 import Settings from "./pages/Settings";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
+import SecurityScans from "./pages/SecurityScans";
+import ScanDetail from "./pages/ScanDetail";
 import type { ReactNode } from "react";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -36,10 +37,11 @@ export default function App() {
             }
           >
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/users" element={<Users />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId" element={<ProjectDetail />} />
+            <Route path="/security" element={<SecurityScans />} />
+            <Route path="/security/:scanId" element={<ScanDetail />} />
             <Route path="/deploy" element={<Deploy />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

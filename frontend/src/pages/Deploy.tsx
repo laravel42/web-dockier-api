@@ -26,7 +26,7 @@ export default function Deploy() {
     setShowDeployForm(false); setDeployForm({ providerId: "", gitConnectionId: "", repo: "", branch: "main" }); fetchData();
   };
 
-  const inputCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
+  const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 
   const statusStyle: Record<string, string> = {
     pending: "bg-warning-50 text-warning-500",
@@ -38,16 +38,16 @@ export default function Deploy() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-text">Deployments</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Deployments</h1>
         <button onClick={() => setShowDeployForm(!showDeployForm)}
-          className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors">
+          className="h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm">
           {showDeployForm ? "Cancel" : "New Deployment"}
         </button>
       </div>
 
       {showDeployForm && (
-        <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 mb-6">
+        <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 mb-8 border border-border/50">
           <form onSubmit={handleDeploy} className="space-y-4">
             <div>
               <label htmlFor="deploy-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Server Provider</label>
@@ -71,7 +71,7 @@ export default function Deploy() {
               <label htmlFor="deploy-branch" className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
               <input id="deploy-branch" type="text" value={deployForm.branch} onChange={(e) => setDeployForm({ ...deployForm, branch: e.target.value })} className={inputCls} />
             </div>
-            <button type="submit" className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors">Deploy</button>
+            <button type="submit" className="h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm">Deploy</button>
           </form>
         </div>
       )}
@@ -81,7 +81,7 @@ export default function Deploy() {
       ) : (
         <div className="space-y-3">
           {deployments.map((d) => (
-            <div key={d.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-shadow">
+            <div key={d.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-all border border-transparent hover:border-border/50">
               <div>
                 <h3 className="text-sm font-semibold text-text">{d.repo}</h3>
                 <p className="text-sm text-text-secondary mt-0.5">Branch: {d.branch} · {new Date(d.createdAt).toLocaleString()}</p>
