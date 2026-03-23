@@ -3,7 +3,7 @@ import Editor from "react-simple-code-editor";
 import { highlight, languages } from "prismjs";
 import "prismjs/components/prism-properties";
 import "prismjs/themes/prism.css";
-import { deployApi } from "../services/api";
+import { deployApi, imageBuilderApi } from "../services/api";
 import Modal from "./Modal";
 
 // ─── Types ───
@@ -75,12 +75,16 @@ interface WizardState {
   tofuAppName: string;
   tofuRegion: string;
   useDocker: boolean;
+  buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   envVars: Array<{ name: string; value: string }>;
   // Step 6
   deploymentId: string;
   deployStatus: string;
   deployLogs: string[];
   deployAppUrl: string;
+  codebuildBuildId: string;
+  codebuildImageUri: string;
+  codebuildLogsUrl: string;
 }
 
 interface DeployWizardProps {
@@ -613,7 +617,7 @@ function getPlans(
     },
     {
       tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
-      instance: isProd ? "m6g.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
+      instance: isProd ? "m6i.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
       storage: "50 GB gp3", network: "Up to 10 Gbps",
       managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
       monthlyPrice: isProd ? "~$80/mo" : "~$40/mo",
@@ -640,7 +644,7 @@ function getPlans(
     },
     {
       tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
-      instance: isProd ? "m6g.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
+      instance: isProd ? "m6i.large" : "t3.medium", cpu: isProd ? "2 vCPU (dedicated)" : "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
       storage: "50 GB gp3", network: "Up to 10 Gbps",
       managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
       monthlyPrice: isProd ? "~$100/mo" : "~$50/mo",
@@ -878,11 +882,12 @@ function formatEnvContent(rows: Array<{ name: string; value: string }>): string 
   }).join("\n");
 }
 
-function StepCompose({ state, loading, error, onToggleDocker, onEnvChange }: {
+function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onEnvChange }: {
   state: WizardState;
   loading: boolean;
   error: string;
   onToggleDocker: () => void;
+  onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
   onEnvChange: (envVars: Array<{ name: string; value: string }>) => void;
 }) {
   const [rawEnv, setRawEnv] = useState(() => formatEnvContent(state.envVars));
@@ -929,6 +934,75 @@ function StepCompose({ state, loading, error, onToggleDocker, onEnvChange }: {
           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${state.useDocker ? "translate-x-6" : "translate-x-1"}`} />
         </button>
       </div>
+
+      {/* Build method selector */}
+      {state.useDocker && (
+        <div>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Build Method</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button
+              type="button"
+              onClick={() => onBuildMethodChange("dockerfile")}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                state.buildMethod === "dockerfile"
+                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                  : "border-border bg-surface hover:border-primary-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185zm-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.186.185.186zm0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186z"/></svg>
+                <span className="text-sm font-medium text-text">Dockerfile</span>
+              </div>
+              <p className="text-xs text-text-muted">Auto-generated Dockerfile with auto-fix on failure</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onBuildMethodChange("railpack")}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                state.buildMethod === "railpack"
+                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                  : "border-border bg-surface hover:border-primary-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                <span className="text-sm font-medium text-text">Railpack</span>
+              </div>
+              <p className="text-xs text-text-muted">Zero-config builder by Railway, falls back to Dockerfile</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onBuildMethodChange("nixpacks")}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                state.buildMethod === "nixpacks"
+                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                  : "border-border bg-surface hover:border-primary-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-cyan-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                <span className="text-sm font-medium text-text">Nixpacks</span>
+              </div>
+              <p className="text-xs text-text-muted">Nix-based builder by Railway, falls back to Dockerfile</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onBuildMethodChange("codebuild")}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                state.buildMethod === "codebuild"
+                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                  : "border-border bg-surface hover:border-primary-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" /></svg>
+                <span className="text-sm font-medium text-text">CodeBuild</span>
+              </div>
+              <p className="text-xs text-text-muted">AWS CodeBuild with BuildKit + ECR cache, no local Docker needed</p>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Resources */}
       {state.tofuResources.length > 0 && (
@@ -1072,6 +1146,27 @@ function StepDeploy({ state }: { state: WizardState }) {
         </div>
       )}
 
+      {/* CodeBuild logs link */}
+      {state.codebuildLogsUrl && (
+        <div className="rounded-lg bg-orange-500/10 border border-orange-500/20 p-3">
+          <p className="text-xs text-orange-600 font-semibold uppercase tracking-wide mb-1">CodeBuild Logs</p>
+          <a href={state.codebuildLogsUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            View in CloudWatch
+          </a>
+        </div>
+      )}
+
+      {/* CodeBuild image URI */}
+      {state.codebuildImageUri && (
+        <div className="rounded-lg bg-primary-500/10 border border-primary-500/20 p-3">
+          <p className="text-xs text-primary-600 font-semibold uppercase tracking-wide mb-1">Built Image</p>
+          <p className="text-sm text-text font-mono break-all">{state.codebuildImageUri}</p>
+        </div>
+      )}
+
       {/* App URL */}
       {state.deployAppUrl && (
         <div className="rounded-lg bg-success-500/10 border border-success-500/20 p-3">
@@ -1105,11 +1200,15 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     tofuAppName: "",
     tofuRegion: "",
     useDocker: true,
+    buildMethod: "dockerfile",
     envVars: [],
     deploymentId: "",
     deployStatus: "",
     deployLogs: [],
     deployAppUrl: "",
+    codebuildBuildId: "",
+    codebuildImageUri: "",
+    codebuildLogsUrl: "",
   });
   const [tofuLoading, setTofuLoading] = useState(false);
   const [tofuError, setTofuError] = useState("");
@@ -1132,11 +1231,15 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
         tofuAppName: "",
         tofuRegion: "",
         useDocker: true,
+        buildMethod: "dockerfile",
         envVars: [],
         deploymentId: "",
         deployStatus: "",
         deployLogs: [],
         deployAppUrl: "",
+        codebuildBuildId: "",
+        codebuildImageUri: "",
+        codebuildLogsUrl: "",
       });
       setTofuLoading(false);
       setTofuError("");
@@ -1176,6 +1279,8 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     try {
       const parsed = parseOwnerRepo(project.repository);
       const repo = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
+      const plans = getPlans(s.selectedProvider, s.environment, s.servicesModes, s.deployStrategy);
+      const selectedPlan = plans[s.selectedPlan] || plans[1] || plans[0];
       const res = await deployApi.generateTofu({
         providerId: s.selectedProviderId,
         repo,
@@ -1187,6 +1292,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
         region: s.tofuRegion || undefined,
         deployStrategy: s.deployStrategy || undefined,
         useDocker: s.useDocker || undefined,
+        instanceType: selectedPlan?.instance || undefined,
         services: analysis?.detectedServices?.length
           ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: s.servicesModes[svc.type] || "vps" }))
           : undefined,
@@ -1211,10 +1317,157 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
   const startDeploy = useCallback(async () => {
     if (!project || !state.selectedProviderId) return;
     setDeployError("");
-    setState(prev => ({ ...prev, deployStatus: "pending", deployLogs: [], deployAppUrl: "" }));
+    setState(prev => ({ ...prev, deployStatus: "pending", deployLogs: [], deployAppUrl: "", codebuildBuildId: "", codebuildImageUri: "", codebuildLogsUrl: "" }));
     try {
       const parsed = parseOwnerRepo(project.repository);
       const repo = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
+
+      // ── CodeBuild path: build image first via image-builder, then deploy ──
+      if (state.buildMethod === "codebuild") {
+        setState(prev => ({ ...prev, deployStatus: "building", deployLogs: [`[${new Date().toISOString().replace("T", " ").slice(0, 19)}] ▶ Starting CodeBuild image build...`] }));
+
+        const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
+        const plan = plans[state.selectedPlan] || plans[1] || plans[0];
+
+        // Map deployStrategy to deployTarget for CloudFormation template selection
+        const deployTargetMap: Record<string, "ecs" | "apprunner" | "ec2"> = {
+          vps: "ec2",
+          managed: "ecs",
+          serverless: "apprunner",
+        };
+        const deployTarget = deployTargetMap[state.deployStrategy] || "ec2";
+
+        const build = await imageBuilderApi.startBuild({
+          sourceRepo: repo,
+          sourceRef: project.branch || "main",
+          projectId: project.id,
+          gitConnectionId: project.connectionId,
+          deployTarget,
+          deployParams: {
+            appName: state.tofuAppName || project.name?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || undefined,
+            containerPort: analysis?.aiAnalysis?.port || 3000,
+            instanceType: plan?.instance || undefined,
+            cpu: plan?.cpu?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.cpu.match(/[\d.]+/)![0]) * 1024)) : undefined,
+            memory: plan?.ram?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.ram.match(/[\d.]+/)![0]) * 1024)) : undefined,
+          },
+        });
+
+        setState(prev => ({
+          ...prev,
+          codebuildBuildId: build.id,
+          codebuildLogsUrl: build.logsUrl,
+          deployLogs: [
+            ...prev.deployLogs,
+            `[${new Date().toISOString().replace("T", " ").slice(0, 19)}] ℹ CodeBuild started: ${build.codebuildId}`,
+            `[${new Date().toISOString().replace("T", " ").slice(0, 19)}] ℹ Logs: ${build.logsUrl}`,
+          ],
+        }));
+
+        // Poll CodeBuild until image is ready
+        const pollCodeBuild = async () => {
+          try {
+            const b = await imageBuilderApi.getBuild(build.id);
+            const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+
+            // Fetch real CloudWatch logs
+            try {
+              const logsResp = await imageBuilderApi.getBuildLogs(build.id);
+              if (logsResp.logs.length > 0) {
+                setState(prev => ({ ...prev, deployLogs: logsResp.logs }));
+              }
+            } catch { /* logs not available yet */ }
+
+            if (b.status === "succeeded") {
+              setState(prev => ({
+                ...prev,
+                codebuildImageUri: b.imageUri,
+                deployLogs: [
+                  ...prev.deployLogs,
+                  `[${ts}] ✓ Image built${b.imageUri ? `: ${b.imageUri}` : ""}`,
+                  `[${ts}] ▶ Starting infrastructure deployment...`,
+                ],
+              }));
+
+              // Now trigger the normal deploy with the built image as registryUrl
+              const deployment = await deployApi.createDeployment({
+                providerId: state.selectedProviderId,
+                gitConnectionId: project.connectionId,
+                repo,
+                branch: project.branch || "main",
+                tofuScript: state.tofuScript || undefined,
+                techStack: analysis?.techStack.map(t => t.name) || [],
+                primaryLanguage: analysis?.primaryLanguage || "",
+                deployStrategy: state.deployStrategy,
+                buildMethod: "dockerfile",
+                registryUrl: b.imageUri.split("/").slice(0, -1).join("/"),
+              });
+              setState(prev => ({ ...prev, deploymentId: deployment.id }));
+
+              // Poll deploy status
+              const pollDeploy = async () => {
+                try {
+                  const d = await deployApi.getDeployment(deployment.id);
+                  setState(prev => ({
+                    ...prev,
+                    deployStatus: d.status,
+                    deployLogs: d.logs ? d.logs.split("\n").filter(Boolean) : prev.deployLogs,
+                    deployAppUrl: d.appUrl || prev.deployAppUrl,
+                  }));
+                  if (d.status === "success" || d.status === "failed") {
+                    if (d.status === "failed") setDeployError("Deployment failed. Check logs for details.");
+                    onDeployComplete?.();
+                    return;
+                  }
+                  pollRef.current = setTimeout(pollDeploy, 1500);
+                } catch {
+                  pollRef.current = setTimeout(pollDeploy, 2000);
+                }
+              };
+              pollRef.current = setTimeout(pollDeploy, 1000);
+              return;
+            }
+
+            if (b.status === "failed" || b.status === "stopped") {
+              // Fetch final logs on failure
+              try {
+                const logsResp = await imageBuilderApi.getBuildLogs(build.id);
+                if (logsResp.logs.length > 0) {
+                  setState(prev => ({
+                    ...prev,
+                    deployStatus: "failed",
+                    deployLogs: [
+                      ...logsResp.logs,
+                      `[${ts}] ✗ CodeBuild failed: ${b.statusReason || "Unknown error"}`,
+                    ],
+                  }));
+                  setDeployError(`CodeBuild failed: ${b.statusReason || "Check logs above"}`);
+                  return;
+                }
+              } catch { /* fall through to basic message */ }
+
+              setState(prev => ({
+                ...prev,
+                deployStatus: "failed",
+                deployLogs: [
+                  ...prev.deployLogs,
+                  `[${ts}] ✗ CodeBuild failed: ${b.statusReason || "Unknown error"}`,
+                ],
+              }));
+              setDeployError(`CodeBuild failed: ${b.statusReason || "Check CloudWatch logs"}`);
+              return;
+            }
+
+            // Still in progress
+            pollRef.current = setTimeout(pollCodeBuild, 5000);
+          } catch {
+            pollRef.current = setTimeout(pollCodeBuild, 5000);
+          }
+        };
+        pollRef.current = setTimeout(pollCodeBuild, 3000);
+        return;
+      }
+
+      // ── Standard path: local build via deploy service ──
       const deployment = await deployApi.createDeployment({
         providerId: state.selectedProviderId,
         gitConnectionId: project.connectionId,
@@ -1224,6 +1477,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
         techStack: analysis?.techStack.map(t => t.name) || [],
         primaryLanguage: analysis?.primaryLanguage || "",
         deployStrategy: state.deployStrategy,
+        buildMethod: state.buildMethod,
       });
       setState(prev => ({ ...prev, deploymentId: deployment.id }));
 
@@ -1344,6 +1598,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               setState(prev => ({ ...prev, useDocker: next, tofuScript: "" }));
               generateScript({ useDocker: next });
             }}
+            onBuildMethodChange={(method) => setState(prev => ({ ...prev, buildMethod: method }))}
             onEnvChange={(envVars) => setState(prev => ({ ...prev, envVars }))}
           />
         )}

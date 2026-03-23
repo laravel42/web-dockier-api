@@ -1,0 +1,609 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Image Builder — CodeBuild (standard:7.0 + buildx), S3 source bucket,
+  SNS queues, deploy Lambdas. Fully async pipeline.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: image-builder
+  BuildTimeoutMinutes:
+    Type: Number
+    Default: 30
+  ComputeType:
+    Type: String
+    Default: BUILD_GENERAL1_LARGE
+    AllowedValues:
+      - BUILD_GENERAL1_SMALL
+      - BUILD_GENERAL1_MEDIUM
+      - BUILD_GENERAL1_LARGE
+
+Resources:
+  # ── S3: Source uploads ──
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-source"
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldSources
+            Status: Enabled
+            ExpirationInDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ── S3: Deploy templates ──
+  TemplateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-templates-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ── SNS Topics ──
+  BuildRequestTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-build-request"
+
+  BuildCompleteTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-build-complete"
+
+  DeployCompleteTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-deploy-complete"
+
+  # ── CloudWatch Logs ──
+  BuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/codebuild/${ProjectName}"
+      RetentionInDays: 30
+
+  # ── IAM: CodeBuild Role ──
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-codebuild-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-codebuild-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Logs
+                Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource:
+                  - !GetAtt BuildLogGroup.Arn
+                  - !Sub "${BuildLogGroup.Arn}:*"
+              - Sid: ECRAuth
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: ECR
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:CreateRepository
+                  - ecr:DescribeRepositories
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/*"
+              - Sid: S3Source
+                Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion, s3:GetBucketVersioning]
+                Resource:
+                  - !GetAtt SourceBucket.Arn
+                  - !Sub "${SourceBucket.Arn}/*"
+              - Sid: SNSNotify
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref BuildCompleteTopic
+
+  # ── CodeBuild Project ──
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref ProjectName
+      Description: Builds Docker images with buildx, pushes to ECR
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      TimeoutInMinutes: !Ref BuildTimeoutMinutes
+      QueuedTimeoutInMinutes: 60
+      Source:
+        Type: S3
+        Location: !Sub "${SourceBucket}/"
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Cache:
+        Type: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+          - LOCAL_SOURCE_CACHE
+          - LOCAL_CUSTOM_CACHE
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: !Ref ComputeType
+        PrivilegedMode: true
+        ImagePullCredentialsType: CODEBUILD
+        EnvironmentVariables:
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref "AWS::AccountId"
+            Type: PLAINTEXT
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref "AWS::Region"
+            Type: PLAINTEXT
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref BuildLogGroup
+
+  # ── Lambda: Build Starter (SNS → starts CodeBuild with S3 source) ──
+  BuildStarterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-build-starter-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StartBuild
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: codebuild:StartBuild
+                Resource: !GetAtt CodeBuildProject.Arn
+
+  BuildStarterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-build-starter"
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 128
+      Role: !GetAtt BuildStarterRole.Arn
+      Environment:
+        Variables:
+          CODEBUILD_PROJECT: !Ref CodeBuildProject
+          BUILD_COMPLETE_TOPIC: !Ref BuildCompleteTopic
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import urllib.request
+          import os
+
+          cb = boto3.client('codebuild')
+
+          def handler(event, context):
+            for record in event.get('Records', []):
+              msg = json.loads(record['Sns']['Message'])
+              print(f"Build request: {json.dumps(msg)}")
+
+              env_vars = [
+                {'name': 'AWS_ACCOUNT_ID', 'value': msg['accountId'], 'type': 'PLAINTEXT'},
+                {'name': 'AWS_DEFAULT_REGION', 'value': msg['region'], 'type': 'PLAINTEXT'},
+                {'name': 'IMAGE_REPO_NAME', 'value': msg['imageRepoName'], 'type': 'PLAINTEXT'},
+                {'name': 'CACHE_REPO_NAME', 'value': msg['cacheRepoName'], 'type': 'PLAINTEXT'},
+                {'name': 'BUILD_ID', 'value': msg['buildId'], 'type': 'PLAINTEXT'},
+                {'name': 'SNS_TOPIC_ARN', 'value': os.environ['BUILD_COMPLETE_TOPIC'], 'type': 'PLAINTEXT'},
+                {'name': 'DEPLOY_TARGET', 'value': msg.get('deployTarget', ''), 'type': 'PLAINTEXT'},
+                {'name': 'DEPLOY_PARAMS', 'value': json.dumps(msg.get('deployParams', {})), 'type': 'PLAINTEXT'},
+                {'name': 'CALLBACK_URL', 'value': msg.get('callbackUrl', ''), 'type': 'PLAINTEXT'},
+              ]
+
+              result = cb.start_build(
+                projectName=os.environ['CODEBUILD_PROJECT'],
+                environmentVariablesOverride=env_vars,
+                sourceTypeOverride='S3',
+                sourceLocationOverride=f"{msg['s3Bucket']}/{msg['s3Key']}",
+              )
+
+              cb_build_id = result['build']['id']
+              print(f"CodeBuild started: {cb_build_id}")
+
+              # Notify callback
+              callback_url = msg.get('callbackUrl', '')
+              if callback_url:
+                try:
+                  data = json.dumps({'buildId': msg['buildId'], 'status': 'deploying', 'codebuildId': cb_build_id}).encode()
+                  req = urllib.request.Request(callback_url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+                  urllib.request.urlopen(req, timeout=10)
+                except Exception as e:
+                  print(f"Callback failed: {e}")
+
+  BuildRequestSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BuildRequestTopic
+      Protocol: lambda
+      Endpoint: !GetAtt BuildStarterLambda.Arn
+
+  BuildStarterSnsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BuildStarterLambda
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref BuildRequestTopic
+
+  # ── Lambda: Deploy Trigger (build complete → CloudFormation) ──
+  DeployLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-deploy-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DeployPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [cloudformation:CreateStack, cloudformation:UpdateStack, cloudformation:DescribeStacks]
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-app-*"
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "${TemplateBucket.Arn}/*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CloudFormationRole.Arn
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref DeployCompleteTopic
+              - Effect: Allow
+                Action: [ec2:DescribeVpcs, ec2:DescribeSubnets]
+                Resource: "*"
+
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-cfn-deploy-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess
+      Policies:
+        - PolicyName: IAMForDeploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:TagRole
+                Resource: "*"
+
+  DeployLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-deploy-trigger"
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 60
+      MemorySize: 256
+      Role: !GetAtt DeployLambdaRole.Arn
+      Environment:
+        Variables:
+          TEMPLATE_BUCKET: !Ref TemplateBucket
+          CFN_ROLE_ARN: !GetAtt CloudFormationRole.Arn
+          DEPLOY_COMPLETE_TOPIC: !Ref DeployCompleteTopic
+          PROJECT_NAME: !Ref ProjectName
+      Code:
+        ZipFile: |
+          import json, boto3, urllib.request, os
+
+          cfn = boto3.client('cloudformation')
+          ec2 = boto3.client('ec2')
+
+          TEMPLATE_MAP = {'ecs': 'ecs-fargate.yml', 'apprunner': 'apprunner.yml', 'ec2': 'ec2.yml'}
+
+          def get_default_vpc():
+            vpcs = ec2.describe_vpcs(Filters=[{'Name': 'is-default', 'Values': ['true']}])
+            return vpcs['Vpcs'][0]['VpcId'] if vpcs['Vpcs'] else None
+
+          def get_subnets(vpc_id):
+            subs = ec2.describe_subnets(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])
+            return [s['SubnetId'] for s in subs['Subnets']]
+
+          def handler(event, context):
+            for record in event.get('Records', []):
+              msg = json.loads(record['Sns']['Message'])
+              print(f"Build complete: {json.dumps(msg)}")
+
+              deploy_target = msg.get('deployTarget', '')
+              if not deploy_target:
+                print("No deploy target, skipping")
+                return
+
+              build_id = msg.get('buildId', '')
+              image_uri = msg.get('imageUri', '')
+              deploy_params = json.loads(msg.get('deployParams', '{}')) if isinstance(msg.get('deployParams'), str) else msg.get('deployParams', {})
+              callback_url = msg.get('callbackUrl', '')
+              app_name = deploy_params.get('appName', f"app-{build_id[:8]}")
+
+              template_file = TEMPLATE_MAP.get(deploy_target, 'ecs-fargate.yml')
+              bucket = os.environ['TEMPLATE_BUCKET']
+              template_url = f"https://{bucket}.s3.amazonaws.com/{template_file}"
+
+              vpc_id = deploy_params.get('vpcId') or get_default_vpc()
+              subnets = deploy_params.get('subnetIds') or get_subnets(vpc_id)
+
+              params = [
+                {'ParameterKey': 'AppName', 'ParameterValue': app_name},
+                {'ParameterKey': 'ImageUri', 'ParameterValue': image_uri},
+                {'ParameterKey': 'BuildId', 'ParameterValue': build_id},
+                {'ParameterKey': 'CallbackUrl', 'ParameterValue': callback_url},
+              ]
+              if deploy_params.get('containerPort'):
+                params.append({'ParameterKey': 'ContainerPort', 'ParameterValue': str(deploy_params['containerPort'])})
+              if deploy_target == 'ecs':
+                if deploy_params.get('cpu'):
+                  params.append({'ParameterKey': 'Cpu', 'ParameterValue': str(deploy_params['cpu'])})
+                if deploy_params.get('memory'):
+                  params.append({'ParameterKey': 'Memory', 'ParameterValue': str(deploy_params['memory'])})
+                params.append({'ParameterKey': 'VpcId', 'ParameterValue': vpc_id})
+                params.append({'ParameterKey': 'SubnetIds', 'ParameterValue': ','.join(subnets)})
+              if deploy_target == 'ec2':
+                params.append({'ParameterKey': 'VpcId', 'ParameterValue': vpc_id})
+                params.append({'ParameterKey': 'SubnetId', 'ParameterValue': subnets[0]})
+                if deploy_params.get('instanceType'):
+                  params.append({'ParameterKey': 'InstanceType', 'ParameterValue': str(deploy_params['instanceType'])})
+
+              stack_name = f"{os.environ['PROJECT_NAME']}-app-{app_name}"
+              try:
+                cfn.create_stack(
+                  StackName=stack_name, TemplateURL=template_url, Parameters=params,
+                  RoleARN=os.environ['CFN_ROLE_ARN'], Capabilities=['CAPABILITY_NAMED_IAM'],
+                  NotificationARNs=[os.environ['DEPLOY_COMPLETE_TOPIC']],
+                  Tags=[{'Key': 'BuildId', 'Value': build_id}, {'Key': 'ManagedBy', 'Value': 'image-builder'}],
+                  OnFailure='ROLLBACK',
+                )
+              except cfn.exceptions.AlreadyExistsException:
+                cfn.update_stack(
+                  StackName=stack_name, TemplateURL=template_url, Parameters=params,
+                  RoleARN=os.environ['CFN_ROLE_ARN'], Capabilities=['CAPABILITY_NAMED_IAM'],
+                )
+
+              if callback_url:
+                try:
+                  data = json.dumps({'buildId': build_id, 'status': 'deploying', 'deployTarget': deploy_target, 'stackName': stack_name}).encode()
+                  req = urllib.request.Request(callback_url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+                  urllib.request.urlopen(req, timeout=10)
+                except Exception as e:
+                  print(f"Callback failed: {e}")
+
+  BuildCompleteSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BuildCompleteTopic
+      Protocol: lambda
+      Endpoint: !GetAtt DeployLambda.Arn
+
+  DeployLambdaSnsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DeployLambda
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref BuildCompleteTopic
+
+  # ── Lambda: Deploy Complete Notifier ──
+  NotifyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-notify-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DescribeStacks
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-app-*"
+
+  NotifyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-deploy-notify"
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 128
+      Role: !GetAtt NotifyLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import json, boto3, urllib.request
+
+          cfn = boto3.client('cloudformation')
+
+          def handler(event, context):
+            for record in event.get('Records', []):
+              msg = record['Sns']['Message']
+              if 'StackId' not in msg:
+                continue
+              lines = msg.strip().split('\n')
+              data = {}
+              for line in lines:
+                if '=' in line:
+                  k, v = line.split('=', 1)
+                  data[k.strip()] = v.strip().strip("'\"")
+
+              stack_name = data.get('StackName', '')
+              status = data.get('ResourceStatus', '')
+              resource_type = data.get('ResourceType', '')
+
+              if resource_type != 'AWS::CloudFormation::Stack':
+                continue
+              if status not in ('CREATE_COMPLETE', 'UPDATE_COMPLETE', 'CREATE_FAILED', 'ROLLBACK_COMPLETE'):
+                continue
+
+              app_url, build_id, callback_url = '', '', ''
+              try:
+                resp = cfn.describe_stacks(StackName=stack_name)
+                stack = resp['Stacks'][0]
+                outputs = {o['OutputKey']: o['OutputValue'] for o in stack.get('Outputs', [])}
+                app_url = outputs.get('AppUrl', '')
+                build_id = outputs.get('BuildId', '')
+                params = {p['ParameterKey']: p['ParameterValue'] for p in stack.get('Parameters', [])}
+                callback_url = params.get('CallbackUrl', '')
+              except Exception as e:
+                print(f"Failed to describe stack: {e}")
+
+              if callback_url:
+                try:
+                  payload = json.dumps({
+                    'buildId': build_id, 'stackName': stack_name,
+                    'status': 'success' if 'COMPLETE' in status and 'ROLLBACK' not in status else 'failed',
+                    'appUrl': app_url, 'cfnStatus': status,
+                  }).encode()
+                  req = urllib.request.Request(callback_url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
+                  urllib.request.urlopen(req, timeout=10)
+                except Exception as e:
+                  print(f"Callback failed: {e}")
+
+  DeployCompleteSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref DeployCompleteTopic
+      Protocol: lambda
+      Endpoint: !GetAtt NotifyLambda.Arn
+
+  NotifyLambdaSnsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref NotifyLambda
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref DeployCompleteTopic
+
+  # ── IAM: Encore Service User Policy ──
+  # Policy for the external IAM user (devhub-s3-user) that Encore uses
+  # to upload source to S3, publish to SNS, and query STS/CodeBuild.
+  EncoreServicePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${ProjectName}-encore-access"
+      Description: Permissions for the Encore service to interact with the image builder pipeline
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: S3UploadSource
+            Effect: Allow
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub "${SourceBucket.Arn}/*"
+          - Sid: SNSPublish
+            Effect: Allow
+            Action:
+              - sns:Publish
+            Resource:
+              - !Ref BuildRequestTopic
+          - Sid: STSIdentity
+            Effect: Allow
+            Action:
+              - sts:GetCallerIdentity
+            Resource: "*"
+          - Sid: CodeBuildAccess
+            Effect: Allow
+            Action:
+              - codebuild:BatchGetBuilds
+              - codebuild:StopBuild
+              - codebuild:ListBuildsForProject
+            Resource:
+              - !GetAtt CodeBuildProject.Arn
+          - Sid: CloudWatchLogs
+            Effect: Allow
+            Action:
+              - logs:GetLogEvents
+              - logs:DescribeLogStreams
+            Resource:
+              - !GetAtt BuildLogGroup.Arn
+              - !Sub "${BuildLogGroup.Arn}:*"
+          - Sid: CloudFormationDescribe
+            Effect: Allow
+            Action:
+              - cloudformation:DescribeStacks
+            Resource:
+              - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-app-*"
+
+Outputs:
+  CodeBuildProjectName:
+    Value: !Ref CodeBuildProject
+  SourceBucketName:
+    Value: !Ref SourceBucket
+  TemplateBucketName:
+    Value: !Ref TemplateBucket
+  BuildRequestTopicArn:
+    Value: !Ref BuildRequestTopic
+  BuildCompleteTopicArn:
+    Value: !Ref BuildCompleteTopic
+  DeployCompleteTopicArn:
+    Value: !Ref DeployCompleteTopic
+  LogGroupName:
+    Value: !Ref BuildLogGroup
+  EncoreServicePolicyArn:
+    Value: !Ref EncoreServicePolicy
+    Description: Attach this policy to the devhub-s3-user IAM user

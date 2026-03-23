@@ -1,11 +1,15 @@
 import { api, APIError } from "encore.dev/api";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { Topic, Subscription } from "encore.dev/pubsub";
+import { secret } from "encore.dev/config";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
 import { git_integration } from "~encore/clients";
 
 const db = new SQLDatabase("deploy", { migrations: "./migrations" });
+
+// ─── Secrets ───
+const DeployCallbackUrl = secret("DeployCallbackUrl");
 
 // ─── Interfaces ───
 
@@ -61,6 +65,7 @@ export interface DeployEvent {
   primaryLanguage: string;
   registryUrl: string;
   deployStrategy: string;
+  buildMethod: "dockerfile" | "railpack" | "nixpacks";
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {
@@ -199,6 +204,7 @@ export const createDeployment = api(
     primaryLanguage?: string;
     registryUrl?: string;
     deployStrategy?: string;
+    buildMethod?: "dockerfile" | "railpack" | "nixpacks";
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -222,6 +228,7 @@ export const createDeployment = api(
       primaryLanguage: params.primaryLanguage || "",
       registryUrl: params.registryUrl || "",
       deployStrategy: params.deployStrategy || "managed",
+      buildMethod: params.buildMethod || "dockerfile",
     });
 
     return {
@@ -285,14 +292,48 @@ export const getDeployment = api(
   }
 );
 
-// ─── Deploy Processor (Pub/Sub) — Docker + Pulumi ───
+// ─── AWS Pipeline Webhook (called by Lambda when build/deploy completes) ───
+
+export const awsPipelineWebhook = api(
+  { method: "POST", path: "/deploy/webhook/aws-pipeline", auth: false },
+  async (params: {
+    buildId: string;
+    status: "deploying" | "success" | "failed";
+    appUrl?: string;
+    stackName?: string;
+    cfnStatus?: string;
+    deployTarget?: string;
+    codebuildId?: string;
+  }): Promise<{ ok: boolean }> => {
+    if (!params.buildId) return { ok: false };
+
+    const row = await db.queryRow<{ id: string; status: string }>`
+      SELECT id, status FROM deployments WHERE id = ${params.buildId}`;
+    if (!row) return { ok: false };
+
+    if (params.status === "success") {
+      const appUrl = params.appUrl || "";
+      await db.exec`UPDATE deployments SET status = 'success', app_url = ${appUrl}, updated_at = NOW() WHERE id = ${params.buildId}`;
+      await appendLog(params.buildId, `[${ts()}] ✓ AWS pipeline complete — app URL: ${appUrl}`);
+    } else if (params.status === "failed") {
+      await db.exec`UPDATE deployments SET status = 'failed', updated_at = NOW() WHERE id = ${params.buildId}`;
+      await appendLog(params.buildId, `[${ts()}] ✗ AWS pipeline failed: ${params.cfnStatus || "unknown"}`);
+    } else {
+      await appendLog(params.buildId, `[${ts()}] ℹ AWS pipeline: ${params.status} (${params.deployTarget || ""})`);
+    }
+    return { ok: true };
+  }
+);
+
+// ─── Deploy Processor (Pub/Sub) ───
+// AWS: Clone → Analyze → Bundle zip → S3 → SNS → CodeBuild → ECR → CloudFormation
+// Others: Clone → Analyze → Docker build → Pulumi
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
     const { deploymentId } = event;
     const repoName = event.repo.split("/").pop() || "app";
     const shortId = deploymentId.slice(0, 8);
-    const imageName = `${repoName}:${shortId}`;
 
     // Look up provider for API key + region
     const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string; app_runner_connection_arn: string }>`
@@ -319,7 +360,6 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
           const lines = data.toString().split("\n").filter(Boolean);
           for (const line of lines) {
             output += line + "\n";
-            // Skip Pulumi progress noise (dots, "@ updating..." lines)
             if (/^\s*\.+\s*$/.test(line) || /^@ updating/.test(line)) continue;
             await appendLog(deploymentId, `[${ts()}] ${line}`);
           }
@@ -337,19 +377,6 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${region}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Strategy: ${event.deployStrategy || "managed (default)"}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
-
-      if (!event.tofuScript) {
-        throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
-      }
-
-      // AWS App Runner requires a GitHub connection ARN; fail early if missing
-      const isAppRunner = provider === "aws" && event.deployStrategy === "serverless";
-      const appRunnerArn = providerRow?.app_runner_connection_arn?.trim() || "";
-      if (isAppRunner && !appRunnerArn) {
-        throw new Error(
-          "AWS App Runner requires a GitHub connection. Go to Settings → Providers, edit your AWS provider, and add the App Runner connection ARN from AWS Console → App Runner → GitHub connections."
-        );
-      }
 
       // ── Step 1: Clone repository ──
       await appendLog(deploymentId, `[${ts()}]`);
@@ -376,201 +403,49 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         { cwd: workDir, timeout: 120_000, stdio: "pipe" }
       );
 
-      // Get the commit hash
       const commitHash = execSync("git rev-parse HEAD", { cwd: repoDir, timeout: 5_000 }).toString().trim();
       await appendLog(deploymentId, `[${ts()}] ✓ Repository cloned (commit: ${commitHash.slice(0, 8)})`);
       await db.exec`UPDATE deployments SET commit_hash = ${commitHash} WHERE id = ${deploymentId}`;
 
-      // ── Step 2: Build Docker image with Cloud Native Buildpacks ──
-      // Check if we already have a built image for this repo+branch+commit
-      const cachedImage = await db.queryRow<{ docker_image: string }>`
-        SELECT docker_image FROM deployments
-        WHERE repo = ${event.repo} AND branch = ${event.branch} AND commit_hash = ${commitHash}
-          AND docker_image != '' AND id != ${deploymentId}
-        ORDER BY created_at DESC LIMIT 1`;
-
-      let imageName: string;
-      let skipBuild = false;
-      let buildDir = repoDir;
-      let detectedPM = "";
+      // ── Step 2: Analyze repository & generate Dockerfile ──
       const { existsSync } = await import("node:fs");
       const { readFile: readFs } = await import("node:fs/promises");
-      const { readdirSync } = await import("node:fs");
 
-      if (cachedImage?.docker_image) {
-        // Verify the image still exists locally
+      const { analyzeRepoConfig, generateDockerfile, configSummary } = await import("./repo-analyzer");
+
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Analyze Repository ──────────────`);
+
+      const repoConfig = analyzeRepoConfig(repoDir);
+      for (const line of configSummary(repoConfig)) {
+        await appendLog(deploymentId, `[${ts()}] ℹ ${line}`);
+      }
+
+      // Ensure packageManager field is set in package.json (required for corepack)
+      if (repoConfig.runtime === "node" && (repoConfig.packageManager === "pnpm" || repoConfig.packageManager === "yarn")) {
+        const appDir = repoConfig.subDir ? join(repoDir, repoConfig.subDir) : repoDir;
         try {
-          execSync(`docker image inspect ${JSON.stringify(cachedImage.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
-          imageName = cachedImage.docker_image;
-          skipBuild = true;
-          await appendLog(deploymentId, `[${ts()}]`);
-          await appendLog(deploymentId, `[${ts()}] ── Build Image (Buildpacks) ───────`);
-          await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image for commit ${commitHash.slice(0, 8)}`);
-          await appendLog(deploymentId, `[${ts()}] ✓ Docker image: ${imageName}`);
-        } catch {
-          // Image was pruned, need to rebuild
-          imageName = `${repoName}:${shortId}`;
-        }
-      } else {
-        imageName = `${repoName}:${shortId}`;
-      }
-
-      // ── Prepare Dockerfile (always, even if skipping local build for AWS) ──
-      {
-      const rootFiles = readdirSync(repoDir);
-      const frameworkConfigs = ["next.config.js", "next.config.ts", "next.config.mjs", "nuxt.config.ts", "vite.config.ts", "angular.json", "remix.config.js", "astro.config.mjs"];
-      const hasRootFramework = frameworkConfigs.some(f => rootFiles.includes(f));
-      if (!hasRootFramework) {
-        const subdirs = ["app", "frontend", "web", "client", "packages/app", "packages/web", "apps/web", "apps/frontend"];
-        for (const sub of subdirs) {
-          const subPath = join(repoDir, sub);
-          if (existsSync(subPath) && existsSync(join(subPath, "package.json"))) {
-            const subFiles = readdirSync(subPath);
-            if (frameworkConfigs.some(f => subFiles.includes(f))) {
-              buildDir = subPath;
-              await appendLog(deploymentId, `[${ts()}] ℹ Detected app in subdirectory: ${sub}/`);
-              break;
-            }
-          }
-        }
-      }
-
-      // Detect package manager
-      if (existsSync(join(buildDir, "pnpm-lock.yaml"))) detectedPM = "pnpm";
-      else if (existsSync(join(buildDir, "yarn.lock"))) detectedPM = "yarn";
-      else if (existsSync(join(buildDir, "bun.lockb"))) detectedPM = "bun";
-      if (!detectedPM && buildDir !== repoDir) {
-        if (existsSync(join(repoDir, "pnpm-lock.yaml"))) detectedPM = "pnpm";
-        else if (existsSync(join(repoDir, "yarn.lock"))) detectedPM = "yarn";
-        else if (existsSync(join(repoDir, "bun.lockb"))) detectedPM = "bun";
-        if (detectedPM) {
-          const lockFiles: Record<string, string> = { pnpm: "pnpm-lock.yaml", yarn: "yarn.lock", bun: "bun.lockb" };
-          try { const { copyFile } = await import("node:fs/promises"); await copyFile(join(repoDir, lockFiles[detectedPM]), join(buildDir, lockFiles[detectedPM])); } catch {}
-        }
-      }
-      if (!detectedPM) {
-        const stackLowerPM = event.techStack.map(s => s.toLowerCase());
-        if (stackLowerPM.includes("pnpm")) detectedPM = "pnpm";
-        else if (stackLowerPM.includes("yarn")) detectedPM = "yarn";
-      }
-
-      if (detectedPM) {
-        try {
-          const pkgPath = join(buildDir, "package.json");
+          const pkgPath = join(appDir, "package.json");
           const pkg = JSON.parse(await readFs(pkgPath, "utf-8"));
           if (!pkg.packageManager) {
-            const pmVersions: Record<string, string> = { pnpm: "pnpm@10.14.0", yarn: "yarn@4.5.0", bun: "bun@1.1.0" };
-            pkg.packageManager = pmVersions[detectedPM] || `${detectedPM}@latest`;
+            const pmVer = repoConfig.packageManagerVersion || (repoConfig.packageManager === "pnpm" ? "10.14.0" : "4.5.0");
+            pkg.packageManager = `${repoConfig.packageManager}@${pmVer}`;
             await writeFile(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
-            await appendLog(deploymentId, `[${ts()}] ℹ Detected ${detectedPM} — added packageManager field`);
-          } else {
-            await appendLog(deploymentId, `[${ts()}] ℹ Package manager: ${pkg.packageManager}`);
+            await appendLog(deploymentId, `[${ts()}] ℹ Added packageManager field: ${pkg.packageManager}`);
           }
         } catch {}
-      }
-
-      const stackLower = event.techStack.map(s => s.toLowerCase());
-      const isNextJs = stackLower.includes("next.js") || existsSync(join(buildDir, "next.config.js")) || existsSync(join(buildDir, "next.config.ts")) || existsSync(join(buildDir, "next.config.mjs"));
-      const runtime = detectRuntime(event.primaryLanguage, event.techStack);
-
-      let hasStandalone = false;
-      if (isNextJs) {
-        for (const cfgName of ["next.config.ts", "next.config.mjs", "next.config.js"]) {
-          const cfgPath = join(buildDir, cfgName);
-          if (existsSync(cfgPath)) {
-            try { hasStandalone = (await readFs(cfgPath, "utf-8")).includes("standalone"); } catch {}
-            break;
+        if (repoConfig.subDir) {
+          const lockFiles: Record<string, string> = { pnpm: "pnpm-lock.yaml", yarn: "yarn.lock", bun: "bun.lockb" };
+          const lockFile = lockFiles[repoConfig.packageManager];
+          if (lockFile && existsSync(join(repoDir, lockFile)) && !existsSync(join(appDir, lockFile))) {
+            try { const { copyFile } = await import("node:fs/promises"); await copyFile(join(repoDir, lockFile), join(appDir, lockFile)); } catch {}
           }
         }
       }
 
-      // Compute relative subdirectory path (e.g. "frontend" or "" if root)
-      const { relative } = await import("node:path");
-      const subDir = buildDir !== repoDir ? relative(repoDir, buildDir) : "";
-      const copyPrefix = subDir ? `${subDir}/` : "";
-
-      // Extract actual pnpm version from packageManager field
-      let pnpmVersion = "9.15.0";
-      try {
-        const pkgContent = JSON.parse(await readFs(join(buildDir, "package.json"), "utf-8"));
-        if (pkgContent.packageManager && pkgContent.packageManager.startsWith("pnpm@")) {
-          // Extract version without hash (e.g. "pnpm@10.14.0+sha512..." → "10.14.0")
-          const ver = pkgContent.packageManager.replace("pnpm@", "").split("+")[0];
-          if (ver) pnpmVersion = ver;
-        }
-      } catch {}
-
-      const hasComposer = existsSync(join(buildDir, "composer.json"));
-      let phpVersion = "8.4";
-      if (hasComposer) {
-        try {
-          const composerJson = JSON.parse(await readFs(join(buildDir, "composer.json"), "utf-8"));
-          const phpReq = composerJson?.require?.["php"];
-          if (typeof phpReq === "string") {
-            const matches = [...phpReq.matchAll(/8\.(\d+)/g)];
-            if (matches.length) {
-              const minMinor = Math.min(...matches.map((m) => parseInt(m[1], 10)));
-              const minor = Math.min(4, Math.max(2, minMinor));
-              phpVersion = `8.${minor}`;
-            }
-          }
-        } catch {}
-        await appendLog(deploymentId, `[${ts()}] ℹ Detected composer.json — will run composer install (PHP ${phpVersion}) before JS build`);
-      }
-      const composerStage = hasComposer
-        ? `FROM php:${phpVersion}-cli AS composer\nWORKDIR /app\nCOPY ${copyPrefix}composer.json ${copyPrefix}composer.lock* ./\nRUN apt-get update && apt-get install -y --no-install-recommends curl git && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && rm -rf /var/lib/apt/lists/*\nRUN composer install --no-interaction --optimize-autoloader --ignore-platform-reqs --prefer-dist --no-scripts\n`
-        : "";
-      const composerCopy = hasComposer ? `COPY --from=composer /app/vendor ./vendor\n` : "";
-
-      let df = hasComposer ? composerStage : "";
-      df += `FROM node:20-slim AS builder\nWORKDIR /app\n`;
-      if (detectedPM === "pnpm") {
-        df += `COPY ${copyPrefix}package.json ${copyPrefix}pnpm-lock.yaml ./\nRUN corepack enable && corepack prepare pnpm@${pnpmVersion} --activate\nRUN pnpm install --no-frozen-lockfile\nCOPY ${copyPrefix}. .\n${composerCopy}RUN pnpm run build\n`;
-      } else if (detectedPM === "yarn") {
-        df += `COPY ${copyPrefix}package.json ${copyPrefix}yarn.lock ./\nRUN corepack enable\nRUN yarn install --immutable\nCOPY ${copyPrefix}. .\n${composerCopy}RUN yarn build\n`;
-      } else {
-        df += `COPY ${copyPrefix}package.json ${copyPrefix}package-lock.json* ./\nRUN npm ci\nCOPY ${copyPrefix}. .\n${composerCopy}RUN npm run build\n`;
-      }
-      if (runtime.name === "php") {
-        df += `\nFROM php:${phpVersion}-cli\nWORKDIR /app\n`;
-        df += `COPY --from=builder /app .\nENV PORT=${runtime.port}\nEXPOSE ${runtime.port}\n`;
-        df += `CMD ${JSON.stringify(runtime.startCmd.split(" "))}\n`;
-      } else {
-        df += `\nFROM node:20-slim\nWORKDIR /app\n`;
-        if (isNextJs && hasStandalone) {
-          df += `COPY --from=builder /app/.next/standalone ./\nCOPY --from=builder /app/.next/static ./.next/static\nCOPY --from=builder /app/public ./public\nENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ["node", "server.js"]\n`;
-        } else if (isNextJs) {
-          df += `COPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/public ./public\nCOPY --from=builder /app/package.json ./\n`;
-          df += `ENV PORT=3000 HOSTNAME="0.0.0.0"\nEXPOSE 3000\nCMD ${JSON.stringify([detectedPM || "npm", "start"])}\n`;
-        } else {
-          df += `COPY --from=builder /app .\nENV PORT=${runtime.port}\nEXPOSE ${runtime.port}\nCMD ${JSON.stringify(runtime.startCmd.split(" "))}\n`;
-        }
-      }
-
-      // Verify package.json exists, find it if not
-      if (!existsSync(join(buildDir, "package.json"))) {
-        const findPkg = (dir: string, depth: number): string | null => {
-          if (depth > 3) return null;
-          try {
-            const entries = readdirSync(dir, { withFileTypes: true });
-            for (const e of entries) {
-              if (e.name === "package.json") return dir;
-              if (e.isDirectory() && !["node_modules", ".git", ".next", "dist"].includes(e.name)) {
-                const found = findPkg(join(dir, e.name), depth + 1);
-                if (found) return found;
-              }
-            }
-          } catch {}
-          return null;
-        };
-        const pkgDir = findPkg(repoDir, 0);
-        if (pkgDir) {
-          buildDir = pkgDir;
-          await appendLog(deploymentId, `[${ts()}] ℹ Found package.json in: ${buildDir.replace(workDir, ".")}`);
-        }
-      }
-
+      const df = generateDockerfile(repoConfig);
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
+
       const dockerignore = [
         "node_modules", ".next", ".git", ".gitignore",
         "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store",
@@ -580,53 +455,307 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         "Dockerfile*", ".dockerignore", "pulumi", ".pulumi-state",
       ].join("\n");
       await writeFile(join(repoDir, ".dockerignore"), dockerignore, "utf-8");
-      await appendLog(deploymentId, `[${ts()}] ℹ Generated Dockerfile in repo root (pm: ${detectedPM || "npm"}, subDir: ${subDir || "/"})`);
+
+      const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";
+      await appendLog(deploymentId, `[${ts()}] ✓ Generated Dockerfile (${repoConfig.runtime}/${repoConfig.framework || "generic"}, pm: ${pm}, subDir: ${repoConfig.subDir || "/"})`);
+
+      // ══════════════════════════════════════════════════════════════
+      // AWS: Offload to CodeBuild → CloudFormation pipeline
+      // ══════════════════════════════════════════════════════════════
+      if (provider === "aws") {
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── AWS Pipeline (CodeBuild → CloudFormation) ──`);
+
+        const accessKeyId = providerRow?.api_key || "";
+        const secretAccessKey = providerRow?.api_secret || "";
+        if (!accessKeyId || !secretAccessKey) {
+          throw new Error("AWS credentials not configured on provider.");
+        }
+
+        const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+        const sts = new STSClient({ region, credentials: { accessKeyId, secretAccessKey } });
+        const identity = await sts.send(new GetCallerIdentityCommand({}));
+        const accountId = identity.Account || "";
+
+        const codebuildProject = "image-builder";
+        const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+        const cacheRepoName = `${imageRepoName}-cache`;
+        const bucketName = `${codebuildProject}-source`;
+
+        // Inject buildspec.yml for CodeBuild
+        const buildspecContent = generateAwsBuildspec();
+        await writeFile(join(repoDir, "buildspec.yml"), buildspecContent, "utf-8");
+
+        // Remove .git, bundle into zip
+        await rm(join(repoDir, ".git"), { recursive: true, force: true });
+        const { default: AdmZip } = await import("adm-zip");
+        const { readdirSync } = await import("node:fs");
+        const zip = new AdmZip();
+        const addDir = (dirPath: string, zipPrefix: string) => {
+          const items = readdirSync(dirPath, { withFileTypes: true });
+          for (const item of items) {
+            const fullPath = join(dirPath, item.name);
+            if (item.isDirectory()) {
+              addDir(fullPath, zipPrefix ? `${zipPrefix}/${item.name}` : item.name);
+            } else {
+              zip.addLocalFile(fullPath, zipPrefix || undefined);
+            }
+          }
+        };
+        addDir(repoDir, "");
+        const zipBuffer = zip.toBuffer();
+        await appendLog(deploymentId, `[${ts()}] ℹ Source bundle: ${(zipBuffer.length / 1024 / 1024).toFixed(1)} MB`);
+
+        // Upload to S3
+        const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+        const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
+        const s3Key = `${deploymentId}.zip`;
+        await s3.send(new PutObjectCommand({
+          Bucket: bucketName, Key: s3Key, Body: zipBuffer, ContentType: "application/zip",
+        }));
+        await appendLog(deploymentId, `[${ts()}] ✓ Source uploaded to S3 (${bucketName}/${s3Key})`);
+
+        // Map deploy strategy → CloudFormation deploy target
+        const deployTargetMap: Record<string, string> = { vps: "ec2", managed: "ecs", serverless: "apprunner" };
+        const deployTarget = deployTargetMap[event.deployStrategy] || "ec2";
+
+        const deployParams: Record<string, any> = { appName: repoName, containerPort: 3000 };
+        if (deployTarget === "ecs") { deployParams.cpu = "1024"; deployParams.memory = "2048"; }
+        if (deployTarget === "ec2") { deployParams.instanceType = "t3.small"; }
+
+        // Publish to SNS → triggers CodeBuild
+        const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
+        const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
+        const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
+
+        let callbackUrl = "";
+        try { callbackUrl = DeployCallbackUrl(); } catch {}
+
+        await sns.send(new PublishCommand({
+          TopicArn: buildRequestTopicArn,
+          Subject: "build-request",
+          Message: JSON.stringify({
+            buildId: deploymentId,
+            sourceRepo: event.repo,
+            sourceRef: event.branch,
+            commitSha: commitHash,
+            imageRepoName,
+            cacheRepoName,
+            s3Bucket: bucketName,
+            s3Key,
+            accountId,
+            region,
+            codebuildProject,
+            deployTarget,
+            deployParams,
+            callbackUrl,
+          }),
+        }));
+        await appendLog(deploymentId, `[${ts()}] ✓ Build queued (CodeBuild → ECR → CloudFormation)`);
+        await appendLog(deploymentId, `[${ts()}] ℹ Deploy target: ${deployTarget}`);
+
+        try { await rm(workDir, { recursive: true, force: true }); } catch {}
+
+        await db.exec`UPDATE deployments SET status = 'deploying', docker_image = ${imageRepoName}, updated_at = NOW() WHERE id = ${deploymentId}`;
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── Handed off to AWS ───────────────`);
+        await appendLog(deploymentId, `[${ts()}] ℹ CodeBuild will build the image, push to ECR, then CloudFormation deploys infrastructure.`);
+
+        // ── Poll CodeBuild + CloudFormation until complete ──
+        const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
+        const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+        const cbClient = new CodeBuildClient({ region, credentials: { accessKeyId, secretAccessKey } });
+        const cfnClient = new CloudFormationClient({ region, credentials: { accessKeyId, secretAccessKey } });
+
+        const cfnStackName = `${codebuildProject}-app-${repoName}`;
+        let codebuildId = "";
+        let buildSucceeded = false;
+
+        // Phase 1: Wait for CodeBuild to start and complete (up to 15 min)
+        for (let attempt = 0; attempt < 60; attempt++) {
+          await new Promise(r => setTimeout(r, 15_000));
+
+          // Find the CodeBuild build for this deployment
+          if (!codebuildId) {
+            try {
+              const listResult = await cbClient.send(new ListBuildsForProjectCommand({
+                projectName: codebuildProject, sortOrder: "DESCENDING",
+              }));
+              const buildIds = (listResult.ids || []).slice(0, 10);
+              if (buildIds.length > 0) {
+                const batchResult = await cbClient.send(new BatchGetBuildsCommand({ ids: buildIds }));
+                const match = (batchResult.builds || []).find(b => {
+                  const loc = b.source?.location || "";
+                  return loc.includes(`${deploymentId}.zip`);
+                });
+                if (match?.id) {
+                  codebuildId = match.id;
+                  await appendLog(deploymentId, `[${ts()}] ℹ CodeBuild started: ${codebuildId}`);
+                }
+              }
+            } catch {}
+          }
+
+          // Check CodeBuild status
+          if (codebuildId) {
+            try {
+              const batchResult = await cbClient.send(new BatchGetBuildsCommand({ ids: [codebuildId] }));
+              const cbBuild = batchResult.builds?.[0];
+              if (cbBuild) {
+                const cbStatus = cbBuild.buildStatus || "";
+                if (cbStatus === "SUCCEEDED") {
+                  buildSucceeded = true;
+                  await appendLog(deploymentId, `[${ts()}] ✓ CodeBuild succeeded — image pushed to ECR`);
+                  break;
+                } else if (cbStatus === "FAILED" || cbStatus === "FAULT" || cbStatus === "TIMED_OUT" || cbStatus === "STOPPED") {
+                  const reason = cbBuild.phases?.find(p => p.phaseStatus === "FAILED")?.contexts?.[0]?.message || cbStatus;
+                  await appendLog(deploymentId, `[${ts()}] ✗ CodeBuild failed: ${reason}`);
+                  await db.exec`UPDATE deployments SET status = 'failed', updated_at = NOW() WHERE id = ${deploymentId}`;
+                  return;
+                } else if (attempt % 4 === 0) {
+                  const phase = cbBuild.currentPhase || "QUEUED";
+                  await appendLog(deploymentId, `[${ts()}] ℹ CodeBuild: ${phase}...`);
+                }
+              }
+            } catch {}
+          } else if (attempt % 4 === 0) {
+            await appendLog(deploymentId, `[${ts()}] ℹ Waiting for CodeBuild to start...`);
+          }
+        }
+
+        if (!buildSucceeded) {
+          await appendLog(deploymentId, `[${ts()}] ⚠ CodeBuild did not complete within timeout`);
+          await db.exec`UPDATE deployments SET status = 'failed', updated_at = NOW() WHERE id = ${deploymentId}`;
+          return;
+        }
+
+        // Phase 2: Wait for CloudFormation stack to complete (up to 10 min)
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── CloudFormation Deploy ──────────`);
+
+        let appUrl = "";
+        for (let attempt = 0; attempt < 40; attempt++) {
+          await new Promise(r => setTimeout(r, 15_000));
+          try {
+            const stackResult = await cfnClient.send(new DescribeStacksCommand({ StackName: cfnStackName }));
+            const stack = stackResult.Stacks?.[0];
+            if (!stack) {
+              if (attempt % 4 === 0) await appendLog(deploymentId, `[${ts()}] ℹ Waiting for CloudFormation stack...`);
+              continue;
+            }
+            const stackStatus = stack.StackStatus || "";
+            if (stackStatus === "CREATE_COMPLETE" || stackStatus === "UPDATE_COMPLETE") {
+              const outputs = Object.fromEntries((stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]));
+              appUrl = outputs.AppUrl || "";
+              await appendLog(deploymentId, `[${ts()}] ✓ CloudFormation stack: ${stackStatus}`);
+              if (appUrl) await appendLog(deploymentId, `[${ts()}] ✓ App URL: ${appUrl}`);
+              break;
+            } else if (stackStatus.includes("ROLLBACK_COMPLETE") || stackStatus.includes("FAILED") || stackStatus === "DELETE_COMPLETE") {
+              await appendLog(deploymentId, `[${ts()}] ✗ CloudFormation failed: ${stackStatus}`);
+              await db.exec`UPDATE deployments SET status = 'failed', updated_at = NOW() WHERE id = ${deploymentId}`;
+              return;
+            } else if (attempt % 4 === 0) {
+              await appendLog(deploymentId, `[${ts()}] ℹ CloudFormation: ${stackStatus}...`);
+            }
+          } catch (cfnErr: any) {
+            // Stack might not exist yet
+            if (attempt % 4 === 0) await appendLog(deploymentId, `[${ts()}] ℹ Waiting for CloudFormation stack...`);
+          }
+        }
+
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
+        await appendLog(deploymentId, `[${ts()}] ✓ Docker image: ${imageRepoName}`);
+        await appendLog(deploymentId, `[${ts()}] ✓ Infrastructure deployed via CloudFormation`);
+        if (appUrl) {
+          await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${appUrl}`);
+          await db.exec`UPDATE deployments SET status = 'success', app_url = ${appUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
+        } else {
+          await appendLog(deploymentId, `[${ts()}] ⚠ Could not determine app URL — check AWS console`);
+          await db.exec`UPDATE deployments SET status = 'success', updated_at = NOW() WHERE id = ${deploymentId}`;
+        }
+        return; // AWS pipeline complete
       }
 
-      // ── Docker build (skip for AWS managed/serverless — both ECS and App Runner use Pulumi docker → ECR) ──
-      const isAwsEcs = provider === "aws" && event.deployStrategy !== "vps" && event.deployStrategy !== "serverless";
-      const skipAwsBuild = provider === "aws" && event.deployStrategy !== "vps";
-      if (!skipBuild && !skipAwsBuild) {
-        const buildResult = await runCmd("docker", [
-          "build", "-t", imageName, "."
-        ], { cwd: repoDir });
-        if (buildResult.code !== 0) {
+      // ══════════════════════════════════════════════════════════════
+      // Non-AWS: Local Docker build + Pulumi
+      // ══════════════════════════════════════════════════════════════
+
+      if (!event.tofuScript) {
+        throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
+      }
+
+      const imageName = `${repoName}:${shortId}`;
+
+      // Check for cached image
+      const cachedImage = await db.queryRow<{ docker_image: string }>`
+        SELECT docker_image FROM deployments
+        WHERE repo = ${event.repo} AND branch = ${event.branch} AND commit_hash = ${commitHash}
+          AND docker_image != '' AND id != ${deploymentId}
+        ORDER BY created_at DESC LIMIT 1`;
+
+      let actualImage = imageName;
+      let skipBuild = false;
+      if (cachedImage?.docker_image) {
+        try {
+          execSync(`docker image inspect ${JSON.stringify(cachedImage.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
+          actualImage = cachedImage.docker_image;
+          skipBuild = true;
+          await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image: ${actualImage}`);
+        } catch { /* image pruned, rebuild */ }
+      }
+
+      if (!skipBuild) {
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── Build Docker Image ─────────────`);
+        const MAX_BUILD_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
+          const buildArgs = ["build", "-t", imageName];
+          if (attempt > 1) buildArgs.push("--no-cache");
+          buildArgs.push(".");
+          const buildResult = await runCmd("docker", buildArgs, { cwd: repoDir });
+          if (buildResult.code === 0) {
+            await appendLog(deploymentId, `[${ts()}] ✓ Docker image built: ${imageName}`);
+            break;
+          }
+          if (attempt < MAX_BUILD_ATTEMPTS) {
+            const { patchDockerfile } = await import("./repo-analyzer");
+            const currentDf = await readFs(join(repoDir, "Dockerfile"), "utf-8");
+            const fix = patchDockerfile(buildResult.output, currentDf);
+            if (fix) {
+              await appendLog(deploymentId, `[${ts()}] ⚠ Build failed — auto-fixing: ${fix.description}`);
+              await writeFile(join(repoDir, "Dockerfile"), fix.patched, "utf-8");
+              continue;
+            }
+          }
           throw new Error(`docker build failed (exit code ${buildResult.code})`);
         }
-        await appendLog(deploymentId, `[${ts()}] ✓ Docker image built: ${imageName}`);
-      } else if (skipBuild) {
-        await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image, skipping build`);
-      } else if (isAwsEcs) {
-        await appendLog(deploymentId, `[${ts()}] ℹ Skipping local build — Pulumi will build+push to ECR`);
-      } else {
-        await appendLog(deploymentId, `[${ts()}] ℹ Skipping local build — Pulumi will build+push to ECR for App Runner`);
       }
 
-      // Save docker image name to DB
-      await db.exec`UPDATE deployments SET docker_image = ${imageName} WHERE id = ${deploymentId}`;
+      await db.exec`UPDATE deployments SET docker_image = ${actualImage} WHERE id = ${deploymentId}`;
 
-      // ── Step 2b: Push image to registry (if registry configured) ──
-      let remoteImage = imageName;
+      // Push to registry if configured
+      let remoteImage = actualImage;
       if (event.registryUrl) {
         await appendLog(deploymentId, `[${ts()}]`);
         await appendLog(deploymentId, `[${ts()}] ── Push Image to Registry ─────────`);
-        remoteImage = `${event.registryUrl}/${imageName}`;
-        // Tag the image for the remote registry
-        const tagResult = await runCmd("docker", ["tag", imageName, remoteImage], { cwd: workDir });
-        if (tagResult.code !== 0) {
-          await appendLog(deploymentId, `[${ts()}] ⚠ docker tag failed, continuing with local image`);
-          remoteImage = imageName;
-        } else {
+        remoteImage = `${event.registryUrl}/${actualImage}`;
+        const tagResult = await runCmd("docker", ["tag", actualImage, remoteImage], { cwd: workDir });
+        if (tagResult.code === 0) {
           const pushResult = await runCmd("docker", ["push", remoteImage], { cwd: workDir });
           if (pushResult.code !== 0) {
             await appendLog(deploymentId, `[${ts()}] ⚠ docker push failed, continuing with local image`);
-            remoteImage = imageName;
+            remoteImage = actualImage;
           } else {
             await appendLog(deploymentId, `[${ts()}] ✓ Image pushed: ${remoteImage}`);
           }
+        } else {
+          await appendLog(deploymentId, `[${ts()}] ⚠ docker tag failed, continuing with local image`);
+          remoteImage = actualImage;
         }
       }
-      // ── Step 3: Pulumi up ──
+
+      // ── Pulumi up ──
       await db.exec`UPDATE deployments SET status = 'deploying', updated_at = NOW() WHERE id = ${deploymentId}`;
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Pulumi Setup ───────────────────`);
@@ -635,84 +764,43 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       const { mkdir } = await import("node:fs/promises");
       await mkdir(pulumiDir, { recursive: true });
 
-      // Write Pulumi program files (use unique app names for AWS ECS to avoid resource conflicts)
       const { generatePulumiProject, generatePackageJson, generateTsConfig } = await import("./pulumi-templates/index");
-      let pulumiScript = event.tofuScript;
-      // Normalize AWS App Runner runtimes (NODEJS_20/PYTHON_312 not supported — use NODEJS_22/PYTHON_311)
-      pulumiScript = pulumiScript.replace(/NODEJS_20/g, "NODEJS_22").replace(/PYTHON_312/g, "PYTHON_311");
-      if (provider === "aws" && event.deployStrategy !== "vps") {
-        const uniqueAppName = `${repoName}-${shortId}`;
-        const quotedRepo = repoName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        pulumiScript = pulumiScript.replace(new RegExp(`"${quotedRepo}(-[a-zA-Z0-9-]*)?"`, "g"), (_, suffix) => `"${uniqueAppName}${suffix || ""}"`);
-        await appendLog(deploymentId, `[${ts()}] ℹ Using unique resource prefix: ${uniqueAppName}`);
-      }
-      await writeFile(join(pulumiDir, "index.ts"), pulumiScript, "utf-8");
+      await writeFile(join(pulumiDir, "index.ts"), event.tofuScript, "utf-8");
       await writeFile(join(pulumiDir, "Pulumi.yaml"), generatePulumiProject(repoName, provider), "utf-8");
       await writeFile(join(pulumiDir, "package.json"), generatePackageJson(repoName, provider), "utf-8");
       await writeFile(join(pulumiDir, "tsconfig.json"), generateTsConfig(), "utf-8");
 
-      // Build provider env vars
       const providerEnv: Record<string, string> = {};
-      if (provider === "aws") {
-        providerEnv.AWS_ACCESS_KEY_ID = providerRow?.api_key || "";
-        providerEnv.AWS_SECRET_ACCESS_KEY = providerRow?.api_secret || "";
-        providerEnv.AWS_DEFAULT_REGION = region;
-      } else if (provider === "digitalocean") {
-        providerEnv.DIGITALOCEAN_TOKEN = providerRow?.api_key || "";
-      } else if (provider === "hetzner") {
-        providerEnv.HCLOUD_TOKEN = providerRow?.api_key || "";
-      } else if (provider === "vultr") {
-        providerEnv.VULTR_API_KEY = providerRow?.api_key || "";
-      } else if (provider === "linode") {
-        providerEnv.LINODE_TOKEN = providerRow?.api_key || "";
-      }
-      // Use local backend (file state) to avoid needing Pulumi Cloud login
+      if (provider === "digitalocean") { providerEnv.DIGITALOCEAN_TOKEN = providerRow?.api_key || ""; }
+      else if (provider === "hetzner") { providerEnv.HCLOUD_TOKEN = providerRow?.api_key || ""; }
+      else if (provider === "vultr") { providerEnv.VULTR_API_KEY = providerRow?.api_key || ""; }
+      else if (provider === "linode") { providerEnv.LINODE_TOKEN = providerRow?.api_key || ""; }
       const stateDir = join(pulumiDir, ".pulumi-state");
       await mkdir(stateDir, { recursive: true });
       providerEnv.PULUMI_BACKEND_URL = `file://${stateDir}`;
       providerEnv.PULUMI_CONFIG_PASSPHRASE = "";
 
-      // npm install
       await appendLog(deploymentId, `[${ts()}] ℹ Installing Pulumi dependencies...`);
       const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
-      if (installResult.code !== 0) {
-        throw new Error(`npm install failed (exit code ${installResult.code})`);
-      }
+      if (installResult.code !== 0) throw new Error(`npm install failed (exit code ${installResult.code})`);
       await appendLog(deploymentId, `[${ts()}] ✓ Dependencies installed`);
 
-      // pulumi stack init
       const stackName = `${repoName}-${shortId}`;
       await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
-      // Set config values — SSH public key for VPS providers (from ssh_keys table)
-      if (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "aws" && event.deployStrategy === "vps")) {
+      // SSH key for VPS providers
+      if (provider === "hetzner" || provider === "vultr" || provider === "linode") {
         const sshKeyRow = await db.queryRow<{ public_key: string }>`
           SELECT public_key FROM ssh_keys WHERE user_id = ${event.userId} ORDER BY created_at DESC LIMIT 1`;
-        if (!sshKeyRow) {
-          throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
-        }
+        if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
         await runCmd("pulumi", ["config", "set", "sshPublicKey", sshKeyRow.public_key.trim(), "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-        if (provider === "aws" && event.deployStrategy === "vps") {
-          await runCmd("pulumi", ["config", "set", "keyPairSuffix", shortId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-        }
       }
       if (provider === "linode") {
         await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
       }
       await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
-      // For AWS ECS/App Runner deploys, tell @pulumi/docker where the Dockerfile is (repo root)
-      if (provider === "aws" && event.deployStrategy !== "vps") {
-        await runCmd("pulumi", ["config", "set", "buildContext", repoDir, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-      }
-
-      // AWS App Runner requires the GitHub connection ARN for source authentication
-      if (isAppRunner && appRunnerArn) {
-        await runCmd("pulumi", ["config", "set", "appRunnerConnectionArn", appRunnerArn, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-      }
-
-      // Restore state from previous deployment if available
-      let hasValidState = false;
+      // Restore state from previous deployment
       const prevDeploy = await db.queryRow<{ tofu_script: string }>`
         SELECT tofu_script FROM deployments
         WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
@@ -723,19 +811,11 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         if (stateMarker !== -1) {
           const savedState = prevDeploy.tofu_script.slice(stateMarker + "/* STATE */\n".length);
           try {
-            // Only attempt import if it looks like valid Pulumi state (has "deployment" key)
             if (savedState.includes('"deployment"')) {
               const stateFile = join(pulumiDir, "prev-state.json");
               await writeFile(stateFile, savedState, "utf-8");
               const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
-              if (importResult.code === 0) {
-                hasValidState = true;
-                await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
-                // Remove stale config keys only when not using App Runner (ECS doesn't need it)
-                if (!isAppRunner) {
-                  await runCmd("pulumi", ["config", "rm", "appRunnerConnectionArn", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-                }
-              }
+              if (importResult.code === 0) await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
             }
           } catch { /* non-critical */ }
         }
@@ -743,54 +823,10 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
 
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Pulumi Up ──────────────────────`);
-
-      // Clean up leftover AWS ECS resources from previous (non-Pulumi) deploys
-      if (isAwsEcs && !hasValidState) {
-        const appName = repoName;
-        await appendLog(deploymentId, `[${ts()}] ℹ Cleaning up pre-existing AWS resources...`);
-
-        // Silently clean up — errors are expected if resources don't exist
-        const silentCmd = async (cmd: string, args: string[], env?: Record<string, string>) => {
-          const result = await new Promise<{ code: number; output: string }>((resolve) => {
-            const proc = spawn(cmd, args, {
-              env: { ...process.env, ...env },
-              stdio: ["ignore", "pipe", "pipe"],
-            });
-            let output = "";
-            proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
-            proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
-            proc.on("close", (code) => resolve({ code: code ?? 1, output }));
-            proc.on("error", (err) => resolve({ code: 1, output: err.message }));
-          });
-          return result;
-        };
-
-        await silentCmd("aws", ["logs", "delete-log-group", "--log-group-name", `/ecs/${appName}`, "--region", region], providerEnv);
-        await silentCmd("aws", ["iam", "detach-role-policy", "--role-name", `${appName}-exec`, "--policy-arn", "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"], providerEnv);
-        await silentCmd("aws", ["iam", "delete-role", "--role-name", `${appName}-exec`], providerEnv);
-        await silentCmd("aws", ["ecs", "update-service", "--cluster", appName, "--service", appName, "--desired-count", "0", "--region", region], providerEnv);
-        await silentCmd("aws", ["ecs", "delete-service", "--cluster", appName, "--service", appName, "--force", "--region", region], providerEnv);
-        const tdListResult = await silentCmd("aws", ["ecs", "list-task-definitions", "--family-prefix", appName, "--query", "taskDefinitionArns", "--output", "text", "--region", region], providerEnv);
-        if (tdListResult.code === 0 && tdListResult.output.trim()) {
-          for (const arn of tdListResult.output.trim().split(/\s+/)) {
-            if (arn.startsWith("arn:")) await silentCmd("aws", ["ecs", "deregister-task-definition", "--task-definition", arn, "--region", region], providerEnv);
-          }
-        }
-        await silentCmd("aws", ["ecs", "delete-cluster", "--cluster", appName, "--region", region], providerEnv);
-        const sgResult = await silentCmd("aws", ["ec2", "describe-security-groups", "--filters", `Name=group-name,Values=${appName}-sg`, "--query", "SecurityGroups[0].GroupId", "--output", "text", "--region", region], providerEnv);
-        if (sgResult.code === 0 && sgResult.output.trim() && sgResult.output.trim() !== "None") {
-          await silentCmd("aws", ["ec2", "delete-security-group", "--group-id", sgResult.output.trim(), "--region", region], providerEnv);
-        }
-        await silentCmd("aws", ["ecr", "delete-repository", "--repository-name", appName, "--force", "--region", region], providerEnv);
-        await appendLog(deploymentId, `[${ts()}] ✓ Cleaned up pre-existing resources`);
-      }
-
       const upResult = await runCmd("pulumi", ["up", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
-      if (upResult.code !== 0) {
-        throw new Error(`pulumi up failed (exit code ${upResult.code})`);
-      }
+      if (upResult.code !== 0) throw new Error(`pulumi up failed (exit code ${upResult.code})`);
 
-      // ── Step 4: Extract outputs ──
+      // Extract outputs
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Extracting outputs ──────────────`);
       const outputResult = await runCmd("pulumi", ["stack", "output", "--json", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
@@ -798,10 +834,12 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       let appUrl = "";
       let serverIp = "";
       try {
-        const outputs = JSON.parse(outputResult.output);
-        appUrl = outputs.appUrl || outputs.serverIp || "";
+        const jsonMatch = outputResult.output.match(/\{[\s\S]*\}/);
+        const outputs = JSON.parse(jsonMatch ? jsonMatch[0] : outputResult.output);
+        appUrl = outputs.appUrl || "";
         serverIp = outputs.serverIp || "";
-        if (appUrl && !appUrl.startsWith("http") && !appUrl.startsWith("ecs-fargate://")) appUrl = `http://${appUrl}`;
+        if (!appUrl && serverIp) appUrl = `http://${serverIp}`;
+        if (appUrl && !appUrl.startsWith("http")) appUrl = `http://${appUrl}`;
         for (const [key, val] of Object.entries(outputs)) {
           await appendLog(deploymentId, `[${ts()}]   ${key} = ${val}`);
         }
@@ -809,143 +847,43 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         await appendLog(deploymentId, `[${ts()}]   (could not parse outputs)`);
       }
 
-      // ── Step 5: Wait for ECS task public IP (AWS ECS deploys only) ──
-      if (isAwsEcs) {
-        let ecsClusterName = "";
-        let ecsServiceName = "";
-        try {
-          const outputs = JSON.parse(outputResult.output);
-          ecsClusterName = outputs.clusterName || "";
-          ecsServiceName = outputs.serviceName || "";
-        } catch {}
-
-        if (ecsClusterName && ecsServiceName) {
-          await appendLog(deploymentId, `[${ts()}]`);
-          await appendLog(deploymentId, `[${ts()}] ── Waiting for ECS Task ────────────`);
-          await appendLog(deploymentId, `[${ts()}] ℹ Image was built & pushed to ECR by Pulumi`);
-
-          let taskPublicIp = "";
-          for (let attempt = 0; attempt < 20; attempt++) {
-            await new Promise(r => setTimeout(r, 15_000));
-            const listResult = await runCmd("aws", [
-              "ecs", "list-tasks",
-              "--cluster", ecsClusterName,
-              "--service-name", ecsServiceName,
-              "--desired-status", "RUNNING",
-              "--region", region,
-              "--output", "json"
-            ], { cwd: workDir, env: providerEnv });
-            try {
-              const listOutput = JSON.parse(listResult.output);
-              const taskArns: string[] = listOutput.taskArns || [];
-              if (taskArns.length > 0) {
-                await appendLog(deploymentId, `[${ts()}] ✓ ECS task is running`);
-                const descResult = await runCmd("aws", [
-                  "ecs", "describe-tasks",
-                  "--cluster", ecsClusterName,
-                  "--tasks", taskArns[0],
-                  "--region", region,
-                  "--output", "json"
-                ], { cwd: workDir, env: providerEnv });
-                try {
-                  const descOutput = JSON.parse(descResult.output);
-                  const attachments = descOutput.tasks?.[0]?.attachments || [];
-                  for (const att of attachments) {
-                    if (att.type === "ElasticNetworkInterface") {
-                      const eniDetail = (att.details || []).find((d: any) => d.name === "networkInterfaceId");
-                      if (eniDetail) {
-                        const eniResult = await runCmd("aws", [
-                          "ec2", "describe-network-interfaces",
-                          "--network-interface-ids", eniDetail.value,
-                          "--query", "NetworkInterfaces[0].Association.PublicIp",
-                          "--output", "text",
-                          "--region", region
-                        ], { cwd: workDir, env: providerEnv });
-                        const ip = eniResult.output.trim();
-                        if (ip && ip !== "None") {
-                          taskPublicIp = ip;
-                          await appendLog(deploymentId, `[${ts()}] ✓ Public IP: ${taskPublicIp}`);
-                        }
-                      }
-                    }
-                  }
-                } catch { /* parse error */ }
-                break;
-              }
-            } catch { /* parse error */ }
-            if (attempt === 5 || attempt === 10 || attempt === 15) {
-              const stoppedResult = await runCmd("aws", [
-                "ecs", "describe-services",
-                "--cluster", ecsClusterName,
-                "--services", ecsServiceName,
-                "--region", region,
-                "--output", "json"
-              ], { cwd: workDir, env: providerEnv });
-              try {
-                const svcOutput = JSON.parse(stoppedResult.output);
-                const events = svcOutput.services?.[0]?.events?.slice(0, 3) || [];
-                for (const ev of events) {
-                  await appendLog(deploymentId, `[${ts()}]   ECS event: ${ev.message}`);
-                }
-              } catch {}
-            }
-            await appendLog(deploymentId, `[${ts()}] ℹ Waiting for task... (attempt ${attempt + 1}/20)`);
-          }
-          if (taskPublicIp) {
-            appUrl = `http://${taskPublicIp}:${3000}`;
-          }
-        }
-      }
-
-      // ── Step 5b: Transfer Docker image to server (VPS, if no registry) ──
-      if (event.techStack.length > 0 && serverIp && !event.registryUrl && provider !== "aws") {
+      // Transfer Docker image to server (VPS, if no registry)
+      if (event.techStack.length > 0 && serverIp && !event.registryUrl) {
         await appendLog(deploymentId, `[${ts()}]`);
         await appendLog(deploymentId, `[${ts()}] ── Transfer Docker Image ──────────`);
-        const tarPath = join(workDir, `${imageName.replace(":", "-")}.tar`);
-        const saveResult = await runCmd("docker", ["save", "-o", tarPath, imageName], { cwd: workDir });
+        const tarPath = join(workDir, `${actualImage.replace(":", "-")}.tar`);
+        const saveResult = await runCmd("docker", ["save", "-o", tarPath, actualImage], { cwd: workDir });
         if (saveResult.code === 0) {
-          // Wait for SSH to be ready (VPS just provisioned)
           await appendLog(deploymentId, `[${ts()}] ℹ Waiting for server SSH to be ready...`);
           await new Promise(r => setTimeout(r, 30_000));
-
-          // SCP the image to the server
           const scpResult = await runCmd("scp", [
             "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=30",
             tarPath, `root@${serverIp}:/tmp/app-image.tar`
           ], { cwd: workDir });
-
           if (scpResult.code === 0) {
-            // Load the image on the server
             const loadResult = await runCmd("ssh", [
-              "-o", "StrictHostKeyChecking=no",
-              `root@${serverIp}`,
-              `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; docker run -d --name ${repoName} --restart=always -p 127.0.0.1:8080:8080 --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=8080 ${imageName}`
+              "-o", "StrictHostKeyChecking=no", `root@${serverIp}`,
+              `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; docker run -d --name ${repoName} --restart=always -p 127.0.0.1:8080:8080 --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=8080 ${actualImage}`
             ], { cwd: workDir });
-            if (loadResult.code === 0) {
-              await appendLog(deploymentId, `[${ts()}] ✓ Docker image transferred and running on server`);
-            } else {
-              await appendLog(deploymentId, `[${ts()}] ⚠ Failed to load image on server (deploy may still work via user_data)`);
-            }
+            if (loadResult.code === 0) await appendLog(deploymentId, `[${ts()}] ✓ Docker image transferred and running on server`);
+            else await appendLog(deploymentId, `[${ts()}] ⚠ Failed to load image on server`);
           } else {
-            await appendLog(deploymentId, `[${ts()}] ⚠ SCP failed — server may still pull image via user_data`);
+            await appendLog(deploymentId, `[${ts()}] ⚠ SCP failed`);
           }
-        } else {
-          await appendLog(deploymentId, `[${ts()}] ⚠ docker save failed, skipping image transfer`);
         }
       }
 
-      // ── Save state ──
+      // Save Pulumi state
       try {
         const stateResult = await runCmd("pulumi", ["stack", "export", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
         if (stateResult.code === 0) {
           await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateResult.output} WHERE id = ${deploymentId}`;
         }
-      } catch { /* not critical */ }
+      } catch {}
 
-      // ── Cleanup ──
-      try { await rm(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      try { await rm(workDir, { recursive: true, force: true }); } catch {}
 
-      const finalUrl = appUrl || generateAppUrl(provider, repoName, shortId, region);
+      const finalUrl = appUrl || generateAppUrl(provider, repoName, shortId, region, event.deployStrategy);
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
       await appendLog(deploymentId, `[${ts()}] ✓ Docker image: ${remoteImage}`);
@@ -961,18 +899,131 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
   },
 });
 
+function generateAwsBuildspec(): string {
+  return `version: 0.2
+
+env:
+  shell: bash
+  variables:
+    AWS_ACCOUNT_ID: "123456789012"
+    AWS_DEFAULT_REGION: "us-east-1"
+    IMAGE_REPO_NAME: "my-app"
+    CACHE_REPO_NAME: "my-app-cache"
+
+phases:
+  install:
+    commands:
+      - set -euo pipefail
+      - mkdir -p ~/.docker/cli-plugins
+      - |
+        if ! docker buildx version >/dev/null 2>&1; then
+          curl -fsSL "https://github.com/docker/buildx/releases/latest/download/buildx-linux-amd64" \\
+            -o ~/.docker/cli-plugins/docker-buildx
+          chmod +x ~/.docker/cli-plugins/docker-buildx
+        fi
+
+  pre_build:
+    commands:
+      - set -euo pipefail
+      - |
+        IMAGE_URI="\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com/\${IMAGE_REPO_NAME}"
+        CACHE_URI="\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com/\${CACHE_REPO_NAME}"
+        IMAGE_TAG="\${CODEBUILD_RESOLVED_SOURCE_VERSION:-latest}"
+        SHORT_TAG="\${IMAGE_TAG:0:12}"
+        echo "export IMAGE_URI=\${IMAGE_URI}" > /tmp/build_env.sh
+        echo "export CACHE_URI=\${CACHE_URI}" >> /tmp/build_env.sh
+        echo "export IMAGE_TAG=\${IMAGE_TAG}" >> /tmp/build_env.sh
+        echo "export SHORT_TAG=\${SHORT_TAG}" >> /tmp/build_env.sh
+      - |
+        aws ecr describe-repositories --repository-names "$IMAGE_REPO_NAME" >/dev/null 2>&1 \\
+          || aws ecr create-repository --repository-name "$IMAGE_REPO_NAME"
+        aws ecr describe-repositories --repository-names "$CACHE_REPO_NAME" >/dev/null 2>&1 \\
+          || aws ecr create-repository --repository-name "$CACHE_REPO_NAME"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com"
+      - docker buildx create --name cbuilder --use || docker buildx use cbuilder
+      - docker buildx inspect --bootstrap
+
+  build:
+    commands:
+      - echo "Building Docker image"
+      - |
+        set -euo pipefail
+        source /tmp/build_env.sh
+        echo "Building \${IMAGE_URI}:\${SHORT_TAG}"
+        docker buildx build \\
+          --progress=plain \\
+          --cache-from type=registry,ref=\${CACHE_URI}:buildcache,ignore-error=true \\
+          --cache-to type=registry,ref=\${CACHE_URI}:buildcache,mode=max \\
+          --tag \${IMAGE_URI}:\${SHORT_TAG} \\
+          --tag \${IMAGE_URI}:latest \\
+          --push \\
+          .
+
+  post_build:
+    commands:
+      - |
+        source /tmp/build_env.sh
+        CALLBACK_URL="\${CALLBACK_URL:-}"
+        BUILD_ID="\${BUILD_ID:-}"
+
+        if [ "\${CODEBUILD_BUILD_SUCCEEDING:-1}" = "0" ]; then
+          echo "Build FAILED"
+          exit 0
+        fi
+
+        printf '{"imageUri":"%s"}\\n' "\${IMAGE_URI}:\${SHORT_TAG}" > imageDetail.json
+        cat imageDetail.json
+
+        if [ -n "\${SNS_TOPIC_ARN:-}" ] && [ -n "\${DEPLOY_TARGET:-}" ]; then
+          python3 << 'PYEOF'
+        import json, os, subprocess
+        dp_raw = os.environ.get('DEPLOY_PARAMS', '{}')
+        try: dp = json.loads(dp_raw)
+        except: dp = {}
+        image_uri = os.environ.get('IMAGE_URI', '')
+        short_tag = os.environ.get('SHORT_TAG', 'latest')
+        msg = json.dumps({
+            'buildId': os.environ.get('BUILD_ID', ''),
+            'imageUri': f'{image_uri}:{short_tag}',
+            'deployTarget': os.environ.get('DEPLOY_TARGET', ''),
+            'deployParams': dp,
+            'callbackUrl': os.environ.get('CALLBACK_URL', '')
+        })
+        subprocess.run([
+            'aws', 'sns', 'publish',
+            '--topic-arn', os.environ['SNS_TOPIC_ARN'],
+            '--subject', 'build-complete',
+            '--message', msg
+        ], check=True)
+        print('SNS published for deploy')
+        PYEOF
+        fi
+
+artifacts:
+  files:
+    - imageDetail.json
+
+cache:
+  paths:
+    - '/root/.cache/**/*'
+`;
+}
+
 function ts(): string {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
 
-function generateAppUrl(provider: string, repoName: string, shortId: string, region: string): string {
+function generateAppUrl(provider: string, repoName: string, shortId: string, region: string, deployStrategy?: string): string {
   const slug = `${repoName}-${shortId}`;
   switch (provider) {
     case "digitalocean": return `https://${slug}.ondigitalocean.app`;
     case "hetzner": return `https://${slug}.${region}.hetzner.app`;
     case "vultr": return `https://${slug}.vultr.app`;
     case "linode": return `https://${slug}.linodeobjects.com`;
-    case "aws": return `https://${slug}.${region}.awsapprunner.com`;
+    case "aws":
+      if (deployStrategy === "vps") return `http://ec2-${slug}.compute-1.amazonaws.com`;
+      if (deployStrategy === "managed") return `https://${slug}.${region}.elb.amazonaws.com`;
+      return `https://${slug}.${region}.awsapprunner.com`;
     case "upcloud": return `https://${slug}.upcloud.app`;
     case "katapult": return `https://${slug}.katapult.io`;
     case "hostinger": return `https://${slug}.hostinger.app`;
@@ -1007,6 +1058,7 @@ interface TofuRequest {
   deployStrategy?: "vps" | "managed" | "serverless";
   useDocker?: boolean;
   dockerImage?: string;
+  instanceType?: string;
   services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
   aiAnalysis?: {
     runtime: string;
@@ -1072,6 +1124,7 @@ export const generateTofu = api(
       deployStrategy: params.deployStrategy,
       useDocker: params.useDocker,
       dockerImage: params.dockerImage,
+      instanceType: params.instanceType,
     });
 
     return {

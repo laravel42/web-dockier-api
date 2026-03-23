@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploy a Docker image to AWS App Runner.
+
+Parameters:
+  AppName:
+    Type: String
+  ImageUri:
+    Type: String
+    Description: Full ECR image URI with tag
+  ContainerPort:
+    Type: Number
+    Default: 3000
+  Cpu:
+    Type: String
+    Default: "1024"
+    AllowedValues: ["256", "512", "1024", "2048", "4096"]
+    Description: CPU units (1024 = 1 vCPU)
+  Memory:
+    Type: String
+    Default: "2048"
+    AllowedValues: ["512", "1024", "2048", "3072", "4096", "6144", "8192", "10240", "12288"]
+    Description: Memory in MB
+  MinInstances:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 25
+  MaxInstances:
+    Type: Number
+    Default: 4
+    MinValue: 1
+    MaxValue: 25
+  MaxConcurrency:
+    Type: Number
+    Default: 100
+    Description: Max concurrent requests per instance before scaling
+  HealthCheckPath:
+    Type: String
+    Default: "/"
+  EnvVarsJson:
+    Type: String
+    Default: '[{"name":"NODE_ENV","value":"production"}]'
+  BuildId:
+    Type: String
+    Default: ""
+  CallbackUrl:
+    Type: String
+    Default: ""
+
+Resources:
+  AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-apprunner-ecr"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-apprunner-instance"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Ref AppName
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AccessRole.Arn
+        AutoDeploymentsEnabled: false
+        ImageRepository:
+          ImageIdentifier: !Ref ImageUri
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: !Ref ContainerPort
+            RuntimeEnvironmentVariables:
+              - Name: NODE_ENV
+                Value: production
+              - Name: PORT
+                Value: !Ref ContainerPort
+              - Name: HOSTNAME
+                Value: "0.0.0.0"
+      InstanceConfiguration:
+        Cpu: !Ref Cpu
+        Memory: !Ref Memory
+        InstanceRoleArn: !GetAtt InstanceRole.Arn
+      AutoScalingConfigurationArn: !GetAtt AutoScaling.AutoScalingConfigurationArn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: !Ref HealthCheckPath
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 5
+      Tags:
+        - Key: Name
+          Value: !Ref AppName
+        - Key: BuildId
+          Value: !Ref BuildId
+
+  AutoScaling:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: !Sub "${AppName}-scaling"
+      MaxConcurrency: !Ref MaxConcurrency
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+
+Outputs:
+  AppUrl:
+    Value: !Sub "https://${AppRunnerService.ServiceUrl}"
+  ServiceArn:
+    Value: !GetAtt AppRunnerService.ServiceArn
+  ServiceId:
+    Value: !GetAtt AppRunnerService.ServiceId
+  BuildId:
+    Value: !Ref BuildId

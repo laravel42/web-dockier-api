@@ -42,6 +42,7 @@ export default function App() {
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId" element={<ProjectDetail />} />
             <Route path="/security" element={<SecurityScans />} />
+            <Route path="/security/project/:projectId" element={<ScanDetail />} />
             <Route path="/security/:scanId" element={<ScanDetail />} />
             <Route path="/deploy" element={<Deploy />} />
             <Route path="/deploy/:deployId" element={<DeployDetail />} />

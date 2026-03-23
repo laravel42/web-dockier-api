@@ -84,7 +84,7 @@ interface ScanProgress {
 }
 
 export default function ScanDetail() {
-  const { scanId } = useParams<{ scanId: string }>();
+  const { scanId, projectId: routeProjectId } = useParams<{ scanId?: string; projectId?: string }>();
   const navigate = useNavigate();
 
   const [scan, setScan] = useState<Scan | null>(null);
@@ -141,27 +141,50 @@ export default function ScanDetail() {
 
   // Load scan + project + findings
   useEffect(() => {
-    if (!scanId) return;
-    setLoading(true);
-    codeAnalysisApi.getScan(scanId)
-      .then(async (s) => {
-        setScan(s);
-        try {
-          const p = await projectsApi.get(s.projectId);
+    if (scanId) {
+      setLoading(true);
+      codeAnalysisApi.getScan(scanId)
+        .then(async (s) => {
+          setScan(s);
+          try {
+            const p = await projectsApi.get(s.projectId);
+            setProject(p);
+            // Fetch all scans for this project (sidebar)
+            setAllScansLoading(true);
+            codeAnalysisApi.listScans(s.projectId)
+              .then((res) => setAllScans(res.scans))
+              .catch(() => {})
+              .finally(() => setAllScansLoading(false));
+          } catch {}
+          return s;
+        })
+        .catch((err: any) => setError(err.message || "Failed to load scan"))
+        .finally(() => setLoading(false));
+      fetchFindings(scanId);
+    } else if (routeProjectId) {
+      // No scan yet — load project directly and show empty state with "Run scan" button
+      setLoading(true);
+      projectsApi.get(routeProjectId)
+        .then(async (p) => {
           setProject(p);
-          // Fetch all scans for this project (sidebar)
+          // Check if there are any existing scans for this project
           setAllScansLoading(true);
-          codeAnalysisApi.listScans(s.projectId)
-            .then((res) => setAllScans(res.scans))
+          codeAnalysisApi.listScans(routeProjectId)
+            .then((res) => {
+              setAllScans(res.scans);
+              // If there are scans, navigate to the latest one
+              if (res.scans.length > 0) {
+                const latest = res.scans.sort((a: Scan, b: Scan) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+                navigate(`/security/${latest.id}`, { replace: true });
+              }
+            })
             .catch(() => {})
             .finally(() => setAllScansLoading(false));
-        } catch {}
-        return s;
-      })
-      .catch((err: any) => setError(err.message || "Failed to load scan"))
-      .finally(() => setLoading(false));
-    fetchFindings(scanId);
-  }, [scanId]);
+        })
+        .catch((err: any) => setError(err.message || "Failed to load project"))
+        .finally(() => setLoading(false));
+    }
+  }, [scanId, routeProjectId]);
 
   const fetchFindings = async (id: string, severity?: string) => {
     setFindingsLoading(true);
@@ -332,11 +355,99 @@ export default function ScanDetail() {
     );
   }
 
-  if (error || !scan) {
+  if (error || (!scan && !project)) {
     return (
       <div className="text-center py-16">
         <p className="text-danger-500 text-sm mb-4">{error || "Scan not found"}</p>
         <button onClick={() => navigate("/security")} className={btnSecondary}>Back to Security Scans</button>
+      </div>
+    );
+  }
+
+  // Project loaded but no scan selected — show empty state with sidebar
+  if (!scan && project) {
+    return (
+      <div className="flex gap-6">
+        <div className="flex-1 min-w-0">
+          <button onClick={() => navigate("/security")} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+            All Scans
+          </button>
+          <h1 className="text-2xl font-display font-semibold text-text tracking-tight mb-2">{project.name}</h1>
+          <div className={`${cardCls} p-12 text-center mt-6`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-text-muted mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+            <p className="text-sm text-text-muted mb-1">No security scans yet for this project.</p>
+            <p className="text-sm text-text-muted">Click "Run new scan" to get started.</p>
+          </div>
+        </div>
+        {/* Sidebar */}
+        <div className="w-64 shrink-0">
+          <div className="sticky top-6 space-y-3">
+            <button
+              type="button"
+              onClick={handleRunScan}
+              disabled={scanRunning || !project.connectionId}
+              className="w-full h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+            >
+              {scanRunning ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Scanning…
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                  </svg>
+                  Run new scan
+                </>
+              )}
+            </button>
+            {scanRunning && scanProgress && (
+              <div className={`${cardCls} p-3 space-y-2`}>
+                <p className="text-xs font-medium text-text">
+                  {scanProgress.phase === "cloning" && "Cloning…"}
+                  {scanProgress.phase === "scanning" && "Scanning…"}
+                  {scanProgress.phase === "persisting" && "Processing…"}
+                </p>
+                <div className="w-full h-1.5 bg-secondary-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary-500 rounded-full transition-all duration-300" style={{ width: `${scanProgress.phase === "cloning" ? 10 : scanProgress.phase === "scanning" ? 40 : 80}%` }} />
+                </div>
+              </div>
+            )}
+            {scanError && (
+              <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-xs text-danger-500">{scanError}</div>
+            )}
+            <div className={`${cardCls} overflow-hidden`}>
+              <div className="px-3 py-2 border-b border-border">
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Scan History</p>
+              </div>
+              {allScans.length === 0 ? (
+                <p className="text-xs text-text-muted text-center py-4">No scans yet</p>
+              ) : (
+                <div className="max-h-[calc(100vh-220px)] overflow-y-auto divide-y divide-border">
+                  {allScans.map((s) => {
+                    const statusDot = s.status === "completed" ? "bg-success-500" : s.status === "failed" ? "bg-danger-500" : s.status === "running" ? "bg-primary-500" : "bg-secondary-300";
+                    return (
+                      <button key={s.id} type="button" onClick={() => navigate(`/security/${s.id}`)} className="w-full text-left px-3 py-2.5 transition-colors hover:bg-secondary-50">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot}`} />
+                          <span className="text-xs font-medium truncate text-text">
+                            {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

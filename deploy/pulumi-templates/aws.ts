@@ -112,7 +112,7 @@ const taskDef = new aws.ecs.TaskDefinition("${p.appName}", {
   networkMode: "awsvpc",
   requiresCompatibilities: ["FARGATE"],
   runtimePlatform: {
-    cpuArchitecture: "ARM64",
+    cpuArchitecture: "X86_64",
     operatingSystemFamily: "LINUX",
   },
   cpu: "512",
@@ -126,8 +126,6 @@ const taskDef = new aws.ecs.TaskDefinition("${p.appName}", {
       portMappings: [{ containerPort: ${p.runtime.port}, hostPort: ${p.runtime.port}, protocol: "tcp" }],
       environment: [
         { name: "PORT", value: "${p.runtime.port}" },
-        { name: "NODE_ENV", value: "production" },
-        { name: "HOSTNAME", value: "0.0.0.0" },
       ],
       logConfiguration: {
         logDriver: "awslogs",
@@ -237,8 +235,6 @@ const appRunner = new aws.apprunner.Service("${p.appName}", {
         port: "${p.runtime.port}",
         runtimeEnvironmentVariables: {
           PORT: "${p.runtime.port}",
-          NODE_ENV: "production",
-          HOSTNAME: "0.0.0.0",
         },
       },
     },
@@ -277,6 +273,7 @@ import * as aws from "@pulumi/aws";
 const config = new pulumi.Config();
 const region = config.get("region") || "${p.region}";
 const suffix = config.get("keyPairSuffix") || "";
+const instanceType = config.get("instanceType") || "${p.instanceType || "t3.small"}";
 const name = (base: string) => suffix ? \`${p.appName}-\${suffix}-\${base}\` : \`${p.appName}-\${base}\`;
 
 // ── Default VPC & Subnet (avoids "No default subnet for AZ" when us-east-1a has none) ──
@@ -305,20 +302,20 @@ const sg = new aws.ec2.SecurityGroup("${p.appName}-sg", {
   egress: [{ fromPort: 0, toPort: 0, protocol: "-1", cidrBlocks: ["0.0.0.0/0"] }],
 });
 
-// ── AMI (Ubuntu 24.04 ARM64) ──
+// ── AMI (Ubuntu 24.04 AMD64) ──
 const ami = aws.ec2.getAmiOutput({
   mostRecent: true,
   owners: ["099720109477"],
   filters: [
-    { name: "name", values: ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"] },
-    { name: "architecture", values: ["arm64"] },
+    { name: "name", values: ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"] },
+    { name: "architecture", values: ["x86_64"] },
   ],
 });
 
 // ── EC2 Instance (use subnet from default VPC; avoids "No default subnet for AZ" errors) ──
 const server = new aws.ec2.Instance("${p.appName}", {
   ami: ami.id,
-  instanceType: "t4g.small",
+  instanceType,
   subnetId,
   keyName: keyPair.keyName,
   vpcSecurityGroupIds: [sg.id],
@@ -329,6 +326,6 @@ const server = new aws.ec2.Instance("${p.appName}", {
 });
 
 export const serverIp = server.publicIp;
-export const appUrl = server.publicIp.apply((ip) => \`http://\${ip}\`);
+export const appUrl = server.publicIp.apply((ip) => \`http://ec2-\${ip.replace(/\\./g, "-")}.compute-1.amazonaws.com\`);
 `;
 }

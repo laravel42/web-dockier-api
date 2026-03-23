@@ -19,12 +19,6 @@ interface Deployment {
   createdAt: string;
 }
 
-interface Provider {
-  id: string;
-  provider: string;
-  label: string;
-}
-
 interface Project {
   id: string;
   name: string;
@@ -41,18 +35,9 @@ function repoKey(repoUrl: string): string {
   return repoUrl;
 }
 
-const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
-  digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
-  hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
-  vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
-  linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode" },
-};
-
 export default function Deploy() {
   const navigate = useNavigate();
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,13 +45,11 @@ export default function Deploy() {
     const load = async () => {
       setLoading(true);
       try {
-        const [dRes, pRes, projRes] = await Promise.all([
+        const [dRes, projRes] = await Promise.all([
           deployApi.listDeployments(),
-          deployApi.listProviders(),
           projectsApi.list(),
         ]);
         setDeployments(dRes.deployments);
-        setProviders(pRes.providers);
         setProjects(projRes.projects);
       } catch {}
       finally { setLoading(false); }
@@ -113,17 +96,10 @@ export default function Deploy() {
               const proj = projectByRepo[repo];
               const sorted = repoDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
               const latest = sorted[0];
-              const prov = providers.find(p => p.id === latest.providerId);
-              const provKey = prov?.provider || "";
-              const ps = providerStyles[provKey] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
-              const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
               const statusDot = latest.status === "success" ? "bg-success-500"
                 : latest.status === "failed" ? "bg-danger-500"
                 : latest.status === "building" || latest.status === "deploying" ? "bg-primary-500"
                 : "bg-secondary-400";
-
-              const successCount = sorted.filter(d => d.status === "success").length;
-              const failedCount = sorted.filter(d => d.status === "failed").length;
 
               return (
                 <div

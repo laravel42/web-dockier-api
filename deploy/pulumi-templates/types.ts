@@ -13,6 +13,7 @@ export interface DeployParams {
   deployStrategy?: "vps" | "managed" | "serverless";
   useDocker?: boolean;
   dockerImage?: string;
+  instanceType?: string;
   aiAnalysis?: {
     runtime: string;
     runtimeVersion: string;
