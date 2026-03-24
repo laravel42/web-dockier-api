@@ -8,7 +8,7 @@ import { join } from "node:path";
 // ─── Stack Detection ───
 
 export type DetectedStack =
-  | { runtime: "node"; framework: "nextjs" | "nuxt" | "generic"; packageManager: "npm" | "pnpm" | "yarn" | "bun"; hasStandalone: boolean; subDir: string }
+  | { runtime: "node"; framework: "nextjs" | "nuxt" | "generic"; packageManager: "npm" | "pnpm" | "yarn" | "bun"; hasStandalone: boolean; isStatic: boolean; subDir: string }
   | { runtime: "php"; framework: "laravel" | "generic"; hasNodeAssets: boolean; subDir: string }
   | { runtime: "python"; framework: "django" | "fastapi" | "flask" | "generic"; subDir: string }
   | { runtime: "go"; subDir: string }
@@ -33,6 +33,7 @@ export function detectStack(repoDir: string): DetectedStack {
   if (existsSync(join(appDir, "package.json"))) {
     let framework: "nextjs" | "nuxt" | "generic" = "generic";
     let hasStandalone = false;
+    let isStatic = false;
     try {
       const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf-8"));
       const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
@@ -47,10 +48,24 @@ export function detectStack(repoDir: string): DetectedStack {
         }
       } else if (allDeps["nuxt"]) {
         framework = "nuxt";
+        for (const cfg of ["nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js"]) {
+          const cfgPath = join(appDir, cfg);
+          if (existsSync(cfgPath)) {
+            try {
+              const content = readFileSync(cfgPath, "utf-8");
+              if (/nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(content)
+                || /ssr\s*:\s*false/.test(content)
+                || /preset\s*:\s*['"]static['"]/.test(content)) {
+                isStatic = true;
+              }
+            } catch {}
+            break;
+          }
+        }
       }
     } catch {}
     const pm = detectNodePM(appDir, repoDir);
-    return { runtime: "node", framework, packageManager: pm, hasStandalone, subDir };
+    return { runtime: "node", framework, packageManager: pm, hasStandalone, isStatic, subDir };
   }
 
   // Python
@@ -186,6 +201,21 @@ function nodeDockerfile(stack: Extract<DetectedStack, { runtime: "node" }>, repo
     lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
     lines.push("EXPOSE 3000");
     lines.push('CMD ["node_modules/.bin/next", "start"]');
+  } else if (stack.framework === "nuxt" && stack.isStatic) {
+    // Nuxt static site — serve pre-rendered files with a minimal server
+    lines.push("FROM public.ecr.aws/docker/library/node:" + nodeVer + "-slim");
+    lines.push("WORKDIR /app");
+    lines.push("RUN npm i -g serve");
+    lines.push("COPY --from=builder /app/.output/public ./public");
+    lines.push("ENV PORT=3000");
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["serve", "public", "-l", "3000", "-s"]');
+  } else if (stack.framework === "nuxt") {
+    // Nuxt SSR — self-contained Nitro server
+    lines.push("COPY --from=builder /app/.output ./.output");
+    lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["node", ".output/server/index.mjs"]');
   } else {
     lines.push("COPY --from=builder /app .");
     if (pm === "pnpm" || pm === "yarn") {
@@ -232,12 +262,12 @@ function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>, repoDi
 
     if (stack.hasNodeAssets) {
       lines.push("");
-      lines.push("FROM public.ecr.aws/docker/library/node:20-alpine AS frontend");
+      lines.push("FROM public.ecr.aws/docker/library/node:20-slim AS frontend");
       lines.push("WORKDIR /app");
       lines.push("COPY package*.json yarn.lock* pnpm-lock.yaml* bun.lockb* ./");
-      lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \\');
-      lines.push('    elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; \\');
-      lines.push("    else npm ci; fi");
+      lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --no-frozen-lockfile; \\');
+      lines.push('    elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install; \\');
+      lines.push("    else npm ci || npm install; fi");
       lines.push("COPY . .");
       lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm run build; \\');
       lines.push('    elif [ -f yarn.lock ]; then yarn build; \\');

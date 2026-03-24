@@ -234,7 +234,28 @@ function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig)
     config.framework = "Nuxt";
     config.frameworkVersion = cleanVersion(allDeps["nuxt"]);
     config.port = 3000;
-    config.features.add("ssr");
+    // Detect static vs SSR from nuxt.config
+    let isStatic = false;
+    for (const cfgName of ["nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js"]) {
+      const cfgPath = join(appDir, cfgName);
+      if (existsSync(cfgPath)) {
+        try {
+          const content = readFileSync(cfgPath, "utf-8");
+          // Check for static preset or SSR disabled
+          if (/nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(content)
+            || /ssr\s*:\s*false/.test(content)
+            || /preset\s*:\s*['"]static['"]/.test(content)) {
+            isStatic = true;
+          }
+        } catch {}
+        break;
+      }
+    }
+    if (isStatic) {
+      config.features.add("static-export");
+    } else {
+      config.features.add("ssr");
+    }
   } else if (allDeps["@angular/core"]) {
     config.framework = "Angular";
     config.frameworkVersion = cleanVersion(allDeps["@angular/core"]);
@@ -556,6 +577,21 @@ function generateNodeDockerfile(config: RepoConfig): string {
     lines.push("EXPOSE 3000");
     // Use next directly from node_modules — pnpm/yarn aren't installed in production stage
     lines.push('CMD ["node_modules/.bin/next", "start"]');
+  } else if (config.framework === "Nuxt" && config.features.has("static-export")) {
+    // Nuxt static site — serve pre-rendered files with a minimal server
+    lines.push("FROM public.ecr.aws/docker/library/node:${nodeVer}-slim".replace("${nodeVer}", nodeVer));
+    lines.push("WORKDIR /app");
+    lines.push("RUN npm i -g serve");
+    lines.push("COPY --from=builder /app/.output/public ./public");
+    lines.push('ENV PORT=3000');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["serve", "public", "-l", "3000", "-s"]');
+  } else if (config.framework === "Nuxt") {
+    // Nuxt SSR — self-contained Nitro server
+    lines.push("COPY --from=builder /app/.output ./.output");
+    lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["node", ".output/server/index.mjs"]');
   } else {
     lines.push("COPY --from=builder /app .");
     lines.push(`ENV PORT=${config.port}`);
@@ -640,8 +676,8 @@ function generatePhpDockerfile(config: RepoConfig): string {
     const nodePm = config.features.has("node-pm-pnpm") ? "pnpm"
       : config.features.has("node-pm-yarn") ? "yarn" : "npm";
     let nodeInstallCmd = "npm ci || npm install";
-    if (nodePm === "pnpm") nodeInstallCmd = "corepack enable && pnpm install --frozen-lockfile";
-    else if (nodePm === "yarn") nodeInstallCmd = "corepack enable && yarn install --frozen-lockfile";
+    if (nodePm === "pnpm") nodeInstallCmd = "corepack enable && pnpm install --no-frozen-lockfile";
+    else if (nodePm === "yarn") nodeInstallCmd = "corepack enable && yarn install --immutable || yarn install";
 
     lines.push("");
     lines.push("FROM public.ecr.aws/docker/library/node:20-slim AS node-builder");
@@ -649,7 +685,7 @@ function generatePhpDockerfile(config: RepoConfig): string {
     lines.push(`COPY ${copyPrefix}package.json ${copyPrefix}package-lock.json* ${copyPrefix}pnpm-lock.yaml* ${copyPrefix}yarn.lock* ./`);
     lines.push(`RUN ${nodeInstallCmd}`);
     lines.push(`COPY ${copyPrefix}. .`);
-    lines.push("RUN npm run build");
+    lines.push(`RUN ${nodePm} run build`);
   }
 
   // ── Production stage ──
@@ -658,16 +694,21 @@ function generatePhpDockerfile(config: RepoConfig): string {
   lines.push("WORKDIR /app");
 
   // Re-install system libs and PHP extensions in production stage
-  // PHP Docker image Debian versions: 7.x/8.0/8.1 → Bullseye, 8.2+ → Bookworm
+  // PHP Docker image Debian versions: 7.x/8.0/8.1 → Bullseye, 8.2/8.3 → Bookworm, 8.4+ → Trixie
   const phpMajMin = parseFloat(phpVer) || 8.4;
   const isBullseye = phpMajMin < 8.2;
+  const isTrixie = phpMajMin >= 8.4;
   const runtimeAptPkgs = new Set<string>();
   // Only runtime libs (not -dev packages, not build tools)
   for (const ext of config.phpExtensions) {
-    if (ext === "gd") { runtimeAptPkgs.add("libpng16-16"); runtimeAptPkgs.add("libjpeg62-turbo"); runtimeAptPkgs.add("libfreetype6"); }
+    if (ext === "gd") {
+      runtimeAptPkgs.add(isTrixie ? "libpng16-16t64" : "libpng16-16");
+      runtimeAptPkgs.add("libjpeg62-turbo");
+      runtimeAptPkgs.add("libfreetype6");
+    }
     if (ext === "pgsql" || ext === "pdo_pgsql") runtimeAptPkgs.add("libpq5");
-    if (ext === "zip") runtimeAptPkgs.add("libzip4");
-    if (ext === "intl") runtimeAptPkgs.add(isBullseye ? "libicu67" : "libicu72");
+    if (ext === "zip") runtimeAptPkgs.add(isTrixie ? "libzip5" : "libzip4");
+    if (ext === "intl") runtimeAptPkgs.add(isBullseye ? "libicu67" : isTrixie ? "libicu76" : "libicu72");
     if (ext === "imagick") runtimeAptPkgs.add(isBullseye ? "libmagickwand-6.q16-6" : "libmagickwand-6.q16-7");
   }
   if (runtimeAptPkgs.size > 0) {
