@@ -11,7 +11,7 @@ interface ConfirmModalProps {
 
 export default function ConfirmModal({ open, onClose, onConfirm, title = "Confirm Delete", message = "Are you sure? This action cannot be undone.", confirmLabel = "Delete" }: ConfirmModalProps) {
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={onClose} title={title} compact>
       <p className="text-sm text-text-secondary mb-6">{message}</p>
       <div className="flex justify-end gap-3">
         <button onClick={onClose} className="h-9 px-4 text-sm font-medium text-text-secondary rounded-[var(--radius-btn)] hover:bg-secondary-50 transition-colors">Cancel</button>

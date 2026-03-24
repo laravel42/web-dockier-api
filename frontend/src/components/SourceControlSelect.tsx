@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import DevIcon from "./DevIcon";
 
 interface Connection {
   id: string;
@@ -12,8 +13,6 @@ const PROVIDER_ICONS: Record<string, { icon: string; name: string }> = {
   gitlab_self_hosted: { icon: "gitlab", name: "GitLab" },
   bitbucket: { icon: "bitbucket", name: "Bitbucket" },
 };
-
-const ICON_BASE = "https://cdn.simpleicons.org";
 
 interface Props {
   value: string;
@@ -76,11 +75,10 @@ export default function SourceControlSelect({ value, onChange, connections, load
       >
         {selected ? (
           <>
-            <img
-              src={`${ICON_BASE}/${PROVIDER_ICONS[selected.provider]?.icon ?? "git"}`}
+            <DevIcon
+              src={PROVIDER_ICONS[selected.provider]?.icon ?? "git"}
               alt=""
               className="w-4 h-4 shrink-0"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
             <span className="truncate">{selected.label} ({PROVIDER_ICONS[selected.provider]?.name ?? selected.provider})</span>
           </>
@@ -117,11 +115,10 @@ export default function SourceControlSelect({ value, onChange, connections, load
                     value === c.id ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  <img
-                    src={`${ICON_BASE}/${PROVIDER_ICONS[c.provider]?.icon ?? "git"}`}
+                  <DevIcon
+                    src={PROVIDER_ICONS[c.provider]?.icon ?? "git"}
                     alt=""
                     className="w-4 h-4 shrink-0"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                   <span>{c.label} ({PROVIDER_ICONS[c.provider]?.name ?? c.provider})</span>
                 </button>

@@ -4,6 +4,7 @@ import { projectsApi, gitApi, deployApi } from "../services/api";
 import ConfirmModal from "../components/ConfirmModal";
 import Modal from "../components/Modal";
 import DeployWizard from "../components/DeployWizard";
+import DevIcon from "../components/DevIcon";
 
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
@@ -543,7 +544,7 @@ export default function ProjectDetail() {
         const prov = allProviders.find(p => p.id === lastDeploy.providerId);
         const provKey = prov?.provider || "";
         const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-          aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
+          aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "i/aws.svg" },
           digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
           hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
           vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
@@ -559,7 +560,7 @@ export default function ProjectDetail() {
               <div className="flex items-center gap-3 mb-4">
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[lastDeploy.status] || "bg-secondary-100 text-text-muted"}`}>{lastDeploy.status}</span>
                 <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium ${ps.bg} ${ps.text}`}>
-                  {ps.icon && <img src={`https://cdn.simpleicons.org/${ps.icon}`} alt="" className="w-3 h-3" />}
+                  {ps.icon && <DevIcon src={ps.icon} alt="" className="w-3 h-3" />}
                   {provKey.toUpperCase()} · {strategyLabels[lastDeploy.deployStrategy] || lastDeploy.deployStrategy}
                 </span>
                 <span className="text-xs text-text-muted ml-auto">{new Date(lastDeploy.createdAt).toLocaleString()}</span>

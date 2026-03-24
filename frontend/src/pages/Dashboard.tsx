@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { projectsApi, deployApi, codeAnalysisApi } from "../services/api";
+import DevIcon from "../components/DevIcon";
 
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
 
@@ -10,7 +11,7 @@ interface Scan { id: string; projectId: string; repo: string; branch: string; st
 interface Provider { id: string; provider: string; label: string; }
 
 const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
+  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "i/aws.svg" },
   digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
   hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
   vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
@@ -120,7 +121,7 @@ export default function Dashboard() {
                       <p className="text-xs text-text-muted">{d.branch} · {new Date(d.createdAt).toLocaleDateString()}</p>
                     </div>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium shrink-0 ${ps.bg} ${ps.text}`}>
-                      {ps.icon && <img src={`https://cdn.simpleicons.org/${ps.icon}`} alt="" className="w-2.5 h-2.5" />}
+                      {ps.icon && <DevIcon src={ps.icon} alt="" className="w-2.5 h-2.5" />}
                       {pk.toUpperCase()}
                     </span>
                   </button>

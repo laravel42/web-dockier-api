@@ -6,6 +6,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import SourceControlSelect from "../components/SourceControlSelect";
 import RepoSelect from "../components/RepoSelect";
 import BranchSelect from "../components/BranchSelect";
+import DevIcon from "../components/DevIcon";
 
 const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 const btnPrimary = "h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm";
@@ -200,7 +201,10 @@ export default function Projects() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Projects</h1>
-        <button onClick={openCreate} className={btnPrimary}>New Project</button>
+        <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          New Project
+        </button>
       </div>
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditing(null); resetSelections(); }} title={editing ? "Edit Project" : "New Project"} size="xl">
@@ -335,7 +339,7 @@ export default function Projects() {
                 {platformLabel && (
                   <div>
                     <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary-50 text-text-secondary text-sm font-medium">
-                      <img src={`https://cdn.simpleicons.org/${PLATFORM_ICONS[p.platform] || p.platform}`} alt="" className="w-4 h-4" />
+                      <DevIcon src={PLATFORM_ICONS[p.platform] || p.platform} alt="" className="w-4 h-4" />
                       {platformLabel}
                     </span>
                   </div>

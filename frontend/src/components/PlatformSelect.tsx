@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import DevIcon from "./DevIcon";
 
 interface Platform {
   name: string;
@@ -108,8 +109,6 @@ const PLATFORMS: Platform[] = [
   { name: ".NET", slug: "dotnet", icon: "dotnet" },
 ];
 
-const ICON_BASE = "https://cdn.simpleicons.org";
-
 interface Props {
   value: string;
   onChange: (slug: string) => void;
@@ -151,11 +150,10 @@ export default function PlatformSelect({ value, onChange }: Props) {
       >
         {selected ? (
           <>
-            <img
-              src={`${ICON_BASE}/${selected.icon}`}
+            <DevIcon
+              src={selected.icon}
               alt=""
               className="w-4 h-4 shrink-0"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
             <span className="truncate">{selected.name}</span>
           </>
@@ -192,11 +190,10 @@ export default function PlatformSelect({ value, onChange }: Props) {
                     value === p.slug ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  <img
-                    src={`${ICON_BASE}/${p.icon}`}
+                  <DevIcon
+                    src={p.icon}
                     alt=""
                     className="w-4 h-4 shrink-0"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                   <span>{p.name}</span>
                 </button>

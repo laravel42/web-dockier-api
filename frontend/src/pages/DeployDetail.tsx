@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../services/api";
+import DevIcon from "../components/DevIcon";
 
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
@@ -35,7 +36,7 @@ interface Project {
 }
 
 const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "amazonwebservices" },
+  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "i/aws.svg" },
   digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
   hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
   vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
@@ -167,7 +168,7 @@ export default function DeployDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
           <div className={`${cardCls} px-3 py-2 text-center`}>
             <div className="flex items-center justify-center gap-1.5 mb-1">
-              {ps.icon && <img src={`https://cdn.simpleicons.org/${ps.icon}`} alt="" className="w-3.5 h-3.5" />}
+              {ps.icon && <DevIcon src={ps.icon} alt="" className="w-3.5 h-3.5" />}
               <p className={`text-sm font-bold ${ps.text}`}>{provKey.toUpperCase()}</p>
             </div>
             <p className="text-[10px] text-text-muted">Provider</p>
@@ -244,7 +245,7 @@ export default function DeployDetail() {
                       </div>
                       <div className="flex items-center gap-1.5 mt-1 ml-4">
                         <span className={`inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-medium ${dps.bg} ${dps.text}`}>
-                          {dps.icon && <img src={`https://cdn.simpleicons.org/${dps.icon}`} alt="" className="w-2.5 h-2.5" />}
+                          {dps.icon && <DevIcon src={dps.icon} alt="" className="w-2.5 h-2.5" />}
                           {dk.toUpperCase()}
                         </span>
                         <span className="text-[10px] text-text-muted">{d.branch}</span>
