@@ -234,7 +234,28 @@ function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig)
     config.framework = "Nuxt";
     config.frameworkVersion = cleanVersion(allDeps["nuxt"]);
     config.port = 3000;
-    config.features.add("ssr");
+    // Detect static vs SSR from nuxt.config
+    let isStatic = false;
+    for (const cfgName of ["nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js"]) {
+      const cfgPath = join(appDir, cfgName);
+      if (existsSync(cfgPath)) {
+        try {
+          const content = readFileSync(cfgPath, "utf-8");
+          // Check for static preset or SSR disabled
+          if (/nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(content)
+            || /ssr\s*:\s*false/.test(content)
+            || /preset\s*:\s*['"]static['"]/.test(content)) {
+            isStatic = true;
+          }
+        } catch {}
+        break;
+      }
+    }
+    if (isStatic) {
+      config.features.add("static-export");
+    } else {
+      config.features.add("ssr");
+    }
   } else if (allDeps["@angular/core"]) {
     config.framework = "Angular";
     config.frameworkVersion = cleanVersion(allDeps["@angular/core"]);
@@ -556,6 +577,21 @@ function generateNodeDockerfile(config: RepoConfig): string {
     lines.push("EXPOSE 3000");
     // Use next directly from node_modules — pnpm/yarn aren't installed in production stage
     lines.push('CMD ["node_modules/.bin/next", "start"]');
+  } else if (config.framework === "Nuxt" && config.features.has("static-export")) {
+    // Nuxt static site — serve pre-rendered files with a minimal server
+    lines.push("FROM public.ecr.aws/docker/library/node:${nodeVer}-slim".replace("${nodeVer}", nodeVer));
+    lines.push("WORKDIR /app");
+    lines.push("RUN npm i -g serve");
+    lines.push("COPY --from=builder /app/.output/public ./public");
+    lines.push('ENV PORT=3000');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["serve", "public", "-l", "3000", "-s"]');
+  } else if (config.framework === "Nuxt") {
+    // Nuxt SSR — self-contained Nitro server
+    lines.push("COPY --from=builder /app/.output ./.output");
+    lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["node", ".output/server/index.mjs"]');
   } else {
     lines.push("COPY --from=builder /app .");
     lines.push(`ENV PORT=${config.port}`);

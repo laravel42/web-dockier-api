@@ -188,6 +188,19 @@ Resources:
                 ln -sf /etc/nginx/sites-available/${AppName} /etc/nginx/sites-enabled/default
                 nginx -t && systemctl restart nginx
           files:
+            /etc/systemd/system/cfn-hup.service:
+              content: |
+                [Unit]
+                Description=cfn-hup daemon
+                [Service]
+                Type=simple
+                ExecStart=/usr/local/bin/cfn-hup -v
+                Restart=always
+                [Install]
+                WantedBy=multi-user.target
+              mode: "000644"
+              owner: root
+              group: root
             /etc/cfn/cfn-hup.conf:
               content: !Sub |
                 [main]
@@ -208,7 +221,7 @@ Resources:
               owner: root
               group: root
           services:
-            sysvinit:
+            systemd:
               cfn-hup:
                 enabled: true
                 ensureRunning: true
@@ -245,7 +258,10 @@ Resources:
           pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz 2>/dev/null || true
 
           cfn-init -v --stack ${AWS::StackName} --resource Instance --configsets deploy --region ${AWS::Region}
-          cfn-hup || true
+
+          systemctl daemon-reload
+          systemctl enable cfn-hup
+          systemctl start cfn-hup
 
           echo "── Done ──"
 

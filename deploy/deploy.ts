@@ -522,7 +522,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         const deployTarget = deployTargetMap[event.deployStrategy] || "ec2";
 
         const deployParams: Record<string, any> = { appName: repoName, containerPort: repoConfig.port || 3000 };
-        if (deployTarget === "ecs") { deployParams.cpu = "1024"; deployParams.memory = "2048"; }
+        if (deployTarget === "ecs") { deployParams.cpu = "512"; deployParams.memory = "1024"; }
         if (deployTarget === "ec2") { deployParams.instanceType = "t3.small"; }
 
         // Publish to SNS → triggers CodeBuild
