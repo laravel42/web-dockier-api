@@ -1,9 +1,15 @@
 import { api, APIError } from "encore.dev/api";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
+import { secret } from "encore.dev/config";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
 
 const db = new SQLDatabase("gitintegration", { migrations: "./migrations" });
+
+// ─── Bedrock secrets ───
+const BedrockApiKey = secret("BedrockApiKey");
+const BedrockRegion = secret("BedrockRegion");
+const BedrockAccountId = secret("BedrockAccountId");
 
 // ─── Interfaces ───
 
@@ -378,22 +384,6 @@ export const pullOrigin = api(
 
 // ─── Helper: call AI to generate fix ───
 
-async function aiRequest(url: string, options: RequestInit, maxRetries = 3): Promise<any> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, options);
-    if (res.ok) return res.json();
-    if (res.status === 429 && attempt < maxRetries) {
-      const retryAfter = parseInt(res.headers.get("retry-after") || "0", 10);
-      const delay = retryAfter > 0 ? retryAfter * 1000 : Math.min(2000 * Math.pow(2, attempt), 30000);
-      await new Promise(r => setTimeout(r, delay));
-      continue;
-    }
-    const body = await res.json().catch(() => ({})) as any;
-    throw new Error(body.error?.message || res.statusText);
-  }
-  throw new Error("Max retries exceeded");
-}
-
 async function generateAIFix(aiType: string, aiConfig: Record<string, string>, filePath: string, fileContent: string, finding: { ruleId: string; severity: string; message: string; snippet: string; startLine: number; endLine: number }): Promise<string> {
   const prompt = `You are a senior security engineer. Fix the following security vulnerability in the code.
 
@@ -413,43 +403,39 @@ ${finding.snippet}
 ${fileContent}
 \`\`\`
 
-Return ONLY the complete fixed file content. Do not include any explanation, markdown fences, or commentary — just the raw file content.`;
+Instructions:
+1. Fix ONLY the security vulnerability described above.
+2. Keep all existing functionality, imports, and code structure intact.
+3. Return the COMPLETE fixed file content — every line, not just the changed part.
+4. Do NOT include markdown fences, explanations, or commentary — output raw file content only.`;
 
-  if (aiType === "openai") {
-    const headers = { Authorization: `Bearer ${aiConfig.apiKey}`, "Content-Type": "application/json" };
-    // Try gpt-4o first, fall back to gpt-4o-mini on rate limit
-    const models = ["gpt-4o", "gpt-4o-mini"];
-    let lastErr: Error | null = null;
-    for (const model of models) {
-      try {
-        const data = await aiRequest("https://api.openai.com/v1/chat/completions", {
-          method: "POST", headers,
-          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
-        });
-        return data.choices?.[0]?.message?.content?.trim() || "";
-      } catch (e: any) {
-        lastErr = e;
-        if (!e.message?.includes("429") && !e.message?.toLowerCase().includes("rate")) throw e;
-        // rate limited on this model, try next
-      }
-    }
-    throw lastErr || new Error("OpenAI API failed");
-  } else if (aiType === "anthropic") {
-    const data = await aiRequest("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": aiConfig.apiKey, "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8192, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
-    });
-    return data.content?.[0]?.text?.trim() || "";
-  } else if (aiType === "google-gemini") {
-    const data = await aiRequest(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiConfig.apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2 } }),
-    });
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  // Amazon Bedrock — Bearer auth with API key from Encore secret
+  const apiKey = BedrockApiKey();
+  if (!apiKey) throw new Error("BedrockApiKey secret is not configured");
+  const region = BedrockRegion() || "us-east-1";
+  const modelId = aiConfig.model || "us.anthropic.claude-sonnet-4-20250514-v1:0";
+  const accountId = BedrockAccountId() || "";
+  const modelArn = modelId.startsWith("arn:") ? modelId : `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`;
+  const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/converse`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: [{ text: prompt }] }],
+      inferenceConfig: { temperature: 0.2, maxTokens: 32000 },
+    }),
+  });
+  if (!res.ok) {
+    const errBody: any = await res.json().catch(() => ({}));
+    throw new Error(`Bedrock ${res.status}: ${errBody.message || errBody.Message || res.statusText}`);
   }
-  throw new Error(`Unsupported AI provider: ${aiType}`);
+  const data: any = await res.json();
+  const raw = data.output?.message?.content?.[0]?.text?.trim() || "";
+  return raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
 }
 
 // ─── Create PR/MR with AI Fix ───
@@ -479,7 +465,7 @@ export const createFixMR = api(
 
     const fixBranch = `fix/${params.ruleId.replace(/[^a-zA-Z0-9._-]/g, "-")}-${Date.now()}`;
     const title = `Fix: [${params.severity.toUpperCase()}] ${params.message.substring(0, 80)}`;
-    const hasAI = params.aiType && params.aiConfig?.apiKey;
+    const hasAI = !!params.aiType;
 
     const bodyParts = [
       `## Security Fix`,
@@ -557,6 +543,17 @@ export const createFixMR = api(
       const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token, "Content-Type": "application/json" };
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
 
+      // Verify project exists first
+      const projectCheck = await fetch(`${baseUrl}/api/v4/projects/${projectPath}`, { headers });
+      if (!projectCheck.ok) {
+        // Try URL-encoding with just the repo name (no owner) in case it's a flat namespace
+        const altPath = encodeURIComponent(params.repo);
+        const altCheck = await fetch(`${baseUrl}/api/v4/projects/${altPath}`, { headers });
+        if (!altCheck.ok) {
+          throw APIError.notFound(`GitLab project not found: ${params.owner}/${params.repo} (tried both encoded paths). Check the repository URL and token permissions.`);
+        }
+      }
+
       // Create the fix branch
       const branchRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches`, {
         method: "POST", headers,
@@ -632,6 +629,52 @@ export const createFixMR = api(
     }
 
     throw APIError.unimplemented("PR/MR creation not supported for this provider");
+  }
+);
+
+// ─── Bedrock Model Listing ───
+
+export const listBedrockModels = api(
+  { method: "GET", path: "/git/bedrock/models", auth: true },
+  async (): Promise<{ models: Array<{ id: string; name: string }> }> => {
+    const apiKey = BedrockApiKey();
+    if (!apiKey) throw APIError.failedPrecondition("BedrockApiKey secret is not configured");
+    const region = BedrockRegion() || "us-east-1";
+    const accountId = BedrockAccountId() || "";
+
+    // List inference profiles — these are what you actually invoke
+    const profilesRes = await fetch(`https://bedrock.${region}.amazonaws.com/inference-profiles`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (profilesRes.ok) {
+      const profilesData: any = await profilesRes.json();
+      const profiles = (profilesData.inferenceProfileSummaries || [])
+        .filter((p: any) => p.type === "SYSTEM_DEFINED" && p.status === "ACTIVE")
+        .map((p: any) => ({
+          id: p.inferenceProfileId || p.inferenceProfileArn,
+          name: p.inferenceProfileName || p.inferenceProfileId,
+        }))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+      if (profiles.length > 0) return { models: profiles };
+    }
+
+    // Fallback: list foundation models and build ARNs
+    const res = await fetch(`https://bedrock.${region}.amazonaws.com/foundation-models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      const err: any = await res.json().catch(() => ({}));
+      throw APIError.internal(err?.message || err?.Message || `Bedrock API error: ${res.status}`);
+    }
+    const data: any = await res.json();
+    const models = (data.modelSummaries || [])
+      .filter((m: any) => m.inferenceTypesSupported?.includes("ON_DEMAND") && m.outputModalities?.includes("TEXT"))
+      .map((m: any) => ({
+        id: m.modelId,
+        name: `${m.providerName} — ${m.modelName}`,
+      }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+    return { models };
   }
 );
 
@@ -1860,35 +1903,30 @@ IMPORTANT for deployOptions:
 Be precise with versions — read them from composer.json/package.json/etc.`;
 
   try {
-    let data: any;
-    if (aiType === "openai") {
-      const headers = { Authorization: `Bearer ${aiConfig.apiKey}`, "Content-Type": "application/json" };
-      data = await aiRequest("https://api.openai.com/v1/chat/completions", {
-        method: "POST", headers,
-        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }], temperature: 0.1, response_format: { type: "json_object" } }),
-      });
-      const text = data.choices?.[0]?.message?.content?.trim() || "";
-      return JSON.parse(text) as AIRepoAnalysis;
-    } else if (aiType === "anthropic") {
-      data = await aiRequest("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "x-api-key": aiConfig.apiKey, "Content-Type": "application/json", "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2048, messages: [{ role: "user", content: prompt }], temperature: 0.1 }),
-      });
-      const text = data.content?.[0]?.text?.trim() || "";
-      // Extract JSON from potential markdown fences
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      return jsonMatch ? JSON.parse(jsonMatch[0]) as AIRepoAnalysis : null;
-    } else if (aiType === "google-gemini") {
-      data = await aiRequest(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${aiConfig.apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } }),
-      });
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-      const jsonMatch2 = text.match(/\{[\s\S]*\}/);
-      return jsonMatch2 ? JSON.parse(jsonMatch2[0]) as AIRepoAnalysis : null;
-    }
+    const apiKey = BedrockApiKey();
+    if (!apiKey) return null;
+    const region = BedrockRegion() || "us-east-1";
+    const accountId = BedrockAccountId() || "";
+    const modelId = "us.anthropic.claude-sonnet-4-20250514-v1:0";
+    const modelArn = `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`;
+    const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/converse`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: [{ text: prompt }] }],
+        inferenceConfig: { temperature: 0.1, maxTokens: 4096 },
+      }),
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const text = data.output?.message?.content?.[0]?.text?.trim() || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    return jsonMatch ? JSON.parse(jsonMatch[0]) as AIRepoAnalysis : null;
   } catch (e: any) {
     console.error("AI analysis failed:", e.message);
   }

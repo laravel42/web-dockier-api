@@ -173,11 +173,8 @@ export default function ProjectDetail() {
             setAnalysisError("");
             let aiType: string | undefined;
             let aiApiKey: string | undefined;
-            try {
-              const stored = JSON.parse(localStorage.getItem("integrations") || "[]");
-              const aiInteg = stored.find((i: any) => ["openai", "anthropic", "google-gemini"].includes(i.type) && i.config?.apiKey);
-              if (aiInteg) { aiType = aiInteg.type; aiApiKey = aiInteg.config.apiKey; }
-            } catch { /* ignore */ }
+            const bedrockModel = localStorage.getItem("bedrock_default_model");
+            if (bedrockModel) { aiType = "bedrock"; aiApiKey = bedrockModel; }
             gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, aiType, aiApiKey)
               .then(setAnalysis)
               .catch((err: any) => setAnalysisError(err.message || "Failed to analyze repo"))

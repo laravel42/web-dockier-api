@@ -6,7 +6,7 @@ export interface IntegrationDef {
   name: string;
   category: string;
   description: string;
-  fields: Array<{ key: string; label: string; placeholder: string; secret?: boolean }>;
+  fields: Array<{ key: string; label: string; placeholder: string; secret?: boolean; options?: "dynamic" | Array<{ value: string; label: string }> }>;
 }
 
 export const INTEGRATION_CATALOG: IntegrationDef[] = [
@@ -71,15 +71,6 @@ export const INTEGRATION_CATALOG: IntegrationDef[] = [
   { type: "paypal", name: "PayPal", category: "Payments", description: "Payment solutions for every business", fields: [{ key: "clientId", label: "Client ID", placeholder: "AXxx..." }, { key: "clientSecret", label: "Client Secret", placeholder: "••••••", secret: true }, { key: "sandbox", label: "Sandbox Mode", placeholder: "false" }] },
   { type: "lemonsqueezy", name: "Lemon Squeezy", category: "Payments", description: "Payment gateway for e-commerce and subscriptions", fields: [{ key: "apiKey", label: "API Key", placeholder: "••••••", secret: true }] },
 
-  // ── AI & ML ──
-  { type: "openai", name: "OpenAI", category: "AI", description: "Use the many tools ChatGPT has to offer", fields: [{ key: "apiKey", label: "API Key", placeholder: "sk-••••••", secret: true }] },
-  { type: "anthropic", name: "Anthropic (Claude)", category: "AI", description: "AI-powered assistant for content creation and code generation", fields: [{ key: "apiKey", label: "API Key", placeholder: "sk-ant-••••••", secret: true }] },
-  { type: "google-gemini", name: "Google Gemini", category: "AI", description: "Use the new Gemini models from Google", fields: [{ key: "apiKey", label: "API Key", placeholder: "AIza...", secret: true }] },
-  { type: "huggingface", name: "Hugging Face", category: "AI", description: "Run inference on 100,000+ open ML models", fields: [{ key: "apiToken", label: "API Token", placeholder: "hf_••••••", secret: true }] },
-  { type: "openrouter", name: "OpenRouter", category: "AI", description: "Use any AI model via OpenRouter.ai", fields: [{ key: "apiKey", label: "API Key", placeholder: "sk-or-••••••", secret: true }] },
-  { type: "groq", name: "Groq", category: "AI", description: "Use Groq's fast language models and audio processing", fields: [{ key: "apiKey", label: "API Key", placeholder: "gsk_••••••", secret: true }] },
-  { type: "mistral", name: "Mistral AI", category: "AI", description: "State-of-the-art open-weight and hosted language models", fields: [{ key: "apiKey", label: "API Key", placeholder: "••••••", secret: true }] },
-
   // ── DevOps & CI/CD ──
   { type: "github", name: "GitHub", category: "DevOps", description: "Collaboration tool for developers", fields: [{ key: "token", label: "Personal Access Token", placeholder: "ghp_••••••", secret: true }] },
   { type: "gitlab", name: "GitLab", category: "DevOps", description: "Developer platform for code, CI/CD, and DevSecOps", fields: [{ key: "host", label: "GitLab URL", placeholder: "https://gitlab.com" }, { key: "token", label: "Personal Access Token", placeholder: "glpat-••••••", secret: true }] },
@@ -100,6 +91,5 @@ export const CATEGORY_COLORS: Record<string, string> = {
   CRM: "bg-orange-50 text-orange-600",
   "Project Management": "bg-violet-50 text-violet-600",
   Payments: "bg-emerald-50 text-emerald-600",
-  AI: "bg-fuchsia-50 text-fuchsia-600",
   DevOps: "bg-slate-100 text-slate-600",
 };
