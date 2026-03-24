@@ -232,12 +232,12 @@ function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>, repoDi
 
     if (stack.hasNodeAssets) {
       lines.push("");
-      lines.push("FROM public.ecr.aws/docker/library/node:20-alpine AS frontend");
+      lines.push("FROM public.ecr.aws/docker/library/node:20-slim AS frontend");
       lines.push("WORKDIR /app");
       lines.push("COPY package*.json yarn.lock* pnpm-lock.yaml* bun.lockb* ./");
-      lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \\');
-      lines.push('    elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; \\');
-      lines.push("    else npm ci; fi");
+      lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --no-frozen-lockfile; \\');
+      lines.push('    elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install; \\');
+      lines.push("    else npm ci || npm install; fi");
       lines.push("COPY . .");
       lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm run build; \\');
       lines.push('    elif [ -f yarn.lock ]; then yarn build; \\');
