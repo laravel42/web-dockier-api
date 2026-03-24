@@ -123,6 +123,8 @@ export const listProviders = api(
 export const deleteProvider = api(
   { method: "DELETE", path: "/deploy/providers/:providerId", auth: true },
   async (params: { providerId: string }): Promise<{ success: boolean }> => {
+    // Delete associated deployments first to avoid FK constraint violation
+    await db.exec`DELETE FROM deployments WHERE provider_id = ${params.providerId}`;
     await db.exec`DELETE FROM server_providers WHERE id = ${params.providerId}`;
     return { success: true };
   }
@@ -480,7 +482,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         const codebuildProject = "image-builder";
         const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
         const cacheRepoName = `${imageRepoName}-cache`;
-        const bucketName = `${codebuildProject}-source`;
+        const bucketName = `${codebuildProject}-source-${accountId}`;
 
         // Inject buildspec.yml for CodeBuild
         const buildspecContent = generateAwsBuildspec();
@@ -914,13 +916,6 @@ phases:
   install:
     commands:
       - set -euo pipefail
-      - mkdir -p ~/.docker/cli-plugins
-      - |
-        if ! docker buildx version >/dev/null 2>&1; then
-          curl -fsSL "https://github.com/docker/buildx/releases/latest/download/buildx-linux-amd64" \\
-            -o ~/.docker/cli-plugins/docker-buildx
-          chmod +x ~/.docker/cli-plugins/docker-buildx
-        fi
 
   pre_build:
     commands:
@@ -940,8 +935,6 @@ phases:
         aws ecr describe-repositories --repository-names "$CACHE_REPO_NAME" >/dev/null 2>&1 \\
           || aws ecr create-repository --repository-name "$CACHE_REPO_NAME"
       - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com"
-      - docker buildx create --name cbuilder --use || docker buildx use cbuilder
-      - docker buildx inspect --bootstrap
 
   build:
     commands:
@@ -950,14 +943,18 @@ phases:
         set -euo pipefail
         source /tmp/build_env.sh
         echo "Building \${IMAGE_URI}:\${SHORT_TAG}"
-        docker buildx build \\
+        DOCKER_BUILDKIT=1 docker build \\
           --progress=plain \\
-          --cache-from type=registry,ref=\${CACHE_URI}:buildcache,ignore-error=true \\
-          --cache-to type=registry,ref=\${CACHE_URI}:buildcache,mode=max \\
+          --build-arg BUILDKIT_INLINE_CACHE=1 \\
+          --cache-from \${IMAGE_URI}:latest \\
           --tag \${IMAGE_URI}:\${SHORT_TAG} \\
           --tag \${IMAGE_URI}:latest \\
-          --push \\
           .
+      - |
+        source /tmp/build_env.sh
+        echo "Pushing \${IMAGE_URI}:\${SHORT_TAG}"
+        docker push \${IMAGE_URI}:\${SHORT_TAG}
+        docker push \${IMAGE_URI}:latest
 
   post_build:
     commands:

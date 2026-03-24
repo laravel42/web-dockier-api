@@ -342,7 +342,7 @@ export const startBuild = api(
       }
 
       // 1. Pull repo, inject buildspec.yml, upload to S3
-      const bucketName = `${codebuildProject}-source`;
+      const bucketName = `${codebuildProject}-source-${accountId}`;
       const s3Key = await bundleAndUploadSource(
         params.sourceRepo, sourceRef, id,
         accessKeyId, secretAccessKey, region, bucketName,
@@ -365,7 +365,7 @@ export const startBuild = api(
           commitSha: params.commitSha || "unknown",
           imageRepoName: imageRepo,
           cacheRepoName,
-          s3Bucket: `${codebuildProject}-source`,
+          s3Bucket: bucketName,
           s3Key,
           accountId,
           region,

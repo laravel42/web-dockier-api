@@ -338,14 +338,7 @@ function goDockerfile(repoDir: string): string {
 
 const COMMON_INSTALL = `  install:
     commands:
-      - set -euo pipefail
-      - mkdir -p ~/.docker/cli-plugins
-      - |
-        if ! docker buildx version >/dev/null 2>&1; then
-          curl -fsSL "https://github.com/docker/buildx/releases/latest/download/buildx-linux-amd64" \\
-            -o ~/.docker/cli-plugins/docker-buildx
-          chmod +x ~/.docker/cli-plugins/docker-buildx
-        fi`;
+      - set -euo pipefail`;
 
 function commonPreBuild(): string {
   return `  pre_build:
@@ -365,9 +358,7 @@ function commonPreBuild(): string {
           || aws ecr create-repository --repository-name "$IMAGE_REPO_NAME"
         aws ecr describe-repositories --repository-names "$CACHE_REPO_NAME" >/dev/null 2>&1 \\
           || aws ecr create-repository --repository-name "$CACHE_REPO_NAME"
-      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com"
-      - docker buildx create --name cbuilder --use || docker buildx use cbuilder
-      - docker buildx inspect --bootstrap`;
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com"`;
 }
 
 function buildAndPush(): string {
@@ -375,14 +366,18 @@ function buildAndPush(): string {
         set -euo pipefail
         source /tmp/build_env.sh
         echo "Building \${IMAGE_URI}:\${SHORT_TAG}"
-        docker buildx build \\
+        DOCKER_BUILDKIT=1 docker build \\
           --progress=plain \\
-          --cache-from type=registry,ref=\${CACHE_URI}:buildcache,ignore-error=true \\
-          --cache-to type=registry,ref=\${CACHE_URI}:buildcache,mode=max \\
+          --build-arg BUILDKIT_INLINE_CACHE=1 \\
+          --cache-from \${IMAGE_URI}:latest \\
           --tag \${IMAGE_URI}:\${SHORT_TAG} \\
           --tag \${IMAGE_URI}:latest \\
-          --push \\
-          .`;
+          .
+      - |
+        source /tmp/build_env.sh
+        echo "Pushing \${IMAGE_URI}:\${SHORT_TAG}"
+        docker push \${IMAGE_URI}:\${SHORT_TAG}
+        docker push \${IMAGE_URI}:latest`;
 }
 
 function commonPostBuild(): string {

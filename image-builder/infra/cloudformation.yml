@@ -23,7 +23,7 @@ Resources:
   SourceBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${ProjectName}-source"
+      BucketName: !Sub "${ProjectName}-source-${AWS::AccountId}"
       LifecycleConfiguration:
         Rules:
           - Id: ExpireOldSources
@@ -275,8 +275,11 @@ Resources:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action: [cloudformation:CreateStack, cloudformation:UpdateStack, cloudformation:DescribeStacks]
+                Action: [cloudformation:CreateStack, cloudformation:UpdateStack, cloudformation:DescribeStacks, cloudformation:DeleteStack]
                 Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-app-*"
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:PutRetentionPolicy]
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/*"
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub "${TemplateBucket.Arn}/*"
@@ -403,6 +406,29 @@ Resources:
                   params.append({'ParameterKey': 'InstanceType', 'ParameterValue': str(deploy_params['instanceType'])})
 
               stack_name = f"{os.environ['PROJECT_NAME']}-app-{app_name}"
+
+              # Handle stacks stuck in ROLLBACK_COMPLETE (can't be updated, must be deleted first)
+              try:
+                desc = cfn.describe_stacks(StackName=stack_name)
+                stack_status = desc['Stacks'][0]['StackStatus'] if desc['Stacks'] else None
+                if stack_status in ('ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'CREATE_FAILED', 'DELETE_FAILED'):
+                  print(f"Stack {stack_name} is in {stack_status}, deleting before re-create")
+                  cfn.delete_stack(StackName=stack_name)
+                  waiter = cfn.get_waiter('stack_delete_complete')
+                  waiter.wait(StackName=stack_name, WaiterConfig={'Delay': 5, 'MaxAttempts': 60})
+              except cfn.exceptions.ClientError:
+                pass  # Stack doesn't exist yet, that's fine
+
+              # Pre-create the log group if it doesn't exist (avoids AlreadyExists in CFN)
+              logs = boto3.client('logs')
+              log_group_name = f"/ecs/{app_name}"
+              try:
+                logs.create_log_group(logGroupName=log_group_name)
+                logs.put_retention_policy(logGroupName=log_group_name, retentionInDays=14)
+                print(f"Created log group {log_group_name}")
+              except logs.exceptions.ResourceAlreadyExistsException:
+                print(f"Log group {log_group_name} already exists, will import")
+
               try:
                 cfn.create_stack(
                   StackName=stack_name, TemplateURL=template_url, Parameters=params,

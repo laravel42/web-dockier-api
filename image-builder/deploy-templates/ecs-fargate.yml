@@ -44,11 +44,8 @@ Parameters:
     Description: Webhook URL to POST when stack completes
 
 Resources:
-  LogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/ecs/${AppName}"
-      RetentionInDays: 14
+  # Log group is created by the deploy Lambda before stack creation
+  # to avoid AlreadyExists errors. Referenced by name directly.
 
   Cluster:
     Type: AWS::ECS::Cluster
@@ -155,7 +152,7 @@ Resources:
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-group: !Ref LogGroup
+              awslogs-group: !Sub "/ecs/${AppName}"
               awslogs-region: !Ref "AWS::Region"
               awslogs-stream-prefix: ecs
 
