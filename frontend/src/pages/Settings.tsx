@@ -9,24 +9,25 @@ import ConfirmModal from "../components/ConfirmModal";
 import RoleFormModal from "../components/RoleFormModal";
 import DevIcon from "../components/DevIcon";
 
-type Tab = "profile" | "security" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations";
+type Tab = "general" | "profile" | "security" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations";
 
 const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
 const btnDanger = "text-sm text-danger-500 hover:text-danger-700 font-medium transition-colors";
 
 export default function Settings() {
-  const [tab, setTab] = useState<Tab>("profile");
+  const [tab, setTab] = useState<Tab>("general");
   const tabCls = (active: boolean) => `h-9 px-4 text-sm font-medium rounded-[var(--radius-btn)] transition-colors ${active ? "bg-primary-500 text-white" : "text-text-secondary hover:bg-secondary-50"}`;
 
   return (
     <div>
       <h1 className="text-2xl font-display font-semibold text-text mb-8 tracking-tight">Settings</h1>
       <div className="flex gap-2 mb-6" role="tablist">
-        {([["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["ssh-keys", "SSH Keys"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"]] as [Tab, string][]).map(([key, label]) => (
+        {([["general", "General"], ["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["ssh-keys", "SSH Keys"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"]] as [Tab, string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={tabCls(tab === key)}>{label}</button>
         ))}
       </div>
+      {tab === "general" && <GeneralTab />}
       {tab === "profile" && <ProfileTab />}
       {tab === "security" && <SecurityTab />}
       {tab === "roles" && <RolesTab />}
@@ -35,6 +36,67 @@ export default function Settings() {
       {tab === "source-control" && <SourceControlTab />}
       {tab === "channels" && <NotificationChannelsTab />}
       {tab === "integrations" && <IntegrationsTab />}
+    </div>
+  );
+}
+
+function GeneralTab() {
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    // Load saved model from localStorage
+    const saved = localStorage.getItem("bedrock_default_model");
+    if (saved) setSelectedModel(saved);
+
+    // Fetch available models
+    gitApi.listBedrockModels()
+      .then((res) => setModels(res.models))
+      .catch(() => setModels([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = () => {
+    setSaving(true);
+    localStorage.setItem("bedrock_default_model", selectedModel);
+    setMessage("Default LLM saved");
+    setSaving(false);
+    setTimeout(() => setMessage(""), 2000);
+  };
+
+  return (
+    <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 max-w-lg">
+      <h2 className="text-base font-semibold text-text mb-1">Default LLM</h2>
+      <p className="text-sm text-text-secondary mb-5">Select the Amazon Bedrock model used for AI features across the platform (security fixes, code analysis, etc.).</p>
+      {message && <div className="mb-4 p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="default-model" className="block text-sm font-medium text-text-secondary mb-1.5">Bedrock Model</label>
+          {loading ? (
+            <div className="flex items-center gap-2 h-11">
+              <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-text-muted">Loading models...</span>
+            </div>
+          ) : models.length > 0 ? (
+            <select id="default-model" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className={inputCls}>
+              <option value="">Select a model</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-text-muted py-2">Could not load models. Make sure the BedrockApiKey secret is configured.</p>
+          )}
+        </div>
+        <div className="flex justify-end pt-2">
+          <button onClick={handleSave} disabled={saving || !selectedModel} className={`${btnPrimary} disabled:opacity-50`}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1127,15 +1189,35 @@ function IntegrationsTab() {
             {catalog.fields.map((f) => (
               <div key={f.key}>
                 <label htmlFor={`int-${f.key}`} className="block text-sm font-medium text-text-secondary mb-1.5">{f.label}</label>
-                <input
-                  id={`int-${f.key}`}
-                  type={f.secret ? "password" : "text"}
-                  value={formConfig[f.key] || ""}
-                  onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
-                  className={inputCls}
-                  placeholder={f.placeholder}
-                  required
-                />
+                {f.options === "dynamic" ? (
+                  <input
+                    id={`int-${f.key}`}
+                    type="text"
+                    value={formConfig[f.key] || ""}
+                    onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
+                    className={inputCls}
+                    placeholder={f.placeholder}
+                  />
+                ) : Array.isArray(f.options) ? (
+                  <select
+                    id={`int-${f.key}`}
+                    value={formConfig[f.key] || f.options[0]?.value || ""}
+                    onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
+                    className={inputCls}
+                  >
+                    {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    id={`int-${f.key}`}
+                    type={f.secret ? "password" : "text"}
+                    value={formConfig[f.key] || ""}
+                    onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
+                    className={inputCls}
+                    placeholder={f.placeholder}
+                    required
+                  />
+                )}
               </div>
             ))}
             <div className="flex justify-end">
@@ -1200,15 +1282,35 @@ function IntegrationsTab() {
                 {editCat.fields.map((f) => (
                   <div key={f.key}>
                     <label htmlFor={`edit-int-${f.key}`} className="block text-sm font-medium text-text-secondary mb-1.5">{f.label}</label>
-                    <input
-                      id={`edit-int-${f.key}`}
-                      type={f.secret ? "password" : "text"}
-                      value={editConfig[f.key] || ""}
-                      onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
-                      className={inputCls}
-                      placeholder={f.placeholder}
-                      required
-                    />
+                    {f.options === "dynamic" ? (
+                      <input
+                        id={`edit-int-${f.key}`}
+                        type="text"
+                        value={editConfig[f.key] || ""}
+                        onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
+                        className={inputCls}
+                        placeholder={f.placeholder}
+                      />
+                    ) : Array.isArray(f.options) ? (
+                      <select
+                        id={`edit-int-${f.key}`}
+                        value={editConfig[f.key] || f.options[0]?.value || ""}
+                        onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
+                        className={inputCls}
+                      >
+                        {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        id={`edit-int-${f.key}`}
+                        type={f.secret ? "password" : "text"}
+                        value={editConfig[f.key] || ""}
+                        onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
+                        className={inputCls}
+                        placeholder={f.placeholder}
+                        required
+                      />
+                    )}
                   </div>
                 ))}
               </div>

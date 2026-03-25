@@ -284,6 +284,9 @@ export const gitApi = {
     request<{ content: string }>(
       `/git/connections/${connectionId}/file-content?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`
     ),
+
+  listBedrockModels: () =>
+    request<{ models: Array<{ id: string; name: string }> }>("/git/bedrock/models"),
 };
 
 // ─── Notifications ───

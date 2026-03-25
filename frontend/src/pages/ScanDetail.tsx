@@ -54,14 +54,6 @@ interface PMIntegration {
   enabled: boolean;
 }
 
-interface AIIntegration {
-  id: string;
-  type: string;
-  name: string;
-  config: Record<string, string>;
-  enabled: boolean;
-}
-
 function parseOwnerRepo(repoUrl: string): { owner: string; repo: string } | null {
   try {
     const u = new URL(repoUrl);
@@ -93,6 +85,7 @@ export default function ScanDetail() {
   const [loading, setLoading] = useState(true);
   const [findingsLoading, setFindingsLoading] = useState(false);
   const [severityFilter, setSeverityFilter] = useState("");
+  const [providerFilter, setProviderFilter] = useState("");
   const [error, setError] = useState("");
 
   // Sidebar: all scans for this project
@@ -106,7 +99,6 @@ export default function ScanDetail() {
 
   // PM integration state
   const [pmIntegrations, setPmIntegrations] = useState<PMIntegration[]>([]);
-  const [aiIntegration, setAiIntegration] = useState<AIIntegration | null>(null);
   const [issueModal, setIssueModal] = useState<{ open: boolean; finding: Finding | null }>({ open: false, finding: null });
   const [issueTitle, setIssueTitle] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
@@ -124,6 +116,15 @@ export default function ScanDetail() {
   const [selectedPmSubProject, setSelectedPmSubProject] = useState("");
   const [mrCreating, setMrCreating] = useState<string | null>(null);
 
+  // AI Fix modal state
+  const [fixModal, setFixModal] = useState<{ open: boolean; finding: Finding | null }>({ open: false, finding: null });
+  const [fixLoading, setFixLoading] = useState(false);
+  const [fixResult, setFixResult] = useState<{ mrUrl: string; mrId: string; mrTitle: string } | null>(null);
+  const [fixError, setFixError] = useState("");
+
+  // File contents cache for code preview
+  const [fileContents, setFileContents] = useState<Record<string, string>>({});
+
   // Load integrations from localStorage
   useEffect(() => {
     try {
@@ -132,9 +133,6 @@ export default function ScanDetail() {
         const all: PMIntegration[] = JSON.parse(stored);
         const pmTypes = INTEGRATION_CATALOG.filter(c => c.category === "Project Management" || c.category === "DevOps").map(c => c.type);
         setPmIntegrations(all.filter(i => i.enabled && pmTypes.includes(i.type)));
-        const aiTypes = INTEGRATION_CATALOG.filter(c => c.category === "AI").map(c => c.type);
-        const ai = all.find(i => i.enabled && aiTypes.includes(i.type)) as AIIntegration | undefined;
-        setAiIntegration(ai || null);
       }
     } catch {}
   }, []);
@@ -199,6 +197,21 @@ export default function ScanDetail() {
     setSeverityFilter(severity);
     if (scanId) fetchFindings(scanId, severity);
   };
+
+  // Fetch file contents for code preview
+  useEffect(() => {
+    if (!project || findings.length === 0) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    const uniqueFiles = [...new Set(findings.map(f => f.filePath))];
+    const toFetch = uniqueFiles.filter(fp => !fileContents[fp]);
+    if (toFetch.length === 0) return;
+    toFetch.forEach(fp => {
+      gitApi.getFileContent(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", fp)
+        .then(res => setFileContents(prev => ({ ...prev, [fp]: res.content })))
+        .catch(() => {});
+    });
+  }, [findings, project]);
 
   const handleRunScan = async () => {
     if (!project) return;
@@ -329,22 +342,33 @@ export default function ScanDetail() {
     if (!project) return;
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
-    if (!aiIntegration) {
-      alert("No AI integration configured. Add one in Settings → Integrations.");
+
+    const bedrockModel = localStorage.getItem("bedrock_default_model");
+    if (!bedrockModel) {
+      alert("No default LLM configured. Select one in Settings → General.");
       return;
     }
+
+    // Open modal with loader
+    setFixModal({ open: true, finding: f });
+    setFixLoading(true);
+    setFixResult(null);
+    setFixError("");
     setMrCreating(f.id);
     try {
       const result = await gitApi.createFixMR(project.connectionId, {
         owner: parsed.owner, repo: parsed.repo, branch: project.branch || "main",
         filePath: f.filePath, startLine: f.startLine, endLine: f.endLine,
         ruleId: f.ruleId, severity: f.severity, message: f.message, snippet: f.snippet || "",
-        aiType: aiIntegration.type, aiConfig: aiIntegration.config,
+        aiType: "bedrock", aiConfig: { model: bedrockModel },
       });
-      window.open(result.mrUrl, "_blank");
+      setFixResult(result);
     } catch (err: any) {
-      alert(`Failed to create MR: ${err.message || "Unknown error"}`);
-    } finally { setMrCreating(null); }
+      setFixError(err.message || "Failed to create MR");
+    } finally {
+      setFixLoading(false);
+      setMrCreating(null);
+    }
   };
 
   if (loading) {
@@ -522,6 +546,40 @@ export default function ScanDetail() {
         </div>
       )}
 
+      {/* Provider filter pills */}
+      {scan.summary && findings.length > 0 && (() => {
+        const counts = findings.reduce<Record<string, number>>((acc, f) => {
+          const p = f.ruleId.startsWith("sonar.") ? "sonar" : f.ruleId.startsWith("custom.") ? "custom" : "opengrep";
+          acc[p] = (acc[p] || 0) + 1;
+          return acc;
+        }, {});
+        const providers = [
+          { key: "", label: "All Providers", count: findings.length },
+          { key: "opengrep", label: "Opengrep", count: counts["opengrep"] || 0 },
+          { key: "sonar", label: "SonarQube", count: counts["sonar"] || 0 },
+          { key: "custom", label: "Custom Rules", count: counts["custom"] || 0 },
+        ].filter(p => p.key === "" || p.count > 0);
+        return (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <span className="text-xs text-text-muted mr-1">Source:</span>
+            {providers.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setProviderFilter(p.key)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  providerFilter === p.key
+                    ? "bg-primary-500 text-white"
+                    : "bg-secondary-50 text-text-muted hover:bg-secondary-100 hover:text-text"
+                }`}
+              >
+                {p.label} ({p.count})
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Findings list */}
       {findingsLoading ? (
         <div className="flex justify-center py-8">
@@ -529,8 +587,23 @@ export default function ScanDetail() {
         </div>
       ) : findings.length > 0 ? (
         <div className="space-y-2">
-          {Object.entries(
-            findings.reduce<Record<string, Finding[]>>((acc, f) => {
+          {(() => {
+            const filtered = providerFilter
+              ? findings.filter((f) => {
+                  if (providerFilter === "sonar") return f.ruleId.startsWith("sonar.");
+                  if (providerFilter === "custom") return f.ruleId.startsWith("custom.");
+                  return !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.");
+                })
+              : findings;
+            if (filtered.length === 0) {
+              return (
+                <div className={`${cardCls} p-8 text-center`}>
+                  <p className="text-sm text-text-muted">No findings from this provider{severityFilter ? ` with severity "${severityFilter}"` : ""}.</p>
+                </div>
+              );
+            }
+            return Object.entries(
+              filtered.reduce<Record<string, Finding[]>>((acc, f) => {
               (acc[f.filePath] ||= []).push(f);
               return acc;
             }, {})
@@ -575,7 +648,7 @@ export default function ScanDetail() {
                       </span>
                       <span className="text-[10px] text-text-muted font-mono">L{f.startLine}</span>
                       <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
-                      {(pmIntegrations.length > 0 || (project?.connectionId && aiIntegration)) && (
+                      {(pmIntegrations.length > 0 || project?.connectionId) && (
                         <div className="flex items-center gap-2 ml-auto shrink-0">
                           {pmIntegrations.length > 0 && (
                             <button
@@ -589,7 +662,7 @@ export default function ScanDetail() {
                               Create issue
                             </button>
                           )}
-                          {project?.connectionId && aiIntegration && (
+                          {project?.connectionId && (
                             <button
                               type="button"
                               onClick={() => handleCreateMR(f)}
@@ -607,17 +680,57 @@ export default function ScanDetail() {
                     </div>
                     {/* Message */}
                     <p className="text-xs text-text leading-snug">{f.message}</p>
-                    {/* Snippet */}
-                    {f.snippet && (
-                      <pre className="p-1.5 rounded bg-gray-900 text-gray-300 text-[11px] font-mono overflow-x-auto leading-tight">
-                        <code>{f.snippet}</code>
-                      </pre>
-                    )}
+                    {/* Code preview with context */}
+                    {(() => {
+                      const content = fileContents[f.filePath];
+                      if (!content) {
+                        return f.snippet ? (
+                          <pre className="p-1.5 rounded bg-gray-900 text-gray-300 text-[11px] font-mono overflow-x-auto leading-tight">
+                            <code>{f.snippet}</code>
+                          </pre>
+                        ) : null;
+                      }
+                      const allLines = content.split("\n");
+                      const ctxBefore = 5;
+                      const ctxAfter = 5;
+                      const start = Math.max(0, f.startLine - 1 - ctxBefore);
+                      const end = Math.min(allLines.length, f.endLine + ctxAfter);
+                      const visibleLines = allLines.slice(start, end);
+                      const gutterWidth = String(end).length;
+                      return (
+                        <div className="rounded-lg overflow-hidden border border-gray-700/50 bg-[#1e1e2e]">
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-[#181825] border-b border-gray-700/50">
+                            <span className="text-[10px] text-gray-400 font-mono">{f.filePath}</span>
+                            <span className="text-[10px] text-gray-500">L{start + 1}–{end}</span>
+                          </div>
+                          <pre className="p-0 m-0 overflow-x-auto text-[11px] leading-[1.6] font-mono">
+                            {visibleLines.map((line, i) => {
+                              const lineNum = start + i + 1;
+                              const isVulnerable = lineNum >= f.startLine && lineNum <= f.endLine;
+                              return (
+                                <div
+                                  key={lineNum}
+                                  className={`flex ${isVulnerable ? "bg-danger-500/15" : "hover:bg-white/[0.03]"}`}
+                                >
+                                  <span className={`shrink-0 select-none text-right pr-3 pl-3 ${isVulnerable ? "text-danger-400 bg-danger-500/10" : "text-gray-600"}`} style={{ width: `${gutterWidth + 3}ch` }}>
+                                    {lineNum}
+                                  </span>
+                                  <code className={`flex-1 pr-3 ${isVulnerable ? "text-gray-200" : "text-gray-400"}`}>
+                                    {line || " "}
+                                  </code>
+                                </div>
+                              );
+                            })}
+                          </pre>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
             </details>
-          ))}
+          ));
+          })()}
         </div>
       ) : scan.status === "completed" ? (
         <div className={`${cardCls} p-8 text-center`}>
@@ -708,6 +821,95 @@ export default function ScanDetail() {
               {issueCreating ? "Creating..." : "Create Issue"}
             </button>
           </form>
+        )}
+      </Modal>
+
+      {/* AI Fix Modal */}
+      <Modal open={fixModal.open} onClose={() => setFixModal({ open: false, finding: null })} title="Fix with AI" size="lg" compact>
+        {fixModal.finding && (
+          <div className="space-y-4">
+            {/* Finding summary */}
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary-50">
+              <span className={`px-1.5 py-px rounded text-[10px] font-semibold uppercase shrink-0 mt-0.5 ${
+                fixModal.finding.severity === "error" ? "bg-danger-500/10 text-danger-500" :
+                fixModal.finding.severity === "warning" ? "bg-warning-50 text-warning-500" :
+                "bg-primary-50 text-primary-500"
+              }`}>
+                {fixModal.finding.severity}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm text-text leading-snug">{fixModal.finding.message}</p>
+                <p className="text-xs text-text-muted mt-1 font-mono">{fixModal.finding.filePath}:{fixModal.finding.startLine}</p>
+                <p className="text-[10px] text-text-muted font-mono mt-0.5">{fixModal.finding.ruleId}</p>
+              </div>
+            </div>
+
+            {/* Loading state */}
+            {fixLoading && (
+              <div className="flex flex-col items-center py-10 gap-4">
+                <div className="relative">
+                  <div className="w-12 h-12 border-3 border-violet-200 rounded-full" />
+                  <div className="absolute inset-0 w-12 h-12 border-3 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-text">AI is analyzing the vulnerability…</p>
+                  <p className="text-xs text-text-muted mt-1">Generating fix and creating merge request</p>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+                  <span className="text-xs text-text-muted">Using Amazon Bedrock</span>
+                </div>
+              </div>
+            )}
+
+            {/* Success state */}
+            {fixResult && (
+              <div className="flex flex-col items-center py-8 gap-4">
+                <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-success-500">Merge request created</p>
+                  <p className="text-xs text-text-muted mt-1">{fixResult.mrTitle}</p>
+                </div>
+                <a
+                  href={fixResult.mrUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-9 px-5 inline-flex items-center gap-2 bg-violet-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-violet-600 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                  Open Merge Request
+                </a>
+              </div>
+            )}
+
+            {/* Error state */}
+            {fixError && (
+              <div className="flex flex-col items-center py-8 gap-4">
+                <div className="w-12 h-12 rounded-full bg-danger-500/10 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-danger-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-danger-500">Fix failed</p>
+                  <p className="text-xs text-text-muted mt-1">{fixError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fixModal.finding && handleCreateMR(fixModal.finding)}
+                  className="h-9 px-5 inline-flex items-center gap-2 bg-violet-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-violet-600 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </Modal>
       </div>

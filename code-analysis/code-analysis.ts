@@ -4,9 +4,14 @@ import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
 import { git_integration } from "~encore/clients";
 import { execSync, spawnSync } from "child_process";
-import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, statSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { secret } from "encore.dev/config";
+
+// ─── SonarQube Configuration (optional) ───
+const SonarQubeUrl = secret("SonarQubeUrl");
+const SonarQubeToken = secret("SonarQubeToken");
 
 // Resolve opengrep binary path at module load
 function findOpengrep(): string {
@@ -398,6 +403,172 @@ async function updateProgress(scanId: string, progress: ScanProgress) {
   await db.exec`UPDATE scans SET summary = ${JSON.stringify(summary)}::jsonb, updated_at = NOW() WHERE id = ${scanId}`;
 }
 
+// ─── SonarQube Scanner Integration ───
+
+interface SonarIssue {
+  ruleId: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  snippet: string;
+}
+
+function mapSonarSeverity(s: string): "error" | "warning" | "info" {
+  switch (s) {
+    case "BLOCKER":
+    case "CRITICAL": return "error";
+    case "MAJOR": return "warning";
+    case "MINOR":
+    case "INFO":
+    default: return "info";
+  }
+}
+
+function findSonarScanner(): string | null {
+  const candidates = [
+    "sonar-scanner",
+    join(process.env.HOME || "", ".sonar/native-sonar-scanner/sonar-scanner"),
+    "/usr/local/bin/sonar-scanner",
+    "/opt/sonar-scanner/bin/sonar-scanner",
+  ];
+  for (const bin of candidates) {
+    try {
+      const result = spawnSync(bin, ["--version"], { stdio: "pipe", timeout: 5000 });
+      if (result.status === 0) return bin;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+async function sonarFetch(path: string, params: Record<string, string> = {}): Promise<any> {
+  const baseUrl = SonarQubeUrl();
+  const token = SonarQubeToken();
+  if (!baseUrl || !token) throw new Error("SonarQube URL or token not configured");
+
+  const url = new URL(path, baseUrl);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`SonarQube API ${path} returned ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function waitForSonarAnalysis(taskId: string, timeoutMs = 120_000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const data = await sonarFetch("/api/ce/task", { id: taskId });
+    const status = data.task?.status;
+    if (status === "SUCCESS") return;
+    if (status === "FAILED" || status === "CANCELED") {
+      throw new Error(`SonarQube analysis ${status}: ${data.task?.errorMessage || "unknown error"}`);
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error("SonarQube analysis timed out");
+}
+
+async function runSonarScanner(repoDir: string, projectKey: string): Promise<SonarIssue[]> {
+  const baseUrl = SonarQubeUrl();
+  const token = SonarQubeToken();
+  if (!baseUrl || !token) {
+    console.log("[sonar] SonarQube not configured, skipping");
+    return [];
+  }
+
+  const scannerBin = findSonarScanner();
+  if (!scannerBin) {
+    console.log("[sonar] sonar-scanner binary not found, skipping");
+    return [];
+  }
+
+  console.log(`[sonar] Running sonar-scanner for project ${projectKey}...`);
+
+  // Write sonar-project.properties
+  const props = [
+    `sonar.projectKey=${projectKey}`,
+    `sonar.sources=.`,
+    `sonar.host.url=${baseUrl}`,
+    `sonar.token=${token}`,
+    `sonar.sourceEncoding=UTF-8`,
+    `sonar.scm.disabled=true`,
+  ].join("\n");
+  writeFileSync(join(repoDir, "sonar-project.properties"), props);
+
+  // Run scanner
+  try {
+    execSync(`${JSON.stringify(scannerBin)}`, {
+      cwd: repoDir,
+      timeout: 300_000,
+      stdio: "pipe",
+      env: { ...process.env },
+    });
+  } catch (err: any) {
+    const stderr = err.stderr?.toString() || "";
+    console.error(`[sonar] Scanner failed: ${stderr || err.message}`);
+    // Try to continue — scanner may have uploaded partial results
+  }
+
+  // Read the task ID from .scannerwork/report-task.txt
+  const reportTaskPath = join(repoDir, ".scannerwork", "report-task.txt");
+  if (!existsSync(reportTaskPath)) {
+    console.log("[sonar] No report-task.txt found, scanner may have failed");
+    return [];
+  }
+
+  const reportContent = readFileSync(reportTaskPath, "utf-8");
+  const ceTaskIdMatch = reportContent.match(/ceTaskId=(.+)/);
+  if (!ceTaskIdMatch) {
+    console.log("[sonar] Could not find ceTaskId in report-task.txt");
+    return [];
+  }
+
+  // Wait for server to process
+  console.log(`[sonar] Waiting for analysis task ${ceTaskIdMatch[1]}...`);
+  await waitForSonarAnalysis(ceTaskIdMatch[1]);
+
+  // Pull issues from API
+  console.log("[sonar] Fetching issues...");
+  const issues: SonarIssue[] = [];
+  let page = 1;
+  const pageSize = 500;
+
+  while (true) {
+    const data = await sonarFetch("/api/issues/search", {
+      componentKeys: projectKey,
+      resolved: "false",
+      ps: String(pageSize),
+      p: String(page),
+    });
+
+    for (const issue of data.issues || []) {
+      // Extract file path from component key (format: projectKey:path/to/file.ts)
+      const component = issue.component || "";
+      const filePath = component.includes(":") ? component.split(":").slice(1).join(":") : component;
+
+      issues.push({
+        ruleId: `sonar.${issue.rule || "unknown"}`,
+        severity: mapSonarSeverity(issue.severity || "INFO"),
+        message: issue.message || "SonarQube issue",
+        filePath,
+        startLine: issue.line || issue.textRange?.startLine || 1,
+        endLine: issue.textRange?.endLine || issue.line || 1,
+        snippet: (issue.message || "").slice(0, 200),
+      });
+    }
+
+    const total = data.paging?.total || 0;
+    if (page * pageSize >= total) break;
+    page++;
+  }
+
+  console.log(`[sonar] Found ${issues.length} issues`);
+  return issues;
+}
+
 async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; user_id: string; project_id: string; created_at: Date }) {
   console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, opengrep binary: ${OPENGREP_BIN}`);
   const tmpDir = mkdtempSync(join(tmpdir(), "opengrep-scan-"));
@@ -440,18 +611,24 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     const outputFile = join(tmpDir, "results.json");
     let openGrepOutput: string;
 
+    console.log(`[doScan] Running opengrep: ${OPENGREP_BIN} in ${repoDir}`);
     try {
       execSync(
         `${JSON.stringify(OPENGREP_BIN)} scan --config auto --json --quiet --json-output=${JSON.stringify(outputFile)} .`,
         { cwd: repoDir, timeout: 300_000, stdio: "pipe", env: { ...process.env, OPENGREP_ENABLE_VERSION_CHECK: "0", HOME: process.env.HOME || "" } }
       );
       openGrepOutput = readFileSync(outputFile, "utf-8");
+      console.log(`[doScan] Opengrep completed, output size: ${openGrepOutput.length} bytes`);
     } catch (execErr: any) {
+      console.error(`[doScan] Opengrep exec error: ${execErr.message}`);
+      console.error(`[doScan] Opengrep stderr: ${execErr.stderr?.toString()?.slice(0, 500) || "(none)"}`);
       if (existsSync(outputFile)) {
         openGrepOutput = readFileSync(outputFile, "utf-8");
+        console.log(`[doScan] Opengrep partial output size: ${openGrepOutput.length} bytes`);
       } else {
         const stderr = execErr.stderr?.toString() || "";
         const stdout = execErr.stdout?.toString() || "";
+        console.error(`[doScan] No output file, failing. stderr: ${stderr.slice(0, 500)}`);
         throw new Error(`Opengrep failed (bin: ${OPENGREP_BIN}): ${stderr || stdout || execErr.message}`);
       }
     }
@@ -471,6 +648,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     const results = parsed.results || [];
     const scannedPaths = parsed.paths?.scanned || [];
     const filesScanned = scannedPaths.length;
+    console.log(`[doScan] Opengrep found ${results.length} findings across ${filesScanned} files`);
 
     const mapSeverity = (s: string): "error" | "warning" | "info" => {
       const upper = s.toUpperCase();
@@ -506,6 +684,23 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       const arr = findingsByFile.get(cf.filePath) || [];
       arr.push(cf);
       findingsByFile.set(cf.filePath, arr);
+    }
+
+    // 3c. Run SonarQube scanner (if configured)
+    let sonarFindings: SonarIssue[] = [];
+    try {
+      const sonarProjectKey = `scan-${scanId}`;
+      sonarFindings = await runSonarScanner(repoDir, sonarProjectKey);
+      console.log(`[doScan] SonarQube found ${sonarFindings.length} issues`);
+    } catch (sonarErr: any) {
+      console.log(`[doScan] SonarQube scan skipped or failed: ${sonarErr.message}`);
+    }
+
+    // Merge sonar findings into the map
+    for (const sf of sonarFindings) {
+      const arr = findingsByFile.get(sf.filePath) || [];
+      arr.push(sf);
+      findingsByFile.set(sf.filePath, arr);
     }
 
     // 4. Persist findings file-by-file, updating progress after each file
@@ -548,6 +743,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     const allSeverities = [
       ...results.map((r) => mapSeverity(r.extra.severity)),
       ...customFindings.map((f) => f.severity),
+      ...sonarFindings.map((f) => f.severity),
     ];
     const summary: ScanSummary = {
       totalFindings: totalInserted,
