@@ -239,15 +239,29 @@ async function bundleAndUploadSource(
       console.log("Repo already has a Dockerfile, using it as-is");
     }
 
+    // Generate .dockerignore if not present
+    if (!existsSync(join(repoDir, ".dockerignore"))) {
+      const dockerignore = [
+        "node_modules", ".next", ".git", ".gitignore",
+        "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store",
+        "vendor", ".env", ".env.*", "*.log",
+        "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv",
+        "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor",
+      ].join("\n");
+      writeFileSync(join(repoDir, ".dockerignore"), dockerignore);
+    }
+
     // Remove .git directory (not needed in build)
     rmSync(join(repoDir, ".git"), { recursive: true, force: true });
 
     // Create zip
     const { default: AdmZip } = await import("adm-zip");
     const zip = new AdmZip();
+    const skipDirs = new Set(["node_modules", ".git", ".pnpm-store", ".turbo", ".cache", "__pycache__", ".venv", "venv", "vendor"]);
     const addDir = (dirPath: string, zipPrefix: string) => {
       const items = readdirSync(dirPath, { withFileTypes: true });
       for (const item of items) {
+        if (item.isDirectory() && skipDirs.has(item.name)) continue;
         const fullPath = join(dirPath, item.name);
         if (item.isDirectory()) {
           addDir(fullPath, zipPrefix ? `${zipPrefix}/${item.name}` : item.name);
