@@ -286,6 +286,18 @@ function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig)
     config.port = 3000;
   }
 
+  // Detect client-only SPAs (React/Vue/Vite without a server framework)
+  // These produce static files and have no start script
+  if (!config.framework && !pkg.scripts?.start) {
+    const isSpa = (allDeps["react"] || allDeps["vue"] || allDeps["vite"] || allDeps["@vitejs/plugin-react"]);
+    if (isSpa && pkg.scripts?.build) {
+      config.framework = "SPA";
+      config.frameworkVersion = cleanVersion(allDeps["react"] || allDeps["vue"] || allDeps["vite"] || "");
+      config.port = 3000;
+      config.features.add("static-export");
+    }
+  }
+
   // Build & start commands from scripts
   if (pkg.scripts?.build) config.buildCommand = `${config.packageManager === "npm" ? "npm run" : config.packageManager} build`;
   if (pkg.scripts?.start) config.startCommand = `${config.packageManager === "npm" ? "npm" : config.packageManager} start`;
@@ -592,6 +604,15 @@ function generateNodeDockerfile(config: RepoConfig): string {
     lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
     lines.push("EXPOSE 3000");
     lines.push('CMD ["node", ".output/server/index.mjs"]');
+  } else if (config.framework === "SPA") {
+    // Client-only SPA (React/Vue/Vite) — serve static build output
+    lines.push("RUN npm i -g serve");
+    // Copy whichever build output dir exists (Vite→dist, CRA→build)
+    lines.push("COPY --from=builder /app/package.json ./");
+    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n    if [ -d /builder/dist ]; then cp -r /builder/dist ./dist; elif [ -d /builder/build ]; then cp -r /builder/build ./build; fi");
+    lines.push("ENV PORT=3000");
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["sh", "-c", "if [ -d dist ]; then serve dist -l 3000 -s; else serve build -l 3000 -s; fi"]');
   } else {
     lines.push("COPY --from=builder /app .");
     lines.push(`ENV PORT=${config.port}`);

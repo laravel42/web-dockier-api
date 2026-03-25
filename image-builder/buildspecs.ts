@@ -8,7 +8,7 @@ import { join } from "node:path";
 // ─── Stack Detection ───
 
 export type DetectedStack =
-  | { runtime: "node"; framework: "nextjs" | "nuxt" | "generic"; packageManager: "npm" | "pnpm" | "yarn" | "bun"; hasStandalone: boolean; isStatic: boolean; subDir: string }
+  | { runtime: "node"; framework: "nextjs" | "nuxt" | "spa" | "generic"; packageManager: "npm" | "pnpm" | "yarn" | "bun"; hasStandalone: boolean; isStatic: boolean; subDir: string }
   | { runtime: "php"; framework: "laravel" | "generic"; hasNodeAssets: boolean; subDir: string }
   | { runtime: "python"; framework: "django" | "fastapi" | "flask" | "generic"; subDir: string }
   | { runtime: "go"; subDir: string }
@@ -31,7 +31,7 @@ export function detectStack(repoDir: string): DetectedStack {
 
   // Node.js
   if (existsSync(join(appDir, "package.json"))) {
-    let framework: "nextjs" | "nuxt" | "generic" = "generic";
+    let framework: "nextjs" | "nuxt" | "spa" | "generic" = "generic";
     let hasStandalone = false;
     let isStatic = false;
     try {
@@ -62,6 +62,9 @@ export function detectStack(repoDir: string): DetectedStack {
             break;
           }
         }
+      } else if ((allDeps["react"] || allDeps["vue"] || allDeps["vite"] || allDeps["@vitejs/plugin-react"]) && !pkg.scripts?.start && pkg.scripts?.build) {
+        framework = "spa";
+        isStatic = true;
       }
     } catch {}
     const pm = detectNodePM(appDir, repoDir);
@@ -216,6 +219,14 @@ function nodeDockerfile(stack: Extract<DetectedStack, { runtime: "node" }>, repo
     lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
     lines.push("EXPOSE 3000");
     lines.push('CMD ["node", ".output/server/index.mjs"]');
+  } else if (stack.framework === "spa") {
+    // Client-only SPA (React/Vue/Vite) — serve static build output
+    lines.push("RUN npm i -g serve");
+    lines.push("COPY --from=builder /app/package.json ./");
+    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n    if [ -d /builder/dist ]; then cp -r /builder/dist ./dist; elif [ -d /builder/build ]; then cp -r /builder/build ./build; fi");
+    lines.push("ENV PORT=3000");
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["sh", "-c", "if [ -d dist ]; then serve dist -l 3000 -s; else serve build -l 3000 -s; fi"]');
   } else {
     lines.push("COPY --from=builder /app .");
     if (pm === "pnpm" || pm === "yarn") {

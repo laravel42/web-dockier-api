@@ -141,7 +141,7 @@ Resources:
             03_install_cfn_helpers:
               command: |
                 if ! command -v cfn-signal &>/dev/null; then
-                  pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz 2>/dev/null || true
+                  pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
                 fi
         app:
           commands:
@@ -255,7 +255,7 @@ Resources:
 
           apt-get update -y
           apt-get install -y python3-pip
-          pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz 2>/dev/null || true
+          pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
 
           cfn-init -v --stack ${AWS::StackName} --resource Instance --configsets deploy --region ${AWS::Region}
 
