@@ -65,6 +65,14 @@ export function detectStack(repoDir: string): DetectedStack {
       } else if ((allDeps["react"] || allDeps["vue"] || allDeps["vite"] || allDeps["@vitejs/plugin-react"]) && !pkg.scripts?.start && pkg.scripts?.build) {
         framework = "spa";
         isStatic = true;
+      } else if (allDeps["astro"]) {
+        const hasAdapter = allDeps["@astrojs/node"] || allDeps["@astrojs/vercel"] || allDeps["@astrojs/netlify"] || allDeps["@astrojs/cloudflare"];
+        if (hasAdapter || pkg.scripts?.start) {
+          framework = "generic";
+        } else {
+          framework = "spa";
+          isStatic = true;
+        }
       }
     } catch {}
     const pm = detectNodePM(appDir, repoDir);
@@ -158,6 +166,12 @@ function nodeDockerfile(stack: Extract<DetectedStack, { runtime: "node" }>, repo
     if (pkg.engines?.node) {
       const m = pkg.engines.node.match(/(\d+)/);
       if (m) nodeVer = m[1];
+    }
+    // Ensure minimum Node version for frameworks that require it
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    if (allDeps["astro"]) {
+      const astroVer = parseInt((allDeps["astro"] || "0").replace(/[\^~>=<]/g, "")) || 0;
+      if (astroVer >= 5 && parseInt(nodeVer) < 22) nodeVer = "22";
     }
   } catch {}
 

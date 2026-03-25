@@ -267,7 +267,13 @@ function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig)
   } else if (allDeps["astro"]) {
     config.framework = "Astro";
     config.frameworkVersion = cleanVersion(allDeps["astro"]);
-    config.port = 4321;
+    config.port = 3000;
+    const hasAdapter = allDeps["@astrojs/node"] || allDeps["@astrojs/vercel"] || allDeps["@astrojs/netlify"] || allDeps["@astrojs/cloudflare"];
+    if (hasAdapter || pkg.scripts?.start) {
+      config.features.add("ssr");
+    } else {
+      config.features.add("static-export");
+    }
   } else if (allDeps["remix"] || allDeps["@remix-run/node"]) {
     config.framework = "Remix";
     config.frameworkVersion = cleanVersion(allDeps["@remix-run/node"] || allDeps["remix"]);
@@ -300,6 +306,16 @@ function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig)
 
   // Build & start commands from scripts
   if (pkg.scripts?.build) config.buildCommand = `${config.packageManager === "npm" ? "npm run" : config.packageManager} build`;
+
+  // Ensure minimum Node version for frameworks that require it
+  if (config.framework === "Astro") {
+    const astroVer = parseInt((allDeps["astro"] || "0").replace(/[\^~>=<]/g, "")) || 0;
+    if (astroVer >= 5 && parseInt(config.runtimeVersion) < 22) {
+      config.nodeVersion = "22";
+      config.runtimeVersion = "22";
+    }
+  }
+
   if (pkg.scripts?.start) config.startCommand = `${config.packageManager === "npm" ? "npm" : config.packageManager} start`;
   else if (pkg.scripts?.serve) config.startCommand = `${config.packageManager === "npm" ? "npm run" : config.packageManager} serve`;
   else if (pkg.main) config.startCommand = `node ${pkg.main}`;
@@ -613,6 +629,13 @@ function generateNodeDockerfile(config: RepoConfig): string {
     lines.push("ENV PORT=3000");
     lines.push("EXPOSE 3000");
     lines.push('CMD ["sh", "-c", "if [ -d dist ]; then serve dist -l 3000 -s; else serve build -l 3000 -s; fi"]');
+  } else if (config.framework === "Astro" && config.features.has("static-export")) {
+    // Astro static site
+    lines.push("RUN npm i -g serve");
+    lines.push("COPY --from=builder /app/dist ./dist");
+    lines.push("ENV PORT=3000");
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["serve", "dist", "-l", "3000", "-s"]');
   } else {
     lines.push("COPY --from=builder /app .");
     lines.push(`ENV PORT=${config.port}`);
