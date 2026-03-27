@@ -281,7 +281,7 @@ Resources:
                 Action: [logs:CreateLogGroup, logs:PutRetentionPolicy]
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/*"
               - Effect: Allow
-                Action: s3:GetObject
+                Action: [s3:GetObject, s3:PutObject]
                 Resource: !Sub "${TemplateBucket.Arn}/*"
               - Effect: Allow
                 Action: iam:PassRole
@@ -404,6 +404,29 @@ Resources:
                 params.append({'ParameterKey': 'SubnetId', 'ParameterValue': subnets[0]})
                 if deploy_params.get('instanceType'):
                   params.append({'ParameterKey': 'InstanceType', 'ParameterValue': str(deploy_params['instanceType'])})
+
+              # Pass environment variables if provided
+              env_vars = deploy_params.get('envVars', [])
+              if env_vars:
+                params.append({'ParameterKey': 'EnvVarsJson', 'ParameterValue': json.dumps(env_vars)})
+
+              # For ECS with env vars, inject them into the template directly
+              if deploy_target == 'ecs' and env_vars:
+                try:
+                  s3c = boto3.client('s3')
+                  obj = s3c.get_object(Bucket=bucket, Key=template_file)
+                  template_body = obj['Body'].read().decode('utf-8')
+                  env_yaml = "\n          Environment:"
+                  for ev in env_vars:
+                    val = str(ev.get('value', '')).replace('"', '\\"')
+                    env_yaml += f'\n            - Name: {ev["name"]}\n              Value: "{val}"'
+                  template_body = template_body.replace('          Essential: true', '          Essential: true' + env_yaml)
+                  mod_key = f"_tmp/{app_name}-{build_id[:8]}.yml"
+                  s3c.put_object(Bucket=bucket, Key=mod_key, Body=template_body.encode('utf-8'))
+                  template_url = f"https://{bucket}.s3.amazonaws.com/{mod_key}"
+                  print(f"Injected {len(env_vars)} env vars into template: {mod_key}")
+                except Exception as e:
+                  print(f"Failed to inject env vars: {e}")
 
               stack_name = f"{os.environ['PROJECT_NAME']}-app-{app_name}"
 

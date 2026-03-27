@@ -1356,6 +1356,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             instanceType: plan?.instance || undefined,
             cpu: plan?.cpu?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.cpu.match(/[\d.]+/)![0]) * 1024)) : undefined,
             memory: plan?.ram?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.ram.match(/[\d.]+/)![0]) * 1024)) : undefined,
+            envVars: state.envVars.length > 0 ? state.envVars : undefined,
           },
         });
 

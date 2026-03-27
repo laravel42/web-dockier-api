@@ -85,6 +85,7 @@ interface StartBuildParams {
     instanceType?: string;
     vpcId?: string;
     subnetIds?: string[];
+    envVars?: Array<{ name: string; value: string }>;
   };
 }
 
