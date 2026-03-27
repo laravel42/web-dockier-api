@@ -1367,7 +1367,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
         );
         setState(prev => ({ ...prev, codebuildBuildId: build.id, codebuildLogsUrl: build.logsUrl, deployLogs: [...formattedLogs] }));
 
-        let lastPhase = "";
+        const seenPhases = new Set<string>();
 
         // Poll CodeBuild until image is ready
         const pollCodeBuild = async () => {
@@ -1382,9 +1382,9 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                 // Extract phase info from raw logs
                 for (const line of logsResp.logs) {
                   const phaseMatch = line.match(/Entering phase (\w+)/);
-                  if (phaseMatch && phaseMatch[1] !== lastPhase) {
-                    lastPhase = phaseMatch[1];
-                    formattedLogs.push(`[${ts}] ℹ CodeBuild: ${lastPhase}...`);
+                  if (phaseMatch && !seenPhases.has(phaseMatch[1])) {
+                    seenPhases.add(phaseMatch[1]);
+                    formattedLogs.push(`[${ts}] ℹ CodeBuild: ${phaseMatch[1]}...`);
                   }
                 }
               }
