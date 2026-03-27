@@ -123,6 +123,7 @@ interface BuildStatusResponse {
   statusReason: string;
   logsUrl: string;
   tags: string[];
+  buildMetadata: Record<string, string>;
   startedAt: string;
   finishedAt: string;
   createdAt: string;
@@ -184,7 +185,7 @@ async function bundleAndUploadSource(
   gitToken?: string,
   gitProvider?: string,
   gitEndpoint?: string,
-): Promise<string> {
+): Promise<{ s3Key: string; detectedRuntime: string; detectedPort: number }> {
   const { execSync } = await import("node:child_process");
   const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
@@ -224,19 +225,30 @@ async function bundleAndUploadSource(
     writeFileSync(join(repoDir, "buildspec.yml"), buildspecContent);
 
     // Generate Dockerfile if the repo doesn't already have one
+    let generatedDockerfile = false;
+    let detectedPort = 3000;
     if (!existsSync(join(repoDir, "Dockerfile"))) {
       const dockerfile = genDF(stack, repoDir);
       if (dockerfile) {
         writeFileSync(join(repoDir, "Dockerfile"), dockerfile);
-        console.log(`Generated Dockerfile for ${stack.runtime}`);
+        generatedDockerfile = true;
+        // Extract port from generated Dockerfile
+        const exposeMatch = dockerfile.match(/EXPOSE\s+(\d+)/);
+        if (exposeMatch) detectedPort = parseInt(exposeMatch[1]);
+        console.log(`Generated Dockerfile for ${stack.runtime} (port: ${detectedPort})`);
       } else {
-        // Fall back to the old monolithic buildspec that has bash auto-detection
         const fallbackBuildspec = getBuildspecContent();
         writeFileSync(join(repoDir, "buildspec.yml"), fallbackBuildspec);
         console.log("Unknown stack, falling back to generic buildspec with auto-detection");
       }
     } else {
-      console.log("Repo already has a Dockerfile, using it as-is");
+      // Detect port from existing Dockerfile
+      try {
+        const df = readFileSync(join(repoDir, "Dockerfile"), "utf-8");
+        const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
+        if (exposeMatch) detectedPort = parseInt(exposeMatch[1]);
+      } catch {}
+      console.log(`Repo already has a Dockerfile, using it as-is (port: ${detectedPort})`);
     }
 
     // Generate .dockerignore if not present
@@ -286,7 +298,7 @@ async function bundleAndUploadSource(
       ContentType: "application/zip",
     }));
 
-    return s3Key;
+    return { s3Key, detectedRuntime: stack.runtime, detectedPort };
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -357,11 +369,15 @@ export const startBuild = api(
 
       // 1. Pull repo, inject buildspec.yml, upload to S3
       const bucketName = `${codebuildProject}-source-${accountId}`;
-      const s3Key = await bundleAndUploadSource(
+      const { s3Key, detectedRuntime, detectedPort } = await bundleAndUploadSource(
         params.sourceRepo, sourceRef, id,
         accessKeyId, secretAccessKey, region, bucketName,
         gitToken, gitProvider, gitEndpoint,
       );
+
+      // Always use the detected port from the Dockerfile (generated or existing)
+      const deployParams = { ...params.deployParams };
+      deployParams.containerPort = detectedPort;
 
       // 2. Publish to SNS to queue the CodeBuild job
       const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
@@ -385,7 +401,7 @@ export const startBuild = api(
           region,
           codebuildProject,
           deployTarget: params.deployTarget || "",
-          deployParams: params.deployParams || {},
+          deployParams: deployParams,
           callbackUrl,
         }),
       }));
@@ -642,6 +658,54 @@ export const webhook = api(
   }
 );
 
+// ─── API: Get Deploy Status (polls CloudFormation for stack status) ───
+
+export const getDeployStatus = api(
+  { method: "GET", path: "/image-builder/builds/:buildId/deploy-status", auth: true },
+  async (params: { buildId: string }): Promise<{ status: string; appUrl: string; stackName: string }> => {
+    const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
+    if (!row) throw APIError.notFound("Build not found");
+    const build = rowToBuild(row);
+
+    // Check if webhook already set the metadata
+    if (build.buildMetadata?.appUrl) {
+      return { status: "success", appUrl: build.buildMetadata.appUrl, stackName: build.buildMetadata.stackName || "" };
+    }
+    if (build.status === "failed") {
+      return { status: "failed", appUrl: "", stackName: "" };
+    }
+
+    // Poll CloudFormation directly
+    const appName = build.sourceRepo.split("/").pop()?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || "";
+    const stackName = `image-builder-app-${appName}`;
+    try {
+      const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+      const cfn = new CloudFormationClient({
+        region: getAwsRegion(),
+        credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+      });
+      const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+      const stack = result.Stacks?.[0];
+      if (!stack) return { status: "pending", appUrl: "", stackName };
+
+      const stackStatus = stack.StackStatus || "";
+      if (stackStatus === "CREATE_COMPLETE" || stackStatus === "UPDATE_COMPLETE") {
+        const outputs = Object.fromEntries((stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]));
+        const appUrl = outputs.AppUrl || "";
+        // Update the build record so future polls are fast
+        await db.exec`UPDATE builds SET status = 'succeeded', build_metadata = ${JSON.stringify({ appUrl, stackName })}, updated_at = NOW() WHERE id = ${params.buildId}`;
+        return { status: "success", appUrl, stackName };
+      }
+      if (stackStatus.includes("ROLLBACK") || stackStatus.includes("FAILED")) {
+        return { status: "failed", appUrl: "", stackName };
+      }
+      return { status: "deploying", appUrl: "", stackName };
+    } catch {
+      return { status: "pending", appUrl: "", stackName };
+    }
+  }
+);
+
 // ─── Internal: Refresh build status from CodeBuild ───
 
 async function refreshBuildStatus(build: BuildRecord): Promise<BuildRecord> {
@@ -688,6 +752,7 @@ function buildToStatusResponse(build: BuildRecord): BuildStatusResponse {
     id: build.id, codebuildId: build.codebuildId, sourceRepo: build.sourceRepo,
     sourceRef: build.sourceRef, commitSha: build.commitSha, imageUri: build.imageUri,
     status: build.status, statusReason: build.statusReason, logsUrl: build.logsUrl,
-    tags: build.tags, startedAt: build.startedAt, finishedAt: build.finishedAt, createdAt: build.createdAt,
+    tags: build.tags, buildMetadata: build.buildMetadata,
+    startedAt: build.startedAt, finishedAt: build.finishedAt, createdAt: build.createdAt,
   };
 }

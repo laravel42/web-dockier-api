@@ -132,7 +132,7 @@ Resources:
               command: systemctl enable docker && systemctl start docker
             02_install_awscli:
               command: |
-                if ! command -v aws &>/dev/null; then
+                if ! command -v aws >/dev/null 2>&1; then
                   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
                   unzip -q /tmp/awscliv2.zip -d /tmp
                   /tmp/aws/install
@@ -140,7 +140,7 @@ Resources:
                 fi
             03_install_cfn_helpers:
               command: |
-                if ! command -v cfn-signal &>/dev/null; then
+                if ! command -v cfn-signal >/dev/null 2>&1; then
                   pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
                 fi
         app:
@@ -150,7 +150,9 @@ Resources:
                 aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin $(echo "${ImageUri}" | cut -d/ -f1)
             02_deploy_container:
               command: !Sub |
-                set -euo pipefail
+                set -eu
+                # Wait for Docker daemon to be ready
+                for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
                 docker pull "${ImageUri}"
                 docker stop ${AppName} 2>/dev/null || true
                 docker rm ${AppName} 2>/dev/null || true
@@ -163,7 +165,7 @@ Resources:
                 docker run -d \
                   --name ${AppName} \
                   --restart unless-stopped \
-                  -p ${ContainerPort}:${ContainerPort} \
+                  -p 127.0.0.1:8080:${ContainerPort} \
                   -e PORT=${ContainerPort} \
                   $ENV_FLAGS \
                   "${ImageUri}"
@@ -174,7 +176,7 @@ Resources:
                     listen 80 default_server;
                     server_name _;
                     location / {
-                        proxy_pass http://127.0.0.1:${ContainerPort};
+                        proxy_pass http://127.0.0.1:8080;
                         proxy_set_header Host $host;
                         proxy_set_header X-Real-IP $remote_addr;
                         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

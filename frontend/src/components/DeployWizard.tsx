@@ -1324,12 +1324,19 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
 
       // ── CodeBuild path: build image first via image-builder, then deploy ──
       if (state.buildMethod === "codebuild") {
-        setState(prev => ({ ...prev, deployStatus: "building", deployLogs: [`[${new Date().toISOString().replace("T", " ").slice(0, 19)}] ▶ Starting CodeBuild image build...`] }));
+        const ts0 = new Date().toISOString().replace("T", " ").slice(0, 19);
+        const formattedLogs: string[] = [
+          `[${ts0}] ▶ Starting deployment pipeline...`,
+          `[${ts0}] ℹ Provider: ${state.selectedProvider}`,
+          `[${ts0}] ℹ Strategy: ${state.deployStrategy}`,
+          `[${ts0}] ℹ Repository: ${repo} | Branch: ${project.branch || "main"}`,
+          `[${ts0}]`,
+        ];
+        setState(prev => ({ ...prev, deployStatus: "building", deployLogs: formattedLogs }));
 
         const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
         const plan = plans[state.selectedPlan] || plans[1] || plans[0];
 
-        // Map deployStrategy to deployTarget for CloudFormation template selection
         const deployTargetMap: Record<string, "ecs" | "apprunner" | "ec2"> = {
           vps: "ec2",
           managed: "ecs",
@@ -1352,16 +1359,14 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           },
         });
 
-        setState(prev => ({
-          ...prev,
-          codebuildBuildId: build.id,
-          codebuildLogsUrl: build.logsUrl,
-          deployLogs: [
-            ...prev.deployLogs,
-            `[${new Date().toISOString().replace("T", " ").slice(0, 19)}] ℹ CodeBuild started: ${build.codebuildId}`,
-            `[${new Date().toISOString().replace("T", " ").slice(0, 19)}] ℹ Logs: ${build.logsUrl}`,
-          ],
-        }));
+        const ts1 = new Date().toISOString().replace("T", " ").slice(0, 19);
+        formattedLogs.push(
+          `[${ts1}] ── Build Image (CodeBuild) ────────`,
+          `[${ts1}] ℹ Build queued: ${build.codebuildId || build.id}`,
+        );
+        setState(prev => ({ ...prev, codebuildBuildId: build.id, codebuildLogsUrl: build.logsUrl, deployLogs: [...formattedLogs] }));
+
+        let lastPhase = "";
 
         // Poll CodeBuild until image is ready
         const pollCodeBuild = async () => {
@@ -1369,61 +1374,78 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             const b = await imageBuilderApi.getBuild(build.id);
             const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
 
-            // Fetch real CloudWatch logs
+            // Parse CodeBuild phase from CloudWatch logs
             try {
               const logsResp = await imageBuilderApi.getBuildLogs(build.id);
               if (logsResp.logs.length > 0) {
-                setState(prev => ({ ...prev, deployLogs: logsResp.logs }));
+                // Extract phase info from raw logs
+                for (const line of logsResp.logs) {
+                  const phaseMatch = line.match(/Entering phase (\w+)/);
+                  if (phaseMatch && phaseMatch[1] !== lastPhase) {
+                    lastPhase = phaseMatch[1];
+                    formattedLogs.push(`[${ts}] ℹ CodeBuild: ${lastPhase}...`);
+                  }
+                }
               }
-            } catch { /* logs not available yet */ }
+            } catch {}
 
             if (b.status === "succeeded") {
+              formattedLogs.push(
+                `[${ts}] ✓ CodeBuild succeeded — image pushed to ECR`,
+                `[${ts}]`,
+                `[${ts}] ── CloudFormation Deploy ──────────`,
+              );
               setState(prev => ({
                 ...prev,
                 codebuildImageUri: b.imageUri,
-                deployLogs: [
-                  ...prev.deployLogs,
-                  `[${ts}] ✓ Image built${b.imageUri ? `: ${b.imageUri}` : ""}`,
-                  `[${ts}] ▶ Starting infrastructure deployment...`,
-                ],
+                deployStatus: "deploying",
+                deployAppUrl: "",
+                deployLogs: [...formattedLogs],
               }));
 
-              // Now trigger the normal deploy with the built image as registryUrl
-              const deployment = await deployApi.createDeployment({
-                providerId: state.selectedProviderId,
-                gitConnectionId: project.connectionId,
-                repo,
-                branch: project.branch || "main",
-                tofuScript: state.tofuScript || undefined,
-                techStack: analysis?.techStack.map(t => t.name) || [],
-                primaryLanguage: analysis?.primaryLanguage || "",
-                deployStrategy: state.deployStrategy,
-                buildMethod: "dockerfile",
-                registryUrl: b.imageUri.split("/").slice(0, -1).join("/"),
-              });
-              setState(prev => ({ ...prev, deploymentId: deployment.id }));
-
-              // Poll deploy status
-              const pollDeploy = async () => {
+              const pollCfnDeploy = async () => {
                 try {
-                  const d = await deployApi.getDeployment(deployment.id);
-                  setState(prev => ({
-                    ...prev,
-                    deployStatus: d.status,
-                    deployLogs: d.logs ? d.logs.split("\n").filter(Boolean) : prev.deployLogs,
-                    deployAppUrl: d.appUrl || prev.deployAppUrl,
-                  }));
-                  if (d.status === "success" || d.status === "failed") {
-                    if (d.status === "failed") setDeployError("Deployment failed. Check logs for details.");
+                  const ds = await imageBuilderApi.getDeployStatus(build.id);
+                  const ts2 = new Date().toISOString().replace("T", " ").slice(0, 19);
+
+                  if (ds.status === "success" && ds.appUrl) {
+                    formattedLogs.push(
+                      `[${ts2}] ✓ CloudFormation stack: CREATE_COMPLETE`,
+                      `[${ts2}] ✓ App URL: ${ds.appUrl}`,
+                      `[${ts2}]`,
+                      `[${ts2}] ── Complete ───────────────────────`,
+                      `[${ts2}] ✓ Infrastructure deployed via CloudFormation`,
+                      `[${ts2}] ✓ Application URL: ${ds.appUrl}`,
+                    );
+                    setState(prev => ({
+                      ...prev,
+                      deployStatus: "success",
+                      deployAppUrl: ds.appUrl,
+                      deployLogs: [...formattedLogs],
+                    }));
                     onDeployComplete?.();
                     return;
                   }
-                  pollRef.current = setTimeout(pollDeploy, 1500);
+                  if (ds.status === "failed") {
+                    formattedLogs.push(`[${ts2}] ✗ CloudFormation failed`);
+                    setState(prev => ({ ...prev, deployStatus: "failed", deployLogs: [...formattedLogs] }));
+                    setDeployError("CloudFormation deployment failed.");
+                    onDeployComplete?.();
+                    return;
+                  }
+                  if (ds.status === "deploying") {
+                    // Only add if not already showing
+                    if (!formattedLogs.some(l => l.includes("CloudFormation:"))) {
+                      formattedLogs.push(`[${ts2}] ℹ CloudFormation: deploying...`);
+                      setState(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
+                    }
+                  }
+                  pollRef.current = setTimeout(pollCfnDeploy, 10000);
                 } catch {
-                  pollRef.current = setTimeout(pollDeploy, 2000);
+                  pollRef.current = setTimeout(pollCfnDeploy, 10000);
                 }
               };
-              pollRef.current = setTimeout(pollDeploy, 1000);
+              pollRef.current = setTimeout(pollCfnDeploy, 5000);
               return;
             }
 

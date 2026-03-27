@@ -664,6 +664,7 @@ export const imageBuilderApi = {
       statusReason: string;
       logsUrl: string;
       tags: string[];
+      buildMetadata: Record<string, string>;
       startedAt: string;
       finishedAt: string;
       createdAt: string;
@@ -718,6 +719,13 @@ export const imageBuilderApi = {
       nextToken?: string;
     }>(`/image-builder/builds/${buildId}/logs${q}`);
   },
+
+  getDeployStatus: (buildId: string) =>
+    request<{
+      status: string;
+      appUrl: string;
+      stackName: string;
+    }>(`/image-builder/builds/${buildId}/deploy-status`),
 };
 
 // ─── Integrations ───

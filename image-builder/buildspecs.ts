@@ -314,8 +314,9 @@ function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>, repoDi
     lines.push("    && php artisan view:clear 2>/dev/null || true \\");
     lines.push("    && chown -R www-data:www-data storage bootstrap/cache");
     lines.push("");
-    lines.push("# Nginx + Supervisor");
-    lines.push(`RUN echo 'server { listen 80; server_name _; root /var/www/html/public; index index.php; client_max_body_size 100M; location / { try_files \\$uri \\$uri/ /index.php?\\$query_string; } location ~ \\.php$ { fastcgi_pass 127.0.0.1:9000; fastcgi_param SCRIPT_FILENAME \\$realpath_root\\$fastcgi_script_name; include fastcgi_params; } location ~ /\\.(?!well-known).* { deny all; } }' > /etc/nginx/sites-available/default`);
+    lines.push("# Nginx config");
+    lines.push("RUN cat > /etc/nginx/sites-available/default <<'NGINXCONF'\nserver {\n  listen 80;\n  server_name _;\n  root /var/www/html/public;\n  index index.php;\n  client_max_body_size 100M;\n  location / { try_files $uri $uri/ /index.php?$query_string; }\n  location ~ \\.php$ { fastcgi_pass 127.0.0.1:9000; fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name; include fastcgi_params; }\n  location ~ /\\.(?!well-known).* { deny all; }\n}\nNGINXCONF");
+    lines.push("# Supervisor config");
     lines.push(`RUN echo '[supervisord]\\nnodaemon=true\\n[program:php-fpm]\\ncommand=php-fpm -F\\nautostart=true\\nautorestart=true\\n[program:nginx]\\ncommand=nginx -g "daemon off;"\\nautostart=true\\nautorestart=true' > /etc/supervisor/conf.d/app.conf`);
     lines.push("EXPOSE 80");
     lines.push('CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/app.conf"]');
