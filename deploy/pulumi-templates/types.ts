@@ -14,6 +14,7 @@ export interface DeployParams {
   useDocker?: boolean;
   dockerImage?: string;
   instanceType?: string;
+  ecrImageUri?: string;
   aiAnalysis?: {
     runtime: string;
     runtimeVersion: string;

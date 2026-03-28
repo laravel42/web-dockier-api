@@ -62,6 +62,9 @@ export function detectStack(repoDir: string): DetectedStack {
             break;
           }
         }
+      } else if (allDeps["@angular/core"]) {
+        framework = "spa";
+        isStatic = true;
       } else if ((allDeps["react"] || allDeps["vue"] || allDeps["vite"] || allDeps["@vitejs/plugin-react"]) && !pkg.scripts?.start && pkg.scripts?.build) {
         framework = "spa";
         isStatic = true;
@@ -234,10 +237,17 @@ function nodeDockerfile(stack: Extract<DetectedStack, { runtime: "node" }>, repo
     lines.push("EXPOSE 3000");
     lines.push('CMD ["node", ".output/server/index.mjs"]');
   } else if (stack.framework === "spa") {
-    // Client-only SPA (React/Vue/Vite) — serve static build output
+    // Client-only SPA (React/Vue/Vite/Angular) — serve static build output
     lines.push("RUN npm i -g serve");
     lines.push("COPY --from=builder /app/package.json ./");
-    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n    if [ -d /builder/dist ]; then cp -r /builder/dist ./dist; elif [ -d /builder/build ]; then cp -r /builder/build ./build; fi");
+    // Angular outputs to dist/<project>/browser (v17+) or dist/<project>; React/Vue to dist/ or build/
+    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n" +
+      "    BROWSER=$(find /builder/dist -maxdepth 2 -type d -name browser 2>/dev/null | head -1) && \\\n" +
+      "    if [ -n \"$BROWSER\" ]; then cp -r \"$BROWSER\" ./dist; \\\n" +
+      "    elif [ -d /builder/dist ] && [ -f /builder/dist/index.html ]; then cp -r /builder/dist ./dist; \\\n" +
+      "    elif [ -d /builder/dist ]; then INNER=$(ls /builder/dist | head -1) && \\\n" +
+      "      if [ -f \"/builder/dist/$INNER/index.html\" ]; then cp -r \"/builder/dist/$INNER\" ./dist; else cp -r /builder/dist ./dist; fi; \\\n" +
+      "    elif [ -d /builder/build ]; then cp -r /builder/build ./build; fi");
     lines.push("ENV PORT=3000");
     lines.push("EXPOSE 3000");
     lines.push('CMD ["sh", "-c", "if [ -d dist ]; then serve dist -l 3000 -s; else serve build -l 3000 -s; fi"]');

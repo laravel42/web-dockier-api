@@ -259,7 +259,8 @@ function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig)
   } else if (allDeps["@angular/core"]) {
     config.framework = "Angular";
     config.frameworkVersion = cleanVersion(allDeps["@angular/core"]);
-    config.port = 4200;
+    config.port = 3000;
+    config.features.add("static-export");
   } else if (allDeps["svelte"] || allDeps["@sveltejs/kit"]) {
     config.framework = "SvelteKit";
     config.frameworkVersion = cleanVersion(allDeps["@sveltejs/kit"] || allDeps["svelte"]);
@@ -623,12 +624,27 @@ function generateNodeDockerfile(config: RepoConfig): string {
   } else if (config.framework === "SPA") {
     // Client-only SPA (React/Vue/Vite) — serve static build output
     lines.push("RUN npm i -g serve");
-    // Copy whichever build output dir exists (Vite→dist, CRA→build)
+    // Angular outputs to dist/<project>/browser (v17+) or dist/<project>; React/Vue to dist/ or build/
     lines.push("COPY --from=builder /app/package.json ./");
-    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n    if [ -d /builder/dist ]; then cp -r /builder/dist ./dist; elif [ -d /builder/build ]; then cp -r /builder/build ./build; fi");
+    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n" +
+      "    BROWSER=$(find /builder/dist -maxdepth 2 -type d -name browser 2>/dev/null | head -1) && \\\n" +
+      "    if [ -n \"$BROWSER\" ]; then cp -r \"$BROWSER\" ./dist; \\\n" +
+      "    elif [ -d /builder/dist ] && [ -f /builder/dist/index.html ]; then cp -r /builder/dist ./dist; \\\n" +
+      "    elif [ -d /builder/dist ]; then INNER=$(ls /builder/dist | head -1) && \\\n" +
+      "      if [ -f \"/builder/dist/$INNER/index.html\" ]; then cp -r \"/builder/dist/$INNER\" ./dist; else cp -r /builder/dist ./dist; fi; \\\n" +
+      "    elif [ -d /builder/build ]; then cp -r /builder/build ./build; fi");
     lines.push("ENV PORT=3000");
     lines.push("EXPOSE 3000");
     lines.push('CMD ["sh", "-c", "if [ -d dist ]; then serve dist -l 3000 -s; else serve build -l 3000 -s; fi"]');
+  } else if (config.framework === "Angular") {
+    // Angular SPA — serve static build output from dist/<project-name>/browser or dist/
+    lines.push("RUN npm i -g serve");
+    lines.push("COPY --from=builder /app/package.json ./");
+    // Angular 17+ outputs to dist/<project>/browser; older versions to dist/<project>
+    lines.push("RUN --mount=from=builder,source=/app/dist,target=/builder-dist \\\n    BROWSER=$(find /builder-dist -maxdepth 2 -type d -name browser | head -1) && \\\n    if [ -n \"$BROWSER\" ]; then cp -r \"$BROWSER\" ./dist; else cp -r /builder-dist/$(ls /builder-dist | head -1) ./dist; fi");
+    lines.push("ENV PORT=3000");
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["serve", "dist", "-l", "3000", "-s"]');
   } else if (config.framework === "Astro" && config.features.has("static-export")) {
     // Astro static site
     lines.push("RUN npm i -g serve");

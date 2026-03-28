@@ -45,18 +45,44 @@ SUPERVISOR
     supervisorctl reread && supervisorctl update`;
   }
 
+  // Build ECR image URI from deploy params (available when provider is AWS)
+  const ecrImageUri = p.ecrImageUri || "";
+
   return `#!/bin/bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 # ── System Setup ──
 apt-get update -y
-apt-get install -y curl git unzip nginx certbot python3-certbot-nginx
+apt-get install -y curl git unzip nginx certbot python3-certbot-nginx awscli
 
 # ── Docker ──
 curl -fsSL https://get.docker.com | sh
 systemctl enable docker
 ${dbSetup}${cacheSetup}
+
+# ── Pull & Run Docker Image from ECR ──
+ECR_IMAGE="${ecrImageUri}"
+if [ -n "$ECR_IMAGE" ]; then
+  REGION=$(echo "$ECR_IMAGE" | cut -d. -f4)
+  # Retry ECR login + pull (image may not be available immediately)
+  for i in $(seq 1 12); do
+    aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$(echo "$ECR_IMAGE" | cut -d/ -f1)" && break
+    sleep 10
+  done
+  for i in $(seq 1 12); do
+    docker pull "$ECR_IMAGE" && break
+    sleep 15
+  done
+  docker stop ${p.appName} 2>/dev/null || true
+  docker rm ${p.appName} 2>/dev/null || true
+  docker run -d --name ${p.appName} --restart=always \\
+    -p 127.0.0.1:${p.runtime.port}:${p.runtime.port} \\
+    --add-host=host.docker.internal:host-gateway \\
+    -e APP_ENV=production \\
+    -e PORT=${p.runtime.port} \\
+    "$ECR_IMAGE"
+fi
 
 # ── Nginx Reverse Proxy ──
 cat > /etc/nginx/sites-available/${p.appName} << 'NGINX'
