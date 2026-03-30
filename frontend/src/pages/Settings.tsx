@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { authApi, deployApi, gitApi, usersApi, rolesApi, notificationsApi } from "../services/api";
+import { authApi, deployApi, gitApi, usersApi, rolesApi, notificationsApi, codeAnalysisApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { countries } from "../data/countries";
 import { INTEGRATION_CATALOG, CATEGORY_COLORS } from "../data/integrations";
@@ -8,8 +8,9 @@ import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
 import RoleFormModal from "../components/RoleFormModal";
 import DevIcon from "../components/DevIcon";
+import YamlEditor from "../components/YamlEditor";
 
-type Tab = "general" | "profile" | "security" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations";
+type Tab = "general" | "profile" | "security" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
 
 const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 const btnPrimary = "h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors";
@@ -23,7 +24,7 @@ export default function Settings() {
     <div>
       <h1 className="text-2xl font-display font-semibold text-text mb-8 tracking-tight">Settings</h1>
       <div className="flex gap-2 mb-6" role="tablist">
-        {([["general", "General"], ["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["ssh-keys", "SSH Keys"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"]] as [Tab, string][]).map(([key, label]) => (
+        {([["general", "General"], ["profile", "Profile"], ["security", "Security"], ["roles", "Roles"], ["providers", "Providers"], ["ssh-keys", "SSH Keys"], ["source-control", "Source Control"], ["channels", "Notification Channels"], ["integrations", "Integrations"], ["security-rules", "Security Rules"]] as [Tab, string][]).map(([key, label]) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={tabCls(tab === key)}>{label}</button>
         ))}
       </div>
@@ -36,6 +37,7 @@ export default function Settings() {
       {tab === "source-control" && <SourceControlTab />}
       {tab === "channels" && <NotificationChannelsTab />}
       {tab === "integrations" && <IntegrationsTab />}
+      {tab === "security-rules" && <SecurityRulesTab />}
     </div>
   );
 }
@@ -46,11 +48,16 @@ function GeneralTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [scanTools, setScanTools] = useState<Record<string, boolean>>({ opengrep: true, sonarqube: true, customRules: true });
 
   useEffect(() => {
     // Load saved model from localStorage
     const saved = localStorage.getItem("bedrock_default_model");
     if (saved) setSelectedModel(saved);
+
+    // Load saved scan tools
+    const savedTools = localStorage.getItem("scan_tools");
+    if (savedTools) { try { setScanTools(JSON.parse(savedTools)); } catch {} }
 
     // Fetch available models
     gitApi.listBedrockModels()
@@ -62,17 +69,22 @@ function GeneralTab() {
   const handleSave = () => {
     setSaving(true);
     localStorage.setItem("bedrock_default_model", selectedModel);
-    setMessage("Default LLM saved");
+    localStorage.setItem("scan_tools", JSON.stringify(scanTools));
+    setMessage("Settings saved");
     setSaving(false);
     setTimeout(() => setMessage(""), 2000);
   };
 
+  const toggleTool = (key: string) => setScanTools(prev => ({ ...prev, [key]: !prev[key] }));
+
   return (
-    <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 max-w-lg">
-      <h2 className="text-base font-semibold text-text mb-1">Default LLM</h2>
-      <p className="text-sm text-text-secondary mb-5">Select the Amazon Bedrock model used for AI features across the platform (security fixes, code analysis, etc.).</p>
-      {message && <div className="mb-4 p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
-      <div className="space-y-4">
+    <div className="space-y-6 max-w-lg">
+      {message && <div className="p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
+
+      {/* Default LLM */}
+      <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6">
+        <h2 className="text-base font-semibold text-text mb-1">Default LLM</h2>
+        <p className="text-sm text-text-secondary mb-4">Amazon Bedrock model used for AI features (security fixes, code analysis).</p>
         <div>
           <label htmlFor="default-model" className="block text-sm font-medium text-text-secondary mb-1.5">Bedrock Model</label>
           {loading ? (
@@ -91,11 +103,43 @@ function GeneralTab() {
             <p className="text-sm text-text-muted py-2">Could not load models. Make sure the BedrockApiKey secret is configured.</p>
           )}
         </div>
-        <div className="flex justify-end pt-2">
-          <button onClick={handleSave} disabled={saving || !selectedModel} className={`${btnPrimary} disabled:opacity-50`}>
-            {saving ? "Saving..." : "Save"}
-          </button>
+      </div>
+
+      {/* Security Scan Tools */}
+      <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6">
+        <h2 className="text-base font-semibold text-text mb-1">Security Scan Tools</h2>
+        <p className="text-sm text-text-secondary mb-4">Select which engines run during security scans.</p>
+        <div className="space-y-3">
+          {([
+            { key: "opengrep", name: "Opengrep", desc: "Open-source static analysis with community rules", icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg> },
+            { key: "sonarqube", name: "SonarQube", desc: "Enterprise code quality and security analysis", icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Zm0 13.036h.008v.008H12v-.008Z" /></svg> },
+            { key: "customRules", name: "Custom Rules", desc: "Your regex-based rules from Settings → Security Rules", icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg> },
+          ] as const).map(({ key, name, desc, icon }) => (
+            <button key={key} type="button" onClick={() => toggleTool(key)}
+              className={`w-full flex items-center gap-4 p-3 rounded-lg border transition-all text-left ${
+                scanTools[key] ? "border-primary-500 bg-primary-50/50" : "border-border hover:border-primary-300"
+              }`}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${scanTools[key] ? "text-primary-500 bg-primary-100" : "text-text-muted bg-secondary-50"}`}>
+                {icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${scanTools[key] ? "text-text" : "text-text-muted"}`}>{name}</p>
+                <p className="text-xs text-text-muted">{desc}</p>
+              </div>
+              <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                scanTools[key] ? "bg-primary-500 border-primary-500" : "border-border"
+              }`}>
+                {scanTools[key] && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+              </div>
+            </button>
+          ))}
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={handleSave} disabled={saving || !selectedModel} className={`${btnPrimary} disabled:opacity-50`}>
+          {saving ? "Saving..." : "Save"}
+        </button>
       </div>
     </div>
   );
@@ -1356,6 +1400,692 @@ function IntegrationsTab() {
           <p className="text-sm text-text-muted">No integrations configured yet. Add one to connect external services like databases, caches, or storage.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+interface CRule {
+  id: string; ruleId: string; severity: string; message: string;
+  pattern: string; extensions: string[]; enabled: boolean; isSystem: boolean;
+}
+
+function SecurityRulesTab() {
+  const [ruleSource, setRuleSource] = useState<"custom" | "sonarqube" | "opengrep">("custom");
+  const [rules, setRules] = useState<CRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingRule, setEditingRule] = useState<CRule | null>(null);
+  const [form, setForm] = useState({ ruleId: "", severity: "warning", message: "", pattern: "", extensions: [] as string[] });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [sevTab, setSevTab] = useState<string>("");
+  const [langFilter, setLangFilter] = useState<Set<string>>(new Set());
+
+  const fetchRules = async () => {
+    setLoading(true);
+    try { const res = await codeAnalysisApi.listCustomRules(); setRules(res.rules); }
+    catch {} finally { setLoading(false); }
+  };
+  useEffect(() => { fetchRules(); }, []);
+
+  const openAdd = () => {
+    setForm({ ruleId: "custom.", severity: "warning", message: "", pattern: "", extensions: [".php", ".js", ".ts"] });
+    setEditingRule(null); setError(""); setShowForm(true);
+  };
+  const openEdit = (r: CRule) => {
+    setForm({ ruleId: r.ruleId, severity: r.severity, message: r.message, pattern: r.pattern, extensions: [...r.extensions] });
+    setEditingRule(r); setError(""); setShowForm(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true); setError("");
+    try {
+      try { new RegExp(form.pattern); } catch { throw new Error("Invalid regex pattern"); }
+      if (form.extensions.length === 0) throw new Error("Select at least one file extension");
+      if (editingRule) {
+        await codeAnalysisApi.updateCustomRule(editingRule.id, { ruleId: form.ruleId, severity: form.severity, message: form.message, pattern: form.pattern, extensions: form.extensions });
+      } else {
+        await codeAnalysisApi.createCustomRule({ ruleId: form.ruleId, severity: form.severity, message: form.message, pattern: form.pattern, extensions: form.extensions });
+      }
+      setShowForm(false); fetchRules();
+    } catch (err: any) { setError(err.message || "Failed to save rule"); }
+    finally { setSaving(false); }
+  };
+
+  const handleToggle = async (r: CRule) => {
+    try {
+      await codeAnalysisApi.updateCustomRule(r.id, { enabled: !r.enabled });
+      setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
+    } catch {}
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try { await codeAnalysisApi.deleteCustomRule(deleteId); } catch {}
+    setDeleteId(null); fetchRules();
+  };
+
+  const filtered = (filter ? rules.filter(r => r.ruleId.toLowerCase().includes(filter.toLowerCase()) || r.message.toLowerCase().includes(filter.toLowerCase())) : rules)
+    .filter(r => !sevTab || r.severity === sevTab)
+    .filter(r => langFilter.size === 0 || r.extensions.some(ext => langFilter.has(ext)));
+  const counts = { error: rules.filter(r => r.severity === "error").length, warning: rules.filter(r => r.severity === "warning").length, info: rules.filter(r => r.severity === "info").length };
+
+  const extIconMap: Record<string, string> = {
+    ".php": "php", ".blade.php": "php", ".js": "javascript", ".ts": "typescript",
+    ".jsx": "react", ".tsx": "react", ".vue": "vuejs", ".py": "python",
+    ".rb": "ruby", ".java": "java", ".go": "go", ".rs": "rust", ".cs": "csharp",
+    ".env": "linux", ".ini": "linux", ".yaml": "yaml", ".yml": "yaml",
+    ".json": "json", ".xml": "xml", ".html": "html5", ".sql": "azuresqldatabase",
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-text">Security Rules</h2>
+          <p className="text-sm text-text-muted mt-0.5">Manage rules used during security scans.</p>
+        </div>
+      </div>
+
+      {/* Source selector + search */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => setRuleSource("custom")} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${ruleSource === "custom" ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
+          Custom Rules
+        </button>
+        <button onClick={() => setRuleSource("sonarqube")} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${ruleSource === "sonarqube" ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
+          SonarQube
+        </button>
+        <button onClick={() => setRuleSource("opengrep")} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${ruleSource === "opengrep" ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
+          Opengrep
+        </button>
+        {ruleSource === "custom" && (
+          <div className="ml-auto flex items-center gap-2">
+            <input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
+            <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2 shrink-0`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+              Add Rule
+            </button>
+          </div>
+        )}
+      </div>
+
+      {ruleSource === "sonarqube" ? (
+        <SonarQubeRulesPanel />
+      ) : ruleSource === "opengrep" ? (
+        <OpengrepRulesPanel />
+      ) : (
+      <>
+
+      <div className="flex gap-4">
+        {/* Sidebar filters */}
+        <RulesFilterSidebar
+          severities={[
+            { key: "error", label: "Error", count: counts.error, color: "text-danger-500", icon: "🔴" },
+            { key: "warning", label: "Warning", count: counts.warning, color: "text-warning-500", icon: "🟡" },
+            { key: "info", label: "Info", count: counts.info, color: "text-primary-500", icon: "🔵" },
+          ]}
+          activeSeverity={sevTab}
+          onSeverityChange={(k) => setSevTab(k)}
+          languages={[
+            { key: ".php", icon: "php", label: "PHP", count: rules.filter(r => r.extensions.includes(".php")).length },
+            { key: ".js", icon: "javascript", label: "JS/JSX", count: rules.filter(r => r.extensions.some(e => [".js",".jsx"].includes(e))).length },
+            { key: ".ts", icon: "typescript", label: "TS/TSX", count: rules.filter(r => r.extensions.some(e => [".ts",".tsx"].includes(e))).length },
+            { key: ".vue", icon: "vuejs", label: "Vue", count: rules.filter(r => r.extensions.includes(".vue")).length },
+            { key: ".py", icon: "python", label: "Python", count: rules.filter(r => r.extensions.includes(".py")).length },
+            { key: ".rb", icon: "ruby", label: "Ruby", count: rules.filter(r => r.extensions.includes(".rb")).length },
+            { key: ".java", icon: "java", label: "Java", count: rules.filter(r => r.extensions.includes(".java")).length },
+            { key: ".go", icon: "go", label: "Go", count: rules.filter(r => r.extensions.includes(".go")).length },
+            { key: ".rs", icon: "rust", label: "Rust", count: rules.filter(r => r.extensions.includes(".rs")).length },
+            { key: ".cs", icon: "csharp", label: "C#", count: rules.filter(r => r.extensions.includes(".cs")).length },
+            { key: ".yaml", icon: "yaml", label: "YAML", count: rules.filter(r => r.extensions.some(e => [".yaml",".yml"].includes(e))).length },
+            { key: ".json", icon: "json", label: "JSON", count: rules.filter(r => r.extensions.includes(".json")).length },
+            { key: ".html", icon: "html5", label: "HTML", count: rules.filter(r => r.extensions.includes(".html")).length },
+            { key: ".sql", icon: "azuresqldatabase", label: "SQL", count: rules.filter(r => r.extensions.includes(".sql")).length },
+          ]}
+          activeLangs={langFilter}
+          onLangToggle={(k) => setLangFilter(prev => {
+            const n = new Set(prev);
+            const grouped: Record<string, string[]> = { ".js": [".js", ".jsx"], ".ts": [".ts", ".tsx"] };
+            const exts = grouped[k] || [k];
+            const active = exts.every(e => n.has(e));
+            for (const e of exts) { if (active) n.delete(e); else n.add(e); }
+            return n;
+          })}
+          onLangClear={() => setLangFilter(new Set())}
+        />
+
+        {/* Rules grid */}
+        <div className="flex-1 min-w-0">
+
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={editingRule ? "Edit Rule" : "Add Custom Rule"}>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Rule ID</label>
+            <input type="text" value={form.ruleId} onChange={e => setForm({ ...form, ruleId: e.target.value })} className={inputCls} placeholder="custom.category.name" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Severity</label>
+            <select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })} className={inputCls}>
+              <option value="error">Error</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Message</label>
+            <input type="text" value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} className={inputCls} placeholder="Description of the vulnerability" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Regex Pattern</label>
+            <input type="text" value={form.pattern} onChange={e => setForm({ ...form, pattern: e.target.value })} className={`${inputCls} font-mono text-xs`} placeholder="\beval\s*\(" required />
+            <p className="text-xs text-text-muted mt-1">JavaScript regex syntax (flags gi applied automatically)</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">File Extensions</label>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { ext: ".php", icon: "php", label: "PHP" }, { ext: ".blade.php", icon: "php", label: "Blade" },
+                { ext: ".js", icon: "javascript", label: "JS" }, { ext: ".ts", icon: "typescript", label: "TS" },
+                { ext: ".jsx", icon: "react", label: "JSX" }, { ext: ".tsx", icon: "react", label: "TSX" },
+                { ext: ".vue", icon: "vuejs", label: "Vue" }, { ext: ".py", icon: "python", label: "Python" },
+                { ext: ".rb", icon: "ruby", label: "Ruby" }, { ext: ".java", icon: "java", label: "Java" },
+                { ext: ".go", icon: "go", label: "Go" }, { ext: ".rs", icon: "rust", label: "Rust" },
+                { ext: ".cs", icon: "csharp", label: "C#" }, { ext: ".env", icon: "linux", label: ".env" },
+                { ext: ".yaml", icon: "yaml", label: "YAML" }, { ext: ".json", icon: "json", label: "JSON" },
+                { ext: ".html", icon: "html5", label: "HTML" }, { ext: ".sql", icon: "azuresqldatabase", label: "SQL" },
+              ]).map(({ ext, icon, label }) => {
+                const selected = form.extensions.includes(ext);
+                return (
+                  <button key={ext} type="button"
+                    onClick={() => setForm(f => ({ ...f, extensions: selected ? f.extensions.filter(e => e !== ext) : [...f.extensions, ext] }))}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                      selected ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border bg-card text-text-muted hover:border-primary-300"
+                    }`}>
+                    <DevIcon src={icon} className="w-4 h-4" />{label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {error && <p className="text-sm text-danger-500">{error}</p>}
+          <div className="flex justify-end">
+            <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>{saving ? "Saving…" : editingRule ? "Update" : "Create"}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} message="Are you sure you want to delete this custom rule?" />
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {filtered.map(r => (
+            <div key={r.id} className={`bg-card border border-border rounded-lg p-4 flex flex-col gap-3 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
+                <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
+                {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
+                <button type="button" onClick={() => handleToggle(r)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
+                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-[1px]"}`} />
+                </button>
+              </div>
+              <p className="text-sm text-text leading-relaxed">{r.message}</p>
+              <code className="text-xs text-text-muted font-mono bg-secondary-50 px-2 py-1 rounded truncate">{r.pattern}</code>
+              <div className="flex items-end gap-2">
+                <div className="flex flex-wrap gap-1 flex-1">
+                  {r.extensions.map(ext => (
+                    <span key={ext} className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-secondary-50 text-xs text-text-muted">
+                      {extIconMap[ext] && <DevIcon src={extIconMap[ext]} className="w-3.5 h-3.5" />}{ext}
+                    </span>
+                  ))}
+                </div>
+                {!r.isSystem && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEdit(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                    </button>
+                    <button onClick={() => setDeleteId(r.id)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-2">No rules found</p>}
+        </div>
+      )}
+      </div>{/* end flex-1 */}
+      </div>{/* end flex gap-4 */}
+      </>
+      )}
+    </div>
+  );
+}
+
+// SonarQube rules cache (persists across tab switches)
+type SQRuleItem = { key: string; name: string; severity: string; lang: string; type: string; isActive: boolean; cleanCodeAttribute: string; impacts: Array<{ softwareQuality: string; severity: string }>; profileKey: string };
+let _sqCache: { profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }>; rules: SQRuleItem[] } | null = null;
+
+function SonarQubeRulesPanel() {
+  const [profiles, setProfiles] = useState<Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }>>([]);
+  const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set());
+  const [allRules, setAllRules] = useState<SQRuleItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [sevFilter, setSevFilter] = useState("");
+  const [sqVisible, setSqVisible] = useState(30);
+
+  useEffect(() => {
+    // Use cache if available
+    if (_sqCache) {
+      setProfiles(_sqCache.profiles);
+      setAllRules(_sqCache.rules);
+      setLoading(false);
+      return;
+    }
+    codeAnalysisApi.listSonarProfiles()
+      .then(async (res) => {
+        setProfiles(res.profiles);
+        setRulesLoading(true);
+        const merged: typeof allRules = [];
+        const seen = new Set<string>();
+        for (const p of res.profiles) {
+          try {
+            const data = await codeAnalysisApi.listSonarRules(p.key, 1);
+            for (const r of data.rules) {
+              if (!seen.has(r.key)) {
+                seen.add(r.key);
+                merged.push({ ...r, profileKey: p.key });
+              }
+            }
+          } catch {}
+        }
+        setAllRules(merged);
+        _sqCache = { profiles: res.profiles, rules: merged };
+        setRulesLoading(false);
+      })
+      .catch(e => setError(e.message || "Failed to connect to SonarQube"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const rules = allRules.filter(r => selectedLangs.size === 0 || selectedLangs.has(r.lang));
+
+  const handleToggle = async (ruleKey: string, currentActive: boolean) => {
+    const rule = allRules.find(r => r.key === ruleKey);
+    if (!rule) return;
+    try {
+      await codeAnalysisApi.toggleSonarRule(rule.profileKey, ruleKey, !currentActive);
+      setAllRules(prev => {
+        const updated = prev.map(r => r.key === ruleKey ? { ...r, isActive: !currentActive } : r);
+        if (_sqCache) _sqCache.rules = updated;
+        return updated;
+      });
+    } catch (e: any) {
+      setError(e.message || "Failed to toggle rule");
+      setTimeout(() => setError(""), 3000);
+    }
+  };
+
+  const sevBadge = (s: string): { cls: string; label: string; icon: string } => {
+    switch (s) {
+      case "BLOCKER": return { cls: "bg-red-100 text-red-700", label: "Blocker", icon: "🔴" };
+      case "CRITICAL": return { cls: "bg-orange-100 text-orange-700", label: "High", icon: "🟠" };
+      case "MAJOR": return { cls: "bg-yellow-100 text-yellow-700", label: "Medium", icon: "🟡" };
+      case "MINOR": return { cls: "bg-blue-100 text-blue-700", label: "Low", icon: "🔵" };
+      case "INFO": return { cls: "bg-slate-100 text-slate-500", label: "Info", icon: "⚪" };
+      default: return { cls: "bg-secondary-50 text-text-muted", label: s, icon: "" };
+    }
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error && profiles.length === 0) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p><p className="text-xs text-text-muted mt-2">Check that SonarQubeUrl and SonarQubeToken secrets are configured correctly.</p></div>;
+
+  return (
+    <div className="space-y-4">
+      {error && <div className="p-3 rounded-lg bg-danger-500/10 text-danger-500 text-sm">{error}</div>}
+
+      <div className="flex gap-4">
+        <RulesFilterSidebar
+          severities={[
+            { key: "BLOCKER", label: "Blocker", count: rules.filter(r => r.severity === "BLOCKER").length, color: "text-red-500", icon: "🔴" },
+            { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-orange-500", icon: "🟠" },
+            { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-yellow-500", icon: "🟡" },
+            { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-blue-500", icon: "🔵" },
+            { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-slate-400", icon: "⚪" },
+          ]}
+          activeSeverity={sevFilter}
+          onSeverityChange={(k) => { setSevFilter(k); setSqVisible(30); }}
+          languages={profiles.map(p => {
+            const langIcon: Record<string, string> = { java: "java", js: "javascript", ts: "typescript", py: "python", php: "php", go: "go", ruby: "ruby", cs: "csharp", kotlin: "kotlin", swift: "swift", scala: "scala", web: "html5", css: "css3", xml: "xml" };
+            const langRename: Record<string, string> = { "Azure Resource Manager": "Azure", "IPython Notebooks": "Python" };
+            return { key: p.language, icon: langIcon[p.language] || "devicon", label: langRename[p.languageName] || p.languageName, count: allRules.filter(r => r.lang === p.language).length };
+          })}
+          activeLangs={selectedLangs}
+          onLangToggle={(k) => { setSelectedLangs(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; }); setSqVisible(30); }}
+          onLangClear={() => { setSelectedLangs(new Set()); setSqVisible(30); }}
+        />
+
+        <div className="flex-1 min-w-0">
+
+      {rulesLoading ? (
+        <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : (() => {
+        const sqFiltered = rules.filter(r => (!sevFilter || r.severity === sevFilter));
+        const sqShown = sqFiltered.slice(0, sqVisible);
+        return (<>
+        <div className="grid grid-cols-2 gap-2">
+          {sqShown.map(r => {
+            const langExts: Record<string, Array<{ ext: string; icon: string }>> = {
+              java: [{ ext: ".java", icon: "java" }],
+              js: [{ ext: ".js", icon: "javascript" }, { ext: ".jsx", icon: "react" }],
+              ts: [{ ext: ".ts", icon: "typescript" }, { ext: ".tsx", icon: "react" }],
+              py: [{ ext: ".py", icon: "python" }],
+              php: [{ ext: ".php", icon: "php" }],
+              go: [{ ext: ".go", icon: "go" }],
+              ruby: [{ ext: ".rb", icon: "ruby" }],
+              cs: [{ ext: ".cs", icon: "csharp" }],
+              kotlin: [{ ext: ".kt", icon: "kotlin" }],
+              swift: [{ ext: ".swift", icon: "swift" }],
+              scala: [{ ext: ".scala", icon: "scala" }],
+              web: [{ ext: ".html", icon: "html5" }, { ext: ".css", icon: "css3" }],
+              css: [{ ext: ".css", icon: "css3" }],
+              xml: [{ ext: ".xml", icon: "xml" }],
+            };
+            const exts = langExts[r.lang] || [{ ext: `.${r.lang}`, icon: r.lang }];
+            const langRename: Record<string, string> = { azureresourcemanager: "Azure", ipynb: "Python", web: "HTML/CSS" };
+            const techLabel = langRename[r.lang] || r.lang;
+            return (
+            <div key={r.key} className={`bg-card border border-border rounded-lg p-4 flex flex-col gap-3 transition-all ${!r.isActive ? "opacity-50" : ""}`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0`} style={{ backgroundColor: { BLOCKER: "#ef4444", CRITICAL: "#f97316", MAJOR: "#eab308", MINOR: "#3b82f6", INFO: "#94a3b8" }[r.severity] || "#94a3b8" }} />
+                <span className="text-xs font-mono text-text-muted truncate flex-1">{r.key}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {exts.slice(0, 1).map(e => (
+                    <span key={e.ext} className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-secondary-50 text-xs text-text-muted">
+                      <DevIcon src={e.icon} className="w-3.5 h-3.5" />{techLabel}
+                    </span>
+                  ))}
+                </div>
+                <button type="button" onClick={() => handleToggle(r.key, r.isActive)}
+                  className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.isActive ? "bg-primary-500" : "bg-secondary-200"}`}>
+                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.isActive ? "left-[14px]" : "left-[1px]"}`} />
+                </button>
+              </div>
+              <p className="text-sm text-text leading-relaxed">{r.name}</p>
+              {/* Impacts */}
+              <div className="flex flex-wrap gap-1.5">
+                {r.impacts.map(i => {
+                  const sevColors: Record<string, { statusBg: string; statusBorder: string; icon: string; iconBg: string; labelBg: string; labelText: string }> = {
+                    BLOCKER: { statusBg: "bg-red-100", statusBorder: "border-red-200", icon: "text-red-600", iconBg: "bg-red-500", labelBg: "bg-red-50", labelText: "text-red-700" },
+                    HIGH: { statusBg: "bg-red-100", statusBorder: "border-red-200", icon: "text-red-600", iconBg: "bg-red-500", labelBg: "bg-red-50", labelText: "text-red-700" },
+                    MEDIUM: { statusBg: "bg-amber-100", statusBorder: "border-amber-200", icon: "text-amber-600", iconBg: "bg-amber-500", labelBg: "bg-amber-50", labelText: "text-amber-700" },
+                    LOW: { statusBg: "bg-emerald-100", statusBorder: "border-emerald-200", icon: "text-emerald-600", iconBg: "bg-emerald-500", labelBg: "bg-emerald-50", labelText: "text-emerald-700" },
+                    INFO: { statusBg: "bg-sky-100", statusBorder: "border-sky-200", icon: "text-sky-600", iconBg: "bg-sky-500", labelBg: "bg-sky-50", labelText: "text-sky-700" },
+                  };
+                  const s = sevColors[i.severity] || { statusBg: "bg-secondary-100", statusBorder: "border-secondary-200", icon: "text-text-muted", iconBg: "bg-secondary-400", labelBg: "bg-secondary-50", labelText: "text-text" };
+                  const isUp = i.severity === "HIGH" || i.severity === "MEDIUM" || i.severity === "BLOCKER";
+                  return (
+                    <span key={i.softwareQuality} className={`inline-flex items-center rounded-lg text-xs overflow-hidden`}>
+                      <span className={`font-medium px-2.5 py-1 ${s.labelBg} ${s.labelText}`}>{i.softwareQuality.charAt(0) + i.softwareQuality.slice(1).toLowerCase()}</span>
+                      <span className={`inline-flex items-center gap-1 font-semibold px-2 py-1 ${s.statusBg} ${s.icon}`}>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center ${s.iconBg}`}>
+                          {i.severity === "INFO" ? (
+                            <span className="text-[10px] font-bold text-white leading-none">i</span>
+                          ) : (
+                            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d={isUp ? "M4.5 15.75l7.5-7.5 7.5 7.5" : "M19.5 8.25l-7.5 7.5-7.5-7.5"} />
+                            </svg>
+                          )}
+                        </span>
+                        {i.severity.charAt(0) + i.severity.slice(1).toLowerCase()}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            );
+          })}
+          {sqFiltered.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-2">{sevFilter || selectedLangs.size ? "No rules match your filters" : "No rules found"}</p>}
+        </div>
+        {sqVisible < sqFiltered.length && (
+          <div className="flex justify-center mt-4">
+            <button onClick={() => setSqVisible(v => v + 30)} className="h-9 px-5 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 hover:text-text transition-colors">
+              Load more ({sqFiltered.length - sqVisible} remaining)
+            </button>
+          </div>
+        )}
+        </>);
+      })()}
+      </div>{/* end flex-1 */}
+      </div>{/* end flex gap-4 sidebar layout */}
+    </div>
+  );
+}
+
+function RulesFilterSidebar({ severities, activeSeverity, onSeverityChange, languages, activeLangs, onLangToggle, onLangClear }: {
+  severities: Array<{ key: string; label: string; count: number; color: string; icon?: string }>;
+  activeSeverity: string;
+  onSeverityChange: (key: string) => void;
+  languages: Array<{ key: string; icon: string; label: string; count?: number }>;
+  activeLangs: Set<string>;
+  onLangToggle: (key: string) => void;
+  onLangClear: () => void;
+}) {
+  const [sevOpen, setSevOpen] = useState(true);
+  const [techOpen, setTechOpen] = useState(true);
+
+  const chevron = (open: boolean) => (
+    <svg className={`w-3.5 h-3.5 text-text-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+    </svg>
+  );
+
+  return (
+    <div className="w-52 shrink-0 space-y-1.5 self-start sticky top-6">
+      {/* Severity */}
+      <div className="bg-secondary-50/60 rounded-lg overflow-hidden">
+        <button onClick={() => setSevOpen(!sevOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-secondary-100 transition-colors">
+          Severity {chevron(sevOpen)}
+        </button>
+        {sevOpen && (
+          <div className="px-2 pb-2 space-y-0.5">
+            {severities.map(s => (
+              <button key={s.key} onClick={() => onSeverityChange(activeSeverity === s.key ? "" : s.key)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${activeSeverity === s.key ? "bg-primary-500 text-white font-medium" : "text-text-muted hover:bg-secondary-100"}`}>
+                <span className="flex items-center gap-2">{s.icon && <span className="text-[10px]">{s.icon}</span>}{s.label}</span>
+                <span className={`text-xs ${activeSeverity === s.key ? "text-white/70" : s.color}`}>{s.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Technology */}
+      <div className="bg-secondary-50/60 rounded-lg overflow-hidden">
+        <button onClick={() => setTechOpen(!techOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-secondary-100 transition-colors">
+          Technology {chevron(techOpen)}
+        </button>
+        {techOpen && (
+          <div className="px-2 pb-2 space-y-0.5">
+              {languages.map(l => {
+                const active = activeLangs.has(l.key);
+                return (
+                  <button key={l.key} type="button" onClick={() => onLangToggle(l.key)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all ${active ? "bg-primary-50 text-primary-600 font-medium" : "text-text-muted hover:bg-secondary-100"}`}>
+                    <DevIcon src={l.icon} className="w-5 h-5 shrink-0" />
+                    <span className="text-sm truncate flex-1 text-left">{l.label}</span>
+                    {l.count !== undefined && <span className="text-xs font-semibold">{l.count}</span>}
+                  </button>
+                );
+              })}
+            {activeLangs.size > 0 && (
+              <button type="button" onClick={onLangClear} className="w-full text-left px-3 py-1.5 text-xs text-text-muted hover:text-text transition-colors">Clear all</button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+let _ogCache: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }> | null = null;
+
+function OpengrepRulesPanel() {
+  const [allRules, setAllRules] = useState<Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [sevFilter, setSevFilter] = useState("");
+  const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set());
+  const [visible, setVisible] = useState(30);
+  const [disabledRules, setDisabledRules] = useState<Set<string>>(() => {
+    try { const s = localStorage.getItem("og_disabled_rules"); return s ? new Set(JSON.parse(s)) : new Set(); } catch { return new Set(); }
+  });
+  const [editRule, setEditRule] = useState<{ id: string; path: string; name: string } | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const toggleRule = (id: string) => {
+    setDisabledRules(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      localStorage.setItem("og_disabled_rules", JSON.stringify([...n]));
+      return n;
+    });
+  };
+
+  const openEditModal = async (r: { id: string; path: string; name: string }) => {
+    setEditRule(r); setEditLoading(true); setEditContent("");
+    try {
+      const res = await codeAnalysisApi.getOpengrepRuleContent(r.path);
+      setEditContent(res.content);
+    } catch { setEditContent("# Failed to load rule content"); }
+    finally { setEditLoading(false); }
+  };
+
+  const saveEdit = async () => {
+    if (!editRule) return;
+    setEditSaving(true);
+    try {
+      await codeAnalysisApi.updateOpengrepRuleContent(editRule.path, editContent);
+      setEditRule(null);
+    } catch { /* ignore */ }
+    finally { setEditSaving(false); }
+  };
+
+  useEffect(() => {
+    if (_ogCache) { setAllRules(_ogCache); setLoading(false); return; }
+    codeAnalysisApi.listOpengrepRules()
+      .then(res => { setAllRules(res.rules); _ogCache = res.rules; })
+      .catch(e => setError(e.message || "Failed to load Opengrep rules"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const rules = allRules
+    .filter(r => selectedLangs.size === 0 || selectedLangs.has(r.lang))
+    .filter(r => !sevFilter || r.severity === sevFilter);
+
+  const langIcon: Record<string, string> = {
+    java: "java", javascript: "javascript", typescript: "typescript", python: "python", php: "php",
+    go: "go", ruby: "ruby", rust: "rust", c: "c", csharp: "csharp", kotlin: "kotlin",
+    swift: "swift", scala: "scala", bash: "bash", dockerfile: "docker", terraform: "terraform",
+    html: "html5", json: "json", yaml: "yaml", elixir: "elixir", solidity: "solidity",
+    clojure: "clojure", ocaml: "ocaml", apex: "salesforce", generic: "devicon",
+  };
+
+  const languages = [...new Set(allRules.map(r => r.lang))].sort().map(l => ({
+    key: l, icon: langIcon[l] || "devicon", label: l.charAt(0).toUpperCase() + l.slice(1),
+    count: allRules.filter(r => r.lang === l).length,
+  }));
+
+  const sevCounts = {
+    error: allRules.filter(r => r.severity === "error").length,
+    warning: allRules.filter(r => r.severity === "warning").length,
+    info: allRules.filter(r => r.severity === "info").length,
+  };
+
+  const shown = rules.slice(0, visible);
+
+  if (loading) return <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (error) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p></div>;
+
+  return (
+    <div className="flex gap-4">
+      <RulesFilterSidebar
+        severities={[
+          { key: "error", label: "Error", count: sevCounts.error, color: "text-danger-500", icon: "🔴" },
+          { key: "warning", label: "Warning", count: sevCounts.warning, color: "text-warning-500", icon: "🟡" },
+          { key: "info", label: "Info", count: sevCounts.info, color: "text-primary-500", icon: "🔵" },
+        ]}
+        activeSeverity={sevFilter}
+        onSeverityChange={(k) => { setSevFilter(k); setVisible(30); }}
+        languages={languages}
+        activeLangs={selectedLangs}
+        onLangToggle={(k) => { setSelectedLangs(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; }); setVisible(30); }}
+        onLangClear={() => { setSelectedLangs(new Set()); setVisible(30); }}
+      />
+
+      <div className="flex-1 min-w-0">
+        <div className="grid grid-cols-2 gap-2">
+          {shown.map(r => {
+            const enabled = !disabledRules.has(r.id);
+            return (
+            <div key={r.id} className={`bg-card border border-border rounded-lg p-4 flex flex-col gap-3 transition-all ${!enabled ? "opacity-50" : ""}`}>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
+                <span className="text-xs font-mono text-text-muted truncate flex-1">{r.id}</span>
+                <button type="button" onClick={() => toggleRule(r.id)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
+                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "left-[14px]" : "left-[1px]"}`} />
+                </button>
+              </div>
+              <p className="text-sm text-text leading-relaxed">{r.name}</p>
+              <p className="text-xs text-text-muted bg-secondary-50 px-2 py-1 rounded line-clamp-2 leading-relaxed">{r.message || r.path}</p>
+              <div className="flex items-end gap-2">
+                <div className="flex flex-wrap gap-1 flex-1">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-secondary-50 text-xs text-text-muted">
+                    {langIcon[r.lang] && <DevIcon src={langIcon[r.lang]} className="w-3.5 h-3.5" />}{r.lang}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEditModal(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            );
+          })}
+          {rules.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-2">{sevFilter || selectedLangs.size ? "No rules match your filters" : "No rules found"}</p>}
+        </div>
+        {visible < rules.length && (
+          <div className="flex justify-center mt-4">
+            <button onClick={() => setVisible(v => v + 30)} className="h-9 px-5 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 hover:text-text transition-colors">
+              Load more ({rules.length - visible} remaining)
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Edit YAML Modal */}
+      <Modal open={!!editRule} onClose={() => setEditRule(null)} title={editRule?.name || "Edit Rule"} size="lg">
+        {editLoading ? (
+          <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-xs text-text-muted font-mono">{editRule?.path}</p>
+            <YamlEditor value={editContent} onChange={setEditContent} height="320px" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditRule(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Cancel</button>
+              <button onClick={saveEdit} disabled={editSaving} className={`${btnPrimary} disabled:opacity-50`}>{editSaving ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

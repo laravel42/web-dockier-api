@@ -9,6 +9,8 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { secret } from "encore.dev/config";
 
+const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
+
 // ─── SonarQube Configuration (optional) ───
 const SonarQubeUrl = secret("SonarQubeUrl");
 const SonarQubeToken = secret("SonarQubeToken");
@@ -107,6 +109,23 @@ const SCANNABLE_EXT = new Set([
   ".json", ".xml", ".html", ".htm", ".twig", ".sql",
 ]);
 
+// Seed default custom rules on startup
+(async () => {
+  try {
+    const count = await db.queryRow<{ n: number }>`SELECT COUNT(*)::int AS n FROM custom_rules WHERE user_id = 'system'`;
+    if (count && count.n > 0) return;
+    for (const rule of CUSTOM_RULES) {
+      const id = `seed-${rule.id}`;
+      await db.exec`INSERT INTO custom_rules (id, user_id, rule_id, severity, message, pattern, extensions)
+        VALUES (${id}, 'system', ${rule.id}, ${rule.severity}, ${rule.message}, ${rule.pattern.source}, ${rule.extensions})
+        ON CONFLICT (id) DO NOTHING`;
+    }
+    console.log(`[code-analysis] Seeded ${CUSTOM_RULES.length} default custom rules`);
+  } catch (e: any) {
+    console.error("[code-analysis] Failed to seed custom rules:", e.message);
+  }
+})();
+
 function walkFiles(dir: string, base: string = ""): string[] {
   const results: string[] = [];
   try {
@@ -136,19 +155,41 @@ interface CustomFinding {
   snippet: string;
 }
 
-function runCustomRules(repoDir: string, files: string[]): CustomFinding[] {
+// Load custom rules from DB (system defaults + user rules)
+async function loadCustomRules(userId: string): Promise<CustomRule[]> {
+  const rows = db.query<{
+    rule_id: string; severity: string; message: string; pattern: string; extensions: string[];
+  }>`SELECT rule_id, severity, message, pattern, extensions FROM custom_rules
+     WHERE (user_id = 'system' OR user_id = ${userId}) AND enabled = true
+     ORDER BY rule_id`;
+  const rules: CustomRule[] = [];
+  for await (const row of rows) {
+    try {
+      rules.push({
+        id: row.rule_id,
+        severity: row.severity as "error" | "warning" | "info",
+        message: row.message,
+        pattern: new RegExp(row.pattern, "gi"),
+        extensions: row.extensions,
+      });
+    } catch { /* skip invalid regex */ }
+  }
+  return rules;
+}
+
+function runCustomRules(repoDir: string, files: string[], rules: CustomRule[]): CustomFinding[] {
   const findings: CustomFinding[] = [];
   for (const relPath of files) {
     const absPath = join(repoDir, relPath);
     let content: string;
     try {
       const stat = statSync(absPath);
-      if (stat.size > 512_000) continue; // skip files > 512KB
+      if (stat.size > 512_000) continue;
       content = readFileSync(absPath, "utf-8");
     } catch { continue; }
 
     const lower = relPath.toLowerCase();
-    for (const rule of CUSTOM_RULES) {
+    for (const rule of rules) {
       if (!rule.extensions.some(ext => lower.endsWith(ext))) continue;
       const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
       let match: RegExpExecArray | null;
@@ -359,7 +400,7 @@ interface ScanProgress {
 
 export const runScan = api(
   { method: "POST", path: "/code-analysis/scans/:scanId/run", auth: true },
-  async (params: { scanId: string }): Promise<Scan> => {
+  async (params: { scanId: string; enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
     const scan = await db.queryRow<{
       id: string; user_id: string; project_id: string; connection_id: string;
       repo: string; branch: string; status: string; summary: ScanSummary;
@@ -369,13 +410,17 @@ export const runScan = api(
     if (!scan) throw APIError.notFound("Scan not found");
     if (scan.status === "running") throw APIError.failedPrecondition("Scan is already running");
 
-    // Set running immediately with progress info
     const initialProgress: ScanProgress = { phase: "cloning", filesScanned: 0, filesInRepo: 0, findingsCount: 0 };
     await db.exec`UPDATE scans SET status = 'running', summary = ${JSON.stringify({ ...emptySummary(), progress: initialProgress })}::jsonb, updated_at = NOW() WHERE id = ${params.scanId}`;
     await db.exec`DELETE FROM findings WHERE scan_id = ${params.scanId}`;
 
-    // Fire off the scan asynchronously — don't await
-    doScan(params.scanId, scan).catch((e) => {
+    const tools = {
+      opengrep: params.enableOpengrep !== false,
+      sonarqube: params.enableSonarqube !== false,
+      customRules: params.enableCustomRules !== false,
+    };
+
+    doScan(params.scanId, scan, tools).catch((e) => {
       console.error(`Scan ${params.scanId} failed:`, e);
     });
 
@@ -385,6 +430,301 @@ export const runScan = api(
       status: "running", summary: { ...emptySummary() },
       createdAt: scan.created_at.toISOString(), updatedAt: new Date().toISOString(),
     };
+  }
+);
+
+// ─── Custom Rules CRUD ───
+
+interface CustomRuleResponse {
+  id: string;
+  ruleId: string;
+  severity: string;
+  message: string;
+  pattern: string;
+  extensions: string[];
+  enabled: boolean;
+  isSystem: boolean;
+  createdAt: string;
+}
+
+export const listCustomRules = api(
+  { method: "GET", path: "/code-analysis/custom-rules", auth: true },
+  async (): Promise<{ rules: CustomRuleResponse[] }> => {
+    const authData = getAuthData()!;
+    const rows = db.query<{
+      id: string; user_id: string; rule_id: string; severity: string; message: string;
+      pattern: string; extensions: string[]; enabled: boolean; created_at: Date;
+    }>`SELECT id, user_id, rule_id, severity, message, pattern, extensions, enabled, created_at
+       FROM custom_rules WHERE user_id = 'system' OR user_id = ${authData.userID}
+       ORDER BY rule_id`;
+    const rules: CustomRuleResponse[] = [];
+    for await (const r of rows) {
+      rules.push({
+        id: r.id, ruleId: r.rule_id, severity: r.severity, message: r.message,
+        pattern: r.pattern, extensions: r.extensions, enabled: r.enabled,
+        isSystem: r.user_id === "system", createdAt: r.created_at.toISOString(),
+      });
+    }
+    return { rules };
+  }
+);
+
+export const createCustomRule = api(
+  { method: "POST", path: "/code-analysis/custom-rules", auth: true },
+  async (params: {
+    ruleId: string; severity: string; message: string; pattern: string; extensions: string[];
+  }): Promise<CustomRuleResponse> => {
+    const authData = getAuthData()!;
+    try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); }
+    const id = uuidv4();
+    await db.exec`INSERT INTO custom_rules (id, user_id, rule_id, severity, message, pattern, extensions)
+      VALUES (${id}, ${authData.userID}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern}, ${params.extensions})`;
+    return {
+      id, ruleId: params.ruleId, severity: params.severity, message: params.message,
+      pattern: params.pattern, extensions: params.extensions, enabled: true,
+      isSystem: false, createdAt: new Date().toISOString(),
+    };
+  }
+);
+
+export const updateCustomRule = api(
+  { method: "PUT", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
+  async (params: {
+    ruleDbId: string; ruleId?: string; severity?: string; message?: string;
+    pattern?: string; extensions?: string[]; enabled?: boolean;
+  }): Promise<{ success: boolean }> => {
+    const authData = getAuthData()!;
+    const row = await db.queryRow<{ user_id: string }>`SELECT user_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    if (!row) throw APIError.notFound("Rule not found");
+    if (row.user_id === "system" && params.enabled === undefined) throw APIError.permissionDenied("Cannot edit system rules");
+    if (row.user_id !== "system" && row.user_id !== authData.userID) throw APIError.permissionDenied("Not your rule");
+    if (params.pattern) { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
+    if (row.user_id === "system") {
+      await db.exec`UPDATE custom_rules SET enabled = ${params.enabled ?? true} WHERE id = ${params.ruleDbId}`;
+    } else {
+      await db.exec`UPDATE custom_rules SET
+        rule_id = COALESCE(${params.ruleId ?? null}, rule_id),
+        severity = COALESCE(${params.severity ?? null}, severity),
+        message = COALESCE(${params.message ?? null}, message),
+        pattern = COALESCE(${params.pattern ?? null}, pattern),
+        extensions = COALESCE(${params.extensions ?? null}, extensions),
+        enabled = COALESCE(${params.enabled ?? null}, enabled)
+        WHERE id = ${params.ruleDbId}`;
+    }
+    return { success: true };
+  }
+);
+
+export const deleteCustomRule = api(
+  { method: "DELETE", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
+  async (params: { ruleDbId: string }): Promise<{ success: boolean }> => {
+    const authData = getAuthData()!;
+    const row = await db.queryRow<{ user_id: string }>`SELECT user_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    if (!row) throw APIError.notFound("Rule not found");
+    if (row.user_id === "system") throw APIError.permissionDenied("Cannot delete system rules");
+    if (row.user_id !== authData.userID) throw APIError.permissionDenied("Not your rule");
+    await db.exec`DELETE FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    return { success: true };
+  }
+);
+
+// ─── Opengrep Rules (from GitHub) ───
+
+interface OGRule {
+  id: string;
+  name: string;
+  lang: string;
+  path: string;
+  severity: string;
+  category: string;
+  message: string;
+}
+
+let _ogRulesCache: OGRule[] | null = null;
+
+export const listOpengrepRules = api(
+  { method: "GET", path: "/code-analysis/opengrep-rules", auth: true },
+  async (): Promise<{ rules: OGRule[]; languages: string[] }> => {
+    if (_ogRulesCache) {
+      const langs = [...new Set(_ogRulesCache.map(r => r.lang))].sort();
+      return { rules: _ogRulesCache, languages: langs };
+    }
+
+    if (!existsSync(RULES_DIR)) throw APIError.failedPrecondition("Opengrep rules not found. Clone https://github.com/opengrep/opengrep-rules into code-analysis/rules/opengrep");
+
+    const langDirs = new Set([
+      "java", "javascript", "python", "php", "go", "ruby", "rust", "typescript",
+      "c", "csharp", "kotlin", "swift", "scala", "bash", "dockerfile", "terraform",
+      "html", "json", "yaml", "elixir", "ocaml", "solidity", "clojure", "apex",
+      "generic", "ai",
+    ]);
+
+    const rules: OGRule[] = [];
+    const walkYaml = (dir: string, base: string) => {
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const rel = base ? `${base}/${entry.name}` : entry.name;
+          if (entry.isDirectory() && !entry.name.startsWith(".")) {
+            walkYaml(join(dir, entry.name), rel);
+          } else if (entry.isFile() && entry.name.endsWith(".yaml") && !entry.name.startsWith(".")) {
+            const parts = rel.split("/");
+            const lang = parts[0];
+            if (!langDirs.has(lang)) return;
+            const fileName = parts[parts.length - 1].replace(".yaml", "");
+            const category = parts.length > 2 ? parts[1] : "general";
+            // Read severity + message from YAML
+            let severity = "info";
+            let message = "";
+            try {
+              const raw = readFileSync(join(dir, entry.name), "utf-8");
+              // Extract severity
+              const sevMatch = raw.match(/^\s+severity:\s*(\S+)/m);
+              if (sevMatch) {
+                const s = sevMatch[1].toUpperCase();
+                severity = s === "ERROR" ? "error" : s === "WARNING" ? "warning" : "info";
+              }
+              // Extract message
+              const msgMatch = raw.match(/^\s+message:\s*>-?\s*\n([\s\S]*?)(?=\n\s+\w+:|\n\s+-\s)/m);
+              if (msgMatch) {
+                message = msgMatch[1].replace(/\n\s+/g, " ").trim();
+              } else {
+                const inlineMatch = raw.match(/^\s+message:\s*(.+)$/m);
+                if (inlineMatch) message = inlineMatch[1].replace(/^['">-]+\s*/, "").replace(/['"]$/, "").trim();
+              }
+            } catch { /* ignore */ }
+            rules.push({
+              id: rel.replace(/\.yaml$/, "").replace(/\//g, "."),
+              name: fileName.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
+              lang, path: rel, severity, category, message,
+            });
+          }
+        }
+      } catch { /* permission errors */ }
+    };
+    walkYaml(RULES_DIR, "");
+
+    _ogRulesCache = rules;
+    const langs = [...new Set(rules.map(r => r.lang))].sort();
+    return { rules, languages: langs };
+  }
+);
+
+export const getOpengrepRuleContent = api(
+  { method: "GET", path: "/code-analysis/opengrep-rules/content", auth: true },
+  async (params: { path: string }): Promise<{ content: string }> => {
+    const filePath = join(RULES_DIR, params.path);
+    if (!filePath.startsWith(RULES_DIR) || !existsSync(filePath)) throw APIError.notFound("Rule file not found");
+    return { content: readFileSync(filePath, "utf-8") };
+  }
+);
+
+export const updateOpengrepRuleContent = api(
+  { method: "PUT", path: "/code-analysis/opengrep-rules/content", auth: true },
+  async (params: { path: string; content: string }): Promise<{ success: boolean }> => {
+    const filePath = join(RULES_DIR, params.path);
+    if (!filePath.startsWith(RULES_DIR)) throw APIError.invalidArgument("Invalid path");
+    writeFileSync(filePath, params.content, "utf-8");
+    _ogRulesCache = null; // invalidate cache
+    return { success: true };
+  }
+);
+
+// ─── SonarQube Rule Management ───
+
+interface SQProfile {
+  key: string;
+  name: string;
+  language: string;
+  languageName: string;
+  isDefault: boolean;
+  activeRuleCount: number;
+}
+
+interface SQRule {
+  key: string;
+  name: string;
+  severity: string;
+  lang: string;
+  langName: string;
+  type: string;
+  status: string;
+  isActive: boolean;
+  cleanCodeAttribute: string;
+  impacts: Array<{ softwareQuality: string; severity: string }>;
+}
+
+export const listSonarProfiles = api(
+  { method: "GET", path: "/code-analysis/sonar/profiles", auth: true },
+  async (): Promise<{ profiles: SQProfile[] }> => {
+    const data = await sonarFetch("/api/qualityprofiles/search");
+    const profiles: SQProfile[] = (data.profiles || []).map((p: any) => ({
+      key: p.key, name: p.name, language: p.language, languageName: p.languageName,
+      isDefault: p.isDefault, activeRuleCount: p.activeRuleCount || 0,
+    }));
+    return { profiles };
+  }
+);
+
+export const listSonarRules = api(
+  { method: "GET", path: "/code-analysis/sonar/rules", auth: true },
+  async (params: { profileKey: string; page?: number; query?: string }): Promise<{ rules: SQRule[]; total: number }> => {
+    // Get active rule keys for this profile
+    const activeData = await sonarFetch("/api/rules/search", {
+      activation: "true",
+      qprofile: params.profileKey,
+      ps: "500",
+      p: String(params.page || 1),
+      f: "name,severity,lang,langName,status,cleanCodeAttribute",
+      ...(params.query ? { q: params.query } : {}),
+    });
+    const activeKeys = new Set((activeData.rules || []).map((r: any) => r.key));
+    const activeRules: SQRule[] = (activeData.rules || []).map((r: any) => ({
+      key: r.key, name: r.name, severity: r.severity, lang: r.lang,
+      langName: r.langName, type: r.type, status: r.status, isActive: true,
+      cleanCodeAttribute: r.cleanCodeAttribute || "",
+      impacts: (r.impacts || []).map((i: any) => ({ softwareQuality: i.softwareQuality, severity: i.severity })),
+    }));
+
+    if (params.query) {
+      const inactiveData = await sonarFetch("/api/rules/search", {
+        activation: "false",
+        qprofile: params.profileKey,
+        ps: "500",
+        p: String(params.page || 1),
+        f: "name,severity,lang,langName,status,cleanCodeAttribute",
+        q: params.query,
+      });
+      for (const r of inactiveData.rules || []) {
+        if (!activeKeys.has(r.key)) {
+          activeRules.push({
+            key: r.key, name: r.name, severity: r.severity, lang: r.lang,
+            langName: r.langName, type: r.type, status: r.status, isActive: false,
+            cleanCodeAttribute: r.cleanCodeAttribute || "",
+            impacts: (r.impacts || []).map((i: any) => ({ softwareQuality: i.softwareQuality, severity: i.severity })),
+          });
+        }
+      }
+    }
+
+    return { rules: activeRules, total: activeData.total || activeRules.length };
+  }
+);
+
+export const toggleSonarRule = api(
+  { method: "POST", path: "/code-analysis/sonar/rules/toggle", auth: true },
+  async (params: { profileKey: string; ruleKey: string; activate: boolean }): Promise<{ success: boolean }> => {
+    if (params.activate) {
+      await sonarFetch("/api/qualityprofiles/activate_rule", {
+        key: params.profileKey,
+        rule: params.ruleKey,
+      }, "POST");
+    } else {
+      await sonarFetch("/api/qualityprofiles/deactivate_rule", {
+        key: params.profileKey,
+        rule: params.ruleKey,
+      }, "POST");
+    }
+    return { success: true };
   }
 );
 
@@ -442,19 +782,26 @@ function findSonarScanner(): string | null {
   return null;
 }
 
-async function sonarFetch(path: string, params: Record<string, string> = {}): Promise<any> {
+async function sonarFetch(path: string, params: Record<string, string> = {}, method: "GET" | "POST" = "GET"): Promise<any> {
   const baseUrl = SonarQubeUrl();
   const token = SonarQubeToken();
   if (!baseUrl || !token) throw new Error("SonarQube URL or token not configured");
 
-  const url = new URL(path, baseUrl);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
 
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let res: Response;
+  if (method === "POST") {
+    const url = new URL(path, baseUrl);
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    res = await fetch(url.toString(), { method: "POST", headers, body: new URLSearchParams(params).toString() });
+  } else {
+    const url = new URL(path, baseUrl);
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    res = await fetch(url.toString(), { headers });
+  }
   if (!res.ok) throw new Error(`SonarQube API ${path} returned ${res.status}: ${await res.text()}`);
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : {};
 }
 
 async function waitForSonarAnalysis(taskId: string, timeoutMs = 120_000): Promise<void> {
@@ -569,8 +916,8 @@ async function runSonarScanner(repoDir: string, projectKey: string): Promise<Son
   return issues;
 }
 
-async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; user_id: string; project_id: string; created_at: Date }) {
-  console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, opengrep binary: ${OPENGREP_BIN}`);
+async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; user_id: string; project_id: string; created_at: Date }, tools: { opengrep: boolean; sonarqube: boolean; customRules: boolean } = { opengrep: true, sonarqube: true, customRules: true }) {
+  console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, tools: opengrep=${tools.opengrep} sonarqube=${tools.sonarqube} customRules=${tools.customRules}`);
   const tmpDir = mkdtempSync(join(tmpdir(), "opengrep-scan-"));
 
   try {
@@ -607,48 +954,9 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
 
     await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0 });
 
-    // 2. Run Opengrep
+    // 2. Run Opengrep (if enabled)
     const outputFile = join(tmpDir, "results.json");
-    let openGrepOutput: string;
-
-    console.log(`[doScan] Running opengrep: ${OPENGREP_BIN} in ${repoDir}`);
-    try {
-      execSync(
-        `${JSON.stringify(OPENGREP_BIN)} scan --config auto --json --quiet --json-output=${JSON.stringify(outputFile)} .`,
-        { cwd: repoDir, timeout: 300_000, stdio: "pipe", env: { ...process.env, OPENGREP_ENABLE_VERSION_CHECK: "0", HOME: process.env.HOME || "" } }
-      );
-      openGrepOutput = readFileSync(outputFile, "utf-8");
-      console.log(`[doScan] Opengrep completed, output size: ${openGrepOutput.length} bytes`);
-    } catch (execErr: any) {
-      console.error(`[doScan] Opengrep exec error: ${execErr.message}`);
-      console.error(`[doScan] Opengrep stderr: ${execErr.stderr?.toString()?.slice(0, 500) || "(none)"}`);
-      if (existsSync(outputFile)) {
-        openGrepOutput = readFileSync(outputFile, "utf-8");
-        console.log(`[doScan] Opengrep partial output size: ${openGrepOutput.length} bytes`);
-      } else {
-        const stderr = execErr.stderr?.toString() || "";
-        const stdout = execErr.stdout?.toString() || "";
-        console.error(`[doScan] No output file, failing. stderr: ${stderr.slice(0, 500)}`);
-        throw new Error(`Opengrep failed (bin: ${OPENGREP_BIN}): ${stderr || stdout || execErr.message}`);
-      }
-    }
-
-    // 3. Parse results
-    const parsed = JSON.parse(openGrepOutput) as {
-      results?: Array<{
-        check_id: string;
-        path: string;
-        start: { line: number; col: number };
-        end: { line: number; col: number };
-        extra: { message: string; severity: string; lines: string; metadata?: Record<string, any> };
-      }>;
-      paths?: { scanned?: string[] };
-    };
-
-    const results = parsed.results || [];
-    const scannedPaths = parsed.paths?.scanned || [];
-    const filesScanned = scannedPaths.length;
-    console.log(`[doScan] Opengrep found ${results.length} findings across ${filesScanned} files`);
+    let openGrepOutput = '{"results":[],"paths":{"scanned":[]}}';
 
     const mapSeverity = (s: string): "error" | "warning" | "info" => {
       const upper = s.toUpperCase();
@@ -657,43 +965,74 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       return "info";
     };
 
-    // Group findings by file for progressive insertion
     const findingsByFile = new Map<string, Array<{ ruleId: string; severity: "error" | "warning" | "info"; message: string; filePath: string; startLine: number; endLine: number; snippet: string }>>();
-    for (const r of results) {
-      const arr = findingsByFile.get(r.path) || [];
-      arr.push({
-        ruleId: r.check_id,
-        severity: mapSeverity(r.extra.severity),
-        message: r.extra.message,
-        filePath: r.path,
-        startLine: r.start.line,
-        endLine: r.end.line,
-        snippet: (r.extra.lines || "").trim().slice(0, 200),
-      });
-      findingsByFile.set(r.path, arr);
+    let filesScanned = 0;
+
+    if (tools.opengrep) {
+      console.log(`[doScan] Running opengrep: ${OPENGREP_BIN} in ${repoDir}`);
+      const configFlag = existsSync(RULES_DIR) ? `--config ${JSON.stringify(RULES_DIR)}` : "--config auto";
+      try {
+        execSync(
+          `${JSON.stringify(OPENGREP_BIN)} scan ${configFlag} --json --quiet --json-output=${JSON.stringify(outputFile)} .`,
+          { cwd: repoDir, timeout: 300_000, stdio: "pipe", env: { ...process.env, OPENGREP_ENABLE_VERSION_CHECK: "0", HOME: process.env.HOME || "" } }
+        );
+        openGrepOutput = readFileSync(outputFile, "utf-8");
+        console.log(`[doScan] Opengrep completed, output size: ${openGrepOutput.length} bytes`);
+      } catch (execErr: any) {
+        console.error(`[doScan] Opengrep exec error: ${execErr.message}`);
+        if (existsSync(outputFile)) {
+          openGrepOutput = readFileSync(outputFile, "utf-8");
+        } else {
+          const stderr = execErr.stderr?.toString() || "";
+          throw new Error(`Opengrep failed: ${stderr || execErr.message}`);
+        }
+      }
+
+      const parsed = JSON.parse(openGrepOutput) as {
+        results?: Array<{ check_id: string; path: string; start: { line: number }; end: { line: number }; extra: { message: string; severity: string; lines: string } }>;
+        paths?: { scanned?: string[] };
+      };
+      const results = parsed.results || [];
+      filesScanned = parsed.paths?.scanned?.length || 0;
+      console.log(`[doScan] Opengrep found ${results.length} findings across ${filesScanned} files`);
+
+      for (const r of results) {
+        const arr = findingsByFile.get(r.path) || [];
+        arr.push({ ruleId: r.check_id, severity: mapSeverity(r.extra.severity), message: r.extra.message, filePath: r.path, startLine: r.start.line, endLine: r.end.line, snippet: (r.extra.lines || "").trim().slice(0, 200) });
+        findingsByFile.set(r.path, arr);
+      }
+    } else {
+      console.log("[doScan] Opengrep disabled, skipping");
     }
 
-    // 3b. Run custom regex-based rules on the cloned repo
-    console.log(`[doScan] Running custom rules on ${scanId}...`);
-    const allFiles = walkFiles(repoDir);
-    const customFindings = runCustomRules(repoDir, allFiles);
-    console.log(`[doScan] Custom rules found ${customFindings.length} findings in ${allFiles.length} files`);
-
-    // Merge custom findings into the map
-    for (const cf of customFindings) {
-      const arr = findingsByFile.get(cf.filePath) || [];
-      arr.push(cf);
-      findingsByFile.set(cf.filePath, arr);
+    // 3b. Run custom regex-based rules (if enabled)
+    if (tools.customRules) {
+      console.log(`[doScan] Running custom rules on ${scanId}...`);
+      const allFiles = walkFiles(repoDir);
+      const dbRules = await loadCustomRules(scan.user_id);
+      const customFindings = runCustomRules(repoDir, allFiles, dbRules);
+      console.log(`[doScan] Custom rules found ${customFindings.length} findings in ${allFiles.length} files (${dbRules.length} rules loaded)`);
+      for (const cf of customFindings) {
+        const arr = findingsByFile.get(cf.filePath) || [];
+        arr.push(cf);
+        findingsByFile.set(cf.filePath, arr);
+      }
+    } else {
+      console.log("[doScan] Custom rules disabled, skipping");
     }
 
-    // 3c. Run SonarQube scanner (if configured)
+    // 3c. Run SonarQube scanner (if enabled and configured)
     let sonarFindings: SonarIssue[] = [];
-    try {
-      const sonarProjectKey = `scan-${scanId}`;
-      sonarFindings = await runSonarScanner(repoDir, sonarProjectKey);
-      console.log(`[doScan] SonarQube found ${sonarFindings.length} issues`);
-    } catch (sonarErr: any) {
-      console.log(`[doScan] SonarQube scan skipped or failed: ${sonarErr.message}`);
+    if (tools.sonarqube) {
+      try {
+        const sonarProjectKey = `scan-${scanId}`;
+        sonarFindings = await runSonarScanner(repoDir, sonarProjectKey);
+        console.log(`[doScan] SonarQube found ${sonarFindings.length} issues`);
+      } catch (sonarErr: any) {
+        console.log(`[doScan] SonarQube scan skipped or failed: ${sonarErr.message}`);
+      }
+    } else {
+      console.log("[doScan] SonarQube disabled, skipping");
     }
 
     // Merge sonar findings into the map
@@ -739,17 +1078,13 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       });
     }
 
-    // 5. Compute final summary
-    const allSeverities = [
-      ...results.map((r) => mapSeverity(r.extra.severity)),
-      ...customFindings.map((f) => f.severity),
-      ...sonarFindings.map((f) => f.severity),
-    ];
+    // 5. Compute final summary from all persisted findings
+    const allFindings = [...findingsByFile.values()].flat();
     const summary: ScanSummary = {
       totalFindings: totalInserted,
-      errors: allSeverities.filter((s) => s === "error").length,
-      warnings: allSeverities.filter((s) => s === "warning").length,
-      infos: allSeverities.filter((s) => s === "info").length,
+      errors: allFindings.filter((f) => f.severity === "error").length,
+      warnings: allFindings.filter((f) => f.severity === "warning").length,
+      infos: allFindings.filter((f) => f.severity === "info").length,
       filesScanned,
       filesInRepo,
     };

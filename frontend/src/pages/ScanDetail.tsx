@@ -227,7 +227,10 @@ export default function ScanDetail() {
         repo,
         branch: project.branch || "main",
       });
-      await codeAnalysisApi.runScan(newScan.id);
+      await codeAnalysisApi.runScan(newScan.id, (() => {
+        try { const t = JSON.parse(localStorage.getItem("scan_tools") || "{}"); return { enableOpengrep: t.opengrep !== false, enableSonarqube: t.sonarqube !== false, enableCustomRules: t.customRules !== false }; }
+        catch { return {}; }
+      })());
 
       const poll = async () => {
         try {

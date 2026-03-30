@@ -4,3 +4,4 @@ encore.gen.cue
 /.encore
 node_modules
 /encore.gen
+code-analysis/migrations/2_create_custom_rules.up.sql
