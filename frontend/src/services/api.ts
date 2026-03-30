@@ -408,7 +408,8 @@ export const deployApi = {
     primaryLanguage?: string;
     registryUrl?: string;
     deployStrategy?: string;
-    buildMethod?: "dockerfile" | "railpack" | "nixpacks";
+    buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+    skipPipeline?: boolean;
   }) =>
     request<{
       id: string;
@@ -420,6 +421,16 @@ export const deployApi = {
       appUrl: string;
     }>("/deploy/deployments", {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateDeployment: (deploymentId: string, data: {
+    status?: "pending" | "building" | "deploying" | "success" | "failed";
+    logs?: string;
+    appUrl?: string;
+  }) =>
+    request<{ ok: boolean }>(`/deploy/deployments/${deploymentId}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     }),
 
