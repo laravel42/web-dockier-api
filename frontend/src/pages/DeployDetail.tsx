@@ -54,6 +54,7 @@ export default function DeployDetail() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [destroying, setDestroying] = useState(false);
 
   // Sidebar: all deploys for same repo
   const [allDeploys, setAllDeploys] = useState<Deployment[]>([]);
@@ -122,6 +123,7 @@ export default function DeployDetail() {
     building: "bg-warning-500/10 text-warning-500",
     deploying: "bg-primary-500/10 text-primary-500",
     pending: "bg-secondary-100 text-text-muted",
+    destroyed: "bg-secondary-100 text-text-muted",
   };
 
   return (
@@ -162,6 +164,31 @@ export default function DeployDetail() {
               </div>
             </div>
           </div>
+          {deploy.status !== "destroyed" && (
+          <button
+            disabled={destroying}
+            onClick={async () => {
+              if (!deploy || !confirm("This will delete the CloudFormation stack, ECR images, and deployment record. Continue?")) return;
+              setDestroying(true);
+              try {
+                const res = await deployApi.destroyDeployment(deploy.id);
+                if (res.success) {
+                  const updated = await deployApi.getDeployment(deploy.id);
+                  setDeploy(updated);
+                } else {
+                  setError(res.message);
+                }
+                setDestroying(false);
+              } catch (e: any) {
+                setError(e.message || "Failed to destroy deployment");
+                setDestroying(false);
+              }
+            }}
+            className="h-9 px-4 bg-danger-500/10 text-danger-500 text-sm font-medium rounded-[var(--radius-btn)] hover:bg-danger-500/20 transition-colors disabled:opacity-50"
+          >
+            {destroying ? "Destroying…" : "Destroy"}
+          </button>
+          )}
         </div>
 
         {/* Info cards */}

@@ -31,7 +31,7 @@ interface Deployment {
   gitConnectionId: string;
   repo: string;
   branch: string;
-  status: "pending" | "building" | "deploying" | "success" | "failed";
+  status: "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";
   logs: string;
   appUrl: string;
   commitHash: string;
@@ -301,7 +301,7 @@ export const updateDeployment = api(
   { method: "PUT", path: "/deploy/deployments/:deploymentId", auth: true },
   async (params: {
     deploymentId: string;
-    status?: "pending" | "building" | "deploying" | "success" | "failed";
+    status?: "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";
     logs?: string;
     appUrl?: string;
   }): Promise<{ ok: boolean }> => {
@@ -315,6 +315,84 @@ export const updateDeployment = api(
       await db.exec`UPDATE deployments SET app_url = ${params.appUrl}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
     }
     return { ok: true };
+  }
+);
+
+// ─── Destroy Deployment (tears down AWS infrastructure) ───
+
+export const destroyDeployment = api(
+  { method: "POST", path: "/deploy/deployments/:deploymentId/destroy", auth: true },
+  async (params: { deploymentId: string }): Promise<{ success: boolean; message: string }> => {
+    const authData = getAuthData()!;
+
+    const row = await db.queryRow<{
+      id: string; user_id: string; provider_id: string; repo: string; deploy_strategy: string; docker_image: string;
+    }>`SELECT id, user_id, provider_id, repo, deploy_strategy, docker_image FROM deployments WHERE id = ${params.deploymentId}`;
+    if (!row) throw APIError.notFound("Deployment not found");
+    if (row.user_id !== authData.userID) throw APIError.permissionDenied("Not your deployment");
+
+    const providerRow = await db.queryRow<{
+      provider: string; region: string; api_key: string; api_secret: string;
+    }>`SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${row.provider_id}`;
+    if (!providerRow) throw APIError.notFound("Provider not found");
+
+    const repoName = row.repo.split("/").pop() || "app";
+    const appName = row.docker_image || repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+    const region = providerRow.region || "us-east-1";
+    const accessKeyId = providerRow.api_key;
+    const secretAccessKey = providerRow.api_secret;
+    const credentials = { accessKeyId, secretAccessKey };
+
+    const errors: string[] = [];
+
+    // 1. Delete CloudFormation stack
+    const stackName = `image-builder-app-${appName}`;
+    try {
+      const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+      const cfn = new CloudFormationClient({ region, credentials });
+
+      // Check if stack exists before trying to delete
+      try {
+        await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+        await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+      } catch (e: any) {
+        if (!e.message?.includes("does not exist")) throw e;
+      }
+    } catch (e: any) {
+      errors.push(`CloudFormation: ${e.message}`);
+    }
+
+    // 2. Delete ECR repository
+    try {
+      const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
+      const ecr = new ECRClient({ region, credentials });
+      await ecr.send(new DeleteRepositoryCommand({ repositoryName: appName, force: true }));
+    } catch (e: any) {
+      if (!e.name?.includes("RepositoryNotFoundException")) {
+        errors.push(`ECR: ${e.message}`);
+      }
+    }
+
+    // 3. Delete ECR cache repository
+    try {
+      const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
+      const ecr = new ECRClient({ region, credentials });
+      await ecr.send(new DeleteRepositoryCommand({ repositoryName: `${appName}-cache`, force: true }));
+    } catch (e: any) {
+      // Cache repo may not exist, ignore
+    }
+
+    // 4. Update deployment record to destroyed status
+    const destroyTs = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const destroyLog = errors.length > 0
+      ? `\n[${destroyTs}] ⚠ Partially destroyed. Errors: ${errors.join("; ")}`
+      : `\n[${destroyTs}] ✓ Infrastructure destroyed (stack: ${stackName}, ECR: ${appName})`;
+    await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+
+    if (errors.length > 0) {
+      return { success: false, message: `Partially destroyed. Errors: ${errors.join("; ")}` };
+    }
+    return { success: true, message: `Destroyed stack ${stackName}, ECR repo ${appName}.` };
   }
 );
 
