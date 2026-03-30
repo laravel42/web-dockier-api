@@ -1325,24 +1325,36 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
       // ── CodeBuild path: build image first via image-builder, then deploy ──
       if (state.buildMethod === "codebuild") {
         const ts0 = new Date().toISOString().replace("T", " ").slice(0, 19);
-        const formattedLogs: string[] = [
-          `[${ts0}] ▶ Starting deployment pipeline...`,
-          `[${ts0}] ℹ Provider: ${state.selectedProvider}`,
-          `[${ts0}] ℹ Strategy: ${state.deployStrategy}`,
-          `[${ts0}] ℹ Repository: ${repo} | Branch: ${project.branch || "main"}`,
-          `[${ts0}]`,
-        ];
-        setState(prev => ({ ...prev, deployStatus: "building", deployLogs: formattedLogs }));
-
-        const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
-        const plan = plans[state.selectedPlan] || plans[1] || plans[0];
-
         const deployTargetMap: Record<string, "ecs" | "apprunner" | "ec2"> = {
           vps: "ec2",
           managed: "ecs",
           serverless: "apprunner",
         };
         const deployTarget = deployTargetMap[state.deployStrategy] || "ec2";
+
+        const formattedLogs: string[] = [
+          `[${ts0}] ▶ Starting deployment pipeline...`,
+          `[${ts0}] ℹ Provider: ${state.selectedProvider} | Region: ${state.tofuRegion || "us-east-1"}`,
+          `[${ts0}] ℹ Strategy: ${state.deployStrategy}`,
+          `[${ts0}] ℹ Repository: ${repo} | Branch: ${project.branch || "main"}`,
+          `[${ts0}]`,
+        ];
+
+        // Add analysis details to match deploy service log format
+        if (analysis) {
+          formattedLogs.push(`[${ts0}] ── Analyze Repository ──────────────`);
+          if (analysis.primaryLanguage) formattedLogs.push(`[${ts0}] ℹ Runtime: ${analysis.primaryLanguage}${analysis.aiAnalysis?.runtimeVersion ? " " + analysis.aiAnalysis.runtimeVersion : ""}`);
+          if (analysis.aiAnalysis?.framework) formattedLogs.push(`[${ts0}] ℹ Framework: ${analysis.aiAnalysis.framework}${analysis.aiAnalysis.frameworkVersion ? " " + analysis.aiAnalysis.frameworkVersion : ""}`);
+          if (analysis.techStack?.length) formattedLogs.push(`[${ts0}] ℹ Tech stack: ${analysis.techStack.map((t: any) => t.name || t).join(", ")}`);
+          if (analysis.aiAnalysis?.port) formattedLogs.push(`[${ts0}] ℹ Port: ${analysis.aiAnalysis.port}`);
+          formattedLogs.push(`[${ts0}] ℹ Deploy target: ${deployTarget}`);
+          formattedLogs.push(`[${ts0}]`);
+        }
+
+        setState(prev => ({ ...prev, deployStatus: "building", deployLogs: formattedLogs }));
+
+        const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
+        const plan = plans[state.selectedPlan] || plans[1] || plans[0];
 
         const build = await imageBuilderApi.startBuild({
           sourceRepo: repo,
@@ -1360,12 +1372,41 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           },
         });
 
+        // Create a deployment record so it appears in deploy history
+        let codebuildDeployId = "";
+        try {
+          const dep = await deployApi.createDeployment({
+            providerId: state.selectedProviderId,
+            gitConnectionId: project.connectionId,
+            repo,
+            branch: project.branch || "main",
+            techStack: analysis?.techStack.map(t => t.name) || [],
+            primaryLanguage: analysis?.primaryLanguage || "",
+            deployStrategy: state.deployStrategy,
+            buildMethod: "codebuild",
+            skipPipeline: true,
+          });
+          codebuildDeployId = dep.id;
+          setState(prev => ({ ...prev, deploymentId: dep.id }));
+        } catch {}
+
         const ts1 = new Date().toISOString().replace("T", " ").slice(0, 19);
         formattedLogs.push(
           `[${ts1}] ── Build Image (CodeBuild) ────────`,
           `[${ts1}] ℹ Build queued: ${build.codebuildId || build.id}`,
         );
         setState(prev => ({ ...prev, codebuildBuildId: build.id, codebuildLogsUrl: build.logsUrl, deployLogs: [...formattedLogs] }));
+
+        // Helper to sync logs to deploy record
+        const syncDeployRecord = (status: "building" | "deploying" | "success" | "failed", logs: string[], appUrl?: string) => {
+          if (!codebuildDeployId) return;
+          deployApi.updateDeployment(codebuildDeployId, {
+            status,
+            logs: logs.join("\n"),
+            ...(appUrl ? { appUrl } : {}),
+          }).catch(() => {});
+        };
+        syncDeployRecord("building", formattedLogs);
 
         const seenPhases = new Set<string>();
 
@@ -1403,6 +1444,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                 deployAppUrl: "",
                 deployLogs: [...formattedLogs],
               }));
+              syncDeployRecord("deploying", formattedLogs);
 
               const pollCfnDeploy = async () => {
                 try {
@@ -1410,11 +1452,13 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                   const ts2 = new Date().toISOString().replace("T", " ").slice(0, 19);
 
                   if (ds.status === "success" && ds.appUrl) {
+                    const appName = state.tofuAppName || project.name?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || repo.split("/").pop() || "app";
                     formattedLogs.push(
                       `[${ts2}] ✓ CloudFormation stack: CREATE_COMPLETE`,
                       `[${ts2}] ✓ App URL: ${ds.appUrl}`,
                       `[${ts2}]`,
                       `[${ts2}] ── Complete ───────────────────────`,
+                      `[${ts2}] ✓ Docker image: ${appName}`,
                       `[${ts2}] ✓ Infrastructure deployed via CloudFormation`,
                       `[${ts2}] ✓ Application URL: ${ds.appUrl}`,
                     );
@@ -1424,21 +1468,26 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                       deployAppUrl: ds.appUrl,
                       deployLogs: [...formattedLogs],
                     }));
+                    syncDeployRecord("success", formattedLogs, ds.appUrl);
                     onDeployComplete?.();
                     return;
                   }
                   if (ds.status === "failed") {
                     formattedLogs.push(`[${ts2}] ✗ CloudFormation failed`);
                     setState(prev => ({ ...prev, deployStatus: "failed", deployLogs: [...formattedLogs] }));
+                    syncDeployRecord("failed", formattedLogs);
                     setDeployError("CloudFormation deployment failed.");
                     onDeployComplete?.();
                     return;
                   }
                   if (ds.status === "deploying") {
-                    // Only add if not already showing
-                    if (!formattedLogs.some(l => l.includes("CloudFormation:"))) {
-                      formattedLogs.push(`[${ts2}] ℹ CloudFormation: deploying...`);
+                    const lastCfnLog = formattedLogs.filter(l => l.includes("CloudFormation:")).pop();
+                    const lastCfnTime = lastCfnLog?.match(/\[([\d\s:-]+)\]/)?.[1] || "";
+                    // Add periodic status updates (not just the first one)
+                    if (!lastCfnLog || lastCfnTime !== ts2) {
+                      formattedLogs.push(`[${ts2}] ℹ CloudFormation: CREATE_IN_PROGRESS...`);
                       setState(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
+                      syncDeployRecord("deploying", formattedLogs);
                     }
                   }
                   pollRef.current = setTimeout(pollCfnDeploy, 10000);
@@ -1455,14 +1504,16 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               try {
                 const logsResp = await imageBuilderApi.getBuildLogs(build.id);
                 if (logsResp.logs.length > 0) {
+                  const failLogs = [
+                    ...logsResp.logs,
+                    `[${ts}] ✗ CodeBuild failed: ${b.statusReason || "Unknown error"}`,
+                  ];
                   setState(prev => ({
                     ...prev,
                     deployStatus: "failed",
-                    deployLogs: [
-                      ...logsResp.logs,
-                      `[${ts}] ✗ CodeBuild failed: ${b.statusReason || "Unknown error"}`,
-                    ],
+                    deployLogs: failLogs,
                   }));
+                  syncDeployRecord("failed", failLogs);
                   setDeployError(`CodeBuild failed: ${b.statusReason || "Check logs above"}`);
                   return;
                 }
@@ -1476,6 +1527,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                   `[${ts}] ✗ CodeBuild failed: ${b.statusReason || "Unknown error"}`,
                 ],
               }));
+              syncDeployRecord("failed", [...formattedLogs, `[${ts}] ✗ CodeBuild failed: ${b.statusReason || "Unknown error"}`]);
               setDeployError(`CodeBuild failed: ${b.statusReason || "Check CloudWatch logs"}`);
               return;
             }

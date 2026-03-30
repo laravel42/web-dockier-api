@@ -62,6 +62,9 @@ export function detectStack(repoDir: string): DetectedStack {
             break;
           }
         }
+      } else if (allDeps["@sveltejs/kit"]) {
+        framework = "sveltekit";
+        isStatic = false;
       } else if (allDeps["@angular/core"]) {
         framework = "spa";
         isStatic = true;
@@ -199,6 +202,17 @@ function nodeDockerfile(stack: Extract<DetectedStack, { runtime: "node" }>, repo
     lines.push("RUN npm ci || npm install");
   }
   lines.push(`COPY ${copyPrefix}. .`);
+
+  // SvelteKit: ensure adapter-node is used (adapter-auto won't work in Docker)
+  if (stack.framework === "sveltekit") {
+    const installCmd = pm === "pnpm" ? "pnpm add -D" : pm === "yarn" ? "yarn add -D" : pm === "bun" ? "bun add -D" : "npm install --save-dev";
+    lines.push(`RUN ${installCmd} @sveltejs/adapter-node`);
+    // Patch svelte.config.js to use adapter-node if it uses adapter-auto
+    lines.push("RUN if grep -q 'adapter-auto' svelte.config.js 2>/dev/null; then \\\n" +
+      "    sed -i \"s/@sveltejs\\/adapter-auto/@sveltejs\\/adapter-node/g\" svelte.config.js; \\\n" +
+      "    fi");
+  }
+
   lines.push(`RUN ${pm === "npm" ? "npm run" : pm} build`);
 
   // Production
@@ -236,6 +250,17 @@ function nodeDockerfile(stack: Extract<DetectedStack, { runtime: "node" }>, repo
     lines.push('ENV PORT=3000 HOSTNAME="0.0.0.0"');
     lines.push("EXPOSE 3000");
     lines.push('CMD ["node", ".output/server/index.mjs"]');
+  } else if (stack.framework === "sveltekit") {
+    // SvelteKit with adapter-node — ensure adapter-node is used, then run the built server
+    // Replace adapter-auto with adapter-node at build time if needed
+    lines.push("RUN --mount=from=builder,source=/app,target=/builder \\\n" +
+      "    if [ -d /builder/build ]; then cp -r /builder/build ./build; \\\n" +
+      "    elif [ -d /builder/.svelte-kit/output ]; then cp -r /builder/.svelte-kit/output ./build; fi");
+    lines.push("COPY --from=builder /app/package.json ./");
+    lines.push("COPY --from=builder /app/node_modules ./node_modules");
+    lines.push('ENV PORT=3000 HOST="0.0.0.0" ORIGIN="http://localhost:3000"');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["node", "build"]');
   } else if (stack.framework === "spa") {
     // Client-only SPA (React/Vue/Vite/Angular) — serve static build output
     lines.push("RUN npm i -g serve");

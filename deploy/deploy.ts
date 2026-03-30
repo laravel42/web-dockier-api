@@ -65,7 +65,7 @@ export interface DeployEvent {
   primaryLanguage: string;
   registryUrl: string;
   deployStrategy: string;
-  buildMethod: "dockerfile" | "railpack" | "nixpacks";
+  buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {
@@ -206,7 +206,8 @@ export const createDeployment = api(
     primaryLanguage?: string;
     registryUrl?: string;
     deployStrategy?: string;
-    buildMethod?: "dockerfile" | "railpack" | "nixpacks";
+    buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+    skipPipeline?: boolean;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -217,21 +218,23 @@ export const createDeployment = api(
       VALUES (${id}, ${authData.userID}, ${params.providerId}, ${params.gitConnectionId},
               ${params.repo}, ${params.branch}, 'pending', '', ${script}, ${params.deployStrategy || "managed"}, NOW(), NOW())`;
 
-    // Publish deploy event
-    await deployTopic.publish({
-      deploymentId: id,
-      userId: authData.userID,
-      providerId: params.providerId,
-      gitConnectionId: params.gitConnectionId,
-      repo: params.repo,
-      branch: params.branch,
-      tofuScript: script,
-      techStack: params.techStack || [],
-      primaryLanguage: params.primaryLanguage || "",
-      registryUrl: params.registryUrl || "",
-      deployStrategy: params.deployStrategy || "managed",
-      buildMethod: params.buildMethod || "dockerfile",
-    });
+    // Skip pub/sub when the build is handled externally (e.g. CodeBuild via image-builder)
+    if (!params.skipPipeline) {
+      await deployTopic.publish({
+        deploymentId: id,
+        userId: authData.userID,
+        providerId: params.providerId,
+        gitConnectionId: params.gitConnectionId,
+        repo: params.repo,
+        branch: params.branch,
+        tofuScript: script,
+        techStack: params.techStack || [],
+        primaryLanguage: params.primaryLanguage || "",
+        registryUrl: params.registryUrl || "",
+        deployStrategy: params.deployStrategy || "managed",
+        buildMethod: params.buildMethod || "dockerfile",
+      });
+    }
 
     return {
       id, userId: authData.userID, providerId: params.providerId,
@@ -291,6 +294,27 @@ export const getDeployment = api(
       deployStrategy: row.deploy_strategy || "managed",
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     };
+  }
+);
+
+export const updateDeployment = api(
+  { method: "PUT", path: "/deploy/deployments/:deploymentId", auth: true },
+  async (params: {
+    deploymentId: string;
+    status?: "pending" | "building" | "deploying" | "success" | "failed";
+    logs?: string;
+    appUrl?: string;
+  }): Promise<{ ok: boolean }> => {
+    if (params.status) {
+      await db.exec`UPDATE deployments SET status = ${params.status}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+    }
+    if (params.logs) {
+      await db.exec`UPDATE deployments SET logs = ${params.logs}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+    }
+    if (params.appUrl) {
+      await db.exec`UPDATE deployments SET app_url = ${params.appUrl}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+    }
+    return { ok: true };
   }
 );
 

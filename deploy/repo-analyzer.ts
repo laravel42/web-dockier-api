@@ -570,6 +570,16 @@ function generateNodeDockerfile(config: RepoConfig): string {
   }
 
   lines.push(`COPY ${copyPrefix}. .`);
+
+  // SvelteKit: ensure adapter-node is used (adapter-auto won't work in Docker)
+  if (config.framework === "SvelteKit") {
+    const installCmd = pm === "pnpm" ? "pnpm add -D" : pm === "yarn" ? "yarn add -D" : pm === "bun" ? "bun add -D" : "npm install --save-dev";
+    lines.push(`RUN ${installCmd} @sveltejs/adapter-node`);
+    lines.push("RUN if grep -q 'adapter-auto' svelte.config.js 2>/dev/null; then \\\n" +
+      "    sed -i \"s/@sveltejs\\/adapter-auto/@sveltejs\\/adapter-node/g\" svelte.config.js; \\\n" +
+      "    fi");
+  }
+
   lines.push(`RUN ${pm === "npm" ? "npm run" : pm} build`);
 
   // ── Production stage ──
@@ -645,6 +655,14 @@ function generateNodeDockerfile(config: RepoConfig): string {
     lines.push("ENV PORT=3000");
     lines.push("EXPOSE 3000");
     lines.push('CMD ["serve", "dist", "-l", "3000", "-s"]');
+  } else if (config.framework === "SvelteKit") {
+    // SvelteKit with adapter-node — run the built server
+    lines.push("COPY --from=builder /app/build ./build");
+    lines.push("COPY --from=builder /app/package.json ./");
+    lines.push("COPY --from=builder /app/node_modules ./node_modules");
+    lines.push('ENV PORT=3000 HOST="0.0.0.0" ORIGIN="http://localhost:3000"');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["node", "build"]');
   } else if (config.framework === "Astro" && config.features.has("static-export")) {
     // Astro static site
     lines.push("RUN npm i -g serve");
