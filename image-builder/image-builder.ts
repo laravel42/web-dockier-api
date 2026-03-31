@@ -237,6 +237,26 @@ async function bundleAndUploadSource(
         const exposeMatch = dockerfile.match(/EXPOSE\s+(\d+)/);
         if (exposeMatch) detectedPort = parseInt(exposeMatch[1]);
         console.log(`Generated Dockerfile for ${stack.runtime} (port: ${detectedPort})`);
+
+        // Inject Django deploy patch script if needed
+        if (stack.runtime === "python" && "framework" in stack && stack.framework === "django") {
+          const patchScript = `import pathlib, re
+for sf in sorted(pathlib.Path(".").rglob("settings.py")):
+    s = str(sf)
+    if "venv" in s or "site-packages" in s:
+        continue
+    txt = sf.read_text()
+    if "ALLOWED_HOSTS" not in txt:
+        continue
+    txt = re.sub(r"ALLOWED_HOSTS\\s*=\\s*\\[.*?\\]", 'ALLOWED_HOSTS = ["*"]', txt, flags=re.DOTALL)
+    txt += '\\nimport os\\nSECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-deploy-key")\\nDEBUG = False\\n'
+    sf.write_text(txt)
+    print(f"Patched {sf}")
+    break
+`;
+          writeFileSync(join(repoDir, "_deploy_patch.py"), patchScript);
+          console.log("Injected Django deploy patch script");
+        }
       } else {
         const fallbackBuildspec = getBuildspecContent();
         writeFileSync(join(repoDir, "buildspec.yml"), fallbackBuildspec);
