@@ -1943,6 +1943,53 @@ export const analyzeRepo = api(
     if (!conn) throw APIError.notFound("Connection not found");
 
     const branch = params.branch || "main";
+    const repoKey = `${params.owner}/${params.repo}`;
+
+    // ── Fetch latest commit SHA (lightweight, single API call) ──
+    let latestSha = "";
+    try {
+      if (conn.provider === "github") {
+        const baseUrl = conn.endpoint || "https://api.github.com";
+        const res = await fetch(`${baseUrl}/repos/${repoKey}/commits?sha=${encodeURIComponent(branch)}&per_page=1`, {
+          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+        });
+        if (res.ok) {
+          const commits = await res.json() as any[];
+          if (commits.length > 0) latestSha = commits[0].sha || "";
+        }
+      } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+        const baseUrl = conn.endpoint || "https://gitlab.com";
+        const projectPath = encodeURIComponent(repoKey);
+        const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=1`, {
+          headers: { "PRIVATE-TOKEN": conn.personal_token },
+        });
+        if (res.ok) {
+          const commits = await res.json() as any[];
+          if (commits.length > 0) latestSha = commits[0].id || "";
+        }
+      } else if (conn.provider === "bitbucket") {
+        const baseUrl = conn.endpoint || "https://api.bitbucket.org";
+        const res = await fetch(`${baseUrl}/2.0/repositories/${repoKey}/commits/${encodeURIComponent(branch)}?pagelen=1`, {
+          headers: { Authorization: `Bearer ${conn.personal_token}` },
+        });
+        if (res.ok) {
+          const data = await res.json() as any;
+          if (data.values?.length > 0) latestSha = data.values[0].hash || "";
+        }
+      }
+    } catch {}
+
+    // ── Check cache ──
+    if (latestSha) {
+      try {
+        const cached = await db.queryRow<{ result: string }>`
+          SELECT result FROM analysis_cache WHERE repo = ${repoKey} AND branch = ${branch} AND commit_sha = ${latestSha}`;
+        if (cached) {
+          return JSON.parse(cached.result) as RepoAnalysis;
+        }
+      } catch {}
+    }
+
     let files: string[] = [];
     let repoSize = 0;
     let primaryLanguage = "";
@@ -2061,7 +2108,7 @@ export const analyzeRepo = api(
       }
     }
 
-    return {
+    const result = {
       techStack,
       deployOptions: aiAnalysis?.deployOptions?.length ? aiAnalysis.deployOptions : deployOptions,
       detectedServices,
@@ -2071,6 +2118,19 @@ export const analyzeRepo = api(
       hasCi,
       aiAnalysis,
     };
+
+    // ── Write to cache ──
+    if (latestSha) {
+      const id = uuidv4();
+      try {
+        await db.exec`
+          INSERT INTO analysis_cache (id, repo, branch, commit_sha, result, created_at)
+          VALUES (${id}, ${repoKey}, ${branch}, ${latestSha}, ${JSON.stringify(result)}::jsonb, NOW())
+          ON CONFLICT (repo, branch) DO UPDATE SET commit_sha = ${latestSha}, result = ${JSON.stringify(result)}::jsonb, created_at = NOW()`;
+      } catch {}
+    }
+
+    return result;
   }
 );
 

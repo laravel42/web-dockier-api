@@ -192,7 +192,20 @@ export default function Projects() {
     if (editing) {
       await projectsApi.update(editing.id, submitData);
     } else {
-      await projectsApi.create(submitData);
+      const created = await projectsApi.create(submitData);
+      // Pre-warm analysis cache in the background
+      try {
+        const repoUrl = repo?.url || form.repository;
+        const u = new URL(repoUrl);
+        const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
+        if (parts.length >= 2) {
+          const owner = parts[0];
+          const repoName = parts[1];
+          const br = selectedBranch || form.branch || "main";
+          // Fire and forget — don't block the UI
+          gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br).catch(() => {});
+        }
+      } catch {}
     }
     setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
   };
