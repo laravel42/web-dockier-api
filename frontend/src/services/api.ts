@@ -425,13 +425,18 @@ export const deployApi = {
     }),
 
   updateDeployment: (deploymentId: string, data: {
-    status?: "pending" | "building" | "deploying" | "success" | "failed";
+    status?: "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";
     logs?: string;
     appUrl?: string;
   }) =>
     request<{ ok: boolean }>(`/deploy/deployments/${deploymentId}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    }),
+
+  destroyDeployment: (deploymentId: string) =>
+    request<{ success: boolean; message: string }>(`/deploy/deployments/${deploymentId}/destroy`, {
+      method: "POST",
     }),
 
   getDeployment: (deploymentId: string) =>

@@ -122,6 +122,7 @@ export default function DeployDetail() {
     building: "bg-warning-500/10 text-warning-500",
     deploying: "bg-primary-500/10 text-primary-500",
     pending: "bg-secondary-100 text-text-muted",
+    destroyed: "bg-secondary-100 text-text-muted",
   };
 
   return (

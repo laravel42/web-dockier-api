@@ -133,6 +133,8 @@ export default function ProjectDetail() {
   const [_userProviders, setUserProviders] = useState<string[]>([]);
   const [allProviders, setAllProviders] = useState<Array<{ id: string; provider: string; label: string }>>([]);
   const [showDeployWizard, setShowDeployWizard] = useState(false);
+  const [destroying, setDestroying] = useState(false);
+  const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
 
   // Last deploy
   interface DeployInfo { id: string; providerId: string; repo: string; branch: string; status: string; appUrl: string; commitHash: string; dockerImage: string; deployStrategy: string; createdAt: string; }
@@ -549,7 +551,7 @@ export default function ProjectDetail() {
         };
         const ps = providerStyles[provKey] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
         const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
-        const statusColors: Record<string, string> = { success: "bg-success-500/10 text-success-500", failed: "bg-danger-500/10 text-danger-500", building: "bg-warning-500/10 text-warning-500", deploying: "bg-primary-500/10 text-primary-500", pending: "bg-secondary-100 text-text-muted" };
+        const statusColors: Record<string, string> = { success: "bg-success-500/10 text-success-500", failed: "bg-danger-500/10 text-danger-500", building: "bg-warning-500/10 text-warning-500", deploying: "bg-primary-500/10 text-primary-500", pending: "bg-secondary-100 text-text-muted", destroyed: "bg-secondary-100 text-text-muted" };
         return (
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Last Deploy</h2>
@@ -590,9 +592,20 @@ export default function ProjectDetail() {
               </div>
               <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
                 <span className="text-xs text-text-muted">{prov?.label || provKey}</span>
-                <button onClick={() => navigate(`/deploy/${lastDeploy.id}`)} className="text-xs text-primary-500 hover:text-primary-700 font-medium transition-colors">
-                  View details →
-                </button>
+                <div className="flex items-center gap-3">
+                  {lastDeploy.status === "success" && (
+                    <button
+                      disabled={destroying}
+                      onClick={() => setShowDestroyConfirm(true)}
+                      className="text-xs text-danger-500 hover:text-danger-700 font-medium transition-colors disabled:opacity-50"
+                    >
+                      {destroying ? "Destroying…" : "Destroy"}
+                    </button>
+                  )}
+                  <button onClick={() => navigate(`/deploy/${lastDeploy.id}`)} className="text-xs text-primary-500 hover:text-primary-700 font-medium transition-colors">
+                    View details →
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -612,6 +625,29 @@ export default function ProjectDetail() {
       />
 
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />
+
+      <ConfirmModal
+        open={showDestroyConfirm}
+        onClose={() => setShowDestroyConfirm(false)}
+        title="Destroy Deployment"
+        message="This will delete the CloudFormation stack, ECR images, and mark the deployment as destroyed. This action cannot be undone."
+        confirmLabel="Destroy"
+        onConfirm={async () => {
+          if (!lastDeploy) return;
+          setDestroying(true);
+          try {
+            const res = await deployApi.destroyDeployment(lastDeploy.id);
+            if (res.success) {
+              setLastDeploy({ ...lastDeploy, status: "destroyed", appUrl: "" });
+            } else {
+              setError(res.message);
+            }
+          } catch (e: any) {
+            setError(e.message || "Failed to destroy deployment");
+          }
+          setDestroying(false);
+        }}
+      />
 
       {/* Pull from origin log modal */}
       <Modal open={pullLog !== null} onClose={() => setPullLog(null)} title="Pull from Origin">
