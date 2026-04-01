@@ -1948,7 +1948,6 @@ function OpengrepRulesPanel() {
   const [editRule, setEditRule] = useState<{ id: string; path: string; name: string } | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editLoading, setEditLoading] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
 
   const toggleRule = (id: string) => {
     setDisabledRules(prev => {
@@ -1966,16 +1965,6 @@ function OpengrepRulesPanel() {
       setEditContent(res.content);
     } catch { setEditContent("# Failed to load rule content"); }
     finally { setEditLoading(false); }
-  };
-
-  const saveEdit = async () => {
-    if (!editRule) return;
-    setEditSaving(true);
-    try {
-      await codeAnalysisApi.updateOpengrepRuleContent(editRule.path, editContent);
-      setEditRule(null);
-    } catch { /* ignore */ }
-    finally { setEditSaving(false); }
   };
 
   useEffect(() => {
@@ -2052,8 +2041,8 @@ function OpengrepRulesPanel() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEditModal(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                  <button onClick={() => openEditModal(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="View">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
                   </button>
                 </div>
               </div>
@@ -2072,16 +2061,15 @@ function OpengrepRulesPanel() {
       </div>
 
       {/* Edit YAML Modal */}
-      <Modal open={!!editRule} onClose={() => setEditRule(null)} title={editRule?.name || "Edit Rule"} size="lg">
+      <Modal open={!!editRule} onClose={() => setEditRule(null)} title={editRule?.name || "Edit Rule"} size="xl">
         {editLoading ? (
           <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
         ) : (
           <div className="space-y-4">
             <p className="text-xs text-text-muted font-mono">{editRule?.path}</p>
-            <YamlEditor value={editContent} onChange={setEditContent} height="320px" />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setEditRule(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Cancel</button>
-              <button onClick={saveEdit} disabled={editSaving} className={`${btnPrimary} disabled:opacity-50`}>{editSaving ? "Saving…" : "Save"}</button>
+            <YamlEditor value={editContent} onChange={() => {}} height="960px" readOnly />
+            <div className="flex justify-end">
+              <button onClick={() => setEditRule(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Close</button>
             </div>
           </div>
         )}

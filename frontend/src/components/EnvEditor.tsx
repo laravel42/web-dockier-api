@@ -1,17 +1,28 @@
 import { useRef, useEffect } from "react";
 import { EditorView, basicSetup } from "codemirror";
-import { yaml } from "@codemirror/lang-yaml";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorState } from "@codemirror/state";
+import { StreamLanguage } from "@codemirror/language";
 
-interface YamlEditorProps {
+// Minimal .env / properties language definition
+const envLang = StreamLanguage.define({
+  token(stream) {
+    if (stream.sol() && stream.match(/\s*#/)) { stream.skipToEnd(); return "comment"; }
+    if (stream.sol() && stream.match(/[A-Za-z_][A-Za-z0-9_]*/)) return "variableName";
+    if (stream.eat("=")) return "operator";
+    stream.next();
+    return "string";
+  },
+});
+
+interface EnvEditorProps {
   value: string;
   onChange: (value: string) => void;
   height?: string;
-  readOnly?: boolean;
+  placeholder?: string;
 }
 
-export default function YamlEditor({ value, onChange, height = "320px", readOnly = false }: YamlEditorProps) {
+export default function EnvEditor({ value, onChange, height = "140px", placeholder }: EnvEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -20,30 +31,22 @@ export default function YamlEditor({ value, onChange, height = "320px", readOnly
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const extensions = [
-      basicSetup,
-      yaml(),
-      oneDark,
-      EditorView.theme({
-        "&": { height },
-        ".cm-scroller": { overflow: "auto", scrollbarWidth: "none" },
-        ".cm-scroller::-webkit-scrollbar": { display: "none" },
-      }),
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged) {
-          onChangeRef.current(update.state.doc.toString());
-        }
-      }),
-    ];
+    const state = EditorState.create({
+      doc: value,
+      extensions: [
+        basicSetup,
+        envLang,
+        oneDark,
+        EditorView.theme({ "&": { height }, ".cm-scroller": { overflow: "auto" } }),
+        ...(placeholder ? [EditorView.contentAttributes.of({ "aria-placeholder": placeholder })] : []),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+        }),
+      ],
+    });
 
-    if (readOnly) {
-      extensions.push(EditorState.readOnly.of(true), EditorView.editable.of(false));
-    }
-
-    const state = EditorState.create({ doc: value, extensions });
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
-
     return () => { view.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -47,7 +47,7 @@ export default function Modal({ open, onClose, title, children, size = "default"
             </svg>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 scrollbar-hide">
           {children}
         </div>
       </div>

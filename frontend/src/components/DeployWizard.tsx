@@ -1,8 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import Editor from "react-simple-code-editor";
-import { highlight, languages } from "prismjs";
-import "prismjs/components/prism-properties";
-import "prismjs/themes/prism.css";
+import EnvEditor from "./EnvEditor";
 import { deployApi, imageBuilderApi } from "../services/api";
 import Modal from "./Modal";
 
@@ -1033,25 +1030,12 @@ function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChang
       {!loading && (
         <div>
           <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Environment Variables</p>
-          <div className="rounded-lg border border-border overflow-hidden focus-within:ring-1 focus-within:ring-primary-500/40 focus-within:border-primary-500/40 bg-card">
-            <Editor
-              value={rawEnv}
-              onValueChange={handleEnvEdit}
-              highlight={(code) => highlight(code, languages.properties, "properties")}
-              padding={12}
-              placeholder="# Paste your .env file content
-KEY=value
-ANOTHER=value
-# Comments are ignored"
-              textareaClassName="!outline-none"
-              preClassName="!m-0 !bg-transparent"
-              style={{
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                fontSize: 14,
-                minHeight: 140,
-              }}
-            />
-          </div>
+          <EnvEditor
+            value={rawEnv}
+            onChange={handleEnvEdit}
+            height="140px"
+            placeholder="# Paste your .env file content&#10;KEY=value&#10;ANOTHER=value"
+          />
           <p className="text-[10px] text-text-muted mt-2">Paste your .env file content. Each line should be KEY=value. Comments (#) and empty lines are ignored.</p>
         </div>
       )}
