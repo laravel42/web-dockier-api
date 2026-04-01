@@ -1,6 +1,6 @@
 import { api } from "encore.dev/api";
-import { db } from "./shared";
-import { appendLog, ts } from "./processor/helpers";
+import { db } from "../shared";
+import { appendLog, ts } from "../processor/helpers";
 
 export const awsPipelineWebhook = api(
   { method: "POST", path: "/deploy/webhook/aws-pipeline", auth: false },

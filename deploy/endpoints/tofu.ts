@@ -1,6 +1,6 @@
 import { api, APIError } from "encore.dev/api";
-import { db } from "./shared";
-import { generatePulumiProgram } from "./pulumi-templates/index";
+import { db } from "../shared";
+import { generatePulumiProgram } from "../pulumi-templates/index";
 
 interface TofuRequest {
   providerId: string;

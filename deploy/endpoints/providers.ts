@@ -1,7 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
-import { db, type ProviderResponse } from "./shared";
+import { db, type ProviderResponse } from "../shared";
 
 export const addProvider = api(
   { method: "POST", path: "/deploy/providers", auth: true },

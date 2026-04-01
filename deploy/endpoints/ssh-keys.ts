@@ -1,7 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
-import { db } from "./shared";
+import { db } from "../shared";
 
 export const listSshKeys = api(
   { method: "GET", path: "/deploy/ssh-keys", auth: true },

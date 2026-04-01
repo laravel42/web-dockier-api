@@ -1,7 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
-import { db, deployTopic, type Deployment } from "./shared";
+import { db, deployTopic, type Deployment } from "../shared";
 
 export const createDeployment = api(
   { method: "POST", path: "/deploy/deployments", auth: true },

@@ -14,9 +14,9 @@ export { deployTopic, type DeployEvent, type Deployment, type ProviderResponse }
 // - processor/       → pub/sub subscription (deploy-processor)
 
 // Force Encore to load all endpoint files
-import "./providers";
-import "./ssh-keys";
-import "./deployments";
-import "./webhook";
-import "./tofu";
+import "./endpoints/providers";
+import "./endpoints/ssh-keys";
+import "./endpoints/deployments";
+import "./endpoints/webhook";
+import "./endpoints/tofu";
 import "./processor";
