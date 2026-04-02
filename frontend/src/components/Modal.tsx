@@ -39,8 +39,8 @@ export default function Modal({ open, onClose, title, children, size = "default"
       onClick={(e) => { e.stopPropagation(); }}
       onCancel={(e) => { e.preventDefault(); }}
     >
-      <div className="relative bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)] border border-border/50 p-6 pb-16">
-        <div className="flex items-center justify-between mb-5">
+      <div className="relative bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)] border border-border/50 p-6 flex flex-col" style={{ maxHeight: "85vh" }}>
+        <div className="flex items-center justify-between mb-5 shrink-0">
           <h2 className="text-base font-display font-semibold text-text">{title}</h2>
           <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors" aria-label="Close">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -48,7 +48,7 @@ export default function Modal({ open, onClose, title, children, size = "default"
             </svg>
           </button>
         </div>
-        <div>{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto">{children}</div>
       </div>
     </dialog>
   );

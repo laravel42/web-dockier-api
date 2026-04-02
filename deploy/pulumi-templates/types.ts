@@ -10,7 +10,7 @@ export interface DeployParams {
   hasDocker: boolean;
   techStack: string[];
   services: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
-  deployStrategy?: "vps" | "managed" | "serverless";
+  deployStrategy?: "vps" | "managed" | "serverless" | "static";
   useDocker?: boolean;
   dockerImage?: string;
   instanceType?: string;

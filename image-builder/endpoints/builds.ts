@@ -80,6 +80,7 @@ export const startBuild = api(
         params.sourceRepo, sourceRef, id,
         accessKeyId, secretAccessKey, region, bucketName,
         gitToken, gitProvider, gitEndpoint,
+        params.deployTarget,
       );
 
       // Always use the detected port from the Dockerfile (generated or existing)

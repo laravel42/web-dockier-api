@@ -108,3 +108,100 @@ export function commonPostBuild(): string {
         PYEOF
         fi`;
 }
+
+
+export function staticBuildAndSync(): string {
+  return `      - |
+        set -euo pipefail
+        # Ensure Node 20 is active (nvm resets between phases)
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm use 20 2>/dev/null || true
+        # Remove CodeBuild cache symlink that conflicts with pnpm
+        if [ -L node_modules ]; then rm -f node_modules; fi
+        echo "Building static site..."
+        echo "Node: $(node --version), npm: $(npm --version)"
+        # Detect package manager and build
+        if [ -f pnpm-lock.yaml ]; then
+          corepack enable && pnpm install --no-frozen-lockfile && pnpm run build
+        elif [ -f yarn.lock ]; then
+          corepack enable && yarn install && yarn build
+        elif [ -f bun.lockb ]; then
+          npm i -g bun && bun install && bun run build
+        else
+          npm ci || npm install
+          npm run build
+        fi
+      - |
+        set -euo pipefail
+        echo "Determining build output directory..."
+        # Find the build output (dist, build, .output/public, out)
+        if [ -d ".output/public" ]; then BUILD_DIR=".output/public";
+        elif [ -d "dist" ]; then BUILD_DIR="dist";
+        elif [ -d "build" ]; then BUILD_DIR="build";
+        elif [ -d "out" ]; then BUILD_DIR="out";
+        elif [ -d "public" ]; then BUILD_DIR="public";
+        else echo "ERROR: No build output directory found"; exit 1; fi
+        echo "Build output: $BUILD_DIR"
+        echo "$BUILD_DIR" > /tmp/build_dir.txt
+      - |
+        set -euo pipefail
+        BUILD_DIR=$(cat /tmp/build_dir.txt)
+        WEBSITE_BUCKET="\${DEPLOY_PARAMS_APP_NAME:-\${IMAGE_REPO_NAME}}-static-site"
+        echo "Creating S3 bucket if needed..."
+        aws s3api head-bucket --bucket "$WEBSITE_BUCKET" 2>/dev/null || aws s3 mb "s3://$WEBSITE_BUCKET" --region "\${AWS_DEFAULT_REGION}"
+        echo "Syncing to s3://$WEBSITE_BUCKET..."
+        aws s3 sync "$BUILD_DIR" "s3://$WEBSITE_BUCKET" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html"
+        aws s3 sync "$BUILD_DIR" "s3://$WEBSITE_BUCKET" --delete --cache-control "no-cache" --include "*.html"
+        echo "Static site deployed to S3"`;
+}
+
+export function staticPostBuild(): string {
+  return `  post_build:
+    commands:
+      - |
+        CALLBACK_URL="\${CALLBACK_URL:-}"
+        BUILD_ID="\${BUILD_ID:-}"
+
+        if [ "\${CODEBUILD_BUILD_SUCCEEDING:-1}" = "0" ]; then
+          echo "Build FAILED"
+          if [ -n "$CALLBACK_URL" ] && [ -n "$BUILD_ID" ]; then
+            python3 << 'PYEOF'
+        import json, os, urllib.request
+        callback = os.environ.get('CALLBACK_URL', '')
+        build_id = os.environ.get('BUILD_ID', '')
+        if callback and build_id:
+            data = json.dumps({'buildId': build_id, 'status': 'failed', 'statusReason': 'Static build failed'}).encode()
+            req = urllib.request.Request(callback, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+            try: urllib.request.urlopen(req, timeout=10)
+            except: pass
+        PYEOF
+          fi
+          exit 0
+        fi
+
+        printf '{"staticSite":true}\\n' > imageDetail.json
+
+        if [ -n "\${SNS_TOPIC_ARN:-}" ] && [ -n "\${DEPLOY_TARGET:-}" ]; then
+          python3 << 'PYEOF'
+        import json, os, subprocess
+        dp_raw = os.environ.get('DEPLOY_PARAMS', '{}')
+        try: dp = json.loads(dp_raw)
+        except: dp = {}
+        msg = json.dumps({
+            'buildId': os.environ.get('BUILD_ID', ''),
+            'imageUri': '',
+            's3Bucket': os.environ.get('S3_WEBSITE_BUCKET', ''),
+            'deployTarget': os.environ.get('DEPLOY_TARGET', ''),
+            'deployParams': dp,
+            'callbackUrl': os.environ.get('CALLBACK_URL', '')
+        })
+        subprocess.run([
+            'aws', 'sns', 'publish',
+            '--topic-arn', os.environ['SNS_TOPIC_ARN'],
+            '--subject', 'build-complete',
+            '--message', msg
+        ], check=True)
+        print('SNS published for deploy')
+        PYEOF
+        fi`;
+}
