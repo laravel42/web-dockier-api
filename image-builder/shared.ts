@@ -1,7 +1,7 @@
 // ─── Shared utilities, types, secrets, and helpers for image-builder ───
 
 import { api, APIError } from "encore.dev/api";
-import { SQLDatabase } from "encore.dev/storage/sqldb";
+import { db, initDb } from "../lib/db";
 import { secret } from "encore.dev/config";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
@@ -53,7 +53,10 @@ export function getCallbackUrl(): string {
 
 // ─── Database ───
 
-export const db = new SQLDatabase("imagebuilder", { migrations: "./migrations" });
+const DatabaseUrl = secret("DatabaseUrl");
+initDb(DatabaseUrl());
+
+export { db };
 
 // ─── Interfaces ───
 
