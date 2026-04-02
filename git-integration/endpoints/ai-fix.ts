@@ -2,6 +2,52 @@ import { api, APIError } from "encore.dev/api";
 import { db, BedrockApiKey, BedrockRegion, BedrockAccountId } from "../shared";
 import { throwProviderError } from "../helpers";
 
+// ─── Helper: AI-summarize a finding into a short title ───
+
+async function summarizeFindingAI(severity: string, message: string, filePath: string, snippet: string, model?: string): Promise<{ title: string; estimateMinutes: number }> {
+  const apiKey = BedrockApiKey();
+  if (!apiKey) return { title: "", estimateMinutes: 0 };
+  const region = BedrockRegion() || "us-east-1";
+  const accountId = BedrockAccountId() || "";
+  const modelId = model || "us.anthropic.claude-sonnet-4-20250514-v1:0";
+  const modelArn = modelId.startsWith("arn:") ? modelId : `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`;
+  const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/converse`;
+  const prompt = `Analyze this security finding and return a JSON object with exactly two fields:
+- "title": a concise issue title, max 60 characters, no quotes or markdown
+- "estimateMinutes": estimated time in minutes to fix this issue (consider complexity, code changes needed, testing)
+
+Severity: ${severity}
+File: ${filePath}
+Finding: ${message}${snippet ? `\nCode:\n${snippet}` : ""}
+
+Return ONLY valid JSON, nothing else.`;
+  const reqBody = JSON.stringify({ messages: [{ role: "user", content: [{ text: prompt }] }], inferenceConfig: { temperature: 0.3, maxTokens: 200 } });
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
+  console.log(`[AI summarize] model=${modelId} prompt: ${prompt.slice(0, 300)}`);
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
+    const res = await fetch(url, { method: "POST", headers, body: reqBody });
+    if (res.ok) {
+      const data: any = await res.json();
+      const raw = (data.output?.message?.content?.[0]?.text || "").trim();
+      console.log(`[AI summarize] attempt=${attempt + 1} response: ${raw}`);
+      try {
+        const cleaned = raw.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
+        const parsed = JSON.parse(cleaned);
+        return {
+          title: String(parsed.title || "").slice(0, 60),
+          estimateMinutes: Math.max(0, Math.round(Number(parsed.estimateMinutes) || 0)),
+        };
+      } catch { return { title: raw.slice(0, 60), estimateMinutes: 0 }; }
+    }
+    const errBody: any = await res.json().catch(() => ({}));
+    console.log(`[AI summarize] attempt=${attempt + 1} status=${res.status} error=${errBody.message || errBody.Message || res.statusText}`);
+    if (res.status !== 503 && res.status !== 429) return { title: "", estimateMinutes: 0 };
+  }
+  return { title: "", estimateMinutes: 0 };
+}
+
 // ─── Helper: call AI to generate fix ───
 
 async function generateAIFix(aiType: string, aiConfig: Record<string, string>, filePath: string, fileContent: string, finding: { ruleId: string; severity: string; message: string; snippet: string; startLine: number; endLine: number }): Promise<string> {
@@ -38,24 +84,30 @@ Instructions:
   const modelArn = modelId.startsWith("arn:") ? modelId : `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`;
   const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/converse`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      messages: [{ role: "user", content: [{ text: prompt }] }],
-      inferenceConfig: { temperature: 0.2, maxTokens: 32000 },
-    }),
+  const reqBody = JSON.stringify({
+    messages: [{ role: "user", content: [{ text: prompt }] }],
+    inferenceConfig: { temperature: 0.2, maxTokens: 32000 },
   });
-  if (!res.ok) {
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
+  console.log(`[AI fix] model=${modelId} url=${url}\n[AI fix] prompt (first 500 chars): ${prompt.slice(0, 500)}`);
+
+  // Retry up to 2 times on 503/429
+  let lastErr = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
+    const res = await fetch(url, { method: "POST", headers, body: reqBody });
+    if (res.ok) {
+      const data: any = await res.json();
+      const raw = data.output?.message?.content?.[0]?.text?.trim() || "";
+      console.log(`[AI fix] attempt=${attempt + 1} model=${modelId} response_length=${raw.length}`);
+      return raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+    }
     const errBody: any = await res.json().catch(() => ({}));
-    throw new Error(`Bedrock ${res.status}: ${errBody.message || errBody.Message || res.statusText}`);
+    lastErr = `Bedrock ${res.status}: ${errBody.message || errBody.Message || res.statusText}`;
+    console.log(`[AI fix] attempt=${attempt + 1} status=${res.status} error=${lastErr}`);
+    if (res.status !== 503 && res.status !== 429) break;
   }
-  const data: any = await res.json();
-  const raw = data.output?.message?.content?.[0]?.text?.trim() || "";
-  return raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+  throw new Error(lastErr);
 }
 
 // ─── Create PR/MR with AI Fix ───
@@ -76,6 +128,8 @@ export const createFixMR = api(
     snippet: string;
     aiType?: string;
     aiConfig?: Record<string, string>;
+    assignee?: string;
+    reviewer?: string;
   }): Promise<{ mrUrl: string; mrId: string; mrTitle: string }> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
@@ -84,24 +138,15 @@ export const createFixMR = api(
     if (!conn) throw APIError.notFound("Connection not found");
 
     const fixBranch = `fix/${params.ruleId.replace(/[^a-zA-Z0-9._-]/g, "-")}-${Date.now()}`;
-    const title = `Fix: [${params.severity.toUpperCase()}] ${params.message.substring(0, 80)}`;
-    const hasAI = !!params.aiType;
+    // Generate AI-summarized title
+    let title = `Fix: [${params.severity.toUpperCase()}] ${params.message.substring(0, 80)}`;
+    try {
+      const summary = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "", params.aiConfig?.model);
+      if (summary.title) title = `Fix: ${summary.title}`;
+    } catch { /* fallback to default */ }
 
-    const bodyParts = [
-      `## Security Fix`,
-      ``,
-      `**Rule:** \`${params.ruleId}\``,
-      `**Severity:** ${params.severity}`,
-      `**File:** \`${params.filePath}\` (L${params.startLine}–L${params.endLine})`,
-      ``,
-      `**Finding:** ${params.message}`,
-      ``,
-      params.snippet ? `\`\`\`\n${params.snippet}\n\`\`\`` : "",
-      ``,
-      `---`,
-      hasAI ? `*Fix generated by AI (${params.aiType}) from security scan*` : `*Created automatically from security scan*`,
-    ];
-    const body = bodyParts.filter(Boolean).join("\n");
+    const body = params.message;
+    const hasAI = !!params.aiType;
 
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
@@ -156,6 +201,20 @@ export const createFixMR = api(
         throw APIError.internal(`Failed to create PR: ${err.message || prRes.statusText}`);
       }
       const pr = await prRes.json() as any;
+      // Set assignee and reviewer on the PR
+      if (params.assignee || params.reviewer) {
+        const update: Record<string, unknown> = {};
+        if (params.assignee) update.assignees = [params.assignee];
+        if (params.reviewer) update.reviewers = [params.reviewer];
+        await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/pulls/${pr.number}`, {
+          method: "PATCH", headers, body: JSON.stringify(update),
+        }).catch(() => { /* non-critical */ });
+        if (params.reviewer) {
+          await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/pulls/${pr.number}/requested_reviewers`, {
+            method: "POST", headers, body: JSON.stringify({ reviewers: [params.reviewer] }),
+          }).catch(() => { /* non-critical */ });
+        }
+      }
       return { mrUrl: pr.html_url || "", mrId: String(pr.number || pr.id), mrTitle: title };
 
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
@@ -196,7 +255,7 @@ export const createFixMR = api(
               method: "PUT", headers,
               body: JSON.stringify({
                 branch: fixBranch,
-                commit_message: `fix: ${params.ruleId} — ${params.message.substring(0, 60)}`,
+                commit_message: title,
                 content: fixedContent,
                 encoding: "text",
               }),
@@ -206,9 +265,12 @@ export const createFixMR = api(
       }
 
       // Create the MR
+      const mrBody: Record<string, unknown> = { source_branch: fixBranch, target_branch: params.branch, title, description: body };
+      if (params.assignee) mrBody.assignee_ids = [Number(params.assignee)];
+      if (params.reviewer) mrBody.reviewer_ids = [Number(params.reviewer)];
       const mrRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/merge_requests`, {
         method: "POST", headers,
-        body: JSON.stringify({ source_branch: fixBranch, target_branch: params.branch, title, description: body }),
+        body: JSON.stringify(mrBody),
       });
       if (!mrRes.ok) {
         const err = await mrRes.json().catch(() => ({})) as any;
@@ -232,13 +294,15 @@ export const createFixMR = api(
       }
 
       // Create the PR
+      const prBody: Record<string, unknown> = {
+        title, description: body,
+        source: { branch: { name: fixBranch } },
+        destination: { branch: { name: params.branch } },
+      };
+      if (params.reviewer) prBody.reviewers = [{ uuid: params.reviewer }];
       const prRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/pullrequests`, {
         method: "POST", headers,
-        body: JSON.stringify({
-          title, description: body,
-          source: { branch: { name: fixBranch } },
-          destination: { branch: { name: params.branch } },
-        }),
+        body: JSON.stringify(prBody),
       });
       if (!prRes.ok) {
         const err = await prRes.json().catch(() => ({})) as any;
@@ -295,5 +359,18 @@ export const listBedrockModels = api(
       }))
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
     return { models };
+  }
+);
+
+// ─── Summarize Finding into Short Title ───
+
+export const summarizeFinding = api(
+  { method: "POST", path: "/git/ai/summarize-finding", auth: true },
+  async (params: { severity: string; message: string; filePath: string; snippet?: string; model?: string }): Promise<{ title: string; estimateMinutes: number }> => {
+    try {
+      const result = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "", params.model);
+      if (result.title) return result;
+    } catch { /* fallback */ }
+    return { title: params.message.slice(0, 60), estimateMinutes: 0 };
   }
 );

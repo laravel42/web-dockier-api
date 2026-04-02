@@ -9,7 +9,7 @@ interface ModalProps {
   compact?: boolean;
 }
 
-export default function Modal({ open, onClose, title, children, size = "default", compact = false }: ModalProps) {
+export default function Modal({ open, onClose, title, children, size = "default" }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {

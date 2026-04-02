@@ -36,6 +36,9 @@ interface CreateIssueRequest {
   projectId: string;
   title: string;
   description: string;
+  priority?: number; // 0=none, 1=urgent, 2=high, 3=medium, 4=low
+  estimateMinutes?: number; // time estimate for resolution
+  assigneeId?: string; // assignee user ID
 }
 
 interface CreateIssueResponse {
@@ -75,6 +78,25 @@ export const listPMTeamProjects = api(
       case "asana": return fetchAsanaWorkspaceProjects(req.config, req.teamId);
       case "clickup": return fetchClickUpSpaces(req.config, req.teamId);
       default: return { projects: [] };
+    }
+  }
+);
+
+// ─── List members within a team ───
+
+interface TeamMember { id: string; name: string; email?: string; avatarUrl?: string; }
+
+export const listPMTeamMembers = api(
+  { expose: true, method: "POST", path: "/integrations/pm/team-members" },
+  async (req: { type: string; config: Record<string, string>; teamId: string }): Promise<{ members: TeamMember[] }> => {
+    switch (req.type) {
+      case "linear": return fetchLinearTeamMembers(req.config, req.teamId);
+      case "jira": return fetchJiraProjectMembers(req.config, req.teamId);
+      case "gitlab": return fetchGitLabProjectMembers(req.config, req.teamId);
+      case "github": return fetchGitHubRepoCollaborators(req.config, req.teamId);
+      case "asana": return fetchAsanaWorkspaceMembers(req.config, req.teamId);
+      case "clickup": return fetchClickUpMembers(req.config, req.teamId);
+      default: return { members: [] };
     }
   }
 );
@@ -284,17 +306,18 @@ async function fetchClickUpSpaces(config: Record<string, string>, teamId: string
 async function createJiraIssue(req: CreateIssueRequest): Promise<CreateIssueResponse> {
   const { host, email, apiToken } = req.config;
   const base = host.replace(/\/+$/, "");
+  const fields: Record<string, unknown> = {
+    project: { id: req.teamId },
+    summary: req.title,
+    description: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: req.description }] }] },
+    issuetype: { name: "Task" },
+  };
+  if (req.estimateMinutes) fields.timetracking = { originalEstimate: `${req.estimateMinutes}m` };
+  if (req.assigneeId) fields.assignee = { accountId: req.assigneeId };
   const res = await fetch(`${base}/rest/api/3/issue`, {
     method: "POST",
     headers: { Authorization: `Basic ${btoa(`${email}:${apiToken}`)}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      fields: {
-        project: { id: req.teamId },
-        summary: req.title,
-        description: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: req.description }] }] },
-        issuetype: { name: "Task" },
-      },
-    }),
+    body: JSON.stringify({ fields }),
   });
   if (!res.ok) {
     const err: any = await res.json().catch(() => ({}));
@@ -306,7 +329,14 @@ async function createJiraIssue(req: CreateIssueRequest): Promise<CreateIssueResp
 
 async function createLinearIssue(req: CreateIssueRequest): Promise<CreateIssueResponse> {
   const { apiKey } = req.config;
-  const mutation = `mutation { issueCreate(input: { teamId: "${req.teamId}", ${req.projectId ? `projectId: "${req.projectId}",` : ""} title: ${JSON.stringify(req.title)}, description: ${JSON.stringify(req.description)} }) { success issue { id identifier url } } }`;
+  const priorityField = req.priority ? `priority: ${req.priority},` : "";
+  const estimateField = req.estimateMinutes ? (() => {
+    const m = req.estimateMinutes!;
+    const points = m <= 30 ? 1 : m <= 60 ? 2 : m <= 120 ? 3 : m <= 240 ? 5 : 8;
+    return `estimate: ${points},`;
+  })() : "";
+  const assigneeField = req.assigneeId ? `assigneeId: "${req.assigneeId}",` : "";
+  const mutation = `mutation { issueCreate(input: { teamId: "${req.teamId}", ${req.projectId ? `projectId: "${req.projectId}",` : ""} ${priorityField} ${estimateField} ${assigneeField} title: ${JSON.stringify(req.title)}, description: ${JSON.stringify(req.description)} }) { success issue { id identifier url } } }`;
   const res = await fetch("https://api.linear.app/graphql", {
     method: "POST",
     headers: { Authorization: apiKey, "Content-Type": "application/json" },
@@ -339,10 +369,12 @@ async function createClickUpTask(req: CreateIssueRequest): Promise<CreateIssueRe
   const { apiKey } = req.config;
   // ClickUp needs a list ID. Use the project (space) to find the first list.
   const listId = req.projectId || req.teamId;
+  const taskBody: Record<string, unknown> = { name: req.title, description: req.description };
+  if (req.estimateMinutes) taskBody.time_estimate = req.estimateMinutes * 60 * 1000;
   const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
     method: "POST",
     headers: { Authorization: apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ name: req.title, description: req.description }),
+    body: JSON.stringify(taskBody),
   });
   if (!res.ok) throw new Error(`ClickUp API error ${res.status}`);
   const data: any = await res.json();
@@ -461,7 +493,7 @@ async function createGitHubIssue(req: CreateIssueRequest): Promise<CreateIssueRe
   const res = await fetch(`https://api.github.com/repos/${fullName}/issues`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
-    body: JSON.stringify({ title: req.title, body: req.description, labels: ["security"] }),
+    body: JSON.stringify({ title: req.title, body: req.description, labels: ["security"], ...(req.assigneeId ? { assignees: [req.assigneeId] } : {}) }),
   });
   if (!res.ok) {
     const err: any = await res.json().catch(() => ({}));
@@ -495,15 +527,101 @@ async function createGitLabIssue(req: CreateIssueRequest): Promise<CreateIssueRe
   const { host, token } = req.config;
   const base = (host || "https://gitlab.com").replace(/\/+$/, "");
   const projectId = encodeURIComponent(req.teamId);
+  const issueBody: Record<string, unknown> = { title: req.title, description: req.description, labels: "security" };
+  if (req.assigneeId) issueBody.assignee_ids = [Number(req.assigneeId)];
   const res = await fetch(`${base}/api/v4/projects/${projectId}/issues`, {
     method: "POST",
     headers: { "PRIVATE-TOKEN": token, "Content-Type": "application/json" },
-    body: JSON.stringify({ title: req.title, description: req.description, labels: "security" }),
+    body: JSON.stringify(issueBody),
   });
   if (!res.ok) {
     const err: any = await res.json().catch(() => ({}));
     throw new Error(err?.message || err?.error || `GitLab API error ${res.status}`);
   }
   const data: any = await res.json();
+  // Set time estimate if supported
+  if (req.estimateMinutes) {
+    try {
+      await fetch(`${base}/api/v4/projects/${projectId}/issues/${data.iid}/time_estimate`, {
+        method: "POST",
+        headers: { "PRIVATE-TOKEN": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ duration: `${req.estimateMinutes}m` }),
+      });
+    } catch { /* non-critical */ }
+  }
   return { issueId: String(data.id), issueKey: `#${data.iid}`, issueUrl: data.web_url };
+}
+
+// ═══════════════════════════════════════════
+// Team member fetchers
+// ═══════════════════════════════════════════
+
+async function fetchLinearTeamMembers(config: Record<string, string>, teamId: string): Promise<{ members: TeamMember[] }> {
+  const { apiKey } = config;
+  const res = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: { Authorization: apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: `{ team(id: "${teamId}") { members { nodes { id name email avatarUrl } } } }` }),
+  });
+  if (!res.ok) return { members: [] };
+  const data: any = await res.json();
+  return { members: (data?.data?.team?.members?.nodes || []).map((m: any) => ({ id: m.id, name: m.name, email: m.email, avatarUrl: m.avatarUrl })) };
+}
+
+async function fetchJiraProjectMembers(config: Record<string, string>, projectId: string): Promise<{ members: TeamMember[] }> {
+  const { host, email, apiToken } = config;
+  const base = host.replace(/\/+$/, "");
+  const res = await fetch(`${base}/rest/api/3/user/assignable/search?project=${projectId}&maxResults=50`, {
+    headers: { Authorization: `Basic ${btoa(`${email}:${apiToken}`)}`, Accept: "application/json" },
+  });
+  if (!res.ok) return { members: [] };
+  const data = await res.json() as any[];
+  return { members: data.map((u: any) => ({ id: u.accountId, name: u.displayName, email: u.emailAddress, avatarUrl: u.avatarUrls?.["24x24"] })) };
+}
+
+async function fetchGitLabProjectMembers(config: Record<string, string>, projectId: string): Promise<{ members: TeamMember[] }> {
+  const { host, token } = config;
+  const base = (host || "https://gitlab.com").replace(/\/+$/, "");
+  const res = await fetch(`${base}/api/v4/projects/${encodeURIComponent(projectId)}/members/all?per_page=100`, {
+    headers: { "PRIVATE-TOKEN": token },
+  });
+  if (!res.ok) return { members: [] };
+  const data = await res.json() as any[];
+  return { members: data.map((u: any) => ({ id: String(u.id), name: u.name || u.username, email: "", avatarUrl: u.avatar_url })) };
+}
+
+async function fetchGitHubRepoCollaborators(config: Record<string, string>, repoId: string): Promise<{ members: TeamMember[] }> {
+  const { token } = config;
+  // Resolve repo full_name from ID
+  const repoRes = await fetch(`https://api.github.com/repositories/${repoId}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+  });
+  if (!repoRes.ok) return { members: [] };
+  const repo: any = await repoRes.json();
+  const res = await fetch(`https://api.github.com/repos/${repo.full_name}/collaborators?per_page=100`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+  });
+  if (!res.ok) return { members: [] };
+  const data = await res.json() as any[];
+  return { members: data.map((u: any) => ({ id: u.login, name: u.login, avatarUrl: u.avatar_url })) };
+}
+
+async function fetchAsanaWorkspaceMembers(config: Record<string, string>, workspaceId: string): Promise<{ members: TeamMember[] }> {
+  const { accessToken } = config;
+  const res = await fetch(`https://app.asana.com/api/1.0/workspaces/${workspaceId}/users?opt_fields=name,email,photo.image_21x21`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return { members: [] };
+  const data: any = await res.json();
+  return { members: (data.data || []).map((u: any) => ({ id: u.gid, name: u.name, email: u.email, avatarUrl: u.photo?.image_21x21 })) };
+}
+
+async function fetchClickUpMembers(config: Record<string, string>, teamId: string): Promise<{ members: TeamMember[] }> {
+  const { apiKey } = config;
+  const res = await fetch(`https://api.clickup.com/api/v2/team/${teamId}`, {
+    headers: { Authorization: apiKey },
+  });
+  if (!res.ok) return { members: [] };
+  const data: any = await res.json();
+  return { members: (data.team?.members || []).map((m: any) => ({ id: String(m.user.id), name: m.user.username || m.user.email, email: m.user.email, avatarUrl: m.user.profilePicture })) };
 }

@@ -34,7 +34,7 @@ function repoKey(repoUrl: string): string {
     const u = new URL(repoUrl);
     const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
     if (parts.length >= 2) return parts.join("/");
-  } catch {}
+  } catch { /* URL parse fallback */ }
   return repoUrl;
 }
 
@@ -56,7 +56,7 @@ export default function Deploy() {
         ]);
         setDeployments(dRes.deployments);
         setProjects(projRes.projects);
-      } catch {}
+      } catch { /* silently handle load failure */ }
       finally { setLoading(false); }
     };
     load();

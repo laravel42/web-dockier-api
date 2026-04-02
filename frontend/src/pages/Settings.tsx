@@ -44,21 +44,17 @@ export default function Settings() {
 
 function GeneralTab() {
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
-  const [selectedModel, setSelectedModel] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [scanTools, setScanTools] = useState<Record<string, boolean>>({ opengrep: true, sonarqube: true, customRules: true });
+  const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
+    const savedTools = localStorage.getItem("scan_tools");
+    if (savedTools) { try { return JSON.parse(savedTools); } catch { /* ignore */ } }
+    return { opengrep: true, sonarqube: true, customRules: true };
+  });
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("bedrock_default_model") || "");
 
   useEffect(() => {
-    // Load saved model from localStorage
-    const saved = localStorage.getItem("bedrock_default_model");
-    if (saved) setSelectedModel(saved);
-
-    // Load saved scan tools
-    const savedTools = localStorage.getItem("scan_tools");
-    if (savedTools) { try { setScanTools(JSON.parse(savedTools)); } catch {} }
-
     // Fetch available models
     gitApi.listBedrockModels()
       .then((res) => setModels(res.models))
@@ -174,7 +170,7 @@ function ProfileTab() {
       await usersApi.update(userId, { name, country, language, timezone });
       setUserProfile({ name, country, language, timezone });
       setMessage("Profile updated successfully");
-    } catch (err: any) { setMessage(err.message); }
+    } catch (err: unknown) { setMessage((err as Error).message); }
     finally { setSaving(false); }
   };
 
@@ -245,14 +241,14 @@ function SecurityTab() {
   const handleSetup2FA = async () => {
     setLoading(true);
     try { const res = await authApi.setup2FA(); setQrCode(res.qrCodeUrl); setSecret(res.secret); }
-    catch (err: any) { setMessage(err.message); }
+    catch (err: unknown) { setMessage((err as Error).message); }
     finally { setLoading(false); }
   };
 
   const handleEnable2FA = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try { await authApi.enable2FA(verifyToken); setMessage("2FA enabled successfully"); setQrCode(null); setSecret(null); setVerifyToken(""); }
-    catch (err: any) { setMessage(err.message); }
+    catch (err: unknown) { setMessage((err as Error).message); }
     finally { setLoading(false); }
   };
 
@@ -289,15 +285,15 @@ function SecurityTab() {
 }
 
 function RolesTab() {
-  const [roles, setRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string; permissions: string[] }>>([]);
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [editingRole, setEditingRole] = useState<any | null>(null);
+  const [editingRole, setEditingRole] = useState<{ id: string; name: string; description: string; permissions: string[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const fetch_ = async () => {
     setLoading(true);
-    try { const res = await rolesApi.list(); setRoles(res.roles.filter((r: any) => r && r.name)); }
+    try { const res = await rolesApi.list(); setRoles(res.roles.filter((r: { name?: string }) => r && r.name)); }
     catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -381,9 +377,9 @@ function RolesTab() {
 }
 
 function ProvidersTab() {
-  const [providers, setProviders] = useState<any[]>([]);
+  const [providers, setProviders] = useState<Array<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string }>>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<any | null>(null);
+  const [editingProvider, setEditingProvider] = useState<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string } | null>(null);
   const [editForm, setEditForm] = useState({ label: "", apiKey: "", apiSecret: "" });
   const [editEnabled, setEditEnabled] = useState(true);
   const [form, setForm] = useState({ provider: "aws", label: "", apiKey: "", apiSecret: "" });
@@ -415,7 +411,7 @@ function ProvidersTab() {
     setShowForm(false); setForm({ provider: "aws", label: "", apiKey: "", apiSecret: "" }); fetch_();
   };
 
-  const openEdit = (p: any) => {
+  const openEdit = (p: typeof providers[number]) => {
     setEditingProvider(p);
     setEditForm({ label: p.label, apiKey: p.apiKey || "", apiSecret: p.apiSecret || "" });
     setEditEnabled(p.enabled !== false);
@@ -528,7 +524,7 @@ function ProvidersTab() {
               <div className="flex items-center gap-6 py-3 px-4 rounded-lg bg-secondary-50 border border-border text-xs">
                 <div>
                   <span className="uppercase tracking-wide text-text-muted font-semibold">Added</span>
-                  <p className="text-text font-medium mt-0.5">{new Date(editingProvider.createdAt).toLocaleDateString()}</p>
+                  <p className="text-text font-medium mt-0.5">{editingProvider.createdAt ? new Date(editingProvider.createdAt).toLocaleDateString() : "—"}</p>
                 </div>
                 <div className="w-px h-8 bg-border" />
                 <div>
@@ -624,8 +620,8 @@ function SshKeysTab() {
       setShowForm(false);
       setForm({ label: "", publicKey: "" });
       fetchKeys();
-    } catch (err: any) {
-      setError(err.message || "Failed to add SSH key");
+    } catch (err: unknown) {
+      setError((err as Error).message || "Failed to add SSH key");
     }
   };
 
@@ -703,9 +699,9 @@ function SshKeysTab() {
 }
 
 function SourceControlTab() {
-  const [connections, setConnections] = useState<any[]>([]);
+  const [connections, setConnections] = useState<Array<{ id: string; provider: string; label: string; endpoint?: string; personalToken?: string }>>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editingConn, setEditingConn] = useState<any | null>(null);
+  const [editingConn, setEditingConn] = useState<{ id: string; provider: string; label: string; endpoint?: string; createdAt?: string } | null>(null);
   const [editForm, setEditForm] = useState({ label: "", personalToken: "", endpoint: "" });
   const [form, setForm] = useState({ provider: "github", personalToken: "", label: "", endpoint: "" });
   const [loading, setLoading] = useState(true);
@@ -722,11 +718,15 @@ function SourceControlTab() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    await gitApi.addConnection({ ...form, repoUrl: "" });
-    setShowForm(false); setForm({ provider: "github", personalToken: "", label: "", endpoint: "" }); fetch_();
+    try {
+      await gitApi.addConnection({ ...form, repoUrl: "" });
+      setShowForm(false); setForm({ provider: "github", personalToken: "", label: "", endpoint: "" }); fetch_();
+    } catch (err: unknown) {
+      alert((err as Error).message || "Failed to add connection");
+    }
   };
 
-  const openEdit = (conn: any) => {
+  const openEdit = (conn: typeof connections[number]) => {
     setEditingConn(conn);
     setEditForm({ label: conn.label, personalToken: "", endpoint: conn.endpoint || "" });
   };
@@ -816,7 +816,7 @@ function SourceControlTab() {
             <div className="flex items-center gap-6 py-3 px-4 rounded-lg bg-secondary-50 border border-border text-xs">
               <div>
                 <span className="uppercase tracking-wide text-text-muted font-semibold">Connected</span>
-                <p className="text-text font-medium mt-0.5">{new Date(editingConn.createdAt).toLocaleDateString()}</p>
+                <p className="text-text font-medium mt-0.5">{editingConn.createdAt ? new Date(editingConn.createdAt).toLocaleDateString() : "—"}</p>
               </div>
               <div className="w-px h-8 bg-border" />
               <div>
@@ -888,11 +888,11 @@ function SourceControlTab() {
 }
 
 function NotificationChannelsTab() {
-  const [channels, setChannels] = useState<any[]>([]);
+  const [channels, setChannels] = useState<Array<{ id: string; type: string; config: Record<string, string>; enabled: boolean }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ type: "email", configValue: "" });
   const [loading, setLoading] = useState(true);
-  const [editingChannel, setEditingChannel] = useState<any | null>(null);
+  const [editingChannel, setEditingChannel] = useState<{ id: string; type: string; config: Record<string, string>; enabled: boolean } | null>(null);
   const [editEnabled, setEditEnabled] = useState(true);
   const [editConfigValue, setEditConfigValue] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -916,7 +916,7 @@ function NotificationChannelsTab() {
     setShowForm(false); setFormData({ type: "email", configValue: "" }); fetch_();
   };
 
-  const openEditChannel = (ch: any) => {
+  const openEditChannel = (ch: typeof channels[number]) => {
     setEditingChannel(ch);
     setEditEnabled(ch.enabled);
     setEditConfigValue(ch.type === "email" ? ch.config.email || "" : ch.type === "slack" ? ch.config.webhookUrl || "" : ch.type === "webhook" ? ch.config.url || "" : "");
@@ -1083,8 +1083,13 @@ interface Integration {
 }
 
 function IntegrationsTab() {
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [integrations, setIntegrations] = useState<Integration[]>(() => {
+    try {
+      const stored = localStorage.getItem("integrations");
+      if (stored) return JSON.parse(stored);
+    } catch { /* ignore */ }
+    return [];
+  });
   const [showAdd, setShowAdd] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [formConfig, setFormConfig] = useState<Record<string, string>>({});
@@ -1096,16 +1101,6 @@ function IntegrationsTab() {
   const [editConfig, setEditConfig] = useState<Record<string, string>>({});
   const [editEnabled, setEditEnabled] = useState(true);
   const [confirmRemove, setConfirmRemove] = useState(false);
-
-  // Integrations are stored in localStorage for now (no backend endpoint yet)
-  useEffect(() => {
-    setLoading(true);
-    try {
-      const stored = localStorage.getItem("integrations");
-      if (stored) setIntegrations(JSON.parse(stored));
-    } catch {}
-    setLoading(false);
-  }, []);
 
   const persist = (items: Integration[]) => {
     setIntegrations(items);
@@ -1388,9 +1383,7 @@ function IntegrationsTab() {
       </Modal>
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingIntg) persist(integrations.filter(i => i.id !== editingIntg.id)); setEditingIntg(null); setConfirmRemove(false); }} message="Are you sure you want to remove this integration?" />
 
-      {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : integrations.length > 0 ? (
+      {integrations.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {integrations.map((intg) => {
             const cat = INTEGRATION_CATALOG.find(c => c.type === intg.type);
@@ -1444,7 +1437,7 @@ function SecurityRulesTab() {
   const fetchRules = async () => {
     setLoading(true);
     try { const res = await codeAnalysisApi.listCustomRules(); setRules(res.rules); }
-    catch {} finally { setLoading(false); }
+    catch { /* ignore */ } finally { setLoading(false); }
   };
   useEffect(() => { fetchRules(); }, []);
 
@@ -1468,7 +1461,7 @@ function SecurityRulesTab() {
         await codeAnalysisApi.createCustomRule({ ruleId: form.ruleId, severity: form.severity, message: form.message, pattern: form.pattern, extensions: form.extensions });
       }
       setShowForm(false); fetchRules();
-    } catch (err: any) { setError(err.message || "Failed to save rule"); }
+    } catch (err: unknown) { setError((err as Error).message || "Failed to save rule"); }
     finally { setSaving(false); }
   };
 
@@ -1476,12 +1469,12 @@ function SecurityRulesTab() {
     try {
       await codeAnalysisApi.updateCustomRule(r.id, { enabled: !r.enabled });
       setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    try { await codeAnalysisApi.deleteCustomRule(deleteId); } catch {}
+    try { await codeAnalysisApi.deleteCustomRule(deleteId); } catch { /* ignore */ }
     setDeleteId(null); fetchRules();
   };
 
@@ -1689,10 +1682,10 @@ type SQRuleItem = { key: string; name: string; severity: string; lang: string; t
 let _sqCache: { profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }>; rules: SQRuleItem[] } | null = null;
 
 function SonarQubeRulesPanel() {
-  const [profiles, setProfiles] = useState<Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }>>([]);
+  const [profiles, setProfiles] = useState(() => _sqCache?.profiles ?? []);
   const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set());
-  const [allRules, setAllRules] = useState<SQRuleItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [allRules, setAllRules] = useState(() => _sqCache?.rules ?? []);
+  const [loading, setLoading] = useState(!_sqCache);
   const [rulesLoading, setRulesLoading] = useState(false);
   const [error, setError] = useState("");
   const [sevFilter, setSevFilter] = useState("");
@@ -1703,15 +1696,9 @@ function SonarQubeRulesPanel() {
     // Load disabled rules from DB
     codeAnalysisApi.listRuleOverrides("sonarqube").then(res => {
       setDisabledSqRules(new Set(res.overrides.filter(o => !o.enabled).map(o => o.ruleId)));
-    }).catch(() => {});
+    }).catch(() => { /* ignore */ });
 
-    // Use cache if available
-    if (_sqCache) {
-      setProfiles(_sqCache.profiles);
-      setAllRules(_sqCache.rules);
-      setLoading(false);
-      return;
-    }
+    if (_sqCache) return;
     codeAnalysisApi.listSonarProfiles()
       .then(async (res) => {
         setProfiles(res.profiles);
@@ -1727,7 +1714,7 @@ function SonarQubeRulesPanel() {
                 merged.push({ ...r, profileKey: p.key });
               }
             }
-          } catch {}
+          } catch { /* skip profile on error */ }
         }
         setAllRules(merged);
         _sqCache = { profiles: res.profiles, rules: merged };
@@ -1748,26 +1735,15 @@ function SonarQubeRulesPanel() {
     });
     try {
       await codeAnalysisApi.toggleRule("sonarqube", ruleKey, nowEnabled);
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Revert on failure
       setDisabledSqRules(prev => {
         const n = new Set(prev);
         if (nowEnabled) n.add(ruleKey); else n.delete(ruleKey);
         return n;
       });
-      setError(e.message || "Failed to toggle rule");
+      setError((e as Error).message || "Failed to toggle rule");
       setTimeout(() => setError(""), 3000);
-    }
-  };
-
-  const sevBadge = (s: string): { cls: string; label: string; icon: string } => {
-    switch (s) {
-      case "BLOCKER": return { cls: "bg-red-100 text-red-700", label: "Blocker", icon: "🔴" };
-      case "CRITICAL": return { cls: "bg-orange-100 text-orange-700", label: "High", icon: "🟠" };
-      case "MAJOR": return { cls: "bg-yellow-100 text-yellow-700", label: "Medium", icon: "🟡" };
-      case "MINOR": return { cls: "bg-blue-100 text-blue-700", label: "Low", icon: "🔵" };
-      case "INFO": return { cls: "bg-slate-100 text-slate-500", label: "Info", icon: "⚪" };
-      default: return { cls: "bg-secondary-50 text-text-muted", label: s, icon: "" };
     }
   };
 

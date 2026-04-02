@@ -11,7 +11,6 @@ import DevIcon from "../components/DevIcon";
 const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 const btnPrimary = "h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm";
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
-const btnDanger = "text-sm text-danger-500 hover:text-danger-700 font-medium transition-colors";
 
 const PLATFORM_NAMES: Record<string, string> = {
   react: "React", nextjs: "Next.js", vue: "Vue", nuxt: "Nuxt", angular: "Angular", svelte: "Svelte",
@@ -61,9 +60,9 @@ function getRepoKey(repoUrl: string): string | null {
 export default function Projects() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; repository: string; branch: string; connectionId: string; platform?: string }>>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<any | null>(null);
+  const [editing, setEditing] = useState<{ id: string; name: string; repository: string; branch: string; connectionId: string } | null>(null);
   const [form, setForm] = useState({ name: "", repository: "", branch: "" });
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -134,8 +133,8 @@ export default function Projects() {
       try {
         const res = await gitApi.listRepos(selectedConnectionId);
         if (!cancelled) setRepos(res.repos);
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || "Failed to load repositories");
+      } catch (err: unknown) {
+        if (!cancelled) setError((err as Error).message || "Failed to load repositories");
       }
       finally { if (!cancelled) setLoadingRepos(false); }
     };
@@ -164,8 +163,8 @@ export default function Projects() {
             setSelectedBranch(repo.defaultBranch);
           }
         }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || "Failed to load branches");
+      } catch (err: unknown) {
+        if (!cancelled) setError((err as Error).message || "Failed to load branches");
       }
       finally { if (!cancelled) setLoadingBranches(false); }
     };
@@ -194,14 +193,6 @@ export default function Projects() {
     }
   }, [location.state]);
 
-  const openEdit = (p: any) => {
-    setEditing(p);
-    setForm({ name: p.name, repository: p.repository, branch: p.branch || "" });
-    resetSelections();
-    setShowForm(true);
-    fetchConnections();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const repo = repos.find(r => r.fullName === selectedRepo);
@@ -209,12 +200,12 @@ export default function Projects() {
       name: form.name,
       repository: editing ? form.repository : (repo?.url || form.repository),
       branch: editing ? form.branch : (selectedBranch || form.branch),
-      connectionId: editing ? (form as any).connectionId : selectedConnectionId,
+      connectionId: editing ? editing.connectionId : selectedConnectionId,
     };
     if (editing) {
       await projectsApi.update(editing.id, submitData);
     } else {
-      const created = await projectsApi.create(submitData);
+      await projectsApi.create(submitData);
       // Pre-warm analysis cache in the background
       try {
         const repoUrl = repo?.url || form.repository;
@@ -227,7 +218,7 @@ export default function Projects() {
           // Fire and forget — don't block the UI
           gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br).catch(() => {});
         }
-      } catch {}
+      } catch { /* pre-warm is fire-and-forget */ }
     }
     setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
   };
@@ -343,7 +334,6 @@ export default function Projects() {
               pending: "bg-secondary-400",
             };
             const platformLabel = p.platform ? (PLATFORM_NAMES[p.platform] || p.platform) : null;
-            const isGitHub = p.repository?.includes("github");
             const isGitLab = p.repository?.includes("gitlab");
             return (
               <div
@@ -400,7 +390,7 @@ export default function Projects() {
                     if (platformLabel) {
                       return (
                         <div className="flex items-center gap-1.5 mt-1.5">
-                          <DevIcon src={PLATFORM_ICONS[p.platform] || p.platform} className="w-4 h-4" />
+                          <DevIcon src={PLATFORM_ICONS[p.platform!] || p.platform!} className="w-4 h-4" />
                           <span className="text-xs text-text-muted">{platformLabel}</span>
                         </div>
                       );

@@ -189,3 +189,36 @@ export const getFileContent = api(
     throw APIError.unimplemented("File content not supported for this provider");
   }
 );
+
+// ─── List Repo Members (for assignee/reviewer selection) ───
+
+export const listRepoMembers = api(
+  { method: "GET", path: "/git/connections/:connectionId/repo-members", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string }): Promise<{ members: Array<{ id: string; username: string; name: string; avatarUrl: string }> }> => {
+    const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
+      SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
+    if (!conn) throw APIError.notFound("Connection not found");
+    const members: Array<{ id: string; username: string; name: string; avatarUrl: string }> = [];
+    if (conn.provider === "github") {
+      const baseUrl = conn.endpoint || "https://api.github.com";
+      const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/collaborators?per_page=100`, {
+        headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+      });
+      if (res.ok) {
+        const data = await res.json() as Array<{ id: number; login: string; avatar_url: string }>;
+        for (const u of data) members.push({ id: u.login, username: u.login, name: u.login, avatarUrl: u.avatar_url });
+      }
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      const baseUrl = conn.endpoint || "https://gitlab.com";
+      const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
+      const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/members/all?per_page=100`, {
+        headers: { "PRIVATE-TOKEN": conn.personal_token },
+      });
+      if (res.ok) {
+        const data = await res.json() as Array<{ id: number; username: string; name: string; avatar_url: string }>;
+        for (const u of data) members.push({ id: String(u.id), username: u.username, name: u.name || u.username, avatarUrl: u.avatar_url });
+      }
+    }
+    return { members };
+  }
+);

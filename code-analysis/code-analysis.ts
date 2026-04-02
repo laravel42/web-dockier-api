@@ -988,7 +988,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       filesInRepo = parseInt(countOutput, 10) || 0;
     } catch { /* ignore */ }
 
-    await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0 });
+    await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Loading disabled rules…" });
 
     // Load globally disabled rule IDs
     const disabledOpengrep = new Set<string>();
@@ -1015,6 +1015,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     let filesScanned = 0;
 
     if (tools.opengrep) {
+      await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Running OpenGrep scanner…" });
       console.log(`[doScan] Running opengrep: ${OPENGREP_BIN} in ${repoDir}`);
       const configFlag = existsSync(RULES_DIR) ? `--config ${JSON.stringify(RULES_DIR)}` : "--config auto";
       try {
@@ -1054,6 +1055,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
 
     // 3b. Run custom regex-based rules (if enabled)
     if (tools.customRules) {
+      await updateProgress(scanId, { phase: "scanning", filesScanned, filesInRepo, findingsCount: findingsByFile.size, currentFile: "Running custom rules…" });
       console.log(`[doScan] Running custom rules on ${scanId}...`);
       const allFiles = walkFiles(repoDir);
       const dbRules = await loadCustomRules(scan.app_id);
@@ -1071,6 +1073,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     // 3c. Run SonarQube scanner (if enabled and configured)
     let sonarFindings: SonarIssue[] = [];
     if (tools.sonarqube) {
+      await updateProgress(scanId, { phase: "scanning", filesScanned, filesInRepo, findingsCount: findingsByFile.size, currentFile: "Running SonarQube scanner…" });
       try {
         const sonarProjectKey = `scan-${scanId}`;
         sonarFindings = await runSonarScanner(repoDir, sonarProjectKey);
@@ -1110,8 +1113,8 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       }));
 
       await Promise.all(batch.map((f) =>
-        db.exec`INSERT INTO findings (id, scan_id, rule_id, severity, message, file_path, start_line, end_line, snippet, created_at)
-          VALUES (${f.id}, ${f.scanId}, ${f.ruleId}, ${f.severity}, ${f.message}, ${f.filePath}, ${f.startLine}, ${f.endLine}, ${f.snippet}, NOW())`
+        db.exec`INSERT INTO findings (id, scan_id, rule_id, severity, message, file_path, start_line, end_line, snippet, created_at, app_id)
+          VALUES (${f.id}, ${f.scanId}, ${f.ruleId}, ${f.severity}, ${f.message}, ${f.filePath}, ${f.startLine}, ${f.endLine}, ${f.snippet}, NOW(), ${scan.app_id})`
       ));
 
       totalInserted += batch.length;

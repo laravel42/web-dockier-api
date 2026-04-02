@@ -279,11 +279,17 @@ export const gitApi = {
     filePath: string; startLine: number; endLine: number;
     ruleId: string; severity: string; message: string; snippet: string;
     aiType?: string; aiConfig?: Record<string, string>;
+    assignee?: string; reviewer?: string;
   }) =>
     request<{ mrUrl: string; mrId: string; mrTitle: string }>(`/git/connections/${connectionId}/create-mr`, {
       method: "POST",
       body: JSON.stringify({ connectionId, ...data }),
     }),
+
+  listRepoMembers: (connectionId: string, owner: string, repo: string) =>
+    request<{ members: Array<{ id: string; username: string; name: string; avatarUrl: string }> }>(
+      `/git/connections/${connectionId}/repo-members?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`
+    ),
 
   getFileContent: (connectionId: string, owner: string, repo: string, branch: string, path: string) =>
     request<{ content: string }>(
@@ -292,6 +298,12 @@ export const gitApi = {
 
   listBedrockModels: () =>
     request<{ models: Array<{ id: string; name: string }> }>("/git/bedrock/models"),
+
+  summarizeFinding: (severity: string, message: string, filePath: string, snippet?: string, model?: string) =>
+    request<{ title: string; estimateMinutes: number }>("/git/ai/summarize-finding", {
+      method: "POST",
+      body: JSON.stringify({ severity, message, filePath, snippet, model }),
+    }),
 };
 
 // ─── Notifications ───
@@ -811,7 +823,15 @@ export const integrationsApi = {
       body: JSON.stringify({ type, config, teamId }),
     }),
 
-  createPMIssue: (data: { type: string; config: Record<string, string>; teamId: string; projectId: string; title: string; description: string }) =>
+  listPMTeamMembers: (type: string, config: Record<string, string>, teamId: string) =>
+    request<{
+      members: Array<{ id: string; name: string; email?: string; avatarUrl?: string }>;
+    }>("/integrations/pm/team-members", {
+      method: "POST",
+      body: JSON.stringify({ type, config, teamId }),
+    }),
+
+  createPMIssue: (data: { type: string; config: Record<string, string>; teamId: string; projectId: string; title: string; description: string; priority?: number; estimateMinutes?: number; assigneeId?: string }) =>
     request<{
       issueId: string;
       issueKey: string;

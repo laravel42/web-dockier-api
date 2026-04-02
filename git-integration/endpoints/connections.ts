@@ -14,12 +14,16 @@ export const addConnection = api(
   }): Promise<GitConnectionResponse> => {
     const authData = getAuthData()!;
     const id = uuidv4();
+    console.log(`[addConnection] provider=${params.provider} label=${params.label} appId=${authData.appId} endpoint=${params.endpoint}`);
     const existing = await db.queryRow<{ id: string }>`
       SELECT id FROM git_connections WHERE app_id = ${authData.appId} AND provider = ${params.provider} AND label = ${params.label}`;
     if (existing) throw APIError.alreadyExists(`A ${params.provider} connection with label "${params.label}" already exists`);
     await db.exec`
       INSERT INTO git_connections (id, app_id, provider, personal_token, label, repo_url, endpoint, created_at)
       VALUES (${id}, ${authData.appId}, ${params.provider}, ${params.personalToken}, ${params.label}, ${params.repoUrl}, ${params.endpoint || ""}, NOW())`;
+    // Verify it was persisted
+    const verify = await db.queryRow<{ id: string }>`SELECT id FROM git_connections WHERE id = ${id}`;
+    console.log(`[addConnection] inserted id=${id} verified=${!!verify}`);
     return { id, provider: params.provider, label: params.label, repoUrl: params.repoUrl, endpoint: params.endpoint || "", createdAt: new Date().toISOString() };
   }
 );

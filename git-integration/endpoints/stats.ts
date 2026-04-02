@@ -296,10 +296,22 @@ export const getRepoStats = api(
         }
       } catch {}
 
+      // Fetch open issues count
+      let openIssues = 0;
+      if (repoData.has_issues) {
+        try {
+          const issuesRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/issues?status=new&status=open&pagelen=0`, { headers });
+          if (issuesRes.ok) {
+            const issuesData = await issuesRes.json() as any;
+            openIssues = issuesData.size || 0;
+          }
+        } catch { /* ignore */ }
+      }
+
       return ({
         stars: 0,
         forks: 0,
-        openIssues: repoData.has_issues ? 0 : 0,
+        openIssues,
         watchers,
         language: repoData.language || "",
         languages: repoData.language ? { [repoData.language]: 100 } : {},

@@ -105,6 +105,9 @@ export default function ScanDetail() {
   const [issueIntegration, setIssueIntegration] = useState("");
   const [issueCreating, setIssueCreating] = useState(false);
   const [issueSuccess, setIssueSuccess] = useState("");
+  const [issueSuccessUrl, setIssueSuccessUrl] = useState("");
+  const [aiEstimate, setAiEstimate] = useState(0);
+  const [titleGenerating, setTitleGenerating] = useState(false);
   const [issueError, setIssueError] = useState("");
   const [pmProjects, setPmProjects] = useState<Array<{ id: string; name: string; key?: string }>>([]);
   const [pmProjectsLoading, setPmProjectsLoading] = useState(false);
@@ -114,6 +117,8 @@ export default function ScanDetail() {
   const [pmSubProjects, setPmSubProjects] = useState<Array<{ id: string; name: string; key?: string }>>([]);
   const [pmSubProjectsLoading, setPmSubProjectsLoading] = useState(false);
   const [selectedPmSubProject, setSelectedPmSubProject] = useState("");
+  const [pmMembers, setPmMembers] = useState<Array<{ id: string; name: string; email?: string }>>([]);
+  const [selectedPmAssignee, setSelectedPmAssignee] = useState("");
   const [mrCreating, setMrCreating] = useState<string | null>(null);
 
   // AI Fix modal state
@@ -121,6 +126,13 @@ export default function ScanDetail() {
   const [fixLoading, setFixLoading] = useState(false);
   const [fixResult, setFixResult] = useState<{ mrUrl: string; mrId: string; mrTitle: string } | null>(null);
   const [fixError, setFixError] = useState("");
+
+  // Assignee/reviewer for MR
+  const [repoMembers, setRepoMembers] = useState<Array<{ id: string; username: string; name: string; avatarUrl: string }>>([]);
+  const [mrAssignee, setMrAssignee] = useState("");
+  const [mrReviewer, setMrReviewer] = useState("");
+  const [mrTitle, setMrTitle] = useState("");
+  const [mrDescription, setMrDescription] = useState("");
 
   // File contents cache for code preview
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
@@ -244,9 +256,12 @@ export default function ScanDetail() {
             if (s.status === "failed") {
               setScanError((s.summary as any)?.error || "Scan failed");
             } else {
-              navigate(`/security/${newScan.id}`);
+              // Refresh current scan data, findings, and sidebar
+              setScan(s);
+              fetchFindings(newScan.id, severityFilter || undefined);
+              if (scanId !== newScan.id) navigate(`/security/${newScan.id}`);
             }
-            // Refresh sidebar
+            // Refresh sidebar scan list
             codeAnalysisApi.listScans(project.id).then((res) => setAllScans(res.scans)).catch(() => {});
             return;
           }
@@ -267,15 +282,25 @@ export default function ScanDetail() {
   const fetchPmTeams = async (pm: PMIntegration) => {
     setPmProjectsLoading(true);
     setPmProjects([]); setSelectedPmProject(""); setPmSubProjects([]); setSelectedPmSubProject("");
+    setPmMembers([]); setSelectedPmAssignee("");
     try {
       const res = await integrationsApi.listPMTeams(pm.type, pm.config);
       setPmProjects(res.teams); setPmTeamLabel(res.teamLabel); setPmProjectLabel(res.projectLabel);
       if (res.teams.length > 0) {
         setSelectedPmProject(res.teams[0].id);
         if (res.projectLabel) fetchPmSubProjects(pm, res.teams[0].id);
+        fetchPmMembers(pm, res.teams[0].id);
       }
-    } catch {}
+    } catch { /* ignore */ }
     finally { setPmProjectsLoading(false); }
+  };
+
+  const fetchPmMembers = async (pm: PMIntegration, teamId: string) => {
+    setPmMembers([]); setSelectedPmAssignee("");
+    try {
+      const res = await integrationsApi.listPMTeamMembers(pm.type, pm.config, teamId);
+      setPmMembers(res.members);
+    } catch { /* ignore */ }
   };
 
   const fetchPmSubProjects = async (pm: PMIntegration, teamId: string) => {
@@ -289,24 +314,31 @@ export default function ScanDetail() {
   };
 
   const openIssueModal = (f: Finding) => {
-    const title = `[${f.severity.toUpperCase()}] ${f.message}`;
+    const repoUrl = project?.repository?.replace(/\.git$/, "") || "";
+    const branch = project?.branch || "main";
+    const blameUrl = `${repoUrl}/-/blame/${branch}/${f.filePath}#L${f.startLine}`;
+    const cleanMsg = f.message.replace(/\s+/g, " ").trim();
     const desc = [
-      `**Security Finding** from Opengrep scan`,
-      ``, `**Severity:** ${f.severity}`,
-      `**File:** \`${f.filePath}\` (line ${f.startLine}${f.endLine !== f.startLine ? `-${f.endLine}` : ""})`,
-      `**Rule:** \`${f.ruleId}\``,
-      f.snippet ? `\n\`\`\`\n${f.snippet}\n\`\`\`` : "",
-      ``, `**Project:** ${project?.name || ""}`,
-      `**Repository:** ${project?.repository || ""}`,
+      cleanMsg,
+      ``,
+      `**Source:** ${blameUrl}`,
     ].filter(Boolean).join("\n");
-    setIssueTitle(title); setIssueDescription(desc);
+    setIssueTitle("Generating title…");
+    setTitleGenerating(true);
+    setIssueDescription(desc);
     const firstPm = pmIntegrations[0];
     setIssueIntegration(firstPm?.id || "");
-    setIssueCreating(false); setIssueSuccess(""); setIssueError("");
+    setIssueCreating(false); setIssueSuccess(""); setIssueSuccessUrl(""); setIssueError("");
     setPmProjects([]); setSelectedPmProject(""); setPmSubProjects([]); setSelectedPmSubProject("");
     setPmTeamLabel("Project"); setPmProjectLabel("");
     setIssueModal({ open: true, finding: f });
     if (firstPm) fetchPmTeams(firstPm);
+    // Generate AI title and estimate
+    const model = localStorage.getItem("bedrock_default_model") || undefined;
+    setAiEstimate(0);
+    gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "", model)
+      .then(res => { setIssueTitle(res.title); setAiEstimate(res.estimateMinutes); setTitleGenerating(false); })
+      .catch(() => { setIssueTitle(f.message.slice(0, 60)); setTitleGenerating(false); });
   };
 
   const handleIntegrationChange = (integrationId: string) => {
@@ -317,27 +349,39 @@ export default function ScanDetail() {
 
   const handleTeamChange = (teamId: string) => {
     setSelectedPmProject(teamId); setPmSubProjects([]); setSelectedPmSubProject("");
-    if (pmProjectLabel) {
-      const pm = pmIntegrations.find(i => i.id === issueIntegration);
-      if (pm) fetchPmSubProjects(pm, teamId);
-    }
+    const pm = pmIntegrations.find(i => i.id === issueIntegration);
+    if (pmProjectLabel && pm) fetchPmSubProjects(pm, teamId);
+    if (pm) fetchPmMembers(pm, teamId);
   };
 
   const handleCreateIssue = async (e: React.FormEvent) => {
     e.preventDefault();
     const pm = pmIntegrations.find(i => i.id === issueIntegration);
     if (!pm) return;
-    setIssueCreating(true); setIssueSuccess(""); setIssueError("");
+    setIssueCreating(true); setIssueSuccess(""); setIssueSuccessUrl(""); setIssueError("");
     try {
+      const severityToPriority: Record<string, number> = { error: 2, warning: 3, info: 4 };
+      const priority = issueModal.finding ? severityToPriority[issueModal.finding.severity] : undefined;
+      const estimateMinutes = aiEstimate || undefined;
       const result = await integrationsApi.createPMIssue({
         type: pm.type, config: pm.config, teamId: selectedPmProject,
         projectId: selectedPmSubProject, title: issueTitle, description: issueDescription,
+        priority, estimateMinutes, assigneeId: selectedPmAssignee || undefined,
       });
       const label = result.issueKey || result.issueId;
-      setIssueSuccess(result.issueUrl ? `Issue ${label} created in ${pm.name}` : `Issue created in ${pm.name}`);
-      setTimeout(() => setIssueModal({ open: false, finding: null }), 2000);
-    } catch (err: any) {
-      setIssueError(err.message || "Failed to create issue");
+      setIssueSuccess(result.issueUrl ? `Issue ${label} created` : `Issue created`);
+      setIssueSuccessUrl(result.issueUrl || "");
+    } catch (err: unknown) {
+      const msg = (err as Error).message || "Unknown error";
+      let friendly = "Failed to create issue";
+      if (msg.includes("Timeout") || msg.includes("timeout")) friendly = "Connection timed out — the server may be unreachable. Check your network and try again.";
+      else if (msg.includes("fetch failed")) friendly = "Could not connect to the integration server. Check that the service is running and accessible.";
+      else if (msg.includes("401") || msg.includes("Unauthorized")) friendly = "Authentication failed — check your API key or token in the integration settings.";
+      else if (msg.includes("403") || msg.includes("Forbidden")) friendly = "Permission denied — your token may not have permission to create issues.";
+      else if (msg.includes("404") || msg.includes("Not Found")) friendly = "Project or resource not found — check the selected team/project exists.";
+      else if (msg.includes("429")) friendly = "Rate limited — too many requests. Wait a moment and try again.";
+      else friendly = msg;
+      setIssueError(friendly);
     } finally { setIssueCreating(false); }
   };
 
@@ -352,10 +396,44 @@ export default function ScanDetail() {
       return;
     }
 
-    // Open modal with loader
+    // Open modal, fetch members
     setFixModal({ open: true, finding: f });
-    setFixLoading(true);
+    setFixLoading(false);
     setFixResult(null);
+    setFixError("");
+    setMrAssignee("");
+    setMrReviewer("");
+    // Pre-fill title and description
+    setMrTitle("Generating title…");
+    setTitleGenerating(true);
+    const repoUrl = project.repository?.replace(/\.git$/, "") || "";
+    const branch = project.branch || "main";
+    const blameUrl = `${repoUrl}/-/blame/${branch}/${f.filePath}#L${f.startLine}`;
+    const cleanMsg = f.message.replace(/\s+/g, " ").trim();
+    setMrDescription([cleanMsg, ``, `**Source:** ${blameUrl}`].join("\n"));
+    // Fetch repo members for assignee/reviewer
+    gitApi.listRepoMembers(project.connectionId, parsed.owner, parsed.repo)
+      .then(res => setRepoMembers(res.members))
+      .catch(() => setRepoMembers([]));
+    // Generate AI title
+    const model = bedrockModel || undefined;
+    gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "", model)
+      .then(res => { setMrTitle(res.title || f.message.slice(0, 60)); setTitleGenerating(false); })
+      .catch(() => { setMrTitle(f.message.slice(0, 60)); setTitleGenerating(false); });
+  };
+
+  const handleSubmitMR = async () => {
+    const f = fixModal.finding;
+    if (!f || !project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    const bedrockModel = localStorage.getItem("bedrock_default_model");
+    if (!bedrockModel) {
+      setFixError("No default LLM configured. Select one in Settings → General.");
+      return;
+    }
+
+    setFixLoading(true);
     setFixError("");
     setMrCreating(f.id);
     try {
@@ -364,10 +442,11 @@ export default function ScanDetail() {
         filePath: f.filePath, startLine: f.startLine, endLine: f.endLine,
         ruleId: f.ruleId, severity: f.severity, message: f.message, snippet: f.snippet || "",
         aiType: "bedrock", aiConfig: { model: bedrockModel },
+        assignee: mrAssignee || undefined, reviewer: mrReviewer || undefined,
       });
       setFixResult(result);
-    } catch (err: any) {
-      setFixError(err.message || "Failed to create MR");
+    } catch (err: unknown) {
+      setFixError((err as Error).message || "Failed to create MR");
     } finally {
       setFixLoading(false);
       setMrCreating(null);
@@ -434,18 +513,34 @@ export default function ScanDetail() {
                 </>
               )}
             </button>
-            {scanRunning && scanProgress && (
-              <div className={`${cardCls} p-3 space-y-2`}>
-                <p className="text-xs font-medium text-text">
-                  {scanProgress.phase === "cloning" && "Cloning…"}
-                  {scanProgress.phase === "scanning" && "Scanning…"}
-                  {scanProgress.phase === "persisting" && "Processing…"}
-                </p>
-                <div className="w-full h-1.5 bg-secondary-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary-500 rounded-full transition-all duration-300" style={{ width: `${scanProgress.phase === "cloning" ? 10 : scanProgress.phase === "scanning" ? 40 : 80}%` }} />
+            {scanRunning && scanProgress && (() => {
+              const pct = scanProgress.phase === "cloning" ? 5
+                : scanProgress.phase === "scanning" ? (scanProgress.filesInRepo > 0 ? 10 + Math.round((scanProgress.filesScanned / scanProgress.filesInRepo) * 50) : 30)
+                : scanProgress.phase === "persisting" ? (scanProgress.filesInRepo > 0 ? 60 + Math.round((scanProgress.filesScanned / scanProgress.filesInRepo) * 35) : 80)
+                : 100;
+              const label = scanProgress.phase === "cloning" ? "Cloning repository…"
+                : scanProgress.phase === "scanning" ? "Running security scanners…"
+                : scanProgress.phase === "persisting" ? "Processing findings…"
+                : "Finalizing…";
+              return (
+                <div className={`${cardCls} p-3 space-y-2`}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-text">{label}</p>
+                    <span className="text-xs font-semibold text-primary-500">{pct}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-secondary-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary-500 rounded-full transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-text-muted">
+                    <span>{scanProgress.filesScanned > 0 ? `${scanProgress.filesScanned}/${scanProgress.filesInRepo} files` : ""}</span>
+                    <span>{scanProgress.findingsCount > 0 ? `${scanProgress.findingsCount} findings` : ""}</span>
+                  </div>
+                  {scanProgress.currentFile && (
+                    <p className="text-[10px] text-text-muted font-mono truncate">{scanProgress.currentFile}</p>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
             {scanError && (
               <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-xs text-danger-500">{scanError}</div>
             )}
@@ -485,6 +580,10 @@ export default function ScanDetail() {
     running: "bg-primary-500/10 text-primary-500",
     pending: "bg-secondary-100 text-text-muted",
   };
+
+  if (!scan) return (
+    <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+  );
 
   return (
     <div className="flex gap-6">
@@ -747,11 +846,26 @@ export default function ScanDetail() {
       {/* Create Issue Modal */}
       <Modal open={issueModal.open} onClose={() => setIssueModal({ open: false, finding: null })} title="Create Issue from Finding">
         {issueSuccess ? (
-          <div className="flex flex-col items-center py-6 gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
+          <div className="flex flex-col items-center py-6 gap-4">
+            <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+            </div>
             <p className="text-sm font-medium text-success-500">{issueSuccess}</p>
+            {issueSuccessUrl && (
+              <a
+                href={issueSuccessUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+                Open Issue
+              </a>
+            )}
           </div>
         ) : (
           <form onSubmit={handleCreateIssue} className="space-y-4">
@@ -811,109 +925,110 @@ export default function ScanDetail() {
             )}
             <div>
               <label htmlFor="issue-title" className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
-              <input id="issue-title" type="text" value={issueTitle} onChange={(e) => setIssueTitle(e.target.value)} className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors" required />
+              <input id="issue-title" type="text" value={issueTitle} onChange={(e) => setIssueTitle(e.target.value)} disabled={titleGenerating} className={`w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors ${titleGenerating ? "opacity-50 cursor-wait" : ""}`} required />
             </div>
             <div>
               <label htmlFor="issue-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
               <textarea id="issue-desc" value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} rows={8} className="w-full px-3 py-2 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
             </div>
-            {issueError && (
-              <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{issueError}</div>
+            {pmMembers.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
+                <select value={selectedPmAssignee} onChange={(e) => setSelectedPmAssignee(e.target.value)}
+                  className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 transition-colors">
+                  <option value="">Unassigned</option>
+                  {pmMembers.map(m => <option key={m.id} value={m.id}>{m.name}{m.email ? ` (${m.email})` : ""}</option>)}
+                </select>
+              </div>
             )}
-            <button type="submit" disabled={issueCreating || !issueIntegration || (!selectedPmProject && pmProjects.length > 0)} className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 transition-colors">
-              {issueCreating ? "Creating..." : "Create Issue"}
-            </button>
+            {issueError && (
+              <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
+                <p>{issueError}</p>
+                <button type="button" onClick={() => setIssueError("")} className="text-xs text-danger-400 hover:text-danger-600 mt-1 underline">Dismiss</button>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button type="submit" disabled={issueCreating || !issueIntegration || (!selectedPmProject && pmProjects.length > 0)} className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 transition-colors">
+                {issueCreating ? "Creating..." : "Create Issue"}
+              </button>
+            </div>
           </form>
         )}
       </Modal>
 
       {/* AI Fix Modal */}
-      <Modal open={fixModal.open} onClose={() => setFixModal({ open: false, finding: null })} title="Fix with AI" size="lg" compact>
-        {fixModal.finding && (
-          <div className="space-y-4">
-            {/* Finding summary */}
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary-50">
-              <span className={`px-1.5 py-px rounded text-[10px] font-semibold uppercase shrink-0 mt-0.5 ${
-                fixModal.finding.severity === "error" ? "bg-danger-500/10 text-danger-500" :
-                fixModal.finding.severity === "warning" ? "bg-warning-50 text-warning-500" :
-                "bg-primary-50 text-primary-500"
-              }`}>
-                {fixModal.finding.severity}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm text-text leading-snug">{fixModal.finding.message}</p>
-                <p className="text-xs text-text-muted mt-1 font-mono">{fixModal.finding.filePath}:{fixModal.finding.startLine}</p>
-                <p className="text-[10px] text-text-muted font-mono mt-0.5">{fixModal.finding.ruleId}</p>
-              </div>
+      <Modal open={fixModal.open} onClose={() => setFixModal({ open: false, finding: null })} title="Fix with AI">
+        {fixResult ? (
+          <div className="flex flex-col items-center py-8 gap-4">
+            <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
             </div>
-
-            {/* Loading state */}
-            {fixLoading && (
-              <div className="flex flex-col items-center py-10 gap-4">
-                <div className="relative">
-                  <div className="w-12 h-12 border-3 border-violet-200 rounded-full" />
-                  <div className="absolute inset-0 w-12 h-12 border-3 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-text">AI is analyzing the vulnerability…</p>
-                  <p className="text-xs text-text-muted mt-1">Generating fix and creating merge request</p>
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
-                  <span className="text-xs text-text-muted">Using Amazon Bedrock</span>
-                </div>
-              </div>
-            )}
-
-            {/* Success state */}
-            {fixResult && (
-              <div className="flex flex-col items-center py-8 gap-4">
-                <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-success-500">Merge request created</p>
-                  <p className="text-xs text-text-muted mt-1">{fixResult.mrTitle}</p>
-                </div>
-                <a
-                  href={fixResult.mrUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-9 px-5 inline-flex items-center gap-2 bg-violet-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-violet-600 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                  </svg>
-                  Open Merge Request
-                </a>
-              </div>
-            )}
-
-            {/* Error state */}
-            {fixError && (
-              <div className="flex flex-col items-center py-8 gap-4">
-                <div className="w-12 h-12 rounded-full bg-danger-500/10 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-danger-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-danger-500">Fix failed</p>
-                  <p className="text-xs text-text-muted mt-1">{fixError}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fixModal.finding && handleCreateMR(fixModal.finding)}
-                  className="h-9 px-5 inline-flex items-center gap-2 bg-violet-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-violet-600 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
+            <p className="text-sm font-medium text-success-500">Merge request created</p>
+            {fixResult.mrUrl && (
+              <a href={fixResult.mrUrl} target="_blank" rel="noopener noreferrer"
+                className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+                Open Merge Request
+              </a>
             )}
           </div>
-        )}
+        ) : fixLoading ? (
+          <div className="flex flex-col items-center py-10 gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 border-[3px] border-violet-200 rounded-full" />
+              <div className="absolute inset-0 w-12 h-12 border-[3px] border-violet-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-text">AI is analyzing the vulnerability…</p>
+              <p className="text-xs text-text-muted mt-1">Generating fix and creating merge request</p>
+            </div>
+          </div>
+        ) : fixModal.finding ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
+              <input type="text" value={mrTitle} onChange={(e) => setMrTitle(e.target.value)} disabled={titleGenerating}
+                className={`w-full h-11 px-3 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors ${titleGenerating ? "opacity-50 cursor-wait" : ""}`} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
+              <textarea value={mrDescription} onChange={(e) => setMrDescription(e.target.value)} rows={5}
+                className="w-full px-3 py-2 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
+              <select value={mrAssignee} onChange={(e) => setMrAssignee(e.target.value)}
+                className="w-full h-11 px-3 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 transition-colors">
+                <option value="">None</option>
+                {repoMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.username})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Reviewer</label>
+              <select value={mrReviewer} onChange={(e) => setMrReviewer(e.target.value)}
+                className="w-full h-11 px-3 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 transition-colors">
+                <option value="">None</option>
+                {repoMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.username})</option>)}
+              </select>
+            </div>
+            {fixError && (
+              <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
+                <p>{fixError}</p>
+                <button type="button" onClick={() => setFixError("")} className="text-xs text-danger-400 hover:text-danger-600 mt-1 underline">Dismiss</button>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button type="button" onClick={handleSubmitMR} disabled={fixLoading || !mrTitle}
+                className="h-9 px-4 bg-violet-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-violet-600 disabled:opacity-50 transition-colors">
+                Create Merge Request
+              </button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
       </div>
 
@@ -941,24 +1056,34 @@ export default function ScanDetail() {
             )}
           </button>
 
-          {scanRunning && scanProgress && (
-            <div className={`${cardCls} p-3 space-y-2`}>
-              <p className="text-xs font-medium text-text">
-                {scanProgress.phase === "cloning" && "Cloning…"}
-                {scanProgress.phase === "scanning" && "Scanning…"}
-                {scanProgress.phase === "persisting" && "Processing…"}
-              </p>
-              <div className="w-full h-1.5 bg-secondary-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary-500 rounded-full transition-all duration-300"
-                  style={{ width: `${scanProgress.phase === "cloning" ? 10 : scanProgress.phase === "scanning" ? 40 : 80}%` }}
-                />
+          {scanRunning && scanProgress && (() => {
+            const pct = scanProgress.phase === "cloning" ? 5
+              : scanProgress.phase === "scanning" ? (scanProgress.filesInRepo > 0 ? 10 + Math.round((scanProgress.filesScanned / scanProgress.filesInRepo) * 50) : 30)
+              : scanProgress.phase === "persisting" ? (scanProgress.filesInRepo > 0 ? 60 + Math.round((scanProgress.filesScanned / scanProgress.filesInRepo) * 35) : 80)
+              : 100;
+            const label = scanProgress.phase === "cloning" ? "Cloning repository…"
+              : scanProgress.phase === "scanning" ? "Running security scanners…"
+              : scanProgress.phase === "persisting" ? "Processing findings…"
+              : "Finalizing…";
+            return (
+              <div className={`${cardCls} p-3 space-y-2`}>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-text">{label}</p>
+                  <span className="text-xs font-semibold text-primary-500">{pct}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-secondary-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary-500 rounded-full transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-text-muted">
+                  <span>{scanProgress.filesScanned > 0 ? `${scanProgress.filesScanned}/${scanProgress.filesInRepo} files` : ""}</span>
+                  <span>{scanProgress.findingsCount > 0 ? `${scanProgress.findingsCount} findings` : ""}</span>
+                </div>
+                {scanProgress.currentFile && (
+                  <p className="text-[10px] text-text-muted font-mono truncate">{scanProgress.currentFile}</p>
+                )}
               </div>
-              {scanProgress.filesInRepo > 0 && (
-                <p className="text-[10px] text-text-muted">{scanProgress.filesScanned}/{scanProgress.filesInRepo} files</p>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {scanError && (
             <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-xs text-danger-500">{scanError}</div>
