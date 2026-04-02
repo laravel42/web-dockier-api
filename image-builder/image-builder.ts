@@ -13,6 +13,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { git_integration } from "~encore/clients";
 import { db, initDb } from "../lib/db";
+export { type BuildRecord, type BuildStatusResponse } from "./shared";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
