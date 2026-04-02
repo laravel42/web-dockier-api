@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Modal from "./Modal";
 
 interface Permission {
@@ -86,14 +86,31 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: { name: string; description: string; permissions: string[] }) => void;
+  initialData?: { name: string; description: string; permissions: string[] };
+  title?: string;
+  submitLabel?: string;
 }
 
-export default function RoleFormModal({ open, onClose, onSubmit }: Props) {
+export default function RoleFormModal({ open, onClose, onSubmit, initialData, title, submitLabel }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set(ALL_LOCKED));
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (open && initialData) {
+      setName(initialData.name);
+      setDescription(initialData.description);
+      setSelected(new Set(initialData.permissions.length > 0 ? initialData.permissions : ALL_LOCKED));
+    } else if (open) {
+      setName("");
+      setDescription("");
+      setSelected(new Set(ALL_LOCKED));
+    }
+    setSearch("");
+    setCollapsed(new Set());
+  }, [open]);
 
   const inputCls =
     "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
@@ -165,7 +182,7 @@ export default function RoleFormModal({ open, onClose, onSubmit }: Props) {
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="New role">
+    <Modal open={open} onClose={handleClose} title={title || "New role"}>
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Name */}
         <div>
@@ -328,7 +345,7 @@ export default function RoleFormModal({ open, onClose, onSubmit }: Props) {
             disabled={!name.trim()}
             className="h-9 px-5 bg-text text-card text-sm font-medium rounded-[var(--radius-btn)] hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Create role
+            {submitLabel || "Create role"}
           </button>
         </div>
       </form>

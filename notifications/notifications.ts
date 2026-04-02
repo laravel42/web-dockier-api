@@ -18,7 +18,6 @@ const SlackWebhookUrl = secret("SlackWebhookUrl");
 
 interface NotificationChannel {
   id: string;
-  userId: string;
   type: "email" | "slack" | "webhook" | "in_app";
   config: Record<string, string>;
   enabled: boolean;
@@ -27,7 +26,6 @@ interface NotificationChannel {
 
 interface Notification {
   id: string;
-  userId: string;
   channel: string;
   title: string;
   message: string;
@@ -36,16 +34,15 @@ interface Notification {
 }
 
 interface SendNotificationParams {
-  userId: string;
   title: string;
   message: string;
-  channels?: string[]; // channel types to send to; defaults to all enabled
+  channels?: string[];
 }
 
 // ─── Pub/Sub Topic ───
 
 export interface NotificationEvent {
-  userId: string;
+  appId: string;
   title: string;
   message: string;
   channelType: string;
@@ -70,11 +67,11 @@ export const addChannel = api(
     const configJson = JSON.stringify(params.config);
 
     await db.exec`
-      INSERT INTO notification_channels (id, user_id, type, config, enabled, created_at)
-      VALUES (${id}, ${authData.userID}, ${params.type}, ${configJson}, true, NOW())`;
+      INSERT INTO notification_channels (id, app_id, type, config, enabled, created_at)
+      VALUES (${id}, ${authData.appId}, ${params.type}, ${configJson}, true, NOW())`;
 
     return {
-      id, userId: authData.userID, type: params.type,
+      id, type: params.type,
       config: params.config, enabled: true, createdAt: new Date().toISOString(),
     };
   }
@@ -86,14 +83,14 @@ export const listChannels = api(
     const authData = getAuthData();
     if (!authData) throw APIError.unauthenticated("Not authenticated");
     const rows = db.query<{
-      id: string; user_id: string; type: string; config: string; enabled: boolean; created_at: Date;
-    }>`SELECT id, user_id, type, config, enabled, created_at
-       FROM notification_channels WHERE user_id = ${authData.userID}`;
+      id: string; type: string; config: string; enabled: boolean; created_at: Date;
+    }>`SELECT id, type, config, enabled, created_at
+       FROM notification_channels WHERE app_id = ${authData.appId}`;
 
     const channels: NotificationChannel[] = [];
     for await (const row of rows) {
       channels.push({
-        id: row.id, userId: row.user_id,
+        id: row.id,
         type: row.type as NotificationChannel["type"],
         config: JSON.parse(row.config), enabled: row.enabled,
         createdAt: row.created_at.toISOString(),
@@ -124,17 +121,20 @@ export const deleteChannel = api(
 export const send = api(
   { method: "POST", path: "/notifications/send", auth: true },
   async (params: SendNotificationParams): Promise<{ sent: number }> => {
+    const authData = getAuthData();
+    if (!authData) throw APIError.unauthenticated("Not authenticated");
+
     const rows = db.query<{
       type: string; config: string;
     }>`SELECT type, config FROM notification_channels
-       WHERE user_id = ${params.userId} AND enabled = true`;
+       WHERE app_id = ${authData.appId} AND enabled = true`;
 
     let sent = 0;
     for await (const row of rows) {
       if (params.channels && !params.channels.includes(row.type)) continue;
 
       await notificationTopic.publish({
-        userId: params.userId,
+        appId: authData.appId,
         title: params.title,
         message: params.message,
         channelType: row.type,
@@ -145,8 +145,8 @@ export const send = api(
 
     // Always store in-app notification
     await db.exec`
-      INSERT INTO notifications (id, user_id, channel, title, message, read, created_at)
-      VALUES (${uuidv4()}, ${params.userId}, 'in_app', ${params.title}, ${params.message}, false, NOW())`;
+      INSERT INTO notifications (id, app_id, channel, title, message, read, created_at)
+      VALUES (${uuidv4()}, ${authData.appId}, 'in_app', ${params.title}, ${params.message}, false, NOW())`;
 
     return { sent };
   }
@@ -162,18 +162,18 @@ export const listNotifications = api(
 
     const rows = params.unreadOnly
       ? db.query<{
-          id: string; user_id: string; channel: string; title: string; message: string; read: boolean; created_at: Date;
-        }>`SELECT id, user_id, channel, title, message, read, created_at
-           FROM notifications WHERE user_id = ${authData.userID} AND read = false ORDER BY created_at DESC LIMIT 50`
+          id: string; channel: string; title: string; message: string; read: boolean; created_at: Date;
+        }>`SELECT id, channel, title, message, read, created_at
+           FROM notifications WHERE app_id = ${authData.appId} AND read = false ORDER BY created_at DESC LIMIT 50`
       : db.query<{
-          id: string; user_id: string; channel: string; title: string; message: string; read: boolean; created_at: Date;
-        }>`SELECT id, user_id, channel, title, message, read, created_at
-           FROM notifications WHERE user_id = ${authData.userID} ORDER BY created_at DESC LIMIT 50`;
+          id: string; channel: string; title: string; message: string; read: boolean; created_at: Date;
+        }>`SELECT id, channel, title, message, read, created_at
+           FROM notifications WHERE app_id = ${authData.appId} ORDER BY created_at DESC LIMIT 50`;
 
     const notifications: Notification[] = [];
     for await (const row of rows) {
       notifications.push({
-        id: row.id, userId: row.user_id, channel: row.channel,
+        id: row.id, channel: row.channel,
         title: row.title, message: row.message, read: row.read,
         createdAt: row.created_at.toISOString(),
       });
@@ -197,7 +197,6 @@ const _ = new Subscription(notificationTopic, "notification-processor", {
     switch (event.channelType) {
       case "email":
         console.log(`[EMAIL] To: ${event.channelConfig.email} | ${event.title}: ${event.message}`);
-        // In production, integrate with SMTP/SES here
         break;
       case "slack":
         try {
@@ -215,14 +214,13 @@ const _ = new Subscription(notificationTopic, "notification-processor", {
           await fetch(event.channelConfig.url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: event.title, message: event.message, userId: event.userId }),
+            body: JSON.stringify({ title: event.title, message: event.message, appId: event.appId }),
           });
         } catch (e) {
           console.error("Webhook notification failed:", e);
         }
         break;
       case "in_app":
-        // Already stored in DB during send
         break;
     }
   },

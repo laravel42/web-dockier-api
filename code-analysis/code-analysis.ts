@@ -113,12 +113,12 @@ const SCANNABLE_EXT = new Set([
 // Seed default custom rules on startup
 (async () => {
   try {
-    const count = await db.queryRow<{ n: number }>`SELECT COUNT(*)::int AS n FROM custom_rules WHERE user_id = 'system'`;
+    const count = await db.queryRow<{ n: number }>`SELECT COUNT(*)::int AS n FROM custom_rules WHERE app_id = ''`;
     if (count && count.n > 0) return;
     for (const rule of CUSTOM_RULES) {
       const id = `seed-${rule.id}`;
-      await db.exec`INSERT INTO custom_rules (id, user_id, rule_id, severity, message, pattern, extensions)
-        VALUES (${id}, 'system', ${rule.id}, ${rule.severity}, ${rule.message}, ${rule.pattern.source}, ${rule.extensions})
+      await db.exec`INSERT INTO custom_rules (id, app_id, rule_id, severity, message, pattern, extensions)
+        VALUES (${id}, '', ${rule.id}, ${rule.severity}, ${rule.message}, ${rule.pattern.source}, ${rule.extensions})
         ON CONFLICT (id) DO NOTHING`;
     }
     console.log(`[code-analysis] Seeded ${CUSTOM_RULES.length} default custom rules`);
@@ -156,12 +156,12 @@ interface CustomFinding {
   snippet: string;
 }
 
-// Load custom rules from DB (system defaults + user rules)
-async function loadCustomRules(userId: string): Promise<CustomRule[]> {
+// Load custom rules from DB (system defaults + tenant rules)
+async function loadCustomRules(appId: string): Promise<CustomRule[]> {
   const rows = db.query<{
     rule_id: string; severity: string; message: string; pattern: string; extensions: string[];
   }>`SELECT rule_id, severity, message, pattern, extensions FROM custom_rules
-     WHERE (user_id = 'system' OR user_id = ${userId}) AND enabled = true
+     WHERE (app_id = '' OR app_id = ${appId}) AND enabled = true
      ORDER BY rule_id`;
   const rules: CustomRule[] = [];
   for await (const row of rows) {
@@ -240,7 +240,6 @@ interface ScanSummary {
 
 interface Scan {
   id: string;
-  userId: string;
   projectId: string;
   connectionId: string;
   repo: string;
@@ -266,12 +265,12 @@ export const createScan = api(
     const summary: ScanSummary = { totalFindings: 0, errors: 0, warnings: 0, infos: 0, filesScanned: 0, filesInRepo: 0 };
 
     await db.exec`
-      INSERT INTO scans (id, user_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at)
-      VALUES (${id}, ${authData.userID}, ${params.projectId}, ${params.connectionId},
+      INSERT INTO scans (id, app_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at)
+      VALUES (${id}, ${authData.appId}, ${params.projectId}, ${params.connectionId},
               ${params.repo}, ${params.branch}, 'pending', ${JSON.stringify(summary)}::jsonb, NOW(), NOW())`;
 
     return {
-      id, userId: authData.userID, projectId: params.projectId,
+      id, projectId: params.projectId,
       connectionId: params.connectionId, repo: params.repo, branch: params.branch,
       status: "pending", summary, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
@@ -287,32 +286,32 @@ export const listScans = api(
 
     const rows = params.projectId && params.branch
       ? db.query<{
-          id: string; user_id: string; project_id: string; connection_id: string;
+          id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;
           created_at: Date; updated_at: Date;
-        }>`SELECT id, user_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
-           FROM scans WHERE user_id = ${authData.userID} AND project_id = ${params.projectId} AND branch = ${params.branch}
+        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+           FROM scans WHERE app_id = ${authData.appId} AND project_id = ${params.projectId} AND branch = ${params.branch}
            ORDER BY created_at DESC LIMIT 50`
       : params.projectId
       ? db.query<{
-          id: string; user_id: string; project_id: string; connection_id: string;
+          id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;
           created_at: Date; updated_at: Date;
-        }>`SELECT id, user_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
-           FROM scans WHERE user_id = ${authData.userID} AND project_id = ${params.projectId}
+        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+           FROM scans WHERE app_id = ${authData.appId} AND project_id = ${params.projectId}
            ORDER BY created_at DESC LIMIT 50`
       : db.query<{
-          id: string; user_id: string; project_id: string; connection_id: string;
+          id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;
           created_at: Date; updated_at: Date;
-        }>`SELECT id, user_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
-           FROM scans WHERE user_id = ${authData.userID}
+        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+           FROM scans WHERE app_id = ${authData.appId}
            ORDER BY created_at DESC LIMIT 50`;
 
     const scans: Scan[] = [];
     for await (const row of rows) {
       scans.push({
-        id: row.id, userId: row.user_id, projectId: row.project_id,
+        id: row.id, projectId: row.project_id,
         connectionId: row.connection_id, repo: row.repo, branch: row.branch,
         status: row.status as Scan["status"], summary: parseSummary(row.summary),
         createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
@@ -328,16 +327,16 @@ export const getScan = api(
   { method: "GET", path: "/code-analysis/scans/:scanId", auth: true },
   async (params: { scanId: string }): Promise<Scan> => {
     const row = await db.queryRow<{
-      id: string; user_id: string; project_id: string; connection_id: string;
+      id: string; project_id: string; connection_id: string;
       repo: string; branch: string; status: string; summary: ScanSummary;
       created_at: Date; updated_at: Date;
-    }>`SELECT id, user_id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+    }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
        FROM scans WHERE id = ${params.scanId}`;
 
     if (!row) throw APIError.notFound("Scan not found");
 
     return {
-      id: row.id, userId: row.user_id, projectId: row.project_id,
+      id: row.id, projectId: row.project_id,
       connectionId: row.connection_id, repo: row.repo, branch: row.branch,
       status: row.status as Scan["status"], summary: parseSummary(row.summary),
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
@@ -403,7 +402,7 @@ export const runScan = api(
   { method: "POST", path: "/code-analysis/scans/:scanId/run", auth: true },
   async (params: { scanId: string; enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
     const scan = await db.queryRow<{
-      id: string; user_id: string; project_id: string; connection_id: string;
+      id: string; app_id: string; project_id: string; connection_id: string;
       repo: string; branch: string; status: string; summary: ScanSummary;
       created_at: Date; updated_at: Date;
     }>`SELECT * FROM scans WHERE id = ${params.scanId}`;
@@ -426,7 +425,7 @@ export const runScan = api(
     });
 
     return {
-      id: scan.id, userId: scan.user_id, projectId: scan.project_id,
+      id: scan.id, projectId: scan.project_id,
       connectionId: scan.connection_id, repo: scan.repo, branch: scan.branch,
       status: "running", summary: { ...emptySummary() },
       createdAt: scan.created_at.toISOString(), updatedAt: new Date().toISOString(),
@@ -453,17 +452,17 @@ export const listCustomRules = api(
   async (): Promise<{ rules: CustomRuleResponse[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{
-      id: string; user_id: string; rule_id: string; severity: string; message: string;
+      id: string; app_id: string; rule_id: string; severity: string; message: string;
       pattern: string; extensions: string[]; enabled: boolean; created_at: Date;
-    }>`SELECT id, user_id, rule_id, severity, message, pattern, extensions, enabled, created_at
-       FROM custom_rules WHERE user_id = 'system' OR user_id = ${authData.userID}
+    }>`SELECT id, app_id, rule_id, severity, message, pattern, extensions, enabled, created_at
+       FROM custom_rules WHERE app_id = '' OR app_id = ${authData.appId}
        ORDER BY rule_id`;
     const rules: CustomRuleResponse[] = [];
     for await (const r of rows) {
       rules.push({
         id: r.id, ruleId: r.rule_id, severity: r.severity, message: r.message,
         pattern: r.pattern, extensions: r.extensions, enabled: r.enabled,
-        isSystem: r.user_id === "system", createdAt: r.created_at.toISOString(),
+        isSystem: r.app_id === "", createdAt: r.created_at.toISOString(),
       });
     }
     return { rules };
@@ -478,8 +477,8 @@ export const createCustomRule = api(
     const authData = getAuthData()!;
     try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); }
     const id = uuidv4();
-    await db.exec`INSERT INTO custom_rules (id, user_id, rule_id, severity, message, pattern, extensions)
-      VALUES (${id}, ${authData.userID}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern}, ${params.extensions})`;
+    await db.exec`INSERT INTO custom_rules (id, app_id, rule_id, severity, message, pattern, extensions)
+      VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern}, ${params.extensions})`;
     return {
       id, ruleId: params.ruleId, severity: params.severity, message: params.message,
       pattern: params.pattern, extensions: params.extensions, enabled: true,
@@ -495,12 +494,12 @@ export const updateCustomRule = api(
     pattern?: string; extensions?: string[]; enabled?: boolean;
   }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
-    const row = await db.queryRow<{ user_id: string }>`SELECT user_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    const row = await db.queryRow<{ app_id: string }>`SELECT app_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
     if (!row) throw APIError.notFound("Rule not found");
-    if (row.user_id === "system" && params.enabled === undefined) throw APIError.permissionDenied("Cannot edit system rules");
-    if (row.user_id !== "system" && row.user_id !== authData.userID) throw APIError.permissionDenied("Not your rule");
+    if (row.app_id === "" && params.enabled === undefined) throw APIError.permissionDenied("Cannot edit system rules");
+    if (row.app_id !== "" && row.app_id !== authData.appId) throw APIError.permissionDenied("Not your rule");
     if (params.pattern) { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
-    if (row.user_id === "system") {
+    if (row.app_id === "") {
       await db.exec`UPDATE custom_rules SET enabled = ${params.enabled ?? true} WHERE id = ${params.ruleDbId}`;
     } else {
       await db.exec`UPDATE custom_rules SET
@@ -520,10 +519,10 @@ export const deleteCustomRule = api(
   { method: "DELETE", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
   async (params: { ruleDbId: string }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
-    const row = await db.queryRow<{ user_id: string }>`SELECT user_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    const row = await db.queryRow<{ app_id: string }>`SELECT app_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
     if (!row) throw APIError.notFound("Rule not found");
-    if (row.user_id === "system") throw APIError.permissionDenied("Cannot delete system rules");
-    if (row.user_id !== authData.userID) throw APIError.permissionDenied("Not your rule");
+    if (row.app_id === "") throw APIError.permissionDenied("Cannot delete system rules");
+    if (row.app_id !== authData.appId) throw APIError.permissionDenied("Not your rule");
     await db.exec`DELETE FROM custom_rules WHERE id = ${params.ruleDbId}`;
     return { success: true };
   }
@@ -729,6 +728,42 @@ export const toggleSonarRule = api(
   }
 );
 
+// ─── Global Rule Overrides (OpenGrep & SonarQube) ───
+
+export const listRuleOverrides = api(
+  { method: "GET", path: "/code-analysis/rule-overrides", auth: true },
+  async (params: { tool: "opengrep" | "sonarqube" }): Promise<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }> => {
+    const overrides: Array<{ id: string; ruleId: string; enabled: boolean }> = [];
+    if (params.tool === "opengrep") {
+      const rows = db.query<{ id: string; rule_id: string; enabled: boolean }>`
+        SELECT id, rule_id, enabled FROM opengrep_rules`;
+      for await (const r of rows) overrides.push({ id: r.id, ruleId: r.rule_id, enabled: r.enabled });
+    } else {
+      const rows = db.query<{ id: string; rule_id: string; enabled: boolean }>`
+        SELECT id, rule_id, enabled FROM sonarqube_rules`;
+      for await (const r of rows) overrides.push({ id: r.id, ruleId: r.rule_id, enabled: r.enabled });
+    }
+    return { overrides };
+  }
+);
+
+export const toggleRule = api(
+  { method: "POST", path: "/code-analysis/rule-overrides", auth: true },
+  async (params: { tool: "opengrep" | "sonarqube"; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
+    const id = uuidv4();
+    if (params.tool === "opengrep") {
+      await db.exec`INSERT INTO opengrep_rules (id, rule_id, enabled)
+        VALUES (${id}, ${params.ruleId}, ${params.enabled})
+        ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
+    } else {
+      await db.exec`INSERT INTO sonarqube_rules (id, rule_id, enabled)
+        VALUES (${id}, ${params.ruleId}, ${params.enabled})
+        ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
+    }
+    return { success: true };
+  }
+);
+
 function emptySummary(): ScanSummary {
   return { totalFindings: 0, errors: 0, warnings: 0, infos: 0, filesScanned: 0, filesInRepo: 0 };
 }
@@ -917,7 +952,7 @@ async function runSonarScanner(repoDir: string, projectKey: string): Promise<Son
   return issues;
 }
 
-async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; user_id: string; project_id: string; created_at: Date }, tools: { opengrep: boolean; sonarqube: boolean; customRules: boolean } = { opengrep: true, sonarqube: true, customRules: true }) {
+async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; app_id: string; project_id: string; created_at: Date }, tools: { opengrep: boolean; sonarqube: boolean; customRules: boolean } = { opengrep: true, sonarqube: true, customRules: true }) {
   console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, tools: opengrep=${tools.opengrep} sonarqube=${tools.sonarqube} customRules=${tools.customRules}`);
   const tmpDir = mkdtempSync(join(tmpdir(), "opengrep-scan-"));
 
@@ -954,6 +989,16 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     } catch { /* ignore */ }
 
     await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0 });
+
+    // Load globally disabled rule IDs
+    const disabledOpengrep = new Set<string>();
+    const disabledSonar = new Set<string>();
+    {
+      const ogRows = db.query<{ rule_id: string }>`SELECT rule_id FROM opengrep_rules WHERE enabled = false`;
+      for await (const r of ogRows) disabledOpengrep.add(r.rule_id);
+      const sqRows = db.query<{ rule_id: string }>`SELECT rule_id FROM sonarqube_rules WHERE enabled = false`;
+      for await (const r of sqRows) disabledSonar.add(r.rule_id);
+    }
 
     // 2. Run Opengrep (if enabled)
     const outputFile = join(tmpDir, "results.json");
@@ -998,6 +1043,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       console.log(`[doScan] Opengrep found ${results.length} findings across ${filesScanned} files`);
 
       for (const r of results) {
+        if (disabledOpengrep.has(r.check_id)) continue;
         const arr = findingsByFile.get(r.path) || [];
         arr.push({ ruleId: r.check_id, severity: mapSeverity(r.extra.severity), message: r.extra.message, filePath: r.path, startLine: r.start.line, endLine: r.end.line, snippet: (r.extra.lines || "").trim().slice(0, 200) });
         findingsByFile.set(r.path, arr);
@@ -1010,7 +1056,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     if (tools.customRules) {
       console.log(`[doScan] Running custom rules on ${scanId}...`);
       const allFiles = walkFiles(repoDir);
-      const dbRules = await loadCustomRules(scan.user_id);
+      const dbRules = await loadCustomRules(scan.app_id);
       const customFindings = runCustomRules(repoDir, allFiles, dbRules);
       console.log(`[doScan] Custom rules found ${customFindings.length} findings in ${allFiles.length} files (${dbRules.length} rules loaded)`);
       for (const cf of customFindings) {
@@ -1036,8 +1082,9 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       console.log("[doScan] SonarQube disabled, skipping");
     }
 
-    // Merge sonar findings into the map
+    // Merge sonar findings into the map (skip disabled rules)
     for (const sf of sonarFindings) {
+      if (disabledSonar.has(sf.ruleId)) continue;
       const arr = findingsByFile.get(sf.filePath) || [];
       arr.push(sf);
       findingsByFile.set(sf.filePath, arr);

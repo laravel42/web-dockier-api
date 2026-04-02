@@ -49,9 +49,9 @@ export const startBuild = api(
     const callbackUrl = getCallbackUrl();
 
     await db.exec`
-      INSERT INTO builds (id, user_id, project_id, source_repo, source_ref, commit_sha,
+      INSERT INTO builds (id, app_id, project_id, source_repo, source_ref, commit_sha,
         dockerfile_path, build_context, image_repo, cache_repo_uri, status, tags, created_at, updated_at)
-      VALUES (${id}, ${authData.userID}, ${params.projectId || ""}, ${params.sourceRepo},
+      VALUES (${id}, ${authData.appId}, ${params.projectId || ""}, ${params.sourceRepo},
         ${sourceRef}, ${params.commitSha || ""}, ${dockerfilePath}, ${buildContext},
         ${imageRepo}, ${`${ecrBase}/${cacheRepoName}`}, 'pending', ${JSON.stringify(tags)}, NOW(), NOW())`;
 
@@ -267,13 +267,13 @@ export const listBuilds = api(
 
     let rows;
     if (params.sourceRepo && params.status) {
-      rows = db.query`SELECT * FROM builds WHERE user_id = ${authData.userID} AND source_repo = ${params.sourceRepo} AND status = ${params.status} ORDER BY created_at DESC LIMIT ${limit}`;
+      rows = db.query`SELECT * FROM builds WHERE app_id = ${authData.appId} AND source_repo = ${params.sourceRepo} AND status = ${params.status} ORDER BY created_at DESC LIMIT ${limit}`;
     } else if (params.sourceRepo) {
-      rows = db.query`SELECT * FROM builds WHERE user_id = ${authData.userID} AND source_repo = ${params.sourceRepo} ORDER BY created_at DESC LIMIT ${limit}`;
+      rows = db.query`SELECT * FROM builds WHERE app_id = ${authData.appId} AND source_repo = ${params.sourceRepo} ORDER BY created_at DESC LIMIT ${limit}`;
     } else if (params.status) {
-      rows = db.query`SELECT * FROM builds WHERE user_id = ${authData.userID} AND status = ${params.status} ORDER BY created_at DESC LIMIT ${limit}`;
+      rows = db.query`SELECT * FROM builds WHERE app_id = ${authData.appId} AND status = ${params.status} ORDER BY created_at DESC LIMIT ${limit}`;
     } else {
-      rows = db.query`SELECT * FROM builds WHERE user_id = ${authData.userID} ORDER BY created_at DESC LIMIT ${limit}`;
+      rows = db.query`SELECT * FROM builds WHERE app_id = ${authData.appId} ORDER BY created_at DESC LIMIT ${limit}`;
     }
 
     const builds: BuildStatusResponse[] = [];

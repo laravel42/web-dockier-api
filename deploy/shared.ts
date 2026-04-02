@@ -13,7 +13,6 @@ export const DeployCallbackUrl = secret("DeployCallbackUrl");
 
 export interface ServerProvider {
   id: string;
-  userId: string;
   provider: "digitalocean" | "hetzner" | "vultr" | "linode" | "aws" | "upcloud" | "katapult" | "hostinger";
   label: string;
   apiKey: string;
@@ -24,7 +23,6 @@ export interface ServerProvider {
 
 export interface Deployment {
   id: string;
-  userId: string;
   providerId: string;
   gitConnectionId: string;
   repo: string;
@@ -41,7 +39,6 @@ export interface Deployment {
 
 export interface ProviderResponse {
   id: string;
-  userId: string;
   provider: string;
   label: string;
   region: string;
@@ -51,7 +48,7 @@ export interface ProviderResponse {
 
 export interface DeployEvent {
   deploymentId: string;
-  userId: string;
+  appId: string;
   providerId: string;
   gitConnectionId: string;
   repo: string;

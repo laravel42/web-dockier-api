@@ -78,8 +78,8 @@ async function ensureUser(userId: string): Promise<UserRow> {
   }
 
   await db.exec`
-    INSERT INTO users (id, email, name, created_at)
-    VALUES (${authData.userID}, ${authData.email}, '', NOW())
+    INSERT INTO users (id, email, name, app_id, created_at)
+    VALUES (${authData.userID}, ${authData.email}, '', ${authData.appId}, NOW())
     ON CONFLICT (id) DO NOTHING`;
 
   user = await db.queryRow<UserRow>`
@@ -106,8 +106,8 @@ export const createUser = api(
     if (existing) throw APIError.alreadyExists("A user with this email already exists");
 
     await db.exec`
-      INSERT INTO users (id, email, name, country, language, timezone, created_at)
-      VALUES (${id}, ${params.email}, ${params.name}, ${params.country || ""}, ${params.language || "en"}, ${params.timezone || "UTC"}, NOW())`;
+      INSERT INTO users (id, email, name, app_id, country, language, timezone, created_at)
+      VALUES (${id}, ${params.email}, ${params.name}, ${getAuthData()!.appId}, ${params.country || ""}, ${params.language || "en"}, ${params.timezone || "UTC"}, NOW())`;
 
     const row = await db.queryRow<UserRow>`
       SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users WHERE id = ${id}`;
@@ -130,6 +130,7 @@ export const getUser = api(
 export const listUsers = api(
   { method: "GET", path: "/users", auth: true },
   async (params: ListUsersParams): Promise<ListUsersResponse> => {
+    const authData = getAuthData()!;
     const page = params.page || 1;
     const limit = Math.min(params.limit || 20, 100);
     const offset = (page - 1) * limit;
@@ -141,64 +142,35 @@ export const listUsers = api(
       const searchPattern = `%${params.search}%`;
       const countRow = await db.queryRow<{ count: number }>`
         SELECT COUNT(*)::int as count FROM users
-        WHERE name ILIKE ${searchPattern} OR email ILIKE ${searchPattern}`;
+        WHERE app_id = ${authData.appId} AND (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern})`;
       total = countRow?.count || 0;
 
       const rows = db.query<{
-        id: string;
-        email: string;
-        name: string;
-        avatar_url: string | null;
-        country: string;
-        language: string;
-        timezone: string;
-        created_at: Date;
+        id: string; email: string; name: string; avatar_url: string | null;
+        country: string; language: string; timezone: string; created_at: Date;
       }>`SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users
-         WHERE name ILIKE ${searchPattern} OR email ILIKE ${searchPattern}
+         WHERE app_id = ${authData.appId} AND (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern})
          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
       users = [];
       for await (const row of rows) {
-        users.push({
-          id: row.id,
-          email: row.email,
-          name: row.name,
-          avatarUrl: row.avatar_url || undefined,
-          country: row.country,
-          language: row.language,
-          timezone: row.timezone,
-          createdAt: row.created_at.toISOString(),
-        });
+        users.push({ id: row.id, email: row.email, name: row.name, avatarUrl: row.avatar_url || undefined, country: row.country, language: row.language, timezone: row.timezone, createdAt: row.created_at.toISOString() });
       }
     } else {
       const countRow = await db.queryRow<{ count: number }>`
-        SELECT COUNT(*)::int as count FROM users`;
+        SELECT COUNT(*)::int as count FROM users WHERE app_id = ${authData.appId}`;
       total = countRow?.count || 0;
 
       const rows = db.query<{
-        id: string;
-        email: string;
-        name: string;
-        avatar_url: string | null;
-        country: string;
-        language: string;
-        timezone: string;
-        created_at: Date;
+        id: string; email: string; name: string; avatar_url: string | null;
+        country: string; language: string; timezone: string; created_at: Date;
       }>`SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users
+         WHERE app_id = ${authData.appId}
          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
       users = [];
       for await (const row of rows) {
-        users.push({
-          id: row.id,
-          email: row.email,
-          name: row.name,
-          avatarUrl: row.avatar_url || undefined,
-          country: row.country,
-          language: row.language,
-          timezone: row.timezone,
-          createdAt: row.created_at.toISOString(),
-        });
+        users.push({ id: row.id, email: row.email, name: row.name, avatarUrl: row.avatar_url || undefined, country: row.country, language: row.language, timezone: row.timezone, createdAt: row.created_at.toISOString() });
       }
     }
 

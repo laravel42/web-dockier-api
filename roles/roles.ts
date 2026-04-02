@@ -20,8 +20,8 @@ export const createRole = api(
   async (params: { name: string; description?: string; permissions: string[] }): Promise<Role> => {
     const authData = getAuthData()!;
     const id = uuidv4();
-    await db.exec`INSERT INTO roles (id, user_id, name, description, permissions, created_at)
-      VALUES (${id}, ${authData.userID}, ${params.name}, ${params.description || ""}, ${params.permissions}, NOW())`;
+    await db.exec`INSERT INTO roles (id, app_id, name, description, permissions, created_at)
+      VALUES (${id}, ${authData.appId}, ${params.name}, ${params.description || ""}, ${params.permissions}, NOW())`;
     return { id, name: params.name, description: params.description || "", permissions: params.permissions, createdAt: new Date().toISOString() };
   }
 );
@@ -31,7 +31,7 @@ export const listRoles = api(
   async (): Promise<{ roles: Role[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{ id: string; name: string; description: string; permissions: string[]; created_at: Date }>`
-      SELECT id, name, description, permissions, created_at FROM roles WHERE user_id = ${authData.userID} ORDER BY created_at DESC`;
+      SELECT id, name, description, permissions, created_at FROM roles WHERE app_id = ${authData.appId} ORDER BY created_at DESC`;
     const roles: Role[] = [];
     for await (const r of rows) roles.push({ id: r.id, name: r.name, description: r.description, permissions: r.permissions || [], createdAt: r.created_at.toISOString() });
     return { roles };

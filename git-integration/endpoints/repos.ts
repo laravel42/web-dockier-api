@@ -11,18 +11,24 @@ export const listRepos = api(
     const repos: GitRepo[] = [];
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
-      const res = await fetch(`${baseUrl}/user/repos?per_page=100&sort=updated`, { headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" } });
+      const res = await fetch(`${baseUrl}/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member`, { headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" } });
       if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
-      for (const r of data) repos.push({ name: r.name, fullName: r.full_name, url: r.html_url, defaultBranch: r.default_branch, private: r.private });
+      for (const r of data) {
+        if (r.archived) continue;
+        repos.push({ name: r.name, fullName: r.full_name, url: r.html_url, defaultBranch: r.default_branch, private: r.private });
+      }
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
-      const res = await fetch(`${baseUrl}/api/v4/projects?membership=true&per_page=100&order_by=updated_at`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
+      const res = await fetch(`${baseUrl}/api/v4/projects?membership=true&simple=true&per_page=100&order_by=updated_at&archived=false`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
       if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
-      for (const r of data) repos.push({ name: r.name, fullName: r.path_with_namespace, url: r.web_url, defaultBranch: r.default_branch || "main", private: r.visibility === "private" });
+      for (const r of data) {
+        if (r.marked_for_deletion_at || r.marked_for_deletion_on) continue;
+        repos.push({ name: r.name, fullName: r.path_with_namespace, url: r.web_url, defaultBranch: r.default_branch || "main", private: r.visibility === "private" });
+      }
     } else if (conn.provider === "bitbucket") {
       const baseUrl = conn.endpoint || "https://api.bitbucket.org";
       const res = await fetch(`${baseUrl}/2.0/repositories?role=member&pagelen=100`, { headers: { Authorization: `Bearer ${conn.personal_token}` } });
@@ -41,21 +47,39 @@ export const listBranches = api(
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
     if (!conn) throw APIError.notFound("Connection not found");
     const branches: string[] = [];
+    const staleThreshold = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3 months
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
-      const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/branches`, { headers: { Authorization: `Bearer ${conn.personal_token}` } });
+      const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
+      const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/branches?per_page=100`, { headers });
       if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
-      for (const b of data) branches.push(b.name);
+      // Fetch commit dates in parallel to filter stale branches
+      const withDates = await Promise.all(data.map(async (b: any) => {
+        try {
+          const cRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits/${b.commit.sha}`, { headers });
+          if (!cRes.ok) return { name: b.name, date: 0 };
+          const c = await cRes.json() as any;
+          return { name: b.name, date: new Date(c.commit?.committer?.date || 0).getTime() };
+        } catch { return { name: b.name, date: 0 }; }
+      }));
+      withDates
+        .filter(b => b.date > staleThreshold)
+        .sort((a, b) => b.date - a.date)
+        .forEach(b => branches.push(b.name));
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
-      const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
+      const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
       if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
-      for (const b of data) branches.push(b.name);
+      const dated = data
+        .map((b: any) => ({ name: b.name, date: new Date(b.commit?.committed_date || 0).getTime() }))
+        .filter((b: any) => b.date > staleThreshold)
+        .sort((a: any, b: any) => b.date - a.date);
+      for (const b of dated) branches.push(b.name);
     }
     return { branches };
   }

@@ -20,7 +20,6 @@ export interface GitRepo {
 
 export interface GitConnectionResponse {
   id: string;
-  userId: string;
   provider: string;
   label: string;
   repoUrl: string;

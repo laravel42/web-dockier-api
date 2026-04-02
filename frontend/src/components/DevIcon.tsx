@@ -21,11 +21,14 @@ export default function DevIcon({ src, className = "", alt = "" }: Props) {
   const isUrl = src.startsWith("http") || src.startsWith("/") || src.startsWith("data:");
   const url = isUrl ? src : resolveIcon(src, dark);
 
+  if (!url) return null;
+
   return (
     <img
       src={url}
       alt={alt}
       className={className}
+      onLoad={(e) => { (e.target as HTMLImageElement).style.display = ""; }}
       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
     />
   );

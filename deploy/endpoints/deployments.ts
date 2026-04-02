@@ -23,14 +23,14 @@ export const createDeployment = api(
     const script = params.tofuScript || "";
 
     await db.exec`
-      INSERT INTO deployments (id, user_id, provider_id, git_connection_id, repo, branch, status, logs, tofu_script, deploy_strategy, created_at, updated_at)
-      VALUES (${id}, ${authData.userID}, ${params.providerId}, ${params.gitConnectionId},
+      INSERT INTO deployments (id, app_id, provider_id, git_connection_id, repo, branch, status, logs, tofu_script, deploy_strategy, created_at, updated_at)
+      VALUES (${id}, ${authData.appId}, ${params.providerId}, ${params.gitConnectionId},
               ${params.repo}, ${params.branch}, 'pending', '', ${script}, ${params.deployStrategy || "managed"}, NOW(), NOW())`;
 
     if (!params.skipPipeline) {
       await deployTopic.publish({
         deploymentId: id,
-        userId: authData.userID,
+        appId: authData.appId,
         providerId: params.providerId,
         gitConnectionId: params.gitConnectionId,
         repo: params.repo,
@@ -45,7 +45,7 @@ export const createDeployment = api(
     }
 
     return {
-      id, userId: authData.userID, providerId: params.providerId,
+      id, providerId: params.providerId,
       gitConnectionId: params.gitConnectionId, repo: params.repo,
       branch: params.branch, status: "pending", logs: "", appUrl: "",
       commitHash: "", dockerImage: "", deployStrategy: params.deployStrategy || "managed",
@@ -60,18 +60,18 @@ export const listDeployments = api(
     const authData = getAuthData()!;
     const rows = params.providerId
       ? db.query<{
-          id: string; user_id: string; provider_id: string; git_connection_id: string;
+          id: string; provider_id: string; git_connection_id: string;
           repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
-        }>`SELECT * FROM deployments WHERE user_id = ${authData.userID} AND provider_id = ${params.providerId} ORDER BY created_at DESC LIMIT 50`
+        }>`SELECT * FROM deployments WHERE app_id = ${authData.appId} AND provider_id = ${params.providerId} ORDER BY created_at DESC LIMIT 50`
       : db.query<{
-          id: string; user_id: string; provider_id: string; git_connection_id: string;
+          id: string; provider_id: string; git_connection_id: string;
           repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
-        }>`SELECT * FROM deployments WHERE user_id = ${authData.userID} ORDER BY created_at DESC LIMIT 50`;
+        }>`SELECT * FROM deployments WHERE app_id = ${authData.appId} ORDER BY created_at DESC LIMIT 50`;
 
     const deployments: Deployment[] = [];
     for await (const row of rows) {
       deployments.push({
-        id: row.id, userId: row.user_id, providerId: row.provider_id,
+        id: row.id, providerId: row.provider_id,
         gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
         status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
         commitHash: row.commit_hash, dockerImage: row.docker_image,
@@ -87,12 +87,12 @@ export const getDeployment = api(
   { method: "GET", path: "/deploy/deployments/:deploymentId", auth: true },
   async (params: { deploymentId: string }): Promise<Deployment> => {
     const row = await db.queryRow<{
-      id: string; user_id: string; provider_id: string; git_connection_id: string;
+      id: string; provider_id: string; git_connection_id: string;
       repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
     }>`SELECT * FROM deployments WHERE id = ${params.deploymentId}`;
     if (!row) throw APIError.notFound("Deployment not found");
     return {
-      id: row.id, userId: row.user_id, providerId: row.provider_id,
+      id: row.id, providerId: row.provider_id,
       gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
       status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
       commitHash: row.commit_hash, dockerImage: row.docker_image,
@@ -122,10 +122,10 @@ export const destroyDeployment = api(
   async (params: { deploymentId: string }): Promise<{ success: boolean; message: string }> => {
     const authData = getAuthData()!;
     const row = await db.queryRow<{
-      id: string; user_id: string; provider_id: string; repo: string; deploy_strategy: string; docker_image: string;
-    }>`SELECT id, user_id, provider_id, repo, deploy_strategy, docker_image FROM deployments WHERE id = ${params.deploymentId}`;
+      id: string; app_id: string; provider_id: string; repo: string; deploy_strategy: string; docker_image: string;
+    }>`SELECT id, app_id, provider_id, repo, deploy_strategy, docker_image FROM deployments WHERE id = ${params.deploymentId}`;
     if (!row) throw APIError.notFound("Deployment not found");
-    if (row.user_id !== authData.userID) throw APIError.permissionDenied("Not your deployment");
+    if (row.app_id !== authData.appId) throw APIError.permissionDenied("Not your deployment");
 
     const providerRow = await db.queryRow<{
       provider: string; region: string; api_key: string; api_secret: string;

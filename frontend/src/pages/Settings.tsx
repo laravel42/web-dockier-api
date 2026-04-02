@@ -291,8 +291,9 @@ function SecurityTab() {
 function RolesTab() {
   const [roles, setRoles] = useState<any[]>([]);
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const fetch_ = async () => {
     setLoading(true);
@@ -306,6 +307,12 @@ function RolesTab() {
   const handleCreateRole = async (data: { name: string; description: string; permissions: string[] }) => {
     await rolesApi.create(data);
     setShowRoleModal(false); fetch_();
+  };
+
+  const handleEditRole = async (data: { name: string; description: string; permissions: string[] }) => {
+    if (!editingRole) return;
+    await rolesApi.update(editingRole.id, data);
+    setEditingRole(null); fetch_();
   };
 
   const formatPerm = (p: string) => {
@@ -327,37 +334,48 @@ function RolesTab() {
 
       <RoleFormModal open={showRoleModal} onClose={() => setShowRoleModal(false)} onSubmit={handleCreateRole} />
 
+      {/* Edit modal */}
+      <RoleFormModal
+        open={!!editingRole}
+        onClose={() => setEditingRole(null)}
+        onSubmit={handleEditRole}
+        initialData={editingRole ? { name: editingRole.name, description: editingRole.description, permissions: editingRole.permissions || [] } : undefined}
+        title="Edit Role"
+        submitLabel="Save Changes"
+      />
+
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {roles.map((r) => (
-            <div key={r.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-shadow">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div key={r.id} onClick={() => setEditingRole(r)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 flex items-center justify-center shrink-0 text-primary-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                   </svg>
                 </div>
-                <div>
-                  <p className="text-base font-bold text-text">{r.name}</p>
-                  <p className="text-sm text-text-secondary mt-0.5">{r.description}</p>
-                  {r.permissions?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {r.permissions.map((p: string) => (
-                        <span key={p} className="px-2 py-0.5 bg-primary-50 text-primary-600 rounded text-xs font-medium">{formatPerm(p)}</span>
-                      ))}
-                    </div>
-                  )}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-text truncate">{r.name}</p>
+                  <p className="text-xs text-text-muted truncate">{r.description || "No description"}</p>
                 </div>
               </div>
-              <button onClick={() => setDeleteId(r.id)} className={btnDanger}>Remove</button>
+              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600">{r.permissions?.length || 0} permissions</span>
+              {r.permissions?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {r.permissions.slice(0, 3).map((p: string) => (
+                    <span key={p} className="px-1.5 py-0.5 bg-secondary-50 text-text-muted rounded text-[10px]">{formatPerm(p)}</span>
+                  ))}
+                  {r.permissions.length > 3 && <span className="px-1.5 py-0.5 text-text-muted text-[10px]">+{r.permissions.length - 3}</span>}
+                </div>
+              )}
             </div>
           ))}
-          {roles.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No roles configured yet</p>}
+          {roles.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No roles configured yet</p>}
         </div>
       )}
-      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) rolesApi.delete(deleteId).then(fetch_); }} message="Are you sure you want to remove this role?" />
+      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingRole) rolesApi.delete(editingRole.id).then(fetch_); setEditingRole(null); setConfirmRemove(false); }} message="Are you sure you want to remove this role?" />
     </div>
   );
 }
@@ -1623,7 +1641,7 @@ function SecurityRulesTab() {
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {filtered.map(r => (
-            <div key={r.id} className={`bg-card border border-border rounded-lg p-4 flex flex-col gap-3 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
+            <div key={r.id} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
@@ -1679,8 +1697,14 @@ function SonarQubeRulesPanel() {
   const [error, setError] = useState("");
   const [sevFilter, setSevFilter] = useState("");
   const [sqVisible, setSqVisible] = useState(30);
+  const [disabledSqRules, setDisabledSqRules] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // Load disabled rules from DB
+    codeAnalysisApi.listRuleOverrides("sonarqube").then(res => {
+      setDisabledSqRules(new Set(res.overrides.filter(o => !o.enabled).map(o => o.ruleId)));
+    }).catch(() => {});
+
     // Use cache if available
     if (_sqCache) {
       setProfiles(_sqCache.profiles);
@@ -1713,19 +1737,24 @@ function SonarQubeRulesPanel() {
       .finally(() => setLoading(false));
   }, []);
 
-  const rules = allRules.filter(r => selectedLangs.size === 0 || selectedLangs.has(r.lang));
+  const rules = allRules.filter(r => selectedLangs.size === 0 || selectedLangs.has(r.lang) || (selectedLangs.has("py") && r.lang === "ipynb"));
 
-  const handleToggle = async (ruleKey: string, currentActive: boolean) => {
-    const rule = allRules.find(r => r.key === ruleKey);
-    if (!rule) return;
+  const handleToggle = async (ruleKey: string) => {
+    const nowEnabled = disabledSqRules.has(ruleKey);
+    setDisabledSqRules(prev => {
+      const n = new Set(prev);
+      if (nowEnabled) n.delete(ruleKey); else n.add(ruleKey);
+      return n;
+    });
     try {
-      await codeAnalysisApi.toggleSonarRule(rule.profileKey, ruleKey, !currentActive);
-      setAllRules(prev => {
-        const updated = prev.map(r => r.key === ruleKey ? { ...r, isActive: !currentActive } : r);
-        if (_sqCache) _sqCache.rules = updated;
-        return updated;
-      });
+      await codeAnalysisApi.toggleRule("sonarqube", ruleKey, nowEnabled);
     } catch (e: any) {
+      // Revert on failure
+      setDisabledSqRules(prev => {
+        const n = new Set(prev);
+        if (nowEnabled) n.add(ruleKey); else n.delete(ruleKey);
+        return n;
+      });
       setError(e.message || "Failed to toggle rule");
       setTimeout(() => setError(""), 3000);
     }
@@ -1760,10 +1789,11 @@ function SonarQubeRulesPanel() {
           ]}
           activeSeverity={sevFilter}
           onSeverityChange={(k) => { setSevFilter(k); setSqVisible(30); }}
-          languages={profiles.map(p => {
-            const langIcon: Record<string, string> = { java: "java", js: "javascript", ts: "typescript", py: "python", php: "php", go: "go", ruby: "ruby", cs: "csharp", kotlin: "kotlin", swift: "swift", scala: "scala", web: "html5", css: "css3", xml: "xml" };
-            const langRename: Record<string, string> = { "Azure Resource Manager": "Azure", "IPython Notebooks": "Python" };
-            return { key: p.language, icon: langIcon[p.language] || "devicon", label: langRename[p.languageName] || p.languageName, count: allRules.filter(r => r.lang === p.language).length };
+          languages={profiles.filter(p => p.language !== "ipynb").map(p => {
+            const langIcon: Record<string, string> = { java: "java", js: "javascript", ts: "typescript", py: "python", python: "python", php: "php", go: "go", ruby: "ruby", cs: "csharp", kotlin: "kotlin", swift: "swift", scala: "scala", web: "html5", css: "css3", xml: "xml", docker: "docker", dockerfile: "docker", terraform: "terraform", azureresourcemanager: "azureresourcemanager", azuresqldatabase: "azure" };
+            const langRename: Record<string, string> = { "Azure Resource Manager": "Azure" };
+            const count = allRules.filter(r => r.lang === p.language || (p.language === "py" && r.lang === "ipynb")).length;
+            return { key: p.language, icon: langIcon[p.language] || p.language, label: langRename[p.languageName] || p.languageName, count };
           })}
           activeLangs={selectedLangs}
           onLangToggle={(k) => { setSelectedLangs(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; }); setSqVisible(30); }}
@@ -1800,7 +1830,7 @@ function SonarQubeRulesPanel() {
             const langRename: Record<string, string> = { azureresourcemanager: "Azure", ipynb: "Python", web: "HTML/CSS" };
             const techLabel = langRename[r.lang] || r.lang;
             return (
-            <div key={r.key} className={`bg-card border border-border rounded-lg p-4 flex flex-col gap-3 transition-all ${!r.isActive ? "opacity-50" : ""}`}>
+            <div key={r.key} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${disabledSqRules.has(r.key) ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0`} style={{ backgroundColor: { BLOCKER: "#ef4444", CRITICAL: "#f97316", MAJOR: "#eab308", MINOR: "#3b82f6", INFO: "#94a3b8" }[r.severity] || "#94a3b8" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.key}</span>
@@ -1811,9 +1841,9 @@ function SonarQubeRulesPanel() {
                     </span>
                   ))}
                 </div>
-                <button type="button" onClick={() => handleToggle(r.key, r.isActive)}
-                  className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.isActive ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.isActive ? "left-[14px]" : "left-[1px]"}`} />
+                <button type="button" onClick={() => handleToggle(r.key)}
+                  className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${!disabledSqRules.has(r.key) ? "bg-primary-500" : "bg-secondary-200"}`}>
+                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-[1px]"}`} />
                 </button>
               </div>
               <p className="text-sm text-text leading-relaxed">{r.name}</p>
@@ -1942,20 +1972,27 @@ function OpengrepRulesPanel() {
   const [sevFilter, setSevFilter] = useState("");
   const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set());
   const [visible, setVisible] = useState(30);
-  const [disabledRules, setDisabledRules] = useState<Set<string>>(() => {
-    try { const s = localStorage.getItem("og_disabled_rules"); return s ? new Set(JSON.parse(s)) : new Set(); } catch { return new Set(); }
-  });
+  const [disabledRules, setDisabledRules] = useState<Set<string>>(new Set());
   const [editRule, setEditRule] = useState<{ id: string; path: string; name: string } | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editLoading, setEditLoading] = useState(false);
 
+  // Load disabled rules from backend
+  useEffect(() => {
+    codeAnalysisApi.listRuleOverrides("opengrep").then(res => {
+      const disabled = new Set(res.overrides.filter(o => !o.enabled).map(o => o.ruleId));
+      setDisabledRules(disabled);
+    }).catch(() => {});
+  }, []);
+
   const toggleRule = (id: string) => {
+    const nowEnabled = disabledRules.has(id);
     setDisabledRules(prev => {
       const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      localStorage.setItem("og_disabled_rules", JSON.stringify([...n]));
+      if (nowEnabled) n.delete(id); else n.add(id);
       return n;
     });
+    codeAnalysisApi.toggleRule("opengrep", id, nowEnabled).catch(() => {});
   };
 
   const openEditModal = async (r: { id: string; path: string; name: string }) => {
@@ -1984,11 +2021,11 @@ function OpengrepRulesPanel() {
     go: "go", ruby: "ruby", rust: "rust", c: "c", csharp: "csharp", kotlin: "kotlin",
     swift: "swift", scala: "scala", bash: "bash", dockerfile: "docker", terraform: "terraform",
     html: "html5", json: "json", yaml: "yaml", elixir: "elixir", solidity: "solidity",
-    clojure: "clojure", ocaml: "ocaml", apex: "salesforce", generic: "devicon",
+    clojure: "clojure", ocaml: "ocaml", apex: "apex", generic: "generic", sql: "sql"
   };
 
   const languages = [...new Set(allRules.map(r => r.lang))].sort().map(l => ({
-    key: l, icon: langIcon[l] || "devicon", label: l.charAt(0).toUpperCase() + l.slice(1),
+    key: l, icon: langIcon[l] || l, label: l.charAt(0).toUpperCase() + l.slice(1),
     count: allRules.filter(r => r.lang === l).length,
   }));
 
@@ -2024,7 +2061,7 @@ function OpengrepRulesPanel() {
           {shown.map(r => {
             const enabled = !disabledRules.has(r.id);
             return (
-            <div key={r.id} className={`bg-card border border-border rounded-lg p-4 flex flex-col gap-3 transition-all ${!enabled ? "opacity-50" : ""}`}>
+            <div key={r.id} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${!enabled ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.id}</span>

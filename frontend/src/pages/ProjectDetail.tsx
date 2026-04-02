@@ -215,7 +215,7 @@ export default function ProjectDetail() {
     setPullLoading(true);
     setPullLog(["$ git pull origin " + (project.branch || "main"), "Connecting to remote…"]);
     try {
-      const res = await gitApi.pullOrigin(project.connectionId, parsed.owner, parsed.repo, project.branch || "main");
+      const res = await gitApi.pullOrigin(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", stats?.lastCommitHash);
       setPullLog(res.log);
     } catch (err: any) {
       setPullLog((prev) => [...(prev || []), `error: ${err.message || "Pull failed"}`]);

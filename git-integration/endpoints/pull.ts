@@ -6,7 +6,7 @@ import { throwProviderError } from "../helpers";
 
 export const pullOrigin = api(
   { method: "POST", path: "/git/connections/:connectionId/pull", auth: true },
-  async (params: { connectionId: string; owner: string; repo: string; branch: string }): Promise<{ log: string[] }> => {
+  async (params: { connectionId: string; owner: string; repo: string; branch: string; currentHash?: string }): Promise<{ log: string[] }> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
     }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -25,7 +25,7 @@ export const pullOrigin = api(
         const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=10`, { headers });
         if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
         const commits = await res.json() as any[];
-        if (commits.length === 0) {
+        if (commits.length === 0 || (params.currentHash && commits[0].sha === params.currentHash)) {
           log.push("Already up to date.");
         } else {
           log.push(` * branch            ${branch} -> FETCH_HEAD`);
@@ -59,7 +59,7 @@ export const pullOrigin = api(
         const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=10`, { headers });
         if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
         const commits = await res.json() as any[];
-        if (commits.length === 0) {
+        if (commits.length === 0 || (params.currentHash && commits[0].id === params.currentHash)) {
           log.push("Already up to date.");
         } else {
           log.push(` * branch            ${branch} -> FETCH_HEAD`);
@@ -92,7 +92,7 @@ export const pullOrigin = api(
         if (!res.ok) throwProviderError("Bitbucket", res.status, res.statusText);
         const data = await res.json() as any;
         const commits = data.values || [];
-        if (commits.length === 0) {
+        if (commits.length === 0 || (params.currentHash && commits[0].hash === params.currentHash)) {
           log.push("Already up to date.");
         } else {
           log.push(` * branch            ${branch} -> FETCH_HEAD`);

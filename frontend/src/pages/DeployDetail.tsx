@@ -211,7 +211,7 @@ export default function DeployDetail() {
       </div>
 
       {/* Sidebar: deploy history */}
-      <div className="w-64 shrink-0">
+      <div className="w-80 shrink-0">
         <div className="sticky top-6 space-y-3">
           <div className={`${cardCls} overflow-hidden`}>
             <div className="px-3 py-2 border-b border-border">

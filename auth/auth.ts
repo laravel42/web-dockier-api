@@ -36,6 +36,7 @@ interface RegisterParams {
   email: string;
   password: string;
   name: string;
+  appId: string;
 }
 
 interface LoginParams {
@@ -57,11 +58,13 @@ interface SocialLoginParams {
   provider: "google" | "github";
   code: string;
   redirectUri: string;
+  appId: string;
 }
 
 export interface AuthData {
   userID: string;
   email: string;
+  appId: string;
 }
 
 // ─── Auth Handler (used by Encore's auth middleware) ───
@@ -80,8 +83,9 @@ export const auth = authHandler<AuthParams, AuthData>(async (params) => {
     const decoded = jwt.verify(token, jwtSecretValue) as {
       userId: string;
       email: string;
+      appId: string;
     };
-    return { userID: decoded.userId, email: decoded.email };
+    return { userID: decoded.userId, email: decoded.email, appId: decoded.appId };
   } catch {
     throw APIError.unauthenticated("Invalid or expired token");
   }
@@ -93,8 +97,8 @@ export const gateway = new Gateway({
 
 // ─── Helper ───
 
-function generateToken(userId: string, email: string): string {
-  return jwt.sign({ userId, email }, getJwtSecret(), { expiresIn: "7d" });
+function generateToken(userId: string, email: string, appId: string): string {
+  return jwt.sign({ userId, email, appId }, getJwtSecret(), { expiresIn: "7d" });
 }
 
 // ─── Register ───
@@ -110,10 +114,10 @@ export const register = api(
     const hashedPassword = await bcrypt.hash(params.password, 12);
 
     await db.exec`
-      INSERT INTO users (id, email, password_hash, name, created_at)
-      VALUES (${id}, ${params.email}, ${hashedPassword}, ${params.name}, NOW())`;
+      INSERT INTO users (id, email, password_hash, name, app_id, created_at)
+      VALUES (${id}, ${params.email}, ${hashedPassword}, ${params.name}, ${params.appId}, NOW())`;
 
-    return { token: generateToken(id, params.email), userId: id };
+    return { token: generateToken(id, params.email, params.appId), userId: id };
   }
 );
 
@@ -127,7 +131,8 @@ export const login = api(
       email: string;
       password_hash: string;
       two_factor_enabled: boolean;
-    }>`SELECT id, email, password_hash, two_factor_enabled FROM users WHERE email = ${params.email}`;
+      app_id: string;
+    }>`SELECT id, email, password_hash, two_factor_enabled, app_id FROM users WHERE email = ${params.email}`;
 
     if (!user) throw APIError.notFound("Invalid credentials");
 
@@ -136,14 +141,14 @@ export const login = api(
 
     if (user.two_factor_enabled) {
       const tempToken = jwt.sign(
-        { userId: user.id, email: user.email, pending2FA: true },
+        { userId: user.id, email: user.email, appId: user.app_id, pending2FA: true },
         getJwtSecret(),
         { expiresIn: "5m" }
       );
       return { token: tempToken, userId: user.id, requires2FA: true };
     }
 
-    return { token: generateToken(user.id, user.email), userId: user.id };
+    return { token: generateToken(user.id, user.email, user.app_id), userId: user.id };
   }
 );
 
@@ -205,7 +210,8 @@ export const verify2FA = api(
       id: string;
       email: string;
       two_factor_secret: string;
-    }>`SELECT id, email, two_factor_secret FROM users WHERE id = ${params.userId}`;
+      app_id: string;
+    }>`SELECT id, email, two_factor_secret, app_id FROM users WHERE id = ${params.userId}`;
 
     if (!user) throw APIError.notFound("User not found");
 
@@ -215,7 +221,7 @@ export const verify2FA = api(
     });
     if (!result.valid) throw APIError.unauthenticated("Invalid 2FA token");
 
-    return { token: generateToken(user.id, user.email), userId: user.id };
+    return { token: generateToken(user.id, user.email, user.app_id), userId: user.id };
   }
 );
 
@@ -286,24 +292,27 @@ export const socialLogin = api(
 
     if (!email) throw APIError.invalidArgument("Could not retrieve email");
 
-    let user = await db.queryRow<{ id: string }>`
-      SELECT id FROM users WHERE email = ${email}`;
+    let user = await db.queryRow<{ id: string; app_id: string }>`
+      SELECT id, app_id FROM users WHERE email = ${email}`;
 
     let userId: string;
+    let appId: string;
     if (!user) {
       userId = uuidv4();
+      appId = params.appId;
       await db.exec`
-        INSERT INTO users (id, email, name, created_at)
-        VALUES (${userId}, ${email}, ${name}, NOW())`;
+        INSERT INTO users (id, email, name, app_id, created_at)
+        VALUES (${userId}, ${email}, ${name}, ${appId}, NOW())`;
     } else {
       userId = user.id;
+      appId = user.app_id;
     }
 
     await db.exec`
-      INSERT INTO social_connections (id, user_id, provider, provider_id, created_at)
-      VALUES (${uuidv4()}, ${userId}, ${params.provider}, ${providerId}, NOW())
+      INSERT INTO social_connections (id, user_id, provider, provider_id, app_id, created_at)
+      VALUES (${uuidv4()}, ${userId}, ${params.provider}, ${providerId}, ${appId}, NOW())
       ON CONFLICT (user_id, provider) DO UPDATE SET provider_id = ${providerId}`;
 
-    return { token: generateToken(userId, email), userId };
+    return { token: generateToken(userId, email, appId), userId };
   }
 );

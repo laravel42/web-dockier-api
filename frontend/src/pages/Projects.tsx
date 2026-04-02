@@ -152,7 +152,9 @@ export default function Projects() {
       setBranches([]); setSelectedBranch("");
       const repo = repos.find(r => r.fullName === selectedRepo);
       if (!repo) return;
-      const [owner, repoName] = repo.fullName.split("/");
+      const parts = repo.fullName.split("/");
+      const repoName = parts.pop()!;
+      const owner = parts.join("/");
       try {
         const res = await gitApi.listBranches(selectedConnectionId, owner, repoName);
         if (!cancelled) {
@@ -283,7 +285,13 @@ export default function Projects() {
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
               <RepoSelect
                 value={selectedRepo}
-                onChange={setSelectedRepo}
+                onChange={(val) => {
+                  setSelectedRepo(val);
+                  if (!form.name && val) {
+                    const repo = repos.find(r => r.fullName === val);
+                    if (repo) setForm(f => ({ ...f, name: repo.name }));
+                  }
+                }}
                 repos={repos}
                 loading={loadingRepos}
               />
@@ -303,7 +311,7 @@ export default function Projects() {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-3 pt-2 mt-auto">
+          <div className="absolute bottom-4 right-6 flex items-center gap-3">
             <button type="button" onClick={() => { setShowForm(false); setEditing(null); resetSelections(); }} className={btnSecondary}>Cancel</button>
             <button
               type="submit"
@@ -319,7 +327,7 @@ export default function Projects() {
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {projects.map((p) => {
             const repoKey = p.repository ? getRepoKey(p.repository) : null;
             const lastDeploy = repoKey
@@ -341,31 +349,25 @@ export default function Projects() {
               <div
                 key={p.id}
                 onClick={() => navigate(`/projects/${p.id}`)}
-                className="bg-card border border-border rounded-[var(--radius-card)] p-5 flex flex-col gap-4 hover:border-primary-500/30 transition-all overflow-hidden shadow-[var(--shadow-card)] cursor-pointer"
+                className="bg-card border border-border rounded-[var(--radius-card)] p-3 flex flex-col gap-3 hover:border-primary-500/30 transition-all overflow-hidden shadow-[var(--shadow-card)] cursor-pointer"
               >
                 {/* Header: icon, slug */}
                 <div className="flex items-center gap-3 min-w-0">
                     {isGitLab ? (
-                      <svg viewBox="0 0 24 24" className="w-7 h-7 shrink-0 text-text-secondary" fill="currentColor">
+                      <svg viewBox="0 0 24 24" className="w-6 h-6 shrink-0 text-text-secondary" fill="currentColor">
                         <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 01-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 014.82 2a.43.43 0 01.58 0 .42.42 0 01.11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0118.6 2a.43.43 0 01.58 0 .42.42 0 01.11.18l2.44 7.51L23 13.45a.84.84 0 01-.35.94z"/>
                       </svg>
                     ) : (
-                      <svg viewBox="0 0 24 24" className="w-7 h-7 shrink-0 text-text-secondary" fill="currentColor">
+                      <svg viewBox="0 0 24 24" className="w-6 h-6 shrink-0 text-text-secondary" fill="currentColor">
                         <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z" />
                       </svg>
                     )}
-                    <span className="text-base text-text-secondary truncate lowercase">{p.repository ? getRepoSlug(p.repository) : "—"}</span>
+                    <span className="text-sm text-text-secondary truncate lowercase">{p.repository ? getRepoSlug(p.repository) : "—"}</span>
                 </div>
 
                 {/* Title & branch */}
                 <div className="min-w-0">
-                  <h3 className="text-xl font-bold text-text truncate">{p.name}</h3>
-                  <p className="flex items-center gap-1.5 text-sm text-text-muted mt-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                    </svg>
-                    {p.branch || "main"}
-                  </p>
+                  <h3 className="text-lg font-bold text-text truncate">{p.name}</h3>
                   {(() => {
                     const badges = projectLangs[p.id];
                     if (badges && badges.length > 0) {
@@ -387,7 +389,7 @@ export default function Projects() {
                       return (
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           {badges.slice(0, 4).map((b) => (
-                            <span key={b.name} className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
+                            <span key={b.name} className="inline-flex items-center gap-3 px-1.5 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
                               <DevIcon src={langIconMap[b.name] || b.name.toLowerCase()} className="w-4 h-4" />
                               {langLabel[b.name] || b.name}
                             </span>
@@ -407,18 +409,26 @@ export default function Projects() {
                   })()}
                 </div>
 
-                {/* Last deploy */}
-                <div className="flex items-center gap-2">
-                  {lastDeploy ? (
-                    <>
-                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
-                      <span className="text-xs text-text-muted">
-                        Last deploy: {new Date(lastDeploy.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-text-muted">No deployments yet</span>
-                  )}
+                {/* Last deploy + branch */}
+                <div className="flex items-center justify-between gap-2 mt-auto">
+                  <div className="flex items-center gap-2">
+                    {lastDeploy ? (
+                      <>
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
+                        <span className="text-xs text-text-muted">
+                          Last deploy: {new Date(lastDeploy.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-text-muted">No deployments yet</span>
+                    )}
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                    </svg>
+                    {p.branch || "main"}
+                  </span>
                 </div>
               </div>
             );

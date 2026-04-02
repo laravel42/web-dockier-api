@@ -9,7 +9,6 @@ initDb(DatabaseUrl());
 
 interface Project {
   id: string;
-  userId: string;
   name: string;
   repository: string;
   branch: string;
@@ -24,33 +23,33 @@ export const createProject = api(
     const authData = getAuthData()!;
     const id = uuidv4();
     await db.exec`
-      INSERT INTO projects (id, user_id, name, repository, branch, connection_id, platform, created_at)
-      VALUES (${id}, ${authData.userID}, ${params.name}, ${params.repository}, ${params.branch}, ${params.connectionId || ""}, ${params.platform || ""}, NOW())`;
-    return { id, userId: authData.userID, name: params.name, repository: params.repository, branch: params.branch, connectionId: params.connectionId || "", platform: params.platform || "", createdAt: new Date().toISOString() };
+      INSERT INTO projects (id, app_id, name, repository, branch, connection_id, platform, created_at)
+      VALUES (${id}, ${authData.appId}, ${params.name}, ${params.repository}, ${params.branch}, ${params.connectionId || ""}, ${params.platform || ""}, NOW())`;
+    return { id, name: params.name, repository: params.repository, branch: params.branch, connectionId: params.connectionId || "", platform: params.platform || "", createdAt: new Date().toISOString() };
   }
 );
+
 export const getProject = api(
   { method: "GET", path: "/projects/:projectId", auth: true },
   async (params: { projectId: string }): Promise<Project> => {
     const row = await db.queryRow<{
-      id: string; user_id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; created_at: Date;
-    }>`SELECT id, user_id, name, repository, branch, connection_id, platform, created_at FROM projects WHERE id = ${params.projectId}`;
+      id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; created_at: Date;
+    }>`SELECT id, name, repository, branch, connection_id, platform, created_at FROM projects WHERE id = ${params.projectId}`;
     if (!row) throw APIError.notFound("Project not found");
-    return { id: row.id, userId: row.user_id, name: row.name, repository: row.repository, branch: row.branch, connectionId: row.connection_id, platform: row.platform, createdAt: row.created_at.toISOString() };
+    return { id: row.id, name: row.name, repository: row.repository, branch: row.branch, connectionId: row.connection_id, platform: row.platform, createdAt: row.created_at.toISOString() };
   }
 );
-
 
 export const listProjects = api(
   { method: "GET", path: "/projects", auth: true },
   async (): Promise<{ projects: Project[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{
-      id: string; user_id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; created_at: Date;
-    }>`SELECT id, user_id, name, repository, branch, connection_id, platform, created_at FROM projects WHERE user_id = ${authData.userID} ORDER BY created_at DESC`;
+      id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; created_at: Date;
+    }>`SELECT id, name, repository, branch, connection_id, platform, created_at FROM projects WHERE app_id = ${authData.appId} ORDER BY created_at DESC`;
     const projects: Project[] = [];
     for await (const row of rows) {
-      projects.push({ id: row.id, userId: row.user_id, name: row.name, repository: row.repository, branch: row.branch, connectionId: row.connection_id, platform: row.platform, createdAt: row.created_at.toISOString() });
+      projects.push({ id: row.id, name: row.name, repository: row.repository, branch: row.branch, connectionId: row.connection_id, platform: row.platform, createdAt: row.created_at.toISOString() });
     }
     return { projects };
   }
@@ -66,8 +65,8 @@ export const updateProject = api(
     if (params.branch !== undefined) await db.exec`UPDATE projects SET branch = ${params.branch}, updated_at = NOW() WHERE id = ${params.projectId}`;
     if (params.connectionId !== undefined) await db.exec`UPDATE projects SET connection_id = ${params.connectionId}, updated_at = NOW() WHERE id = ${params.projectId}`;
     if (params.platform !== undefined) await db.exec`UPDATE projects SET platform = ${params.platform}, updated_at = NOW() WHERE id = ${params.projectId}`;
-    const row = await db.queryRow<{ id: string; user_id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; created_at: Date }>`SELECT id, user_id, name, repository, branch, connection_id, platform, created_at FROM projects WHERE id = ${params.projectId}`;
-    return { id: row!.id, userId: row!.user_id, name: row!.name, repository: row!.repository, branch: row!.branch, connectionId: row!.connection_id, platform: row!.platform, createdAt: row!.created_at.toISOString() };
+    const row = await db.queryRow<{ id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; created_at: Date }>`SELECT id, name, repository, branch, connection_id, platform, created_at FROM projects WHERE id = ${params.projectId}`;
+    return { id: row!.id, name: row!.name, repository: row!.repository, branch: row!.branch, connectionId: row!.connection_id, platform: row!.platform, createdAt: row!.created_at.toISOString() };
   }
 );
 

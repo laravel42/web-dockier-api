@@ -90,7 +90,6 @@ export interface StartBuildParams {
 export interface BuildRecord {
   id: string;
   codebuildId: string;
-  userId: string;
   projectId: string;
   sourceRepo: string;
   sourceRef: string;
@@ -168,7 +167,7 @@ export async function getAwsAccountId(accessKeyId: string, secretAccessKey: stri
 
 export function rowToBuild(row: any): BuildRecord {
   return {
-    id: row.id, codebuildId: row.codebuild_id, userId: row.user_id,
+    id: row.id, codebuildId: row.codebuild_id,
     projectId: row.project_id, sourceRepo: row.source_repo, sourceRef: row.source_ref,
     commitSha: row.commit_sha, dockerfilePath: row.dockerfile_path,
     buildContext: row.build_context, imageRepo: row.image_repo, imageUri: row.image_uri,

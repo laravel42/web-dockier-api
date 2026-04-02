@@ -268,10 +268,10 @@ export const gitApi = {
       badges: Array<{ name: string; category: string; confidence: number }>;
     }>(`/git/repo-badges?repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
-  pullOrigin: (connectionId: string, owner: string, repo: string, branch: string) =>
+  pullOrigin: (connectionId: string, owner: string, repo: string, branch: string, currentHash?: string) =>
     request<{ log: string[] }>(`/git/connections/${connectionId}/pull`, {
       method: "POST",
-      body: JSON.stringify({ connectionId, owner, repo, branch }),
+      body: JSON.stringify({ connectionId, owner, repo, branch, currentHash }),
     }),
 
   createFixMR: (connectionId: string, data: {
@@ -651,6 +651,12 @@ export const codeAnalysisApi = {
 
   toggleSonarRule: (profileKey: string, ruleKey: string, activate: boolean) =>
     request("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
+
+  listRuleOverrides: (tool: "opengrep" | "sonarqube") =>
+    request<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }>(`/code-analysis/rule-overrides?tool=${tool}`),
+
+  toggleRule: (tool: "opengrep" | "sonarqube", ruleId: string, enabled: boolean) =>
+    request("/code-analysis/rule-overrides", { method: "POST", body: JSON.stringify({ tool, ruleId, enabled }) }),
 };
 
 // ─── Image Builder ───

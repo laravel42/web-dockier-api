@@ -1,70 +1,62 @@
-// Eagerly import all local icon assets via Vite glob import.
-// Keys are like "../assets/icons/react.svg" → we extract the filename stem.
-const modules = import.meta.glob("../assets/icons/*.{svg,png}", {
-  eager: true,
-  import: "default",
-}) as Record<string, string>;
+// Icons served statically from public/devicons/ — no Vite bundling needed.
 
-// Build a lookup: "react" → "/assets/icons/react-abc123.svg" (resolved URL)
-const localIcons: Record<string, string> = {};
-for (const [path, url] of Object.entries(modules)) {
-  // "../assets/icons/react.svg" → "react"
-  const name = path.split("/").pop()!.replace(/\.(svg|png)$/, "");
-  localIcons[name] = url;
-}
+// Icons that are .png instead of .svg
+const PNG_ICONS = new Set([
+  "authorizer", "browserless", "coder-dark", "coder-light", "cplusplus",
+  "cusdis", "fizzy", "listmonk", "nocodb", "otel", "quirrel", "rocket",
+  "sails-extended", "shiori", "soketi", "trpc", "web3js",
+]);
 
-// Map devicons CDN slug → local filename (when they differ)
+// Icons that have -dark / -light variants
+const THEMED_ICONS = new Set([
+  "apple", "astro", "coder", "fastify", "flask", "github", "inngest",
+  "nextjs", "nodejs", "nuxtjs", "openai", "prisma", "railway", "redhat",
+  "rust", "spree", "timescale", "umami", "unreal", "vaultwarden",
+]);
+
+// Map external slugs → local filename (when they differ)
 const SLUG_TO_LOCAL: Record<string, string> = {
-  github: "github",
-  dotnet: "dot-net",
   nodedotjs: "nodejs",
   vuedotjs: "vuejs",
+  nuxt: "nuxtjs",
   nuxtdotjs: "nuxtjs",
-  angularjs: "angularjs",
   angular: "angularjs",
   rubyonrails: "rails",
   springboot: "spring",
   nextdotjs: "nextjs",
   emberdotjs: "ember",
-  astro: "astro",
-  flask: "flask",
-  fastify: "fastify",
-  rust: "rust",
-  apple: "apple",
-  cplusplus: "cplusplus",
   openjdk: "java",
   solid: "solidjs",
   "i/aws.svg": "aws",
+  "vbnet": "vscode",
+  "ipython": "python",
+  "cloudformation": "aws",
+  "sql": "sql",
+  "sveltekit": "svelte"
 };
 
-const CDN = "https://devicons.railway.com";
+function iconUrl(name: string): string {
+  const ext = PNG_ICONS.has(name) ? "png" : "svg";
+  return `/devicons/${name}.${ext}`;
+}
 
 /**
- * Resolve a devicons slug to a URL.
- * Prefers local bundled file, falls back to CDN.
- * When `dark` is provided, tries the themed variant first:
- *   dark=true  → tries "{base}-dark" then "{base}"
- *   dark=false → tries "{base}-light" then "{base}"
+ * Resolve a devicons slug to a static URL in public/devicons/.
+ * When theme is known and a themed variant exists, returns that variant.
  */
 export function resolveIcon(slug: string, dark?: boolean): string {
   const base = SLUG_TO_LOCAL[slug] ?? slug;
+  const stripped = base.replace(/-(dark|light)$/, "");
 
-  if (dark !== undefined) {
+  // If theme is known and a themed variant exists, use it
+  if (dark !== undefined && THEMED_ICONS.has(stripped)) {
     const suffix = dark ? "-light" : "-dark";
-    // Strip any existing -dark/-light suffix from base before adding the new one
-    const stripped = base.replace(/-(dark|light)$/, "");
-    const themed = stripped + suffix;
-    if (localIcons[themed]) return localIcons[themed];
+    return iconUrl(stripped + suffix);
   }
 
-  // Direct local match
-  if (localIcons[base]) return localIcons[base];
-  // Fallback to CDN
-  return `${CDN}/${slug}`;
+  return iconUrl(base);
 }
 
 export function isDark(): boolean {
   return document.documentElement.getAttribute("data-theme") === "dark";
 }
-
-export { localIcons };
