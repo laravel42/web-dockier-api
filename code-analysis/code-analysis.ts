@@ -1,5 +1,4 @@
 import { api, APIError } from "encore.dev/api";
-import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
 import { git_integration } from "~encore/clients";
@@ -8,12 +7,16 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, statSync, w
 import { tmpdir } from "os";
 import { join } from "path";
 import { secret } from "encore.dev/config";
+import { db, initDb } from "../lib/db";
 
 const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
 
 // ─── SonarQube Configuration (optional) ───
+const DatabaseUrl = secret("DatabaseUrl");
 const SonarQubeUrl = secret("SonarQubeUrl");
 const SonarQubeToken = secret("SonarQubeToken");
+
+initDb(DatabaseUrl());
 
 // Resolve opengrep binary path at module load
 function findOpengrep(): string {
@@ -33,8 +36,6 @@ function findOpengrep(): string {
 }
 const OPENGREP_BIN = findOpengrep();
 console.log(`[code-analysis] Resolved opengrep binary: ${OPENGREP_BIN}`);
-
-const db = new SQLDatabase("codeanalysis", { migrations: "./migrations" });
 
 // Helper to handle double-encoded jsonb summary
 function parseSummary(raw: any): ScanSummary {

@@ -263,6 +263,11 @@ export const gitApi = {
       files: Array<{ path: string; type: string; size: number }>;
     }>(`/git/connections/${connectionId}/repo-tree?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
+  getRepoBadges: (repo: string, branch?: string) =>
+    request<{
+      badges: Array<{ name: string; category: string; confidence: number }>;
+    }>(`/git/repo-badges?repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
+
   pullOrigin: (connectionId: string, owner: string, repo: string, branch: string) =>
     request<{ log: string[] }>(`/git/connections/${connectionId}/pull`, {
       method: "POST",

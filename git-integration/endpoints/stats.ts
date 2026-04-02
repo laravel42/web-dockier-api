@@ -30,13 +30,13 @@ interface RepoStats {
 export const getRepoStats = api(
   { method: "GET", path: "/git/connections/:connectionId/repo-stats", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<RepoStats> => {
+    const branch = params.branch || "main";
+
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
     }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
 
     if (!conn) throw APIError.notFound("Connection not found");
-
-    const branch = params.branch || "main";
 
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
@@ -141,7 +141,7 @@ export const getRepoStats = api(
         }
       } catch {}
 
-      return {
+      return ({
         stars: repoData.stargazers_count ?? 0,
         forks: repoData.forks_count ?? 0,
         openIssues: repoData.open_issues_count ?? 0,
@@ -155,7 +155,7 @@ export const getRepoStats = api(
         totalCommits,
         contributors,
         topContributors,
-      };
+      });
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token };
@@ -243,7 +243,7 @@ export const getRepoStats = api(
         }
       } catch {}
 
-      return {
+      return ({
         stars: repoData.star_count ?? 0,
         forks: repoData.forks_count ?? 0,
         openIssues: repoData.open_issues_count ?? 0,
@@ -257,7 +257,7 @@ export const getRepoStats = api(
         totalCommits,
         contributors,
         topContributors,
-      };
+      });
     } else if (conn.provider === "bitbucket") {
       const baseUrl = conn.endpoint || "https://api.bitbucket.org";
       const headers = { Authorization: `Bearer ${conn.personal_token}` };
@@ -296,10 +296,10 @@ export const getRepoStats = api(
         }
       } catch {}
 
-      return {
-        stars: 0, // Bitbucket doesn't have stars
-        forks: 0, // Would need separate API call to /forks
-        openIssues: repoData.has_issues ? 0 : 0, // Bitbucket issues need separate query
+      return ({
+        stars: 0,
+        forks: 0,
+        openIssues: repoData.has_issues ? 0 : 0,
         watchers,
         language: repoData.language || "",
         languages: repoData.language ? { [repoData.language]: 100 } : {},
@@ -308,9 +308,9 @@ export const getRepoStats = api(
         lastCommitAuthor,
         lastCommitHash,
         totalCommits,
-        contributors: 0, // Bitbucket doesn't expose contributor count easily
+        contributors: 0,
         topContributors: [],
-      };
+      });
     }
 
     throw APIError.unimplemented("Stats not supported for this provider");

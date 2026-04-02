@@ -1,8 +1,11 @@
-import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { Topic } from "encore.dev/pubsub";
 import { secret } from "encore.dev/config";
+import { db as _db, initDb } from "../lib/db";
 
-export const db = new SQLDatabase("deploy", { migrations: "./migrations" });
+const DatabaseUrl = secret("DatabaseUrl");
+initDb(DatabaseUrl());
+
+export const db = _db;
 
 export const DeployCallbackUrl = secret("DeployCallbackUrl");
 

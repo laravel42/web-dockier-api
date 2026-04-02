@@ -1,7 +1,10 @@
-import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { secret } from "encore.dev/config";
+import { db as _db, initDb } from "../lib/db";
 
-export const db = new SQLDatabase("gitintegration", { migrations: "./migrations" });
+const DatabaseUrl = secret("DatabaseUrl");
+initDb(DatabaseUrl());
+
+export const db = _db;
 
 export const BedrockApiKey = secret("BedrockApiKey");
 export const BedrockRegion = secret("BedrockRegion");

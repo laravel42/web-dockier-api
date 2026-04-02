@@ -1,18 +1,21 @@
 import { api, APIError } from "encore.dev/api";
-import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { secret } from "encore.dev/config";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { generateSecret, generateURI, verify as otpVerify } from "otplib";
 import QRCode from "qrcode";
 import { v4 as uuidv4 } from "uuid";
+import { db, initDb } from "../lib/db";
 
 // Secrets (with local dev fallbacks)
+const DatabaseUrl = secret("DatabaseUrl");
 const JwtSecret = secret("JwtSecret");
 const GoogleClientId = secret("GoogleClientId");
 const GoogleClientSecret = secret("GoogleClientSecret");
 const GitHubClientId = secret("GitHubClientId");
 const GitHubClientSecret = secret("GitHubClientSecret");
+
+initDb(DatabaseUrl());
 
 const LOCAL_JWT_FALLBACK = "local-dev-jwt-secret-do-not-use-in-production";
 
@@ -20,9 +23,6 @@ function getJwtSecret(): string {
   const val = JwtSecret();
   return val || LOCAL_JWT_FALLBACK;
 }
-
-// Database
-const db = new SQLDatabase("auth", { migrations: "./migrations" });
 
 // ─── Interfaces ───
 

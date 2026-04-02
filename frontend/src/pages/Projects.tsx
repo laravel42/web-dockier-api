@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../services/api";
 import Modal from "../components/Modal";
@@ -80,6 +80,8 @@ export default function Projects() {
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [error, setError] = useState("");
   const [deployments, setDeployments] = useState<Array<{ id: string; repo: string; branch: string; status: string; createdAt: string }>>([]);
+  const [projectLangs, setProjectLangs] = useState<Record<string, Array<{ name: string; category: string; confidence: number }>>>({});
+  const fetchedLangsRef = useRef<Set<string>>(new Set());
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -89,6 +91,24 @@ export default function Projects() {
   };
 
   useEffect(() => { fetchProjects(); }, []);
+
+  // Fetch tech badges from analysis_cache for each project
+  useEffect(() => {
+    if (projects.length === 0) return;
+    for (const p of projects) {
+      if (!p.repository || fetchedLangsRef.current.has(p.id)) continue;
+      fetchedLangsRef.current.add(p.id);
+      const parsed = getRepoKey(p.repository);
+      if (!parsed) continue;
+      gitApi.getRepoBadges(parsed, p.branch || undefined)
+        .then((res) => {
+          if (res.badges && res.badges.length > 0) {
+            setProjectLangs(prev => ({ ...prev, [p.id]: res.badges }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [projects]);
 
   useEffect(() => {
     deployApi.listDeployments().then((r) => setDeployments(r.deployments || [])).catch(() => {});
@@ -346,17 +366,46 @@ export default function Projects() {
                     </svg>
                     {p.branch || "main"}
                   </p>
+                  {(() => {
+                    const badges = projectLangs[p.id];
+                    if (badges && badges.length > 0) {
+                      const langIconMap: Record<string, string> = {
+                        JavaScript: "javascript", TypeScript: "typescript", Python: "python", PHP: "php",
+                        Java: "java", Go: "go", Ruby: "ruby", Rust: "rust", "C#": "csharp", "C++": "cplusplus",
+                        C: "c", Kotlin: "kotlin", Swift: "swift", Scala: "scala", Shell: "bash", Dart: "dart",
+                        HTML: "html5", CSS: "css3", Vue: "vuejs", SCSS: "sass", Sass: "sass",
+                        Dockerfile: "docker", Elixir: "elixir", Lua: "lua", Perl: "perl", R: "r",
+                        "Node.js": "nodejs", React: "react", Angular: "angularjs", Laravel: "laravel",
+                        Django: "django", Rails: "rails", "Next.js": "nextjs", Express: "express",
+                        Flask: "flask", Spring: "spring", ".NET": "dot-net",
+                      };
+                      const langLabel: Record<string, string> = {
+                        JavaScript: "JS", TypeScript: "TS", Python: "PY", "C++": "C++", "C#": "C#",
+                        Dockerfile: "Docker", Shell: "SH", Kotlin: "KT", Swift: "SW", Scala: "SC",
+                        HTML: "HTML", CSS: "CSS", SCSS: "SCSS", "Node.js": "Node",
+                      };
+                      return (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {badges.slice(0, 4).map((b) => (
+                            <span key={b.name} className="inline-flex items-center gap-1.5 px-1.5 py-1 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
+                              <DevIcon src={langIconMap[b.name] || b.name.toLowerCase()} className="w-4 h-4" />
+                              {langLabel[b.name] || b.name}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    if (platformLabel) {
+                      return (
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <DevIcon src={PLATFORM_ICONS[p.platform] || p.platform} className="w-4 h-4" />
+                          <span className="text-xs text-text-muted">{platformLabel}</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
-
-                {/* Tech badge */}
-                {platformLabel && (
-                  <div>
-                    <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary-50 text-text-secondary text-sm font-medium">
-                      <DevIcon src={PLATFORM_ICONS[p.platform] || p.platform} alt="" className="w-4 h-4" />
-                      {platformLabel}
-                    </span>
-                  </div>
-                )}
 
                 {/* Last deploy */}
                 <div className="flex items-center gap-2">

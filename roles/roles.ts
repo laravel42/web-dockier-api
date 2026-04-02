@@ -1,9 +1,11 @@
 import { api, APIError } from "encore.dev/api";
-import { SQLDatabase } from "encore.dev/storage/sqldb";
+import { secret } from "encore.dev/config";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
+import { db, initDb } from "../lib/db";
 
-const db = new SQLDatabase("roles", { migrations: "./migrations" });
+const DatabaseUrl = secret("DatabaseUrl");
+initDb(DatabaseUrl());
 
 interface Role {
   id: string;

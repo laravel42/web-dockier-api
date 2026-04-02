@@ -412,7 +412,7 @@ export default function ScanDetail() {
           </div>
         </div>
         {/* Sidebar */}
-        <div className="w-64 shrink-0">
+        <div className="w-80 shrink-0">
           <div className="sticky top-6 space-y-3">
             <button
               type="button"
@@ -918,7 +918,7 @@ export default function ScanDetail() {
       </div>
 
       {/* Sidebar: scan list */}
-      <div className="w-64 shrink-0">
+      <div className="w-80 shrink-0">
         <div className="sticky top-6 space-y-3">
           <button
             type="button"
@@ -998,6 +998,18 @@ export default function ScanDetail() {
                         )}
                         <span className="text-[10px] text-text-muted font-mono">{s.branch}</span>
                       </div>
+                      {s.id === scanId && findings.length > 0 && (() => {
+                        const og = findings.filter(f => !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.")).length;
+                        const sq = findings.filter(f => f.ruleId.startsWith("sonar.")).length;
+                        const cr = findings.filter(f => f.ruleId.startsWith("custom.")).length;
+                        return (
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1.5 ml-4">
+                            {og > 0 && <span className="text-[10px] text-text-muted">Opengrep <span className="font-semibold text-text">{og}</span></span>}
+                            {sq > 0 && <span className="text-[10px] text-text-muted">SonarQube <span className="font-semibold text-text">{sq}</span></span>}
+                            {cr > 0 && <span className="text-[10px] text-text-muted">Custom <span className="font-semibold text-text">{cr}</span></span>}
+                          </div>
+                        );
+                      })()}
                     </button>
                   );
                 })}

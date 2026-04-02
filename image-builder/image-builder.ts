@@ -5,7 +5,6 @@
 // On completion, SNS triggers deploy via CloudFormation.
 
 import { api, APIError } from "encore.dev/api";
-import { SQLDatabase } from "encore.dev/storage/sqldb";
 import { secret } from "encore.dev/config";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
@@ -13,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { git_integration } from "~encore/clients";
+import { db, initDb } from "../lib/db";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,6 +45,9 @@ const AwsSecretAccessKey = secret("ImageBuilderAwsSecretAccessKey");
 const AwsRegion = secret("ImageBuilderAwsRegion");
 const CodeBuildProjectName = secret("ImageBuilderCodeBuildProject");
 const CallbackUrlSecret = secret("ImageBuilderCallbackUrl");
+const DatabaseUrl = secret("DatabaseUrl");
+
+initDb(DatabaseUrl());
 
 function getAwsRegion(): string {
   try { return AwsRegion() || "us-east-1"; } catch { return "us-east-1"; }
@@ -57,8 +60,6 @@ function getCallbackUrl(): string {
 }
 
 // ─── Database ───
-
-const db = new SQLDatabase("imagebuilder", { migrations: "./migrations" });
 
 // ─── Interfaces ───
 
