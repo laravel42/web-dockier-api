@@ -159,6 +159,20 @@ const PROVIDER_META: Record<string, { name: string; icon: string; color: string;
       { type: "vps", label: "VPS", name: "VPS Hosting", description: "Affordable VPS with global data centers" },
     ],
   },
+  gcp: {
+    name: "Google Cloud", icon: "googlecloud", color: "bg-blue-500",
+    services: [
+      { type: "managed", label: "Managed", name: "Cloud Run", description: "Serverless containers — auto-scaling, pay per request" },
+      { type: "vps", label: "VPS", name: "Compute Engine", description: "Full control over a virtual machine with Docker" },
+      { type: "static", label: "Free", name: "Cloud Storage + CDN", description: "Static website hosting with global CDN" },
+    ],
+  },
+  cloudflare: {
+    name: "Cloudflare", icon: "cloudflare", color: "bg-orange-500",
+    services: [
+      { type: "static", label: "Free", name: "Cloudflare Pages", description: "Free static site hosting with unlimited bandwidth and global CDN" },
+    ],
+  },
 };
 
 const MANAGED_INFO: Record<string, Record<string, { service: string; cost: string }>> = {
@@ -260,6 +274,21 @@ const PROVIDER_REGIONS: Record<string, Array<{ id: string; name: string; flag: s
     { id: "us-chi1", name: "Chicago", flag: "🇺🇸" },
     { id: "us-nyc1", name: "New York", flag: "🇺🇸" },
     { id: "sg-sin1", name: "Singapore", flag: "🇸🇬" },
+  ],
+  gcp: [
+    { id: "us-central1", name: "Iowa", flag: "🇺🇸" },
+    { id: "us-east1", name: "South Carolina", flag: "🇺🇸" },
+    { id: "us-west1", name: "Oregon", flag: "🇺🇸" },
+    { id: "europe-west1", name: "Belgium", flag: "🇧🇪" },
+    { id: "europe-west2", name: "London", flag: "🇬🇧" },
+    { id: "europe-west3", name: "Frankfurt", flag: "🇩🇪" },
+    { id: "asia-east1", name: "Taiwan", flag: "🇹🇼" },
+    { id: "asia-northeast1", name: "Tokyo", flag: "🇯🇵" },
+    { id: "asia-southeast1", name: "Singapore", flag: "🇸🇬" },
+    { id: "southamerica-east1", name: "São Paulo", flag: "🇧🇷" },
+  ],
+  cloudflare: [
+    { id: "global", name: "Global (300+ cities)", flag: "🌍" },
   ],
 };
 

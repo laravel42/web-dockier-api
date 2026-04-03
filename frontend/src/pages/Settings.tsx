@@ -396,7 +396,7 @@ function ProvidersTab() {
 
   useEffect(() => { fetch_(); }, []);
 
-  const apiKeyOnlyProviders = ["digitalocean"];
+  const apiKeyOnlyProviders = ["digitalocean", "cloudflare"];
   const needsSecret = !apiKeyOnlyProviders.includes(form.provider) && !["hetzner", "linode"].includes(form.provider);
 
   const credLabel1 = "API Key";
@@ -430,6 +430,7 @@ function ProvidersTab() {
     digitalocean: "Cloud VPS and managed infrastructure.",
     hetzner: "High-performance cloud servers in Europe.",
     linode: "Simple and reliable cloud computing.",
+    cloudflare: "Global edge network with Pages, Workers, and CDN.",
   };
 
   const providerIconUrls: Record<string, string> = {
@@ -438,6 +439,7 @@ function ProvidersTab() {
     digitalocean: "digitalocean",
     hetzner: "hetzner",
     linode: "linode",
+    cloudflare: "cloudflare",
   };
 
   const providerNames: Record<string, string> = {
@@ -446,6 +448,7 @@ function ProvidersTab() {
     digitalocean: "DigitalOcean",
     hetzner: "Hetzner",
     linode: "Linode",
+    cloudflare: "Cloudflare",
   };
 
   return (
@@ -468,6 +471,7 @@ function ProvidersTab() {
               <option value="digitalocean">DigitalOcean</option>
               <option value="hetzner">Hetzner</option>
               <option value="linode">Linode</option>
+              <option value="cloudflare">Cloudflare</option>
             </select>
           </div>
           <div>
