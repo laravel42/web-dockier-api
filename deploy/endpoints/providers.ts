@@ -6,7 +6,7 @@ import { db, type ProviderResponse } from "../shared";
 export const addProvider = api(
   { method: "POST", path: "/deploy/providers", auth: true },
   async (params: {
-    provider: "digitalocean" | "hetzner" | "vultr" | "linode" | "aws" | "upcloud" | "katapult" | "hostinger";
+    provider: "digitalocean" | "hetzner" | "vultr" | "linode" | "aws" | "upcloud" | "katapult" | "hostinger" | "gcp" | "cloudflare";
     label: string;
     apiKey: string;
     apiSecret: string;

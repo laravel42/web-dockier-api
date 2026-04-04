@@ -60,7 +60,7 @@ interface WizardState {
   selectedProvider: string;
   selectedProviderId: string;
   // Step 2
-  deployStrategy: "vps" | "managed" | "serverless";
+  deployStrategy: "vps" | "managed" | "serverless" | "static";
   // Step 3
   servicesModes: Record<string, "vps" | "managed">;
   // Step 4
@@ -106,13 +106,14 @@ const STEPS = [
   { label: "Deploy", icon: "🚀" },
 ];
 
-const PROVIDER_META: Record<string, { name: string; icon: string; color: string; services: Array<{ type: "vps" | "managed" | "serverless"; label: string; name: string; description: string }> }> = {
+const PROVIDER_META: Record<string, { name: string; icon: string; color: string; services: Array<{ type: "vps" | "managed" | "serverless" | "static"; label: string; name: string; description: string }> }> = {
   aws: {
     name: "AWS", icon: "amazonaws", color: "bg-orange-500",
     services: [
       { type: "managed", label: "Managed", name: "ECS Fargate", description: "Serverless containers — no servers to manage, auto-scaling included" },
       { type: "vps", label: "VPS", name: "EC2 Instance", description: "Full control over a virtual machine with Docker" },
       { type: "serverless", label: "Serverless", name: "App Runner", description: "Fully managed, auto-scaling web service from source or image" },
+      { type: "static", label: "Free", name: "S3 + CloudFront", description: "Static website hosting with global CDN" },
     ],
   },
   digitalocean: {
@@ -156,6 +157,20 @@ const PROVIDER_META: Record<string, { name: string; icon: string; color: string;
     name: "Hostinger", icon: "hostinger", color: "bg-indigo-600",
     services: [
       { type: "vps", label: "VPS", name: "VPS Hosting", description: "Affordable VPS with global data centers" },
+    ],
+  },
+  gcp: {
+    name: "Google Cloud", icon: "googlecloud", color: "bg-blue-500",
+    services: [
+      { type: "managed", label: "Managed", name: "Cloud Run", description: "Serverless containers — auto-scaling, pay per request" },
+      { type: "vps", label: "VPS", name: "Compute Engine", description: "Full control over a virtual machine with Docker" },
+      { type: "static", label: "Free", name: "Cloud Storage + CDN", description: "Static website hosting with global CDN" },
+    ],
+  },
+  cloudflare: {
+    name: "Cloudflare", icon: "cloudflare", color: "bg-orange-500",
+    services: [
+      { type: "static", label: "Free", name: "Cloudflare Pages", description: "Free static site hosting with unlimited bandwidth and global CDN" },
     ],
   },
 };
@@ -259,6 +274,21 @@ const PROVIDER_REGIONS: Record<string, Array<{ id: string; name: string; flag: s
     { id: "us-chi1", name: "Chicago", flag: "🇺🇸" },
     { id: "us-nyc1", name: "New York", flag: "🇺🇸" },
     { id: "sg-sin1", name: "Singapore", flag: "🇸🇬" },
+  ],
+  gcp: [
+    { id: "us-central1", name: "Iowa", flag: "🇺🇸" },
+    { id: "us-east1", name: "South Carolina", flag: "🇺🇸" },
+    { id: "us-west1", name: "Oregon", flag: "🇺🇸" },
+    { id: "europe-west1", name: "Belgium", flag: "🇧🇪" },
+    { id: "europe-west2", name: "London", flag: "🇬🇧" },
+    { id: "europe-west3", name: "Frankfurt", flag: "🇩🇪" },
+    { id: "asia-east1", name: "Taiwan", flag: "🇹🇼" },
+    { id: "asia-northeast1", name: "Tokyo", flag: "🇯🇵" },
+    { id: "asia-southeast1", name: "Singapore", flag: "🇸🇬" },
+    { id: "southamerica-east1", name: "São Paulo", flag: "🇧🇷" },
+  ],
+  cloudflare: [
+    { id: "global", name: "Global (300+ cities)", flag: "🌍" },
   ],
 };
 
@@ -374,7 +404,7 @@ function StepProvider({ state, providers, onChange }: {
 
 function StepService({ state, onChange }: {
   state: WizardState;
-  onChange: (strategy: "vps" | "managed" | "serverless") => void;
+  onChange: (strategy: "vps" | "managed" | "serverless" | "static") => void;
 }) {
   const meta = PROVIDER_META[state.selectedProvider];
   if (!meta) return <p className="text-sm text-text-muted">Select a provider first.</p>;
@@ -572,7 +602,7 @@ function StepAnalysis({ state, analysis, analysisLoading, analysisError, onChang
 // ─── Step 4: Environment & Deployment Plans ───
 
 interface Plan {
-  tier: "value" | "balanced" | "performance";
+  tier: "value" | "balanced" | "performance" | "standard";
   label: string;
   badge: string;
   badgeColor: string;
@@ -590,7 +620,7 @@ function getPlans(
   provider: string,
   environment: "staging" | "production",
   servicesModes: Record<string, "vps" | "managed">,
-  deployStrategy: "vps" | "managed" | "serverless"
+  deployStrategy: "vps" | "managed" | "serverless" | "static"
 ): Plan[] {
   const managedSvcs = Object.entries(servicesModes).filter(([, m]) => m === "managed").map(([t]) => t);
   const isProd = environment === "production";
@@ -676,8 +706,25 @@ function getPlans(
     },
   ];
 
+  const awsS3Plans: Plan[] = [
+    {
+      tier: "value", label: "S3 + CloudFront (Free Tier)", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+      instance: "s3-cf-free", cpu: "N/A", ram: "N/A", storage: "5 GB (S3)", network: "1 TB/mo (CloudFront)",
+      managedServices: ["S3 Static Hosting", "CloudFront CDN"],
+      monthlyPrice: "Free – ~$1/mo",
+      breakdown: [{ item: "S3 Storage", cost: "~$0.02/GB" }, { item: "CloudFront", cost: "Free (1TB/mo)" }, { item: "Route 53", cost: "$0.50" }],
+    },
+    {
+      tier: "standard", label: "S3 + CloudFront (Production)", badge: "Recommended", badgeColor: "bg-primary-50 text-primary-500",
+      instance: "s3-cf-prod", cpu: "N/A", ram: "N/A", storage: "50 GB (S3)", network: "10 TB/mo (CloudFront)",
+      managedServices: ["S3 Static Hosting", "CloudFront CDN", "ACM SSL"],
+      monthlyPrice: "~$2 – $10/mo",
+      breakdown: [{ item: "S3 Storage", cost: "~$0.02/GB" }, { item: "CloudFront", cost: "~$5" }, { item: "Route 53", cost: "$0.50" }, { item: "ACM SSL", cost: "Free" }],
+    },
+  ];
+
   const plans: Record<string, Plan[]> = {
-    aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : awsEcsPlans,
+    aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : deployStrategy === "static" ? awsS3Plans : awsEcsPlans,
     digitalocean: [
       {
         tier: "value", label: "Basic Droplet", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
@@ -1309,10 +1356,11 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
       // ── CodeBuild path: build image first via image-builder, then deploy ──
       if (state.buildMethod === "codebuild") {
         const ts0 = new Date().toISOString().replace("T", " ").slice(0, 19);
-        const deployTargetMap: Record<string, "ecs" | "apprunner" | "ec2"> = {
+        const deployTargetMap: Record<string, "ecs" | "apprunner" | "ec2" | "s3"> = {
           vps: "ec2",
           managed: "ecs",
           serverless: "apprunner",
+          static: "s3",
         };
         const deployTarget = deployTargetMap[state.deployStrategy] || "ec2";
 

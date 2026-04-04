@@ -16,6 +16,7 @@ export async function bundleAndUploadSource(
   gitToken?: string,
   gitProvider?: string,
   gitEndpoint?: string,
+  deployTarget?: string,
 ): Promise<{ s3Key: string; detectedRuntime: string; detectedPort: number }> {
   const { execSync } = await import("node:child_process");
   const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
@@ -47,18 +48,24 @@ export async function bundleAndUploadSource(
 
     // Detect tech stack and inject tailored buildspec + Dockerfile
     const { detectStack, generateDockerfile: genDF } = await import("./detection");
-    const { generateBuildspec } = await import("./buildspec");
+    const { generateBuildspec, generateStaticBuildspec } = await import("./buildspec");
     const { existsSync } = await import("node:fs");
     const stack = detectStack(repoDir);
     console.log(`Detected stack: ${stack.runtime}${stack.subDir ? ` (subDir: ${stack.subDir})` : ""}`);
 
-    // Generate stack-specific buildspec
-    const buildspecContent = generateBuildspec(stack);
-    writeFileSync(join(repoDir, "buildspec.yml"), buildspecContent);
+    // For static deploys (S3 + CloudFront), use static buildspec — no Docker needed
+    let detectedPort = 3000;
+    if (deployTarget === "s3") {
+      const buildspecContent = generateStaticBuildspec();
+      writeFileSync(join(repoDir, "buildspec.yml"), buildspecContent);
+      console.log("Generated static buildspec for S3 deploy");
+    } else {
+      // Generate stack-specific buildspec
+      const buildspecContent = generateBuildspec(stack);
+      writeFileSync(join(repoDir, "buildspec.yml"), buildspecContent);
 
     // Generate Dockerfile if the repo doesn't already have one
     let generatedDockerfile = false;
-    let detectedPort = 3000;
     if (!existsSync(join(repoDir, "Dockerfile"))) {
       const dockerfile = genDF(stack, repoDir);
       if (dockerfile) {
@@ -102,6 +109,7 @@ for sf in sorted(pathlib.Path(".").rglob("settings.py")):
       } catch {}
       console.log(`Repo already has a Dockerfile, using it as-is (port: ${detectedPort})`);
     }
+    } // end of non-static (Docker) path
 
     // Generate .dockerignore if not present
     if (!existsSync(join(repoDir, ".dockerignore"))) {

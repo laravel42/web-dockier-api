@@ -1,7 +1,7 @@
 // ─── Buildspec Generator Orchestrator ───
 
 import type { DetectedStack } from "../detection/types";
-import { commonPreBuild, commonPostBuild } from "./common";
+import { commonPreBuild, commonPostBuild, staticBuildAndSync, staticPostBuild } from "./common";
 import { nodeBuildPhase, phpBuildPhase, pythonBuildPhase, goBuildPhase, fallbackBuildPhase } from "./phases";
 
 const COMMON_INSTALL = `  install:
@@ -61,5 +61,55 @@ phases:
     "",
     commonPostBuild(),
     COMMON_FOOTER,
+  ].join("\n");
+}
+
+
+export function generateStaticBuildspec(): string {
+  const header = `version: 0.2
+
+env:
+  shell: bash
+  variables:
+    AWS_ACCOUNT_ID: "123456789012"
+    AWS_DEFAULT_REGION: "us-east-1"
+    IMAGE_REPO_NAME: "my-app"
+
+phases:
+`;
+
+  const install = `  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - set -euo pipefail
+      - node --version && npm --version`;
+
+  const preBuild = `  pre_build:
+    commands:
+      - set -euo pipefail
+      - echo "Static site build — no Docker needed"`;
+
+  const build = `  build:
+    commands:
+${staticBuildAndSync()}`;
+
+  return [
+    header.trimEnd(),
+    install,
+    "",
+    preBuild,
+    "",
+    build,
+    "",
+    staticPostBuild(),
+    `
+artifacts:
+  files:
+    - imageDetail.json
+
+cache:
+  paths:
+    - '/root/.cache/**/*'`,
   ].join("\n");
 }

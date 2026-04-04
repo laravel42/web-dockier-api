@@ -481,7 +481,7 @@ export const deployApi = {
     hasDocker: boolean;
     appName?: string;
     region?: string;
-    deployStrategy?: "vps" | "managed" | "serverless";
+    deployStrategy?: "vps" | "managed" | "serverless" | "static";
     useDocker?: boolean;
     dockerImage?: string;
     instanceType?: string;
@@ -696,7 +696,7 @@ export const imageBuilderApi = {
     tags?: string[];
     projectId?: string;
     gitConnectionId?: string;
-    deployTarget?: "ecs" | "apprunner" | "ec2";
+    deployTarget?: "ecs" | "apprunner" | "ec2" | "s3";
     deployParams?: {
       appName?: string;
       containerPort?: number;

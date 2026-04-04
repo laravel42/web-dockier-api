@@ -13,7 +13,7 @@ export const DeployCallbackUrl = secret("DeployCallbackUrl");
 
 export interface ServerProvider {
   id: string;
-  provider: "digitalocean" | "hetzner" | "vultr" | "linode" | "aws" | "upcloud" | "katapult" | "hostinger";
+  provider: "digitalocean" | "hetzner" | "vultr" | "linode" | "aws" | "upcloud" | "katapult" | "hostinger" | "gcp" | "cloudflare";
   label: string;
   apiKey: string;
   apiSecret: string;

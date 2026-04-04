@@ -70,7 +70,7 @@ export interface StartBuildParams {
   tags?: string[];
   projectId?: string;
   gitConnectionId?: string;
-  deployTarget?: "ecs" | "apprunner" | "ec2";
+  deployTarget?: "ecs" | "apprunner" | "ec2" | "s3";
   deployParams?: {
     appName?: string;
     containerPort?: number;

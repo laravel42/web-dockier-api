@@ -160,6 +160,19 @@ export const destroyDeployment = api(
       await ecr.send(new DeleteRepositoryCommand({ repositoryName: `${appName}-cache`, force: true }));
     } catch {}
 
+    // 4. Delete S3 static site bucket (for S3 + CloudFront deploys)
+    try {
+      const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await import("@aws-sdk/client-s3");
+      const s3 = new S3Client({ region, credentials });
+      const bucketName = `${appName}-static-site`;
+      // Empty the bucket first
+      const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName }));
+      if (listed.Contents && listed.Contents.length > 0) {
+        await s3.send(new DeleteObjectsCommand({ Bucket: bucketName, Delete: { Objects: listed.Contents.map(o => ({ Key: o.Key! })) } }));
+      }
+      await s3.send(new DeleteBucketCommand({ Bucket: bucketName }));
+    } catch {}
+
     const destroyTs = new Date().toISOString().replace("T", " ").slice(0, 19);
     const destroyLog = errors.length > 0
       ? `\n[${destroyTs}] ⚠ Partially destroyed. Errors: ${errors.join("; ")}`

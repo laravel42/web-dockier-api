@@ -11,7 +11,7 @@ interface TofuRequest {
   hasDocker: boolean;
   appName?: string;
   region?: string;
-  deployStrategy?: "vps" | "managed" | "serverless";
+  deployStrategy?: "vps" | "managed" | "serverless" | "static";
   useDocker?: boolean;
   dockerImage?: string;
   instanceType?: string;
