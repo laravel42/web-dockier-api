@@ -1,12 +1,5 @@
 // Icons served statically from public/devicons/ — no Vite bundling needed.
 
-// Icons that are .png instead of .svg
-const PNG_ICONS = new Set([
-  "authorizer", "browserless", "coder-dark", "coder-light", "cplusplus",
-  "cusdis", "fizzy", "listmonk", "nocodb", "otel", "quirrel", "rocket",
-  "sails-extended", "shiori", "soketi", "trpc", "web3js",
-]);
-
 // Icons that have -dark / -light variants
 const THEMED_ICONS = new Set([
   "apple", "astro", "coder", "fastify", "flask", "github", "inngest",
@@ -36,8 +29,7 @@ const SLUG_TO_LOCAL: Record<string, string> = {
 };
 
 function iconUrl(name: string): string {
-  const ext = PNG_ICONS.has(name) ? "png" : "svg";
-  return `/devicons/${name}.${ext}`;
+  return `/devicons/${name}.svg`;
 }
 
 /**

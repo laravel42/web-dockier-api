@@ -246,6 +246,10 @@ interface Scan {
   branch: string;
   status: "pending" | "running" | "completed" | "failed";
   summary: ScanSummary;
+  commitSha: string;
+  commitMessage: string;
+  commitAuthor: string;
+  commitDate: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -272,7 +276,8 @@ export const createScan = api(
     return {
       id, projectId: params.projectId,
       connectionId: params.connectionId, repo: params.repo, branch: params.branch,
-      status: "pending", summary, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      status: "pending", summary, commitSha: "", commitMessage: "", commitAuthor: "", commitDate: "",
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
   }
 );
@@ -288,23 +293,26 @@ export const listScans = api(
       ? db.query<{
           id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;
+          commit_sha: string; commit_message: string; commit_author: string; commit_date: Date | null;
           created_at: Date; updated_at: Date;
-        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, commit_sha, commit_message, commit_author, commit_date, created_at, updated_at
            FROM scans WHERE app_id = ${authData.appId} AND project_id = ${params.projectId} AND branch = ${params.branch}
            ORDER BY created_at DESC LIMIT 50`
       : params.projectId
       ? db.query<{
           id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;
+          commit_sha: string; commit_message: string; commit_author: string; commit_date: Date | null;
           created_at: Date; updated_at: Date;
-        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, commit_sha, commit_message, commit_author, commit_date, created_at, updated_at
            FROM scans WHERE app_id = ${authData.appId} AND project_id = ${params.projectId}
            ORDER BY created_at DESC LIMIT 50`
       : db.query<{
           id: string; project_id: string; connection_id: string;
           repo: string; branch: string; status: string; summary: ScanSummary;
+          commit_sha: string; commit_message: string; commit_author: string; commit_date: Date | null;
           created_at: Date; updated_at: Date;
-        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+        }>`SELECT id, project_id, connection_id, repo, branch, status, summary, commit_sha, commit_message, commit_author, commit_date, created_at, updated_at
            FROM scans WHERE app_id = ${authData.appId}
            ORDER BY created_at DESC LIMIT 50`;
 
@@ -314,6 +322,8 @@ export const listScans = api(
         id: row.id, projectId: row.project_id,
         connectionId: row.connection_id, repo: row.repo, branch: row.branch,
         status: row.status as Scan["status"], summary: parseSummary(row.summary),
+        commitSha: row.commit_sha || "", commitMessage: row.commit_message || "",
+        commitAuthor: row.commit_author || "", commitDate: row.commit_date?.toISOString() || "",
         createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
       });
     }
@@ -329,8 +339,9 @@ export const getScan = api(
     const row = await db.queryRow<{
       id: string; project_id: string; connection_id: string;
       repo: string; branch: string; status: string; summary: ScanSummary;
+      commit_sha: string; commit_message: string; commit_author: string; commit_date: Date | null;
       created_at: Date; updated_at: Date;
-    }>`SELECT id, project_id, connection_id, repo, branch, status, summary, created_at, updated_at
+    }>`SELECT id, project_id, connection_id, repo, branch, status, summary, commit_sha, commit_message, commit_author, commit_date, created_at, updated_at
        FROM scans WHERE id = ${params.scanId}`;
 
     if (!row) throw APIError.notFound("Scan not found");
@@ -339,6 +350,8 @@ export const getScan = api(
       id: row.id, projectId: row.project_id,
       connectionId: row.connection_id, repo: row.repo, branch: row.branch,
       status: row.status as Scan["status"], summary: parseSummary(row.summary),
+      commitSha: row.commit_sha || "", commitMessage: row.commit_message || "",
+      commitAuthor: row.commit_author || "", commitDate: row.commit_date?.toISOString() || "",
       createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     };
   }
@@ -428,6 +441,7 @@ export const runScan = api(
       id: scan.id, projectId: scan.project_id,
       connectionId: scan.connection_id, repo: scan.repo, branch: scan.branch,
       status: "running", summary: { ...emptySummary() },
+      commitSha: "", commitMessage: "", commitAuthor: "", commitDate: "",
       createdAt: scan.created_at.toISOString(), updatedAt: new Date().toISOString(),
     };
   }
@@ -980,6 +994,23 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     );
 
     const repoDir = join(tmpDir, "repo");
+
+    // Capture commit info from the cloned repo
+    let commitSha = "";
+    let commitMessage = "";
+    let commitAuthor = "";
+    let commitDate = "";
+    try {
+      commitSha = execSync("git rev-parse HEAD", { cwd: repoDir, stdio: "pipe" }).toString().trim();
+      commitMessage = execSync("git log -1 --format=%s", { cwd: repoDir, stdio: "pipe" }).toString().trim();
+      commitAuthor = execSync("git log -1 --format=%an <%ae>", { cwd: repoDir, stdio: "pipe" }).toString().trim();
+      commitDate = execSync("git log -1 --format=%aI", { cwd: repoDir, stdio: "pipe" }).toString().trim();
+    } catch { /* ignore — commit info is best-effort */ }
+
+    // Persist commit info on the scan record
+    if (commitSha) {
+      await db.exec`UPDATE scans SET commit_sha = ${commitSha}, commit_message = ${commitMessage}, commit_author = ${commitAuthor}, commit_date = ${commitDate || null} WHERE id = ${scanId}`;
+    }
 
     // Count files
     let filesInRepo = 0;

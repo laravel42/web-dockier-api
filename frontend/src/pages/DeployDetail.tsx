@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../services/api";
-import DevIcon from "../components/DevIcon";
+import ProviderBadge, { getProviderStyle } from "../components/ProviderBadge";
 
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
@@ -35,14 +35,6 @@ interface Project {
   connectionId: string;
 }
 
-const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "i/aws.svg" },
-  digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
-  hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
-  vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
-  linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode" },
-};
-
 const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
 
 export default function DeployDetail() {
@@ -61,17 +53,20 @@ export default function DeployDetail() {
 
   useEffect(() => {
     if (!deployId) return;
-    setLoading(true);
+    let cancelled = false;
+
     Promise.all([
       deployApi.getDeployment(deployId),
       deployApi.listProviders(),
     ])
       .then(async ([d, pRes]) => {
+        if (cancelled) return;
         setDeploy(d);
         setProviders(pRes.providers);
         // Find matching project
         try {
           const projRes = await projectsApi.list();
+          if (cancelled) return;
           const match = projRes.projects.find((p: Project) => {
             try {
               const u = new URL(p.repository);
@@ -82,17 +77,21 @@ export default function DeployDetail() {
           if (match) setProject(match);
         } catch {}
         // Fetch all deploys for sidebar
+        if (cancelled) return;
         setAllDeploysLoading(true);
         deployApi.listDeployments()
           .then((res) => {
+            if (cancelled) return;
             const repoDeploys = res.deployments.filter((dep) => dep.repo === d.repo);
             setAllDeploys(repoDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) as Deployment[]);
           })
           .catch(() => {})
-          .finally(() => setAllDeploysLoading(false));
+          .finally(() => { if (!cancelled) setAllDeploysLoading(false); });
       })
-      .catch((err: any) => setError(err.message || "Failed to load deployment"))
-      .finally(() => setLoading(false));
+      .catch((err: any) => { if (!cancelled) setError(err.message || "Failed to load deployment"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
   }, [deployId]);
 
   if (loading) {
@@ -114,7 +113,7 @@ export default function DeployDetail() {
 
   const prov = providers.find(p => p.id === deploy.providerId);
   const provKey = prov?.provider || "";
-  const ps = providerStyles[provKey] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
+  const ps = getProviderStyle(provKey);
 
   const statusColors: Record<string, string> = {
     success: "bg-success-500/10 text-success-500",
@@ -169,7 +168,7 @@ export default function DeployDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
           <div className={`${cardCls} px-3 py-2 text-center`}>
             <div className="flex items-center justify-center gap-1.5 mb-1">
-              {ps.icon && <DevIcon src={ps.icon} alt="" className="w-3.5 h-3.5" />}
+              <ProviderBadge provider={provKey} showName={false} iconSize="w-3.5 h-3.5" />
               <p className={`text-sm font-bold ${ps.text}`}>{provKey.toUpperCase()}</p>
             </div>
             <p className="text-[10px] text-text-muted">Provider</p>
@@ -229,7 +228,6 @@ export default function DeployDetail() {
                   const isActive = d.id === deployId;
                   const dp = providers.find(p => p.id === d.providerId);
                   const dk = dp?.provider || "";
-                  const dps = providerStyles[dk] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
                   const statusDot = d.status === "success" ? "bg-success-500" : d.status === "failed" ? "bg-danger-500" : d.status === "building" || d.status === "deploying" ? "bg-primary-500" : "bg-secondary-300";
                   return (
                     <button
@@ -245,10 +243,7 @@ export default function DeployDetail() {
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1 ml-4">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-medium ${dps.bg} ${dps.text}`}>
-                          {dps.icon && <DevIcon src={dps.icon} alt="" className="w-2.5 h-2.5" />}
-                          {dk.toUpperCase()}
-                        </span>
+                        <ProviderBadge provider={dk} />
                         <span className="text-[10px] text-text-muted">{d.branch}</span>
                       </div>
                     </button>

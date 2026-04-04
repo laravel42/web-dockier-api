@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { deployApi, projectsApi, gitApi } from "../services/api";
-import DevIcon from "../components/DevIcon";
+import TechBadge from "../components/TechBadge";
 
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
@@ -143,27 +143,10 @@ export default function Deploy() {
                     {(() => {
                       const badges = proj ? projectLangs[proj.id] : null;
                       if (badges && badges.length > 0) {
-                        const langIconMap: Record<string, string> = {
-                          JavaScript: "javascript", TypeScript: "typescript", Python: "python", PHP: "php",
-                          Java: "java", Go: "go", Ruby: "ruby", Rust: "rust", "C#": "csharp", "C++": "cplusplus",
-                          C: "c", Kotlin: "kotlin", Swift: "swift", Shell: "bash", HTML: "html5", CSS: "css3",
-                          Vue: "vuejs", SCSS: "sass", Dockerfile: "docker", Elixir: "elixir", Dart: "dart",
-                          "Node.js": "nodejs", React: "react", Angular: "angularjs", Laravel: "laravel",
-                          Django: "django", Rails: "rails", "Next.js": "nextjs", Express: "express",
-                          Flask: "flask", Spring: "spring", ".NET": "dot-net",
-                        };
-                        const langLabel: Record<string, string> = {
-                          JavaScript: "JS", TypeScript: "TS", Python: "PY", "C++": "C++", "C#": "C#",
-                          Dockerfile: "Docker", Shell: "SH", Kotlin: "KT", Swift: "SW", Scala: "SC",
-                          HTML: "HTML", CSS: "CSS", SCSS: "SCSS", "Node.js": "Node",
-                        };
                         return (
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             {badges.slice(0, 4).map((b) => (
-                              <span key={b.name} className="inline-flex items-center gap-1.5 px-1 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
-                                <DevIcon src={langIconMap[b.name] || b.name.toLowerCase()} className="w-4 h-4" />
-                                {langLabel[b.name] || b.name}
-                              </span>
+                              <TechBadge key={b.name} name={b.name} />
                             ))}
                           </div>
                         );

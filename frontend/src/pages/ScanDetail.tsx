@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, integrationsApi, gitApi } from "../services/api";
 import { INTEGRATION_CATALOG } from "../data/integrations";
 import Modal from "../components/Modal";
+import SeverityBadge from "../components/SeverityBadge";
 
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
@@ -23,6 +24,10 @@ interface Scan {
   branch: string;
   status: string;
   summary: ScanSummary;
+  commitSha: string;
+  commitMessage: string;
+  commitAuthor: string;
+  commitDate: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +141,7 @@ export default function ScanDetail() {
 
   // File contents cache for code preview
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
+  const fetchingFiles = useRef(new Set<string>());
 
   // Load integrations from localStorage
   useEffect(() => {
@@ -216,12 +222,13 @@ export default function ScanDetail() {
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
     const uniqueFiles = [...new Set(findings.map(f => f.filePath))];
-    const toFetch = uniqueFiles.filter(fp => !fileContents[fp]);
+    const toFetch = uniqueFiles.filter(fp => !fileContents[fp] && !fetchingFiles.current.has(fp));
     if (toFetch.length === 0) return;
     toFetch.forEach(fp => {
+      fetchingFiles.current.add(fp);
       gitApi.getFileContent(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", fp)
         .then(res => setFileContents(prev => ({ ...prev, [fp]: res.content })))
-        .catch(() => {});
+        .catch(() => { fetchingFiles.current.delete(fp); });
     });
   }, [findings, project]);
 
@@ -555,13 +562,28 @@ export default function ScanDetail() {
                   {allScans.map((s) => {
                     const statusDot = s.status === "completed" ? "bg-success-500" : s.status === "failed" ? "bg-danger-500" : s.status === "running" ? "bg-primary-500" : "bg-secondary-300";
                     return (
-                      <button key={s.id} type="button" onClick={() => navigate(`/security/${s.id}`)} className="w-full text-left px-3 py-2.5 transition-colors hover:bg-secondary-50">
+                      <button key={s.id} type="button" onClick={() => navigate(`/security/${s.id}`)} className="w-full text-left px-3 py-3 transition-colors hover:bg-secondary-50">
                         <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot}`} />
-                          <span className="text-xs font-medium truncate text-text">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDot}`} />
+                          <span className="text-sm font-medium truncate text-text">
                             {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </span>
                         </div>
+                        <div className="flex items-center gap-2 mt-1.5 ml-[18px]">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                          </svg>
+                          <span className="text-xs text-text font-semibold font-mono truncate">{s.branch}</span>
+                        </div>
+                        {s.commitSha && (
+                          <div className="flex items-center gap-2 mt-1 ml-[18px]">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+                            </svg>
+                            <span className="text-xs text-text font-semibold font-mono">{s.commitSha.slice(0, 7)}</span>
+                            {s.commitMessage && <span className="text-xs text-text-muted truncate">{s.commitMessage.split("\n")[0]}</span>}
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -720,19 +742,13 @@ export default function ScanDetail() {
                 <span className="text-xs font-mono text-text truncate">{filePath}</span>
                 <div className="flex items-center gap-1 ml-auto shrink-0">
                   {fileFindings.filter(f => f.severity === "error").length > 0 && (
-                    <span className="px-1 py-px rounded text-[10px] font-semibold bg-danger-500/10 text-danger-500">
-                      {fileFindings.filter(f => f.severity === "error").length}
-                    </span>
+                    <SeverityBadge severity="error" count={fileFindings.filter(f => f.severity === "error").length} />
                   )}
                   {fileFindings.filter(f => f.severity === "warning").length > 0 && (
-                    <span className="px-1 py-px rounded text-[10px] font-semibold bg-warning-50 text-warning-500">
-                      {fileFindings.filter(f => f.severity === "warning").length}
-                    </span>
+                    <SeverityBadge severity="warning" count={fileFindings.filter(f => f.severity === "warning").length} />
                   )}
                   {fileFindings.filter(f => f.severity === "info").length > 0 && (
-                    <span className="px-1 py-px rounded text-[10px] font-semibold bg-primary-50 text-primary-500">
-                      {fileFindings.filter(f => f.severity === "info").length}
-                    </span>
+                    <SeverityBadge severity="info" count={fileFindings.filter(f => f.severity === "info").length} />
                   )}
                 </div>
               </summary>
@@ -741,13 +757,7 @@ export default function ScanDetail() {
                   <div key={f.id} className="px-3 py-3 pl-9 space-y-1.5">
                     {/* Top row: severity badge + buttons */}
                     <div className="flex items-center gap-2">
-                      <span className={`px-1.5 py-px rounded text-[10px] font-semibold uppercase shrink-0 ${
-                        f.severity === "error" ? "bg-danger-500/10 text-danger-500" :
-                        f.severity === "warning" ? "bg-warning-50 text-warning-500" :
-                        "bg-primary-50 text-primary-500"
-                      }`}>
-                        {f.severity}
-                      </span>
+                      <SeverityBadge severity={f.severity as "error" | "warning" | "info"} label={f.severity} />
                       <span className="text-[10px] text-text-muted font-mono">L{f.startLine}</span>
                       <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
                       {(pmIntegrations.length > 0 || project?.connectionId) && (
@@ -1109,29 +1119,58 @@ export default function ScanDetail() {
                       key={s.id}
                       type="button"
                       onClick={() => navigate(`/security/${s.id}`)}
-                      className={`w-full text-left px-3 py-2.5 transition-colors ${isActive ? "bg-primary-50" : "hover:bg-secondary-50"}`}
+                      className={`w-full text-left px-3 py-3 transition-colors ${isActive ? "bg-primary-50" : "hover:bg-secondary-50"}`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot}`} />
-                        <span className={`text-xs font-medium truncate ${isActive ? "text-primary-600" : "text-text"}`}>
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDot}`} />
+                        <span className={`text-sm font-medium truncate ${isActive ? "text-primary-600" : "text-text"}`}>
                           {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
+                        {s.summary?.totalFindings != null && s.summary.totalFindings > 0 && (() => {
+                          if (isActive && findings.length > 0) {
+                            const hasOg = findings.some(f => !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom."));
+                            const hasSq = findings.some(f => f.ruleId.startsWith("sonar."));
+                            const hasCr = findings.some(f => f.ruleId.startsWith("custom."));
+                            return (
+                              <div className="flex items-center gap-2 ml-auto shrink-0">
+                                {hasOg && <img src="/devicons/opengrep.svg" alt="Opengrep" className="w-4 h-4 rounded" />}
+                                {hasSq && <img src="/devicons/sonarqube.svg" alt="SonarQube" className="w-4 h-4 rounded" />}
+                                {hasCr && <img src="/logo.png" alt="Custom" className="w-4 h-4 rounded" />}
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="flex items-center gap-2 ml-auto shrink-0">
+                              <img src="/devicons/opengrep.svg" alt="Opengrep" className="w-4 h-4 rounded" />
+                              <img src="/devicons/sonarqube.svg" alt="SonarQube" className="w-4 h-4 rounded" />
+                            </div>
+                          );
+                        })()}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1 ml-4">
-                        {s.summary?.totalFindings != null && (
-                          <span className="text-[10px] text-text-muted">{s.summary.totalFindings} finding{s.summary.totalFindings !== 1 ? "s" : ""}</span>
-                        )}
-                        <span className="text-[10px] text-text-muted font-mono">{s.branch}</span>
+                      <div className="flex items-center gap-2 mt-1.5 ml-[18px]">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                        </svg>
+                        <span className="text-xs text-text font-semibold font-mono truncate">{s.branch}</span>
                       </div>
-                      {s.id === scanId && findings.length > 0 && (() => {
-                        const og = findings.filter(f => !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.")).length;
-                        const sq = findings.filter(f => f.ruleId.startsWith("sonar.")).length;
-                        const cr = findings.filter(f => f.ruleId.startsWith("custom.")).length;
+                      {s.commitSha && (
+                        <div className="flex items-center gap-2 mt-1 ml-[18px]">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+                          </svg>
+                          <span className="text-xs text-text font-semibold font-mono">{s.commitSha.slice(0, 7)}</span>
+                          {s.commitMessage && <span className="text-xs text-text-muted truncate">{s.commitMessage.split("\n")[0]}</span>}
+                        </div>
+                      )}
+                      {isActive && findings.length > 0 && (() => {
+                        const errs = findings.filter(f => f.severity === "error").length;
+                        const warns = findings.filter(f => f.severity === "warning").length;
+                        const infos = findings.filter(f => f.severity === "info").length;
                         return (
-                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1.5 ml-4">
-                            {og > 0 && <span className="text-[10px] text-text-muted">Opengrep <span className="font-semibold text-text">{og}</span></span>}
-                            {sq > 0 && <span className="text-[10px] text-text-muted">SonarQube <span className="font-semibold text-text">{sq}</span></span>}
-                            {cr > 0 && <span className="text-[10px] text-text-muted">Custom <span className="font-semibold text-text">{cr}</span></span>}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-[18px]">
+                            {errs > 0 && <SeverityBadge severity="error" count={errs} />}
+                            {warns > 0 && <SeverityBadge severity="warning" count={warns} />}
+                            {infos > 0 && <SeverityBadge severity="info" count={infos} />}
                           </div>
                         );
                       })()}

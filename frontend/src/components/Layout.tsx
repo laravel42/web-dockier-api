@@ -53,10 +53,8 @@ export default function Layout() {
       <aside className="w-[260px] bg-sidebar border-r border-border/80 flex flex-col shrink-0">
         <div className="h-[72px] flex items-center px-6 border-b border-border/80">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-primary-500 flex items-center justify-center shadow-sm">
-              <span className="text-white font-display font-semibold text-sm">S</span>
-            </div>
-            <span className="text-lg font-display font-semibold text-text tracking-tight">SaaS App</span>
+            <img src="/logo.png" alt="Dockier logo" className="w-9 h-9 rounded-xl shadow-sm" />
+            <span className="text-2xl font-display font-semibold text-text tracking-tight">Dockier</span>
           </div>
         </div>
 
@@ -69,7 +67,7 @@ export default function Layout() {
                 to={item.to}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[15px] font-medium transition-all duration-200 ${
                   active
-                    ? "bg-sidebar-active text-primary-600 shadow-sm"
+                    ? "bg-sidebar-active text-primary-300 shadow-sm"
                     : "text-text-secondary hover:bg-secondary-50/80 hover:text-text"
                 }`}
               >

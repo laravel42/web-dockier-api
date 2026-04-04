@@ -7,7 +7,9 @@ import { INTEGRATION_ICONS } from "../data/integration-icons";
 import Modal from "../components/Modal";
 import ConfirmModal from "../components/ConfirmModal";
 import RoleFormModal from "../components/RoleFormModal";
-import DevIcon from "../components/DevIcon";
+import SourceControlBadge, { getSourceControl } from "../components/SourceControlBadge";
+import ProviderBadge, { getProviderStyle } from "../components/ProviderBadge";
+import TechBadge from "../components/TechBadge";
 import YamlEditor from "../components/YamlEditor";
 
 type Tab = "general" | "profile" | "security" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
@@ -424,30 +426,6 @@ function ProvidersTab() {
     setEditingProvider(null); fetch_();
   };
 
-  const providerDescriptions: Record<string, string> = {
-    aws: "Amazon Web Services cloud platform.",
-    googlecloud: "Google Cloud Platform infrastructure.",
-    digitalocean: "Cloud VPS and managed infrastructure.",
-    hetzner: "High-performance cloud servers in Europe.",
-    linode: "Simple and reliable cloud computing.",
-  };
-
-  const providerIconUrls: Record<string, string> = {
-    aws: "i/aws.svg",
-    googlecloud: "googlecloud",
-    digitalocean: "digitalocean",
-    hetzner: "hetzner",
-    linode: "linode",
-  };
-
-  const providerNames: Record<string, string> = {
-    aws: "AWS",
-    googlecloud: "Google Cloud",
-    digitalocean: "DigitalOcean",
-    hetzner: "Hetzner",
-    linode: "Linode",
-  };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -506,17 +484,17 @@ function ProvidersTab() {
         </form>
       </Modal>
 
-      <Modal open={!!editingProvider} onClose={() => setEditingProvider(null)} title={editingProvider ? providerNames[editingProvider.provider] || editingProvider.provider : "Provider"} size="lg">
+      <Modal open={!!editingProvider} onClose={() => setEditingProvider(null)} title={editingProvider ? getProviderStyle(editingProvider.provider).name || editingProvider.provider : "Provider"} size="lg">
         {editingProvider && (
             <form onSubmit={handleEditSave} className="space-y-5">
               {/* Hero header */}
               <div className="flex items-center gap-5">
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0">
-                  {providerIconUrls[editingProvider.provider] ? <DevIcon src={providerIconUrls[editingProvider.provider]} className="w-10 h-10" /> : null}
+                  <ProviderBadge provider={editingProvider.provider} showName={false} iconSize="w-10 h-10" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-lg font-semibold text-text">{providerNames[editingProvider.provider] || editingProvider.provider}</p>
-                  <p className="text-sm text-text-muted">{providerDescriptions[editingProvider.provider] || "Cloud infrastructure provider."}</p>
+                  <p className="text-lg font-semibold text-text">{getProviderStyle(editingProvider.provider).name || editingProvider.provider}</p>
+                  <p className="text-sm text-text-muted">{getProviderStyle(editingProvider.provider).description}</p>
                 </div>
               </div>
 
@@ -547,7 +525,7 @@ function ProvidersTab() {
               {/* Overview */}
               <div>
                 <h3 className="text-sm font-semibold text-text mb-1">Overview</h3>
-                <p className="text-sm text-text-secondary leading-relaxed">{providerDescriptions[editingProvider.provider] || "Cloud infrastructure provider."}</p>
+                <p className="text-sm text-text-secondary leading-relaxed">{getProviderStyle(editingProvider.provider).description}</p>
               </div>
 
               {/* Configuration */}
@@ -577,15 +555,15 @@ function ProvidersTab() {
             <div key={p.id} onClick={() => openEdit(p)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                  {providerIconUrls[p.provider] ? <DevIcon src={providerIconUrls[p.provider]} className="w-7 h-7" /> : null}
+                  <ProviderBadge provider={p.provider} showName={false} iconSize="w-7 h-7" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-text truncate">{providerNames[p.provider] || p.provider}</p>
+                  <p className="text-sm font-bold text-text truncate">{getProviderStyle(p.provider).name || p.provider}</p>
                   <p className="text-xs text-text-muted truncate">{p.label}</p>
                 </div>
               </div>
               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${p.enabled !== false ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>{p.enabled !== false ? "Connected" : "Disabled"}</span>
-              <p className="text-xs text-text-muted mt-2">{providerDescriptions[p.provider] || "Cloud infrastructure provider."}</p>
+              <p className="text-xs text-text-muted mt-2">{getProviderStyle(p.provider).description}</p>
             </div>
           ))}
           {providers.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No server providers configured</p>}
@@ -738,20 +716,6 @@ function SourceControlTab() {
     setEditingConn(null); fetch_();
   };
 
-  const gitDescriptions: Record<string, string> = {
-    github: "GitHub repositories and organizations.",
-    gitlab: "GitLab projects and groups.",
-    gitlab_self_hosted: "Self-hosted GitLab instance.",
-    bitbucket: "Bitbucket repositories and workspaces.",
-  };
-
-  const gitIconUrls: Record<string, string> = {
-    github: "github",
-    gitlab: "gitlab",
-    gitlab_self_hosted: "gitlab",
-    bitbucket: "bitbucket",
-  };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -804,11 +768,11 @@ function SourceControlTab() {
             {/* Hero header */}
             <div className="flex items-center gap-5">
               <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0">
-                {gitIconUrls[editingConn.provider] ? <DevIcon src={gitIconUrls[editingConn.provider]} className="w-10 h-10" /> : null}
+                <SourceControlBadge provider={editingConn.provider} showName={false} iconSize="w-10 h-10" />
               </div>
               <div className="min-w-0">
                 <p className="text-lg font-semibold text-text capitalize">{editingConn.provider.replace("_", " ")}</p>
-                <p className="text-sm text-text-muted">{gitDescriptions[editingConn.provider] || "Source control connection."}</p>
+                <p className="text-sm text-text-muted">{getSourceControl(editingConn.provider).description}</p>
               </div>
             </div>
 
@@ -833,7 +797,7 @@ function SourceControlTab() {
             {/* Overview */}
             <div>
               <h3 className="text-sm font-semibold text-text mb-1">Overview</h3>
-              <p className="text-sm text-text-secondary leading-relaxed">{gitDescriptions[editingConn.provider] || "Source control connection."}</p>
+              <p className="text-sm text-text-secondary leading-relaxed">{getSourceControl(editingConn.provider).description}</p>
             </div>
 
             {/* Configuration */}
@@ -869,7 +833,7 @@ function SourceControlTab() {
             <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                  {gitIconUrls[conn.provider] ? <DevIcon src={gitIconUrls[conn.provider]} className="w-7 h-7" /> : null}
+                  <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
@@ -877,7 +841,7 @@ function SourceControlTab() {
                 </div>
               </div>
               <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-success-50 text-success-500">Connected</span>
-              <p className="text-xs text-text-muted mt-2">{gitDescriptions[conn.provider] || "Source control connection."}</p>
+              <p className="text-xs text-text-muted mt-2">{getSourceControl(conn.provider).description}</p>
             </div>
           ))}
           {connections.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No source control connections yet. Add one to get started.</p>}
@@ -976,7 +940,7 @@ function NotificationChannelsTab() {
       <Modal open={!!editingChannel} onClose={() => setEditingChannel(null)} title={{ email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" }[editingChannel?.type as string] || editingChannel?.type || "Channel"} size="lg">
         {editingChannel && (() => {
           const chName = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" }[editingChannel.type as string] || editingChannel.type;
-          const chIcon = editingChannel.type === "slack" ? <DevIcon src="slack" className="w-10 h-10" /> :
+          const chIcon = editingChannel.type === "slack" ? <TechBadge name="slack" icon="slack" iconOnly iconSize="w-10 h-10" /> :
             editingChannel.type === "email" ? <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> :
             editingChannel.type === "webhook" ? <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg> :
             <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>;
@@ -1048,7 +1012,7 @@ function NotificationChannelsTab() {
             const channelNames: Record<string, string> = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" };
             const channelIcons: Record<string, React.ReactNode> = {
               email: <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>,
-              slack: <DevIcon src="slack" className="w-7 h-7" />,
+              slack: <TechBadge name="slack" icon="slack" iconOnly iconSize="w-7 h-7" />,
               webhook: <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>,
               in_app: <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>,
             };
@@ -1216,7 +1180,7 @@ function IntegrationsTab() {
                     className={`flex items-center gap-3 p-3 rounded-lg border border-border text-left transition-colors ${alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-secondary-50 hover:border-primary-300"}`}
                   >
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                      {INTEGRATION_ICONS[cat.type] ? <DevIcon src={INTEGRATION_ICONS[cat.type]} className="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -1235,7 +1199,7 @@ function IntegrationsTab() {
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="flex items-center gap-3 pb-3 border-b border-border">
               <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                {INTEGRATION_ICONS[catalog.type] ? <DevIcon src={INTEGRATION_ICONS[catalog.type]} className="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
               </div>
               <div>
                 <p className="text-sm font-semibold text-text">{catalog.name}</p>
@@ -1295,7 +1259,7 @@ function IntegrationsTab() {
               {/* Hero header: large icon + name + short description */}
               <div className="flex items-center gap-5">
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0">
-                  {INTEGRATION_ICONS[editCat.type] ? <DevIcon src={INTEGRATION_ICONS[editCat.type]} className="w-10 h-10" /> : null}
+                  {INTEGRATION_ICONS[editCat.type] ? <TechBadge name={editCat.type} icon={INTEGRATION_ICONS[editCat.type]} iconOnly iconSize="w-10 h-10" /> : null}
                 </div>
                 <div className="min-w-0">
                   <p className="text-lg font-semibold text-text">{editCat.name}</p>
@@ -1391,7 +1355,7 @@ function IntegrationsTab() {
               <div key={intg.id} onClick={() => openEdit(intg)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                    {(cat && INTEGRATION_ICONS[cat.type]) ? <DevIcon src={INTEGRATION_ICONS[cat.type]} className="w-7 h-7" /> : null}
+                    {(cat && INTEGRATION_ICONS[cat.type]) ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-7 h-7" /> : null}
                   </div>
                   <p className="text-sm font-bold text-text">{intg.name}</p>
                 </div>
@@ -1614,7 +1578,7 @@ function SecurityRulesTab() {
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                       selected ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border bg-card text-text-muted hover:border-primary-300"
                     }`}>
-                    <DevIcon src={icon} className="w-4 h-4" />{label}
+                    <TechBadge name={ext} icon={icon} iconOnly />{label}
                   </button>
                 );
               })}
@@ -1648,9 +1612,7 @@ function SecurityRulesTab() {
               <div className="flex items-end gap-2">
                 <div className="flex flex-wrap gap-1 flex-1">
                   {r.extensions.map(ext => (
-                    <span key={ext} className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-secondary-50 text-xs text-text-muted">
-                      {extIconMap[ext] && <DevIcon src={extIconMap[ext]} className="w-3.5 h-3.5" />}{ext}
-                    </span>
+                    <TechBadge key={ext} name={ext} icon={extIconMap[ext]} label={ext} />
                   ))}
                 </div>
                 {!r.isSystem && (
@@ -1812,9 +1774,7 @@ function SonarQubeRulesPanel() {
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.key}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {exts.slice(0, 1).map(e => (
-                    <span key={e.ext} className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-secondary-50 text-xs text-text-muted">
-                      <DevIcon src={e.icon} className="w-3.5 h-3.5" />{techLabel}
-                    </span>
+                    <TechBadge key={e.ext} name={e.ext} icon={e.icon} label={techLabel} />
                   ))}
                 </div>
                 <button type="button" onClick={() => handleToggle(r.key)}
@@ -1923,7 +1883,7 @@ function RulesFilterSidebar({ severities, activeSeverity, onSeverityChange, lang
                 return (
                   <button key={l.key} type="button" onClick={() => onLangToggle(l.key)}
                     className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all ${active ? "bg-primary-50 text-primary-600 font-medium" : "text-text-muted hover:bg-secondary-100"}`}>
-                    <DevIcon src={l.icon} className="w-5 h-5 shrink-0" />
+                    <TechBadge name={l.key} icon={l.icon} iconOnly iconSize="w-5 h-5" />
                     <span className="text-sm truncate flex-1 text-left">{l.label}</span>
                     {l.count !== undefined && <span className="text-xs font-semibold">{l.count}</span>}
                   </button>
@@ -2049,9 +2009,7 @@ function OpengrepRulesPanel() {
               <p className="text-xs text-text-muted bg-secondary-50 px-2 py-1 rounded line-clamp-2 leading-relaxed">{r.message || r.path}</p>
               <div className="flex items-end gap-2">
                 <div className="flex flex-wrap gap-1 flex-1">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border bg-secondary-50 text-xs text-text-muted">
-                    {langIcon[r.lang] && <DevIcon src={langIcon[r.lang]} className="w-3.5 h-3.5" />}{r.lang}
-                  </span>
+                  <TechBadge name={r.lang} icon={langIcon[r.lang]} label={r.lang} />
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => openEditModal(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="View">

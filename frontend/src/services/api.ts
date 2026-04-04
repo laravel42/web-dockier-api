@@ -570,6 +570,10 @@ export const codeAnalysisApi = {
       branch: string;
       status: string;
       summary: ScanSummaryApi;
+      commitSha: string;
+      commitMessage: string;
+      commitAuthor: string;
+      commitDate: string;
       createdAt: string;
     }>("/code-analysis/scans", { method: "POST", body: JSON.stringify(data) }),
 
@@ -586,6 +590,10 @@ export const codeAnalysisApi = {
         branch: string;
         status: string;
         summary: ScanSummaryApi;
+        commitSha: string;
+        commitMessage: string;
+        commitAuthor: string;
+        commitDate: string;
         createdAt: string;
         updatedAt: string;
       }>;
@@ -600,6 +608,10 @@ export const codeAnalysisApi = {
       branch: string;
       status: string;
       summary: ScanSummaryApi;
+      commitSha: string;
+      commitMessage: string;
+      commitAuthor: string;
+      commitDate: string;
       createdAt: string;
       updatedAt: string;
     }>(`/code-analysis/scans/${scanId}`),

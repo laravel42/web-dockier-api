@@ -1,18 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import DevIcon from "./DevIcon";
+import SourceControlBadge, { getSourceControl } from "./SourceControlBadge";
 
 interface Connection {
   id: string;
   provider: string;
   label: string;
 }
-
-const PROVIDER_ICONS: Record<string, { icon: string; name: string }> = {
-  github: { icon: "github", name: "GitHub" },
-  gitlab: { icon: "gitlab", name: "GitLab" },
-  gitlab_self_hosted: { icon: "gitlab", name: "GitLab" },
-  bitbucket: { icon: "bitbucket", name: "Bitbucket" },
-};
 
 interface Props {
   value: string;
@@ -31,7 +24,7 @@ export default function SourceControlSelect({ value, onChange, connections, load
 
   const filtered = connections.filter((c) => {
     const q = search.toLowerCase();
-    const provider = PROVIDER_ICONS[c.provider];
+    const provider = getSourceControl(c.provider);
     return (
       c.label.toLowerCase().includes(q) ||
       (provider?.name.toLowerCase().includes(q))
@@ -75,12 +68,8 @@ export default function SourceControlSelect({ value, onChange, connections, load
       >
         {selected ? (
           <>
-            <DevIcon
-              src={PROVIDER_ICONS[selected.provider]?.icon ?? "git"}
-              alt=""
-              className="w-4 h-4 shrink-0"
-            />
-            <span className="truncate">{selected.label} ({PROVIDER_ICONS[selected.provider]?.name ?? selected.provider})</span>
+            <SourceControlBadge provider={selected.provider} showName={false} />
+            <span className="truncate">{selected.label} ({getSourceControl(selected.provider).name})</span>
           </>
         ) : (
           <span className="text-text-muted">Select a source control…</span>
@@ -115,12 +104,8 @@ export default function SourceControlSelect({ value, onChange, connections, load
                     value === c.id ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  <DevIcon
-                    src={PROVIDER_ICONS[c.provider]?.icon ?? "git"}
-                    alt=""
-                    className="w-4 h-4 shrink-0"
-                  />
-                  <span>{c.label} ({PROVIDER_ICONS[c.provider]?.name ?? c.provider})</span>
+                  <SourceControlBadge provider={c.provider} showName={false} />
+                  <span>{c.label} ({getSourceControl(c.provider).name})</span>
                 </button>
               ))
             )}

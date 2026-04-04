@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { projectsApi, deployApi, codeAnalysisApi } from "../services/api";
-import DevIcon from "../components/DevIcon";
+import ProviderBadge from "../components/ProviderBadge";
+import SeverityBadge from "../components/SeverityBadge";
 
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
 
@@ -9,14 +10,6 @@ interface Project { id: string; name: string; repository: string; branch: string
 interface Deploy { id: string; providerId: string; repo: string; branch: string; status: string; appUrl: string; deployStrategy: string; createdAt: string; }
 interface Scan { id: string; projectId: string; repo: string; branch: string; status: string; summary: { totalFindings: number; errors: number; warnings: number; infos: number }; createdAt: string; }
 interface Provider { id: string; provider: string; label: string; }
-
-const providerStyles: Record<string, { bg: string; text: string; icon: string }> = {
-  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "i/aws.svg" },
-  digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean" },
-  hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner" },
-  vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr" },
-  linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode" },
-};
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -111,7 +104,6 @@ export default function Dashboard() {
               {recentDeploys.map((d) => {
                 const prov = providers.find(p => p.id === d.providerId);
                 const pk = prov?.provider || "";
-                const ps = providerStyles[pk] || { bg: "bg-secondary-100", text: "text-text-muted", icon: "" };
                 const statusDot = d.status === "success" ? "bg-success-500" : d.status === "failed" ? "bg-danger-500" : d.status === "building" || d.status === "deploying" ? "bg-primary-500" : "bg-secondary-300";
                 return (
                   <button key={d.id} type="button" onClick={() => navigate(`/deploy/${d.id}`)} className="w-full px-5 py-3 flex items-center gap-3 hover:bg-secondary-50/50 transition-colors text-left">
@@ -120,10 +112,7 @@ export default function Dashboard() {
                       <p className="text-sm text-text truncate">{d.repo}</p>
                       <p className="text-xs text-text-muted">{d.branch} · {new Date(d.createdAt).toLocaleDateString()}</p>
                     </div>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium shrink-0 ${ps.bg} ${ps.text}`}>
-                      {ps.icon && <DevIcon src={ps.icon} alt="" className="w-2.5 h-2.5" />}
-                      {pk.toUpperCase()}
-                    </span>
+                    <ProviderBadge provider={pk} />
                   </button>
                 );
               })}
@@ -153,10 +142,10 @@ export default function Dashboard() {
                     </div>
                     {s.summary && s.status === "completed" && (
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {s.summary.errors > 0 && <span className="px-1.5 py-px rounded text-[10px] font-semibold bg-danger-500/10 text-danger-500">{s.summary.errors}</span>}
-                        {s.summary.warnings > 0 && <span className="px-1.5 py-px rounded text-[10px] font-semibold bg-warning-50 text-warning-500">{s.summary.warnings}</span>}
-                        {s.summary.infos > 0 && <span className="px-1.5 py-px rounded text-[10px] font-semibold bg-primary-50 text-primary-500">{s.summary.infos}</span>}
-                        {s.summary.totalFindings === 0 && <span className="px-1.5 py-px rounded text-[10px] font-semibold bg-success-500/10 text-success-500">Clean</span>}
+                        {s.summary.errors > 0 && <SeverityBadge severity="error" count={s.summary.errors} />}
+                        {s.summary.warnings > 0 && <SeverityBadge severity="warning" count={s.summary.warnings} />}
+                        {s.summary.infos > 0 && <SeverityBadge severity="info" count={s.summary.infos} />}
+                        {s.summary.totalFindings === 0 && <SeverityBadge severity="clean" label="Clean" />}
                       </div>
                     )}
                   </button>
