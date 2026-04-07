@@ -14,17 +14,25 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string; app_runner_connection_arn: string }>`
       SELECT provider, region, api_key, api_secret, COALESCE(app_runner_connection_arn, '') as app_runner_connection_arn FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
-    const region = providerRow?.region || "us-east-1";
+    const defaultRegions: Record<string, string> = {
+      aws: "us-east-1", digitalocean: "nyc3", hetzner: "nbg1", vultr: "ewr",
+      linode: "us-east", gcp: "us-central1", upcloud: "us-nyc1",
+    };
+    const region = providerRow?.region || defaultRegions[providerRow?.provider || ""] || "us-east-1";
 
     const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
-    const { tmpdir } = await import("node:os");
+    const { tmpdir, homedir } = await import("node:os");
     const { spawn } = await import("node:child_process");
     const { execSync } = await import("node:child_process");
 
+    // Ensure ~/.pulumi/bin is in PATH for child processes
+    const pulumiPath = `${homedir()}/.pulumi/bin`;
+    const augmentedPath = process.env.PATH ? `${pulumiPath}:${process.env.PATH}` : pulumiPath;
+
     const runCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Promise<{ code: number; output: string }> => {
       return new Promise((resolve) => {
-        const proc = spawn(cmd, args, { cwd: opts?.cwd || undefined, env: { ...process.env, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"] });
+        const proc = spawn(cmd, args, { cwd: opts?.cwd || undefined, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"] });
         let output = "";
         const onData = async (data: Buffer) => {
           const lines = data.toString().split("\n").filter(Boolean);
@@ -44,7 +52,13 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     try {
       await db.exec`UPDATE deployments SET status = 'building', updated_at = NOW() WHERE id = ${deploymentId}`;
       await appendLog(deploymentId, `[${ts()}] ▶ Starting deployment pipeline...`);
-      await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${region}`);
+      // For GCP, extract the actual region from the Pulumi script since the wizard selection overrides the provider default
+      let displayRegion = region;
+      if (provider === "gcp" && event.tofuScript) {
+        const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+        if (regionMatch) displayRegion = regionMatch[1];
+      }
+      await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${displayRegion}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Strategy: ${event.deployStrategy || "managed (default)"}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
 

@@ -396,10 +396,10 @@ function ProvidersTab() {
 
   useEffect(() => { fetch_(); }, []);
 
-  const apiKeyOnlyProviders = ["digitalocean", "cloudflare"];
+  const apiKeyOnlyProviders = ["digitalocean", "cloudflare", "gcp"];
   const needsSecret = !apiKeyOnlyProviders.includes(form.provider) && !["hetzner", "linode"].includes(form.provider);
 
-  const credLabel1 = "API Key";
+  const credLabel1 = form.provider === "gcp" ? "Service Account JSON Key" : "API Key";
   const credLabel2 = "API Secret";
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -426,7 +426,7 @@ function ProvidersTab() {
 
   const providerDescriptions: Record<string, string> = {
     aws: "Amazon Web Services cloud platform.",
-    googlecloud: "Google Cloud Platform infrastructure.",
+    gcp: "Google Cloud Platform infrastructure.",
     digitalocean: "Cloud VPS and managed infrastructure.",
     hetzner: "High-performance cloud servers in Europe.",
     linode: "Simple and reliable cloud computing.",
@@ -435,7 +435,7 @@ function ProvidersTab() {
 
   const providerIconUrls: Record<string, string> = {
     aws: "i/aws.svg",
-    googlecloud: "googlecloud",
+    gcp: "googlecloud",
     digitalocean: "digitalocean",
     hetzner: "hetzner",
     linode: "linode",
@@ -444,7 +444,7 @@ function ProvidersTab() {
 
   const providerNames: Record<string, string> = {
     aws: "AWS",
-    googlecloud: "Google Cloud",
+    gcp: "Google Cloud",
     digitalocean: "DigitalOcean",
     hetzner: "Hetzner",
     linode: "Linode",
@@ -467,7 +467,7 @@ function ProvidersTab() {
             <label htmlFor="provider-type" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
             <select id="provider-type" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className={inputCls}>
               <option value="aws">AWS</option>
-              <option value="googlecloud">Google Cloud</option>
+              <option value="gcp">Google Cloud</option>
               <option value="digitalocean">DigitalOcean</option>
               <option value="hetzner">Hetzner</option>
               <option value="linode">Linode</option>
@@ -480,7 +480,45 @@ function ProvidersTab() {
           </div>
           <div>
             <label htmlFor="provider-key" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel1}</label>
-            <input id="provider-key" type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} className={inputCls} required />
+            {form.provider === "gcp" ? (
+              <div className="space-y-2">
+                <label
+                  htmlFor="gcp-file-upload"
+                  className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-border rounded-[var(--radius-input)] cursor-pointer hover:border-primary-500/50 transition-colors ${form.apiKey ? "border-success-500/50 bg-success-50" : ""}`}
+                >
+                  {form.apiKey ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-success-500"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                      <span className="text-sm text-success-600 font-medium">Service account key loaded</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-text-muted"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                      <span className="text-sm text-text-muted">Upload .json key file</span>
+                    </>
+                  )}
+                  <input id="gcp-file-upload" type="file" accept=".json,application/json" className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      const text = ev.target?.result as string;
+                      try { JSON.parse(text); setForm({ ...form, apiKey: text }); } catch { alert("Invalid JSON file"); }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = "";
+                  }} />
+                </label>
+                {form.apiKey && (
+                  <div className="flex items-center justify-between text-xs text-text-muted">
+                    <span className="font-mono truncate max-w-[80%]">{(() => { try { return JSON.parse(form.apiKey).client_email || "Valid JSON"; } catch { return "Valid JSON"; } })()}</span>
+                    <button type="button" onClick={() => setForm({ ...form, apiKey: "" })} className="text-danger-500 hover:text-danger-600 ml-2">Remove</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <input id="provider-key" type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} className={inputCls} required />
+            )}
           </div>
 
           {(needsSecret) && <div>
@@ -645,7 +683,7 @@ function SshKeysTab() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-semibold text-text">SSH Keys</h2>
-          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (Hetzner, Vultr, Linode, AWS EC2)</p>
+          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (Hetzner, Vultr, Linode, AWS EC2, GCP Compute Engine)</p>
         </div>
         <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>

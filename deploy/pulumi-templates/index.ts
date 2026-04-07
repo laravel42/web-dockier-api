@@ -5,6 +5,7 @@ export { buildHetzner } from "./hetzner";
 export { buildVultr } from "./vultr";
 export { buildLinode } from "./linode";
 export { buildGenericVPS } from "./generic-vps";
+export { buildGcp } from "./gcp";
 export { buildDockerUserData } from "./user-data";
 
 import type { DeployParams } from "./types";
@@ -14,6 +15,7 @@ import { buildHetzner } from "./hetzner";
 import { buildVultr } from "./vultr";
 import { buildLinode } from "./linode";
 import { buildGenericVPS } from "./generic-vps";
+import { buildGcp } from "./gcp";
 
 /** Generate a Pulumi TypeScript program for the given provider */
 export function generatePulumiProgram(p: DeployParams): string {
@@ -23,6 +25,7 @@ export function generatePulumiProgram(p: DeployParams): string {
     case "hetzner": return buildHetzner(p);
     case "vultr": return buildVultr(p);
     case "linode": return buildLinode(p);
+    case "gcp": return buildGcp(p);
     default: return buildGenericVPS(p);
   }
 }
@@ -35,6 +38,7 @@ export function generatePulumiProject(appName: string, provider: string): string
     hetzner: ["@pulumi/pulumi", "@pulumi/hcloud"],
     vultr: ["@pulumi/pulumi", "@ediri/vultr"],
     linode: ["@pulumi/pulumi", "@pulumi/linode"],
+    gcp: ["@pulumi/pulumi", "@pulumi/gcp"],
   };
   const deps = runtimeDeps[provider] || ["@pulumi/pulumi", "@pulumi/command"];
 
@@ -55,6 +59,7 @@ export function generatePackageJson(appName: string, provider: string): string {
     hetzner: { "@pulumi/hcloud": "^1.0.0" },
     vultr: { "@ediri/vultr": "^2.0.0" },
     linode: { "@pulumi/linode": "^4.0.0" },
+    gcp: { "@pulumi/gcp": "^8.0.0" },
   };
   const deps = {
     "@pulumi/pulumi": "^3.0.0",

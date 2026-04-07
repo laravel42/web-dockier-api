@@ -164,6 +164,7 @@ const PROVIDER_META: Record<string, { name: string; icon: string; color: string;
     services: [
       { type: "managed", label: "Managed", name: "Cloud Run", description: "Serverless containers — auto-scaling, pay per request" },
       { type: "vps", label: "VPS", name: "Compute Engine", description: "Full control over a virtual machine with Docker" },
+      { type: "serverless", label: "Serverless", name: "App Engine", description: "Fully managed from source — zero config, auto-scaling" },
       { type: "static", label: "Free", name: "Cloud Storage + CDN", description: "Static website hosting with global CDN" },
     ],
   },
@@ -196,6 +197,12 @@ const MANAGED_INFO: Record<string, Record<string, { service: string; cost: strin
   Vultr: {
     database: { service: "Managed Database", cost: "~$15/mo" },
     storage: { service: "Object Storage", cost: "$5/mo" },
+  },
+  "Google Cloud": {
+    database: { service: "Cloud SQL (PostgreSQL)", cost: "~$10/mo" },
+    cache: { service: "Memorystore (Redis)", cost: "~$35/mo" },
+    storage: { service: "Cloud Storage", cost: "~$2/mo per 100GB" },
+    queue: { service: "Cloud Tasks / Pub/Sub", cost: "~$1/mo" },
   },
   Linode: {
     database: { service: "Managed Database", cost: "~$15/mo" },
@@ -725,6 +732,32 @@ function getPlans(
 
   const plans: Record<string, Plan[]> = {
     aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : deployStrategy === "static" ? awsS3Plans : awsEcsPlans,
+    gcp: [
+      {
+        tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+        instance: "n2d-standard-2", cpu: "2 vCPU", ram: "8 GB",
+        storage: "30 GB pd-balanced", network: "Up to 10 Gbps",
+        managedServices: managedSvcs.map(s => MANAGED_INFO["Google Cloud"]?.[s]?.service || s),
+        monthlyPrice: isProd ? "~$55/mo" : "~$55/mo",
+        breakdown: [{ item: "Compute Engine", cost: "$50" }, { item: "Persistent Disk", cost: "$3" }, { item: "Static IP", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$5" }))],
+      },
+      {
+        tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
+        instance: "n2d-standard-4", cpu: "4 vCPU", ram: "16 GB",
+        storage: "50 GB pd-balanced", network: "Up to 16 Gbps",
+        managedServices: managedSvcs.map(s => MANAGED_INFO["Google Cloud"]?.[s]?.service || s),
+        monthlyPrice: isProd ? "~$110/mo" : "~$110/mo",
+        breakdown: [{ item: "Compute Engine", cost: "$100" }, { item: "Persistent Disk", cost: "$5" }, { item: "Static IP", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$10" }))],
+      },
+      {
+        tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
+        instance: "n2d-standard-8", cpu: "8 vCPU", ram: "32 GB",
+        storage: "100 GB pd-ssd", network: "Up to 32 Gbps",
+        managedServices: managedSvcs.map(s => MANAGED_INFO["Google Cloud"]?.[s]?.service || s),
+        monthlyPrice: isProd ? "~$225/mo" : "~$225/mo",
+        breakdown: [{ item: "Compute Engine", cost: "$200" }, { item: "Persistent Disk (SSD)", cost: "$17" }, { item: "Static IP", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$15" }))],
+      },
+    ],
     digitalocean: [
       {
         tier: "value", label: "Basic Droplet", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
@@ -980,73 +1013,41 @@ function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChang
       </div>
 
       {/* Build method selector */}
-      {state.useDocker && (
+      {state.useDocker && (() => {
+        const isAws = state.selectedProvider === "aws";
+        const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
+          { id: "dockerfile", label: "Dockerfile", desc: "Auto-generated Dockerfile with auto-fix on failure", icon: <svg className="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185zm-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.186.185.186zm0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186z"/></svg> },
+          { id: "railpack", label: "Railpack", desc: "Zero-config builder by Railway, falls back to Dockerfile", icon: <svg className="w-4 h-4 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+          { id: "nixpacks", label: "Nixpacks", desc: "Nix-based builder by Railway, falls back to Dockerfile", icon: <svg className="w-4 h-4 text-cyan-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> },
+          { id: "codebuild", label: "CodeBuild", desc: "AWS CodeBuild with BuildKit + ECR cache, no local Docker needed", icon: <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" /></svg>, awsOnly: true },
+        ];
+        const filtered = methods.filter(m => !m.awsOnly || isAws);
+        return (
         <div>
           <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Build Method</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              type="button"
-              onClick={() => onBuildMethodChange("dockerfile")}
-              className={`p-3 rounded-lg border text-left transition-all ${
-                state.buildMethod === "dockerfile"
-                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
-                  : "border-border bg-surface hover:border-primary-500/30"
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.186.186 0 00-.185.186v1.887c0 .102.083.185.185.185zm-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.888c0 .102.082.186.185.186zm0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.186.186 0 00-.185.185v1.887c0 .102.082.186.185.186z"/></svg>
-                <span className="text-sm font-medium text-text">Dockerfile</span>
-              </div>
-              <p className="text-xs text-text-muted">Auto-generated Dockerfile with auto-fix on failure</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onBuildMethodChange("railpack")}
-              className={`p-3 rounded-lg border text-left transition-all ${
-                state.buildMethod === "railpack"
-                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
-                  : "border-border bg-surface hover:border-primary-500/30"
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                <span className="text-sm font-medium text-text">Railpack</span>
-              </div>
-              <p className="text-xs text-text-muted">Zero-config builder by Railway, falls back to Dockerfile</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onBuildMethodChange("nixpacks")}
-              className={`p-3 rounded-lg border text-left transition-all ${
-                state.buildMethod === "nixpacks"
-                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
-                  : "border-border bg-surface hover:border-primary-500/30"
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-cyan-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-                <span className="text-sm font-medium text-text">Nixpacks</span>
-              </div>
-              <p className="text-xs text-text-muted">Nix-based builder by Railway, falls back to Dockerfile</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => onBuildMethodChange("codebuild")}
-              className={`p-3 rounded-lg border text-left transition-all ${
-                state.buildMethod === "codebuild"
-                  ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
-                  : "border-border bg-surface hover:border-primary-500/30"
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" /></svg>
-                <span className="text-sm font-medium text-text">CodeBuild</span>
-              </div>
-              <p className="text-xs text-text-muted">AWS CodeBuild with BuildKit + ECR cache, no local Docker needed</p>
-            </button>
+          <div className={`grid grid-cols-2 ${filtered.length > 3 ? "sm:grid-cols-4" : "sm:grid-cols-3"} gap-2`}>
+            {filtered.map(m => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onBuildMethodChange(m.id)}
+                className={`p-3 rounded-lg border text-left transition-all ${
+                  state.buildMethod === m.id
+                    ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                    : "border-border bg-surface hover:border-primary-500/30"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  {m.icon}
+                  <span className="text-sm font-medium text-text">{m.label}</span>
+                </div>
+                <p className="text-xs text-text-muted">{m.desc}</p>
+              </button>
+            ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Resources */}
       {state.tofuResources.length > 0 && (

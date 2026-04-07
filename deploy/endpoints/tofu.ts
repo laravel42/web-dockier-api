@@ -75,6 +75,7 @@ function getDefaultRegion(provider: string): string {
   const defaults: Record<string, string> = {
     digitalocean: "nyc3", hetzner: "nbg1", vultr: "ewr", linode: "us-east",
     aws: "us-east-1", upcloud: "us-nyc1", katapult: "london", hostinger: "us",
+    gcp: "us-central1",
   };
   return defaults[provider] || "us-east-1";
 }
@@ -133,6 +134,11 @@ function getEstimatedResources(provider: string, runtime: { name: string }, hasD
       resources.push("linode_instance (g6-nanode-1)", "linode_firewall", "linode_sshkey");
       if (managedSvcs.some(s => s.type === "database")) resources.push("linode_database_mysql (Managed DB)");
       if (managedSvcs.some(s => s.type === "storage")) resources.push("linode_object_storage_bucket");
+      break;
+    case "gcp":
+      resources.push("gcp_compute_instance (e2-small)", "gcp_compute_firewall", "gcp_compute_network", "gcp_compute_address (Static IP)");
+      if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+      if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");
       break;
     default:
       resources.push(`${provider}_server`, `${provider}_firewall`);
