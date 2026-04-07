@@ -630,7 +630,7 @@ export default function ProjectDetail() {
         open={showDestroyConfirm}
         onClose={() => setShowDestroyConfirm(false)}
         title="Destroy Deployment"
-        message="This will delete the CloudFormation stack, ECR images, and mark the deployment as destroyed. This action cannot be undone."
+        message="This will destroy all cloud infrastructure for this deployment (servers, firewall rules, static IPs, etc). This action cannot be undone."
         confirmLabel="Destroy"
         onConfirm={async () => {
           if (!lastDeploy) return;

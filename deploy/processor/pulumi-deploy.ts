@@ -230,8 +230,16 @@ export async function handlePulumiDeploy(
 
   // Save Pulumi state
   try {
-    const stateResult = await runCmd("pulumi", ["stack", "export", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-    if (stateResult.code === 0) await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateResult.output} WHERE id = ${deploymentId}`;
+    const { execSync: execSyncState } = await import("node:child_process");
+    const stateOutput = execSyncState("pulumi stack export --non-interactive", {
+      cwd: pulumiDir,
+      env: { ...process.env, ...providerEnv },
+      timeout: 30_000,
+      maxBuffer: 10 * 1024 * 1024,
+    }).toString();
+    if (stateOutput.includes('"deployment"')) {
+      await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateOutput} WHERE id = ${deploymentId}`;
+    }
   } catch {}
 
   try { await ctx.rm(workDir, { recursive: true, force: true }); } catch {}
