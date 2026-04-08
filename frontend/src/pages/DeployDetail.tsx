@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../services/api";
-import ProviderBadge, { getProviderStyle } from "../components/ProviderBadge";
+import ProviderBadge from "../components/ProviderBadge";
+import { getProviderStyle } from "../data/providers";
 
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";

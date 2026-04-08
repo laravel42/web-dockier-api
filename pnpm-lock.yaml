@@ -39,8 +39,8 @@ importers:
         specifier: ^17.4.0
         version: 17.4.0
       encore.dev:
-        specifier: ^1.56.3
-        version: 1.56.3
+        specifier: ^1.56.4
+        version: 1.56.4
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3
@@ -1418,8 +1418,8 @@ packages:
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
 
-  encore.dev@1.56.3:
-    resolution: {integrity: sha512-wixxcZJBwToABkDK8yHt8zI0CcSKs4p8UEjPLxwkoI3/h0QCGasGRKtpZhrqqdBm8zoJBS+C/3S04vVfR/IhMg==}
+  encore.dev@1.56.4:
+    resolution: {integrity: sha512-SrYvqiMjonT+N/ESLLKnRHIftDeugixpwQyqYlDutrz8Kleen6SLW6FTV2KJata6zq7lFGsr/LgJiWeOUUxHuA==}
     engines: {node: '>=18.0.0'}
 
   enhanced-resolve@5.20.1:
@@ -4021,7 +4021,7 @@ snapshots:
 
   emoji-regex@8.0.0: {}
 
-  encore.dev@1.56.3: {}
+  encore.dev@1.56.4: {}
 
   enhanced-resolve@5.20.1:
     dependencies:

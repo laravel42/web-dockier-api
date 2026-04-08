@@ -1,19 +1,5 @@
 import DevIcon from "./DevIcon";
-
-const PROVIDER_STYLES: Record<string, { bg: string; text: string; icon: string; name: string; description: string }> = {
-  aws: { bg: "bg-amber-500/10", text: "text-amber-600", icon: "i/aws.svg", name: "AWS", description: "Amazon Web Services cloud platform." },
-  googlecloud: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "googlecloud", name: "Google Cloud", description: "Google Cloud Platform infrastructure." },
-  digitalocean: { bg: "bg-blue-500/10", text: "text-blue-600", icon: "digitalocean", name: "DigitalOcean", description: "Cloud VPS and managed infrastructure." },
-  hetzner: { bg: "bg-red-500/10", text: "text-red-600", icon: "hetzner", name: "Hetzner", description: "High-performance cloud servers in Europe." },
-  vultr: { bg: "bg-sky-500/10", text: "text-sky-600", icon: "vultr", name: "Vultr", description: "High-performance cloud computing." },
-  linode: { bg: "bg-emerald-500/10", text: "text-emerald-600", icon: "linode", name: "Linode", description: "Simple and reliable cloud computing." },
-};
-
-const FALLBACK = { bg: "bg-secondary-100", text: "text-text-muted", icon: "", name: "", description: "Cloud infrastructure provider." };
-
-export function getProviderStyle(provider: string) {
-  return PROVIDER_STYLES[provider] || { ...FALLBACK, name: provider };
-}
+import { getProviderStyle } from "../data/providers";
 
 interface Props {
   provider: string;

@@ -213,7 +213,7 @@ export default function Projects() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Projects</h1>
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-secondary-50 border border-border rounded-lg p-0.5">
+          <div className="flex items-center bg-secondary-50 border border-border rounded-lg p-0.5 h-10">
             <button
               onClick={() => { setViewMode("cards"); localStorage.setItem("projects-view", "cards"); }}
               className={`p-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}

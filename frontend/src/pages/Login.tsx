@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(import.meta.env.DEV ? "123456789" : "");
   const [twoFAToken, setTwoFAToken] = useState("");
   const [pending2FA, setPending2FA] = useState(false);
   const [pendingUserId, setPendingUserId] = useState("");
