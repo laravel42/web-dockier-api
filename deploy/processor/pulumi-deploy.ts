@@ -52,7 +52,7 @@ export async function handlePulumiDeploy(
     await appendLog(deploymentId, `[${ts()}] ── Build Docker Image ─────────────`);
     const MAX_BUILD_ATTEMPTS = 3;
     for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
-      const buildArgs = ["build", "-t", imageName];
+      const buildArgs = ["build", "--platform", "linux/amd64", "-t", imageName];
       if (attempt > 1) buildArgs.push("--no-cache");
       buildArgs.push(".");
       const buildResult = await runCmd("docker", buildArgs, { cwd: repoDir });
@@ -106,6 +106,12 @@ export async function handlePulumiDeploy(
   else if (provider === "hetzner") providerEnv.HCLOUD_TOKEN = ctx.providerRow.api_key || "";
   else if (provider === "vultr") providerEnv.VULTR_API_KEY = ctx.providerRow.api_key || "";
   else if (provider === "linode") providerEnv.LINODE_TOKEN = ctx.providerRow.api_key || "";
+  else if (provider === "gcp") {
+    const credPath = join(pulumiDir, "gcp-credentials.json");
+    await ctx.writeFile(credPath, ctx.providerRow.api_key || "{}", "utf-8");
+    providerEnv.GOOGLE_CREDENTIALS = ctx.providerRow.api_key || "";
+    providerEnv.GOOGLE_APPLICATION_CREDENTIALS = credPath;
+  }
   const stateDir = join(pulumiDir, ".pulumi-state");
   await mkdir(stateDir, { recursive: true });
   providerEnv.PULUMI_BACKEND_URL = `file://${stateDir}`;
@@ -117,15 +123,35 @@ export async function handlePulumiDeploy(
   await appendLog(deploymentId, `[${ts()}] ✓ Dependencies installed`);
 
   const stackName = `${repoName}-${shortId}`;
-  await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+  const initResult = await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+  if (initResult.code !== 0) await appendLog(deploymentId, `[${ts()}] ⚠ Stack init: ${initResult.output.split("\n").filter(l => l.trim()).slice(-3).join(" | ")}`);
 
-  if (provider === "hetzner" || provider === "vultr" || provider === "linode") {
+  // Generate a temporary deploy SSH key (no passphrase) for image transfer
+  const deployKeyPath = join(workDir, "deploy_key");
+  const deployPubKeyPath = `${deployKeyPath}.pub`;
+  await runCmd("ssh-keygen", ["-t", "ed25519", "-f", deployKeyPath, "-N", "", "-q"], { cwd: workDir });
+  const { readFile: readFs2 } = await import("node:fs/promises");
+  const deployPubKey = (await readFs2(deployPubKeyPath, "utf-8")).trim();
+
+  if (provider === "hetzner" || provider === "vultr" || provider === "linode" || provider === "gcp") {
     const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
     if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
-    await runCmd("pulumi", ["config", "set", "sshPublicKey", sshKeyRow.public_key.trim(), "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    // Combine user key + deploy key so both can access the server
+    const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
+    await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
   if (provider === "linode") await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-  await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+  if (provider === "gcp") {
+    try {
+      const creds = JSON.parse(ctx.providerRow.api_key || "{}");
+      if (creds.project_id) await runCmd("pulumi", ["config", "set", "gcp:project", creds.project_id, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    } catch {}
+    // Don't set gcp:region here — the Pulumi template already has the wizard-selected region as default
+  }
+  // For non-GCP providers, set region from provider config (GCP uses the region baked into the Pulumi script)
+  if (provider !== "gcp") {
+    await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+  }
 
   // Restore state from previous deployment
   const prevDeploy = await db.queryRow<{ tofu_script: string }>`
@@ -149,25 +175,30 @@ export async function handlePulumiDeploy(
   await appendLog(deploymentId, `[${ts()}]`);
   await appendLog(deploymentId, `[${ts()}] ── Pulumi Up ──────────────────────`);
   const upResult = await runCmd("pulumi", ["up", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
-  if (upResult.code !== 0) throw new Error(`pulumi up failed (exit code ${upResult.code})`);
+  if (upResult.code !== 0) {
+    const errorLines = upResult.output.split("\n").filter(l => l.trim()).slice(-20);
+    for (const line of errorLines) await appendLog(deploymentId, `[${ts()}] ✗ ${line}`);
+    throw new Error(`pulumi up failed (exit code ${upResult.code})`);
+  }
 
   await appendLog(deploymentId, `[${ts()}]`);
   await appendLog(deploymentId, `[${ts()}] ── Extracting outputs ──────────────`);
-  const outputResult = await runCmd("pulumi", ["stack", "output", "--json", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
   let appUrl = "";
   let serverIp = "";
   try {
-    const jsonMatch = outputResult.output.match(/\{[\s\S]*\}/);
-    const outputs = JSON.parse(jsonMatch ? jsonMatch[0] : outputResult.output);
-    appUrl = outputs.appUrl || ""; serverIp = outputs.serverIp || "";
+    const ipResult = await runCmd("pulumi", ["stack", "output", "serverIp", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    serverIp = ipResult.output.trim().split("\n").pop()?.trim() || "";
+    const urlResult = await runCmd("pulumi", ["stack", "output", "appUrl", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    appUrl = urlResult.output.trim().split("\n").pop()?.trim() || "";
     if (!appUrl && serverIp) appUrl = `http://${serverIp}`;
     if (appUrl && !appUrl.startsWith("http")) appUrl = `http://${appUrl}`;
-    for (const [key, val] of Object.entries(outputs)) await appendLog(deploymentId, `[${ts()}]   ${key} = ${val}`);
-  } catch { await appendLog(deploymentId, `[${ts()}]   (could not parse outputs)`); }
+    await appendLog(deploymentId, `[${ts()}]   serverIp = ${serverIp || "(not found)"}`);
+    await appendLog(deploymentId, `[${ts()}]   appUrl = ${appUrl || "(not found)"}`);
+  } catch (e: any) { await appendLog(deploymentId, `[${ts()}]   (could not parse outputs: ${e.message})`); }
 
-  // Transfer Docker image to server (VPS, if no registry)
-  if (event.techStack.length > 0 && serverIp && !event.registryUrl) {
+  // Transfer Docker image to server (VPS providers with a server IP)
+  if (serverIp && !event.registryUrl) {
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ── Transfer Docker Image ──────────`);
     const tarPath = join(workDir, `${actualImage.replace(":", "-")}.tar`);
@@ -175,10 +206,21 @@ export async function handlePulumiDeploy(
     if (saveResult.code === 0) {
       await appendLog(deploymentId, `[${ts()}] ℹ Waiting for server SSH to be ready...`);
       await new Promise(r => setTimeout(r, 30_000));
-      const scpResult = await runCmd("scp", ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=30", tarPath, `root@${serverIp}:/tmp/app-image.tar`], { cwd: workDir });
+      const scpResult = await runCmd("scp", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=30", tarPath, `root@${serverIp}:/tmp/app-image.tar`], { cwd: workDir });
       if (scpResult.code === 0) {
-        const loadResult = await runCmd("ssh", ["-o", "StrictHostKeyChecking=no", `root@${serverIp}`,
-          `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; docker run -d --name ${repoName} --restart=always -p 127.0.0.1:8080:8080 --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=8080 ${actualImage}`
+        // Wait for Docker to be installed by the startup script
+        await appendLog(deploymentId, `[${ts()}] ℹ Waiting for Docker to be ready on server...`);
+        for (let i = 0; i < 30; i++) {
+          const check = await runCmd("ssh", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10", `root@${serverIp}`, "docker info >/dev/null 2>&1 && echo READY"], { cwd: workDir });
+          if (check.output.includes("READY")) break;
+          await new Promise(r => setTimeout(r, 10_000));
+        }
+        const loadResult = await runCmd("ssh", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", `root@${serverIp}`,
+          `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && ` +
+          `APP_PORT=$(grep proxy_pass /etc/nginx/sites-available/* 2>/dev/null | head -1 | sed 's/.*://;s/;.*//') && ` +
+          `APP_PORT=\${APP_PORT:-3000} && ` +
+          `docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; ` +
+          `docker run -d --name ${repoName} --restart=always -p 127.0.0.1:\${APP_PORT}:\${APP_PORT} --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=\${APP_PORT} ${actualImage}`
         ], { cwd: workDir });
         if (loadResult.code === 0) await appendLog(deploymentId, `[${ts()}] ✓ Docker image transferred and running on server`);
         else await appendLog(deploymentId, `[${ts()}] ⚠ Failed to load image on server`);
@@ -188,8 +230,16 @@ export async function handlePulumiDeploy(
 
   // Save Pulumi state
   try {
-    const stateResult = await runCmd("pulumi", ["stack", "export", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-    if (stateResult.code === 0) await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateResult.output} WHERE id = ${deploymentId}`;
+    const { execSync: execSyncState } = await import("node:child_process");
+    const stateOutput = execSyncState("pulumi stack export --non-interactive", {
+      cwd: pulumiDir,
+      env: { ...process.env, ...providerEnv },
+      timeout: 30_000,
+      maxBuffer: 10 * 1024 * 1024,
+    }).toString();
+    if (stateOutput.includes('"deployment"')) {
+      await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateOutput} WHERE id = ${deploymentId}`;
+    }
   } catch {}
 
   try { await ctx.rm(workDir, { recursive: true, force: true }); } catch {}

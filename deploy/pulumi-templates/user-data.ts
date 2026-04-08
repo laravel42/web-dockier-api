@@ -48,13 +48,17 @@ SUPERVISOR
   // Build ECR image URI from deploy params (available when provider is AWS)
   const ecrImageUri = p.ecrImageUri || "";
 
+  const isAws = p.provider === "aws";
+  const basePkgs = "curl git unzip nginx certbot python3-certbot-nginx";
+  const pkgList = isAws ? `${basePkgs} awscli` : basePkgs;
+
   return `#!/bin/bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 # ── System Setup ──
 apt-get update -y
-apt-get install -y curl git unzip nginx certbot python3-certbot-nginx awscli
+apt-get install -y ${pkgList}
 
 # ── Docker ──
 curl -fsSL https://get.docker.com | sh

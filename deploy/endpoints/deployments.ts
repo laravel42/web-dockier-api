@@ -135,8 +135,118 @@ export const destroyDeployment = api(
     const repoName = row.repo.split("/").pop() || "app";
     const appName = row.docker_image || repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
     const region = providerRow.region || "us-east-1";
-    const credentials = { accessKeyId: providerRow.api_key, secretAccessKey: providerRow.api_secret };
     const errors: string[] = [];
+
+    // ── Pulumi-based providers (GCP, Hetzner, DigitalOcean, Vultr, Linode, etc.) ──
+    if (providerRow.provider !== "aws") {
+      const tofuRow = await db.queryRow<{ tofu_script: string }>`
+        SELECT tofu_script FROM deployments WHERE id = ${params.deploymentId}`;
+      const tofuScript = tofuRow?.tofu_script || "";
+      const stateMarker = tofuScript.indexOf("/* STATE */\n");
+
+      if (stateMarker === -1) {
+        // No saved state — can't run pulumi destroy, mark as destroyed
+        const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+        await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${`\n[${ts}] ⚠ No Pulumi state found — marked as destroyed but resources may still exist in cloud`}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+        return { success: true, message: "Marked as destroyed (no Pulumi state to clean up)" };
+      }
+
+      const savedState = tofuScript.slice(stateMarker + "/* STATE */\n".length);
+      const pulumiScript = tofuScript.slice(0, stateMarker).trim();
+
+      const { mkdtemp, writeFile, rm, mkdir } = await import("node:fs/promises");
+      const { join } = await import("node:path");
+      const { tmpdir, homedir } = await import("node:os");
+      const { spawn } = await import("node:child_process");
+
+      const pulumiPath = `${homedir()}/.pulumi/bin`;
+      const augmentedPath = process.env.PATH ? `${pulumiPath}:${process.env.PATH}` : pulumiPath;
+
+      const runCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Promise<{ code: number; output: string }> => {
+        return new Promise((resolve) => {
+          const proc = spawn(cmd, args, { cwd: opts?.cwd, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"] });
+          let output = "";
+          proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
+          proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+          proc.on("close", (code) => resolve({ code: code ?? 1, output }));
+          proc.on("error", (err) => resolve({ code: 1, output: err.message }));
+        });
+      };
+
+      const workDir = await mkdtemp(join(tmpdir(), `destroy-${params.deploymentId.slice(0, 8)}-`));
+      const pulumiDir = join(workDir, "pulumi");
+      await mkdir(pulumiDir, { recursive: true });
+
+      try {
+        const { generatePulumiProject, generatePackageJson, generateTsConfig } = await import("../pulumi-templates/index");
+        await writeFile(join(pulumiDir, "index.ts"), pulumiScript, "utf-8");
+        await writeFile(join(pulumiDir, "Pulumi.yaml"), generatePulumiProject(repoName, providerRow.provider), "utf-8");
+        await writeFile(join(pulumiDir, "package.json"), generatePackageJson(repoName, providerRow.provider), "utf-8");
+        await writeFile(join(pulumiDir, "tsconfig.json"), generateTsConfig(), "utf-8");
+
+        // Provider env vars
+        const providerEnv: Record<string, string> = {};
+        if (providerRow.provider === "digitalocean") providerEnv.DIGITALOCEAN_TOKEN = providerRow.api_key || "";
+        else if (providerRow.provider === "hetzner") providerEnv.HCLOUD_TOKEN = providerRow.api_key || "";
+        else if (providerRow.provider === "vultr") providerEnv.VULTR_API_KEY = providerRow.api_key || "";
+        else if (providerRow.provider === "linode") providerEnv.LINODE_TOKEN = providerRow.api_key || "";
+        else if (providerRow.provider === "gcp") {
+          const credPath = join(pulumiDir, "gcp-credentials.json");
+          await writeFile(credPath, providerRow.api_key || "{}", "utf-8");
+          providerEnv.GOOGLE_CREDENTIALS = providerRow.api_key || "";
+          providerEnv.GOOGLE_APPLICATION_CREDENTIALS = credPath;
+        }
+        const stateDir = join(pulumiDir, ".pulumi-state");
+        await mkdir(stateDir, { recursive: true });
+        providerEnv.PULUMI_BACKEND_URL = `file://${stateDir}`;
+        providerEnv.PULUMI_CONFIG_PASSPHRASE = "";
+
+        // Install deps
+        await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
+
+        // Init stack and import state
+        const stackName = `destroy-${params.deploymentId.slice(0, 8)}`;
+        await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+        // Set GCP project if needed
+        if (providerRow.provider === "gcp") {
+          try {
+            const creds = JSON.parse(providerRow.api_key || "{}");
+            if (creds.project_id) await runCmd("pulumi", ["config", "set", "gcp:project", creds.project_id, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+          } catch {}
+        }
+
+        // Import saved state
+        const stateFile = join(pulumiDir, "state.json");
+        await writeFile(stateFile, savedState, "utf-8");
+        const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--force", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
+        if (importResult.code !== 0) {
+          errors.push(`State import failed: ${importResult.output.split("\n").slice(-3).join(" ")}`);
+        } else {
+          // Run pulumi destroy
+          const destroyResult = await runCmd("pulumi", ["destroy", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+          if (destroyResult.code !== 0) {
+            errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
+          }
+        }
+      } catch (e: any) {
+        errors.push(e.message || "Unknown error during destroy");
+      } finally {
+        try { await rm(workDir, { recursive: true, force: true }); } catch {}
+      }
+
+      const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const destroyLog = errors.length > 0
+        ? `\n[${ts}] ⚠ Partially destroyed. Errors: ${errors.join("; ")}`
+        : `\n[${ts}] ✓ Infrastructure destroyed via Pulumi`;
+      await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+
+      if (errors.length > 0) return { success: false, message: `Partially destroyed. Errors: ${errors.join("; ")}` };
+      return { success: true, message: "Infrastructure destroyed via Pulumi." };
+    }
+
+    // ── AWS-specific destroy ──
+    const credentials = { accessKeyId: providerRow.api_key, secretAccessKey: providerRow.api_secret };
 
     const stackName = `image-builder-app-${appName}`;
     try {

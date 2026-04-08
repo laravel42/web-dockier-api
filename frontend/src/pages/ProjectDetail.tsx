@@ -189,7 +189,7 @@ export default function ProjectDetail() {
   }, [projectId]);
 
   // Fetch last deploy for this project
-  useEffect(() => {
+  const fetchLastDeploy = () => {
     if (!project) return;
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
@@ -200,7 +200,9 @@ export default function ProjectDetail() {
         setLastDeploy(match.length > 0 ? match[0] : null);
       })
       .catch(() => {});
-  }, [project]);
+  };
+
+  useEffect(() => { fetchLastDeploy(); }, [project]);
 
   const handleDelete = async () => {
     if (!projectId) return;
@@ -610,7 +612,7 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         analysisError={analysisError}
         providers={allProviders}
-        onDeployComplete={() => {}}
+        onDeployComplete={() => fetchLastDeploy()}
       />
 
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />
@@ -619,7 +621,7 @@ export default function ProjectDetail() {
         open={showDestroyConfirm}
         onClose={() => setShowDestroyConfirm(false)}
         title="Destroy Deployment"
-        message="This will delete the CloudFormation stack, ECR images, and mark the deployment as destroyed. This action cannot be undone."
+        message="This will destroy all cloud infrastructure for this deployment (servers, firewall rules, static IPs, etc). This action cannot be undone."
         confirmLabel="Destroy"
         onConfirm={async () => {
           if (!lastDeploy) return;
@@ -628,6 +630,7 @@ export default function ProjectDetail() {
             const res = await deployApi.destroyDeployment(lastDeploy.id);
             if (res.success) {
               setLastDeploy({ ...lastDeploy, status: "destroyed", appUrl: "" });
+              fetchLastDeploy();
             } else {
               setError(res.message);
             }
