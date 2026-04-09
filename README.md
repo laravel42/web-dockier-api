@@ -1,6 +1,6 @@
-# SaaS Starter
+# Dockier
 
-A full-stack SaaS application boilerplate with EncoreJS backend and React + Tailwind frontend.
+A full-stack application with EncoreJS backend and React + Tailwind frontend.
 
 ## Features
 
