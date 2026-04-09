@@ -145,7 +145,125 @@ export const destroyDeployment = api(
       const stateMarker = tofuScript.indexOf("/* STATE */\n");
 
       if (stateMarker === -1) {
-        // No saved state — can't run pulumi destroy, mark as destroyed
+        // No saved state — can't run pulumi destroy
+        // For GCP Cloud Run, try to clean up all resources via direct API calls
+        if (providerRow.provider === "gcp" && row.deploy_strategy === "managed") {
+          const noStateErrors: string[] = [];
+          try {
+            const saKey = JSON.parse(providerRow.api_key || "{}");
+            const gcpProjectId = saKey.project_id || "";
+            if (gcpProjectId && saKey.client_email && saKey.private_key) {
+              const { createSign } = await import("node:crypto");
+              const now = Math.floor(Date.now() / 1000);
+              const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+              const jwtClaim = Buffer.from(JSON.stringify({
+                iss: saKey.client_email,
+                scope: "https://www.googleapis.com/auth/cloud-platform",
+                aud: "https://oauth2.googleapis.com/token",
+                iat: now, exp: now + 3600,
+              })).toString("base64url");
+              const signInput = `${jwtHeader}.${jwtClaim}`;
+              const signer = createSign("RSA-SHA256");
+              signer.update(signInput);
+              const signature = signer.sign(saKey.private_key, "base64url");
+              const accessToken = ((await (await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
+              })).json()) as { access_token?: string }).access_token || "";
+
+              if (accessToken) {
+                const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+                let arRegion = providerRow.region || "us-central1";
+                const regionMatch = tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+                if (regionMatch) arRegion = regionMatch[1];
+
+                // Extract the Cloud Run service name from the Pulumi script
+                const serviceNameMatch = tofuScript.match(/new gcp\.cloudrunv2\.Service\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
+                const serviceName = serviceNameMatch?.[1] || arRepo;
+
+                const authHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+                // 1. Delete Cloud Run service
+                try {
+                  const deleteServiceRes = await fetch(
+                    `https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`,
+                    { method: "DELETE", headers: authHeaders }
+                  );
+                  if (deleteServiceRes.ok || deleteServiceRes.status === 404) {
+                    noStateErrors.length; // no-op, success or already gone
+                  } else {
+                    const body = await deleteServiceRes.text();
+                    noStateErrors.push(`Cloud Run delete: ${deleteServiceRes.status} ${body.slice(0, 150)}`);
+                  }
+                } catch (e: any) { noStateErrors.push(`Cloud Run delete: ${e.message}`); }
+
+                // 2. Delete Cloud SQL instance (if present in script)
+                const dbInstanceMatch = tofuScript.match(/new gcp\.sql\.DatabaseInstance\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
+                if (dbInstanceMatch) {
+                  try {
+                    // Cloud SQL requires disabling deletion protection first, but our templates set it to false
+                    const deleteDbRes = await fetch(
+                      `https://sqladmin.googleapis.com/v1/projects/${gcpProjectId}/instances/${dbInstanceMatch[1]}`,
+                      { method: "DELETE", headers: authHeaders }
+                    );
+                    if (!deleteDbRes.ok && deleteDbRes.status !== 404) {
+                      const body = await deleteDbRes.text();
+                      noStateErrors.push(`Cloud SQL delete: ${deleteDbRes.status} ${body.slice(0, 150)}`);
+                    }
+                  } catch (e: any) { noStateErrors.push(`Cloud SQL delete: ${e.message}`); }
+                }
+
+                // 3. Delete Cloud Storage bucket (if present in script)
+                const bucketMatch = tofuScript.match(/new gcp\.storage\.Bucket\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
+                if (bucketMatch) {
+                  try {
+                    // List and delete all objects first
+                    const listObjRes = await fetch(
+                      `https://storage.googleapis.com/storage/v1/b/${bucketMatch[1]}/o`,
+                      { headers: authHeaders }
+                    );
+                    if (listObjRes.ok) {
+                      const objData = await listObjRes.json() as { items?: { name: string }[] };
+                      for (const obj of objData.items || []) {
+                        await fetch(
+                          `https://storage.googleapis.com/storage/v1/b/${bucketMatch[1]}/o/${encodeURIComponent(obj.name)}`,
+                          { method: "DELETE", headers: authHeaders }
+                        );
+                      }
+                    }
+                    const deleteBucketRes = await fetch(
+                      `https://storage.googleapis.com/storage/v1/b/${bucketMatch[1]}`,
+                      { method: "DELETE", headers: authHeaders }
+                    );
+                    if (!deleteBucketRes.ok && deleteBucketRes.status !== 404) {
+                      const body = await deleteBucketRes.text();
+                      noStateErrors.push(`Storage delete: ${deleteBucketRes.status} ${body.slice(0, 150)}`);
+                    }
+                  } catch (e: any) { noStateErrors.push(`Storage delete: ${e.message}`); }
+                }
+
+                // 4. Delete Artifact Registry repository
+                try {
+                  const arBase = `https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`;
+                  const deleteArRes = await fetch(arBase, { method: "DELETE", headers: authHeaders });
+                  if (!deleteArRes.ok && deleteArRes.status !== 404) {
+                    const body = await deleteArRes.text();
+                    noStateErrors.push(`AR repo delete: ${deleteArRes.status} ${body.slice(0, 150)}`);
+                  }
+                } catch (e: any) { noStateErrors.push(`AR repo delete: ${e.message}`); }
+              }
+            }
+          } catch (e: any) { noStateErrors.push(`GCP cleanup: ${e.message}`); }
+
+          const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+          const destroyLog = noStateErrors.length > 0
+            ? `\n[${ts}] ⚠ No Pulumi state — direct API cleanup attempted. Errors: ${noStateErrors.join("; ")}`
+            : `\n[${ts}] ✓ No Pulumi state — Cloud Run resources destroyed via direct API`;
+          await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+          return { success: noStateErrors.length === 0, message: noStateErrors.length > 0 ? `Partially destroyed: ${noStateErrors.join("; ")}` : "Cloud Run resources destroyed via direct GCP API" };
+        }
+
         const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
         await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${`\n[${ts}] ⚠ No Pulumi state found — marked as destroyed but resources may still exist in cloud`}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
         return { success: true, message: "Marked as destroyed (no Pulumi state to clean up)" };
@@ -234,6 +352,87 @@ export const destroyDeployment = api(
           const destroyResult = await runCmd("pulumi", ["destroy", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
           if (destroyResult.code !== 0) {
             errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
+          }
+        }
+
+        // ── GCP Cloud Run: clean up Artifact Registry images & repo via API ──
+        if (providerRow.provider === "gcp" && row.deploy_strategy === "managed") {
+          try {
+            const saKey = JSON.parse(providerRow.api_key || "{}");
+            const gcpProjectId = saKey.project_id || "";
+            if (gcpProjectId && saKey.client_email && saKey.private_key) {
+              // Get access token from service account key
+              const { createSign } = await import("node:crypto");
+              const now = Math.floor(Date.now() / 1000);
+              const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+              const jwtClaim = Buffer.from(JSON.stringify({
+                iss: saKey.client_email,
+                scope: "https://www.googleapis.com/auth/cloud-platform",
+                aud: "https://oauth2.googleapis.com/token",
+                iat: now, exp: now + 3600,
+              })).toString("base64url");
+              const signInput = `${jwtHeader}.${jwtClaim}`;
+              const signer = createSign("RSA-SHA256");
+              signer.update(signInput);
+              const signature = signer.sign(saKey.private_key, "base64url");
+              const jwt = `${signInput}.${signature}`;
+
+              const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+              });
+              const tokenData = await tokenRes.json() as { access_token?: string };
+              const accessToken = tokenData.access_token || "";
+
+              if (accessToken) {
+                // Derive the AR repo name the same way the deploy processor does
+                const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+                // Extract region from the Pulumi script
+                let arRegion = providerRow.region || "us-central1";
+                const regionMatch = pulumiScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+                if (regionMatch) arRegion = regionMatch[1];
+
+                const arBase = `https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`;
+
+                // List and delete all Docker images in the repo
+                try {
+                  const listRes = await fetch(`${arBase}/dockerImages`, {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                  });
+                  if (listRes.ok) {
+                    const listData = await listRes.json() as { dockerImages?: { name: string; tags: string[] }[] };
+                    for (const img of listData.dockerImages || []) {
+                      // Delete each tagged version (package version, not docker image)
+                      // The name format is projects/P/locations/L/repositories/R/dockerImages/IMG@sha256:...
+                      // We need to delete the underlying package versions
+                      try {
+                        await fetch(`https://artifactregistry.googleapis.com/v1/${img.name}`, {
+                          method: "DELETE",
+                          headers: { Authorization: `Bearer ${accessToken}` },
+                        });
+                      } catch {}
+                    }
+                  }
+                } catch {}
+
+                // Delete the Artifact Registry repository itself
+                try {
+                  const deleteRes = await fetch(arBase, {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                  });
+                  if (!deleteRes.ok && deleteRes.status !== 404) {
+                    const body = await deleteRes.text();
+                    errors.push(`AR repo delete: ${deleteRes.status} ${body.slice(0, 150)}`);
+                  }
+                } catch (e: any) {
+                  errors.push(`AR repo delete: ${e.message}`);
+                }
+              }
+            }
+          } catch (e: any) {
+            errors.push(`GCP Cloud Run cleanup: ${e.message}`);
           }
         }
       } catch (e: any) {

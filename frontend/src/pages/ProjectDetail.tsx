@@ -584,7 +584,7 @@ export default function ProjectDetail() {
               <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
                 <span className="text-xs text-text-muted">{prov?.label || provKey}</span>
                 <div className="flex items-center gap-3">
-                  {lastDeploy.status === "success" && (
+                  {(lastDeploy.status === "success") && (
                     <button
                       disabled={destroying}
                       onClick={() => setShowDestroyConfirm(true)}
