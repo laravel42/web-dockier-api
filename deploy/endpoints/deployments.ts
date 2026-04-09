@@ -266,14 +266,32 @@ export const destroyDeployment = api(
     } catch (e: any) { errors.push(`CloudFormation: ${e.message}`); }
 
     try {
-      const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
+      const { ECRClient, DeleteRepositoryCommand, BatchDeleteImageCommand, ListImagesCommand } = await import("@aws-sdk/client-ecr");
       const ecr = new ECRClient({ region, credentials });
+
+      // Delete all images from the ECR repo before removing it
+      try {
+        const listed = await ecr.send(new ListImagesCommand({ repositoryName: appName }));
+        if (listed.imageIds && listed.imageIds.length > 0) {
+          await ecr.send(new BatchDeleteImageCommand({ repositoryName: appName, imageIds: listed.imageIds }));
+        }
+      } catch {}
+
       await ecr.send(new DeleteRepositoryCommand({ repositoryName: appName, force: true }));
     } catch (e: any) { if (!e.name?.includes("RepositoryNotFoundException")) errors.push(`ECR: ${e.message}`); }
 
     try {
-      const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
+      const { ECRClient, DeleteRepositoryCommand, BatchDeleteImageCommand, ListImagesCommand } = await import("@aws-sdk/client-ecr");
       const ecr = new ECRClient({ region, credentials });
+
+      // Delete all images from the cache repo before removing it
+      try {
+        const listed = await ecr.send(new ListImagesCommand({ repositoryName: `${appName}-cache` }));
+        if (listed.imageIds && listed.imageIds.length > 0) {
+          await ecr.send(new BatchDeleteImageCommand({ repositoryName: `${appName}-cache`, imageIds: listed.imageIds }));
+        }
+      } catch {}
+
       await ecr.send(new DeleteRepositoryCommand({ repositoryName: `${appName}-cache`, force: true }));
     } catch {}
 
