@@ -732,7 +732,32 @@ function getPlans(
 
   const plans: Record<string, Plan[]> = {
     aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : deployStrategy === "static" ? awsS3Plans : awsEcsPlans,
-    gcp: [
+    gcp: deployStrategy === "managed" ? [
+      {
+        tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+        instance: "1 vCPU / 512 MB", cpu: "1 vCPU", ram: "512 MB",
+        storage: "Included", network: "Pay per request",
+        managedServices: managedSvcs.map(s => MANAGED_INFO["Google Cloud"]?.[s]?.service || s),
+        monthlyPrice: isProd ? "~$15/mo" : "~$5/mo",
+        breakdown: [{ item: "Cloud Run", cost: isProd ? "$10" : "$3" }, { item: "Artifact Registry", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$5" }))],
+      },
+      {
+        tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
+        instance: "2 vCPU / 1 GB", cpu: "2 vCPU", ram: "1 GB",
+        storage: "Included", network: "Pay per request",
+        managedServices: managedSvcs.map(s => MANAGED_INFO["Google Cloud"]?.[s]?.service || s),
+        monthlyPrice: isProd ? "~$40/mo" : "~$15/mo",
+        breakdown: [{ item: "Cloud Run", cost: isProd ? "$35" : "$12" }, { item: "Artifact Registry", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$10" }))],
+      },
+      {
+        tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
+        instance: "4 vCPU / 2 GB", cpu: "4 vCPU", ram: "2 GB",
+        storage: "Included", network: "Pay per request",
+        managedServices: managedSvcs.map(s => MANAGED_INFO["Google Cloud"]?.[s]?.service || s),
+        monthlyPrice: isProd ? "~$90/mo" : "~$40/mo",
+        breakdown: [{ item: "Cloud Run", cost: isProd ? "$80" : "$35" }, { item: "Artifact Registry", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$15" }))],
+      },
+    ] : [
       {
         tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
         instance: "n2d-standard-2", cpu: "2 vCPU", ram: "8 GB",

@@ -28,6 +28,9 @@ export function generateAppUrl(provider: string, repoName: string, shortId: stri
     case "railway": return `https://${slug}.up.railway.app`;
     case "render": return `https://${slug}.onrender.com`;
     case "flyio": return `https://${slug}.fly.dev`;
+    case "gcp":
+      if (deployStrategy === "managed") return `https://${slug}-${region}.run.app`;
+      return `http://${slug}.${region}.compute.gcp`;
     case "encore": return `https://${slug}.encr.app`;
     default: return `https://${slug}.deploy.app`;
   }

@@ -159,12 +159,16 @@ export const destroyDeployment = api(
       const { tmpdir, homedir } = await import("node:os");
       const { spawn } = await import("node:child_process");
 
-      const pulumiPath = `${homedir()}/.pulumi/bin`;
-      const augmentedPath = process.env.PATH ? `${pulumiPath}:${process.env.PATH}` : pulumiPath;
+      const pulumiHome = join(homedir(), ".pulumi", "bin");
+      const pathSep = process.platform === "win32" ? ";" : ":";
+      const extraPaths = process.platform === "win32"
+        ? [pulumiHome, "C:\\Program Files\\Pulumi", "C:\\Program Files (x86)\\Pulumi"]
+        : [pulumiHome, "/usr/local/bin"];
+      const augmentedPath = [...extraPaths, process.env.PATH || ""].join(pathSep);
 
       const runCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Promise<{ code: number; output: string }> => {
         return new Promise((resolve) => {
-          const proc = spawn(cmd, args, { cwd: opts?.cwd, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"] });
+          const proc = spawn(cmd, args, { cwd: opts?.cwd, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
           let output = "";
           proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
           proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
@@ -198,7 +202,10 @@ export const destroyDeployment = api(
         }
         const stateDir = join(pulumiDir, ".pulumi-state");
         await mkdir(stateDir, { recursive: true });
-        providerEnv.PULUMI_BACKEND_URL = `file://${stateDir}`;
+        const stateUrl = process.platform === "win32"
+          ? `file://${stateDir.replace(/\\/g, "/")}`
+          : `file://${stateDir}`;
+        providerEnv.PULUMI_BACKEND_URL = stateUrl;
         providerEnv.PULUMI_CONFIG_PASSPHRASE = "";
 
         // Install deps

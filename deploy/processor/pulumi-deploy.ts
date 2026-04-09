@@ -114,12 +114,20 @@ export async function handlePulumiDeploy(
   }
   const stateDir = join(pulumiDir, ".pulumi-state");
   await mkdir(stateDir, { recursive: true });
-  providerEnv.PULUMI_BACKEND_URL = `file://${stateDir}`;
+  // Pulumi on Windows needs file://C:/... (two slashes, forward slashes) — NOT file:///C:/
+  const stateUrl = process.platform === "win32"
+    ? `file://${stateDir.replace(/\\/g, "/")}`
+    : `file://${stateDir}`;
+  providerEnv.PULUMI_BACKEND_URL = stateUrl;
   providerEnv.PULUMI_CONFIG_PASSPHRASE = "";
 
   await appendLog(deploymentId, `[${ts()}] ℹ Installing Pulumi dependencies...`);
   const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
-  if (installResult.code !== 0) throw new Error(`npm install failed (exit code ${installResult.code})`);
+  if (installResult.code !== 0) {
+    const errLines = installResult.output.split("\n").filter(l => l.trim()).slice(-10);
+    for (const line of errLines) await appendLog(deploymentId, `[${ts()}] ✗ npm: ${line}`);
+    throw new Error(`npm install failed (exit code ${installResult.code})`);
+  }
   await appendLog(deploymentId, `[${ts()}] ✓ Dependencies installed`);
 
   const stackName = `${repoName}-${shortId}`;
@@ -133,7 +141,7 @@ export async function handlePulumiDeploy(
   const { readFile: readFs2 } = await import("node:fs/promises");
   const deployPubKey = (await readFs2(deployPubKeyPath, "utf-8")).trim();
 
-  if (provider === "hetzner" || provider === "vultr" || provider === "linode" || provider === "gcp") {
+  if (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "gcp" && event.deployStrategy !== "managed")) {
     const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
     if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
     // Combine user key + deploy key so both can access the server
@@ -142,10 +150,125 @@ export async function handlePulumiDeploy(
   }
   if (provider === "linode") await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   if (provider === "gcp") {
+    let gcpProjectId = "";
     try {
       const creds = JSON.parse(ctx.providerRow.api_key || "{}");
-      if (creds.project_id) await runCmd("pulumi", ["config", "set", "gcp:project", creds.project_id, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      gcpProjectId = creds.project_id || "";
+      if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
     } catch {}
+    // For Cloud Run (managed), enable Artifact Registry API, create repo, push image, and set imageUri
+    if (event.deployStrategy === "managed" && gcpProjectId) {
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Push Image to Artifact Registry ─`);
+
+      // Extract the actual region from the Pulumi script (wizard-selected, may differ from provider default)
+      let arRegion = region;
+      const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+      if (regionMatch) arRegion = regionMatch[1];
+
+      // Get access token from service account key using JWT
+      const { createSign } = await import("node:crypto");
+      const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
+      const now = Math.floor(Date.now() / 1000);
+      const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+      const jwtClaim = Buffer.from(JSON.stringify({
+        iss: saKey.client_email,
+        scope: "https://www.googleapis.com/auth/cloud-platform",
+        aud: "https://oauth2.googleapis.com/token",
+        iat: now,
+        exp: now + 3600,
+      })).toString("base64url");
+      const signInput = `${jwtHeader}.${jwtClaim}`;
+      const signer = createSign("RSA-SHA256");
+      signer.update(signInput);
+      const signature = signer.sign(saKey.private_key, "base64url");
+      const jwt = `${signInput}.${signature}`;
+
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+      });
+      const tokenData = await tokenRes.json() as { access_token?: string };
+      const accessToken = tokenData.access_token || "";
+      if (!accessToken) throw new Error("Failed to get GCP access token from service account key");
+
+      // Enable Artifact Registry API (idempotent)
+      await appendLog(deploymentId, `[${ts()}] ℹ Enabling Artifact Registry API...`);
+      try {
+        const enableRes = await fetch(`https://serviceusage.googleapis.com/v1/projects/${gcpProjectId}/services/artifactregistry.googleapis.com:enable`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (enableRes.ok) {
+          await new Promise(r => setTimeout(r, 10_000));
+          await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry API enabled`);
+        } else {
+          await appendLog(deploymentId, `[${ts()}] ℹ API enable: ${enableRes.status} (may already be enabled)`);
+        }
+      } catch (e: any) {
+        await appendLog(deploymentId, `[${ts()}] ℹ API enable: ${e.message} (continuing)`);
+      }
+
+      // Also enable Cloud Run API
+      try {
+        await fetch(`https://serviceusage.googleapis.com/v1/projects/${gcpProjectId}/services/run.googleapis.com:enable`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } catch {}
+
+      const arHost = `${arRegion}-docker.pkg.dev`;
+      const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+      const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
+
+      // Create Artifact Registry repository (idempotent — 409 means already exists)
+      try {
+        const createRepoRes = await fetch(`https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories?repositoryId=${arRepo}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ format: "DOCKER" }),
+        });
+        if (createRepoRes.ok) {
+          // Creation is async — poll until the repo is accessible
+          await appendLog(deploymentId, `[${ts()}] ℹ Waiting for repository to be ready...`);
+          for (let i = 0; i < 12; i++) {
+            await new Promise(r => setTimeout(r, 5_000));
+            const checkRes = await fetch(`https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (checkRes.ok) break;
+          }
+          await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository created`);
+        } else if (createRepoRes.status === 409) {
+          await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository already exists`);
+        } else {
+          const body = await createRepoRes.text();
+          await appendLog(deploymentId, `[${ts()}] ⚠ Create repo: ${createRepoRes.status} ${body.slice(0, 200)}`);
+        }
+      } catch (e: any) {
+        await appendLog(deploymentId, `[${ts()}] ⚠ Create repo: ${e.message}`);
+      }
+
+      // Authenticate Docker to Artifact Registry using access token
+      const loginResult = await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password", accessToken, arHost], { cwd: workDir });
+      if (loginResult.code !== 0) {
+        await appendLog(deploymentId, `[${ts()}] ⚠ Docker login failed, retrying...`);
+        // Retry once
+        await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password", accessToken, arHost], { cwd: workDir });
+      }
+
+      // Tag and push
+      const tagResult = await runCmd("docker", ["tag", actualImage, arImageUri], { cwd: workDir });
+      if (tagResult.code !== 0) throw new Error(`Failed to tag image for Artifact Registry`);
+      const pushResult = await runCmd("docker", ["push", arImageUri], { cwd: workDir, env: providerEnv });
+      if (pushResult.code !== 0) throw new Error(`Failed to push image to Artifact Registry`);
+      await appendLog(deploymentId, `[${ts()}] ✓ Image pushed: ${arImageUri}`);
+
+      await runCmd("pulumi", ["config", "set", "imageUri", arImageUri, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    }
     // Don't set gcp:region here — the Pulumi template already has the wizard-selected region as default
   }
   // For non-GCP providers, set region from provider config (GCP uses the region baked into the Pulumi script)

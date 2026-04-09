@@ -26,19 +26,27 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const { spawn } = await import("node:child_process");
     const { execSync } = await import("node:child_process");
 
-    // Ensure ~/.pulumi/bin is in PATH for child processes
-    const pulumiPath = `${homedir()}/.pulumi/bin`;
-    const augmentedPath = process.env.PATH ? `${pulumiPath}:${process.env.PATH}` : pulumiPath;
+    // Ensure ~/.pulumi/bin and common install locations are in PATH for child processes
+    const { join: joinPath } = await import("node:path");
+    const pulumiHome = joinPath(homedir(), ".pulumi", "bin");
+    const pathSep = process.platform === "win32" ? ";" : ":";
+    const extraPaths = process.platform === "win32"
+      ? [pulumiHome, "C:\\Program Files\\Pulumi", "C:\\Program Files (x86)\\Pulumi"]
+      : [pulumiHome, "/usr/local/bin"];
+    const augmentedPath = [...extraPaths, process.env.PATH || ""].join(pathSep);
 
     const runCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Promise<{ code: number; output: string }> => {
       return new Promise((resolve) => {
-        const proc = spawn(cmd, args, { cwd: opts?.cwd || undefined, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"] });
+        const proc = spawn(cmd, args, { cwd: opts?.cwd || undefined, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
         let output = "";
         const onData = async (data: Buffer) => {
           const lines = data.toString().split("\n").filter(Boolean);
           for (const line of lines) {
             output += line + "\n";
             if (/^\s*\.+\s*$/.test(line) || /^@ updating/.test(line)) continue;
+            // Filter noisy Docker push/pull layer status lines
+            if (/^[0-9a-f]{12}:\s*(Waiting|Preparing|Layer already exists|Pushing|Pulling fs layer)\s*$/.test(line)) continue;
+            if (/^\s*Waiting\s*$/.test(line)) continue;
             await appendLog(deploymentId, `[${ts()}] ${line}`);
           }
         };

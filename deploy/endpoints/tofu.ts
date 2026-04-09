@@ -67,7 +67,7 @@ export const generateTofu = api(
       useDocker: params.useDocker, dockerImage: params.dockerImage, instanceType: params.instanceType,
     });
 
-    return { script, provider, region, appName, estimatedResources: getEstimatedResources(provider, runtime, params.hasDocker, params.services || []) };
+    return { script, provider, region, appName, estimatedResources: getEstimatedResources(provider, runtime, params.hasDocker, params.services || [], params.deployStrategy) };
   }
 );
 
@@ -95,7 +95,7 @@ function detectRuntime(lang: string, techStack: string[]): { name: string; versi
   return { name: "node", version: "20", buildCmd: "npm ci && npm run build", startCmd: "npm start", port: 3000 };
 }
 
-function getEstimatedResources(provider: string, runtime: { name: string }, hasDocker: boolean, services: Array<{ type: string; name: string; mode: "vps" | "managed" }>): string[] {
+function getEstimatedResources(provider: string, runtime: { name: string }, hasDocker: boolean, services: Array<{ type: string; name: string; mode: "vps" | "managed" }>, deployStrategy?: string): string[] {
   const resources: string[] = [];
   const managedSvcs = services.filter(s => s.mode === "managed");
   const vpsSvcs = services.filter(s => s.mode === "vps");
@@ -136,9 +136,15 @@ function getEstimatedResources(provider: string, runtime: { name: string }, hasD
       if (managedSvcs.some(s => s.type === "storage")) resources.push("linode_object_storage_bucket");
       break;
     case "gcp":
-      resources.push("gcp_compute_instance (e2-small)", "gcp_compute_firewall", "gcp_compute_network", "gcp_compute_address (Static IP)");
-      if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
-      if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");
+      if (deployStrategy === "managed") {
+        resources.push("gcp_artifact_registry_repository", "gcp_cloud_run_v2_service", "gcp_cloud_run_v2_service_iam_member (public access)");
+        if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+        if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");
+      } else {
+        resources.push("gcp_compute_instance (e2-small)", "gcp_compute_firewall", "gcp_compute_network", "gcp_compute_address (Static IP)");
+        if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+        if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");
+      }
       break;
     default:
       resources.push(`${provider}_server`, `${provider}_firewall`);
