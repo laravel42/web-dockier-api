@@ -730,9 +730,26 @@ function getPlans(
     },
   ];
 
+  const gcpStaticPlans: Plan[] = [
+    {
+      tier: "value", label: "Cloud Storage + CDN (Staging)", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
+      instance: "gcs-cdn-staging", cpu: "N/A", ram: "N/A", storage: "5 GB (Cloud Storage)", network: "1 TB/mo (Cloud CDN)",
+      managedServices: ["Cloud Storage Static Hosting", "Cloud CDN"],
+      monthlyPrice: isProd ? "~$1 – $3/mo" : "Free – ~$1/mo",
+      breakdown: [{ item: "Cloud Storage", cost: "~$0.02/GB" }, { item: "Cloud CDN", cost: "Free (first 1TB)" }, { item: "Global Forwarding Rule", cost: "~$0.50" }],
+    },
+    {
+      tier: "standard", label: "Cloud Storage + CDN (Production)", badge: "Recommended", badgeColor: "bg-primary-50 text-primary-500",
+      instance: "gcs-cdn-prod", cpu: "N/A", ram: "N/A", storage: "50 GB (Cloud Storage)", network: "10 TB/mo (Cloud CDN)",
+      managedServices: ["Cloud Storage Static Hosting", "Cloud CDN", "Global Load Balancer"],
+      monthlyPrice: isProd ? "~$5 – $15/mo" : "~$2 – $5/mo",
+      breakdown: [{ item: "Cloud Storage", cost: "~$0.02/GB" }, { item: "Cloud CDN", cost: "~$5" }, { item: "Global Forwarding Rule", cost: "~$1" }, { item: "Load Balancer", cost: "~$3" }],
+    },
+  ];
+
   const plans: Record<string, Plan[]> = {
     aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : deployStrategy === "static" ? awsS3Plans : awsEcsPlans,
-    gcp: deployStrategy === "managed" ? [
+    gcp: deployStrategy === "static" ? gcpStaticPlans : deployStrategy === "managed" ? [
       {
         tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
         instance: "1 vCPU / 512 MB", cpu: "1 vCPU", ram: "512 MB",

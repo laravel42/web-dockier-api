@@ -5,7 +5,9 @@ export function ts(): string {
 }
 
 export async function appendLog(deploymentId: string, line: string) {
-  await db.exec`UPDATE deployments SET logs = logs || ${line + "\n"} WHERE id = ${deploymentId}`;
+  // Strip null bytes — PostgreSQL text columns reject \0
+  const sanitized = line.replace(/\0/g, "");
+  await db.exec`UPDATE deployments SET logs = logs || ${sanitized + "\n"} WHERE id = ${deploymentId}`;
 }
 
 export function generateAppUrl(provider: string, repoName: string, shortId: string, region: string, deployStrategy?: string): string {
@@ -30,6 +32,7 @@ export function generateAppUrl(provider: string, repoName: string, shortId: stri
     case "flyio": return `https://${slug}.fly.dev`;
     case "gcp":
       if (deployStrategy === "managed") return `https://${slug}-${region}.run.app`;
+      if (deployStrategy === "static") return `http://${slug}.storage.googleapis.com`;
       return `http://${slug}.${region}.compute.gcp`;
     case "encore": return `https://${slug}.encr.app`;
     default: return `https://${slug}.deploy.app`;

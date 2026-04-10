@@ -264,6 +264,87 @@ export const destroyDeployment = api(
           return { success: noStateErrors.length === 0, message: noStateErrors.length > 0 ? `Partially destroyed: ${noStateErrors.join("; ")}` : "Cloud Run resources destroyed via direct GCP API" };
         }
 
+        // For GCP Cloud Storage + CDN, try to clean up via direct API calls
+        if (providerRow.provider === "gcp" && row.deploy_strategy === "static") {
+          const noStateErrors: string[] = [];
+          try {
+            const saKey = JSON.parse(providerRow.api_key || "{}");
+            const gcpProjectId = saKey.project_id || "";
+            if (gcpProjectId && saKey.client_email && saKey.private_key) {
+              const { createSign } = await import("node:crypto");
+              const now = Math.floor(Date.now() / 1000);
+              const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+              const jwtClaim = Buffer.from(JSON.stringify({
+                iss: saKey.client_email,
+                scope: "https://www.googleapis.com/auth/cloud-platform",
+                aud: "https://oauth2.googleapis.com/token",
+                iat: now, exp: now + 3600,
+              })).toString("base64url");
+              const signInput = `${jwtHeader}.${jwtClaim}`;
+              const signer = createSign("RSA-SHA256");
+              signer.update(signInput);
+              const signature = signer.sign(saKey.private_key, "base64url");
+              const accessToken = ((await (await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
+              })).json()) as { access_token?: string }).access_token || "";
+
+              if (accessToken) {
+                const authHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+                // 1. Delete Cloud Storage bucket (empty it first)
+                const bucketMatch = tofuScript.match(/new gcp\.storage\.Bucket\([^,]+,\s*\{[^}]*name:\s*`([^`]+)`/s)
+                  || tofuScript.match(/new gcp\.storage\.Bucket\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
+                if (bucketMatch) {
+                  const bucketName = bucketMatch[1];
+                  try {
+                    const listObjRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o`, { headers: authHeaders });
+                    if (listObjRes.ok) {
+                      const objData = await listObjRes.json() as { items?: { name: string }[] };
+                      for (const obj of objData.items || []) {
+                        await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o/${encodeURIComponent(obj.name)}`, { method: "DELETE", headers: authHeaders });
+                      }
+                    }
+                    const deleteBucketRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`, { method: "DELETE", headers: authHeaders });
+                    if (!deleteBucketRes.ok && deleteBucketRes.status !== 404) {
+                      noStateErrors.push(`Bucket delete: ${(await deleteBucketRes.text()).slice(0, 150)}`);
+                    }
+                  } catch (e: any) { noStateErrors.push(`Bucket delete: ${e.message}`); }
+                }
+
+                // 2. Delete CDN / LB resources (forwarding rule, proxy, url map, backend bucket, global IP)
+                const resourceNames = [
+                  { type: "globalForwardingRules", match: tofuScript.match(/new gcp\.compute\.GlobalForwardingRule\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
+                  { type: "targetHttpProxies", match: tofuScript.match(/new gcp\.compute\.TargetHttpProxy\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
+                  { type: "urlMaps", match: tofuScript.match(/new gcp\.compute\.URLMap\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
+                  { type: "backendBuckets", match: tofuScript.match(/new gcp\.compute\.BackendBucket\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
+                  { type: "globalAddresses", match: tofuScript.match(/new gcp\.compute\.GlobalAddress\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
+                ];
+                for (const { type, match } of resourceNames) {
+                  if (match) {
+                    try {
+                      const deleteRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${match[1]}`, { method: "DELETE", headers: authHeaders });
+                      if (!deleteRes.ok && deleteRes.status !== 404) {
+                        noStateErrors.push(`${type} delete: ${(await deleteRes.text()).slice(0, 150)}`);
+                      }
+                      // Wait briefly between dependent resource deletions
+                      await new Promise(r => setTimeout(r, 2_000));
+                    } catch (e: any) { noStateErrors.push(`${type} delete: ${e.message}`); }
+                  }
+                }
+              }
+            }
+          } catch (e: any) { noStateErrors.push(`GCP static cleanup: ${e.message}`); }
+
+          const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+          const destroyLog = noStateErrors.length > 0
+            ? `\n[${ts}] ⚠ No Pulumi state — direct API cleanup attempted. Errors: ${noStateErrors.join("; ")}`
+            : `\n[${ts}] ✓ No Pulumi state — Cloud Storage + CDN resources destroyed via direct API`;
+          await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+          return { success: noStateErrors.length === 0, message: noStateErrors.length > 0 ? `Partially destroyed: ${noStateErrors.join("; ")}` : "Cloud Storage + CDN resources destroyed via direct GCP API" };
+        }
+
         const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
         await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${`\n[${ts}] ⚠ No Pulumi state found — marked as destroyed but resources may still exist in cloud`}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
         return { success: true, message: "Marked as destroyed (no Pulumi state to clean up)" };

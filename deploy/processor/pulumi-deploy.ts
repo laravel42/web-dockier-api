@@ -28,16 +28,17 @@ export async function handlePulumiDeploy(
   if (!event.tofuScript) throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
 
   const imageName = `${repoName}:${shortId}`;
+  const isStaticDeploy = event.deployStrategy === "static";
 
   // Check for cached image
-  const cachedImage = await db.queryRow<{ docker_image: string }>`
+  const cachedImage = !isStaticDeploy ? await db.queryRow<{ docker_image: string }>`
     SELECT docker_image FROM deployments
     WHERE repo = ${event.repo} AND branch = ${event.branch} AND commit_hash = ${commitHash}
       AND docker_image != '' AND id != ${deploymentId}
-    ORDER BY created_at DESC LIMIT 1`;
+    ORDER BY created_at DESC LIMIT 1` : null;
 
   let actualImage = imageName;
-  let skipBuild = false;
+  let skipBuild = isStaticDeploy;
   if (cachedImage?.docker_image) {
     try {
       execSync(`docker image inspect ${JSON.stringify(cachedImage.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
@@ -71,10 +72,12 @@ export async function handlePulumiDeploy(
     }
   }
 
-  await db.exec`UPDATE deployments SET docker_image = ${actualImage} WHERE id = ${deploymentId}`;
+  if (!isStaticDeploy) {
+    await db.exec`UPDATE deployments SET docker_image = ${actualImage} WHERE id = ${deploymentId}`;
+  }
 
   let remoteImage = actualImage;
-  if (event.registryUrl) {
+  if (event.registryUrl && !isStaticDeploy) {
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ── Push Image to Registry ─────────`);
     remoteImage = `${event.registryUrl}/${actualImage}`;
@@ -141,7 +144,7 @@ export async function handlePulumiDeploy(
   const { readFile: readFs2 } = await import("node:fs/promises");
   const deployPubKey = (await readFs2(deployPubKeyPath, "utf-8")).trim();
 
-  if (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "gcp" && event.deployStrategy !== "managed")) {
+  if (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "gcp" && event.deployStrategy !== "managed" && event.deployStrategy !== "static")) {
     const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
     if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
     // Combine user key + deploy key so both can access the server
@@ -156,6 +159,50 @@ export async function handlePulumiDeploy(
       gcpProjectId = creds.project_id || "";
       if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
     } catch {}
+    // For Cloud Storage + CDN (static), enable Compute API and skip Docker entirely
+    if (event.deployStrategy === "static" && gcpProjectId) {
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── GCP Static Site Setup ──────────`);
+
+      const { createSign } = await import("node:crypto");
+      const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
+      const now = Math.floor(Date.now() / 1000);
+      const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+      const jwtClaim = Buffer.from(JSON.stringify({
+        iss: saKey.client_email,
+        scope: "https://www.googleapis.com/auth/cloud-platform",
+        aud: "https://oauth2.googleapis.com/token",
+        iat: now, exp: now + 3600,
+      })).toString("base64url");
+      const signInput = `${jwtHeader}.${jwtClaim}`;
+      const signer = createSign("RSA-SHA256");
+      signer.update(signInput);
+      const signature = signer.sign(saKey.private_key, "base64url");
+      const jwt = `${signInput}.${signature}`;
+
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+      });
+      const tokenData = await tokenRes.json() as { access_token?: string };
+      const gcpAccessToken = tokenData.access_token || "";
+
+      // Enable Compute Engine API (needed for CDN/LB resources)
+      if (gcpAccessToken) {
+        try {
+          await fetch(`https://serviceusage.googleapis.com/v1/projects/${gcpProjectId}/services/compute.googleapis.com:enable`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${gcpAccessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          await appendLog(deploymentId, `[${ts()}] ✓ Compute Engine API enabled`);
+        } catch (e: any) {
+          await appendLog(deploymentId, `[${ts()}] ℹ Compute API enable: ${e.message} (continuing)`);
+        }
+      }
+      await appendLog(deploymentId, `[${ts()}] ℹ Static site — skipping Docker build`);
+    }
     // For Cloud Run (managed), enable Artifact Registry API, create repo, push image, and set imageUri
     if (event.deployStrategy === "managed" && gcpProjectId) {
       await appendLog(deploymentId, `[${ts()}]`);
@@ -286,10 +333,17 @@ export async function handlePulumiDeploy(
       const savedState = prevDeploy.tofu_script.slice(stateMarker + "/* STATE */\n".length);
       try {
         if (savedState.includes('"deployment"')) {
+          // Rewrite the old stack name in the state to match the current stack
+          // Pulumi state embeds URNs like "urn:pulumi:<oldStack>::<project>::..." — update them to the new stack
+          const oldStackMatch = savedState.match(/"urn:pulumi:([^:]+)::/);
+          const updatedState = oldStackMatch
+            ? savedState.replaceAll(`urn:pulumi:${oldStackMatch[1]}::`, `urn:pulumi:${stackName}::`)
+            : savedState;
           const stateFile = join(pulumiDir, "prev-state.json");
-          await ctx.writeFile(stateFile, savedState, "utf-8");
+          await ctx.writeFile(stateFile, updatedState, "utf-8");
           const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
           if (importResult.code === 0) await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
+          else await appendLog(deploymentId, `[${ts()}] ⚠ State import failed, deploying fresh`);
         }
       } catch {}
     }
@@ -310,18 +364,30 @@ export async function handlePulumiDeploy(
   let appUrl = "";
   let serverIp = "";
   try {
-    const ipResult = await runCmd("pulumi", ["stack", "output", "serverIp", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-    serverIp = ipResult.output.trim().split("\n").pop()?.trim() || "";
-    const urlResult = await runCmd("pulumi", ["stack", "output", "appUrl", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-    appUrl = urlResult.output.trim().split("\n").pop()?.trim() || "";
-    if (!appUrl && serverIp) appUrl = `http://${serverIp}`;
-    if (appUrl && !appUrl.startsWith("http")) appUrl = `http://${appUrl}`;
-    await appendLog(deploymentId, `[${ts()}]   serverIp = ${serverIp || "(not found)"}`);
-    await appendLog(deploymentId, `[${ts()}]   appUrl = ${appUrl || "(not found)"}`);
+    if (isStaticDeploy) {
+      // Static deploys have cdnIp instead of serverIp
+      const cdnResult = await runCmd("pulumi", ["stack", "output", "cdnIp", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      const cdnIp = cdnResult.output.trim().split("\n").pop()?.trim() || "";
+      const urlResult = await runCmd("pulumi", ["stack", "output", "appUrl", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      appUrl = urlResult.output.trim().split("\n").pop()?.trim() || "";
+      if (!appUrl && cdnIp) appUrl = `http://${cdnIp}`;
+      if (appUrl && !appUrl.startsWith("http")) appUrl = `http://${appUrl}`;
+      await appendLog(deploymentId, `[${ts()}]   cdnIp = ${cdnIp || "(not found)"}`);
+      await appendLog(deploymentId, `[${ts()}]   appUrl = ${appUrl || "(not found)"}`);
+    } else {
+      const ipResult = await runCmd("pulumi", ["stack", "output", "serverIp", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      serverIp = ipResult.output.trim().split("\n").pop()?.trim() || "";
+      const urlResult = await runCmd("pulumi", ["stack", "output", "appUrl", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      appUrl = urlResult.output.trim().split("\n").pop()?.trim() || "";
+      if (!appUrl && serverIp) appUrl = `http://${serverIp}`;
+      if (appUrl && !appUrl.startsWith("http")) appUrl = `http://${appUrl}`;
+      await appendLog(deploymentId, `[${ts()}]   serverIp = ${serverIp || "(not found)"}`);
+      await appendLog(deploymentId, `[${ts()}]   appUrl = ${appUrl || "(not found)"}`);
+    }
   } catch (e: any) { await appendLog(deploymentId, `[${ts()}]   (could not parse outputs: ${e.message})`); }
 
   // Transfer Docker image to server (VPS providers with a server IP)
-  if (serverIp && !event.registryUrl) {
+  if (serverIp && !event.registryUrl && !isStaticDeploy) {
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ── Transfer Docker Image ──────────`);
     const tarPath = join(workDir, `${actualImage.replace(":", "-")}.tar`);
@@ -351,6 +417,214 @@ export async function handlePulumiDeploy(
     }
   }
 
+  // Upload static files to GCS bucket (for Cloud Storage + CDN deploys)
+  if (isStaticDeploy && provider === "gcp") {
+    await appendLog(deploymentId, `[${ts()}]`);
+    await appendLog(deploymentId, `[${ts()}] ── Upload Static Files to GCS ─────`);
+    try {
+      // Get the bucket name from Pulumi outputs
+      const bucketResult = await runCmd("pulumi", ["stack", "output", "bucketName", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      const gcsBucket = bucketResult.output.trim().split("\n").pop()?.trim() || "";
+      if (gcsBucket) {
+        // Get access token for GCS upload
+        const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
+        const { createSign: createSignUpload } = await import("node:crypto");
+        const nowUpload = Math.floor(Date.now() / 1000);
+        const jwtHeaderUpload = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+        const jwtClaimUpload = Buffer.from(JSON.stringify({
+          iss: saKey.client_email,
+          scope: "https://www.googleapis.com/auth/devstorage.read_write",
+          aud: "https://oauth2.googleapis.com/token",
+          iat: nowUpload, exp: nowUpload + 3600,
+        })).toString("base64url");
+        const signInputUpload = `${jwtHeaderUpload}.${jwtClaimUpload}`;
+        const signerUpload = createSignUpload("RSA-SHA256");
+        signerUpload.update(signInputUpload);
+        const signatureUpload = signerUpload.sign(saKey.private_key, "base64url");
+        const tokenResUpload = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInputUpload}.${signatureUpload}`,
+        });
+        const tokenDataUpload = await tokenResUpload.json() as { access_token?: string };
+        const uploadToken = tokenDataUpload.access_token || "";
+
+        if (uploadToken) {
+          // Build the static site using npm directly (cross-platform)
+          await appendLog(deploymentId, `[${ts()}] ℹ Installing dependencies...`);
+          const installResult = await runCmd("npm", ["ci"], { cwd: repoDir });
+          if (installResult.code !== 0) {
+            await appendLog(deploymentId, `[${ts()}] ⚠ npm ci failed, trying npm install...`);
+            await runCmd("npm", ["install"], { cwd: repoDir });
+          }
+
+          await appendLog(deploymentId, `[${ts()}] ℹ Building static site...`);
+          const isNuxt = event.techStack.some(t => t.toLowerCase().includes("nuxt"));
+          const isNext = event.techStack.some(t => t.toLowerCase().includes("next"));
+          let buildOk = false;
+
+          // Set environment to force static output
+          const staticEnv: Record<string, string> = {};
+          if (isNuxt) staticEnv.NITRO_PRESET = "static";
+
+          if (isNuxt) {
+            // Try nuxt generate first (produces fully prerendered static site)
+            const genResult = await runCmd("npx", ["nuxt", "generate"], { cwd: repoDir, env: staticEnv });
+            if (genResult.code === 0) {
+              buildOk = true;
+              await appendLog(deploymentId, `[${ts()}] ✓ Nuxt static site generated`);
+            } else {
+              await appendLog(deploymentId, `[${ts()}] ℹ nuxt generate failed (likely API deps), building as SPA...`);
+              // Build with static preset — even if prerender fails, we get the client bundle
+              const buildResult = await runCmd("npm", ["run", "build"], { cwd: repoDir, env: staticEnv });
+              if (buildResult.code === 0) {
+                buildOk = true;
+                await appendLog(deploymentId, `[${ts()}] ✓ Nuxt built with static preset`);
+              }
+            }
+          }
+
+          if (!buildOk) {
+            const buildResult = await runCmd("npm", ["run", "build"], { cwd: repoDir, env: staticEnv });
+            if (buildResult.code === 0) {
+              buildOk = true;
+              await appendLog(deploymentId, `[${ts()}] ✓ Static site built`);
+            } else {
+              const genResult2 = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir, env: staticEnv });
+              if (genResult2.code === 0) {
+                buildOk = true;
+                await appendLog(deploymentId, `[${ts()}] ✓ Static site generated`);
+              } else {
+                await appendLog(deploymentId, `[${ts()}] ⚠ Build failed — uploading source files as fallback`);
+              }
+            }
+          }
+
+          // Determine build output directory (check most specific first)
+          const { existsSync, writeFileSync: writeFs } = await import("node:fs");
+          const possibleDirs = [".output/public", "dist", "build", "out", ".next/out", "output", "public"];
+          let uploadDir = repoDir;
+          for (const dir of possibleDirs) {
+            if (existsSync(join(repoDir, dir))) { uploadDir = join(repoDir, dir); break; }
+          }
+
+          // If no index.html in the upload dir, try to find one elsewhere
+          if (!existsSync(join(uploadDir, "index.html"))) {
+            for (const dir of possibleDirs) {
+              const candidate = join(repoDir, dir);
+              if (existsSync(join(candidate, "index.html"))) { uploadDir = candidate; break; }
+            }
+          }
+
+          // If still no index.html, generate a SPA fallback that loads the client bundle
+          if (!existsSync(join(uploadDir, "index.html"))) {
+            await appendLog(deploymentId, `[${ts()}] ℹ No index.html found — generating SPA fallback`);
+            // Check for 200.html (Nuxt SPA fallback) and use it as index.html
+            if (existsSync(join(uploadDir, "200.html"))) {
+              const { copyFileSync } = await import("node:fs");
+              copyFileSync(join(uploadDir, "200.html"), join(uploadDir, "index.html"));
+              await appendLog(deploymentId, `[${ts()}] ✓ Using 200.html as index.html`);
+            } else {
+              // Look for the client manifest to build a minimal SPA shell
+              const clientDir = join(repoDir, ".nuxt/dist/client");
+              const outputPublicDir = join(repoDir, ".output/public");
+              // If .output/public exists with _nuxt assets but no index.html, create one
+              if (existsSync(join(outputPublicDir, "_nuxt")) || existsSync(join(clientDir, "_nuxt"))) {
+                const assetDir = existsSync(join(outputPublicDir, "_nuxt")) ? outputPublicDir : clientDir;
+                // Find the entry JS file from the manifest
+                let entryScript = "";
+                const manifestPath = join(assetDir, "manifest.json");
+                if (existsSync(manifestPath)) {
+                  try {
+                    const { readFileSync: readManifest } = await import("node:fs");
+                    const manifest = JSON.parse(readManifest(manifestPath, "utf-8"));
+                    // Find the entry point (usually the largest JS file or one with isEntry)
+                    for (const [, value] of Object.entries(manifest) as [string, any][]) {
+                      if (value.isEntry && value.file) { entryScript = `/_nuxt/${value.file}`; break; }
+                    }
+                    if (!entryScript) {
+                      // Fallback: find any JS entry
+                      for (const [, value] of Object.entries(manifest) as [string, any][]) {
+                        if (value.file?.endsWith(".js")) { entryScript = `/_nuxt/${value.file}`; break; }
+                      }
+                    }
+                  } catch {}
+                }
+                const spaHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loading...</title>
+  ${entryScript ? `<script type="module" src="${entryScript}"></script>` : ""}
+</head>
+<body>
+  <div id="__nuxt"></div>
+</body>
+</html>`;
+                writeFs(join(uploadDir, "index.html"), spaHtml, "utf-8");
+                await appendLog(deploymentId, `[${ts()}] ✓ Generated SPA fallback index.html`);
+              } else {
+                // Generic fallback
+                writeFs(join(uploadDir, "index.html"), `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Site</title></head><body><p>Deployment complete. Static files uploaded.</p></body></html>`, "utf-8");
+                await appendLog(deploymentId, `[${ts()}] ⚠ Generated placeholder index.html`);
+              }
+            }
+          }
+
+          await appendLog(deploymentId, `[${ts()}] ℹ Uploading from: ${uploadDir.replace(repoDir, ".")}`);
+
+          // Upload files recursively using GCS JSON API
+          const { readdirSync, statSync, readFileSync } = await import("node:fs");
+          const mimeTypes: Record<string, string> = {
+            ".html": "text/html", ".css": "text/css", ".js": "application/javascript",
+            ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
+            ".ico": "image/x-icon", ".woff": "font/woff", ".woff2": "font/woff2",
+            ".ttf": "font/ttf", ".txt": "text/plain", ".xml": "application/xml",
+            ".webp": "image/webp", ".map": "application/json",
+          };
+          const { extname } = await import("node:path");
+
+          const uploadFile = async (filePath: string, objectName: string) => {
+            const content = readFileSync(filePath);
+            const ext = extname(filePath).toLowerCase();
+            const contentType = mimeTypes[ext] || "application/octet-stream";
+            await fetch(`https://storage.googleapis.com/upload/storage/v1/b/${gcsBucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${uploadToken}`, "Content-Type": contentType },
+              body: content,
+            });
+          };
+
+          const uploadDir2 = async (dir: string, prefix: string) => {
+            const entries = readdirSync(dir);
+            for (const entry of entries) {
+              // Skip non-deployable directories
+              if (["node_modules", ".git", ".nuxt", ".output", ".next", ".cache", "__pycache__"].includes(entry)) continue;
+              const fullPath = join(dir, entry);
+              const objectName = prefix ? `${prefix}/${entry}` : entry;
+              if (statSync(fullPath).isDirectory()) {
+                await uploadDir2(fullPath, objectName);
+              } else {
+                await uploadFile(fullPath, objectName);
+              }
+            }
+          };
+
+          await uploadDir2(uploadDir, "");
+          await appendLog(deploymentId, `[${ts()}] ✓ Static files uploaded to gs://${gcsBucket}`);
+        } else {
+          await appendLog(deploymentId, `[${ts()}] ⚠ Could not get upload token — files not uploaded`);
+        }
+      } else {
+        await appendLog(deploymentId, `[${ts()}] ⚠ Could not determine bucket name from Pulumi outputs`);
+      }
+    } catch (e: any) {
+      await appendLog(deploymentId, `[${ts()}] ⚠ Static file upload error: ${e.message}`);
+    }
+  }
+
   // Save Pulumi state
   try {
     const { execSync: execSyncState } = await import("node:child_process");
@@ -361,7 +635,7 @@ export async function handlePulumiDeploy(
       maxBuffer: 10 * 1024 * 1024,
     }).toString();
     if (stateOutput.includes('"deployment"')) {
-      await db.exec`UPDATE deployments SET tofu_script = ${event.tofuScript + "\n\n/* STATE */\n" + stateOutput} WHERE id = ${deploymentId}`;
+      await db.exec`UPDATE deployments SET tofu_script = ${(event.tofuScript + "\n\n/* STATE */\n" + stateOutput).replace(/\0/g, "")} WHERE id = ${deploymentId}`;
     }
   } catch {}
 
@@ -370,7 +644,7 @@ export async function handlePulumiDeploy(
   const finalUrl = appUrl || generateAppUrl(provider, repoName, shortId, region, event.deployStrategy);
   await appendLog(deploymentId, `[${ts()}]`);
   await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
-  await appendLog(deploymentId, `[${ts()}] ✓ Docker image: ${remoteImage}`);
+  await appendLog(deploymentId, `[${ts()}] ✓ ${isStaticDeploy ? "Static site deployed" : `Docker image: ${remoteImage}`}`);
   await appendLog(deploymentId, `[${ts()}] ✓ Infrastructure provisioned via Pulumi`);
   await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${finalUrl}`);
   await db.exec`UPDATE deployments SET status = 'success', app_url = ${finalUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;

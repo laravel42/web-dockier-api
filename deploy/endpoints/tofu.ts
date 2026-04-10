@@ -136,7 +136,9 @@ function getEstimatedResources(provider: string, runtime: { name: string }, hasD
       if (managedSvcs.some(s => s.type === "storage")) resources.push("linode_object_storage_bucket");
       break;
     case "gcp":
-      if (deployStrategy === "managed") {
+      if (deployStrategy === "static") {
+        resources.push("gcp_storage_bucket (Static Website)", "gcp_compute_backend_bucket (Cloud CDN)", "gcp_compute_url_map", "gcp_compute_target_http_proxy", "gcp_compute_global_forwarding_rule", "gcp_storage_bucket_iam_member (public access)");
+      } else if (deployStrategy === "managed") {
         resources.push("gcp_artifact_registry_repository", "gcp_cloud_run_v2_service", "gcp_cloud_run_v2_service_iam_member (public access)");
         if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
         if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");

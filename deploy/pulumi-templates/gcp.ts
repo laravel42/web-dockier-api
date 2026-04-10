@@ -5,7 +5,8 @@ import { buildDockerUserData } from "./user-data";
 export function buildGcp(p: DeployParams): string {
   if (p.deployStrategy === "vps") return buildGcpComputeEngine(p);
   if (p.deployStrategy === "managed") return buildGcpCloudRun(p);
-  // future: app-engine, static
+  if (p.deployStrategy === "static") return buildGcpCloudStorageCdn(p);
+  // future: app-engine
   return buildGcpComputeEngine(p);
 }
 
@@ -280,5 +281,96 @@ const iamMember = new gcp.cloudrunv2.ServiceIamMember("${p.appName}-public", {
 
 export const serviceUrl = service.uri;
 export const appUrl = service.uri;
+`;
+}
+
+function buildGcpCloudStorageCdn(p: DeployParams): string {
+  return `import * as pulumi from "@pulumi/pulumi";
+import * as gcp from "@pulumi/gcp";
+
+// ─────────────────────────────────────────────────
+// GCP Cloud Storage + CDN (Static Website)
+// App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
+// Repo: ${p.repo}@${p.branch}
+// ─────────────────────────────────────────────────
+
+const config = new pulumi.Config();
+const region = config.get("region") || "${p.region}";
+const gcpConfig = new pulumi.Config("gcp");
+const project = gcpConfig.require("project");
+
+// ── Enable required APIs ──
+const computeApi = new gcp.projects.Service("compute-api", {
+  service: "compute.googleapis.com",
+  disableOnDestroy: false,
+});
+
+// ── Cloud Storage Bucket (static website) ──
+const bucket = new gcp.storage.Bucket("${p.appName}-static-site", {
+  name: \`${p.appName}-static-site-\${project}\`,
+  location: region,
+  forceDestroy: true,
+  uniformBucketLevelAccess: true,
+  website: {
+    mainPageSuffix: "index.html",
+    notFoundPage: "404.html",
+  },
+  cors: [{
+    origins: ["*"],
+    methods: ["GET", "HEAD"],
+    responseHeaders: ["Content-Type"],
+    maxAgeSeconds: 3600,
+  }],
+});
+
+// ── Public access ──
+const bucketIam = new gcp.storage.BucketIAMMember("${p.appName}-public", {
+  bucket: bucket.name,
+  role: "roles/storage.objectViewer",
+  member: "allUsers",
+});
+
+// ── Backend Bucket with CDN ──
+const backendBucket = new gcp.compute.BackendBucket("${p.appName}-cdn", {
+  name: "${p.appName}-cdn",
+  bucketName: bucket.name,
+  enableCdn: true,
+  cdnPolicy: {
+    cacheMode: "CACHE_ALL_STATIC",
+    defaultTtl: 3600,
+    maxTtl: 86400,
+    clientTtl: 3600,
+  },
+}, { dependsOn: [computeApi] });
+
+// ── URL Map ──
+const urlMap = new gcp.compute.URLMap("${p.appName}-url-map", {
+  name: "${p.appName}-url-map",
+  defaultService: backendBucket.selfLink,
+});
+
+// ── HTTP Proxy ──
+const httpProxy = new gcp.compute.TargetHttpProxy("${p.appName}-http-proxy", {
+  name: "${p.appName}-http-proxy",
+  urlMap: urlMap.selfLink,
+});
+
+// ── Global Static IP ──
+const globalIp = new gcp.compute.GlobalAddress("${p.appName}-ip", {
+  name: "${p.appName}-ip",
+});
+
+// ── Forwarding Rule ──
+const forwardingRule = new gcp.compute.GlobalForwardingRule("${p.appName}-fwd", {
+  name: "${p.appName}-fwd",
+  target: httpProxy.selfLink,
+  ipAddress: globalIp.address,
+  portRange: "80",
+  loadBalancingScheme: "EXTERNAL",
+});
+
+export const bucketName = bucket.name;
+export const cdnIp = globalIp.address;
+export const appUrl = globalIp.address.apply(ip => \`http://\${ip}\`);
 `;
 }
