@@ -480,7 +480,7 @@ export const deployApi = {
     hasDocker: boolean;
     appName?: string;
     region?: string;
-    deployStrategy?: "vps" | "managed" | "serverless" | "static";
+    deployStrategy?: "vps" | "managed" | "static";
     useDocker?: boolean;
     dockerImage?: string;
     instanceType?: string;

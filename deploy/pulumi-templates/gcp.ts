@@ -6,7 +6,6 @@ export function buildGcp(p: DeployParams): string {
   if (p.deployStrategy === "vps") return buildGcpComputeEngine(p);
   if (p.deployStrategy === "managed") return buildGcpCloudRun(p);
   if (p.deployStrategy === "static") return buildGcpCloudStorageCdn(p);
-  // future: app-engine
   return buildGcpComputeEngine(p);
 }
 

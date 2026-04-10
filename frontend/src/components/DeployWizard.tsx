@@ -60,7 +60,7 @@ interface WizardState {
   selectedProvider: string;
   selectedProviderId: string;
   // Step 2
-  deployStrategy: "vps" | "managed" | "serverless" | "static";
+  deployStrategy: "vps" | "managed" | "static";
   // Step 3
   servicesModes: Record<string, "vps" | "managed">;
   // Step 4
@@ -106,7 +106,7 @@ const STEPS = [
   { label: "Deploy", icon: "🚀" },
 ];
 
-const PROVIDER_META: Record<string, { name: string; icon: string; color: string; services: Array<{ type: "vps" | "managed" | "serverless" | "static"; label: string; name: string; description: string }> }> = {
+const PROVIDER_META: Record<string, { name: string; icon: string; color: string; services: Array<{ type: "vps" | "managed" | "static"; label: string; name: string; description: string }> }> = {
   aws: {
     name: "AWS", icon: "amazonaws", color: "bg-orange-500",
     services: [
@@ -163,7 +163,6 @@ const PROVIDER_META: Record<string, { name: string; icon: string; color: string;
     services: [
       { type: "managed", label: "Managed", name: "Cloud Run", description: "Serverless containers — auto-scaling, pay per request" },
       { type: "vps", label: "VPS", name: "Compute Engine", description: "Full control over a virtual machine with Docker" },
-      { type: "serverless", label: "Serverless", name: "App Engine", description: "Fully managed from source — zero config, auto-scaling" },
       { type: "static", label: "Free", name: "Cloud Storage + CDN", description: "Static website hosting with global CDN" },
     ],
   },
@@ -410,7 +409,7 @@ function StepProvider({ state, providers, onChange }: {
 
 function StepService({ state, onChange }: {
   state: WizardState;
-  onChange: (strategy: "vps" | "managed" | "serverless" | "static") => void;
+  onChange: (strategy: "vps" | "managed" | "static") => void;
 }) {
   const meta = PROVIDER_META[state.selectedProvider];
   if (!meta) return <p className="text-sm text-text-muted">Select a provider first.</p>;
@@ -418,7 +417,6 @@ function StepService({ state, onChange }: {
   const typeIcons: Record<string, string> = {
     vps: "🖥️",
     managed: "☁️",
-    serverless: "⚡",
   };
 
   return (
@@ -446,7 +444,6 @@ function StepService({ state, onChange }: {
                   <span className="text-sm font-semibold text-text">{svc.name}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
                     svc.type === "managed" ? "bg-primary-50 text-primary-600" :
-                    svc.type === "serverless" ? "bg-secondary-100 text-text-secondary" :
                     "bg-warning-50 text-warning-500"
                   }`}>{svc.label}</span>
                 </div>
@@ -626,7 +623,7 @@ function getPlans(
   provider: string,
   environment: "staging" | "production",
   servicesModes: Record<string, "vps" | "managed">,
-  deployStrategy: "vps" | "managed" | "serverless" | "static"
+  deployStrategy: "vps" | "managed" | "static"
 ): Plan[] {
   const managedSvcs = Object.entries(servicesModes).filter(([, m]) => m === "managed").map(([t]) => t);
   const isProd = environment === "production";
