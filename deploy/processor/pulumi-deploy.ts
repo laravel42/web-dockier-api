@@ -515,39 +515,70 @@ export async function handlePulumiDeploy(
           }
 
           await appendLog(deploymentId, `[${ts()}] ℹ Building static site...`);
+          const { existsSync, writeFileSync: writeFs, readdirSync, statSync, readFileSync, copyFileSync, mkdirSync } = await import("node:fs");
           const isNuxt = event.techStack.some(t => t.toLowerCase().includes("nuxt"));
           const isNext = event.techStack.some(t => t.toLowerCase().includes("next"));
+
+          // ── Step 1: Build the project ──
+          // Each framework has its own build command and output directory.
+          // We try the most specific approach first, then fall back to generic `npm run build`.
           let buildOk = false;
 
-          // Set environment to force static output
-          const staticEnv: Record<string, string> = {};
-          if (isNuxt) staticEnv.NITRO_PRESET = "static";
-
           if (isNuxt) {
-            // Try nuxt generate first (produces fully prerendered static site)
-            const genResult = await runCmd("npx", ["nuxt", "generate"], { cwd: repoDir, env: staticEnv });
+            // Nuxt: try `nuxt generate` for full SSG, fall back to normal build for SPA
+            const genResult = await runCmd("npx", ["nuxt", "generate"], { cwd: repoDir, env: { NITRO_PRESET: "static" } });
             if (genResult.code === 0) {
               buildOk = true;
               await appendLog(deploymentId, `[${ts()}] ✓ Nuxt static site generated`);
             } else {
               await appendLog(deploymentId, `[${ts()}] ℹ nuxt generate failed (likely API deps), building as SPA...`);
-              // Build with static preset — even if prerender fails, we get the client bundle
-              const buildResult = await runCmd("npm", ["run", "build"], { cwd: repoDir, env: staticEnv });
-              if (buildResult.code === 0) {
-                buildOk = true;
-                await appendLog(deploymentId, `[${ts()}] ✓ Nuxt built with static preset`);
+              // Save the 200.html produced by the failed generate — it has correct script/link tags
+              const outputPublicDir = join(repoDir, ".output/public");
+              const saved200 = existsSync(join(outputPublicDir, "200.html"))
+                ? readFileSync(join(outputPublicDir, "200.html"), "utf-8") : null;
+              // Normal build produces client assets without triggering prerender
+              const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
+              if (buildRes.code === 0 || existsSync(join(outputPublicDir, "_nuxt")) || existsSync(join(repoDir, ".nuxt/dist/client/_nuxt"))) {
+                // Ensure .output/public/_nuxt exists
+                if (!existsSync(join(outputPublicDir, "_nuxt"))) {
+                  const src = join(repoDir, ".nuxt/dist/client/_nuxt");
+                  if (existsSync(src)) {
+                    const { cpSync } = await import("node:fs");
+                    mkdirSync(outputPublicDir, { recursive: true });
+                    cpSync(src, join(outputPublicDir, "_nuxt"), { recursive: true });
+                  }
+                }
+                // Restore saved 200.html as index.html
+                if (saved200 && existsSync(join(outputPublicDir, "_nuxt"))) {
+                  writeFs(join(outputPublicDir, "index.html"), saved200, "utf-8");
+                }
+                buildOk = existsSync(join(outputPublicDir, "_nuxt"));
+                if (buildOk) await appendLog(deploymentId, `[${ts()}] ✓ Nuxt SPA built`);
               }
+            }
+          } else if (isNext) {
+            // Next.js: `next build` then `next export` (or output: 'export' in next.config)
+            const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
+            if (buildRes.code === 0) {
+              buildOk = true;
+              // Try next export if out/ doesn't exist yet
+              if (!existsSync(join(repoDir, "out"))) {
+                await runCmd("npx", ["next", "export"], { cwd: repoDir });
+              }
+              await appendLog(deploymentId, `[${ts()}] ✓ Next.js static site built`);
             }
           }
 
+          // Generic fallback for React (CRA/Vite), Vue, Svelte, Angular, Astro, etc.
           if (!buildOk) {
-            const buildResult = await runCmd("npm", ["run", "build"], { cwd: repoDir, env: staticEnv });
-            if (buildResult.code === 0) {
+            const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
+            if (buildRes.code === 0) {
               buildOk = true;
               await appendLog(deploymentId, `[${ts()}] ✓ Static site built`);
             } else {
-              const genResult2 = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir, env: staticEnv });
-              if (genResult2.code === 0) {
+              // Last resort: try generate script if it exists
+              const genRes = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir });
+              if (genRes.code === 0) {
                 buildOk = true;
                 await appendLog(deploymentId, `[${ts()}] ✓ Static site generated`);
               } else {
@@ -556,82 +587,57 @@ export async function handlePulumiDeploy(
             }
           }
 
-          // Determine build output directory (check most specific first)
-          const { existsSync, writeFileSync: writeFs } = await import("node:fs");
-          const possibleDirs = [".output/public", "dist", "build", "out", ".next/out", "output", "public"];
+          // ── Step 2: Find the build output directory ──
+          // Frameworks output to different directories:
+          //   Nuxt: .output/public    Next.js: out         Astro: dist
+          //   React/Vue/Svelte: dist  Angular: dist/<name>  SvelteKit: build
+          const possibleDirs = [
+            ".output/public",  // Nuxt
+            "out",             // Next.js
+            "dist",            // Vite (React/Vue/Svelte), Astro, Angular
+            "build",           // Create React App, SvelteKit
+            ".next/out",       // Next.js (older)
+            "output",          // Generic
+            "public",          // Hugo, some configs
+          ];
           let uploadDir = repoDir;
+          // Prefer a dir that has index.html
           for (const dir of possibleDirs) {
-            if (existsSync(join(repoDir, dir))) { uploadDir = join(repoDir, dir); break; }
+            const candidate = join(repoDir, dir);
+            if (existsSync(join(candidate, "index.html"))) { uploadDir = candidate; break; }
           }
-
-          // If no index.html in the upload dir, try to find one elsewhere
-          if (!existsSync(join(uploadDir, "index.html"))) {
+          // If none had index.html, pick the first that exists
+          if (uploadDir === repoDir) {
             for (const dir of possibleDirs) {
-              const candidate = join(repoDir, dir);
-              if (existsSync(join(candidate, "index.html"))) { uploadDir = candidate; break; }
+              if (existsSync(join(repoDir, dir))) { uploadDir = join(repoDir, dir); break; }
+            }
+          }
+          // For Angular, check dist/<project-name>/browser or dist/<project-name>
+          if (uploadDir === repoDir && existsSync(join(repoDir, "dist"))) {
+            const distEntries = readdirSync(join(repoDir, "dist"));
+            for (const entry of distEntries) {
+              const candidate = join(repoDir, "dist", entry);
+              if (statSync(candidate).isDirectory()) {
+                if (existsSync(join(candidate, "browser", "index.html"))) { uploadDir = join(candidate, "browser"); break; }
+                if (existsSync(join(candidate, "index.html"))) { uploadDir = candidate; break; }
+              }
             }
           }
 
-          // If still no index.html, generate a SPA fallback that loads the client bundle
+          // ── Step 3: Ensure index.html exists ──
           if (!existsSync(join(uploadDir, "index.html"))) {
-            await appendLog(deploymentId, `[${ts()}] ℹ No index.html found — generating SPA fallback`);
-            // Check for 200.html (Nuxt SPA fallback) and use it as index.html
+            // Check for 200.html (Nuxt SPA fallback)
             if (existsSync(join(uploadDir, "200.html"))) {
-              const { copyFileSync } = await import("node:fs");
               copyFileSync(join(uploadDir, "200.html"), join(uploadDir, "index.html"));
               await appendLog(deploymentId, `[${ts()}] ✓ Using 200.html as index.html`);
             } else {
-              // Look for the client manifest to build a minimal SPA shell
-              const clientDir = join(repoDir, ".nuxt/dist/client");
-              const outputPublicDir = join(repoDir, ".output/public");
-              // If .output/public exists with _nuxt assets but no index.html, create one
-              if (existsSync(join(outputPublicDir, "_nuxt")) || existsSync(join(clientDir, "_nuxt"))) {
-                const assetDir = existsSync(join(outputPublicDir, "_nuxt")) ? outputPublicDir : clientDir;
-                // Find the entry JS file from the manifest
-                let entryScript = "";
-                const manifestPath = join(assetDir, "manifest.json");
-                if (existsSync(manifestPath)) {
-                  try {
-                    const { readFileSync: readManifest } = await import("node:fs");
-                    const manifest = JSON.parse(readManifest(manifestPath, "utf-8"));
-                    // Find the entry point (usually the largest JS file or one with isEntry)
-                    for (const [, value] of Object.entries(manifest) as [string, any][]) {
-                      if (value.isEntry && value.file) { entryScript = `/_nuxt/${value.file}`; break; }
-                    }
-                    if (!entryScript) {
-                      // Fallback: find any JS entry
-                      for (const [, value] of Object.entries(manifest) as [string, any][]) {
-                        if (value.file?.endsWith(".js")) { entryScript = `/_nuxt/${value.file}`; break; }
-                      }
-                    }
-                  } catch {}
-                }
-                const spaHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Loading...</title>
-  ${entryScript ? `<script type="module" src="${entryScript}"></script>` : ""}
-</head>
-<body>
-  <div id="__nuxt"></div>
-</body>
-</html>`;
-                writeFs(join(uploadDir, "index.html"), spaHtml, "utf-8");
-                await appendLog(deploymentId, `[${ts()}] ✓ Generated SPA fallback index.html`);
-              } else {
-                // Generic fallback
-                writeFs(join(uploadDir, "index.html"), `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Site</title></head><body><p>Deployment complete. Static files uploaded.</p></body></html>`, "utf-8");
-                await appendLog(deploymentId, `[${ts()}] ⚠ Generated placeholder index.html`);
-              }
+              await appendLog(deploymentId, `[${ts()}] ⚠ No index.html found in build output`);
             }
           }
 
           await appendLog(deploymentId, `[${ts()}] ℹ Uploading from: ${uploadDir.replace(repoDir, ".")}`);
 
           // Upload files recursively using GCS JSON API
-          const { readdirSync, statSync, readFileSync } = await import("node:fs");
           const mimeTypes: Record<string, string> = {
             ".html": "text/html", ".css": "text/css", ".js": "application/javascript",
             ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",
