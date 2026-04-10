@@ -260,7 +260,7 @@ export const destroyDeployment = api(
           const destroyLog = noStateErrors.length > 0
             ? `\n[${ts}] ⚠ No Pulumi state — direct API cleanup attempted. Errors: ${noStateErrors.join("; ")}`
             : `\n[${ts}] ✓ No Pulumi state — Cloud Run resources destroyed via direct API`;
-          await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+          await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
           return { success: noStateErrors.length === 0, message: noStateErrors.length > 0 ? `Partially destroyed: ${noStateErrors.join("; ")}` : "Cloud Run resources destroyed via direct GCP API" };
         }
 
@@ -341,12 +341,12 @@ export const destroyDeployment = api(
           const destroyLog = noStateErrors.length > 0
             ? `\n[${ts}] ⚠ No Pulumi state — direct API cleanup attempted. Errors: ${noStateErrors.join("; ")}`
             : `\n[${ts}] ✓ No Pulumi state — Cloud Storage + CDN resources destroyed via direct API`;
-          await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+          await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
           return { success: noStateErrors.length === 0, message: noStateErrors.length > 0 ? `Partially destroyed: ${noStateErrors.join("; ")}` : "Cloud Storage + CDN resources destroyed via direct GCP API" };
         }
 
         const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
-        await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${`\n[${ts}] ⚠ No Pulumi state found — marked as destroyed but resources may still exist in cloud`}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+        await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', logs = logs || ${`\n[${ts}] ⚠ No Pulumi state found — marked as destroyed but resources may still exist in cloud`}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
         return { success: true, message: "Marked as destroyed (no Pulumi state to clean up)" };
       }
 
@@ -526,7 +526,7 @@ export const destroyDeployment = api(
       const destroyLog = errors.length > 0
         ? `\n[${ts}] ⚠ Partially destroyed. Errors: ${errors.join("; ")}`
         : `\n[${ts}] ✓ Infrastructure destroyed via Pulumi`;
-      await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+      await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
 
       if (errors.length > 0) return { success: false, message: `Partially destroyed. Errors: ${errors.join("; ")}` };
       return { success: true, message: "Infrastructure destroyed via Pulumi." };
@@ -592,7 +592,7 @@ export const destroyDeployment = api(
     const destroyLog = errors.length > 0
       ? `\n[${destroyTs}] ⚠ Partially destroyed. Errors: ${errors.join("; ")}`
       : `\n[${destroyTs}] ✓ Infrastructure destroyed (stack: ${stackName}, ECR: ${appName})`;
-    await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
+    await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', logs = logs || ${destroyLog}, updated_at = NOW() WHERE id = ${params.deploymentId}`;
 
     if (errors.length > 0) return { success: false, message: `Partially destroyed. Errors: ${errors.join("; ")}` };
     return { success: true, message: `Destroyed stack ${stackName}, ECR repo ${appName}.` };

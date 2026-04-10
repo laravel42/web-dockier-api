@@ -323,10 +323,12 @@ export async function handlePulumiDeploy(
     await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
 
-  // Restore state from previous deployment
+  // Restore state from previous deployment (only from successful ones — failed/destroyed may have stale resources)
   const prevDeploy = await db.queryRow<{ tofu_script: string }>`
     SELECT tofu_script FROM deployments WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
-      AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId} ORDER BY created_at DESC LIMIT 1`;
+      AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
+      AND status = 'success'
+      ORDER BY created_at DESC LIMIT 1`;
   if (prevDeploy?.tofu_script) {
     const stateMarker = prevDeploy.tofu_script.indexOf("/* STATE */\n");
     if (stateMarker !== -1) {
@@ -346,6 +348,60 @@ export async function handlePulumiDeploy(
           else await appendLog(deploymentId, `[${ts()}] ⚠ State import failed, deploying fresh`);
         }
       } catch {}
+    }
+  }
+
+  // For GCP Cloud Run: if no previous state was restored, check if the service already exists
+  // and inject import directives so Pulumi adopts existing resources instead of failing with 409
+  if (provider === "gcp" && event.deployStrategy === "managed" && !prevDeploy?.tofu_script) {
+    try {
+      const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
+      const gcpProjectId = saKey.project_id || "";
+      if (gcpProjectId && saKey.client_email && saKey.private_key) {
+        const { createSign } = await import("node:crypto");
+        const now = Math.floor(Date.now() / 1000);
+        const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+        const jwtClaim = Buffer.from(JSON.stringify({
+          iss: saKey.client_email,
+          scope: "https://www.googleapis.com/auth/cloud-platform",
+          aud: "https://oauth2.googleapis.com/token",
+          iat: now, exp: now + 3600,
+        })).toString("base64url");
+        const signInput = `${jwtHeader}.${jwtClaim}`;
+        const signer = createSign("RSA-SHA256");
+        signer.update(signInput);
+        const signature = signer.sign(saKey.private_key, "base64url");
+        const accessToken = ((await (await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
+        })).json()) as { access_token?: string }).access_token || "";
+
+        if (accessToken) {
+          let arRegion = region;
+          const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+          if (regionMatch) arRegion = regionMatch[1];
+          const serviceName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+
+          const checkRes = await fetch(
+            `https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (checkRes.ok) {
+            await appendLog(deploymentId, `[${ts()}] ℹ Existing Cloud Run service found — importing`);
+            // Read current Pulumi program and add import option to the Cloud Run service resource
+            const indexPath = join(pulumiDir, "index.ts");
+            let program = await ctx.readFs(indexPath, "utf-8");
+            program = program.replace(
+              /}, \{ dependsOn: \[cloudRunApi\] \}\);(\s*\/\/ ── Allow unauthenticated)/,
+              `}, { dependsOn: [cloudRunApi], import: \`projects/\${project}/locations/\${region}/services/${serviceName}\` });$1`
+            );
+            await ctx.writeFile(indexPath, program, "utf-8");
+          }
+        }
+      }
+    } catch (e: any) {
+      await appendLog(deploymentId, `[${ts()}] ⚠ Cloud Run import check: ${e.message} (continuing)`);
     }
   }
 
