@@ -112,7 +112,6 @@ const PROVIDER_META: Record<string, { name: string; icon: string; color: string;
     services: [
       { type: "managed", label: "Managed", name: "ECS Fargate", description: "Serverless containers — no servers to manage, auto-scaling included" },
       { type: "vps", label: "VPS", name: "EC2 Instance", description: "Full control over a virtual machine with Docker" },
-      { type: "serverless", label: "Serverless", name: "App Runner", description: "Fully managed, auto-scaling web service from source or image" },
       { type: "static", label: "Free", name: "S3 + CloudFront", description: "Static website hosting with global CDN" },
     ],
   },
@@ -686,33 +685,6 @@ function getPlans(
     },
   ];
 
-  const awsAppRunnerPlans: Plan[] = [
-    {
-      tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
-      instance: "0.25 vCPU / 0.5 GB", cpu: "0.25 vCPU", ram: "0.5 GB",
-      storage: "Included", network: "Included",
-      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
-      monthlyPrice: isProd ? "~$25/mo" : "~$10/mo",
-      breakdown: [{ item: "App Runner", cost: isProd ? "$20" : "$8" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$5" }))],
-    },
-    {
-      tier: "balanced", label: "Standard", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
-      instance: "0.5 vCPU / 1 GB", cpu: "0.5 vCPU", ram: "1 GB",
-      storage: "Included", network: "Included",
-      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
-      monthlyPrice: isProd ? "~$50/mo" : "~$25/mo",
-      breakdown: [{ item: "App Runner", cost: isProd ? "$45" : "$22" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$10" }))],
-    },
-    {
-      tier: "performance", label: "Performance", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
-      instance: "1 vCPU / 2 GB", cpu: "1 vCPU", ram: "2 GB",
-      storage: "Included", network: "Included",
-      managedServices: managedSvcs.map(s => MANAGED_INFO.AWS?.[s]?.service || s),
-      monthlyPrice: isProd ? "~$100/mo" : "~$50/mo",
-      breakdown: [{ item: "App Runner", cost: isProd ? "$90" : "$45" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.AWS?.[s]?.service || s, cost: MANAGED_INFO.AWS?.[s]?.cost || "~$15" }))],
-    },
-  ];
-
   const awsS3Plans: Plan[] = [
     {
       tier: "value", label: "S3 + CloudFront (Free Tier)", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
@@ -748,7 +720,7 @@ function getPlans(
   ];
 
   const plans: Record<string, Plan[]> = {
-    aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "serverless" ? awsAppRunnerPlans : deployStrategy === "static" ? awsS3Plans : awsEcsPlans,
+    aws: deployStrategy === "vps" ? awsEc2Plans : deployStrategy === "static" ? awsS3Plans : awsEcsPlans,
     gcp: deployStrategy === "static" ? gcpStaticPlans : deployStrategy === "managed" ? [
       {
         tier: "value", label: "Starter", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
@@ -1399,10 +1371,9 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
       // ── CodeBuild path: build image first via image-builder, then deploy ──
       if (state.buildMethod === "codebuild") {
         const ts0 = new Date().toISOString().replace("T", " ").slice(0, 19);
-        const deployTargetMap: Record<string, "ecs" | "apprunner" | "ec2" | "s3"> = {
+        const deployTargetMap: Record<string, "ecs" | "ec2" | "s3"> = {
           vps: "ec2",
           managed: "ecs",
-          serverless: "apprunner",
           static: "s3",
         };
         const deployTarget = deployTargetMap[state.deployStrategy] || "ec2";

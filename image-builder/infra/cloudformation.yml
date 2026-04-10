@@ -357,7 +357,7 @@ Resources:
           cfn = boto3.client('cloudformation')
           ec2 = boto3.client('ec2')
 
-          TEMPLATE_MAP = {'ecs': 'ecs-fargate.yml', 'apprunner': 'apprunner.yml', 'ec2': 'ec2.yml', 's3': 's3.yml'}
+          TEMPLATE_MAP = {'ecs': 'ecs-fargate.yml', 'ec2': 'ec2.yml', 's3': 's3.yml'}
 
           def get_default_vpc():
             vpcs = ec2.describe_vpcs(Filters=[{'Name': 'is-default', 'Values': ['true']}])

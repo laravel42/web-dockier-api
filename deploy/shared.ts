@@ -42,7 +42,6 @@ export interface ProviderResponse {
   provider: string;
   label: string;
   region: string;
-  appRunnerConnectionArn?: string;
   createdAt: string;
 }
 

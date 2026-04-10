@@ -383,7 +383,6 @@ export const deployApi = {
     apiKey: string;
     apiSecret: string;
     region?: string;
-    appRunnerConnectionArn?: string;
   }) =>
     request("/deploy/providers", {
       method: "POST",
@@ -393,7 +392,7 @@ export const deployApi = {
   deleteProvider: (providerId: string) =>
     request(`/deploy/providers/${providerId}`, { method: "DELETE" }),
 
-  updateProvider: (providerId: string, data: { label?: string; appRunnerConnectionArn?: string; apiSecret?: string }) =>
+  updateProvider: (providerId: string, data: { label?: string; apiSecret?: string }) =>
     request(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listDeployments: (providerId?: string) =>
@@ -696,7 +695,7 @@ export const imageBuilderApi = {
     tags?: string[];
     projectId?: string;
     gitConnectionId?: string;
-    deployTarget?: "ecs" | "apprunner" | "ec2" | "s3";
+    deployTarget?: "ecs" | "ec2" | "s3";
     deployParams?: {
       appName?: string;
       containerPort?: number;

@@ -120,7 +120,7 @@ function getEstimatedResources(provider: string, runtime: { name: string }, hasD
       if (managedSvcs.some(s => s.type === "storage")) resources.push("vultr_object_storage");
       break;
     case "aws":
-      resources.push("aws_apprunner_service");
+      resources.push("aws_ecs_service (ECS Fargate)");
       if (managedSvcs.some(s => s.type === "database")) resources.push("aws_rds_instance (Managed PostgreSQL/MySQL)");
       if (managedSvcs.some(s => s.type === "cache")) resources.push("aws_elasticache_cluster (Managed Redis)");
       if (managedSvcs.some(s => s.type === "queue")) resources.push("aws_sqs_queue (Managed Queue)");

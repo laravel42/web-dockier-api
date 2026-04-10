@@ -19,8 +19,7 @@ export function generateAppUrl(provider: string, repoName: string, shortId: stri
     case "linode": return `https://${slug}.linodeobjects.com`;
     case "aws":
       if (deployStrategy === "vps") return `http://ec2-${slug}.compute-1.amazonaws.com`;
-      if (deployStrategy === "managed") return `https://${slug}.${region}.elb.amazonaws.com`;
-      return `https://${slug}.${region}.awsapprunner.com`;
+      return `https://${slug}.${region}.elb.amazonaws.com`;
     case "upcloud": return `https://${slug}.upcloud.app`;
     case "katapult": return `https://${slug}.katapult.io`;
     case "hostinger": return `https://${slug}.hostinger.app`;

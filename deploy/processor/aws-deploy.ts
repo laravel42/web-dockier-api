@@ -12,7 +12,7 @@ export async function handleAwsDeploy(
     shortId: string;
     provider: string;
     region: string;
-    providerRow: { api_key: string; api_secret: string; app_runner_connection_arn: string };
+    providerRow: { api_key: string; api_secret: string };
     repoDir: string;
     workDir: string;
     commitHash: string;
@@ -69,7 +69,7 @@ export async function handleAwsDeploy(
   await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: s3Key, Body: zipBuffer, ContentType: "application/zip" }));
   await appendLog(deploymentId, `[${ts()}] ✓ Source uploaded to S3 (${bucketName}/${s3Key})`);
 
-  const deployTargetMap: Record<string, string> = { vps: "ec2", managed: "ecs", serverless: "apprunner" };
+  const deployTargetMap: Record<string, string> = { vps: "ec2", managed: "ecs" };
   const deployTarget = deployTargetMap[event.deployStrategy] || "ec2";
   const deployParams: Record<string, any> = { appName: repoName, containerPort: ctx.repoConfig.port || 3000 };
   if (deployTarget === "ecs") { deployParams.cpu = "512"; deployParams.memory = "1024"; }

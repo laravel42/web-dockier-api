@@ -50,15 +50,6 @@ export function suggestDeployOptions(tech: TechStackItem[], hasDocker: boolean, 
       estimatedMonthlyCost: "$15 – $70/mo (small) | $100 – $500+/mo (production)",
       bestFor: "Containerized microservices, variable traffic workloads",
     });
-    options.push({
-      provider: "AWS",
-      type: "App Runner (Container)",
-      description: "Simplified container hosting — deploy from source or container image with minimal config.",
-      pros: ["Simplest AWS container option", "Auto-scaling & HTTPS built-in", "Deploy from ECR or GitHub", "No VPC setup required"],
-      cons: ["Limited configuration options", "No GPU support", "Fewer integrations than ECS", "Higher per-request cost than Fargate"],
-      estimatedMonthlyCost: "$5 – $25/mo (small) | $50 – $200+/mo (production)",
-      bestFor: "Simple containerized APIs, teams wanting AWS without complexity",
-    });
   }
   if (isStatic || names.has("Vite") || names.has("Astro") || hasNextjs) {
     options.push({

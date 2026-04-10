@@ -4,7 +4,6 @@ import { buildDockerUserData } from "./user-data";
 /** Generate a Pulumi TypeScript program for AWS */
 export function buildAws(p: DeployParams): string {
   if (p.deployStrategy === "vps") return buildAwsEc2(p);
-  if (p.deployStrategy === "serverless") return buildAwsAppRunner(p);
   // "managed" or default → ECS Fargate
   return buildAwsEcsFargate(p);
 }
@@ -158,103 +157,6 @@ export const imageDigest = image.repoDigest;
 export const clusterName = cluster.name;
 export const serviceName = service.name;
 export const appUrl = pulumi.interpolate\`ecs-fargate://\${cluster.name}.\${region}\`;
-`;
-}
-
-function buildAwsAppRunner(p: DeployParams): string {
-  return `import * as pulumi from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
-import * as docker from "@pulumi/docker";
-
-// ─────────────────────────────────────────────────
-// AWS App Runner (Docker via ECR)
-// App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
-// Repo: ${p.repo}@${p.branch}
-// ─────────────────────────────────────────────────
-
-const config = new pulumi.Config();
-const region = config.get("region") || "${p.region}";
-const buildContext = config.get("buildContext") || ".";
-
-// ── ECR Repository ──
-const ecrRepo = new aws.ecr.Repository("${p.appName}", {
-  name: "${p.appName}",
-  imageTagMutability: "MUTABLE",
-  forceDelete: true,
-  imageScanningConfiguration: { scanOnPush: false },
-});
-
-// ── ECR Auth ──
-const authToken = aws.ecr.getAuthorizationTokenOutput({
-  registryId: ecrRepo.registryId,
-});
-
-// ── Build & Push Docker Image to ECR ──
-const image = new docker.Image("${p.appName}-image", {
-  imageName: pulumi.interpolate\`\${ecrRepo.repositoryUrl}:latest\`,
-  build: {
-    context: buildContext,
-    dockerfile: buildContext + "/Dockerfile",
-    builderVersion: docker.BuilderVersion.BuilderV1,
-  },
-  registry: {
-    server: ecrRepo.repositoryUrl.apply(url => url.split("/")[0]),
-    username: authToken.userName,
-    password: authToken.password,
-  },
-});
-
-// ── IAM Role for App Runner ECR access ──
-const accessRole = new aws.iam.Role("${p.appName}-apprunner-ecr", {
-  name: "${p.appName}-apprunner-ecr",
-  assumeRolePolicy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [{
-      Action: "sts:AssumeRole",
-      Effect: "Allow",
-      Principal: { Service: "build.apprunner.amazonaws.com" },
-    }],
-  }),
-});
-
-new aws.iam.RolePolicyAttachment("${p.appName}-apprunner-ecr-policy", {
-  role: accessRole.name,
-  policyArn: "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
-});
-
-// ── App Runner Service (from ECR image) ──
-const appRunner = new aws.apprunner.Service("${p.appName}", {
-  serviceName: "${p.appName}",
-  sourceConfiguration: {
-    authenticationConfiguration: { accessRoleArn: accessRole.arn },
-    autoDeploymentsEnabled: false,
-    imageRepository: {
-      imageIdentifier: image.repoDigest,
-      imageRepositoryType: "ECR",
-      imageConfiguration: {
-        port: "${p.runtime.port}",
-        runtimeEnvironmentVariables: {
-          PORT: "${p.runtime.port}",
-        },
-      },
-    },
-  },
-  instanceConfiguration: { cpu: "1024", memory: "2048" },
-  healthCheckConfiguration: {
-    protocol: "HTTP",
-    path: "/",
-    interval: 10,
-    timeout: 5,
-    healthyThreshold: 1,
-    unhealthyThreshold: 5,
-  },
-  tags: { Name: "${p.appName}", Environment: "production", ManagedBy: "pulumi" },
-});
-
-export const ecrRepositoryUrl = ecrRepo.repositoryUrl;
-export const imageDigest = image.repoDigest;
-export const appUrl = appRunner.serviceUrl.apply((url) => \`https://\${url}\`);
-export const serviceArn = appRunner.arn;
 `;
 }
 

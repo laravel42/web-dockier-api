@@ -36,7 +36,7 @@ interface Project {
   connectionId: string;
 }
 
-const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate", serverless: "App Runner" };
+const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate" };
 
 export default function DeployDetail() {
   const { deployId } = useParams<{ deployId: string }>();

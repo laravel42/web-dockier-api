@@ -11,8 +11,8 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const repoName = event.repo.split("/").pop() || "app";
     const shortId = deploymentId.slice(0, 8);
 
-    const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string; app_runner_connection_arn: string }>`
-      SELECT provider, region, api_key, api_secret, COALESCE(app_runner_connection_arn, '') as app_runner_connection_arn FROM server_providers WHERE id = ${event.providerId}`;
+    const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string }>`
+      SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
     const defaultRegions: Record<string, string> = {
       aws: "us-east-1", digitalocean: "nyc3", hetzner: "nbg1", vultr: "ewr",
