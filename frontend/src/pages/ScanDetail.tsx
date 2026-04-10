@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, integrationsApi, gitApi } from "../services/api";
 import { INTEGRATION_CATALOG } from "../data/integrations";
 import Modal from "../components/Modal";
+import { parseOwnerRepo } from "../utils/parseOwnerRepo";
 import SeverityBadge from "../components/SeverityBadge";
 
 const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
@@ -57,19 +58,6 @@ interface PMIntegration {
   name: string;
   config: Record<string, string>;
   enabled: boolean;
-}
-
-function parseOwnerRepo(repoUrl: string): { owner: string; repo: string } | null {
-  try {
-    const u = new URL(repoUrl);
-    const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
-    if (parts.length >= 2) {
-      const repo = parts[parts.length - 1];
-      const owner = parts.slice(0, parts.length - 1).join("/");
-      return { owner, repo };
-    }
-  } catch {}
-  return null;
 }
 
 interface ScanProgress {
