@@ -10,9 +10,10 @@ import TechBadge from "../components/TechBadge";
 import PlatformBadge from "../components/PlatformBadge";
 import SourceControlBadge from "../components/SourceControlBadge";
 
+import { btnSecondary } from "../utils/styles";
+
 const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
 const btnPrimary = "h-10 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors shadow-sm";
-const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
 
 
 

@@ -5,9 +5,7 @@ import { INTEGRATION_CATALOG } from "../data/integrations";
 import Modal from "../components/Modal";
 import { parseOwnerRepo } from "../utils/parseOwnerRepo";
 import SeverityBadge from "../components/SeverityBadge";
-
-const btnSecondary = "h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors";
-const cardCls = "bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)]";
+import { btnSecondary, cardCls } from "../utils/styles";
 
 interface ScanSummary {
   totalFindings: number;
