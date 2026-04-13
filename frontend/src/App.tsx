@@ -12,7 +12,7 @@ import DeployDetail from "./pages/DeployDetail";
 import Settings from "./pages/Settings";
 import Projects from "./pages/Projects/index";
 import ProjectDetail from "./pages/ProjectDetail";
-import SecurityScans from "./pages/SecurityScans";
+import SecurityScans from "./pages/SecurityScans/index";
 import ScanDetail from "./pages/ScanDetail";
 import type { ReactNode } from "react";
 
