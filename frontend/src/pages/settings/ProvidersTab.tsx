@@ -26,8 +26,8 @@ export default function ProvidersTab() {
 
   useEffect(() => { fetch_(); }, []);
 
-  const apiKeyOnlyProviders = ["digitalocean"];
-  const needsSecret = !apiKeyOnlyProviders.includes(form.provider) && !["hetzner", "linode"].includes(form.provider);
+  const apiKeyOnlyProviders: string[] = [];
+  const needsSecret = !apiKeyOnlyProviders.includes(form.provider);
 
   const credLabel1 = "API Key";
   const credLabel2 = "API Secret";
@@ -70,11 +70,7 @@ export default function ProvidersTab() {
             <label htmlFor="provider-type" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
             <select id="provider-type" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className={inputCls}>
               <option value="aws">AWS</option>
-              <option value="googlecloud">Google Cloud</option>
-              <option value="digitalocean">DigitalOcean</option>
-              <option value="cloudflare">Cloudflare</option>
-              <option value="hetzner">Hetzner</option>
-              <option value="linode">Linode</option>
+              <option value="gcp">Google Cloud</option>
             </select>
           </div>
           <div>

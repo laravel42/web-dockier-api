@@ -2,8 +2,12 @@ import type { WizardState } from "../types";
 import { PROVIDER_META } from "../constants";
 import CheckCircleIcon from "../../icons/filled/CheckCircleIcon";
 
-export default function StepService({ state, onChange }: {
+/** Templates that cannot use static hosting (they need a server runtime). */
+const STATIC_INCOMPATIBLE_TEMPLATES = ["wordpress"];
+
+export default function StepService({ state, templateId, onChange }: {
   state: WizardState;
+  templateId?: string;
   onChange: (strategy: "vps" | "managed" | "static") => void;
 }) {
   const meta = PROVIDER_META[state.selectedProvider];
@@ -22,15 +26,19 @@ export default function StepService({ state, onChange }: {
       <div className="space-y-2">
         {meta.services.map((svc) => {
           const selected = state.deployStrategy === svc.type;
+          const disabled = svc.type === "static" && STATIC_INCOMPATIBLE_TEMPLATES.includes(templateId || "");
           return (
             <button
               key={svc.type}
               type="button"
-              onClick={() => onChange(svc.type)}
+              onClick={() => { if (!disabled) onChange(svc.type); }}
+              disabled={disabled}
               className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                selected
-                  ? "border-primary-500 bg-primary-50"
-                  : "border-border bg-card hover:border-primary-300"
+                disabled
+                  ? "opacity-40 cursor-not-allowed border-border bg-card"
+                  : selected
+                    ? "border-primary-500 bg-primary-50"
+                    : "border-border bg-card hover:border-primary-300"
               }`}
             >
               <span className="text-2xl mt-0.5">{typeIcons[svc.type] || "📦"}</span>
@@ -42,9 +50,12 @@ export default function StepService({ state, onChange }: {
                     "bg-warning-50 text-warning-500"
                   }`}>{svc.label}</span>
                 </div>
-                <p className="text-xs text-text-muted mt-1">{svc.description}</p>
+                <p className="text-xs text-text-muted mt-1">
+                  {svc.description}
+                  {disabled && " — not available for this template"}
+                </p>
               </div>
-              {selected && (
+              {selected && !disabled && (
                 <CheckCircleIcon className="w-5 h-5 text-primary-500 shrink-0 mt-1" />
               )}
             </button>

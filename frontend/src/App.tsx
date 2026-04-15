@@ -10,10 +10,10 @@ import Notifications from "./pages/Notifications";
 import Deploy from "./pages/Deploy";
 import DeployDetail from "./pages/DeployDetail";
 import Settings from "./pages/Settings";
-import Projects from "./pages/Projects";
+import Projects from "./pages/Projects/index";
 import ProjectDetail from "./pages/ProjectDetail";
-import SecurityScans from "./pages/SecurityScans";
-import ScanDetail from "./pages/ScanDetail";
+import SecurityScans from "./pages/SecurityScans/index";
+import ScanDetail from "./pages/ScanDetail/index";
 import type { ReactNode } from "react";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {

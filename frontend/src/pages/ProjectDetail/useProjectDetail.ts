@@ -5,6 +5,47 @@ import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import type { Project, RepoStats, DeployInfo, ProviderInfo } from "./types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
+// Pre-built analysis data for template projects (no repo analysis needed)
+const TEMPLATE_ANALYSIS: Record<string, RepoAnalysis> = {
+  wordpress: {
+    techStack: [
+      { name: "WordPress", category: "CMS", confidence: 1 },
+      { name: "PHP", category: "Language", confidence: 1 },
+      { name: "MySQL", category: "Database", confidence: 1 },
+      { name: "Apache", category: "Server", confidence: 1 },
+    ],
+    deployOptions: [],
+    detectedServices: [
+      { type: "database", name: "MySQL", provider: "MySQL", confidence: 1 },
+    ],
+    repoSize: 0,
+    primaryLanguage: "PHP",
+    hasDocker: true,
+    hasCi: false,
+    aiAnalysis: {
+      runtime: "php",
+      runtimeVersion: "8.3",
+      framework: "WordPress",
+      frameworkVersion: "latest",
+      buildCommand: "",
+      startCommand: "apache2-foreground",
+      port: 80,
+      needsScheduler: false,
+      needsQueueWorker: false,
+      needsWebsockets: false,
+      envVars: [
+        "WORDPRESS_DB_HOST=host.docker.internal:3306",
+        "WORDPRESS_DB_USER=wordpress",
+        "WORDPRESS_DB_PASSWORD=wordpress",
+        "WORDPRESS_DB_NAME=wordpress",
+      ],
+      postDeployCommands: [],
+      nginxConfig: "reverse-proxy",
+      summary: "WordPress CMS with MySQL database, served via Apache on port 80.",
+    },
+  },
+};
+
 export function useProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -69,6 +110,15 @@ export function useProjectDetail() {
     projectsApi.get(projectId)
       .then((p) => {
         setProject(p);
+
+        // For template projects, use pre-built analysis data
+        if (p.sourceType === "template" && p.template && TEMPLATE_ANALYSIS[p.template]) {
+          setAnalysis(TEMPLATE_ANALYSIS[p.template]);
+          setAnalysisLoading(false);
+          // No stats to fetch for template projects
+          return;
+        }
+
         if (p.connectionId && p.repository) {
           const parsed = parseOwnerRepo(p.repository);
           if (parsed) {

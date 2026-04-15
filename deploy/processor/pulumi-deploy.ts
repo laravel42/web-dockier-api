@@ -104,12 +104,13 @@ export async function handlePulumiDeploy(
   await ctx.writeFile(join(pulumiDir, "package.json"), generatePackageJson(repoName, provider), "utf-8");
   await ctx.writeFile(join(pulumiDir, "tsconfig.json"), generateTsConfig(), "utf-8");
 
+  // Provider env vars
   const providerEnv: Record<string, string> = {};
-  if (provider === "digitalocean") providerEnv.DIGITALOCEAN_TOKEN = ctx.providerRow.api_key || "";
-  else if (provider === "hetzner") providerEnv.HCLOUD_TOKEN = ctx.providerRow.api_key || "";
-  else if (provider === "vultr") providerEnv.VULTR_API_KEY = ctx.providerRow.api_key || "";
-  else if (provider === "linode") providerEnv.LINODE_TOKEN = ctx.providerRow.api_key || "";
-  else if (provider === "gcp") {
+  if (provider === "aws") {
+    providerEnv.AWS_ACCESS_KEY_ID = ctx.providerRow.api_key || "";
+    providerEnv.AWS_SECRET_ACCESS_KEY = ctx.providerRow.api_secret || "";
+    providerEnv.AWS_DEFAULT_REGION = region;
+  } else if (provider === "gcp") {
     const credPath = join(pulumiDir, "gcp-credentials.json");
     await ctx.writeFile(credPath, ctx.providerRow.api_key || "{}", "utf-8");
     providerEnv.GOOGLE_CREDENTIALS = ctx.providerRow.api_key || "";
@@ -144,14 +145,13 @@ export async function handlePulumiDeploy(
   const { readFile: readFs2 } = await import("node:fs/promises");
   const deployPubKey = (await readFs2(deployPubKeyPath, "utf-8")).trim();
 
-  if (provider === "hetzner" || provider === "vultr" || provider === "linode" || (provider === "gcp" && event.deployStrategy !== "managed" && event.deployStrategy !== "static")) {
+  if ((provider === "gcp" && event.deployStrategy !== "managed" && event.deployStrategy !== "static")) {
     const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
     if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
     // Combine user key + deploy key so both can access the server
     const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
     await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
-  if (provider === "linode") await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   if (provider === "gcp") {
     let gcpProjectId = "";
     try {

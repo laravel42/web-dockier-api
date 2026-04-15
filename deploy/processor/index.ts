@@ -4,6 +4,8 @@ import { git_integration } from "~encore/clients";
 import { appendLog, ts } from "./helpers";
 import { handleAwsDeploy } from "./aws-deploy";
 import { handlePulumiDeploy } from "./pulumi-deploy";
+import { getTemplateConfig } from "../templates";
+import { handleTemplateDeploy } from "./template-deploy";
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
@@ -15,11 +17,33 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
     const defaultRegions: Record<string, string> = {
-      aws: "us-east-1", digitalocean: "nyc3", hetzner: "nbg1", vultr: "ewr",
-      linode: "us-east", gcp: "us-central1", upcloud: "us-nyc1",
+      aws: "us-east-1", gcp: "us-central1",
     };
     const region = providerRow?.region || defaultRegions[providerRow?.provider || ""] || "us-east-1";
 
+    // ── Template deploy path ──
+    // If this is a template-based project, skip clone/analyze and use pre-built Docker images
+    if (event.templateId) {
+      const templateConfig = getTemplateConfig(event.templateId);
+      if (templateConfig) {
+        // For template projects, use the project name instead of the repo URL
+        const projectRow = await db.queryRow<{ name: string }>`SELECT name FROM projects WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
+        const templateRepoName = projectRow?.name || repoName;
+        try {
+          await handleTemplateDeploy(event, templateConfig, {
+            deploymentId, repoName: templateRepoName, shortId, provider, region,
+            providerRow: providerRow!,
+          });
+        } catch (e: any) {
+          await appendLog(deploymentId, `[${ts()}]`);
+          await appendLog(deploymentId, `[${ts()}] ✗ Template deployment failed: ${e.message || e}`);
+          await db.exec`UPDATE deployments SET status = 'failed', updated_at = NOW() WHERE id = ${deploymentId}`;
+        }
+        return;
+      }
+    }
+
+    // ── Standard deploy path (clone repo, analyze, build, deploy) ──
     const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const { tmpdir, homedir } = await import("node:os");

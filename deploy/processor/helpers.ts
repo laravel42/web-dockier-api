@@ -12,31 +12,27 @@ export async function appendLog(deploymentId: string, line: string) {
 
 export function generateAppUrl(provider: string, repoName: string, shortId: string, region: string, deployStrategy?: string): string {
   const slug = `${repoName}-${shortId}`;
-  switch (provider) {
-    case "digitalocean": return `https://${slug}.ondigitalocean.app`;
-    case "hetzner": return `https://${slug}.${region}.hetzner.app`;
-    case "vultr": return `https://${slug}.vultr.app`;
-    case "linode": return `https://${slug}.linodeobjects.com`;
-    case "aws":
-      if (deployStrategy === "vps") return `http://ec2-${slug}.compute-1.amazonaws.com`;
-      return `https://${slug}.${region}.elb.amazonaws.com`;
-    case "upcloud": return `https://${slug}.upcloud.app`;
-    case "katapult": return `https://${slug}.katapult.io`;
-    case "hostinger": return `https://${slug}.hostinger.app`;
-    case "vercel": return `https://${slug}.vercel.app`;
-    case "netlify": return `https://${slug}.netlify.app`;
-    case "cloudflare": return `https://${slug}.pages.dev`;
-    case "railway": return `https://${slug}.up.railway.app`;
-    case "render": return `https://${slug}.onrender.com`;
-    case "flyio": return `https://${slug}.fly.dev`;
-    case "gcp":
-      if (deployStrategy === "managed") return `https://${slug}-${region}.run.app`;
-      if (deployStrategy === "static") return `http://${slug}.storage.googleapis.com`;
-      return `http://${slug}.${region}.compute.gcp`;
-    case "encore": return `https://${slug}.encr.app`;
-    default: return `https://${slug}.deploy.app`;
-  }
+  const generator = URL_GENERATORS[provider];
+  return generator ? generator(slug, region, deployStrategy) : `https://${slug}.deploy.app`;
 }
+
+type UrlGenerator = (slug: string, region: string, deployStrategy?: string) => string;
+
+/**
+ * URL generators per provider.
+ * To add a new provider, register its URL pattern here.
+ */
+const URL_GENERATORS: Record<string, UrlGenerator> = {
+  aws: (slug, region, deployStrategy) => {
+    if (deployStrategy === "vps") return `http://ec2-${slug}.compute-1.amazonaws.com`;
+    return `https://${slug}.${region}.elb.amazonaws.com`;
+  },
+  gcp: (slug, region, deployStrategy) => {
+    if (deployStrategy === "managed") return `https://${slug}-${region}.run.app`;
+    if (deployStrategy === "static") return `http://${slug}.storage.googleapis.com`;
+    return `http://${slug}.${region}.compute.gcp`;
+  },
+};
 
 export function generateAwsBuildspec(): string {
   return `version: 0.2

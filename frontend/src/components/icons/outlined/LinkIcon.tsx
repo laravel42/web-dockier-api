@@ -1,8 +1,9 @@
 interface IconProps {
   className?: string;
+  strokeWidth?: number;
 }
 
-export default function LinkIcon({ className = "w-5 h-5" }: IconProps) {
+export default function LinkIcon({ className = "w-5 h-5", strokeWidth = 1.5 }: IconProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -10,7 +11,7 @@ export default function LinkIcon({ className = "w-5 h-5" }: IconProps) {
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
-      strokeWidth={1.5}
+      strokeWidth={strokeWidth}
     >
       <path
         strokeLinecap="round"

@@ -9,7 +9,7 @@ A full-stack application with EncoreJS backend and React + Tailwind frontend.
 - **Groups & Roles**: Group management, role-based permissions, membership
 - **Git Integration**: Connect GitHub/GitLab/Bitbucket via personal tokens, browse repos & branches
 - **Notifications**: Multi-channel (email, Slack, webhook, in-app), pub/sub processing
-- **Deploy**: Server provider management (AWS, GCP, DigitalOcean, Hetzner), automated deployments
+- **Deploy**: Server provider management (AWS, GCP), automated deployments
 
 ## Architecture
 
