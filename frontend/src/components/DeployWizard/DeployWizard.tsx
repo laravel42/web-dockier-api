@@ -45,6 +45,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
         {step === 1 && (
           <StepService
             state={state}
+            templateId={project.sourceType === "template" ? project.template : undefined}
             onChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}
           />
         )}
