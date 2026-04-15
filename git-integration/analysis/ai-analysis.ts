@@ -80,8 +80,8 @@ Return ONLY a valid JSON object (no markdown, no explanation) with these exact f
   "summary": "1-2 sentence summary of the architecture",
   "deployOptions": [
     {
-      "provider": "provider name e.g. Hetzner, DigitalOcean, AWS, Vultr, Linode, Vercel, Railway, Render, Fly.io",
-      "type": "deployment type e.g. Cloud Server (VPS), App Platform, ECS Fargate, Managed Kubernetes",
+      "provider": "provider name e.g. AWS, GCP",
+      "type": "deployment type e.g. EC2 Instance, ECS Fargate, Cloud Run, Compute Engine, S3 + CloudFront",
       "description": "1-2 sentence description of why this option fits this specific project",
       "pros": ["3-4 specific pros for THIS project, not generic"],
       "cons": ["2-3 specific cons for THIS project, not generic"],
@@ -92,11 +92,12 @@ Return ONLY a valid JSON object (no markdown, no explanation) with these exact f
 }
 
 IMPORTANT for deployOptions:
-- Suggest 5-10 realistic options ranked by fit for this specific project
+- Suggest 3-6 realistic options ranked by fit for this specific project
+- Only suggest AWS and GCP as cloud providers
 - Consider the detected services (database, cache, queue, etc.) when estimating costs
-- For PHP/Laravel projects: prioritize VPS providers (Hetzner, Vultr, DigitalOcean) and PaaS that support PHP well
-- For Node.js/Python: include serverless and container options
-- For static sites: prioritize Vercel, Netlify, Cloudflare Pages
+- For PHP/Laravel projects: prioritize VPS options (AWS EC2, GCP Compute Engine) and managed container services
+- For Node.js/Python: include serverless and container options (ECS Fargate, Cloud Run)
+- For static sites: suggest AWS S3 + CloudFront or GCP Cloud Storage + CDN
 - Include at least one budget option and one premium/enterprise option
 - Be specific about WHY each option fits (or doesn't) based on the actual tech stack and services detected
 - Cost estimates should account for: compute + database + cache + storage needs

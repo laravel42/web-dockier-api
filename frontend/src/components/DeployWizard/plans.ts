@@ -152,32 +152,6 @@ export function getPlans(
         breakdown: [{ item: "Compute Engine", cost: "$200" }, { item: "Persistent Disk (SSD)", cost: "$17" }, { item: "Static IP", cost: "$1" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO["Google Cloud"]?.[s]?.service || s, cost: MANAGED_INFO["Google Cloud"]?.[s]?.cost || "~$15" }))],
       },
     ],
-    digitalocean: [
-      {
-        tier: "value", label: "Basic Droplet", badge: "Best Value", badgeColor: "bg-success-50 text-success-500",
-        instance: isProd ? "s-1vcpu-2gb" : "s-1vcpu-1gb", cpu: "1 vCPU", ram: isProd ? "2 GB" : "1 GB",
-        storage: "50 GB SSD", network: "1 TB transfer",
-        managedServices: managedSvcs.map(s => MANAGED_INFO.DigitalOcean?.[s]?.service || s),
-        monthlyPrice: isProd ? "$12/mo" : "$6/mo",
-        breakdown: [{ item: "Droplet", cost: isProd ? "$12" : "$6" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.DigitalOcean?.[s]?.service || s, cost: MANAGED_INFO.DigitalOcean?.[s]?.cost || "~$10" }))],
-      },
-      {
-        tier: "balanced", label: "General Purpose", badge: "Best Balance", badgeColor: "bg-primary-50 text-primary-600",
-        instance: isProd ? "g-2vcpu-8gb" : "s-2vcpu-4gb", cpu: "2 vCPU", ram: isProd ? "8 GB" : "4 GB",
-        storage: isProd ? "25 GB NVMe" : "80 GB SSD", network: isProd ? "4 TB transfer" : "4 TB transfer",
-        managedServices: managedSvcs.map(s => MANAGED_INFO.DigitalOcean?.[s]?.service || s),
-        monthlyPrice: isProd ? "$63/mo" : "$24/mo",
-        breakdown: [{ item: "Droplet", cost: isProd ? "$63" : "$24" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.DigitalOcean?.[s]?.service || s, cost: MANAGED_INFO.DigitalOcean?.[s]?.cost || "~$15" }))],
-      },
-      {
-        tier: "performance", label: "CPU-Optimized", badge: "Top Performance", badgeColor: "bg-secondary-100 text-text-secondary",
-        instance: isProd ? "c-4vcpu-8gb" : "c-2vcpu-4gb", cpu: isProd ? "4 vCPU (dedicated)" : "2 vCPU (dedicated)", ram: isProd ? "8 GB" : "4 GB",
-        storage: isProd ? "50 GB NVMe" : "25 GB NVMe", network: "5 TB transfer",
-        managedServices: managedSvcs.map(s => MANAGED_INFO.DigitalOcean?.[s]?.service || s),
-        monthlyPrice: isProd ? "$84/mo" : "$42/mo",
-        breakdown: [{ item: "Droplet", cost: isProd ? "$84" : "$42" }, ...managedSvcs.map(s => ({ item: MANAGED_INFO.DigitalOcean?.[s]?.service || s, cost: MANAGED_INFO.DigitalOcean?.[s]?.cost || "~$15" }))],
-      },
-    ],
   };
 
   // Generic fallback for providers without specific plans

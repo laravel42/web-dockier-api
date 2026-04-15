@@ -142,7 +142,7 @@ export const destroyDeployment = api(
     const region = providerRow.region || "us-east-1";
     const errors: string[] = [];
 
-    // ── Pulumi-based providers (GCP, Hetzner, DigitalOcean, Vultr, Linode, etc.) ──
+    // ── Pulumi-based providers (GCP, AWS with saved Pulumi state) ──
     // Also handles AWS Pulumi VPS deploys (template deploys) that have saved Pulumi state
     const tofuRow = await db.queryRow<{ tofu_script: string }>`
       SELECT tofu_script FROM deployments WHERE id = ${params.deploymentId}`;
@@ -396,11 +396,11 @@ export const destroyDeployment = api(
 
         // Provider env vars
         const providerEnv: Record<string, string> = {};
-        if (providerRow.provider === "digitalocean") providerEnv.DIGITALOCEAN_TOKEN = providerRow.api_key || "";
-        else if (providerRow.provider === "hetzner") providerEnv.HCLOUD_TOKEN = providerRow.api_key || "";
-        else if (providerRow.provider === "vultr") providerEnv.VULTR_API_KEY = providerRow.api_key || "";
-        else if (providerRow.provider === "linode") providerEnv.LINODE_TOKEN = providerRow.api_key || "";
-        else if (providerRow.provider === "gcp") {
+        if (providerRow.provider === "aws") {
+          providerEnv.AWS_ACCESS_KEY_ID = providerRow.api_key || "";
+          providerEnv.AWS_SECRET_ACCESS_KEY = providerRow.api_secret || "";
+          providerEnv.AWS_DEFAULT_REGION = providerRow.region || "us-east-1";
+        } else if (providerRow.provider === "gcp") {
           const credPath = join(pulumiDir, "gcp-credentials.json");
           await writeFile(credPath, providerRow.api_key || "{}", "utf-8");
           providerEnv.GOOGLE_CREDENTIALS = providerRow.api_key || "";

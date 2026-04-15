@@ -89,13 +89,17 @@ export const generateTofu = api(
   }
 );
 
+/**
+ * Default regions per provider.
+ * To add a new provider, add its default region here.
+ */
+const DEFAULT_REGIONS: Record<string, string> = {
+  aws: "us-east-1",
+  gcp: "us-central1",
+};
+
 function getDefaultRegion(provider: string): string {
-  const defaults: Record<string, string> = {
-    digitalocean: "nyc3", hetzner: "nbg1", vultr: "ewr", linode: "us-east",
-    aws: "us-east-1", upcloud: "us-nyc1", katapult: "london", hostinger: "us",
-    gcp: "us-central1",
-  };
-  return defaults[provider] || "us-east-1";
+  return DEFAULT_REGIONS[provider] || "us-east-1";
 }
 
 function detectRuntime(lang: string, techStack: string[]): { name: string; version: string; buildCmd: string; startCmd: string; port: number } {
@@ -113,62 +117,52 @@ function detectRuntime(lang: string, techStack: string[]): { name: string; versi
   return { name: "node", version: "20", buildCmd: "npm ci && npm run build", startCmd: "npm start", port: 3000 };
 }
 
-function getEstimatedResources(provider: string, runtime: { name: string }, hasDocker: boolean, services: Array<{ type: string; name: string; mode: "vps" | "managed" }>, deployStrategy?: string): string[] {
-  const resources: string[] = [];
+type ServiceEntry = { type: string; name: string; mode: "vps" | "managed" };
+type ResourceEstimator = (runtime: { name: string }, hasDocker: boolean, managedSvcs: ServiceEntry[], vpsSvcs: ServiceEntry[], deployStrategy?: string) => string[];
+
+/**
+ * Resource estimators per provider.
+ * To add a new provider, register its estimator here.
+ */
+const RESOURCE_ESTIMATORS: Record<string, ResourceEstimator> = {
+  aws: (_runtime, hasDocker, managedSvcs) => {
+    const r: string[] = ["aws_ecs_service (ECS Fargate)"];
+    if (managedSvcs.some(s => s.type === "database")) r.push("aws_rds_instance (Managed PostgreSQL/MySQL)");
+    if (managedSvcs.some(s => s.type === "cache")) r.push("aws_elasticache_cluster (Managed Redis)");
+    if (managedSvcs.some(s => s.type === "queue")) r.push("aws_sqs_queue (Managed Queue)");
+    if (managedSvcs.some(s => s.type === "storage")) r.push("aws_s3_bucket (Object Storage)");
+    if (managedSvcs.some(s => s.type === "search")) r.push("aws_opensearch_domain (Managed Search)");
+    if (managedSvcs.some(s => s.type === "mail")) r.push("aws_ses_domain_identity (Email)");
+    if (hasDocker) r.push("aws_ecr_repository");
+    r.push("aws_iam_role");
+    return r;
+  },
+  gcp: (_runtime, _hasDocker, managedSvcs, _vpsSvcs, deployStrategy) => {
+    const r: string[] = [];
+    if (deployStrategy === "static") {
+      r.push("gcp_storage_bucket (Static Website)", "gcp_compute_backend_bucket (Cloud CDN)", "gcp_compute_url_map", "gcp_compute_target_http_proxy", "gcp_compute_global_forwarding_rule", "gcp_storage_bucket_iam_member (public access)");
+    } else if (deployStrategy === "managed") {
+      r.push("gcp_artifact_registry_repository", "gcp_cloud_run_v2_service", "gcp_cloud_run_v2_service_iam_member (public access)");
+      if (managedSvcs.some(s => s.type === "database")) r.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+      if (managedSvcs.some(s => s.type === "storage")) r.push("gcp_storage_bucket (Cloud Storage)");
+    } else {
+      r.push("gcp_compute_instance (e2-small)", "gcp_compute_firewall", "gcp_compute_network", "gcp_compute_address (Static IP)");
+      if (managedSvcs.some(s => s.type === "database")) r.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+      if (managedSvcs.some(s => s.type === "storage")) r.push("gcp_storage_bucket (Cloud Storage)");
+    }
+    return r;
+  },
+};
+
+function getEstimatedResources(provider: string, runtime: { name: string }, hasDocker: boolean, services: ServiceEntry[], deployStrategy?: string): string[] {
   const managedSvcs = services.filter(s => s.mode === "managed");
   const vpsSvcs = services.filter(s => s.mode === "vps");
-  switch (provider) {
-    case "digitalocean":
-      resources.push("digitalocean_app (App Platform)");
-      if (managedSvcs.some(s => s.type === "database")) resources.push("digitalocean_database_cluster (Managed DB)");
-      if (managedSvcs.some(s => s.type === "cache")) resources.push("digitalocean_database_cluster (Managed Redis)");
-      if (managedSvcs.some(s => s.type === "storage")) resources.push("digitalocean_spaces_bucket (Object Storage)");
-      resources.push("digitalocean_domain (custom domain)");
-      break;
-    case "hetzner":
-      resources.push("hcloud_server (CX22 — 2 vCPU, 4GB RAM)", "hcloud_firewall", "hcloud_ssh_key");
-      if (vpsSvcs.some(s => s.type === "database")) resources.push("Database installed on VPS");
-      if (vpsSvcs.some(s => s.type === "cache")) resources.push("Redis installed on VPS");
-      if (managedSvcs.some(s => s.type === "database")) resources.push("External managed DB (e.g. PlanetScale, Neon)");
-      if (managedSvcs.some(s => s.type === "storage")) resources.push("hcloud_volume (Block Storage)");
-      break;
-    case "vultr":
-      resources.push("vultr_instance (vc2-1c-1gb)", "vultr_firewall_group", "vultr_ssh_key");
-      if (managedSvcs.some(s => s.type === "database")) resources.push("vultr_database (Managed DB)");
-      if (managedSvcs.some(s => s.type === "storage")) resources.push("vultr_object_storage");
-      break;
-    case "aws":
-      resources.push("aws_ecs_service (ECS Fargate)");
-      if (managedSvcs.some(s => s.type === "database")) resources.push("aws_rds_instance (Managed PostgreSQL/MySQL)");
-      if (managedSvcs.some(s => s.type === "cache")) resources.push("aws_elasticache_cluster (Managed Redis)");
-      if (managedSvcs.some(s => s.type === "queue")) resources.push("aws_sqs_queue (Managed Queue)");
-      if (managedSvcs.some(s => s.type === "storage")) resources.push("aws_s3_bucket (Object Storage)");
-      if (managedSvcs.some(s => s.type === "search")) resources.push("aws_opensearch_domain (Managed Search)");
-      if (managedSvcs.some(s => s.type === "mail")) resources.push("aws_ses_domain_identity (Email)");
-      if (hasDocker) resources.push("aws_ecr_repository");
-      resources.push("aws_iam_role");
-      break;
-    case "linode":
-      resources.push("linode_instance (g6-nanode-1)", "linode_firewall", "linode_sshkey");
-      if (managedSvcs.some(s => s.type === "database")) resources.push("linode_database_mysql (Managed DB)");
-      if (managedSvcs.some(s => s.type === "storage")) resources.push("linode_object_storage_bucket");
-      break;
-    case "gcp":
-      if (deployStrategy === "static") {
-        resources.push("gcp_storage_bucket (Static Website)", "gcp_compute_backend_bucket (Cloud CDN)", "gcp_compute_url_map", "gcp_compute_target_http_proxy", "gcp_compute_global_forwarding_rule", "gcp_storage_bucket_iam_member (public access)");
-      } else if (deployStrategy === "managed") {
-        resources.push("gcp_artifact_registry_repository", "gcp_cloud_run_v2_service", "gcp_cloud_run_v2_service_iam_member (public access)");
-        if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
-        if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");
-      } else {
-        resources.push("gcp_compute_instance (e2-small)", "gcp_compute_firewall", "gcp_compute_network", "gcp_compute_address (Static IP)");
-        if (managedSvcs.some(s => s.type === "database")) resources.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
-        if (managedSvcs.some(s => s.type === "storage")) resources.push("gcp_storage_bucket (Cloud Storage)");
-      }
-      break;
-    default:
-      resources.push(`${provider}_server`, `${provider}_firewall`);
-  }
+
+  const estimator = RESOURCE_ESTIMATORS[provider];
+  const resources = estimator
+    ? estimator(runtime, hasDocker, managedSvcs, vpsSvcs, deployStrategy)
+    : [`${provider}_server`, `${provider}_firewall`];
+
   if (vpsSvcs.length > 0) resources.push(`VPS-hosted: ${vpsSvcs.map(s => s.name).join(", ")}`);
   return resources;
 }

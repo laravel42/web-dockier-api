@@ -17,8 +17,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
     const defaultRegions: Record<string, string> = {
-      aws: "us-east-1", digitalocean: "nyc3", hetzner: "nbg1", vultr: "ewr",
-      linode: "us-east", gcp: "us-central1", upcloud: "us-nyc1",
+      aws: "us-east-1", gcp: "us-central1",
     };
     const region = providerRow?.region || defaultRegions[providerRow?.provider || ""] || "us-east-1";
 

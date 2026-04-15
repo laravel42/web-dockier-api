@@ -1,12 +1,12 @@
 import { api, APIError } from "encore.dev/api";
 import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
-import { db, type ProviderResponse } from "../shared";
+import { db, type ProviderResponse, type DeployProvider, isSupportedProvider } from "../shared";
 
 export const addProvider = api(
   { method: "POST", path: "/deploy/providers", auth: true },
   async (params: {
-    provider: "digitalocean" | "hetzner" | "vultr" | "linode" | "aws" | "upcloud" | "katapult" | "hostinger" | "gcp" | "cloudflare";
+    provider: DeployProvider;
     label: string;
     apiKey: string;
     apiSecret: string;

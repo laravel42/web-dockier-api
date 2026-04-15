@@ -127,11 +127,7 @@ export async function handleTemplateDeploy(
     providerEnv.AWS_ACCESS_KEY_ID = ctx.providerRow.api_key || "";
     providerEnv.AWS_SECRET_ACCESS_KEY = ctx.providerRow.api_secret || "";
     providerEnv.AWS_DEFAULT_REGION = region;
-  } else if (provider === "digitalocean") providerEnv.DIGITALOCEAN_TOKEN = ctx.providerRow.api_key || "";
-  else if (provider === "hetzner") providerEnv.HCLOUD_TOKEN = ctx.providerRow.api_key || "";
-  else if (provider === "vultr") providerEnv.VULTR_API_KEY = ctx.providerRow.api_key || "";
-  else if (provider === "linode") providerEnv.LINODE_TOKEN = ctx.providerRow.api_key || "";
-  else if (provider === "gcp") {
+  } else if (provider === "gcp") {
     const credPath = join(pulumiDir, "gcp-credentials.json");
     await writeFile(credPath, ctx.providerRow.api_key || "{}", "utf-8");
     providerEnv.GOOGLE_CREDENTIALS = ctx.providerRow.api_key || "";
@@ -160,7 +156,7 @@ export async function handleTemplateDeploy(
   await runCmd("pulumi", ["config", "set", "keyPairSuffix", shortId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
   // Set SSH key for VPS providers
-  if (deployStrategy === "vps" && (provider === "aws" || provider === "hetzner" || provider === "vultr" || provider === "linode" || provider === "gcp")) {
+  if (deployStrategy === "vps" && (provider === "aws" || provider === "gcp")) {
     const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
     if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
 
@@ -171,10 +167,6 @@ export async function handleTemplateDeploy(
     const deployPubKey = (await readFs(`${deployKeyPath}.pub`, "utf-8")).trim();
     const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
     await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-  }
-
-  if (provider === "linode") {
-    await runCmd("pulumi", ["config", "set", "--secret", "rootPassword", `Ch4ng3M3-${shortId}!`, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
 
   if (provider === "gcp") {

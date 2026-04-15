@@ -50,7 +50,7 @@ export default function SshKeysTab() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-semibold text-text">SSH Keys</h2>
-          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (Hetzner, Cloudflare, Linode, AWS EC2)</p>
+          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
         </div>
         <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
