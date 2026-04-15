@@ -17,6 +17,7 @@ export const createDeployment = api(
     deployStrategy?: string;
     buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
     skipPipeline?: boolean;
+    templateId?: string;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -41,6 +42,7 @@ export const createDeployment = api(
         registryUrl: params.registryUrl || "",
         deployStrategy: params.deployStrategy || "managed",
         buildMethod: params.buildMethod || "dockerfile",
+        templateId: params.templateId || undefined,
       });
     }
 
@@ -133,16 +135,21 @@ export const destroyDeployment = api(
     if (!providerRow) throw APIError.notFound("Provider not found");
 
     const repoName = row.repo.split("/").pop() || "app";
-    const appName = row.docker_image || repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+    const rawAppName = row.docker_image
+      ? row.docker_image.split(":")[0]  // strip image tag (e.g. "template-wordpress:b18bd089" → "template-wordpress")
+      : repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+    const appName = rawAppName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
     const region = providerRow.region || "us-east-1";
     const errors: string[] = [];
 
     // ── Pulumi-based providers (GCP, Hetzner, DigitalOcean, Vultr, Linode, etc.) ──
-    if (providerRow.provider !== "aws") {
-      const tofuRow = await db.queryRow<{ tofu_script: string }>`
-        SELECT tofu_script FROM deployments WHERE id = ${params.deploymentId}`;
-      const tofuScript = tofuRow?.tofu_script || "";
-      const stateMarker = tofuScript.indexOf("/* STATE */\n");
+    // Also handles AWS Pulumi VPS deploys (template deploys) that have saved Pulumi state
+    const tofuRow = await db.queryRow<{ tofu_script: string }>`
+      SELECT tofu_script FROM deployments WHERE id = ${params.deploymentId}`;
+    const tofuScript = tofuRow?.tofu_script || "";
+    const stateMarker = tofuScript.indexOf("/* STATE */\n");
+
+    if (providerRow.provider !== "aws" || stateMarker !== -1) {
 
       if (stateMarker === -1) {
         // No saved state — can't run pulumi destroy

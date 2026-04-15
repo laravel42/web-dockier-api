@@ -4,8 +4,10 @@ import RepoSelect from "../../../components/RepoSelect";
 import BranchSelect from "../../../components/BranchSelect";
 import { btnSecondary } from "../../../utils/styles";
 import { btnPrimary, inputCls } from "../constants";
-import type { Connection, Repo } from "../types";
+import type { Connection, Repo, ProjectSourceType } from "../types";
+import { PROJECT_TEMPLATES } from "../templates";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
+import CodeIcon from "../../../components/icons/outlined/CodeIcon";
 
 interface Props {
   open: boolean;
@@ -14,6 +16,11 @@ interface Props {
   onFormChange: (form: { name: string; repository: string; branch: string }) => void;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
+  // source type
+  sourceType: ProjectSourceType;
+  onSourceTypeChange: (type: ProjectSourceType) => void;
+  selectedTemplate: string;
+  onTemplateChange: (id: string) => void;
   // selection state
   connections: Connection[];
   selectedConnectionId: string;
@@ -30,13 +37,26 @@ interface Props {
   error: string;
 }
 
+const templateIcons: Record<string, React.ReactNode> = {
+  wordpress: (
+    <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor">
+      <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm-1.508 14.59L7.36 8.592c.486-.024.924-.072.924-.072.434-.048.386-.69-.05-.666 0 0-1.308.102-2.15.102-.152 0-.33-.004-.518-.012A8.01 8.01 0 0 1 12 4c2.357 0 4.506.958 6.053 2.508-.038-.002-.076-.008-.116-.008-.77 0-1.316.67-1.316 1.39 0 .646.372 1.192.77 1.838.298.522.646 1.192.646 2.16 0 .67-.258 1.448-.596 2.53l-.782 2.612-2.832-8.438c.486-.024.924-.072.924-.072.434-.048.386-.69-.05-.666 0 0-1.308.102-2.15.102-.15 0-.328-.004-.514-.01l-.004.002zM16.4 17.2l-2.546-7.31c.476-1.41.634-2.538.634-3.542 0-.364-.024-.702-.066-1.014A7.97 7.97 0 0 1 20 12c0 2.14-.84 4.082-2.208 5.516l-.002.002-1.39-4.318zm-12.4-5.2c0-1.4.36-2.714.992-3.858l3.462 9.486A8.013 8.013 0 0 1 4 12zm8 8c-.876 0-1.716-.14-2.504-.4l2.66-7.726 2.724 7.462c.018.044.04.084.062.124A7.96 7.96 0 0 1 12 20z" />
+    </svg>
+  ),
+};
+
 export default function ProjectFormModal({
   open, editing, form, onFormChange, onClose, onSubmit,
+  sourceType, onSourceTypeChange, selectedTemplate, onTemplateChange,
   connections, selectedConnectionId, onConnectionChange, loadingConnections,
   repos, selectedRepo, onRepoChange, loadingRepos,
   branches, selectedBranch, onBranchChange, loadingBranches,
   error,
 }: Props) {
+  const isTemplateReady = sourceType === "template" && !!selectedTemplate && !!form.name;
+  const isRepoReady = !!form.name && !!selectedRepo && !!selectedBranch;
+  const canSubmit = editing || (sourceType === "template" ? isTemplateReady : isRepoReady);
+
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edit Project" : "New Project"} size="xl">
       <form onSubmit={onSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
@@ -53,16 +73,54 @@ export default function ProjectFormModal({
           />
         </div>
 
-        {/* Step 1: Source Control */}
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</label>
-          <SourceControlSelect
-            value={selectedConnectionId}
-            onChange={onConnectionChange}
-            connections={connections}
-            loading={loadingConnections}
-          />
-        </div>
+        {/* Source type toggle — only show when creating */}
+        {!editing && (
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Project Source</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onSourceTypeChange("repository")}
+                className={`flex items-center gap-3 p-3 rounded-[var(--radius-input)] border text-left transition-all ${
+                  sourceType === "repository"
+                    ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
+                    : "border-border bg-card hover:border-secondary-300"
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  sourceType === "repository" ? "bg-primary-100 text-primary-500" : "bg-secondary-100 text-text-muted"
+                }`}>
+                  <CodeIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text">Source Control</p>
+                  <p className="text-xs text-text-muted">Connect a Git repository</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSourceTypeChange("template")}
+                className={`flex items-center gap-3 p-3 rounded-[var(--radius-input)] border text-left transition-all ${
+                  sourceType === "template"
+                    ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
+                    : "border-border bg-card hover:border-secondary-300"
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  sourceType === "template" ? "bg-primary-100 text-primary-500" : "bg-secondary-100 text-text-muted"
+                }`}>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-text">Template</p>
+                  <p className="text-xs text-text-muted">Start from a pre-built template</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-[var(--radius-input)] bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
@@ -70,29 +128,90 @@ export default function ProjectFormModal({
           </div>
         )}
 
-        {!selectedConnectionId && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
-            <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center text-primary-400">
-              <LinkIcon className="w-7 h-7" />
+        {/* ── Source Control flow ── */}
+        {(sourceType === "repository" || editing) && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</label>
+              <SourceControlSelect
+                value={selectedConnectionId}
+                onChange={onConnectionChange}
+                connections={connections}
+                loading={loadingConnections}
+              />
             </div>
-            <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
-            <p className="text-xs text-text-muted max-w-xs">Select a source control provider above to browse your repositories and pick a branch.</p>
-          </div>
+
+            {!selectedConnectionId && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
+                <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center text-primary-400">
+                  <LinkIcon className="w-7 h-7" />
+                </div>
+                <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
+                <p className="text-xs text-text-muted max-w-xs">Select a source control provider above to browse your repositories and pick a branch.</p>
+              </div>
+            )}
+
+            {selectedConnectionId && (
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
+                <RepoSelect value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} />
+              </div>
+            )}
+
+            {selectedRepo && (
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
+                <BranchSelect value={selectedBranch} onChange={onBranchChange} branches={branches} loading={loadingBranches} />
+              </div>
+            )}
+          </>
         )}
 
-        {/* Step 2: Repository */}
-        {selectedConnectionId && (
+        {/* ── Template flow ── */}
+        {sourceType === "template" && !editing && (
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
-            <RepoSelect value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} />
-          </div>
-        )}
-
-        {/* Step 3: Branch */}
-        {selectedRepo && (
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
-            <BranchSelect value={selectedBranch} onChange={onBranchChange} branches={branches} loading={loadingBranches} />
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Choose a Template</label>
+            <div className="grid grid-cols-1 gap-2">
+              {PROJECT_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => {
+                    onTemplateChange(tpl.id);
+                    if (!form.name) onFormChange({ ...form, name: tpl.name });
+                  }}
+                  className={`flex items-center gap-4 p-4 rounded-[var(--radius-input)] border text-left transition-all ${
+                    selectedTemplate === tpl.id
+                      ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
+                      : "border-border bg-card hover:border-secondary-300"
+                  }`}
+                >
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                    selectedTemplate === tpl.id ? "bg-primary-100 text-primary-600" : "bg-secondary-100 text-text-muted"
+                  }`}>
+                    {templateIcons[tpl.icon] || (
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-text">{tpl.name}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{tpl.description}</p>
+                  </div>
+                  {selectedTemplate === tpl.id && (
+                    <div className="ml-auto shrink-0">
+                      <svg className="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            {PROJECT_TEMPLATES.length === 1 && (
+              <p className="text-xs text-text-muted mt-2">More templates coming soon.</p>
+            )}
           </div>
         )}
 
@@ -101,7 +220,7 @@ export default function ProjectFormModal({
           <button
             type="submit"
             className={btnPrimary}
-            disabled={!editing && (!form.name || !selectedRepo || !selectedBranch)}
+            disabled={!canSubmit}
           >
             {editing ? "Save Changes" : "Create Project"}
           </button>

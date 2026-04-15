@@ -80,7 +80,7 @@ export interface WizardState {
 export interface DeployWizardProps {
   open: boolean;
   onClose: () => void;
-  project: { id: string; name: string; repository: string; branch: string; connectionId: string };
+  project: { id: string; name: string; repository: string; branch: string; connectionId: string; sourceType?: string; template?: string };
   analysis: RepoAnalysis | null;
   analysisLoading?: boolean;
   analysisError?: string;

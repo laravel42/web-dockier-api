@@ -1,6 +1,8 @@
 import { api, APIError } from "encore.dev/api";
+import { getAuthData } from "~encore/auth";
 import { db } from "../shared";
 import { generatePulumiProgram } from "../pulumi-templates/index";
+import { getTemplateConfig } from "../templates";
 
 interface TofuRequest {
   providerId: string;
@@ -16,6 +18,7 @@ interface TofuRequest {
   dockerImage?: string;
   instanceType?: string;
   services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+  templateId?: string;
   aiAnalysis?: {
     runtime: string;
     runtimeVersion: string;
@@ -55,16 +58,31 @@ export const generateTofu = api(
     const provider = providerRow.provider;
     const region = params.region || providerRow.region || getDefaultRegion(provider);
     const repoName = params.repo.split("/").pop() || "app";
-    const appName = params.appName || repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    let appName = params.appName || repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+    // For template projects, use the project name instead of the repo URL
+    if (params.templateId && !params.appName) {
+      const authData = getAuthData()!;
+      const projectRow = await db.queryRow<{ name: string }>`SELECT name FROM projects WHERE app_id = ${authData.appId} ORDER BY created_at DESC LIMIT 1`;
+      if (projectRow?.name) {
+        appName = projectRow.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+      }
+    }
     const runtime = params.aiAnalysis
       ? { name: params.aiAnalysis.runtime, version: params.aiAnalysis.runtimeVersion, buildCmd: params.aiAnalysis.buildCommand, startCmd: params.aiAnalysis.startCommand, port: params.aiAnalysis.port }
       : detectRuntime(params.primaryLanguage, params.techStack);
+
+    // Template-specific params for user-data script
+    const templateConfig = params.templateId ? getTemplateConfig(params.templateId) : null;
 
     const script = generatePulumiProgram({
       provider, region, appName, repo: params.repo, branch: params.branch, runtime,
       hasDocker: params.hasDocker, techStack: params.techStack, services: params.services || [],
       aiAnalysis: params.aiAnalysis, deployStrategy: params.deployStrategy,
       useDocker: params.useDocker, dockerImage: params.dockerImage, instanceType: params.instanceType,
+      publicDockerImage: templateConfig?.dockerImage,
+      dockerEnvVars: templateConfig?.envVars,
+      templateSetupScript: templateConfig?.vpsSetupScript,
     });
 
     return { script, provider, region, appName, estimatedResources: getEstimatedResources(provider, runtime, params.hasDocker, params.services || [], params.deployStrategy) };

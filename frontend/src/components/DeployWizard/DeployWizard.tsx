@@ -60,6 +60,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
         {step === 3 && (
           <StepEnvironment
             state={state}
+            templateId={project.sourceType === "template" ? project.template : undefined}
             onChange={(env, plan) => setState(prev => ({ ...prev, environment: env, selectedPlan: plan }))}
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
           />
@@ -69,6 +70,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             state={state}
             loading={tofuLoading}
             error={tofuError}
+            isTemplate={project.sourceType === "template"}
             onToggleDocker={() => {
               const next = !state.useDocker;
               setState(prev => ({ ...prev, useDocker: next, tofuScript: "" }));

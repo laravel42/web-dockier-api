@@ -5,7 +5,8 @@ export function getPlans(
   provider: string,
   environment: "staging" | "production",
   servicesModes: Record<string, "vps" | "managed">,
-  deployStrategy: "vps" | "managed" | "static"
+  deployStrategy: "vps" | "managed" | "static",
+  templateId?: string
 ): Plan[] {
   const managedSvcs = Object.entries(servicesModes).filter(([, m]) => m === "managed").map(([t]) => t);
   const isProd = environment === "production";
@@ -207,5 +208,12 @@ export function getPlans(
     },
   ];
 
-  return plans[provider] || fallback;
+  const result = plans[provider] || fallback;
+
+  // WordPress templates need at least 2 GB RAM for MySQL + WordPress + imports
+  if (templateId === "wordpress" && environment === "staging" && deployStrategy === "vps") {
+    return result.filter(p => p.tier !== "value");
+  }
+
+  return result;
 }

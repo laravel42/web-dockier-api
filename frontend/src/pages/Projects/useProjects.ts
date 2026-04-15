@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { getRepoKey } from "./utils";
-import type { Connection, Repo, Project, TechBadgeInfo } from "./types";
+import type { Connection, Repo, Project, TechBadgeInfo, ProjectSourceType } from "./types";
+import { PROJECT_TEMPLATES } from "./templates";
 
 export function useProjects() {
   const navigate = useNavigate();
@@ -17,6 +18,10 @@ export function useProjects() {
   const [viewMode, setViewMode] = useState<"cards" | "table">(
     () => (localStorage.getItem("projects-view") as "cards" | "table") || "cards",
   );
+
+  // Source type: "repository" (existing) or "template" (new)
+  const [sourceType, setSourceType] = useState<ProjectSourceType>("repository");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
 
   // Multi-step selection state
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -149,6 +154,7 @@ export function useProjects() {
   const resetSelections = () => {
     setSelectedConnectionId(""); setRepos([]); setSelectedRepo("");
     setBranches([]); setSelectedBranch(""); setConnections([]); setError("");
+    setSourceType("repository"); setSelectedTemplate("");
   };
 
   const openCreate = () => {
@@ -169,30 +175,46 @@ export function useProjects() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const repo = repos.find((r) => r.fullName === selectedRepo);
-    const submitData = {
-      name: form.name,
-      repository: editing ? form.repository : (repo?.url || form.repository),
-      branch: editing ? form.branch : (selectedBranch || form.branch),
-      connectionId: editing ? editing.connectionId : selectedConnectionId,
-    };
-    if (editing) {
-      await projectsApi.update(editing.id, submitData);
+
+    if (sourceType === "template") {
+      const tpl = PROJECT_TEMPLATES.find((t) => t.id === selectedTemplate);
+      if (!tpl) return;
+      await projectsApi.create({
+        name: form.name,
+        repository: tpl.defaultRepo,
+        branch: tpl.defaultBranch,
+        connectionId: "",
+        sourceType: "template",
+        template: tpl.id,
+      });
     } else {
-      await projectsApi.create(submitData);
-      // Pre-warm analysis cache in the background
-      try {
-        const repoUrl = repo?.url || form.repository;
-        const u = new URL(repoUrl);
-        const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
-        if (parts.length >= 2) {
-          const owner = parts[0];
-          const repoName = parts[1];
-          const br = selectedBranch || form.branch || "main";
-          gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br).catch(() => {});
-        }
-      } catch { /* pre-warm is fire-and-forget */ }
+      const repo = repos.find((r) => r.fullName === selectedRepo);
+      const submitData = {
+        name: form.name,
+        repository: editing ? form.repository : (repo?.url || form.repository),
+        branch: editing ? form.branch : (selectedBranch || form.branch),
+        connectionId: editing ? editing.connectionId : selectedConnectionId,
+        sourceType: "repository" as const,
+      };
+      if (editing) {
+        await projectsApi.update(editing.id, submitData);
+      } else {
+        await projectsApi.create(submitData);
+        // Pre-warm analysis cache in the background
+        try {
+          const repoUrl = repo?.url || form.repository;
+          const u = new URL(repoUrl);
+          const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
+          if (parts.length >= 2) {
+            const owner = parts[0];
+            const repoName = parts[1];
+            const br = selectedBranch || form.branch || "main";
+            gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br).catch(() => {});
+          }
+        } catch { /* pre-warm is fire-and-forget */ }
+      }
     }
+
     setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
   };
 
@@ -215,6 +237,9 @@ export function useProjects() {
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,
+    // source type
+    sourceType, setSourceType,
+    selectedTemplate, setSelectedTemplate,
     // form / modal
     connections, selectedConnectionId, setSelectedConnectionId,
     repos, selectedRepo, setSelectedRepo,

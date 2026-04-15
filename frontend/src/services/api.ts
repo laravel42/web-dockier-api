@@ -426,6 +426,7 @@ export const deployApi = {
     deployStrategy?: string;
     buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
     skipPipeline?: boolean;
+    templateId?: string;
   }) =>
     request<{
       id: string;
@@ -486,6 +487,7 @@ export const deployApi = {
     instanceType?: string;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
     aiAnalysis?: Record<string, any>;
+    templateId?: string;
   }) =>
     request<{
       script: string;
@@ -523,6 +525,8 @@ export const projectsApi = {
         repository: string;
         branch: string;
         connectionId: string;
+        sourceType: string;
+        template: string;
         createdAt: string;
       }>;
     }>("/projects"),
@@ -534,13 +538,15 @@ export const projectsApi = {
       repository: string;
       branch: string;
       connectionId: string;
+      sourceType: string;
+      template: string;
       createdAt: string;
     }>(`/projects/${projectId}`),
 
-  create: (data: { name: string; repository: string; branch: string; connectionId: string; platform?: string }) =>
+  create: (data: { name: string; repository: string; branch: string; connectionId: string; platform?: string; sourceType?: string; template?: string }) =>
     request("/projects", { method: "POST", body: JSON.stringify(data) }),
 
-  update: (projectId: string, data: { name?: string; repository?: string; branch?: string; connectionId?: string; platform?: string }) =>
+  update: (projectId: string, data: { name?: string; repository?: string; branch?: string; connectionId?: string; platform?: string; sourceType?: string; template?: string }) =>
     request(`/projects/${projectId}`, { method: "PUT", body: JSON.stringify({ projectId, ...data }) }),
 
   delete: (projectId: string) =>

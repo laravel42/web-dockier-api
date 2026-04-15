@@ -7,7 +7,7 @@ import { parseOwnerRepo } from "./utils";
 
 interface UseDeployWizardParams {
   open: boolean;
-  project: { id: string; name: string; repository: string; branch: string; connectionId: string };
+  project: { id: string; name: string; repository: string; branch: string; connectionId: string; sourceType?: string; template?: string };
   analysis: RepoAnalysis | null;
   analysisLoading?: boolean;
   onDeployComplete?: () => void;
@@ -63,7 +63,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
     try {
       const parsed = parseOwnerRepo(project.repository);
       const repo = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
-      const plans = getPlans(s.selectedProvider, s.environment, s.servicesModes, s.deployStrategy);
+      const plans = getPlans(s.selectedProvider, s.environment, s.servicesModes, s.deployStrategy, project.sourceType === "template" ? project.template : undefined);
       const selectedPlan = plans[s.selectedPlan] || plans[1] || plans[0];
       const res = await deployApi.generateTofu({
         providerId: s.selectedProviderId,
@@ -81,6 +81,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
           ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: s.servicesModes[svc.type] || "vps" }))
           : undefined,
         aiAnalysis: analysis?.aiAnalysis || undefined,
+        templateId: project.sourceType === "template" ? project.template : undefined,
       });
       setState(prev => ({
         ...prev,
@@ -107,7 +108,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
       const repo = parsed ? `${parsed.owner}/${parsed.repo}` : project.repository;
 
       // ── CodeBuild path: build image first via image-builder, then deploy ──
-      if (state.buildMethod === "codebuild") {
+      // Template projects always use the standard path (pre-built Docker images, no CodeBuild needed)
+      if (state.buildMethod === "codebuild" && project.sourceType !== "template") {
         const ts0 = new Date().toISOString().replace("T", " ").slice(0, 19);
         const deployTargetMap: Record<string, "ecs" | "ec2" | "s3"> = {
           vps: "ec2",
@@ -136,7 +138,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
 
         setState(prev => ({ ...prev, deployStatus: "building", deployLogs: formattedLogs }));
 
-        const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
+        const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy, project.sourceType === "template" ? project.template : undefined);
         const plan = plans[state.selectedPlan] || plans[1] || plans[0];
 
         const build = await imageBuilderApi.startBuild({
@@ -167,6 +169,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
             deployStrategy: state.deployStrategy,
             buildMethod: "codebuild",
             skipPipeline: true,
+            templateId: project.sourceType === "template" ? project.template : undefined,
           });
           codebuildDeployId = dep.id;
           setState(prev => ({ ...prev, deploymentId: dep.id }));
@@ -329,6 +332,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         primaryLanguage: analysis?.primaryLanguage || "",
         deployStrategy: state.deployStrategy,
         buildMethod: state.buildMethod,
+        templateId: project.sourceType === "template" ? project.template : undefined,
       });
       setState(prev => ({ ...prev, deploymentId: deployment.id }));
 

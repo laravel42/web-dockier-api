@@ -14,6 +14,17 @@ export interface Repo {
   private: boolean;
 }
 
+export type ProjectSourceType = "repository" | "template";
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  defaultRepo: string;
+  defaultBranch: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -21,6 +32,8 @@ export interface Project {
   branch: string;
   connectionId: string;
   platform?: string;
+  sourceType?: ProjectSourceType;
+  template?: string;
 }
 
 export interface TechBadgeInfo {

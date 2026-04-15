@@ -4,6 +4,8 @@ export interface Project {
   repository: string;
   branch: string;
   connectionId: string;
+  sourceType?: string;
+  template?: string;
   createdAt: string;
 }
 

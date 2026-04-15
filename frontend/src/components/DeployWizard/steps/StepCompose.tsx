@@ -8,13 +8,14 @@ import RailpackIcon from "../../icons/outlined/RailpackIcon";
 import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
 
-export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onEnvChange }: {
+export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onEnvChange, isTemplate }: {
   state: WizardState;
   loading: boolean;
   error: string;
   onToggleDocker: () => void;
   onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
   onEnvChange: (envVars: Array<{ name: string; value: string }>) => void;
+  isTemplate?: boolean;
 }) {
   const [rawEnv, setRawEnv] = useState(() => formatEnvContent(state.envVars));
   const isInternalEditRef = useRef(false);
@@ -41,7 +42,8 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
 
   return (
     <div className="space-y-4">
-      {/* Docker toggle */}
+      {/* Docker toggle — hidden for template projects (pre-built image) */}
+      {!isTemplate && (
       <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface">
         <div className="flex items-center gap-2">
           <DockerIcon className="w-5 h-5 text-blue-500" />
@@ -60,9 +62,10 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${state.useDocker ? "translate-x-6" : "translate-x-1"}`} />
         </button>
       </div>
+      )}
 
-      {/* Build method selector */}
-      {state.useDocker && (() => {
+      {/* Build method selector — hidden for template projects */}
+      {!isTemplate && state.useDocker && (() => {
         const isAws = state.selectedProvider === "aws";
         const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
           { id: "dockerfile", label: "Dockerfile", desc: "Auto-generated Dockerfile with auto-fix on failure", icon: <DockerfileIcon className="w-4 h-4 text-blue-500" /> },

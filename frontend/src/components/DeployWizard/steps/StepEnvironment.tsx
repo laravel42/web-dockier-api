@@ -3,12 +3,13 @@ import { PROVIDER_REGIONS } from "../constants";
 import { getPlans } from "../plans";
 import CheckCircleIcon from "../../icons/filled/CheckCircleIcon";
 
-export default function StepEnvironment({ state, onChange, onRegionChange }: {
+export default function StepEnvironment({ state, templateId, onChange, onRegionChange }: {
   state: WizardState;
+  templateId?: string;
   onChange: (env: "staging" | "production", plan: number) => void;
   onRegionChange: (region: string) => void;
 }) {
-  const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy);
+  const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy, templateId);
   const regions = PROVIDER_REGIONS[state.selectedProvider] || [];
 
   return (
@@ -21,7 +22,12 @@ export default function StepEnvironment({ state, onChange, onRegionChange }: {
             <button
               key={env}
               type="button"
-              onClick={() => onChange(env, state.selectedPlan)}
+              onClick={() => {
+                const newPlans = getPlans(state.selectedProvider, env, state.servicesModes, state.deployStrategy, templateId);
+                // Default to Standard plan (index 0 if Starter is filtered, index 1 otherwise)
+                const standardIdx = newPlans.findIndex(p => p.tier === "balanced");
+                onChange(env, standardIdx >= 0 ? standardIdx : 0);
+              }}
               className={`px-4 py-2 text-sm font-medium transition-colors capitalize ${
                 state.environment === env ? "bg-primary-500 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"
               }`}

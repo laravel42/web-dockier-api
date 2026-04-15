@@ -15,6 +15,12 @@ export interface DeployParams {
   dockerImage?: string;
   instanceType?: string;
   ecrImageUri?: string;
+  /** Public Docker image to pull directly (e.g. "wordpress:latest") — used for template deploys */
+  publicDockerImage?: string;
+  /** Extra env vars to pass to docker run (e.g. WordPress DB config) */
+  dockerEnvVars?: Array<{ name: string; value: string }>;
+  /** Additional setup script to run on VPS before Docker (e.g. MySQL install for WordPress) */
+  templateSetupScript?: string;
   aiAnalysis?: {
     runtime: string;
     runtimeVersion: string;

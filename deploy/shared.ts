@@ -58,6 +58,7 @@ export interface DeployEvent {
   registryUrl: string;
   deployStrategy: string;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+  templateId?: string;
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {

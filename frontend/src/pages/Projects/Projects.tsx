@@ -15,6 +15,8 @@ export default function Projects() {
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,
+    sourceType, setSourceType,
+    selectedTemplate, setSelectedTemplate,
     connections, selectedConnectionId, setSelectedConnectionId,
     repos, selectedRepo, setSelectedRepo,
     branches, selectedBranch, setSelectedBranch,
@@ -62,6 +64,10 @@ export default function Projects() {
         onFormChange={setForm}
         onClose={closeForm}
         onSubmit={handleSubmit}
+        sourceType={sourceType}
+        onSourceTypeChange={setSourceType}
+        selectedTemplate={selectedTemplate}
+        onTemplateChange={setSelectedTemplate}
         connections={connections}
         selectedConnectionId={selectedConnectionId}
         onConnectionChange={setSelectedConnectionId}
