@@ -3,7 +3,7 @@ import EmptyState from "./sections/EmptyState";
 import DeployCard from "./sections/DeployCard";
 
 export default function Deploy() {
-  const { navigate, deployments, loading, projectLangs, projectByRepo, grouped } = useDeploy();
+  const { navigate, deployments, loading, projectLangs, projectById, grouped } = useDeploy();
 
   if (loading) {
     return (
@@ -23,13 +23,13 @@ export default function Deploy() {
         <EmptyState onGoToProjects={() => navigate("/projects")} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {grouped.map(([repo, repoDeploys]) => {
-            const proj = projectByRepo[repo];
+          {grouped.map(([groupKey, repoDeploys]) => {
+            const proj = projectById[groupKey];
             const latest = repoDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
             return (
               <DeployCard
-                key={repo}
-                repo={repo}
+                key={groupKey}
+                repo={latest.repo}
                 deploys={repoDeploys}
                 project={proj}
                 badges={proj ? projectLangs[proj.id] : undefined}

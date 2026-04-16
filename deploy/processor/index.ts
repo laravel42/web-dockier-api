@@ -19,7 +19,13 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const defaultRegions: Record<string, string> = {
       aws: "us-east-1", gcp: "us-central1",
     };
-    const region = providerRow?.region || defaultRegions[providerRow?.provider || ""] || "us-east-1";
+    let region = providerRow?.region || defaultRegions[providerRow?.provider || ""] || "us-east-1";
+
+    // Extract the actual region from the tofuScript if available (the wizard bakes the user's selection into the script)
+    if (event.tofuScript) {
+      const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+      if (regionMatch) region = regionMatch[1];
+    }
 
     // ── Template deploy path ──
     // If this is a template-based project, skip clone/analyze and use pre-built Docker images

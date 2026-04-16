@@ -8,6 +8,7 @@ export const createDeployment = api(
   async (params: {
     providerId: string;
     gitConnectionId: string;
+    projectId?: string;
     repo: string;
     branch: string;
     tofuScript?: string;
@@ -24,9 +25,9 @@ export const createDeployment = api(
     const script = params.tofuScript || "";
 
     await db.exec`
-      INSERT INTO deployments (id, app_id, provider_id, git_connection_id, repo, branch, status, logs, tofu_script, deploy_strategy, created_at, updated_at)
+      INSERT INTO deployments (id, app_id, provider_id, git_connection_id, project_id, repo, branch, status, logs, tofu_script, deploy_strategy, created_at, updated_at)
       VALUES (${id}, ${authData.appId}, ${params.providerId}, ${params.gitConnectionId},
-              ${params.repo}, ${params.branch}, 'pending', '', ${script}, ${params.deployStrategy || "managed"}, NOW(), NOW())`;
+              ${params.projectId || ""}, ${params.repo}, ${params.branch}, 'pending', '', ${script}, ${params.deployStrategy || "managed"}, NOW(), NOW())`;
 
     if (!params.skipPipeline) {
       await deployTopic.publish({
@@ -48,7 +49,8 @@ export const createDeployment = api(
 
     return {
       id, providerId: params.providerId,
-      gitConnectionId: params.gitConnectionId, repo: params.repo,
+      gitConnectionId: params.gitConnectionId, projectId: params.projectId || "",
+      repo: params.repo,
       branch: params.branch, status: "pending", logs: "", appUrl: "",
       commitHash: "", dockerImage: "", deployStrategy: params.deployStrategy || "managed",
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -62,11 +64,11 @@ export const listDeployments = api(
     const authData = getAuthData()!;
     const rows = params.providerId
       ? db.query<{
-          id: string; provider_id: string; git_connection_id: string;
+          id: string; provider_id: string; git_connection_id: string; project_id: string;
           repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
         }>`SELECT * FROM deployments WHERE app_id = ${authData.appId} AND provider_id = ${params.providerId} ORDER BY created_at DESC LIMIT 50`
       : db.query<{
-          id: string; provider_id: string; git_connection_id: string;
+          id: string; provider_id: string; git_connection_id: string; project_id: string;
           repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
         }>`SELECT * FROM deployments WHERE app_id = ${authData.appId} ORDER BY created_at DESC LIMIT 50`;
 
@@ -74,7 +76,8 @@ export const listDeployments = api(
     for await (const row of rows) {
       deployments.push({
         id: row.id, providerId: row.provider_id,
-        gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
+        gitConnectionId: row.git_connection_id, projectId: row.project_id || "",
+        repo: row.repo, branch: row.branch,
         status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
         commitHash: row.commit_hash, dockerImage: row.docker_image,
         deployStrategy: row.deploy_strategy || "managed",
@@ -89,13 +92,14 @@ export const getDeployment = api(
   { method: "GET", path: "/deploy/deployments/:deploymentId", auth: true },
   async (params: { deploymentId: string }): Promise<Deployment> => {
     const row = await db.queryRow<{
-      id: string; provider_id: string; git_connection_id: string;
+      id: string; provider_id: string; git_connection_id: string; project_id: string;
       repo: string; branch: string; status: string; logs: string; app_url: string; commit_hash: string; docker_image: string; deploy_strategy: string; created_at: Date; updated_at: Date;
     }>`SELECT * FROM deployments WHERE id = ${params.deploymentId}`;
     if (!row) throw APIError.notFound("Deployment not found");
     return {
       id: row.id, providerId: row.provider_id,
-      gitConnectionId: row.git_connection_id, repo: row.repo, branch: row.branch,
+      gitConnectionId: row.git_connection_id, projectId: row.project_id || "",
+      repo: row.repo, branch: row.branch,
       status: row.status as Deployment["status"], logs: row.logs, appUrl: row.app_url,
       commitHash: row.commit_hash, dockerImage: row.docker_image,
       deployStrategy: row.deploy_strategy || "managed",

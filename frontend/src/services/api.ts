@@ -400,6 +400,7 @@ export const deployApi = {
       deployments: Array<{
         id: string;
         providerId: string;
+        projectId: string;
         repo: string;
         branch: string;
         status: string;
@@ -417,6 +418,7 @@ export const deployApi = {
   createDeployment: (data: {
     providerId: string;
     gitConnectionId: string;
+    projectId?: string;
     repo: string;
     branch: string;
     tofuScript?: string;

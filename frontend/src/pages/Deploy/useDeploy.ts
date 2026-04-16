@@ -45,17 +45,17 @@ export function useDeploy() {
     }
   }, [projects]);
 
-  // Match deployments to projects by repo key
-  const projectByRepo: Record<string, Project> = {};
+  // Match projects by id
+  const projectById: Record<string, Project> = {};
   for (const p of projects) {
-    const key = repoKey(p.repository);
-    projectByRepo[key] = p;
+    projectById[p.id] = p;
   }
 
-  // Group deployments by repo
+  // Group deployments by projectId (fall back to repo for legacy deployments without projectId)
   const grouped = Object.entries(
     deployments.reduce<Record<string, Deployment[]>>((acc, d) => {
-      (acc[d.repo] ||= []).push(d);
+      const key = d.projectId || d.repo;
+      (acc[key] ||= []).push(d);
       return acc;
     }, {})
   ).sort(([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime());
@@ -65,7 +65,7 @@ export function useDeploy() {
     deployments,
     loading,
     projectLangs,
-    projectByRepo,
+    projectById,
     grouped,
   };
 }

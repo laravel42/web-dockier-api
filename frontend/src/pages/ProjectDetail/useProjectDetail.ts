@@ -149,12 +149,9 @@ export function useProjectDetail() {
   // Fetch last deploy
   const fetchLastDeploy = () => {
     if (!project) return;
-    const parsed = parseOwnerRepo(project.repository);
-    if (!parsed) return;
-    const repoKey = `${parsed.owner}/${parsed.repo}`;
     deployApi.listDeployments()
       .then((res) => {
-        const match = res.deployments.filter((d: DeployInfo) => d.repo === repoKey);
+        const match = res.deployments.filter((d: DeployInfo) => d.projectId === project.id);
         setLastDeploy(match.length > 0 ? match[0] : null);
       })
       .catch(() => {});

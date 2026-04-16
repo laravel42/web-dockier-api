@@ -162,6 +162,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
           const dep = await deployApi.createDeployment({
             providerId: state.selectedProviderId,
             gitConnectionId: project.connectionId,
+            projectId: project.id,
             repo,
             branch: project.branch || "main",
             techStack: analysis?.techStack.map(t => t.name) || [],
@@ -325,6 +326,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
       const deployment = await deployApi.createDeployment({
         providerId: state.selectedProviderId,
         gitConnectionId: project.connectionId,
+        projectId: project.id,
         repo,
         branch: project.branch || "main",
         tofuScript: state.tofuScript || undefined,

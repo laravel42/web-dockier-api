@@ -28,6 +28,7 @@ export interface RepoStats {
 export interface DeployInfo {
   id: string;
   providerId: string;
+  projectId: string;
   repo: string;
   branch: string;
   status: string;
