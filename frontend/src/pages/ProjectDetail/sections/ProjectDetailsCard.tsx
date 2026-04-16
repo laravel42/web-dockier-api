@@ -17,11 +17,11 @@ export default function ProjectDetailsCard({ project }: Props) {
       <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Details</h2>
       <div className="space-y-3">
         <div>
-          <p className="text-xs text-text-muted">Project ID</p>
+          <p className="text-xs">Project ID</p>
           <p className="text-sm text-text-secondary font-mono mt-0.5">{project.id}</p>
         </div>
         <div>
-          <p className="text-xs text-text-muted">Source</p>
+          <p className="text-xs">Source</p>
           <div className="flex items-center gap-2 mt-0.5">
             {isTemplate ? (
               <>
@@ -38,7 +38,7 @@ export default function ProjectDetailsCard({ project }: Props) {
           </div>
         </div>
         <div>
-          <p className="text-xs text-text-muted">Created</p>
+          <p className="text-xs">Created</p>
           <p className="text-sm text-text-secondary mt-0.5">{new Date(project.createdAt).toLocaleString()}</p>
         </div>
       </div>

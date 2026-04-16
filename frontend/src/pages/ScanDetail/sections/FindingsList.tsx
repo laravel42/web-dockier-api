@@ -46,14 +46,14 @@ export default function FindingsList({
 
   // Provider filter pills
   const counts = findings.reduce<Record<string, number>>((acc, f) => {
-    const p = f.ruleId.startsWith("sonar.") ? "sonar" : f.ruleId.startsWith("custom.") ? "custom" : "opengrep";
+    const p = f.ruleId.startsWith("sonar.") ? "sonar" : f.ruleId.startsWith("custom.") ? "custom" : "semgrep";
     acc[p] = (acc[p] || 0) + 1;
     return acc;
   }, {});
 
   const providers = [
     { key: "", label: "All Providers", count: findings.length },
-    { key: "opengrep", label: "Opengrep", count: counts["opengrep"] || 0 },
+    { key: "semgrep", label: "Semgrep", count: counts["semgrep"] || 0 },
     { key: "sonar", label: "SonarQube", count: counts["sonar"] || 0 },
     { key: "custom", label: "Custom Rules", count: counts["custom"] || 0 },
   ].filter(p => p.key === "" || p.count > 0);

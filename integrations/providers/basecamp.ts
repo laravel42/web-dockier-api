@@ -39,7 +39,7 @@ export const basecampProvider: PMProvider = {
     const listRes = await fetch(`${todoset.url}/todolists.json`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Security Findings", description: "Issues from Opengrep scan" }),
+      body: JSON.stringify({ name: "Security Findings", description: "Issues from Semgrep scan" }),
     });
 
     let todolistUrl = "";

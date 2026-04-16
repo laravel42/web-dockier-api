@@ -38,6 +38,16 @@ export interface DeployInfo {
   createdAt: string;
 }
 
+export interface CommitInfo {
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  authorAvatar: string;
+  date: string;
+  url: string;
+}
+
 export interface ProviderInfo {
   id: string;
   provider: string;

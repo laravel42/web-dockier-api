@@ -8,7 +8,7 @@ Dockier brings together the tools developers need to ship secure code faster:
 
 - **Project Management** — Connect GitHub, GitLab, or Bitbucket repositories and organize them as projects with branch tracking, tech stack detection, and deployment status at a glance.
 
-- **Security Scanning** — Run automated code analysis powered by Opengrep, SonarQube, and a built-in custom rules engine. Scans detect SQL injection, XSS, command injection, weak cryptography, path traversal, and dozens of other vulnerability classes across PHP, JavaScript, TypeScript, Python, Go, Java, Ruby, and more.
+- **Security Scanning** — Run automated code analysis powered by Semgrep, SonarQube, and a built-in custom rules engine. Scans detect SQL injection, XSS, command injection, weak cryptography, path traversal, and dozens of other vulnerability classes across PHP, JavaScript, TypeScript, Python, Go, Java, Ruby, and more.
 
 - **AI-Assisted Remediation** — Generate fix merge requests directly from scan findings using LLM-powered code suggestions. Assign reviewers and track fixes without leaving the platform.
 

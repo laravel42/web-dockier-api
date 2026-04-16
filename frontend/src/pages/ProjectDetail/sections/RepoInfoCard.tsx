@@ -1,20 +1,37 @@
 import type { Project, RepoStats } from "../types";
 import { cardCls } from "../constants";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
-import CodeIcon from "../../../components/icons/outlined/CodeIcon";
-import UserIcon from "../../../components/icons/outlined/UserIcon";
-import ChatBubbleIcon from "../../../components/icons/outlined/ChatBubbleIcon";
+import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
+import GitCommitIcon from "../../../components/icons/outlined/GitCommitIcon";
+import TechBadge from "../../../components/TechBadge";
 
 interface Props {
   project: Project;
   stats: RepoStats | null;
+  techStack?: Array<{ name: string; category: string; confidence: number }>;
 }
 
 const templateDescriptions: Record<string, string> = {
   wordpress: "Full WordPress setup with MySQL database, ready to deploy.",
 };
 
-export default function RepoInfoCard({ project, stats }: Props) {
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "";
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = Math.max(0, now - then);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
+export default function RepoInfoCard({ project, stats, techStack }: Props) {
   const isTemplate = project.sourceType === "template";
 
   if (isTemplate) {
@@ -29,7 +46,7 @@ export default function RepoInfoCard({ project, stats }: Props) {
             </a>
           </div>
           <div className="flex items-center gap-2">
-            <CodeIcon className="w-5 h-5 text-text-muted shrink-0" />
+            <GitBranchIcon className="w-5 h-5 text-text-muted shrink-0" />
             <span className="text-sm text-text-secondary">{project.branch}</span>
           </div>
           {project.template && templateDescriptions[project.template] && (
@@ -53,9 +70,9 @@ export default function RepoInfoCard({ project, stats }: Props) {
           ) : (
             <span className="text-sm text-text-muted">No repository linked</span>
           )}
-        </div>
+        </div>                
         <div className="flex items-center gap-2">
-          <CodeIcon className="w-5 h-5 text-text-muted shrink-0" />
+          <GitBranchIcon className="w-5 h-5 text-text-muted shrink-0" />
           {project.branch && project.repository ? (
             <a href={`${project.repository}/-/tree/${project.branch}`} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors">{project.branch}</a>
           ) : project.branch ? (
@@ -64,24 +81,41 @@ export default function RepoInfoCard({ project, stats }: Props) {
             <span className="text-sm text-text-muted">No branch selected</span>
           )}
         </div>
-        {stats?.lastCommitAuthor && (
-          <div className="flex items-center gap-2">
-            <UserIcon className="w-5 h-5 text-text-muted shrink-0" />
-            <span className="text-sm text-text-secondary">{stats.lastCommitAuthor}</span>
-            {stats.lastCommitHash ? (
-              <a href={`${project.repository}/-/commit/${stats.lastCommitHash}`} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-primary-500 hover:text-primary-700 transition-colors">{stats.lastCommitHash.slice(0, 7)}</a>
-            ) : (
-              <span className="text-xs text-text-muted">last commit</span>
-            )}
+        {stats?.lastCommitHash && (
+          <div className="flex items-start gap-2">
+            <GitCommitIcon className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              {stats.lastCommitMessage && (
+                <a
+                  href={`${project.repository}/-/commit/${stats.lastCommitHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-text hover:text-primary-500 transition-colors truncate block"
+                >{stats.lastCommitMessage}</a>
+              )}
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <span className="font-mono text-primary-500">{stats.lastCommitHash.substring(0, 7)}</span>
+                {stats.lastCommitAuthor && (
+                  <>
+                    <span>·</span>
+                    <span>{stats.lastCommitAuthor}</span>
+                  </>
+                )}
+                {stats.lastCommitDate && (
+                  <>
+                    <span>·</span>
+                    <span>{timeAgo(stats.lastCommitDate)}</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
-        {stats?.lastCommitMessage && (
-          <div className="flex items-start gap-2 pt-2 mt-2 border-t border-border">
-            <ChatBubbleIcon className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <p className="text-sm text-text truncate">{stats.lastCommitMessage}</p>
-              {stats.lastCommitDate && <p className="text-xs text-text-muted mt-0.5">{new Date(stats.lastCommitDate).toLocaleString()}</p>}
-            </div>
+        {techStack && techStack.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-border">
+            {techStack.slice(0, 4).map((b) => (
+              <TechBadge key={b.name} name={b.name} iconSize="w-5 h-5" />
+            ))}
           </div>
         )}
       </div>

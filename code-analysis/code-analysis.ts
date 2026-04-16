@@ -18,13 +18,12 @@ const SonarQubeToken = secret("SonarQubeToken");
 
 initDb(DatabaseUrl());
 
-// Resolve opengrep binary path at module load
-function findOpengrep(): string {
+// Resolve semgrep binary path at module load
+function findSemgrep(): string {
   const candidates = [
-    "opengrep",
-    join(process.env.HOME || "", ".local/bin/opengrep"),
-    join(process.env.HOME || "", ".opengrep/cli/v1.16.5/opengrep"),
-    "/usr/local/bin/opengrep",
+    "semgrep",
+    join(process.env.HOME || "", ".local/bin/semgrep"),
+    "/usr/local/bin/semgrep",
   ];
   for (const bin of candidates) {
     try {
@@ -32,10 +31,10 @@ function findOpengrep(): string {
       if (result.status === 0) return bin;
     } catch { /* try next */ }
   }
-  return "opengrep"; // fallback, hope it's in PATH
+  return "semgrep"; // fallback, hope it's in PATH
 }
-const OPENGREP_BIN = findOpengrep();
-console.log(`[code-analysis] Resolved opengrep binary: ${OPENGREP_BIN}`);
+const SEMGREP_BIN = findSemgrep();
+console.log(`[code-analysis] Resolved semgrep binary: ${SEMGREP_BIN}`);
 
 // Helper to handle double-encoded jsonb summary
 function parseSummary(raw: any): ScanSummary {
@@ -45,7 +44,7 @@ function parseSummary(raw: any): ScanSummary {
   return raw ?? { totalFindings: 0, errors: 0, warnings: 0, infos: 0, filesScanned: 0, filesInRepo: 0 };
 }
 
-// ─── Custom Security Rules (complement Opengrep) ───
+// ─── Custom Security Rules (complement Semgrep) ───
 
 interface CustomRule {
   id: string;
@@ -401,7 +400,7 @@ export const deleteScan = api(
   }
 );
 
-// ─── Run Scan (real Opengrep CLI) ───
+// ─── Run Scan (real Semgrep CLI) ───
 
 interface ScanProgress {
   phase: "cloning" | "scanning" | "persisting" | "done";
@@ -413,7 +412,7 @@ interface ScanProgress {
 
 export const runScan = api(
   { method: "POST", path: "/code-analysis/scans/:scanId/run", auth: true },
-  async (params: { scanId: string; enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
+  async (params: { scanId: string; enableSemgrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
     const scan = await db.queryRow<{
       id: string; app_id: string; project_id: string; connection_id: string;
       repo: string; branch: string; status: string; summary: ScanSummary;
@@ -428,7 +427,7 @@ export const runScan = api(
     await db.exec`DELETE FROM findings WHERE scan_id = ${params.scanId}`;
 
     const tools = {
-      opengrep: params.enableOpengrep !== false,
+      semgrep: params.enableSemgrep !== false,
       sonarqube: params.enableSonarqube !== false,
       customRules: params.enableCustomRules !== false,
     };
@@ -542,7 +541,7 @@ export const deleteCustomRule = api(
   }
 );
 
-// ─── Opengrep Rules (from GitHub) ───
+// ─── Semgrep Rules ───
 
 interface OGRule {
   id: string;
@@ -556,15 +555,15 @@ interface OGRule {
 
 let _ogRulesCache: OGRule[] | null = null;
 
-export const listOpengrepRules = api(
-  { method: "GET", path: "/code-analysis/opengrep-rules", auth: true },
+export const listSemgrepRules = api(
+  { method: "GET", path: "/code-analysis/semgrep-rules", auth: true },
   async (): Promise<{ rules: OGRule[]; languages: string[] }> => {
     if (_ogRulesCache) {
       const langs = [...new Set(_ogRulesCache.map(r => r.lang))].sort();
       return { rules: _ogRulesCache, languages: langs };
     }
 
-    if (!existsSync(RULES_DIR)) throw APIError.failedPrecondition("Opengrep rules not found. Clone https://github.com/opengrep/opengrep-rules into code-analysis/rules/opengrep");
+    if (!existsSync(RULES_DIR)) throw APIError.failedPrecondition("Semgrep rules not found. Clone rules into code-analysis/rules/opengrep");
 
     const langDirs = new Set([
       "java", "javascript", "python", "php", "go", "ruby", "rust", "typescript",
@@ -623,8 +622,8 @@ export const listOpengrepRules = api(
   }
 );
 
-export const getOpengrepRuleContent = api(
-  { method: "GET", path: "/code-analysis/opengrep-rules/content", auth: true },
+export const getSemgrepRuleContent = api(
+  { method: "GET", path: "/code-analysis/semgrep-rules/content", auth: true },
   async (params: { path: string }): Promise<{ content: string }> => {
     const filePath = join(RULES_DIR, params.path);
     if (!filePath.startsWith(RULES_DIR) || !existsSync(filePath)) throw APIError.notFound("Rule file not found");
@@ -632,8 +631,8 @@ export const getOpengrepRuleContent = api(
   }
 );
 
-export const updateOpengrepRuleContent = api(
-  { method: "PUT", path: "/code-analysis/opengrep-rules/content", auth: true },
+export const updateSemgrepRuleContent = api(
+  { method: "PUT", path: "/code-analysis/semgrep-rules/content", auth: true },
   async (params: { path: string; content: string }): Promise<{ success: boolean }> => {
     const filePath = join(RULES_DIR, params.path);
     if (!filePath.startsWith(RULES_DIR)) throw APIError.invalidArgument("Invalid path");
@@ -742,13 +741,13 @@ export const toggleSonarRule = api(
   }
 );
 
-// ─── Global Rule Overrides (OpenGrep & SonarQube) ───
+// ─── Global Rule Overrides (Semgrep & SonarQube) ───
 
 export const listRuleOverrides = api(
   { method: "GET", path: "/code-analysis/rule-overrides", auth: true },
-  async (params: { tool: "opengrep" | "sonarqube" }): Promise<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }> => {
+  async (params: { tool: "semgrep" | "sonarqube" }): Promise<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }> => {
     const overrides: Array<{ id: string; ruleId: string; enabled: boolean }> = [];
-    if (params.tool === "opengrep") {
+    if (params.tool === "semgrep") {
       const rows = db.query<{ id: string; rule_id: string; enabled: boolean }>`
         SELECT id, rule_id, enabled FROM opengrep_rules`;
       for await (const r of rows) overrides.push({ id: r.id, ruleId: r.rule_id, enabled: r.enabled });
@@ -763,9 +762,9 @@ export const listRuleOverrides = api(
 
 export const toggleRule = api(
   { method: "POST", path: "/code-analysis/rule-overrides", auth: true },
-  async (params: { tool: "opengrep" | "sonarqube"; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
+  async (params: { tool: "semgrep" | "sonarqube"; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
     const id = uuidv4();
-    if (params.tool === "opengrep") {
+    if (params.tool === "semgrep") {
       await db.exec`INSERT INTO opengrep_rules (id, rule_id, enabled)
         VALUES (${id}, ${params.ruleId}, ${params.enabled})
         ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
@@ -966,9 +965,9 @@ async function runSonarScanner(repoDir: string, projectKey: string): Promise<Son
   return issues;
 }
 
-async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; app_id: string; project_id: string; created_at: Date }, tools: { opengrep: boolean; sonarqube: boolean; customRules: boolean } = { opengrep: true, sonarqube: true, customRules: true }) {
-  console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, tools: opengrep=${tools.opengrep} sonarqube=${tools.sonarqube} customRules=${tools.customRules}`);
-  const tmpDir = mkdtempSync(join(tmpdir(), "opengrep-scan-"));
+async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; app_id: string; project_id: string; created_at: Date }, tools: { semgrep: boolean; sonarqube: boolean; customRules: boolean } = { semgrep: true, sonarqube: true, customRules: true }) {
+  console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, tools: semgrep=${tools.semgrep} sonarqube=${tools.sonarqube} customRules=${tools.customRules}`);
+  const tmpDir = mkdtempSync(join(tmpdir(), "semgrep-scan-"));
 
   try {
     // 1. Clone
@@ -1022,18 +1021,18 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Loading disabled rules…" });
 
     // Load globally disabled rule IDs
-    const disabledOpengrep = new Set<string>();
+    const disabledSemgrep = new Set<string>();
     const disabledSonar = new Set<string>();
     {
       const ogRows = db.query<{ rule_id: string }>`SELECT rule_id FROM opengrep_rules WHERE enabled = false`;
-      for await (const r of ogRows) disabledOpengrep.add(r.rule_id);
+      for await (const r of ogRows) disabledSemgrep.add(r.rule_id);
       const sqRows = db.query<{ rule_id: string }>`SELECT rule_id FROM sonarqube_rules WHERE enabled = false`;
       for await (const r of sqRows) disabledSonar.add(r.rule_id);
     }
 
-    // 2. Run Opengrep (if enabled)
+    // 2. Run Semgrep (if enabled)
     const outputFile = join(tmpDir, "results.json");
-    let openGrepOutput = '{"results":[],"paths":{"scanned":[]}}';
+    let semgrepOutput = '{"results":[],"paths":{"scanned":[]}}';
 
     const mapSeverity = (s: string): "error" | "warning" | "info" => {
       const upper = s.toUpperCase();
@@ -1045,43 +1044,43 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     const findingsByFile = new Map<string, Array<{ ruleId: string; severity: "error" | "warning" | "info"; message: string; filePath: string; startLine: number; endLine: number; snippet: string }>>();
     let filesScanned = 0;
 
-    if (tools.opengrep) {
-      await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Running OpenGrep scanner…" });
-      console.log(`[doScan] Running opengrep: ${OPENGREP_BIN} in ${repoDir}`);
+    if (tools.semgrep) {
+      await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Running Semgrep scanner…" });
+      console.log(`[doScan] Running semgrep: ${SEMGREP_BIN} in ${repoDir}`);
       const configFlag = existsSync(RULES_DIR) ? `--config ${JSON.stringify(RULES_DIR)}` : "--config auto";
       try {
         execSync(
-          `${JSON.stringify(OPENGREP_BIN)} scan ${configFlag} --json --quiet --json-output=${JSON.stringify(outputFile)} .`,
-          { cwd: repoDir, timeout: 300_000, stdio: "pipe", env: { ...process.env, OPENGREP_ENABLE_VERSION_CHECK: "0", HOME: process.env.HOME || "" } }
+          `${JSON.stringify(SEMGREP_BIN)} scan ${configFlag} --json --quiet --json-output=${JSON.stringify(outputFile)} .`,
+          { cwd: repoDir, timeout: 300_000, stdio: "pipe", env: { ...process.env, SEMGREP_ENABLE_VERSION_CHECK: "0", HOME: process.env.HOME || "" } }
         );
-        openGrepOutput = readFileSync(outputFile, "utf-8");
-        console.log(`[doScan] Opengrep completed, output size: ${openGrepOutput.length} bytes`);
+        semgrepOutput = readFileSync(outputFile, "utf-8");
+        console.log(`[doScan] Semgrep completed, output size: ${semgrepOutput.length} bytes`);
       } catch (execErr: any) {
-        console.error(`[doScan] Opengrep exec error: ${execErr.message}`);
+        console.error(`[doScan] Semgrep exec error: ${execErr.message}`);
         if (existsSync(outputFile)) {
-          openGrepOutput = readFileSync(outputFile, "utf-8");
+          semgrepOutput = readFileSync(outputFile, "utf-8");
         } else {
           const stderr = execErr.stderr?.toString() || "";
-          throw new Error(`Opengrep failed: ${stderr || execErr.message}`);
+          throw new Error(`Semgrep failed: ${stderr || execErr.message}`);
         }
       }
 
-      const parsed = JSON.parse(openGrepOutput) as {
+      const parsed = JSON.parse(semgrepOutput) as {
         results?: Array<{ check_id: string; path: string; start: { line: number }; end: { line: number }; extra: { message: string; severity: string; lines: string } }>;
         paths?: { scanned?: string[] };
       };
       const results = parsed.results || [];
       filesScanned = parsed.paths?.scanned?.length || 0;
-      console.log(`[doScan] Opengrep found ${results.length} findings across ${filesScanned} files`);
+      console.log(`[doScan] Semgrep found ${results.length} findings across ${filesScanned} files`);
 
       for (const r of results) {
-        if (disabledOpengrep.has(r.check_id)) continue;
+        if (disabledSemgrep.has(r.check_id)) continue;
         const arr = findingsByFile.get(r.path) || [];
         arr.push({ ruleId: r.check_id, severity: mapSeverity(r.extra.severity), message: r.extra.message, filePath: r.path, startLine: r.start.line, endLine: r.end.line, snippet: (r.extra.lines || "").trim().slice(0, 200) });
         findingsByFile.set(r.path, arr);
       }
     } else {
-      console.log("[doScan] Opengrep disabled, skipping");
+      console.log("[doScan] Semgrep disabled, skipping");
     }
 
     // 3b. Run custom regex-based rules (if enabled)

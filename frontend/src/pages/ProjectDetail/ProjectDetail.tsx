@@ -1,5 +1,5 @@
 import { useProjectDetail } from "./useProjectDetail";
-import { btnSecondary } from "./constants";
+import { btnSecondary, cardCls } from "./constants";
 import DeployWizard from "../../components/DeployWizard";
 import ConfirmModal from "../../components/ConfirmModal";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
@@ -8,6 +8,8 @@ import RepoInfoCard from "./sections/RepoInfoCard";
 import ProjectDetailsCard from "./sections/ProjectDetailsCard";
 import KpiDashboard from "./sections/KpiDashboard";
 import ContributorsGrid from "./sections/ContributorsGrid";
+import RecentCommits from "./sections/RecentCommits";
+import RecentDeploys from "./sections/RecentDeploys";
 import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
@@ -20,10 +22,12 @@ export default function ProjectDetail() {
     showDeployWizard, setShowDeployWizard,
     allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy,
     stats, statsLoading, statsError,
+    recentCommits, commitsLoading, commitsError,
     showBranchModal, setShowBranchModal,
     branchList, branchLoading, branchSearch, setBranchSearch, handleSwitchBranch,
     pullLog, setPullLog, pullLoading,
     lastDeploy, destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
+    recentDeploys,
   } = useProjectDetail();
 
   if (loading) {
@@ -62,15 +66,32 @@ export default function ProjectDetail() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <RepoInfoCard project={project} stats={stats} />
+        <RepoInfoCard project={project} stats={stats} techStack={analysis?.techStack} />
         <ProjectDetailsCard project={project} />
       </div>
+
+      {(() => {
+        const summary = analysis?.aiAnalysis?.summary
+          || (analysis?.techStack?.length
+            ? `${analysis.primaryLanguage || analysis.techStack[0]?.name} project using ${analysis.techStack.slice(0, 4).map(t => t.name).join(", ")}${analysis.hasDocker ? ". Docker-ready" : ""}${analysis.hasCi ? " with CI/CD configured" : ""}.`
+            : null);
+        return summary ? (
+          <div className={`${cardCls} p-5 mb-6`}>
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Description</h2>
+            <p className="text-sm text-text leading-relaxed">{summary}</p>
+          </div>
+        ) : null;
+      })()}
 
       {project.connectionId && project.repository && (
         <KpiDashboard stats={stats} statsLoading={statsLoading} statsError={statsError} />
       )}
 
       <ContributorsGrid stats={stats} />
+
+      <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
+
+      <RecentDeploys deploys={recentDeploys} allProviders={allProviders} navigate={navigate} />
 
       {lastDeploy && (
         <LastDeployCard

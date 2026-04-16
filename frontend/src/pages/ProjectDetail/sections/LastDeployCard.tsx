@@ -32,7 +32,7 @@ export default function LastDeployCard({ lastDeploy, allProviders, destroying, o
           <ProviderBadge provider={provKey} suffix={` · ${strategyLabels[lastDeploy.deployStrategy] || lastDeploy.deployStrategy}`} iconSize="w-3 h-3" />
           <span className="text-xs text-text-muted ml-auto">{new Date(lastDeploy.createdAt).toLocaleString()}</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
           <div>
             <p className="text-xs text-text-muted">Branch</p>
             <p className="text-sm text-text font-medium mt-0.5">{lastDeploy.branch}</p>
@@ -57,10 +57,7 @@ export default function LastDeployCard({ lastDeploy, allProviders, destroying, o
               <p className="text-sm text-text font-mono mt-0.5 truncate" title={lastDeploy.dockerImage}>{lastDeploy.dockerImage.split("/").pop()?.split(":")[0] || lastDeploy.dockerImage}</p>
             </div>
           )}
-        </div>
-        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-          <span className="text-xs text-text-muted">{prov?.label || provKey}</span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-end gap-3 sm:col-start-[-1] justify-end">
             {lastDeploy.status === "success" && (
               <button
                 disabled={destroying}

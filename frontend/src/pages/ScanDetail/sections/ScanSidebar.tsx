@@ -113,7 +113,7 @@ export default function ScanSidebar({
                           const hasCr = findings.some(f => f.ruleId.startsWith("custom."));
                           return (
                             <div className="flex items-center gap-2 ml-auto shrink-0">
-                              {hasOg && <img src="/devicons/opengrep.svg" alt="Opengrep" className="w-4 h-4 rounded" />}
+                              {hasOg && <img src="/devicons/semgrep.svg" alt="Semgrep" className="w-4 h-4 rounded" />}
                               {hasSq && <img src="/devicons/sonarqube.svg" alt="SonarQube" className="w-4 h-4 rounded" />}
                               {hasCr && <img src="/logo.png" alt="Custom" className="w-4 h-4 rounded" />}
                             </div>
@@ -121,7 +121,7 @@ export default function ScanSidebar({
                         }
                         return (
                           <div className="flex items-center gap-2 ml-auto shrink-0">
-                            <img src="/devicons/opengrep.svg" alt="Opengrep" className="w-4 h-4 rounded" />
+                            <img src="/devicons/semgrep.svg" alt="Semgrep" className="w-4 h-4 rounded" />
                             <img src="/devicons/sonarqube.svg" alt="SonarQube" className="w-4 h-4 rounded" />
                           </div>
                         );

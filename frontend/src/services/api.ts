@@ -291,6 +291,11 @@ export const gitApi = {
       `/git/connections/${connectionId}/repo-members?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`
     ),
 
+  getRecentCommits: (connectionId: string, owner: string, repo: string, branch?: string, limit?: number) =>
+    request<{
+      commits: Array<{ hash: string; shortHash: string; message: string; author: string; authorAvatar: string; date: string; url: string }>;
+    }>(`/git/connections/${connectionId}/recent-commits?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}${limit ? `&limit=${limit}` : ""}`),
+
   getFileContent: (connectionId: string, owner: string, repo: string, branch: string, path: string) =>
     request<{ content: string }>(
       `/git/connections/${connectionId}/file-content?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`
@@ -621,7 +626,7 @@ export const codeAnalysisApi = {
       updatedAt: string;
     }>(`/code-analysis/scans/${scanId}`),
 
-  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }) =>
+  runScan: (scanId: string, tools?: { enableSemgrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }) =>
     request<{
       id: string;
       status: string;
@@ -661,14 +666,14 @@ export const codeAnalysisApi = {
   deleteCustomRule: (ruleDbId: string) =>
     request(`/code-analysis/custom-rules/${ruleDbId}`, { method: "DELETE" }),
 
-  listOpengrepRules: () =>
-    request<{ rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>; languages: string[] }>("/code-analysis/opengrep-rules"),
+  listSemgrepRules: () =>
+    request<{ rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>; languages: string[] }>("/code-analysis/semgrep-rules"),
 
-  getOpengrepRuleContent: (path: string) =>
-    request<{ content: string }>(`/code-analysis/opengrep-rules/content?path=${encodeURIComponent(path)}`),
+  getSemgrepRuleContent: (path: string) =>
+    request<{ content: string }>(`/code-analysis/semgrep-rules/content?path=${encodeURIComponent(path)}`),
 
-  updateOpengrepRuleContent: (path: string, content: string) =>
-    request("/code-analysis/opengrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
+  updateSemgrepRuleContent: (path: string, content: string) =>
+    request("/code-analysis/semgrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
 
   listSonarProfiles: () =>
     request<{ profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }> }>("/code-analysis/sonar/profiles"),
@@ -681,10 +686,10 @@ export const codeAnalysisApi = {
   toggleSonarRule: (profileKey: string, ruleKey: string, activate: boolean) =>
     request("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
 
-  listRuleOverrides: (tool: "opengrep" | "sonarqube") =>
+  listRuleOverrides: (tool: "semgrep" | "sonarqube") =>
     request<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }>(`/code-analysis/rule-overrides?tool=${tool}`),
 
-  toggleRule: (tool: "opengrep" | "sonarqube", ruleId: string, enabled: boolean) =>
+  toggleRule: (tool: "semgrep" | "sonarqube", ruleId: string, enabled: boolean) =>
     request("/code-analysis/rule-overrides", { method: "POST", body: JSON.stringify({ tool, ruleId, enabled }) }),
 };
 

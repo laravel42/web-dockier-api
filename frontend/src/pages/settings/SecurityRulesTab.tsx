@@ -12,7 +12,7 @@ interface CRule {
 }
 
 export default function SecurityRulesTab() {
-  const [ruleSource, setRuleSource] = useState<"custom" | "sonarqube" | "opengrep">("custom");
+  const [ruleSource, setRuleSource] = useState<"custom" | "sonarqube" | "semgrep">("custom");
   const [rules, setRules] = useState<CRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -99,8 +99,8 @@ export default function SecurityRulesTab() {
         <button onClick={() => setRuleSource("sonarqube")} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${ruleSource === "sonarqube" ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
           SonarQube
         </button>
-        <button onClick={() => setRuleSource("opengrep")} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${ruleSource === "opengrep" ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
-          Opengrep
+        <button onClick={() => setRuleSource("semgrep")} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${ruleSource === "semgrep" ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
+          Semgrep
         </button>
         {ruleSource === "custom" && (
           <div className="ml-auto flex items-center gap-2">
@@ -115,8 +115,8 @@ export default function SecurityRulesTab() {
 
       {ruleSource === "sonarqube" ? (
         <SonarQubeRulesPanel />
-      ) : ruleSource === "opengrep" ? (
-        <OpengrepRulesPanel />
+      ) : ruleSource === "semgrep" ? (
+        <SemgrepRulesPanel />
       ) : (
       <>
 
@@ -528,7 +528,7 @@ function RulesFilterSidebar({ severities, activeSeverity, onSeverityChange, lang
 
 let _ogCache: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }> | null = null;
 
-function OpengrepRulesPanel() {
+function SemgrepRulesPanel() {
   const [allRules, setAllRules] = useState<Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -542,7 +542,7 @@ function OpengrepRulesPanel() {
 
   // Load disabled rules from backend
   useEffect(() => {
-    codeAnalysisApi.listRuleOverrides("opengrep").then(res => {
+    codeAnalysisApi.listRuleOverrides("semgrep").then(res => {
       const disabled = new Set(res.overrides.filter(o => !o.enabled).map(o => o.ruleId));
       setDisabledRules(disabled);
     }).catch(() => {});
@@ -555,13 +555,13 @@ function OpengrepRulesPanel() {
       if (nowEnabled) n.delete(id); else n.add(id);
       return n;
     });
-    codeAnalysisApi.toggleRule("opengrep", id, nowEnabled).catch(() => {});
+    codeAnalysisApi.toggleRule("semgrep", id, nowEnabled).catch(() => {});
   };
 
   const openEditModal = async (r: { id: string; path: string; name: string }) => {
     setEditRule(r); setEditLoading(true); setEditContent("");
     try {
-      const res = await codeAnalysisApi.getOpengrepRuleContent(r.path);
+      const res = await codeAnalysisApi.getSemgrepRuleContent(r.path);
       setEditContent(res.content);
     } catch { setEditContent("# Failed to load rule content"); }
     finally { setEditLoading(false); }
@@ -569,9 +569,9 @@ function OpengrepRulesPanel() {
 
   useEffect(() => {
     if (_ogCache) { setAllRules(_ogCache); setLoading(false); return; }
-    codeAnalysisApi.listOpengrepRules()
+    codeAnalysisApi.listSemgrepRules()
       .then(res => { setAllRules(res.rules); _ogCache = res.rules; })
-      .catch(e => setError(e.message || "Failed to load Opengrep rules"))
+      .catch(e => setError(e.message || "Failed to load Semgrep rules"))
       .finally(() => setLoading(false));
   }, []);
 

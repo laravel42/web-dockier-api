@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import type { Project, RepoStats, DeployInfo, ProviderInfo } from "./types";
+import type { Project, RepoStats, DeployInfo, ProviderInfo, CommitInfo } from "./types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
 // Pre-built analysis data for template projects (no repo analysis needed)
@@ -77,6 +77,11 @@ export function useProjectDetail() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
 
+  // Recent commits
+  const [recentCommits, setRecentCommits] = useState<CommitInfo[]>([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsError, setCommitsError] = useState("");
+
   // Providers
   const [allProviders, setAllProviders] = useState<ProviderInfo[]>([]);
 
@@ -89,6 +94,9 @@ export function useProjectDetail() {
 
   // Last deploy
   const [lastDeploy, setLastDeploy] = useState<DeployInfo | null>(null);
+
+  // Recent deploys
+  const [recentDeploys, setRecentDeploys] = useState<DeployInfo[]>([]);
 
   // Auto-open deploy wizard from navigation state
   useEffect(() => {
@@ -129,6 +137,13 @@ export function useProjectDetail() {
               .catch((err: any) => setStatsError(err.message || "Failed to load stats"))
               .finally(() => setStatsLoading(false));
 
+            setCommitsLoading(true);
+            setCommitsError("");
+            gitApi.getRecentCommits(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, 5)
+              .then((res) => setRecentCommits(res.commits))
+              .catch((err: any) => setCommitsError(err.message || "Failed to load commits"))
+              .finally(() => setCommitsLoading(false));
+
             setAnalysisLoading(true);
             setAnalysisError("");
             let aiType: string | undefined;
@@ -156,6 +171,7 @@ export function useProjectDetail() {
       .then((res) => {
         const match = res.deployments.filter((d: DeployInfo) => d.repo === repoKey);
         setLastDeploy(match.length > 0 ? match[0] : null);
+        setRecentDeploys(match.slice(0, 5));
       })
       .catch(() => {});
   };
@@ -240,6 +256,8 @@ export function useProjectDetail() {
     fetchLastDeploy,
     // Stats
     stats, statsLoading, statsError,
+    // Recent commits
+    recentCommits, commitsLoading, commitsError,
     // Branch modal
     showBranchModal, setShowBranchModal,
     branchList, branchLoading, branchSearch, setBranchSearch,
@@ -248,6 +266,8 @@ export function useProjectDetail() {
     pullLog, setPullLog, pullLoading,
     // Last deploy
     lastDeploy,
+    // Recent deploys
+    recentDeploys,
     destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
   };
 }

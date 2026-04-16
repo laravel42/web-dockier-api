@@ -9,6 +9,7 @@ const ICON_MAP: Record<string, string> = {
   "Node.js": "nodejs", React: "react", Angular: "angularjs", Laravel: "laravel",
   Django: "django", Rails: "rails", "Next.js": "nextjs", Express: "express",
   Flask: "flask", Spring: "spring", ".NET": "dot-net",
+  "Tailwind CSS": "tailwind_css", Tailwind: "tailwind_css",
 };
 
 const LABEL_MAP: Record<string, string> = {
