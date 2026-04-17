@@ -1,4 +1,5 @@
 import { btnPrimary } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 import { useDashboard } from "./useDashboard";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 import KpiGrid from "./sections/KpiGrid";
@@ -18,7 +19,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }

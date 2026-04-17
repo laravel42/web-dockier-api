@@ -9,6 +9,7 @@ import ScanSidebar from "./sections/ScanSidebar";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
+import Spinner from "../../components/Spinner";
 
 export default function ScanDetail() {
   const core = useScanDetail();
@@ -18,7 +19,7 @@ export default function ScanDetail() {
   if (core.loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }
@@ -54,7 +55,7 @@ export default function ScanDetail() {
   if (!core.scan) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }

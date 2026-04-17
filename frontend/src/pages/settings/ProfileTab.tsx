@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { usersApi } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { countries } from "../../data/countries";
-import { inputCls, btnPrimary } from "./shared";
+import { inputCls, btnPrimary } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 
 export default function ProfileTab() {
   const { userId, email: authEmail, userProfile, setUserProfile } = useAuth();
@@ -37,7 +38,7 @@ export default function ProfileTab() {
     finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
 
   const languages = [
     ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["pt", "Portuguese"],

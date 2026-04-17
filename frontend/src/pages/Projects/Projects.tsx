@@ -1,6 +1,7 @@
 import ConfirmModal from "../../components/ConfirmModal";
+import Spinner from "../../components/Spinner";
 import { useProjects } from "./useProjects";
-import { btnPrimary } from "./constants";
+import { btnPrimary } from "../../utils/styles";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
@@ -92,7 +93,7 @@ export default function Projects() {
       {/* Content */}
       {loading ? (
         <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner />
         </div>
       ) : projects.length === 0 ? (
         <p className="text-text-muted text-center py-12 text-sm">No projects yet. Create one to get started.</p>

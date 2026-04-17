@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { projectsApi, deployApi, codeAnalysisApi } from "../../services/api";
-import type { Project, Deploy, Scan, Provider } from "./types";
+import type { Project, Deployment as Deploy, Scan, Provider } from "../../types";
 
 export function useDashboard() {
   const navigate = useNavigate();

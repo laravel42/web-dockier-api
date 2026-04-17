@@ -1,5 +1,5 @@
-import type { Project } from "../types";
-import { cardCls } from "../constants";
+import type { Project } from "../../../types";
+import { cardCls } from "../../../utils/styles";
 import SourceControlBadge from "../../../components/SourceControlBadge";
 
 interface Props {

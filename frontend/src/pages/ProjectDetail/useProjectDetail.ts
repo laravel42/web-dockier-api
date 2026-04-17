@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import type { Project, RepoStats, DeployInfo, ProviderInfo, CommitInfo } from "./types";
+import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo } from "../../types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
 // ─── Analysis cache (survives navigation within session) ───

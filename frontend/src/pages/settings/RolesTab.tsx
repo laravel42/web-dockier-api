@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { rolesApi } from "../../services/api";
 import RoleFormModal from "../../components/RoleFormModal";
 import ConfirmModal from "../../components/ConfirmModal";
-import { btnPrimary } from "./shared";
+import { btnPrimary } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 
 export default function RolesTab() {
   const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string; permissions: string[] }>>([]);
@@ -61,7 +62,7 @@ export default function RolesTab() {
       />
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {roles.map((r) => (

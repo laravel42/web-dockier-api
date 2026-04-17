@@ -1,6 +1,7 @@
 import { useDeploy } from "./useDeploy";
 import EmptyState from "./sections/EmptyState";
 import DeployCard from "./sections/DeployCard";
+import Spinner from "../../components/Spinner";
 
 export default function Deploy() {
   const { navigate, deployments, loading, projectLangs, projectById, grouped } = useDeploy();
@@ -8,7 +9,7 @@ export default function Deploy() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }

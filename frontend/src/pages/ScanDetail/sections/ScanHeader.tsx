@@ -1,5 +1,5 @@
-import { statusColors } from "../constants";
-import type { Scan, Project } from "../types";
+import { statusBadgeColors as statusColors } from "../../../utils/styles";
+import type { Scan, Project } from "../../../types";
 
 interface Props {
   scan: Scan;

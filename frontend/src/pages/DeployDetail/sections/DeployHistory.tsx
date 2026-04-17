@@ -1,6 +1,7 @@
-import type { Deployment, Provider } from "../types";
+import type { Deployment, Provider } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   deploys: Deployment[];
@@ -20,7 +21,7 @@ export default function DeployHistory({ deploys, providers, activeDeployId, load
           </div>
           {loading ? (
             <div className="flex justify-center py-6">
-              <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              <Spinner className="w-4 h-4" />
             </div>
           ) : deploys.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-4">No deploys yet</p>

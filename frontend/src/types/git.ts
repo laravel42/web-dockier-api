@@ -49,3 +49,13 @@ export interface FixResult {
   mrId: string;
   mrTitle: string;
 }
+
+export interface CommitInfo {
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  authorAvatar?: string;
+  date: string;
+  url?: string;
+}

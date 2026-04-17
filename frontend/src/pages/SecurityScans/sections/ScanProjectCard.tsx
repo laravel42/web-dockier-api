@@ -1,6 +1,6 @@
 import TechBadge from "../../../components/TechBadge";
 import SeverityBadge from "../../../components/SeverityBadge";
-import type { Scan, Project, TechBadgeInfo } from "../types";
+import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 

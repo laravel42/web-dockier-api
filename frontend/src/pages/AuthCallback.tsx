@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { authApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import Spinner from "../components/Spinner";
 
 export default function AuthCallback() {
   const { provider } = useParams<{ provider: string }>();
@@ -33,7 +34,7 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner className="w-8 h-8" />
         <p className="text-text-secondary text-sm">Authenticating...</p>
       </div>
     </div>

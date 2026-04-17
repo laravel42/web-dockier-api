@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi } from "../../services/api";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
-import type { Scan, Project } from "./types";
+import type { Scan, Project } from "../../types";
 
 export function useSecurityScans() {
   const navigate = useNavigate();

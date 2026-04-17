@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { btnPrimary } from "./shared";
+import { btnPrimary } from "../../utils/styles";
 
 export default function GeneralTab() {
   const [saving, setSaving] = useState(false);

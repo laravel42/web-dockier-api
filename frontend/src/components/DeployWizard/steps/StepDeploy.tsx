@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { WizardState } from "../types";
 import CheckIcon from "../../icons/outlined/CheckIcon";
 import ExternalLinkIcon from "../../icons/outlined/ExternalLinkIcon";
+import Spinner from "../../Spinner";
 
 export default function StepDeploy({ state }: { state: WizardState }) {
   const logsRef = useRef<HTMLDivElement>(null);
@@ -30,7 +31,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${statusColors[state.deployStatus] || "bg-secondary-100 text-text-muted"}`}>
           {state.deployStatus || "waiting"}
         </span>
-        {isRunning && <div className="w-3.5 h-3.5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />}
+        {isRunning && <Spinner className="w-3.5 h-3.5" />}
       </div>
 
       {/* Timeline steps */}

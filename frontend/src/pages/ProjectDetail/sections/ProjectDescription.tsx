@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { RepoAnalysis } from "../../../components/DeployWizard";
 import { markdownToHtml } from "../../../utils/markdownToHtml";
-import { cardCls } from "../constants";
+import { cardCls } from "../../../utils/styles";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -35,7 +36,7 @@ export default function ProjectDescription({ analysis, analysisLoading }: Props)
     return (
       <div className={`${cardCls} p-8 mb-6`}>
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner className="w-5 h-5" />
           <span className="text-sm text-text-muted">Analyzing project…</span>
         </div>
       </div>

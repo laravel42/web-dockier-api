@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
+import Spinner from "./Spinner";
 
 interface Repo {
   name: string;
@@ -50,7 +51,7 @@ export default function RepoSelect({ value, onChange, repos, loading }: Props) {
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-2 text-sm text-text-muted">
-        <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner className="w-4 h-4" />
         Loading…
       </div>
     );

@@ -1,5 +1,5 @@
-import type { Deployment, Project } from "../types";
-import { statusColors } from "../constants";
+import type { Deployment, Project } from "../../../types";
+import { statusBadgeColors as statusColors } from "../../../utils/styles";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 
 interface Props {

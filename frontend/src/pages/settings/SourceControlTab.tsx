@@ -3,7 +3,8 @@ import { gitApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
-import { inputCls, btnPrimary, btnDanger } from "./shared";
+import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 
 export default function SourceControlTab() {
   const [connections, setConnections] = useState<Array<{ id: string; provider: string; label: string; endpoint?: string; personalToken?: string }>>([]);
@@ -155,7 +156,7 @@ export default function SourceControlTab() {
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingConn) gitApi.deleteConnection(editingConn.id).then(fetch_); setEditingConn(null); setConfirmRemove(false); }} message="Are you sure you want to remove this connection?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {connections.map((conn) => (

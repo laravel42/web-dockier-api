@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, gitApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import type { Scan, Finding, Project, ScanProgress } from "./types";
+import type { Scan, Finding, Project, ScanProgress } from "../../types";
 
 export function useScanDetail() {
   const { scanId, projectId: routeProjectId } = useParams<{ scanId?: string; projectId?: string }>();

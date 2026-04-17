@@ -1,5 +1,7 @@
-import type { RepoStats } from "../types";
-import { cardCls, langColors, getKpiCards } from "../constants";
+import type { RepoStats } from "../../../types";
+import { cardCls } from "../../../utils/styles";
+import { langColors, getKpiCards } from "../constants";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   stats: RepoStats | null;
@@ -13,7 +15,7 @@ export default function KpiDashboard({ stats, statsLoading, statsError }: Props)
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Repository KPIs</h2>
         <div className="flex justify-center py-8">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner />
         </div>
       </div>
     );

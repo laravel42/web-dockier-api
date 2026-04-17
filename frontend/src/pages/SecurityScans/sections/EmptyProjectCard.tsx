@@ -1,6 +1,6 @@
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
-import type { Project } from "../types";
+import type { Project } from "../../../types";
 
 interface Props {
   project: Project | undefined;

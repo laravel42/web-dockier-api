@@ -1,5 +1,5 @@
 import Modal from "../../../components/Modal";
-import type { Finding, RepoMember, FixResult } from "../types";
+import type { Finding, RepoMember, FixResult } from "../../../types";
 
 interface Props {
   open: boolean;

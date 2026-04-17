@@ -1,5 +1,5 @@
-import type { RepoStats } from "../types";
-import { cardCls } from "../constants";
+import type { RepoStats } from "../../../types";
+import { cardCls } from "../../../utils/styles";
 
 interface Props {
   stats: RepoStats | null;

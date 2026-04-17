@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../../services/api";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
-import type { Deployment, Project } from "./types";
+import type { Deployment, Project } from "../../types";
 
 export function useDeploy() {
   const navigate = useNavigate();

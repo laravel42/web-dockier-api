@@ -1,5 +1,5 @@
 import { useProjectDetail } from "./useProjectDetail";
-import { btnSecondary } from "./constants";
+import { btnSecondary } from "../../utils/styles";
 import DeployWizard from "../../components/DeployWizard";
 import ConfirmModal from "../../components/ConfirmModal";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
@@ -16,6 +16,7 @@ import UserJourneyTree from "./sections/UserJourneyTree";
 import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
+import Spinner from "../../components/Spinner";
 
 export default function ProjectDetail() {
   const {
@@ -36,7 +37,7 @@ export default function ProjectDetail() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }

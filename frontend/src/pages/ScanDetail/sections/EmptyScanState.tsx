@@ -1,6 +1,6 @@
 import { cardCls } from "../../../utils/styles";
 import ScanSidebar from "./ScanSidebar";
-import type { Scan, Finding, Project, ScanProgress } from "../types";
+import type { Scan, Finding, Project, ScanProgress } from "../../../types";
 import ChevronLeftIcon from "../../../components/icons/outlined/ChevronLeftIcon";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 

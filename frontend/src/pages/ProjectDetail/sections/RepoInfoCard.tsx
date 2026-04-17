@@ -1,5 +1,5 @@
-import type { Project, RepoStats } from "../types";
-import { cardCls } from "../constants";
+import type { Project, RepoStats } from "../../../types";
+import { cardCls } from "../../../utils/styles";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
 import GitCommitIcon from "../../../components/icons/outlined/GitCommitIcon";

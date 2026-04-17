@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
-import { inputCls, btnPrimary, btnDanger } from "./shared";
+import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 
 export default function SshKeysTab() {
   const [keys, setKeys] = useState<Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }>>([]);
@@ -79,7 +80,7 @@ export default function SshKeysTab() {
       </Modal>
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <div className="space-y-3">
           {keys.map((k) => (

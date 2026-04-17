@@ -1,5 +1,6 @@
 import Modal from "../../../components/Modal";
 import ShareIcon from "../../../components/icons/outlined/ShareIcon";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   open: boolean;
@@ -26,7 +27,7 @@ export default function BranchModal({ open, onClose, branchList, branchLoading, 
       />
       {branchLoading ? (
         <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner className="w-5 h-5" />
         </div>
       ) : (
         <div className="max-h-64 overflow-y-auto space-y-1">

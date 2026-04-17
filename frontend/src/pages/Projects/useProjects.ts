@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
-import type { Connection, Repo, Project, ProjectSourceType } from "./types";
+import type { Connection, Repo, Project, ProjectSourceType } from "../../types";
 import { PROJECT_TEMPLATES } from "./templates";
 
 export function useProjects() {

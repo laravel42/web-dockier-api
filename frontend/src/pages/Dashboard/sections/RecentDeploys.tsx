@@ -1,4 +1,4 @@
-import type { Deploy, Provider, Project } from "../types";
+import type { Deployment as Deploy, Provider, Project } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
 

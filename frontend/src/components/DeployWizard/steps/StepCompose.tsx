@@ -3,6 +3,7 @@ import type { WizardState } from "../types";
 import { parseEnvContent, formatEnvContent } from "../utils";
 import EnvEditor from "../../EnvEditor";
 import DockerIcon from "../../icons/filled/DockerIcon";
+import Spinner from "../../Spinner";
 import DockerfileIcon from "../../icons/filled/DockerfileIcon";
 import RailpackIcon from "../../icons/outlined/RailpackIcon";
 import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
@@ -116,7 +117,7 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       {/* Loading */}
       {loading && (
         <div className="flex items-center gap-2 py-6 justify-center">
-          <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner className="w-4 h-4" />
           <span className="text-sm text-text-muted">Preparing deployment…</span>
         </div>
       )}

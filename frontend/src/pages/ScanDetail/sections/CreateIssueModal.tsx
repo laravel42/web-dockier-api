@@ -1,7 +1,8 @@
 import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
 import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
 import Modal from "../../../components/Modal";
-import type { PMIntegration, PMTeam, PMMember } from "../types";
+import type { PMIntegration, PMTeam, PMMember } from "../../../types";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   open: boolean;
@@ -92,7 +93,7 @@ export default function CreateIssueModal({
             </label>
             {pmProjectsLoading ? (
               <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
-                <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <Spinner className="w-4 h-4" />
                 <span className="text-sm text-text-muted">Fetching {pmTeamLabel.toLowerCase()}s…</span>
               </div>
             ) : pmProjects.length > 0 ? (
@@ -113,7 +114,7 @@ export default function CreateIssueModal({
               </label>
               {pmSubProjectsLoading ? (
                 <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
-                  <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                  <Spinner className="w-4 h-4" />
                   <span className="text-sm text-text-muted">Fetching {pmProjectLabel.toLowerCase()}s…</span>
                 </div>
               ) : pmSubProjects.length > 0 ? (

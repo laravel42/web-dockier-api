@@ -2,7 +2,8 @@ import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon"
 import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
-import type { Finding, PMIntegration } from "../types";
+import type { Finding, PMIntegration } from "../../../types";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   findings: Finding[];
@@ -28,7 +29,7 @@ export default function FindingsList({
   if (findingsLoading) {
     return (
       <div className="flex justify-center py-8">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }

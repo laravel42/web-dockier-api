@@ -1,5 +1,6 @@
-import type { CommitInfo } from "../types";
-import { cardCls } from "../constants";
+import type { CommitInfo } from "../../../types";
+import { cardCls } from "../../../utils/styles";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   commits: CommitInfo[];
@@ -29,7 +30,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
         <div className={`${cardCls} p-6 flex justify-center`}>
-          <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner className="w-5 h-5" />
         </div>
       </div>
     );

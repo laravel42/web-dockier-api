@@ -1,6 +1,7 @@
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
-import type { Scan, Finding, ScanProgress } from "../types";
+import type { Scan, Finding, ScanProgress } from "../../../types";
+import Spinner from "../../../components/Spinner";
 
 interface Props {
   scanId: string | undefined;
@@ -85,7 +86,7 @@ export default function ScanSidebar({
           </div>
           {allScansLoading ? (
             <div className="flex justify-center py-6">
-              <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              <Spinner className="w-4 h-4" />
             </div>
           ) : allScans.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-4">No scans yet</p>

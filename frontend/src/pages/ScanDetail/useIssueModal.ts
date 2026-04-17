@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { integrationsApi, gitApi } from "../../services/api";
 import { INTEGRATION_CATALOG } from "../../data/integrations";
-import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "./types";
+import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "../../types";
 
 export function useIssueModal(project: Project | null) {
   const [pmIntegrations, setPmIntegrations] = useState<PMIntegration[]>([]);

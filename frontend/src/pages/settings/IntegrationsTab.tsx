@@ -4,7 +4,7 @@ import { INTEGRATION_ICONS } from "../../data/integration-icons";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
-import { inputCls, btnPrimary, btnDanger } from "./shared";
+import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
 
 interface Integration {
   id: string;

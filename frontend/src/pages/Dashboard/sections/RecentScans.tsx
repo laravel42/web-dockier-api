@@ -1,4 +1,4 @@
-import type { Scan, Project } from "../types";
+import type { Scan, Project } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import SeverityBadge from "../../../components/SeverityBadge";
 

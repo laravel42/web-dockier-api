@@ -5,6 +5,7 @@ import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
+import Spinner from "../../components/Spinner";
 
 export default function DeployDetail() {
   const {
@@ -18,7 +19,7 @@ export default function DeployDetail() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
       </div>
     );
   }

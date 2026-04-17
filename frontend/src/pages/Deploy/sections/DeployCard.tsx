@@ -1,4 +1,4 @@
-import type { Deployment, Project } from "../types";
+import type { Deployment, Project } from "../../../types";
 import TechBadge from "../../../components/TechBadge";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";

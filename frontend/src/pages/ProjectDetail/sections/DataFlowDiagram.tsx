@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AIAnalysis } from "../../../components/DeployWizard/types";
-import { cardCls } from "../constants";
+import { cardCls } from "../../../utils/styles";
 
 interface Props {
   dataFlow: NonNullable<AIAnalysis["dataFlow"]>;

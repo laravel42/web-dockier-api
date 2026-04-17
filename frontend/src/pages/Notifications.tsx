@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { notificationsApi } from "../services/api";
+import Spinner from "../components/Spinner";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -23,7 +24,7 @@ export default function Notifications() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <div className="space-y-2">
           {notifications.map((n) => (

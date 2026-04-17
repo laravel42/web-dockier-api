@@ -1,9 +1,9 @@
 import TechBadge from "../../../components/TechBadge";
 import PlatformBadge from "../../../components/PlatformBadge";
 import SourceControlBadge from "../../../components/SourceControlBadge";
-import { getRepoSlug, getRepoKey } from "../utils";
-import { statusColors } from "../constants";
-import type { Project, TechBadgeInfo } from "../types";
+import { getRepoSlug, getRepoKey } from "../../../utils/parseOwnerRepo";
+import { statusDotColors as statusColors } from "../../../utils/styles";
+import type { Project, TechBadgeInfo } from "../../../types";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
 interface Deploy {

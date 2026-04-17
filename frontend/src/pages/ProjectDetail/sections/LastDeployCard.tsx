@@ -1,5 +1,5 @@
-import type { DeployInfo, ProviderInfo } from "../types";
-import { cardCls } from "../constants";
+import type { Deployment as DeployInfo, Provider as ProviderInfo } from "../../../types";
+import { cardCls } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
 
 interface Props {

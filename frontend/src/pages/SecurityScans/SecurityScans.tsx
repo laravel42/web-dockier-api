@@ -3,6 +3,7 @@ import { useSecurityScans } from "./useSecurityScans";
 import ScanProjectCard from "./sections/ScanProjectCard";
 import EmptyProjectCard from "./sections/EmptyProjectCard";
 import ShieldCheckIcon from "../../components/icons/outlined/ShieldCheckIcon";
+import Spinner from "../../components/Spinner";
 
 export default function SecurityScans() {
   const {
@@ -21,7 +22,7 @@ export default function SecurityScans() {
           <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
         </div>
         <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner />
         </div>
       </div>
     );

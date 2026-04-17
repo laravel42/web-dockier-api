@@ -1,5 +1,5 @@
-import type { Deployment } from "../types";
-import { strategyLabels } from "../constants";
+import type { Deployment } from "../../../types";
+import { strategyLabels } from "../../../utils/styles";
 import { cardCls } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
 

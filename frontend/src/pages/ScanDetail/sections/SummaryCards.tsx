@@ -1,5 +1,5 @@
 import { cardCls } from "../../../utils/styles";
-import type { ScanSummary } from "../types";
+import type { ScanSummary } from "../../../types";
 
 interface Props {
   summary: ScanSummary;

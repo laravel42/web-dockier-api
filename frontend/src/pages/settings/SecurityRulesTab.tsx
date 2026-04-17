@@ -4,7 +4,8 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
-import { inputCls, btnPrimary } from "./shared";
+import { inputCls, btnPrimary } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 
 interface CRule {
   id: string; ruleId: string; severity: string; message: string;
@@ -221,7 +222,7 @@ export default function SecurityRulesTab() {
       <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} message="Are you sure you want to delete this custom rule?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {filtered.map(r => (
@@ -336,7 +337,7 @@ function SonarQubeRulesPanel() {
     }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
   if (error && profiles.length === 0) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p><p className="text-xs text-text-muted mt-2">Check that SonarQubeUrl and SonarQubeToken secrets are configured correctly.</p></div>;
 
   return (
@@ -368,7 +369,7 @@ function SonarQubeRulesPanel() {
         <div className="flex-1 min-w-0">
 
       {rulesLoading ? (
-        <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-12"><Spinner className="w-5 h-5" /></div>
       ) : (() => {
         const sqFiltered = rules.filter(r => (!sevFilter || r.severity === sevFilter));
         const sqShown = sqFiltered.slice(0, sqVisible);
@@ -600,7 +601,7 @@ function SemgrepRulesPanel() {
 
   const shown = rules.slice(0, visible);
 
-  if (loading) return <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
   if (error) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p></div>;
 
   return (
@@ -661,7 +662,7 @@ function SemgrepRulesPanel() {
       {/* Edit YAML Modal */}
       <Modal open={!!editRule} onClose={() => setEditRule(null)} title={editRule?.name || "Edit Rule"} size="xl">
         {editLoading ? (
-          <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+          <div className="flex justify-center py-12"><Spinner className="w-5 h-5" /></div>
         ) : (
           <div className="space-y-4">
             <p className="text-xs text-text-muted font-mono">{editRule?.path}</p>

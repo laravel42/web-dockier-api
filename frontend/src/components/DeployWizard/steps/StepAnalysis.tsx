@@ -1,6 +1,7 @@
 import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
 import WarningIcon from "../../icons/outlined/WarningIcon";
+import Spinner from "../../Spinner";
 
 export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, onChange }: {
   state: WizardState;
@@ -12,7 +13,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   if (analysisLoading) {
     return (
       <div className="flex flex-col items-center py-8 gap-3">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <Spinner />
         <p className="text-sm text-text-muted">Analyzing repository…</p>
       </div>
     );

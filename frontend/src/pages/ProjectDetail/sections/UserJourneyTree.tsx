@@ -9,7 +9,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { UserJourneyNode } from "../../../components/DeployWizard/types";
-import { cardCls } from "../constants";
+import { cardCls } from "../../../utils/styles";
 
 interface Props {
   journey: UserJourneyNode;

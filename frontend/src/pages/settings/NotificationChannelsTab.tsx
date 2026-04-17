@@ -3,7 +3,8 @@ import { notificationsApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
-import { inputCls, btnPrimary, btnDanger } from "./shared";
+import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import Spinner from "../../components/Spinner";
 
 export default function NotificationChannelsTab() {
   const [channels, setChannels] = useState<Array<{ id: string; type: string; config: Record<string, string>; enabled: boolean }>>([]);
@@ -159,7 +160,7 @@ export default function NotificationChannelsTab() {
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingChannel) notificationsApi.deleteChannel(editingChannel.id).then(fetch_); setEditingChannel(null); setConfirmRemove(false); }} message="Are you sure you want to remove this channel?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {channels.map((ch) => {

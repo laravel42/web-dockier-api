@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { authApi } from "../../services/api";
-import { inputCls, btnPrimary } from "./shared";
+import { inputCls, btnPrimary } from "../../utils/styles";
 
 export default function SecurityTab() {
   const [qrCode, setQrCode] = useState<string | null>(null);

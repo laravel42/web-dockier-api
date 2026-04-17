@@ -6,9 +6,7 @@ import EyeIcon from "../../components/icons/outlined/EyeIcon";
 import CodeIcon from "../../components/icons/outlined/CodeIcon";
 import UsersIcon from "../../components/icons/outlined/UsersIcon";
 import { createElement } from "react";
-import type { RepoStats } from "./types";
-
-export { btnPrimary, btnSecondary, cardCls } from "../../utils/styles";
+import type { RepoStats } from "../../types";
 
 export const langColors = [
   "bg-blue-500", "bg-amber-500", "bg-emerald-500", "bg-purple-500",

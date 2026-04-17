@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../../services/api";
 import { getProviderStyle } from "../../data/providers";
 import { getRepoKey } from "../../utils/parseOwnerRepo";
-import type { Deployment, Provider, Project } from "./types";
+import type { Deployment, Provider, Project } from "../../types";
 
 export function useDeployDetail() {
   const { deployId } = useParams<{ deployId: string }>();

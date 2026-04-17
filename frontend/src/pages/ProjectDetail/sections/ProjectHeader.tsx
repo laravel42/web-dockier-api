@@ -1,5 +1,5 @@
-import type { Project } from "../types";
-import { btnPrimary, btnSecondary } from "../constants";
+import type { Project } from "../../../types";
+import { btnPrimary, btnSecondary } from "../../../utils/styles";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon";
