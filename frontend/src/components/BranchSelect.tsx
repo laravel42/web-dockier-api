@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useDropdownPosition } from "../hooks/useDropdownPosition";
 
 interface Props {
   value: string;
@@ -10,27 +12,33 @@ interface Props {
 export default function BranchSelect({ value, onChange, branches, loading }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { triggerRef, pos, updatePos, clearPos } = useDropdownPosition();
 
-  const filtered = branches.filter((b) =>
-    b.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = branches.filter((b) => b.toLowerCase().includes(search.toLowerCase()));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      setOpen(false);
+      clearPos();
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [clearPos, triggerRef]);
 
   useEffect(() => {
     if (open) {
       setSearch("");
+      updatePos();
       setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      clearPos();
     }
-  }, [open]);
+  }, [open, updatePos, clearPos]);
 
   if (loading) {
     return (
@@ -52,10 +60,11 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
   );
 
   return (
-    <div ref={ref} className="relative">
+    <div>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => { if (!open) updatePos(); setOpen(!open); }}
         className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
       >
         {value ? (
@@ -71,8 +80,12 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-[var(--radius-input)] shadow-lg max-h-64 flex flex-col">
+      {open && pos && createPortal(
+        <div
+          ref={dropdownRef}
+          className="bg-card border border-border rounded-[var(--radius-input)] shadow-lg max-h-64 flex flex-col"
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
+        >
           <div className="p-2 border-b border-border">
             <input
               ref={inputRef}
@@ -102,7 +115,8 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

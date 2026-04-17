@@ -206,7 +206,7 @@ export const gitApi = {
       topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
     }>(`/git/connections/${connectionId}/repo-stats?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
-  analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string, aiType?: string, aiApiKey?: string) =>
+  analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string, aiType?: string) =>
     request<{
       techStack: Array<{ name: string; category: string; confidence: number }>;
       deployOptions: Array<{
@@ -256,17 +256,17 @@ export const gitApi = {
           bestFor: string;
         }>;
       };
-    }>(`/git/connections/${connectionId}/repo-analyze?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}${aiType ? `&aiType=${encodeURIComponent(aiType)}` : ""}${aiApiKey ? `&aiApiKey=${encodeURIComponent(aiApiKey)}` : ""}`),
+    }>(`/git/connections/${connectionId}/repo-analyze?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}${aiType ? `&aiType=${encodeURIComponent(aiType)}` : ""}`),
 
   getRepoTree: (connectionId: string, owner: string, repo: string, branch?: string) =>
     request<{
       files: Array<{ path: string; type: string; size: number }>;
     }>(`/git/connections/${connectionId}/repo-tree?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
 
-  getRepoBadges: (repo: string, branch?: string) =>
+  getRepoBadges: (repo: string, branch?: string, connectionId?: string) =>
     request<{
       badges: Array<{ name: string; category: string; confidence: number }>;
-    }>(`/git/repo-badges?repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`),
+    }>(`/git/repo-badges?repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}${connectionId ? `&connectionId=${encodeURIComponent(connectionId)}` : ""}`),
 
   pullOrigin: (connectionId: string, owner: string, repo: string, branch: string, currentHash?: string) =>
     request<{ log: string[] }>(`/git/connections/${connectionId}/pull`, {
@@ -301,13 +301,10 @@ export const gitApi = {
       `/git/connections/${connectionId}/file-content?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`
     ),
 
-  listBedrockModels: () =>
-    request<{ models: Array<{ id: string; name: string }> }>("/git/bedrock/models"),
-
-  summarizeFinding: (severity: string, message: string, filePath: string, snippet?: string, model?: string) =>
+  summarizeFinding: (severity: string, message: string, filePath: string, snippet?: string) =>
     request<{ title: string; estimateMinutes: number }>("/git/ai/summarize-finding", {
       method: "POST",
-      body: JSON.stringify({ severity, message, filePath, snippet, model }),
+      body: JSON.stringify({ severity, message, filePath, snippet }),
     }),
 };
 

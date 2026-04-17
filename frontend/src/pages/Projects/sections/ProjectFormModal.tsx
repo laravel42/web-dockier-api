@@ -215,7 +215,7 @@ export default function ProjectFormModal({
           </div>
         )}
 
-        <div className="absolute bottom-4 right-6 flex items-center gap-3">
+        <div className="flex items-center justify-end gap-3 pt-4 mt-2 border-t border-border sticky bottom-0 bg-card">
           <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
           <button
             type="submit"

@@ -1,17 +1,40 @@
 import { api, APIError } from "encore.dev/api";
-import { db, BedrockApiKey, BedrockRegion, BedrockAccountId } from "../shared";
+import { db, OpenAIApiKey } from "../shared";
 import { throwProviderError } from "../helpers";
+
+// ─── Helper: call OpenAI Chat Completions ───
+
+async function callOpenAI(prompt: string, opts: { temperature?: number; maxTokens?: number } = {}): Promise<string | null> {
+  const apiKey = OpenAIApiKey();
+  if (!apiKey) return null;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-5.4-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: opts.temperature ?? 0.2,
+      max_completion_tokens: opts.maxTokens ?? 4096,
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody: any = await res.json().catch(() => ({}));
+    console.log(`[OpenAI] status=${res.status} error=${errBody.error?.message || res.statusText}`);
+    return null;
+  }
+
+  const data: any = await res.json();
+  return data.choices?.[0]?.message?.content?.trim() || null;
+}
 
 // ─── Helper: AI-summarize a finding into a short title ───
 
-async function summarizeFindingAI(severity: string, message: string, filePath: string, snippet: string, model?: string): Promise<{ title: string; estimateMinutes: number }> {
-  const apiKey = BedrockApiKey();
-  if (!apiKey) return { title: "", estimateMinutes: 0 };
-  const region = BedrockRegion() || "us-east-1";
-  const accountId = BedrockAccountId() || "";
-  const modelId = model || "us.anthropic.claude-sonnet-4-20250514-v1:0";
-  const modelArn = modelId.startsWith("arn:") ? modelId : `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`;
-  const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/converse`;
+async function summarizeFindingAI(severity: string, message: string, filePath: string, snippet: string): Promise<{ title: string; estimateMinutes: number }> {
   const prompt = `Analyze this security finding and return a JSON object with exactly two fields:
 - "title": a concise issue title, max 60 characters, no quotes or markdown
 - "estimateMinutes": estimated time in minutes to fix this issue (consider complexity, code changes needed, testing)
@@ -21,17 +44,11 @@ File: ${filePath}
 Finding: ${message}${snippet ? `\nCode:\n${snippet}` : ""}
 
 Return ONLY valid JSON, nothing else.`;
-  const reqBody = JSON.stringify({ messages: [{ role: "user", content: [{ text: prompt }] }], inferenceConfig: { temperature: 0.3, maxTokens: 200 } });
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
-  console.log(`[AI summarize] model=${modelId} prompt: ${prompt.slice(0, 300)}`);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
-    const res = await fetch(url, { method: "POST", headers, body: reqBody });
-    if (res.ok) {
-      const data: any = await res.json();
-      const raw = (data.output?.message?.content?.[0]?.text || "").trim();
-      console.log(`[AI summarize] attempt=${attempt + 1} response: ${raw}`);
+    const raw = await callOpenAI(prompt, { temperature: 0.3, maxTokens: 200 });
+    if (raw) {
       try {
         const cleaned = raw.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
         const parsed = JSON.parse(cleaned);
@@ -41,16 +58,13 @@ Return ONLY valid JSON, nothing else.`;
         };
       } catch { return { title: raw.slice(0, 60), estimateMinutes: 0 }; }
     }
-    const errBody: any = await res.json().catch(() => ({}));
-    console.log(`[AI summarize] attempt=${attempt + 1} status=${res.status} error=${errBody.message || errBody.Message || res.statusText}`);
-    if (res.status !== 503 && res.status !== 429) return { title: "", estimateMinutes: 0 };
   }
   return { title: "", estimateMinutes: 0 };
 }
 
 // ─── Helper: call AI to generate fix ───
 
-async function generateAIFix(aiType: string, aiConfig: Record<string, string>, filePath: string, fileContent: string, finding: { ruleId: string; severity: string; message: string; snippet: string; startLine: number; endLine: number }): Promise<string> {
+async function generateAIFix(filePath: string, fileContent: string, finding: { ruleId: string; severity: string; message: string; snippet: string; startLine: number; endLine: number }): Promise<string> {
   const prompt = `You are a senior security engineer. Fix the following security vulnerability in the code.
 
 **File:** \`${filePath}\`
@@ -75,39 +89,14 @@ Instructions:
 3. Return the COMPLETE fixed file content — every line, not just the changed part.
 4. Do NOT include markdown fences, explanations, or commentary — output raw file content only.`;
 
-  // Amazon Bedrock — Bearer auth with API key from Encore secret
-  const apiKey = BedrockApiKey();
-  if (!apiKey) throw new Error("BedrockApiKey secret is not configured");
-  const region = BedrockRegion() || "us-east-1";
-  const modelId = aiConfig.model || "us.anthropic.claude-sonnet-4-20250514-v1:0";
-  const accountId = BedrockAccountId() || "";
-  const modelArn = modelId.startsWith("arn:") ? modelId : `arn:aws:bedrock:${region}:${accountId}:inference-profile/${modelId}`;
-  const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/converse`;
-
-  const reqBody = JSON.stringify({
-    messages: [{ role: "user", content: [{ text: prompt }] }],
-    inferenceConfig: { temperature: 0.2, maxTokens: 32000 },
-  });
-  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
-  console.log(`[AI fix] model=${modelId} url=${url}\n[AI fix] prompt (first 500 chars): ${prompt.slice(0, 500)}`);
-
-  // Retry up to 2 times on 503/429
-  let lastErr = "";
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
-    const res = await fetch(url, { method: "POST", headers, body: reqBody });
-    if (res.ok) {
-      const data: any = await res.json();
-      const raw = data.output?.message?.content?.[0]?.text?.trim() || "";
-      console.log(`[AI fix] attempt=${attempt + 1} model=${modelId} response_length=${raw.length}`);
+    const raw = await callOpenAI(prompt, { temperature: 0.2, maxTokens: 32000 });
+    if (raw) {
       return raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
     }
-    const errBody: any = await res.json().catch(() => ({}));
-    lastErr = `Bedrock ${res.status}: ${errBody.message || errBody.Message || res.statusText}`;
-    console.log(`[AI fix] attempt=${attempt + 1} status=${res.status} error=${lastErr}`);
-    if (res.status !== 503 && res.status !== 429) break;
   }
-  throw new Error(lastErr);
+  throw new Error("OpenAI failed to generate fix after retries");
 }
 
 // ─── Create PR/MR with AI Fix ───
@@ -138,27 +127,24 @@ export const createFixMR = api(
     if (!conn) throw APIError.notFound("Connection not found");
 
     const fixBranch = `fix/${params.ruleId.replace(/[^a-zA-Z0-9._-]/g, "-")}-${Date.now()}`;
-    // Generate AI-summarized title
     let title = `Fix: [${params.severity.toUpperCase()}] ${params.message.substring(0, 80)}`;
     try {
-      const summary = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "", params.aiConfig?.model);
+      const summary = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "");
       if (summary.title) title = `Fix: ${summary.title}`;
     } catch { /* fallback to default */ }
 
     const body = params.message;
-    const hasAI = !!params.aiType;
+    const hasAI = !!OpenAIApiKey();
 
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
       const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json" };
 
-      // Get the SHA of the source branch
       const refRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/git/ref/heads/${encodeURIComponent(params.branch)}`, { headers });
       if (!refRes.ok) throw APIError.internal("Could not get branch ref");
       const refData = await refRes.json() as any;
       const sha = refData.object?.sha;
 
-      // Create the fix branch
       const createRefRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/git/refs`, {
         method: "POST", headers,
         body: JSON.stringify({ ref: `refs/heads/${fixBranch}`, sha }),
@@ -168,16 +154,13 @@ export const createFixMR = api(
         throw APIError.internal(`Failed to create branch: ${err.message || createRefRes.statusText}`);
       }
 
-      // If AI is available, fetch file, generate fix, and commit
       if (hasAI) {
-        // Get file content
         const fileRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contents/${encodeURIComponent(params.filePath)}?ref=${encodeURIComponent(fixBranch)}`, { headers });
         if (fileRes.ok) {
           const fileData = await fileRes.json() as any;
           const originalContent = Buffer.from(fileData.content || "", "base64").toString("utf-8");
-          const fixedContent = await generateAIFix(params.aiType!, params.aiConfig!, params.filePath, originalContent, params);
+          const fixedContent = await generateAIFix(params.filePath, originalContent, params);
           if (fixedContent && fixedContent !== originalContent) {
-            // Commit the fix
             await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contents/${encodeURIComponent(params.filePath)}`, {
               method: "PUT", headers,
               body: JSON.stringify({
@@ -191,7 +174,6 @@ export const createFixMR = api(
         }
       }
 
-      // Create the PR
       const prRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/pulls`, {
         method: "POST", headers,
         body: JSON.stringify({ title, body, head: fixBranch, base: params.branch }),
@@ -201,18 +183,17 @@ export const createFixMR = api(
         throw APIError.internal(`Failed to create PR: ${err.message || prRes.statusText}`);
       }
       const pr = await prRes.json() as any;
-      // Set assignee and reviewer on the PR
       if (params.assignee || params.reviewer) {
         const update: Record<string, unknown> = {};
         if (params.assignee) update.assignees = [params.assignee];
         if (params.reviewer) update.reviewers = [params.reviewer];
         await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/pulls/${pr.number}`, {
           method: "PATCH", headers, body: JSON.stringify(update),
-        }).catch(() => { /* non-critical */ });
+        }).catch(() => {});
         if (params.reviewer) {
           await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/pulls/${pr.number}/requested_reviewers`, {
             method: "POST", headers, body: JSON.stringify({ reviewers: [params.reviewer] }),
-          }).catch(() => { /* non-critical */ });
+          }).catch(() => {});
         }
       }
       return { mrUrl: pr.html_url || "", mrId: String(pr.number || pr.id), mrTitle: title };
@@ -222,18 +203,15 @@ export const createFixMR = api(
       const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token, "Content-Type": "application/json" };
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
 
-      // Verify project exists first
       const projectCheck = await fetch(`${baseUrl}/api/v4/projects/${projectPath}`, { headers });
       if (!projectCheck.ok) {
-        // Try URL-encoding with just the repo name (no owner) in case it's a flat namespace
         const altPath = encodeURIComponent(params.repo);
         const altCheck = await fetch(`${baseUrl}/api/v4/projects/${altPath}`, { headers });
         if (!altCheck.ok) {
-          throw APIError.notFound(`GitLab project not found: ${params.owner}/${params.repo} (tried both encoded paths). Check the repository URL and token permissions.`);
+          throw APIError.notFound(`GitLab project not found: ${params.owner}/${params.repo}`);
         }
       }
 
-      // Create the fix branch
       const branchRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches`, {
         method: "POST", headers,
         body: JSON.stringify({ branch: fixBranch, ref: params.branch }),
@@ -243,13 +221,12 @@ export const createFixMR = api(
         throw APIError.internal(`Failed to create branch: ${err.message || err.error || branchRes.statusText}`);
       }
 
-      // If AI is available, fetch file, generate fix, and commit
       if (hasAI) {
         const fileRes = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/files/${encodeURIComponent(params.filePath)}?ref=${encodeURIComponent(fixBranch)}`, { headers });
         if (fileRes.ok) {
           const fileData = await fileRes.json() as any;
           const originalContent = Buffer.from(fileData.content || "", "base64").toString("utf-8");
-          const fixedContent = await generateAIFix(params.aiType!, params.aiConfig!, params.filePath, originalContent, params);
+          const fixedContent = await generateAIFix(params.filePath, originalContent, params);
           if (fixedContent && fixedContent !== originalContent) {
             await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/files/${encodeURIComponent(params.filePath)}`, {
               method: "PUT", headers,
@@ -264,7 +241,6 @@ export const createFixMR = api(
         }
       }
 
-      // Create the MR
       const mrBody: Record<string, unknown> = { source_branch: fixBranch, target_branch: params.branch, title, description: body };
       if (params.assignee) mrBody.assignee_ids = [Number(params.assignee)];
       if (params.reviewer) mrBody.reviewer_ids = [Number(params.reviewer)];
@@ -283,7 +259,6 @@ export const createFixMR = api(
       const baseUrl = conn.endpoint || "https://api.bitbucket.org";
       const headers = { Authorization: `Bearer ${conn.personal_token}`, "Content-Type": "application/json" };
 
-      // Create the fix branch
       const branchRes = await fetch(`${baseUrl}/2.0/repositories/${params.owner}/${params.repo}/refs/branches`, {
         method: "POST", headers,
         body: JSON.stringify({ name: fixBranch, target: { hash: params.branch } }),
@@ -293,7 +268,6 @@ export const createFixMR = api(
         throw APIError.internal(`Failed to create branch: ${err.error?.message || branchRes.statusText}`);
       }
 
-      // Create the PR
       const prBody: Record<string, unknown> = {
         title, description: body,
         source: { branch: { name: fixBranch } },
@@ -316,59 +290,13 @@ export const createFixMR = api(
   }
 );
 
-// ─── Bedrock Model Listing ───
-
-export const listBedrockModels = api(
-  { method: "GET", path: "/git/bedrock/models", auth: true },
-  async (): Promise<{ models: Array<{ id: string; name: string }> }> => {
-    const apiKey = BedrockApiKey();
-    if (!apiKey) throw APIError.failedPrecondition("BedrockApiKey secret is not configured");
-    const region = BedrockRegion() || "us-east-1";
-    const accountId = BedrockAccountId() || "";
-
-    // List inference profiles — these are what you actually invoke
-    const profilesRes = await fetch(`https://bedrock.${region}.amazonaws.com/inference-profiles`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (profilesRes.ok) {
-      const profilesData: any = await profilesRes.json();
-      const profiles = (profilesData.inferenceProfileSummaries || [])
-        .filter((p: any) => p.type === "SYSTEM_DEFINED" && p.status === "ACTIVE")
-        .map((p: any) => ({
-          id: p.inferenceProfileId || p.inferenceProfileArn,
-          name: p.inferenceProfileName || p.inferenceProfileId,
-        }))
-        .sort((a: any, b: any) => a.name.localeCompare(b.name));
-      if (profiles.length > 0) return { models: profiles };
-    }
-
-    // Fallback: list foundation models and build ARNs
-    const res = await fetch(`https://bedrock.${region}.amazonaws.com/foundation-models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!res.ok) {
-      const err: any = await res.json().catch(() => ({}));
-      throw APIError.internal(err?.message || err?.Message || `Bedrock API error: ${res.status}`);
-    }
-    const data: any = await res.json();
-    const models = (data.modelSummaries || [])
-      .filter((m: any) => m.inferenceTypesSupported?.includes("ON_DEMAND") && m.outputModalities?.includes("TEXT"))
-      .map((m: any) => ({
-        id: m.modelId,
-        name: `${m.providerName} — ${m.modelName}`,
-      }))
-      .sort((a: any, b: any) => a.name.localeCompare(b.name));
-    return { models };
-  }
-);
-
 // ─── Summarize Finding into Short Title ───
 
 export const summarizeFinding = api(
   { method: "POST", path: "/git/ai/summarize-finding", auth: true },
-  async (params: { severity: string; message: string; filePath: string; snippet?: string; model?: string }): Promise<{ title: string; estimateMinutes: number }> => {
+  async (params: { severity: string; message: string; filePath: string; snippet?: string }): Promise<{ title: string; estimateMinutes: number }> => {
     try {
-      const result = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "", params.model);
+      const result = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "");
       if (result.title) return result;
     } catch { /* fallback */ }
     return { title: params.message.slice(0, 60), estimateMinutes: 0 };

@@ -45,7 +45,7 @@ export function useSecurityScans() {
       fetchedLangsRef.current.add(p.id);
       const parsed = getRepoKey(p.repository);
       if (!parsed) continue;
-      gitApi.getRepoBadges(parsed, p.branch || undefined)
+      gitApi.getRepoBadges(parsed, p.branch || undefined, p.connectionId || undefined)
         .then((res) => {
           if (res.badges && res.badges.length > 0) {
             setProjectLangs((prev) => ({ ...prev, [p.id]: res.badges }));

@@ -5,6 +5,18 @@ import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import type { Project, RepoStats, DeployInfo, ProviderInfo, CommitInfo } from "./types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
+// ─── Analysis cache (survives navigation within session) ───
+const CACHE_VERSION = 6;
+function getCachedAnalysis(key: string): RepoAnalysis | null {
+  try {
+    const raw = sessionStorage.getItem(`analysis:v${CACHE_VERSION}:${key}`);
+    return raw ? JSON.parse(raw) as RepoAnalysis : null;
+  } catch { return null; }
+}
+function setCachedAnalysis(key: string, data: RepoAnalysis) {
+  try { sessionStorage.setItem(`analysis:v${CACHE_VERSION}:${key}`, JSON.stringify(data)); } catch { /* quota */ }
+}
+
 // Pre-built analysis data for template projects (no repo analysis needed)
 const TEMPLATE_ANALYSIS: Record<string, RepoAnalysis> = {
   wordpress: {
@@ -146,14 +158,17 @@ export function useProjectDetail() {
 
             setAnalysisLoading(true);
             setAnalysisError("");
-            let aiType: string | undefined;
-            let aiApiKey: string | undefined;
-            const bedrockModel = localStorage.getItem("bedrock_default_model");
-            if (bedrockModel) { aiType = "bedrock"; aiApiKey = bedrockModel; }
-            gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, aiType, aiApiKey)
-              .then(setAnalysis)
-              .catch((err: any) => setAnalysisError(err.message || "Failed to analyze repo"))
-              .finally(() => setAnalysisLoading(false));
+            const cacheKey = `${parsed.owner}/${parsed.repo}:${p.branch || "main"}`;
+            const cached = getCachedAnalysis(cacheKey);
+            if (cached?.aiAnalysis?.sections && cached?.aiAnalysis?.dataFlow && cached?.aiAnalysis?.userJourney) {
+              setAnalysis(cached);
+              setAnalysisLoading(false);
+            } else {
+              gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, "openai")
+                .then((res) => { setCachedAnalysis(cacheKey, res); setAnalysis(res); })
+                .catch((err: any) => setAnalysisError(err.message || "Failed to analyze repo"))
+                .finally(() => setAnalysisLoading(false));
+            }
           }
         }
       })

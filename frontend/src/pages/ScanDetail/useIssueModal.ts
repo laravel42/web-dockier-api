@@ -92,9 +92,8 @@ export function useIssueModal(project: Project | null) {
     setPmTeamLabel("Project"); setPmProjectLabel("");
     setIssueModal({ open: true, finding: f });
     if (firstPm) fetchPmTeams(firstPm);
-    const model = localStorage.getItem("bedrock_default_model") || undefined;
     setAiEstimate(0);
-    gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "", model)
+    gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "")
       .then(res => { setIssueTitle(res.title); setAiEstimate(res.estimateMinutes); setTitleGenerating(false); })
       .catch(() => { setIssueTitle(f.message.slice(0, 60)); setTitleGenerating(false); });
   };

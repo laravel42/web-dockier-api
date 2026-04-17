@@ -1,5 +1,5 @@
 import { useProjectDetail } from "./useProjectDetail";
-import { btnSecondary, cardCls } from "./constants";
+import { btnSecondary } from "./constants";
 import DeployWizard from "../../components/DeployWizard";
 import ConfirmModal from "../../components/ConfirmModal";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
@@ -10,6 +10,9 @@ import KpiDashboard from "./sections/KpiDashboard";
 import ContributorsGrid from "./sections/ContributorsGrid";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
+import ProjectDescription from "./sections/ProjectDescription";
+import DataFlowDiagram from "./sections/DataFlowDiagram";
+import UserJourneyTree from "./sections/UserJourneyTree";
 import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
@@ -70,18 +73,13 @@ export default function ProjectDetail() {
         <ProjectDetailsCard project={project} />
       </div>
 
-      {(() => {
-        const summary = analysis?.aiAnalysis?.summary
-          || (analysis?.techStack?.length
-            ? `${analysis.primaryLanguage || analysis.techStack[0]?.name} project using ${analysis.techStack.slice(0, 4).map(t => t.name).join(", ")}${analysis.hasDocker ? ". Docker-ready" : ""}${analysis.hasCi ? " with CI/CD configured" : ""}.`
-            : null);
-        return summary ? (
-          <div className={`${cardCls} p-5 mb-6`}>
-            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-2">Description</h2>
-            <p className="text-sm text-text leading-relaxed">{summary}</p>
-          </div>
-        ) : null;
-      })()}
+      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} />
+
+      {analysis?.aiAnalysis?.dataFlow && (
+        <DataFlowDiagram dataFlow={analysis.aiAnalysis.dataFlow} />
+      )}
+
+      {/* UserJourneyTree hidden for now */}
 
       {project.connectionId && project.repository && (
         <KpiDashboard stats={stats} statsLoading={statsLoading} statsError={statsError} />

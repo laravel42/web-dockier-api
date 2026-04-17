@@ -1178,3 +1178,4 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 }
+

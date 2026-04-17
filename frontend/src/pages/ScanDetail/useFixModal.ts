@@ -22,12 +22,6 @@ export function useFixModal(project: Project | null) {
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
 
-    const bedrockModel = localStorage.getItem("bedrock_default_model");
-    if (!bedrockModel) {
-      alert("No default LLM configured. Select one in Settings → General.");
-      return;
-    }
-
     setFixModal({ open: true, finding: f });
     setFixLoading(false);
     setFixResult(null);
@@ -47,8 +41,7 @@ export function useFixModal(project: Project | null) {
       .then(res => setRepoMembers(res.members))
       .catch(() => setRepoMembers([]));
 
-    const model = bedrockModel || undefined;
-    gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "", model)
+    gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "")
       .then(res => { setMrTitle(res.title || f.message.slice(0, 60)); setTitleGenerating(false); })
       .catch(() => { setMrTitle(f.message.slice(0, 60)); setTitleGenerating(false); });
   };
@@ -60,11 +53,6 @@ export function useFixModal(project: Project | null) {
     if (!f || !project) return;
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
-    const bedrockModel = localStorage.getItem("bedrock_default_model");
-    if (!bedrockModel) {
-      setFixError("No default LLM configured. Select one in Settings → General.");
-      return;
-    }
 
     setFixLoading(true);
     setFixError("");
@@ -74,7 +62,7 @@ export function useFixModal(project: Project | null) {
         owner: parsed.owner, repo: parsed.repo, branch: project.branch || "main",
         filePath: f.filePath, startLine: f.startLine, endLine: f.endLine,
         ruleId: f.ruleId, severity: f.severity, message: f.message, snippet: f.snippet || "",
-        aiType: "bedrock", aiConfig: { model: bedrockModel },
+        aiType: "openai",
         assignee: mrAssignee || undefined, reviewer: mrReviewer || undefined,
       });
       setFixResult(result);

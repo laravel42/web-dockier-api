@@ -6,9 +6,7 @@ initDb(DatabaseUrl());
 
 export const db = _db;
 
-export const BedrockApiKey = secret("BedrockApiKey");
-export const BedrockRegion = secret("BedrockRegion");
-export const BedrockAccountId = secret("BedrockAccountId");
+export const OpenAIApiKey = secret("OpenAIApiKey");
 
 export interface GitRepo {
   name: string;

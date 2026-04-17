@@ -1,10 +1,7 @@
-import { useState, useEffect } from "react";
-import { gitApi } from "../../services/api";
-import { inputCls, btnPrimary } from "./shared";
+import { useState } from "react";
+import { btnPrimary } from "./shared";
 
 export default function GeneralTab() {
-  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
@@ -12,19 +9,9 @@ export default function GeneralTab() {
     if (savedTools) { try { return JSON.parse(savedTools); } catch { /* ignore */ } }
     return { semgrep: true, sonarqube: true, customRules: true };
   });
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("bedrock_default_model") || "");
-
-  useEffect(() => {
-    // Fetch available models
-    gitApi.listBedrockModels()
-      .then((res) => setModels(res.models))
-      .catch(() => setModels([]))
-      .finally(() => setLoading(false));
-  }, []);
 
   const handleSave = () => {
     setSaving(true);
-    localStorage.setItem("bedrock_default_model", selectedModel);
     localStorage.setItem("scan_tools", JSON.stringify(scanTools));
     setMessage("Settings saved");
     setSaving(false);
@@ -36,30 +23,6 @@ export default function GeneralTab() {
   return (
     <div className="space-y-6 max-w-lg">
       {message && <div className="p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
-
-      {/* Default LLM */}
-      <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6">
-        <h2 className="text-base font-semibold text-text mb-1">Default LLM</h2>
-        <p className="text-sm text-text-secondary mb-4">Amazon Bedrock model used for AI features (security fixes, code analysis).</p>
-        <div>
-          <label htmlFor="default-model" className="block text-sm font-medium text-text-secondary mb-1.5">Bedrock Model</label>
-          {loading ? (
-            <div className="flex items-center gap-2 h-11">
-              <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-text-muted">Loading models...</span>
-            </div>
-          ) : models.length > 0 ? (
-            <select id="default-model" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className={inputCls}>
-              <option value="">Select a model</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          ) : (
-            <p className="text-sm text-text-muted py-2">Could not load models. Make sure the BedrockApiKey secret is configured.</p>
-          )}
-        </div>
-      </div>
 
       {/* Security Scan Tools */}
       <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6">
@@ -93,7 +56,7 @@ export default function GeneralTab() {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSave} disabled={saving || !selectedModel} className={`${btnPrimary} disabled:opacity-50`}>
+        <button onClick={handleSave} disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
           {saving ? "Saving..." : "Save"}
         </button>
       </div>

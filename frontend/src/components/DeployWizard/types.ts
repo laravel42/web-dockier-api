@@ -27,6 +27,36 @@ export interface AIAnalysis {
   postDeployCommands: string[];
   nginxConfig: string;
   summary: string;
+  description?: string;
+  sections?: {
+    overview: string;
+    howItWorks: string;
+    techStack: string;
+    architecture: string;
+    dataStorage: string;
+    codeQuality: string;
+    security: string;
+    deployment: string;
+  };
+  dataFlow?: {
+    entities: Array<{
+      name: string;
+      description: string;
+      storage: string;
+      fields: Array<{
+        name: string;
+        type: string;
+        sensitivity: "public" | "internal" | "personal" | "sensitive" | "secret";
+      }>;
+    }>;
+  };
+  userJourney?: UserJourneyNode;
+}
+
+export interface UserJourneyNode {
+  label: string;
+  icon?: string;
+  children?: UserJourneyNode[];
 }
 
 export interface RepoAnalysis {

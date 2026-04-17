@@ -1,5 +1,6 @@
 import type { Project } from "../types";
 import { cardCls } from "../constants";
+import SourceControlBadge from "../../../components/SourceControlBadge";
 
 interface Props {
   project: Project;
@@ -8,6 +9,14 @@ interface Props {
 const templateLabels: Record<string, string> = {
   wordpress: "WordPress",
 };
+
+function detectProvider(repo: string): string {
+  if (!repo) return "git";
+  if (repo.includes("github")) return "github";
+  if (repo.includes("gitlab")) return "gitlab";
+  if (repo.includes("bitbucket")) return "bitbucket";
+  return "git";
+}
 
 export default function ProjectDetailsCard({ project }: Props) {
   const isTemplate = project.sourceType === "template";
@@ -33,7 +42,7 @@ export default function ProjectDetailsCard({ project }: Props) {
                 </span>
               </>
             ) : (
-              <span className="text-sm text-text-secondary">Source Control</span>
+              <SourceControlBadge provider={detectProvider(project.repository)} iconSize="w-4 h-4" />
             )}
           </div>
         </div>

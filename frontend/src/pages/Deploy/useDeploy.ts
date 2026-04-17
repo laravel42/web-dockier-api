@@ -35,7 +35,7 @@ export function useDeploy() {
       if (!p.repository || fetchedLangsRef.current.has(p.id)) continue;
       fetchedLangsRef.current.add(p.id);
       const key = repoKey(p.repository);
-      gitApi.getRepoBadges(key, p.branch || undefined)
+      gitApi.getRepoBadges(key, p.branch || undefined, p.connectionId || undefined)
         .then((res) => {
           if (res.badges && res.badges.length > 0) {
             setProjectLangs(prev => ({ ...prev, [p.id]: res.badges }));

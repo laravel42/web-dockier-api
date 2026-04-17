@@ -14,7 +14,8 @@ export function getRepoKey(repoUrl: string): string | null {
     const u = new URL(repoUrl);
     const path = u.pathname.replace(/^\//, "").replace(/\.git$/, "");
     const parts = path.split("/").filter(Boolean);
-    return parts.length >= 2 ? parts.slice(-2).join("/") : null;
+    // Must match parseOwnerRepo: full path (owner/subgroup/repo)
+    return parts.length >= 2 ? parts.join("/") : null;
   } catch {
     return null;
   }

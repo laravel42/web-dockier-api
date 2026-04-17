@@ -1,6 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { v4 as uuidv4 } from "uuid";
-import { db } from "../shared";
+import { db, OpenAIApiKey } from "../shared";
 import { throwProviderError } from "../helpers";
 import { type TechStackItem, detectTechStack } from "./tech-stack";
 import { type DeployOption, suggestDeployOptions } from "./deploy-options";
@@ -21,7 +21,7 @@ interface RepoAnalysis {
 
 export const analyzeRepo = api(
   { method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
-  async (params: { connectionId: string; owner: string; repo: string; branch?: string; aiType?: string; aiApiKey?: string }): Promise<RepoAnalysis> => {
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string; aiType?: string }): Promise<RepoAnalysis> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
     }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -68,10 +68,38 @@ export const analyzeRepo = api(
     // ── Check cache ──
     if (latestSha) {
       try {
-        const cached = await db.queryRow<{ result: string }>`
+        // Try exact SHA match first
+        let cached = await db.queryRow<{ result: string }>`
           SELECT result FROM analysis_cache WHERE repo = ${repoKey} AND branch = ${branch} AND commit_sha = ${latestSha}`;
+        // Fallback: any cached result for this repo+branch (different commit)
+        if (!cached) {
+          cached = await db.queryRow<{ result: string }>`
+            SELECT result FROM analysis_cache WHERE repo = ${repoKey} AND branch = ${branch} ORDER BY created_at DESC LIMIT 1`;
+        }
         if (cached) {
-          return JSON.parse(cached.result) as RepoAnalysis;
+          const parsed = JSON.parse(cached.result) as RepoAnalysis;
+          const ai = parsed.aiAnalysis;
+          const aiComplete = !!(ai?.sections && ai?.dataFlow && ai?.userJourney);
+          console.log(`[analyzeRepo] Cache hit: repo=${repoKey} aiComplete=${aiComplete}`);
+          if (!(params.aiType && OpenAIApiKey() && !aiComplete)) {
+            return parsed;
+          }
+        } else {
+          console.log(`[analyzeRepo] Cache miss: repo=${repoKey} branch=${branch}`);
+        }
+      } catch (e: any) { console.log(`[analyzeRepo] Cache error: ${e.message}`); }
+    } else {
+      // No commit SHA available (git API unreachable) — try cache without SHA match
+      try {
+        const cached = await db.queryRow<{ result: string }>`
+          SELECT result FROM analysis_cache WHERE repo = ${repoKey} AND branch = ${branch} ORDER BY created_at DESC LIMIT 1`;
+        if (cached) {
+          const parsed = JSON.parse(cached.result) as RepoAnalysis;
+          const ai = parsed.aiAnalysis;
+          const aiComplete = !!(ai?.sections && ai?.dataFlow && ai?.userJourney);
+          if (!(params.aiType && OpenAIApiKey() && !aiComplete)) {
+            return parsed;
+          }
         }
       } catch {}
     }
@@ -147,9 +175,11 @@ export const analyzeRepo = api(
     const detectedLang = techStack.find(t => t.category === "language" || (t.category === "runtime" && t.confidence > 50));
     const effectivePrimaryLanguage = detectedLang?.name || primaryLanguage;
 
-    // ── AI-powered deep analysis (if AI config provided) ──
+    // ── AI-powered deep analysis (if OpenAI key is configured) ──
     let aiAnalysis: AIRepoAnalysis | undefined;
-    if (params.aiType && params.aiApiKey) {
+    const hasOpenAI = !!OpenAIApiKey();
+    console.log(`[analyzeRepo] aiType=${params.aiType} hasOpenAI=${hasOpenAI}`);
+    if (params.aiType && hasOpenAI) {
       // Fetch key config files from repo
       const configContents: Record<string, string> = {};
       const filesToFetch = CONFIG_FILES_TO_FETCH.filter(cf =>
@@ -181,14 +211,39 @@ export const analyzeRepo = api(
       });
       await Promise.all(fetchPromises);
 
-      if (Object.keys(configContents).length > 0) {
+      // Also fetch schema/migration/model files for data flow analysis
+      const schemaFiles: Record<string, string> = {};
+      const schemaPatterns = [
+        /migrations?\/.*\.sql$/i,
+        /database\/.*\.sql$/i,
+        /schema\.(sql|prisma|graphql|ts|rb)$/i,
+        /models?\.(ts|js|py|rb|php)$/i,
+        /models\/.*\.(ts|js|py|rb|php)$/i,
+        /entities\/.*\.(ts|js|py|rb|php)$/i,
+        /app\/Models\/.*\.php$/i,
+        /drizzle\/.*\.ts$/i,
+        /prisma\/schema\.prisma$/i,
+        /database\/factories\/.*\.php$/i,
+        /app\/.*Resource\.php$/i,
+        /src\/entity\/.*\.(ts|js)$/i,
+        /db\/.*\.(sql|ts|js)$/i,
+      ];
+      const matchedSchemaFiles = files.filter(f => schemaPatterns.some(p => p.test(f))).slice(0, 30);
+      const schemaPromises = matchedSchemaFiles.map(async (sf) => {
+        const content = await fetchRepoFile(conn.provider, conn.personal_token, conn.endpoint || "", params.owner, params.repo, branch, sf);
+        if (content) schemaFiles[sf] = content;
+      });
+      await Promise.all(schemaPromises);
+
+      if (Object.keys(configContents).length > 0 || files.length > 0) {
         const result = await analyzeWithAI(
           params.aiType,
-          { apiKey: params.aiApiKey },
+          {},
           files,
           configContents,
           techStack,
           detectedServices,
+          schemaFiles,
         );
         if (result) aiAnalysis = result;
       }
@@ -213,9 +268,22 @@ export const analyzeRepo = api(
           INSERT INTO analysis_cache (id, repo, branch, commit_sha, result, created_at)
           VALUES (${id}, ${repoKey}, ${branch}, ${latestSha}, ${JSON.stringify(result)}::jsonb, NOW())
           ON CONFLICT (repo, branch) DO UPDATE SET commit_sha = ${latestSha}, result = ${JSON.stringify(result)}::jsonb, created_at = NOW()`;
-      } catch {}
+        console.log(`[analyzeRepo] Cache written: repo=${repoKey} sha=${latestSha} hasAi=${!!aiAnalysis}`);
+      } catch (e: any) { console.error(`[analyzeRepo] Cache write failed: ${e.message}`); }
+    } else {
+      console.log(`[analyzeRepo] Skipped cache write: no latestSha`);
     }
 
     return result;
+  }
+);
+
+// ─── Clear Analysis Cache ───
+
+export const clearAnalysisCache = api(
+  { method: "DELETE", path: "/git/analysis-cache", auth: true },
+  async (): Promise<{ deleted: boolean }> => {
+    await db.exec`DELETE FROM analysis_cache`;
+    return { deleted: true };
   }
 );

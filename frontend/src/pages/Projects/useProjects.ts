@@ -64,7 +64,7 @@ export function useProjects() {
       const parsed = getRepoKey(p.repository);
       if (!parsed) continue;
       gitApi
-        .getRepoBadges(parsed, p.branch || undefined)
+        .getRepoBadges(parsed, p.branch || undefined, p.connectionId || undefined)
         .then((res) => {
           if (res.badges && res.badges.length > 0) {
             setProjectLangs((prev) => ({ ...prev, [p.id]: res.badges }));
@@ -209,7 +209,7 @@ export function useProjects() {
             const owner = parts[0];
             const repoName = parts[1];
             const br = selectedBranch || form.branch || "main";
-            gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br).catch(() => {});
+            gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br, "openai").catch(() => {});
           }
         } catch { /* pre-warm is fire-and-forget */ }
       }
