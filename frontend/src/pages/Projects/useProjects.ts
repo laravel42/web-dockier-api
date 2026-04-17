@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
-import { getRepoKey } from "./utils";
-import type { Connection, Repo, Project, TechBadgeInfo, ProjectSourceType } from "./types";
+import { useProjectBadges } from "../../hooks/useProjectBadges";
+import type { Connection, Repo, Project, ProjectSourceType } from "./types";
 import { PROJECT_TEMPLATES } from "./templates";
 
 export function useProjects() {
@@ -36,8 +36,6 @@ export function useProjects() {
   const [error, setError] = useState("");
 
   const [deployments, setDeployments] = useState<Array<{ id: string; repo: string; branch: string; status: string; createdAt: string }>>([]);
-  const [projectLangs, setProjectLangs] = useState<Record<string, TechBadgeInfo[]>>({});
-  const fetchedLangsRef = useRef<Set<string>>(new Set());
 
   // ── Data fetching ──────────────────────────────────────────────
 
@@ -54,25 +52,6 @@ export function useProjects() {
   };
 
   useEffect(() => { fetchProjects(); }, []);
-
-  // Fetch tech badges for each project
-  useEffect(() => {
-    if (projects.length === 0) return;
-    for (const p of projects) {
-      if (!p.repository || fetchedLangsRef.current.has(p.id)) continue;
-      fetchedLangsRef.current.add(p.id);
-      const parsed = getRepoKey(p.repository);
-      if (!parsed) continue;
-      gitApi
-        .getRepoBadges(parsed, p.branch || undefined)
-        .then((res) => {
-          if (res.badges && res.badges.length > 0) {
-            setProjectLangs((prev) => ({ ...prev, [p.id]: res.badges }));
-          }
-        })
-        .catch(() => {});
-    }
-  }, [projects]);
 
   useEffect(() => {
     deployApi
@@ -230,6 +209,8 @@ export function useProjects() {
   const confirmDelete = () => {
     if (deleteId) projectsApi.delete(deleteId).then(fetchProjects);
   };
+
+  const projectLangs = useProjectBadges(projects);
 
   return {
     navigate,

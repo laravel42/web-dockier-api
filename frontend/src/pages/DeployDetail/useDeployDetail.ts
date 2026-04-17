@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../../services/api";
 import { getProviderStyle } from "../../data/providers";
+import { getRepoKey } from "../../utils/parseOwnerRepo";
 import type { Deployment, Provider, Project } from "./types";
 
 export function useDeployDetail() {
@@ -34,13 +35,7 @@ export function useDeployDetail() {
           if (cancelled) return;
           const match = d.projectId
             ? projRes.projects.find((p: Project) => p.id === d.projectId)
-            : projRes.projects.find((p: Project) => {
-                try {
-                  const u = new URL(p.repository);
-                  const key = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean).join("/");
-                  return key === d.repo;
-                } catch { return false; }
-              });
+            : projRes.projects.find((p: Project) => getRepoKey(p.repository) === d.repo);
           if (match) setProject(match);
         } catch {}
         if (cancelled) return;

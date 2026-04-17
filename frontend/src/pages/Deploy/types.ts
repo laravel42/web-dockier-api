@@ -1,23 +1,2 @@
-export interface Deployment {
-  id: string;
-  providerId: string;
-  projectId: string;
-  repo: string;
-  branch: string;
-  status: string;
-  logs: string;
-  appUrl: string;
-  commitHash: string;
-  dockerImage: string;
-  deployStrategy: string;
-  createdAt: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  repository: string;
-  branch: string;
-  connectionId?: string;
-  platform?: string;
-}
+export type { Deployment } from "../../types";
+export type { Project } from "../../types";

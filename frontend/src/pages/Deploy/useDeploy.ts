@@ -1,16 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { deployApi, projectsApi, gitApi } from "../../services/api";
+import { deployApi, projectsApi } from "../../services/api";
+import { useProjectBadges } from "../../hooks/useProjectBadges";
 import type { Deployment, Project } from "./types";
-import { repoKey } from "./utils";
 
 export function useDeploy() {
   const navigate = useNavigate();
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [projectLangs, setProjectLangs] = useState<Record<string, Array<{ name: string; category: string; confidence: number }>>>({});
-  const fetchedLangsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const load = async () => {
@@ -28,22 +26,7 @@ export function useDeploy() {
     load();
   }, []);
 
-  // Fetch tech badges from analysis_cache for each project
-  useEffect(() => {
-    if (projects.length === 0) return;
-    for (const p of projects) {
-      if (!p.repository || fetchedLangsRef.current.has(p.id)) continue;
-      fetchedLangsRef.current.add(p.id);
-      const key = repoKey(p.repository);
-      gitApi.getRepoBadges(key, p.branch || undefined)
-        .then((res) => {
-          if (res.badges && res.badges.length > 0) {
-            setProjectLangs(prev => ({ ...prev, [p.id]: res.badges }));
-          }
-        })
-        .catch(() => {});
-    }
-  }, [projects]);
+  const projectLangs = useProjectBadges(projects);
 
   // Match projects by id
   const projectById: Record<string, Project> = {};
