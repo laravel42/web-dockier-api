@@ -1,5 +1,5 @@
 import { request } from "./request";
-import type { Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult } from "../types";
+import type { Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult, CommitInfo } from "../types";
 
 export const gitApi = {
   listConnections: () =>
@@ -127,6 +127,11 @@ export const gitApi = {
   getFileContent: (connectionId: string, owner: string, repo: string, branch: string, path: string) =>
     request<{ content: string }>(
       `/git/connections/${connectionId}/file-content?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`
+    ),
+
+  getRecentCommits: (connectionId: string, owner: string, repo: string, branch?: string, limit?: number) =>
+    request<{ commits: CommitInfo[] }>(
+      `/git/connections/${connectionId}/recent-commits?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}${limit ? `&limit=${limit}` : ""}`
     ),
 
   listBedrockModels: () =>
