@@ -1,4 +1,4 @@
-export { parseOwnerRepo } from "../../utils/parseOwnerRepo";
+export { parseOwnerRepo, getRepoSlug, getRepoKey } from "../../utils/parseOwnerRepo";
 
 export function parseEnvContent(text: string): Array<{ name: string; value: string }> {
   const rows: Array<{ name: string; value: string }> = [];

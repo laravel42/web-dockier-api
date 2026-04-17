@@ -46,6 +46,7 @@ export interface Deployment {
   id: string;
   providerId: string;
   gitConnectionId: string;
+  projectId: string;
   repo: string;
   branch: string;
   status: "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";

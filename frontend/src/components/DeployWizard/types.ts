@@ -1,8 +1,4 @@
-export interface Provider {
-  id: string;
-  provider: string;
-  label: string;
-}
+export type { Provider } from "../../types";
 
 export interface DetectedService {
   type: string;

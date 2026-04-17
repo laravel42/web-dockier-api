@@ -74,6 +74,8 @@ import * as gcp from "@pulumi/gcp";
 const config = new pulumi.Config();
 const region = config.get("region") || "${p.region}";
 const sshPublicKey = config.require("sshPublicKey");
+const suffix = config.get("keyPairSuffix") || "";
+const resName = suffix ? \`${p.appName}-\${suffix}\` : "${p.appName}";
 
 // ── Pick an available zone (prefer -b, -c, -f over -a for better availability) ──
 const zones = gcp.compute.getZonesOutput({ region, status: "UP" });
@@ -90,28 +92,28 @@ const zone = config.get("zone") || zones.names.apply(zs => {
 const network = gcp.compute.getNetworkOutput({ name: "default" });
 
 // ── Firewall ──
-const firewall = new gcp.compute.Firewall("${p.appName}-fw", {
-  name: "${p.appName}-fw",
+const firewall = new gcp.compute.Firewall(\`\${resName}-fw\`, {
+  name: \`\${resName}-fw\`,
   network: network.selfLink,
   allows: [
     { protocol: "tcp", ports: ["22", "80", "443"] },
   ],
   sourceRanges: ["0.0.0.0/0"],
-  targetTags: ["${p.appName}-server"],
+  targetTags: [\`\${resName}-server\`],
 });
 
 // ── Static IP ──
-const staticIp = new gcp.compute.Address("${p.appName}-ip", {
-  name: "${p.appName}-ip",
+const staticIp = new gcp.compute.Address(\`\${resName}-ip\`, {
+  name: \`\${resName}-ip\`,
   region: region,
 });
 
 // ── Instance ──
-const instance = new gcp.compute.Instance("${p.appName}", {
-  name: "${p.appName}",
+const instance = new gcp.compute.Instance(resName, {
+  name: resName,
   machineType: "${p.instanceType || "n2d-standard-2"}",
   zone: zone,
-  tags: ["${p.appName}-server"],
+  tags: [\`\${resName}-server\`],
   scheduling: {
     automaticRestart: true,
     provisioningModel: "STANDARD",

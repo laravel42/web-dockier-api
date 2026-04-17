@@ -1,16 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { codeAnalysisApi, projectsApi, gitApi } from "../../services/api";
-import { getRepoKey } from "../Projects/utils";
-import type { Scan, Project, TechBadgeInfo } from "./types";
+import { codeAnalysisApi, projectsApi } from "../../services/api";
+import { useProjectBadges } from "../../hooks/useProjectBadges";
+import type { Scan, Project } from "./types";
 
 export function useSecurityScans() {
   const navigate = useNavigate();
   const [scans, setScans] = useState<Scan[]>([]);
   const [projects, setProjects] = useState<Record<string, Project>>({});
   const [loading, setLoading] = useState(true);
-  const [projectLangs, setProjectLangs] = useState<Record<string, TechBadgeInfo[]>>({});
-  const fetchedLangsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const load = async () => {
@@ -36,24 +34,7 @@ export function useSecurityScans() {
     return acc;
   }, {});
 
-  // Fetch language badges for each project
-  useEffect(() => {
-    const projList = Object.values(projects);
-    if (projList.length === 0) return;
-    for (const p of projList) {
-      if (!p.repository || fetchedLangsRef.current.has(p.id)) continue;
-      fetchedLangsRef.current.add(p.id);
-      const parsed = getRepoKey(p.repository);
-      if (!parsed) continue;
-      gitApi.getRepoBadges(parsed, p.branch || undefined, p.connectionId || undefined)
-        .then((res) => {
-          if (res.badges && res.badges.length > 0) {
-            setProjectLangs((prev) => ({ ...prev, [p.id]: res.badges }));
-          }
-        })
-        .catch(() => {});
-    }
-  }, [projects]);
+  const projectLangs = useProjectBadges(Object.values(projects));
 
   // All project IDs, sorted: projects with scans first (by latest scan date), then without scans (by name)
   const sortedProjectIds = Object.keys(projects).sort((a, b) => {

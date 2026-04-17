@@ -251,8 +251,35 @@ export async function handleTemplateDeploy(
     }
   }
 
-  if (provider !== "gcp") {
-    await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+  await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+  // ── Restore state from previous deployment to update in-place instead of creating duplicates ──
+  const prevDeploy = await db.queryRow<{ tofu_script: string }>`
+    SELECT tofu_script FROM deployments WHERE app_id = ${event.appId} AND provider_id = ${event.providerId}
+      AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
+      AND status IN ('success', 'failed')
+      ORDER BY created_at DESC LIMIT 1`;
+  if (prevDeploy?.tofu_script) {
+    const stateMarker = prevDeploy.tofu_script.indexOf("/* STATE */\n");
+    if (stateMarker !== -1) {
+      const savedState = prevDeploy.tofu_script.slice(stateMarker + "/* STATE */\n".length);
+      try {
+        if (savedState.includes('"deployment"')) {
+          const oldStackMatch = savedState.match(/"urn:pulumi:([^:]+)::/);
+          const updatedState = oldStackMatch
+            ? savedState.replaceAll(`urn:pulumi:${oldStackMatch[1]}::`, `urn:pulumi:${stackName}::`)
+            : savedState;
+          const stateFile = join(pulumiDir, "prev-state.json");
+          await writeFile(stateFile, updatedState, "utf-8");
+          const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--force", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
+          if (importResult.code === 0) {
+            await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment — will update in-place`);
+          } else {
+            await appendLog(deploymentId, `[${ts()}] ⚠ State import failed, deploying fresh`);
+          }
+        }
+      } catch {}
+    }
   }
 
   // ── Pulumi up ──

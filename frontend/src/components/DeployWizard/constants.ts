@@ -93,7 +93,7 @@ export const PROVIDER_REGIONS: Record<string, Array<{ id: string; name: string; 
   ],
 };
 
-export { btnPrimary, btnSecondary } from "../../utils/styles";
+export { btnPrimary, btnSecondary, inputCls } from "../../utils/styles";
 
 export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   selectedProvider: "",
