@@ -50,6 +50,7 @@ export default function Dashboard() {
         <RecentDeploys
           deploys={recentDeploys}
           providers={providers}
+          projectMap={projectMap}
           onViewAll={() => navigate("/deploy")}
           onViewDeploy={(id) => navigate(`/deploy/${id}`)}
         />

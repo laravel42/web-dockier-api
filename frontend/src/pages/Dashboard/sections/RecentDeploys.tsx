@@ -1,15 +1,16 @@
-import type { Deploy, Provider } from "../types";
+import type { Deploy, Provider, Project } from "../types";
 import { cardCls } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
 
 interface Props {
   deploys: Deploy[];
   providers: Provider[];
+  projectMap: Record<string, Project>;
   onViewAll: () => void;
   onViewDeploy: (id: string) => void;
 }
 
-export default function RecentDeploys({ deploys, providers, onViewAll, onViewDeploy }: Props) {
+export default function RecentDeploys({ deploys, providers, projectMap, onViewAll, onViewDeploy }: Props) {
   return (
     <div className={`${cardCls} overflow-hidden`}>
       <div className="px-5 py-3 border-b border-border flex items-center justify-between">
@@ -23,6 +24,7 @@ export default function RecentDeploys({ deploys, providers, onViewAll, onViewDep
           {deploys.map((d) => {
             const prov = providers.find(p => p.id === d.providerId);
             const pk = prov?.provider || "";
+            const projectName = projectMap[d.projectId]?.name || d.repo;
             const statusDot = d.status === "success" ? "bg-success-500" : d.status === "failed" ? "bg-danger-500" : d.status === "building" || d.status === "deploying" ? "bg-primary-500" : "bg-secondary-300";
             return (
               <button
@@ -33,7 +35,7 @@ export default function RecentDeploys({ deploys, providers, onViewAll, onViewDep
               >
                 <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot}`} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-text truncate">{d.repo}</p>
+                  <p className="text-sm text-text truncate">{projectName}</p>
                   <p className="text-xs text-text-muted">{d.branch} · {new Date(d.createdAt).toLocaleDateString()}</p>
                 </div>
                 <ProviderBadge provider={pk} />
