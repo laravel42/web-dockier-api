@@ -1,6 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
-import { db } from "../shared";
+import { db, DEFAULT_REGIONS } from "../shared";
 import { generatePulumiProgram } from "../pulumi-templates/index";
 import { getTemplateConfig } from "../templates";
 
@@ -88,15 +88,6 @@ export const generateTofu = api(
     return { script, provider, region, appName, estimatedResources: getEstimatedResources(provider, runtime, params.hasDocker, params.services || [], params.deployStrategy) };
   }
 );
-
-/**
- * Default regions per provider.
- * To add a new provider, add its default region here.
- */
-const DEFAULT_REGIONS: Record<string, string> = {
-  aws: "us-east-1",
-  gcp: "us-central1",
-};
 
 function getDefaultRegion(provider: string): string {
   return DEFAULT_REGIONS[provider] || "us-east-1";

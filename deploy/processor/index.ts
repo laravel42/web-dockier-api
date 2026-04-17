@@ -1,11 +1,12 @@
 import { Subscription } from "encore.dev/pubsub";
-import { db, deployTopic, type DeployEvent } from "../shared";
+import { db, deployTopic, type DeployEvent, DEFAULT_REGIONS, extractRegionFromScript } from "../shared";
 import { git_integration } from "~encore/clients";
 import { appendLog, ts } from "./helpers";
 import { handleAwsDeploy } from "./aws-deploy";
 import { handlePulumiDeploy } from "./pulumi-deploy";
 import { getTemplateConfig } from "../templates";
 import { handleTemplateDeploy } from "./template-deploy";
+import { createStreamingRunCmd } from "./run-cmd";
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
@@ -16,23 +17,18 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     const providerRow = await db.queryRow<{ provider: string; region: string; api_key: string; api_secret: string }>`
       SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${event.providerId}`;
     const provider = providerRow?.provider || "cloud";
-    const defaultRegions: Record<string, string> = {
-      aws: "us-east-1", gcp: "us-central1",
-    };
-    let region = providerRow?.region || defaultRegions[providerRow?.provider || ""] || "us-east-1";
+    let region = providerRow?.region || DEFAULT_REGIONS[providerRow?.provider || ""] || "us-east-1";
 
     // Extract the actual region from the tofuScript if available (the wizard bakes the user's selection into the script)
     if (event.tofuScript) {
-      const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
-      if (regionMatch) region = regionMatch[1];
+      const scriptRegion = extractRegionFromScript(event.tofuScript);
+      if (scriptRegion) region = scriptRegion;
     }
 
     // ── Template deploy path ──
-    // If this is a template-based project, skip clone/analyze and use pre-built Docker images
     if (event.templateId) {
       const templateConfig = getTemplateConfig(event.templateId);
       if (templateConfig) {
-        // For template projects, use the project name instead of the repo URL
         const projectRow = await db.queryRow<{ name: string }>`SELECT name FROM projects WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
         const templateRepoName = projectRow?.name || repoName;
         try {
@@ -52,40 +48,10 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
     // ── Standard deploy path (clone repo, analyze, build, deploy) ──
     const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
-    const { tmpdir, homedir } = await import("node:os");
-    const { spawn } = await import("node:child_process");
+    const { tmpdir } = await import("node:os");
     const { execSync } = await import("node:child_process");
 
-    // Ensure ~/.pulumi/bin and common install locations are in PATH for child processes
-    const { join: joinPath } = await import("node:path");
-    const pulumiHome = joinPath(homedir(), ".pulumi", "bin");
-    const pathSep = process.platform === "win32" ? ";" : ":";
-    const extraPaths = process.platform === "win32"
-      ? [pulumiHome, "C:\\Program Files\\Pulumi", "C:\\Program Files (x86)\\Pulumi"]
-      : [pulumiHome, "/usr/local/bin"];
-    const augmentedPath = [...extraPaths, process.env.PATH || ""].join(pathSep);
-
-    const runCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Promise<{ code: number; output: string }> => {
-      return new Promise((resolve) => {
-        const proc = spawn(cmd, args, { cwd: opts?.cwd || undefined, env: { ...process.env, PATH: augmentedPath, ...opts?.env }, stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
-        let output = "";
-        const onData = async (data: Buffer) => {
-          const lines = data.toString().split("\n").filter(Boolean);
-          for (const line of lines) {
-            output += line + "\n";
-            if (/^\s*\.+\s*$/.test(line) || /^@ updating/.test(line)) continue;
-            // Filter noisy Docker push/pull layer status lines
-            if (/^[0-9a-f]{12}:\s*(Waiting|Preparing|Layer already exists|Pushing|Pulling fs layer)\s*$/.test(line)) continue;
-            if (/^\s*Waiting\s*$/.test(line)) continue;
-            await appendLog(deploymentId, `[${ts()}] ${line}`);
-          }
-        };
-        proc.stdout.on("data", onData);
-        proc.stderr.on("data", onData);
-        proc.on("close", (code) => resolve({ code: code ?? 1, output }));
-        proc.on("error", (err) => resolve({ code: 1, output: err.message }));
-      });
-    };
+    const runCmd = createStreamingRunCmd(deploymentId, appendLog, ts);
 
     try {
       await db.exec`UPDATE deployments SET status = 'building', updated_at = NOW() WHERE id = ${deploymentId}`;
@@ -93,8 +59,8 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       // For GCP, extract the actual region from the Pulumi script since the wizard selection overrides the provider default
       let displayRegion = region;
       if (provider === "gcp" && event.tofuScript) {
-        const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
-        if (regionMatch) displayRegion = regionMatch[1];
+        const scriptRegion = extractRegionFromScript(event.tofuScript);
+        if (scriptRegion) displayRegion = scriptRegion;
       }
       await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${displayRegion}`);
       await appendLog(deploymentId, `[${ts()}] ℹ Strategy: ${event.deployStrategy || "managed (default)"}`);

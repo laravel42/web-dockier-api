@@ -1,7 +1,10 @@
-import { db, type DeployEvent } from "../shared";
+import { db, type DeployEvent, extractRegionFromScript } from "../shared";
 import { appendLog, ts, generateAppUrl } from "./helpers";
+import { getGcpAccessToken, getGcpProjectId, enableGcpApis, ensureArtifactRegistryRepo, pushToArtifactRegistry } from "./gcp-helpers";
+import { setupPulumiWorkspace, restorePulumiState, savePulumiState } from "./pulumi-workspace";
+import type { RunCmdFn } from "./run-cmd";
 
-type RunCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }) => Promise<{ code: number; output: string }>;
+type RunCmd = RunCmdFn;
 
 export async function handlePulumiDeploy(
   event: DeployEvent,
@@ -23,9 +26,9 @@ export async function handlePulumiDeploy(
 ) {
   const { deploymentId, repoName, shortId, provider, region, repoDir, workDir, commitHash, runCmd } = ctx;
   const { execSync } = await import("node:child_process");
-  const { join } = await import("node:path");
 
   if (!event.tofuScript) throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
+  const { join } = await import("node:path");
 
   const imageName = `${repoName}:${shortId}`;
   const isStaticDeploy = event.deployStrategy === "static";
@@ -94,36 +97,9 @@ export async function handlePulumiDeploy(
   await appendLog(deploymentId, `[${ts()}]`);
   await appendLog(deploymentId, `[${ts()}] ── Pulumi Setup ───────────────────`);
 
-  const pulumiDir = join(workDir, "pulumi");
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(pulumiDir, { recursive: true });
-
-  const { generatePulumiProject, generatePackageJson, generateTsConfig } = await import("../pulumi-templates/index");
-  await ctx.writeFile(join(pulumiDir, "index.ts"), event.tofuScript, "utf-8");
-  await ctx.writeFile(join(pulumiDir, "Pulumi.yaml"), generatePulumiProject(repoName, provider), "utf-8");
-  await ctx.writeFile(join(pulumiDir, "package.json"), generatePackageJson(repoName, provider), "utf-8");
-  await ctx.writeFile(join(pulumiDir, "tsconfig.json"), generateTsConfig(), "utf-8");
-
-  // Provider env vars
-  const providerEnv: Record<string, string> = {};
-  if (provider === "aws") {
-    providerEnv.AWS_ACCESS_KEY_ID = ctx.providerRow.api_key || "";
-    providerEnv.AWS_SECRET_ACCESS_KEY = ctx.providerRow.api_secret || "";
-    providerEnv.AWS_DEFAULT_REGION = region;
-  } else if (provider === "gcp") {
-    const credPath = join(pulumiDir, "gcp-credentials.json");
-    await ctx.writeFile(credPath, ctx.providerRow.api_key || "{}", "utf-8");
-    providerEnv.GOOGLE_CREDENTIALS = ctx.providerRow.api_key || "";
-    providerEnv.GOOGLE_APPLICATION_CREDENTIALS = credPath;
-  }
-  const stateDir = join(pulumiDir, ".pulumi-state");
-  await mkdir(stateDir, { recursive: true });
-  // Pulumi on Windows needs file://C:/... (two slashes, forward slashes) — NOT file:///C:/
-  const stateUrl = process.platform === "win32"
-    ? `file://${stateDir.replace(/\\/g, "/")}`
-    : `file://${stateDir}`;
-  providerEnv.PULUMI_BACKEND_URL = stateUrl;
-  providerEnv.PULUMI_CONFIG_PASSPHRASE = "";
+  const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
+    workDir, appName: repoName, provider, region, providerRow: ctx.providerRow, indexTs: event.tofuScript,
+  });
 
   await appendLog(deploymentId, `[${ts()}] ℹ Installing Pulumi dependencies...`);
   const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
@@ -153,53 +129,18 @@ export async function handlePulumiDeploy(
     await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
   if (provider === "gcp") {
-    let gcpProjectId = "";
-    try {
-      const creds = JSON.parse(ctx.providerRow.api_key || "{}");
-      gcpProjectId = creds.project_id || "";
-      if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-    } catch {}
+    const gcpProjectId = getGcpProjectId(ctx.providerRow.api_key);
+    if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
     // For Cloud Storage + CDN (static), enable Compute API and skip Docker entirely
     if (event.deployStrategy === "static" && gcpProjectId) {
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── GCP Static Site Setup ──────────`);
 
-      const { createSign } = await import("node:crypto");
-      const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
-      const now = Math.floor(Date.now() / 1000);
-      const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-      const jwtClaim = Buffer.from(JSON.stringify({
-        iss: saKey.client_email,
-        scope: "https://www.googleapis.com/auth/cloud-platform",
-        aud: "https://oauth2.googleapis.com/token",
-        iat: now, exp: now + 3600,
-      })).toString("base64url");
-      const signInput = `${jwtHeader}.${jwtClaim}`;
-      const signer = createSign("RSA-SHA256");
-      signer.update(signInput);
-      const signature = signer.sign(saKey.private_key, "base64url");
-      const jwt = `${signInput}.${signature}`;
-
-      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-      });
-      const tokenData = await tokenRes.json() as { access_token?: string };
-      const gcpAccessToken = tokenData.access_token || "";
-
-      // Enable Compute Engine API (needed for CDN/LB resources)
+      const gcpAccessToken = await getGcpAccessToken(ctx.providerRow.api_key);
       if (gcpAccessToken) {
-        try {
-          await fetch(`https://serviceusage.googleapis.com/v1/projects/${gcpProjectId}/services/compute.googleapis.com:enable`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${gcpAccessToken}`, "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          });
-          await appendLog(deploymentId, `[${ts()}] ✓ Compute Engine API enabled`);
-        } catch (e: any) {
-          await appendLog(deploymentId, `[${ts()}] ℹ Compute API enable: ${e.message} (continuing)`);
-        }
+        await enableGcpApis(gcpProjectId, gcpAccessToken, ["compute.googleapis.com"]);
+        await appendLog(deploymentId, `[${ts()}] ✓ Compute Engine API enabled`);
       }
       await appendLog(deploymentId, `[${ts()}] ℹ Static site — skipping Docker build`);
     }
@@ -208,110 +149,34 @@ export async function handlePulumiDeploy(
       await appendLog(deploymentId, `[${ts()}]`);
       await appendLog(deploymentId, `[${ts()}] ── Push Image to Artifact Registry ─`);
 
-      // Extract the actual region from the Pulumi script (wizard-selected, may differ from provider default)
-      let arRegion = region;
-      const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
-      if (regionMatch) arRegion = regionMatch[1];
-
-      // Get access token from service account key using JWT
-      const { createSign } = await import("node:crypto");
-      const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
-      const now = Math.floor(Date.now() / 1000);
-      const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-      const jwtClaim = Buffer.from(JSON.stringify({
-        iss: saKey.client_email,
-        scope: "https://www.googleapis.com/auth/cloud-platform",
-        aud: "https://oauth2.googleapis.com/token",
-        iat: now,
-        exp: now + 3600,
-      })).toString("base64url");
-      const signInput = `${jwtHeader}.${jwtClaim}`;
-      const signer = createSign("RSA-SHA256");
-      signer.update(signInput);
-      const signature = signer.sign(saKey.private_key, "base64url");
-      const jwt = `${signInput}.${signature}`;
-
-      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-      });
-      const tokenData = await tokenRes.json() as { access_token?: string };
-      const accessToken = tokenData.access_token || "";
+      const arRegion = extractRegionFromScript(event.tofuScript) || region;
+      const accessToken = await getGcpAccessToken(ctx.providerRow.api_key);
       if (!accessToken) throw new Error("Failed to get GCP access token from service account key");
 
-      // Enable Artifact Registry API (idempotent)
+      // Enable APIs
       await appendLog(deploymentId, `[${ts()}] ℹ Enabling Artifact Registry API...`);
-      try {
-        const enableRes = await fetch(`https://serviceusage.googleapis.com/v1/projects/${gcpProjectId}/services/artifactregistry.googleapis.com:enable`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        if (enableRes.ok) {
-          await new Promise(r => setTimeout(r, 10_000));
-          await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry API enabled`);
-        } else {
-          await appendLog(deploymentId, `[${ts()}] ℹ API enable: ${enableRes.status} (may already be enabled)`);
-        }
-      } catch (e: any) {
-        await appendLog(deploymentId, `[${ts()}] ℹ API enable: ${e.message} (continuing)`);
-      }
-
-      // Also enable Cloud Run API
-      try {
-        await fetch(`https://serviceusage.googleapis.com/v1/projects/${gcpProjectId}/services/run.googleapis.com:enable`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-      } catch {}
+      await enableGcpApis(gcpProjectId, accessToken, ["artifactregistry.googleapis.com", "run.googleapis.com"]);
+      await new Promise(r => setTimeout(r, 10_000));
+      await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry API enabled`);
 
       const arHost = `${arRegion}-docker.pkg.dev`;
       const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
       const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
 
-      // Create Artifact Registry repository (idempotent — 409 means already exists)
-      try {
-        const createRepoRes = await fetch(`https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories?repositoryId=${arRepo}`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ format: "DOCKER" }),
-        });
-        if (createRepoRes.ok) {
-          // Creation is async — poll until the repo is accessible
-          await appendLog(deploymentId, `[${ts()}] ℹ Waiting for repository to be ready...`);
-          for (let i = 0; i < 12; i++) {
-            await new Promise(r => setTimeout(r, 5_000));
-            const checkRes = await fetch(`https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`, {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-            if (checkRes.ok) break;
-          }
-          await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository created`);
-        } else if (createRepoRes.status === 409) {
-          await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository already exists`);
-        } else {
-          const body = await createRepoRes.text();
-          await appendLog(deploymentId, `[${ts()}] ⚠ Create repo: ${createRepoRes.status} ${body.slice(0, 200)}`);
-        }
-      } catch (e: any) {
-        await appendLog(deploymentId, `[${ts()}] ⚠ Create repo: ${e.message}`);
+      // Create Artifact Registry repository
+      const repoResult = await ensureArtifactRegistryRepo(gcpProjectId, arRegion, arRepo, accessToken);
+      if (repoResult.created) {
+        await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository created`);
+      } else if (repoResult.error) {
+        await appendLog(deploymentId, `[${ts()}] ⚠ Create repo: ${repoResult.error}`);
+      } else {
+        await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository already exists`);
       }
 
-      // Authenticate Docker to Artifact Registry using access token
-      const loginResult = await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password", accessToken, arHost], { cwd: workDir });
-      if (loginResult.code !== 0) {
-        await appendLog(deploymentId, `[${ts()}] ⚠ Docker login failed, retrying...`);
-        // Retry once
-        await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password", accessToken, arHost], { cwd: workDir });
-      }
-
-      // Tag and push
-      const tagResult = await runCmd("docker", ["tag", actualImage, arImageUri], { cwd: workDir });
-      if (tagResult.code !== 0) throw new Error(`Failed to tag image for Artifact Registry`);
-      const pushResult = await runCmd("docker", ["push", arImageUri], { cwd: workDir, env: providerEnv });
-      if (pushResult.code !== 0) throw new Error(`Failed to push image to Artifact Registry`);
+      // Push image
+      await pushToArtifactRegistry({
+        localImage: actualImage, arImageUri, arHost, accessToken, workDir, runCmd, env: providerEnv,
+      });
       await appendLog(deploymentId, `[${ts()}] ✓ Image pushed: ${arImageUri}`);
 
       await runCmd("pulumi", ["config", "set", "imageUri", arImageUri, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
@@ -326,78 +191,42 @@ export async function handlePulumiDeploy(
   // Restore state from previous deployment (only from successful ones — failed/destroyed may have stale resources)
   const prevDeploy = await db.queryRow<{ tofu_script: string }>`
     SELECT tofu_script FROM deployments WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
+      AND deploy_strategy = ${event.deployStrategy}
       AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
       AND status = 'success'
       ORDER BY created_at DESC LIMIT 1`;
   if (prevDeploy?.tofu_script) {
-    const stateMarker = prevDeploy.tofu_script.indexOf("/* STATE */\n");
-    if (stateMarker !== -1) {
-      const savedState = prevDeploy.tofu_script.slice(stateMarker + "/* STATE */\n".length);
-      try {
-        if (savedState.includes('"deployment"')) {
-          // Rewrite the old stack name in the state to match the current stack
-          // Pulumi state embeds URNs like "urn:pulumi:<oldStack>::<project>::..." — update them to the new stack
-          const oldStackMatch = savedState.match(/"urn:pulumi:([^:]+)::/);
-          const updatedState = oldStackMatch
-            ? savedState.replaceAll(`urn:pulumi:${oldStackMatch[1]}::`, `urn:pulumi:${stackName}::`)
-            : savedState;
-          const stateFile = join(pulumiDir, "prev-state.json");
-          await ctx.writeFile(stateFile, updatedState, "utf-8");
-          const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
-          if (importResult.code === 0) await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
-          else await appendLog(deploymentId, `[${ts()}] ⚠ State import failed, deploying fresh`);
-        }
-      } catch {}
-    }
+    const { restored } = await restorePulumiState({
+      prevTofuScript: prevDeploy.tofu_script, stackName, pulumiDir, providerEnv, runCmd,
+    });
+    if (restored) await appendLog(deploymentId, `[${ts()}] ℹ Restored state from previous deployment`);
+    else await appendLog(deploymentId, `[${ts()}] ⚠ State import failed, deploying fresh`);
   }
 
   // For GCP Cloud Run: if no previous state was restored, check if the service already exists
   // and inject import directives so Pulumi adopts existing resources instead of failing with 409
   if (provider === "gcp" && event.deployStrategy === "managed" && !prevDeploy?.tofu_script) {
     try {
-      const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
-      const gcpProjectId = saKey.project_id || "";
-      if (gcpProjectId && saKey.client_email && saKey.private_key) {
-        const { createSign } = await import("node:crypto");
-        const now = Math.floor(Date.now() / 1000);
-        const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-        const jwtClaim = Buffer.from(JSON.stringify({
-          iss: saKey.client_email,
-          scope: "https://www.googleapis.com/auth/cloud-platform",
-          aud: "https://oauth2.googleapis.com/token",
-          iat: now, exp: now + 3600,
-        })).toString("base64url");
-        const signInput = `${jwtHeader}.${jwtClaim}`;
-        const signer = createSign("RSA-SHA256");
-        signer.update(signInput);
-        const signature = signer.sign(saKey.private_key, "base64url");
-        const accessToken = ((await (await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
-        })).json()) as { access_token?: string }).access_token || "";
+      const gcpProjectId = getGcpProjectId(ctx.providerRow.api_key);
+      const accessToken = await getGcpAccessToken(ctx.providerRow.api_key);
 
-        if (accessToken) {
-          let arRegion = region;
-          const regionMatch = event.tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
-          if (regionMatch) arRegion = regionMatch[1];
-          const serviceName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+      if (accessToken && gcpProjectId) {
+        const arRegion = extractRegionFromScript(event.tofuScript) || region;
+        const serviceName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
 
-          const checkRes = await fetch(
-            `https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+        const checkRes = await fetch(
+          `https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (checkRes.ok) {
+          await appendLog(deploymentId, `[${ts()}] ℹ Existing Cloud Run service found — importing`);
+          const indexPath = join(pulumiDir, "index.ts");
+          let program = await ctx.readFs(indexPath, "utf-8");
+          program = program.replace(
+            /}, \{ dependsOn: \[cloudRunApi\] \}\);(\s*\/\/ ── Allow unauthenticated)/,
+            `}, { dependsOn: [cloudRunApi], import: \`projects/\${project}/locations/\${region}/services/${serviceName}\` });$1`
           );
-          if (checkRes.ok) {
-            await appendLog(deploymentId, `[${ts()}] ℹ Existing Cloud Run service found — importing`);
-            // Read current Pulumi program and add import option to the Cloud Run service resource
-            const indexPath = join(pulumiDir, "index.ts");
-            let program = await ctx.readFs(indexPath, "utf-8");
-            program = program.replace(
-              /}, \{ dependsOn: \[cloudRunApi\] \}\);(\s*\/\/ ── Allow unauthenticated)/,
-              `}, { dependsOn: [cloudRunApi], import: \`projects/\${project}/locations/\${region}/services/${serviceName}\` });$1`
-            );
-            await ctx.writeFile(indexPath, program, "utf-8");
-          }
+          await ctx.writeFile(indexPath, program, "utf-8");
         }
       }
     } catch (e: any) {
@@ -483,27 +312,7 @@ export async function handlePulumiDeploy(
       const gcsBucket = bucketResult.output.trim().split("\n").pop()?.trim() || "";
       if (gcsBucket) {
         // Get access token for GCS upload
-        const saKey = JSON.parse(ctx.providerRow.api_key || "{}");
-        const { createSign: createSignUpload } = await import("node:crypto");
-        const nowUpload = Math.floor(Date.now() / 1000);
-        const jwtHeaderUpload = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-        const jwtClaimUpload = Buffer.from(JSON.stringify({
-          iss: saKey.client_email,
-          scope: "https://www.googleapis.com/auth/devstorage.read_write",
-          aud: "https://oauth2.googleapis.com/token",
-          iat: nowUpload, exp: nowUpload + 3600,
-        })).toString("base64url");
-        const signInputUpload = `${jwtHeaderUpload}.${jwtClaimUpload}`;
-        const signerUpload = createSignUpload("RSA-SHA256");
-        signerUpload.update(signInputUpload);
-        const signatureUpload = signerUpload.sign(saKey.private_key, "base64url");
-        const tokenResUpload = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInputUpload}.${signatureUpload}`,
-        });
-        const tokenDataUpload = await tokenResUpload.json() as { access_token?: string };
-        const uploadToken = tokenDataUpload.access_token || "";
+        const uploadToken = await getGcpAccessToken(ctx.providerRow.api_key, "https://www.googleapis.com/auth/devstorage.read_write");
 
         if (uploadToken) {
           // Build the static site using npm directly (cross-platform)
@@ -688,18 +497,7 @@ export async function handlePulumiDeploy(
   }
 
   // Save Pulumi state
-  try {
-    const { execSync: execSyncState } = await import("node:child_process");
-    const stateOutput = execSyncState("pulumi stack export --non-interactive", {
-      cwd: pulumiDir,
-      env: { ...process.env, ...providerEnv },
-      timeout: 30_000,
-      maxBuffer: 10 * 1024 * 1024,
-    }).toString();
-    if (stateOutput.includes('"deployment"')) {
-      await db.exec`UPDATE deployments SET tofu_script = ${(event.tofuScript + "\n\n/* STATE */\n" + stateOutput).replace(/\0/g, "")} WHERE id = ${deploymentId}`;
-    }
-  } catch {}
+  await savePulumiState({ deploymentId, tofuScript: event.tofuScript, pulumiDir, providerEnv, runCmd, db });
 
   try { await ctx.rm(workDir, { recursive: true, force: true }); } catch {}
 

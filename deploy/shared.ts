@@ -72,6 +72,7 @@ export interface DeployEvent {
   appId: string;
   providerId: string;
   gitConnectionId: string;
+  projectId: string;
   repo: string;
   branch: string;
   tofuScript: string;
@@ -86,3 +87,57 @@ export interface DeployEvent {
 export const deployTopic = new Topic<DeployEvent>("deployments", {
   deliveryGuarantee: "at-least-once",
 });
+
+// ─── Shared Constants ───
+
+/** Default regions per provider. Used by tofu generation and deploy processor. */
+export const DEFAULT_REGIONS: Record<string, string> = {
+  aws: "us-east-1",
+  gcp: "us-central1",
+};
+
+/** Extract the region baked into a Pulumi script by the wizard. */
+export function extractRegionFromScript(tofuScript: string): string | null {
+  const match = tofuScript.match(/config\.get\("region"\)\s*\|\|\s*"([^"]+)"/);
+  return match ? match[1] : null;
+}
+
+// ─── Row Mapper ───
+
+/** Database row shape for deployments. */
+export interface DeploymentRow {
+  id: string;
+  provider_id: string;
+  git_connection_id: string;
+  project_id: string;
+  repo: string;
+  branch: string;
+  status: string;
+  logs: string;
+  app_url: string;
+  commit_hash: string;
+  docker_image: string;
+  deploy_strategy: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/** Map a database row to a Deployment object. */
+export function rowToDeployment(row: DeploymentRow): Deployment {
+  return {
+    id: row.id,
+    providerId: row.provider_id,
+    gitConnectionId: row.git_connection_id,
+    projectId: row.project_id || "",
+    repo: row.repo,
+    branch: row.branch,
+    status: row.status as Deployment["status"],
+    logs: row.logs,
+    appUrl: row.app_url,
+    commitHash: row.commit_hash,
+    dockerImage: row.docker_image,
+    deployStrategy: row.deploy_strategy || "managed",
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
