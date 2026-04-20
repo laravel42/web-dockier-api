@@ -272,20 +272,34 @@ async function destroyGcpStaticNoState(
       const bucketPatternAlt = /new gcp\.storage\.Bucket\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s;
       await deleteGcsBucket(tofuScript, gcpProjectId, authHeaders, noStateErrors, bucketPattern, bucketPatternAlt);
 
-      // 2. Delete CDN / LB resources
+      // 2. Delete CDN / LB resources (match both "quoted" and `template` name patterns)
       const resourceNames = [
-        { type: "globalForwardingRules", match: tofuScript.match(/new gcp\.compute\.GlobalForwardingRule\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
-        { type: "targetHttpProxies", match: tofuScript.match(/new gcp\.compute\.TargetHttpProxy\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
-        { type: "urlMaps", match: tofuScript.match(/new gcp\.compute\.URLMap\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
-        { type: "backendBuckets", match: tofuScript.match(/new gcp\.compute\.BackendBucket\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
-        { type: "globalAddresses", match: tofuScript.match(/new gcp\.compute\.GlobalAddress\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s) },
+        { type: "globalForwardingRules", match: tofuScript.match(/new gcp\.compute\.GlobalForwardingRule\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s) },
+        { type: "targetHttpProxies", match: tofuScript.match(/new gcp\.compute\.TargetHttpProxy\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s) },
+        { type: "urlMaps", match: tofuScript.match(/new gcp\.compute\.URLMap\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s) },
+        { type: "backendBuckets", match: tofuScript.match(/new gcp\.compute\.BackendBucket\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s) },
+        { type: "globalAddresses", match: tofuScript.match(/new gcp\.compute\.GlobalAddress\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s) },
       ];
       for (const { type, match } of resourceNames) {
         if (match) {
+          // Use the first captured group (double-quoted) or second (template literal)
+          let name = match[1] || match[2] || "";
+          // Strip template expressions like ${suffix ? "-" + suffix : ""} to get the base name
+          name = name.replace(/\$\{[^}]+\}/g, "").replace(/-+$/, "");
+          if (!name) continue;
+
+          // For template-based names, list matching resources via API since the suffix is dynamic
           try {
-            const res = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${match[1]}`, { method: "DELETE", headers: authHeaders });
-            if (!res.ok && res.status !== 404) noStateErrors.push(`${type} delete: ${(await res.text()).slice(0, 150)}`);
-            await new Promise(r => setTimeout(r, 2_000));
+            const listRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}`, { headers: authHeaders });
+            if (listRes.ok) {
+              const listData = await listRes.json() as { items?: { name: string }[] };
+              const matching = (listData.items || []).filter((r: { name: string }) => r.name.startsWith(name));
+              for (const r of matching) {
+                const delRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${r.name}`, { method: "DELETE", headers: authHeaders });
+                if (!delRes.ok && delRes.status !== 404) noStateErrors.push(`${type} delete ${r.name}: ${(await delRes.text()).slice(0, 150)}`);
+                await new Promise(r => setTimeout(r, 2_000));
+              }
+            }
           } catch (e: any) { noStateErrors.push(`${type} delete: ${e.message}`); }
         }
       }

@@ -297,6 +297,7 @@ import * as gcp from "@pulumi/gcp";
 
 const config = new pulumi.Config();
 const region = config.get("region") || "${p.region}";
+const suffix = config.get("resourceSuffix") || "";
 const gcpConfig = new pulumi.Config("gcp");
 const project = gcpConfig.require("project");
 
@@ -307,14 +308,19 @@ const computeApi = new gcp.projects.Service("compute-api", {
 });
 
 // ── Cloud Storage Bucket (static website) ──
+// GCS bucket names must be ≤ 63 chars and globally unique.
+// Use project hash + suffix to keep the name short but unique.
+const projectHash = project.replace(/-/g, "").slice(0, 8);
+const bucketName63 = \`${p.appName}-site-\${projectHash}\${suffix ? "-" + suffix : ""}\`.slice(0, 63).replace(/-+$/, "");
+
 const bucket = new gcp.storage.Bucket("${p.appName}-static-site", {
-  name: \`${p.appName}-static-site-\${project}\`,
+  name: bucketName63,
   location: region,
   forceDestroy: true,
   uniformBucketLevelAccess: true,
   website: {
     mainPageSuffix: "index.html",
-    notFoundPage: "404.html",
+    notFoundPage: "index.html",
   },
   cors: [{
     origins: ["*"],
@@ -333,7 +339,7 @@ const bucketIam = new gcp.storage.BucketIAMMember("${p.appName}-public", {
 
 // ── Backend Bucket with CDN ──
 const backendBucket = new gcp.compute.BackendBucket("${p.appName}-cdn", {
-  name: "${p.appName}-cdn",
+  name: \`${p.appName}-cdn\${suffix ? "-" + suffix : ""}\`,
   bucketName: bucket.name,
   enableCdn: true,
   cdnPolicy: {
@@ -342,32 +348,41 @@ const backendBucket = new gcp.compute.BackendBucket("${p.appName}-cdn", {
     maxTtl: 86400,
     clientTtl: 3600,
   },
+  customResponseHeaders: [],
 }, { dependsOn: [computeApi] });
 
-// ── URL Map ──
+// ── URL Map (SPA: rewrite 404s to index.html with 200 status) ──
 const urlMap = new gcp.compute.URLMap("${p.appName}-url-map", {
-  name: "${p.appName}-url-map",
+  name: \`${p.appName}-url-map\${suffix ? "-" + suffix : ""}\`,
   defaultService: backendBucket.selfLink,
+  defaultCustomErrorResponsePolicy: {
+    errorResponseRules: [{
+      matchResponseCodes: ["4xx"],
+      path: "/index.html",
+      overrideResponseCode: 200,
+    }],
+    errorService: backendBucket.selfLink,
+  },
 });
 
 // ── HTTP Proxy ──
 const httpProxy = new gcp.compute.TargetHttpProxy("${p.appName}-http-proxy", {
-  name: "${p.appName}-http-proxy",
+  name: \`${p.appName}-http-proxy\${suffix ? "-" + suffix : ""}\`,
   urlMap: urlMap.selfLink,
 });
 
 // ── Global Static IP ──
 const globalIp = new gcp.compute.GlobalAddress("${p.appName}-ip", {
-  name: "${p.appName}-ip",
+  name: \`${p.appName}-ip\${suffix ? "-" + suffix : ""}\`,
 });
 
 // ── Forwarding Rule ──
 const forwardingRule = new gcp.compute.GlobalForwardingRule("${p.appName}-fwd", {
-  name: "${p.appName}-fwd",
+  name: \`${p.appName}-fwd\${suffix ? "-" + suffix : ""}\`,
   target: httpProxy.selfLink,
   ipAddress: globalIp.address,
   portRange: "80",
-  loadBalancingScheme: "EXTERNAL",
+  loadBalancingScheme: "EXTERNAL_MANAGED",
 });
 
 export const bucketName = bucket.name;

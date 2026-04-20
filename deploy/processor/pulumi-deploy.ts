@@ -114,6 +114,8 @@ export async function handlePulumiDeploy(
   const initResult = await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   if (initResult.code !== 0) await appendLog(deploymentId, `[${ts()}] ⚠ Stack init: ${initResult.output.split("\n").filter(l => l.trim()).slice(-3).join(" | ")}`);
 
+  // Set unique suffix for GCP resource names to avoid 409 collisions across stacks
+  await runCmd("pulumi", ["config", "set", "resourceSuffix", shortId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   // Generate a temporary deploy SSH key (no passphrase) for image transfer
   const deployKeyPath = join(workDir, "deploy_key");
   const deployPubKeyPath = `${deployKeyPath}.pub`;
@@ -188,13 +190,13 @@ export async function handlePulumiDeploy(
     await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
 
-  // Restore state from previous deployment (only from successful ones — failed/destroyed may have stale resources)
+  // Restore state from previous deployment (prefer successful, fall back to failed with partial state)
   const prevDeploy = await db.queryRow<{ tofu_script: string }>`
     SELECT tofu_script FROM deployments WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
       AND deploy_strategy = ${event.deployStrategy}
       AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
-      AND status = 'success'
-      ORDER BY created_at DESC LIMIT 1`;
+      AND status IN ('success', 'failed')
+      ORDER BY (CASE WHEN status = 'success' THEN 0 ELSE 1 END), created_at DESC LIMIT 1`;
   if (prevDeploy?.tofu_script) {
     const { restored } = await restorePulumiState({
       prevTofuScript: prevDeploy.tofu_script, stackName, pulumiDir, providerEnv, runCmd,
