@@ -28,7 +28,7 @@ interface RepoStats {
 }
 
 export const getRepoStats = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-stats", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-stats", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string; refresh?: boolean; projectId?: string }): Promise<RepoStats> => {
     const branch = params.branch || "main";
     const repoKey = `${params.owner}/${params.repo}`;
@@ -356,7 +356,7 @@ export const getRepoStats = api(
 // ─── Invalidate Stats Cache ───
 
 export const invalidateStatsCache = api(
-  { method: "DELETE", path: "/git/stats-cache", auth: true },
+  { expose: true, method: "DELETE", path: "/git/stats-cache", auth: true },
   async (params: { repo: string; branch?: string }): Promise<{ done: boolean }> => {
     if (params.branch) {
       await db.exec`DELETE FROM stats_cache WHERE repo = ${params.repo} AND branch = ${params.branch}`;

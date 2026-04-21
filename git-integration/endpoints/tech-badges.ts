@@ -12,7 +12,7 @@ interface TechBadge {
  * No external API calls — returns empty if neither cache has data.
  */
 export const getRepoBadges = api(
-  { method: "GET", path: "/git/repo-badges", auth: true },
+  { expose: true, method: "GET", path: "/git/repo-badges", auth: true },
   async (params: { repo: string; branch?: string; connectionId?: string }): Promise<{ badges: TechBadge[] }> => {
     const branch = params.branch || "main";
 

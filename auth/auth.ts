@@ -93,7 +93,7 @@ function generateToken(userId: string, email: string, appId: string): string {
 // ─── Register ───
 
 export const register = api(
-  { method: "POST", path: "/auth/register", expose: true },
+  { expose: true, method: "POST", path: "/auth/register" },
   async (params: RegisterParams): Promise<AuthResponse> => {
     const existing = await db.queryRow`
       SELECT id FROM users WHERE email = ${params.email}`;
@@ -113,7 +113,7 @@ export const register = api(
 // ─── Login ───
 
 export const login = api(
-  { method: "POST", path: "/auth/login", expose: true },
+  { expose: true, method: "POST", path: "/auth/login" },
   async (params: LoginParams): Promise<AuthResponse> => {
     const user = await db.queryRow<{
       id: string;
@@ -146,7 +146,7 @@ export const login = api(
 import { getAuthData } from "~encore/auth";
 
 export const setup2FA = api(
-  { method: "POST", path: "/auth/2fa/setup", auth: true },
+  { expose: true, method: "POST", path: "/auth/2fa/setup", auth: true },
   async (): Promise<Setup2FAResponse> => {
     const authData = getAuthData()!;
     const twoFactorSecret = generateSecret();
@@ -168,7 +168,7 @@ export const setup2FA = api(
 // ─── 2FA Enable ───
 
 export const enable2FA = api(
-  { method: "POST", path: "/auth/2fa/enable", auth: true },
+  { expose: true, method: "POST", path: "/auth/2fa/enable", auth: true },
   async (params: { token: string }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
     const user = await db.queryRow<{ two_factor_secret: string }>`
@@ -193,7 +193,7 @@ export const enable2FA = api(
 // ─── 2FA Verify (during login) ───
 
 export const verify2FA = api(
-  { method: "POST", path: "/auth/2fa/verify", expose: true },
+  { expose: true, method: "POST", path: "/auth/2fa/verify" },
   async (params: Verify2FAParams): Promise<AuthResponse> => {
     const user = await db.queryRow<{
       id: string;
@@ -217,7 +217,7 @@ export const verify2FA = api(
 // ─── Get Current User (Me) ───
 
 export const getMe = api(
-  { method: "GET", path: "/auth/me", auth: true },
+  { expose: true, method: "GET", path: "/auth/me", auth: true },
   async (): Promise<{ userId: string; email: string; name: string; roleId: string; appId: string }> => {
     const authData = getAuthData()!;
     const user = await db.queryRow<{ id: string; email: string; name: string; role_id: string | null; app_id: string }>`

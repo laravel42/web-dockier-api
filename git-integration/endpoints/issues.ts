@@ -3,7 +3,7 @@ import { getAuthData } from "~encore/auth";
 import { db } from "../shared";
 
 export const createGitIssue = api(
-  { method: "POST", path: "/git/connections/:connectionId/issues", auth: true },
+  { expose: true, method: "POST", path: "/git/connections/:connectionId/issues", auth: true },
   async (params: {
     connectionId: string;
     owner: string;

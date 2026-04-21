@@ -31,7 +31,7 @@ interface RepoAnalysis {
 }
 
 export const analyzeRepo = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string; aiType?: string; projectId?: string }): Promise<RepoAnalysis> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
@@ -307,7 +307,7 @@ export const analyzeRepo = api(
 // ─── Clear Analysis Cache ───
 
 export const clearAnalysisCache = api(
-  { method: "DELETE", path: "/git/analysis-cache", auth: true },
+  { expose: true, method: "DELETE", path: "/git/analysis-cache", auth: true },
   async (params: { repo?: string; branch?: string }): Promise<{ deleted: boolean }> => {
     if (params.repo && params.branch) {
       await db.exec`DELETE FROM analysis_cache WHERE repo = ${params.repo} AND branch = ${params.branch}`;

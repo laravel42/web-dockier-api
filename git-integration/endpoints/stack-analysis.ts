@@ -5,7 +5,7 @@ import { type StackAnalysis, analyzeStack } from "../analysis/stack-scanner";
 // ─── Get Stack Analysis (cached) ───
 
 export const getStackAnalysis = api(
-  { method: "GET", path: "/git/connections/:connectionId/stack-analysis", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/stack-analysis", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string; projectId?: string }): Promise<{ stack: StackAnalysis | null; cached: boolean }> => {
     const branch = params.branch || "main";
     const repoKey = `${params.owner}/${params.repo}`;
@@ -49,7 +49,7 @@ export const getStackAnalysis = api(
 // ─── Invalidate Stack Cache (called on pull, branch switch, project create) ───
 
 export const invalidateStackCache = api(
-  { method: "DELETE", path: "/git/stack-cache", auth: true },
+  { expose: true, method: "DELETE", path: "/git/stack-cache", auth: true },
   async (params: { repo: string; branch?: string }): Promise<{ done: boolean }> => {
     if (params.branch) {
       await db.exec`DELETE FROM stack_cache WHERE repo = ${params.repo} AND branch = ${params.branch}`;

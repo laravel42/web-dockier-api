@@ -3,7 +3,7 @@ import { db } from "../shared";
 import { appendLog, ts } from "../processor/helpers";
 
 export const awsPipelineWebhook = api(
-  { method: "POST", path: "/deploy/webhook/aws-pipeline", auth: false },
+  { expose: true, method: "POST", path: "/deploy/webhook/aws-pipeline", auth: false },
   async (params: {
     buildId: string;
     status: "deploying" | "success" | "failed";

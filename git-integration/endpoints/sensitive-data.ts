@@ -5,7 +5,7 @@ import { fetchRepoFile } from "../analysis/fetch-file";
 import { type SensitiveField, scanSensitiveData } from "../analysis/sensitive-data-scanner";
 
 export const getSensitiveData = api(
-  { method: "GET", path: "/git/connections/:connectionId/sensitive-data", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/sensitive-data", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<{ sensitiveData: SensitiveField[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;

@@ -48,7 +48,7 @@ interface TofuResponse {
 }
 
 export const generateTofu = api(
-  { method: "POST", path: "/deploy/tofu/generate", auth: true },
+  { expose: true, method: "POST", path: "/deploy/tofu/generate", auth: true },
   async (params: TofuRequest): Promise<TofuResponse> => {
     const providerRow = await db.queryRow<{
       provider: string; region: string; label: string;

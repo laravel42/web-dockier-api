@@ -15,7 +15,7 @@ import { bundleAndUploadSource } from "../source-bundler";
 // ─── API: Start Build ───
 
 export const startBuild = api(
-  { method: "POST", path: "/image-builder/builds", auth: true },
+  { expose: true, method: "POST", path: "/image-builder/builds", auth: true },
   async (params: StartBuildParams): Promise<BuildRecord> => {
     const authData = getAuthData()!;
 
@@ -134,7 +134,7 @@ export const startBuild = api(
 // ─── API: Get Build Status ───
 
 export const getBuildStatus = api(
-  { method: "GET", path: "/image-builder/builds/:buildId", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds/:buildId", auth: true },
   async (params: { buildId: string }): Promise<BuildStatusResponse> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");
@@ -180,7 +180,7 @@ export const getBuildStatus = api(
 // ─── API: Get Build Logs (from CloudWatch) ───
 
 export const getBuildLogs = api(
-  { method: "GET", path: "/image-builder/builds/:buildId/logs", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds/:buildId/logs", auth: true },
   async (params: { buildId: string; nextToken?: string }): Promise<BuildLogsResponse> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");
@@ -261,7 +261,7 @@ export const getBuildLogs = api(
 // ─── API: List Builds ───
 
 export const listBuilds = api(
-  { method: "GET", path: "/image-builder/builds", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds", auth: true },
   async (params: { sourceRepo?: string; status?: string; limit?: number }): Promise<{ builds: BuildStatusResponse[] }> => {
     const authData = getAuthData()!;
     const limit = Math.min(params.limit || 50, 100);
@@ -288,7 +288,7 @@ export const listBuilds = api(
 // ─── API: Cancel Build ───
 
 export const cancelBuild = api(
-  { method: "POST", path: "/image-builder/builds/:buildId/cancel", auth: true },
+  { expose: true, method: "POST", path: "/image-builder/builds/:buildId/cancel", auth: true },
   async (params: { buildId: string }): Promise<BuildStatusResponse> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");

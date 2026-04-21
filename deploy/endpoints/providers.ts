@@ -4,7 +4,7 @@ import { getAuthData } from "~encore/auth";
 import { db, type ProviderResponse, type DeployProvider, isSupportedProvider } from "../shared";
 
 export const addProvider = api(
-  { method: "POST", path: "/deploy/providers", auth: true },
+  { expose: true, method: "POST", path: "/deploy/providers", auth: true },
   async (params: {
     provider: DeployProvider;
     label: string;
@@ -28,7 +28,7 @@ export const addProvider = api(
 );
 
 export const listProviders = api(
-  { method: "GET", path: "/deploy/providers", auth: true },
+  { expose: true, method: "GET", path: "/deploy/providers", auth: true },
   async (): Promise<{ providers: ProviderResponse[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{
@@ -48,7 +48,7 @@ export const listProviders = api(
 );
 
 export const deleteProvider = api(
-  { method: "DELETE", path: "/deploy/providers/:providerId", auth: true },
+  { expose: true, method: "DELETE", path: "/deploy/providers/:providerId", auth: true },
   async (params: { providerId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM deployments WHERE provider_id = ${params.providerId}`;
     await db.exec`DELETE FROM server_providers WHERE id = ${params.providerId}`;
@@ -57,7 +57,7 @@ export const deleteProvider = api(
 );
 
 export const updateProvider = api(
-  { method: "PUT", path: "/deploy/providers/:providerId", auth: true },
+  { expose: true, method: "PUT", path: "/deploy/providers/:providerId", auth: true },
   async (params: { providerId: string; label?: string; apiSecret?: string }): Promise<ProviderResponse> => {
     const row = await db.queryRow<{
       id: string; provider: string; label: string; region: string; created_at: Date;

@@ -99,7 +99,7 @@ async function ensureUser(userId: string): Promise<UserRow> {
 // ─── Create User ───
 
 export const createUser = api(
-  { method: "POST", path: "/users", auth: true },
+  { expose: true, method: "POST", path: "/users", auth: true },
   async (params: {
     email: string;
     name: string;
@@ -132,7 +132,7 @@ export const createUser = api(
 // ─── Get User ───
 
 export const getUser = api(
-  { method: "GET", path: "/users/:userId", auth: true },
+  { expose: true, method: "GET", path: "/users/:userId", auth: true },
   async (params: { userId: string }): Promise<User> => {
     return toUser(await ensureUser(params.userId));
   }
@@ -141,7 +141,7 @@ export const getUser = api(
 // ─── List Users ───
 
 export const listUsers = api(
-  { method: "GET", path: "/users", auth: true },
+  { expose: true, method: "GET", path: "/users", auth: true },
   async (params: ListUsersParams): Promise<ListUsersResponse> => {
     const authData = getAuthData()!;
     const page = params.page || 1;
@@ -188,7 +188,7 @@ export const listUsers = api(
 // ─── Update User ───
 
 export const updateUser = api(
-  { method: "PUT", path: "/users/:userId", auth: true },
+  { expose: true, method: "PUT", path: "/users/:userId", auth: true },
   async (params: UpdateUserParams): Promise<User> => {
     await ensureUser(params.userId);
 
@@ -222,7 +222,7 @@ export const updateUser = api(
 // ─── Delete User ───
 
 export const deleteUser = api(
-  { method: "DELETE", path: "/users/:userId", auth: true },
+  { expose: true, method: "DELETE", path: "/users/:userId", auth: true },
   async (params: { userId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM users WHERE id = ${params.userId}`;
     return { success: true };

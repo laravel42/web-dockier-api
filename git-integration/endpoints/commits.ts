@@ -19,7 +19,7 @@ interface RecentCommitsResponse {
 }
 
 export const getRecentCommits = api(
-  { method: "GET", path: "/git/connections/:connectionId/recent-commits", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/recent-commits", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string; limit?: number }): Promise<RecentCommitsResponse> => {
     const branch = params.branch || "main";
     const limit = Math.min(params.limit || 5, 20);

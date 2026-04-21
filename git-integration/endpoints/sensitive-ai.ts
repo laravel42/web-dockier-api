@@ -28,7 +28,7 @@ interface AiSensitiveResult {
 // ─── Analyze with AI (with DB cache) ───
 
 export const analyzeSensitiveData = api(
-  { method: "POST", path: "/git/analyze-sensitive-data", auth: true },
+  { expose: true, method: "POST", path: "/git/analyze-sensitive-data", auth: true },
   async (params: { schema: string; projectId?: string }): Promise<AiSensitiveResult> => {
     // Check DB cache ONLY if no schema provided (page load cache probe)
     if (params.projectId && (!params.schema || params.schema.trim().length === 0)) {

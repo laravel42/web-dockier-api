@@ -3,7 +3,7 @@ import { db, type GitRepo } from "../shared";
 import { throwProviderError, parseRepoUrl } from "../helpers";
 
 export const listRepos = api(
-  { method: "GET", path: "/git/connections/:connectionId/repos", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repos", auth: true },
   async (params: { connectionId: string; refresh?: boolean }): Promise<{ repos: GitRepo[]; cached: boolean }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -63,7 +63,7 @@ export const listRepos = api(
 );
 
 export const listBranches = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-branches", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-branches", auth: true },
   async (params: { connectionId: string; owner: string; repo: string }): Promise<{ branches: string[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -91,7 +91,7 @@ export const listBranches = api(
 );
 
 export const getConnectionBranches = api(
-  { method: "GET", path: "/git/connections/:connectionId/branches", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/branches", auth: true },
   async (params: { connectionId: string }): Promise<{ branches: string[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; repo_url: string; endpoint: string }>`
       SELECT provider, personal_token, repo_url, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -129,7 +129,7 @@ export const getConnectionBranches = api(
 interface RepoFile { path: string; type: "file" | "dir"; size: number; }
 
 export const getRepoTree = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-tree", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-tree", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<{ files: RepoFile[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -168,7 +168,7 @@ export const getRepoTree = api(
 );
 
 export const getFileContent = api(
-  { method: "GET", path: "/git/connections/:connectionId/file-content", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/file-content", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch: string; path: string }): Promise<{ content: string }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -198,7 +198,7 @@ export const getFileContent = api(
 // ─── List Repo Members (for assignee/reviewer selection) ───
 
 export const listRepoMembers = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-members", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-members", auth: true },
   async (params: { connectionId: string; owner: string; repo: string }): Promise<{ members: Array<{ id: string; username: string; name: string; avatarUrl: string }> }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
