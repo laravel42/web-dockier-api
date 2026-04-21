@@ -26,7 +26,7 @@ export default function ScanProjectCard({ project, projectId, scans, onSelect }:
   return (
     <div
       onClick={() => onSelect(latest.id)}
-      className="bg-card border border-border rounded-[var(--radius-card)] p-3 flex flex-col gap-3 hover:border-primary-500/30 transition-all overflow-hidden shadow-[var(--shadow-card)] cursor-pointer"
+      className="bg-card border border-border rounded-(--radius-card) p-3 flex flex-col gap-3 hover:border-primary-500/30 transition-all overflow-hidden shadow-(--shadow-card) cursor-pointer"
     >
       {/* Header: shield icon + scan count + result badges */}
       <div className="flex items-center justify-between min-w-0">
