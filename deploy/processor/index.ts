@@ -73,7 +73,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       const conn = await git_integration.getConnectionForScan({ connectionId: event.gitConnectionId });
       let cloneUrl: string;
       if (conn.provider === "github") cloneUrl = `https://x-access-token:${conn.token}@github.com/${event.repo}.git`;
-      else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") { const host = new URL(conn.endpoint || "https://gitlab.com").host; cloneUrl = `https://oauth2:${conn.token}@${host}/${event.repo}.git`; }
+      else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") { const host = new URL(conn.endpoint || "https://gitlab.com").host; cloneUrl = `https://oauth2:${conn.token}@${host}/${event.repo}.git`; }
       else if (conn.provider === "bitbucket") cloneUrl = `https://x-token-auth:${conn.token}@bitbucket.org/${event.repo}.git`;
       else throw new Error(`Unsupported git provider: ${conn.provider}`);
 

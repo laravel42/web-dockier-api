@@ -32,7 +32,7 @@ export const listRepos = api(
         if (r.archived) continue;
         repos.push({ name: r.name, fullName: r.full_name, url: r.html_url, defaultBranch: r.default_branch, private: r.private });
       }
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const res = await fetch(`${baseUrl}/api/v4/projects?membership=true&simple=true&per_page=100&order_by=updated_at&archived=false`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
       if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
@@ -77,7 +77,7 @@ export const listBranches = api(
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
       for (const b of data) branches.push(b.name);
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
       const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
@@ -107,8 +107,8 @@ export const getConnectionBranches = api(
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
       for (const b of data) branches.push(b.name);
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
-      const gitlabBase = conn.endpoint || (conn.provider === "gitlab_self_hosted" ? parsed.baseUrl : "https://gitlab.com");
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
+      const gitlabBase = conn.endpoint || (conn.provider === "gitlabSelfHosted" ? parsed.baseUrl : "https://gitlab.com");
       const projectPath = encodeURIComponent(`${parsed.owner}/${parsed.repo}`);
       const res = await fetch(`${gitlabBase}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, { headers: { "PRIVATE-TOKEN": conn.personal_token } });
       if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
@@ -142,7 +142,7 @@ export const getRepoTree = api(
       if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
       const data = await res.json() as any;
       for (const item of data.tree || []) { if (item.type === "blob") files.push({ path: item.path, type: "file", size: item.size || 0 }); }
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
       let page = 1;
@@ -178,7 +178,7 @@ export const getFileContent = api(
       const res = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/contents/${params.path}?ref=${encodeURIComponent(params.branch)}`, { headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3.raw" } });
       if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
       return { content: await res.text() };
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
       const filePath = encodeURIComponent(params.path);
@@ -213,7 +213,7 @@ export const listRepoMembers = api(
         const data = await res.json() as Array<{ id: number; login: string; avatar_url: string }>;
         for (const u of data) members.push({ id: u.login, username: u.login, name: u.login, avatarUrl: u.avatar_url });
       }
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
       const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/members/all?per_page=100`, {

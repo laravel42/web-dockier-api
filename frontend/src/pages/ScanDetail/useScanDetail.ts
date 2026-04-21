@@ -120,7 +120,7 @@ export function useScanDetail() {
         branch: project.branch || "main",
       });
       await codeAnalysisApi.runScan(newScan.id, (() => {
-        try { const t = JSON.parse(localStorage.getItem("scan_tools") || "{}"); return { enableSemgrep: t.semgrep !== false, enableSonarqube: t.sonarqube !== false, enableCustomRules: t.customRules !== false }; }
+        try { const t = JSON.parse(localStorage.getItem("scan_tools") || "{}"); return { enableSemgrep: t.semgrep !== false, enableCustomRules: t.customRules !== false }; }
         catch { return {}; }
       })());
 

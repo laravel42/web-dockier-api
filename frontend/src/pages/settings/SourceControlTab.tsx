@@ -61,7 +61,7 @@ export default function SourceControlTab() {
           <div>
             <label htmlFor="git-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
             <select id="git-provider" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className={inputCls}>
-              <option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="gitlab_self_hosted">GitLab Self-Hosted</option><option value="bitbucket">Bitbucket</option>
+              <option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="gitlabSelfHosted">GitLab Self-Hosted</option><option value="bitbucket">Bitbucket</option>
             </select>
           </div>
           <div>

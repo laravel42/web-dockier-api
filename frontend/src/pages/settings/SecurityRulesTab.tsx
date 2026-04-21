@@ -13,11 +13,11 @@ interface CRule {
 }
 
 export default function SecurityRulesTab() {
-  const [ruleSource, setRuleSource] = useState<"custom" | "sonarqube" | "semgrep">("semgrep");
+  const [ruleSource, setRuleSource] = useState<"custom" | "semgrep">("semgrep");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
     const savedTools = localStorage.getItem("scan_tools");
     if (savedTools) { try { return JSON.parse(savedTools); } catch { /* ignore */ } }
-    return { semgrep: true, sonarqube: true, customRules: true };
+    return { semgrep: true, customRules: true };
   });
   const [toolMessage, setToolMessage] = useState("");
 
@@ -32,9 +32,9 @@ export default function SecurityRulesTab() {
   };
 
   // Auto-switch rule source when current engine is disabled
-  const toolKeyForSource: Record<string, string> = { custom: "customRules", sonarqube: "sonarqube", semgrep: "semgrep" };
   useEffect(() => {
-    if (!scanTools[toolKeyForSource[ruleSource]]) {
+    const toolKey: Record<string, string> = { custom: "customRules", semgrep: "semgrep" };
+    if (!scanTools[toolKey[ruleSource]]) {
       const sources = [
         { key: "semgrep" as const, toolKey: "semgrep" },
         { key: "custom" as const, toolKey: "customRules" },
@@ -117,7 +117,7 @@ export default function SecurityRulesTab() {
   return (
     <div>
       {/* Scan Engine Toggles */}
-      <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-4 mb-4">
+      <div className="bg-card rounded-(--radius-card) shadow-(--shadow-card) p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-semibold text-text">Security Tools</p>
@@ -133,8 +133,8 @@ export default function SecurityRulesTab() {
             <button key={key} type="button" onClick={() => toggleTool(key)}
               className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
-              <span className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${scanTools[key] ? "bg-primary-500" : "bg-secondary-200"}`}>
-                <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-[14px]" : "left-[1px]"}`} />
+              <span className={`w-8 h-4.5 rounded-full shrink-0 transition-colors relative ${scanTools[key] ? "bg-primary-500" : "bg-secondary-200"}`}>
+                <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-3.5" : "left-px"}`} />
               </span>
             </button>
           ))}
@@ -143,7 +143,7 @@ export default function SecurityRulesTab() {
 
       {/* Source selector + search */}
       {(() => {
-        const sources: Array<{ key: "custom" | "sonarqube" | "semgrep"; label: string; toolKey: string }> = [
+        const sources: Array<{ key: "custom" | "semgrep"; label: string; toolKey: string }> = [
           { key: "semgrep", label: "Semgrep", toolKey: "semgrep" },
           { key: "custom", label: "Custom Rules", toolKey: "customRules" },
         ];
@@ -183,9 +183,7 @@ export default function SecurityRulesTab() {
             )}
           </div>
 
-          {effectiveSource === "sonarqube" ? (
-            <SonarQubeRulesPanel />
-          ) : effectiveSource === "semgrep" ? (
+          {effectiveSource === "semgrep" ? (
             <SemgrepRulesPanel filter={semgrepFilter} adding={semgrepAdding} onAddingDone={() => setSemgrepAdding(false)} />
           ) : (
       <>
@@ -256,14 +254,14 @@ export default function SecurityRulesTab() {
           </div>
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">File Extensions</label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {([
                 { ext: ".php", icon: "php", label: "PHP" }, { ext: ".blade.php", icon: "php", label: "Blade" },
                 { ext: ".js", icon: "javascript", label: "JS" }, { ext: ".ts", icon: "typescript", label: "TS" },
                 { ext: ".jsx", icon: "react", label: "JSX" }, { ext: ".tsx", icon: "react", label: "TSX" },
-                { ext: ".vue", icon: "vuejs", label: "Vue" }, { ext: ".py", icon: "python", label: "Python" },
-                { ext: ".rb", icon: "ruby", label: "Ruby" }, { ext: ".java", icon: "java", label: "Java" },
-                { ext: ".go", icon: "go", label: "Go" }, { ext: ".rs", icon: "rust", label: "Rust" },
+                { ext: ".vue", icon: "vuejs", label: "Vue" }, { ext: ".py", icon: "python", label: "PY" },
+                { ext: ".rb", icon: "ruby", label: "RB" }, { ext: ".java", icon: "java", label: "Java" },
+                { ext: ".go", icon: "go", label: "Go" }, { ext: ".rs", icon: "rust", label: "RS" },
                 { ext: ".cs", icon: "csharp", label: "C#" }, { ext: ".env", icon: "linux", label: ".env" },
                 { ext: ".yaml", icon: "yaml", label: "YAML" }, { ext: ".json", icon: "json", label: "JSON" },
                 { ext: ".html", icon: "html5", label: "HTML" }, { ext: ".sql", icon: "azuresqldatabase", label: "SQL" },
@@ -272,10 +270,10 @@ export default function SecurityRulesTab() {
                 return (
                   <button key={ext} type="button"
                     onClick={() => setForm(f => ({ ...f, extensions: selected ? f.extensions.filter(e => e !== ext) : [...f.extensions, ext] }))}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-medium transition-all ${
                       selected ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border bg-card text-text-muted hover:border-primary-300"
                     }`}>
-                    <TechBadge name={ext} icon={icon} iconOnly />{label}
+                    <TechBadge name={ext} icon={icon} iconOnly iconSize="w-3.5 h-3.5" />{label}
                   </button>
                 );
               })}
@@ -300,8 +298,8 @@ export default function SecurityRulesTab() {
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
-                <button type="button" onClick={() => handleToggle(r)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-[1px]"}`} />
+                <button type="button" onClick={() => handleToggle(r)} className={`w-8 h-4.5 rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
+                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-3.5" : "left-px"}`} />
                 </button>
               </div>
               <p className="text-sm text-text leading-relaxed">{r.message}</p>
@@ -312,16 +310,16 @@ export default function SecurityRulesTab() {
                     <TechBadge key={ext} name={ext} icon={extIconMap[ext]} label={ext} />
                   ))}
                 </div>
-                {!r.isSystem && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => openEdit(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
-                    </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEdit(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                  </button>
+                  {!r.isSystem && (
                     <button onClick={() => setDeleteId(r.id)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -335,201 +333,6 @@ export default function SecurityRulesTab() {
       </>
         );
       })()}
-    </div>
-  );
-}
-
-// SonarQube rules cache (persists across tab switches)
-type SQRuleItem = { key: string; name: string; severity: string; lang: string; type: string; isActive: boolean; cleanCodeAttribute: string; impacts: Array<{ softwareQuality: string; severity: string }>; profileKey: string };
-let _sqCache: { profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }>; rules: SQRuleItem[] } | null = null;
-
-function SonarQubeRulesPanel() {
-  const [profiles, setProfiles] = useState(() => _sqCache?.profiles ?? []);
-  const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set());
-  const [allRules, setAllRules] = useState(() => _sqCache?.rules ?? []);
-  const [loading, setLoading] = useState(!_sqCache);
-  const [rulesLoading, setRulesLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [sevFilter, setSevFilter] = useState("");
-  const [sqVisible, setSqVisible] = useState(30);
-  const [disabledSqRules, setDisabledSqRules] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    // Load disabled rules from DB
-    codeAnalysisApi.listRuleOverrides("sonarqube").then(res => {
-      setDisabledSqRules(new Set(res.overrides.filter(o => !o.enabled).map(o => o.ruleId)));
-    }).catch(() => { /* ignore */ });
-
-    if (_sqCache) return;
-    codeAnalysisApi.listSonarProfiles()
-      .then(async (res) => {
-        setProfiles(res.profiles);
-        setRulesLoading(true);
-        const merged: typeof allRules = [];
-        const seen = new Set<string>();
-        for (const p of res.profiles) {
-          try {
-            const data = await codeAnalysisApi.listSonarRules(p.key, 1);
-            for (const r of data.rules) {
-              if (!seen.has(r.key)) {
-                seen.add(r.key);
-                merged.push({ ...r, profileKey: p.key });
-              }
-            }
-          } catch { /* skip profile on error */ }
-        }
-        setAllRules(merged);
-        _sqCache = { profiles: res.profiles, rules: merged };
-        setRulesLoading(false);
-      })
-      .catch(e => setError(e.message || "Failed to connect to SonarQube"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const rules = allRules.filter(r => selectedLangs.size === 0 || selectedLangs.has(r.lang) || (selectedLangs.has("py") && r.lang === "ipynb"));
-
-  const handleToggle = async (ruleKey: string) => {
-    const nowEnabled = disabledSqRules.has(ruleKey);
-    setDisabledSqRules(prev => {
-      const n = new Set(prev);
-      if (nowEnabled) n.delete(ruleKey); else n.add(ruleKey);
-      return n;
-    });
-    try {
-      await codeAnalysisApi.toggleRule("sonarqube", ruleKey, nowEnabled);
-    } catch (e: unknown) {
-      // Revert on failure
-      setDisabledSqRules(prev => {
-        const n = new Set(prev);
-        if (nowEnabled) n.add(ruleKey); else n.delete(ruleKey);
-        return n;
-      });
-      setError((e as Error).message || "Failed to toggle rule");
-      setTimeout(() => setError(""), 3000);
-    }
-  };
-
-  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
-  if (error && profiles.length === 0) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p><p className="text-xs text-text-muted mt-2">Check that SonarQubeUrl and SonarQubeToken secrets are configured correctly.</p></div>;
-
-  return (
-    <div className="space-y-4">
-      {error && <div className="p-3 rounded-lg bg-danger-500/10 text-danger-500 text-sm">{error}</div>}
-
-      <div className="flex gap-4">
-        <RulesFilterSidebar
-          severities={[
-            { key: "BLOCKER", label: "Blocker", count: rules.filter(r => r.severity === "BLOCKER").length, color: "text-red-500", icon: "🔴" },
-            { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-orange-500", icon: "🟠" },
-            { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-yellow-500", icon: "🟡" },
-            { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-blue-500", icon: "🔵" },
-            { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-slate-400", icon: "⚪" },
-          ]}
-          activeSeverity={sevFilter}
-          onSeverityChange={(k) => { setSevFilter(k); setSqVisible(30); }}
-          languages={profiles.filter(p => p.language !== "ipynb").map(p => {
-            const langIcon: Record<string, string> = { java: "java", js: "javascript", ts: "typescript", py: "python", python: "python", php: "php", go: "go", ruby: "ruby", cs: "csharp", kotlin: "kotlin", swift: "swift", scala: "scala", web: "html5", css: "css3", xml: "xml", docker: "docker", dockerfile: "docker", terraform: "terraform", azureresourcemanager: "azureresourcemanager", azuresqldatabase: "azure" };
-            const langRename: Record<string, string> = { "Azure Resource Manager": "Azure" };
-            const count = allRules.filter(r => r.lang === p.language || (p.language === "py" && r.lang === "ipynb")).length;
-            return { key: p.language, icon: langIcon[p.language] || p.language, label: langRename[p.languageName] || p.languageName, count };
-          })}
-          activeLangs={selectedLangs}
-          onLangToggle={(k) => { setSelectedLangs(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; }); setSqVisible(30); }}
-          onLangClear={() => { setSelectedLangs(new Set()); setSqVisible(30); }}
-        />
-
-        <div className="flex-1 min-w-0">
-
-      {rulesLoading ? (
-        <div className="flex justify-center py-12"><Spinner className="w-5 h-5" /></div>
-      ) : (() => {
-        const sqFiltered = rules.filter(r => (!sevFilter || r.severity === sevFilter));
-        const sqShown = sqFiltered.slice(0, sqVisible);
-        return (<>
-        <div className="grid grid-cols-2 gap-2">
-          {sqShown.map(r => {
-            const langExts: Record<string, Array<{ ext: string; icon: string }>> = {
-              java: [{ ext: ".java", icon: "java" }],
-              js: [{ ext: ".js", icon: "javascript" }, { ext: ".jsx", icon: "react" }],
-              ts: [{ ext: ".ts", icon: "typescript" }, { ext: ".tsx", icon: "react" }],
-              py: [{ ext: ".py", icon: "python" }],
-              php: [{ ext: ".php", icon: "php" }],
-              go: [{ ext: ".go", icon: "go" }],
-              ruby: [{ ext: ".rb", icon: "ruby" }],
-              cs: [{ ext: ".cs", icon: "csharp" }],
-              kotlin: [{ ext: ".kt", icon: "kotlin" }],
-              swift: [{ ext: ".swift", icon: "swift" }],
-              scala: [{ ext: ".scala", icon: "scala" }],
-              web: [{ ext: ".html", icon: "html5" }, { ext: ".css", icon: "css3" }],
-              css: [{ ext: ".css", icon: "css3" }],
-              xml: [{ ext: ".xml", icon: "xml" }],
-            };
-            const exts = langExts[r.lang] || [{ ext: `.${r.lang}`, icon: r.lang }];
-            const langRename: Record<string, string> = { azureresourcemanager: "Azure", ipynb: "Python", web: "HTML/CSS" };
-            const techLabel = langRename[r.lang] || r.lang;
-            return (
-            <div key={r.key} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${disabledSqRules.has(r.key) ? "opacity-50" : ""}`}>
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0`} style={{ backgroundColor: { BLOCKER: "#ef4444", CRITICAL: "#f97316", MAJOR: "#eab308", MINOR: "#3b82f6", INFO: "#94a3b8" }[r.severity] || "#94a3b8" }} />
-                <span className="text-xs font-mono text-text-muted truncate flex-1">{r.key}</span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {exts.slice(0, 1).map(e => (
-                    <TechBadge key={e.ext} name={e.ext} icon={e.icon} label={techLabel} />
-                  ))}
-                </div>
-                <button type="button" onClick={() => handleToggle(r.key)}
-                  className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${!disabledSqRules.has(r.key) ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-[1px]"}`} />
-                </button>
-              </div>
-              <p className="text-sm text-text leading-relaxed">{r.name}</p>
-              {/* Impacts */}
-              <div className="flex flex-wrap gap-1.5">
-                {r.impacts.map(i => {
-                  const sevColors: Record<string, { statusBg: string; statusBorder: string; icon: string; iconBg: string; labelBg: string; labelText: string }> = {
-                    BLOCKER: { statusBg: "bg-red-100", statusBorder: "border-red-200", icon: "text-red-600", iconBg: "bg-red-500", labelBg: "bg-red-50", labelText: "text-red-700" },
-                    HIGH: { statusBg: "bg-red-100", statusBorder: "border-red-200", icon: "text-red-600", iconBg: "bg-red-500", labelBg: "bg-red-50", labelText: "text-red-700" },
-                    MEDIUM: { statusBg: "bg-amber-100", statusBorder: "border-amber-200", icon: "text-amber-600", iconBg: "bg-amber-500", labelBg: "bg-amber-50", labelText: "text-amber-700" },
-                    LOW: { statusBg: "bg-emerald-100", statusBorder: "border-emerald-200", icon: "text-emerald-600", iconBg: "bg-emerald-500", labelBg: "bg-emerald-50", labelText: "text-emerald-700" },
-                    INFO: { statusBg: "bg-sky-100", statusBorder: "border-sky-200", icon: "text-sky-600", iconBg: "bg-sky-500", labelBg: "bg-sky-50", labelText: "text-sky-700" },
-                  };
-                  const s = sevColors[i.severity] || { statusBg: "bg-secondary-100", statusBorder: "border-secondary-200", icon: "text-text-muted", iconBg: "bg-secondary-400", labelBg: "bg-secondary-50", labelText: "text-text" };
-                  const isUp = i.severity === "HIGH" || i.severity === "MEDIUM" || i.severity === "BLOCKER";
-                  return (
-                    <span key={i.softwareQuality} className={`inline-flex items-center rounded-lg text-xs overflow-hidden`}>
-                      <span className={`font-medium px-2.5 py-1 ${s.labelBg} ${s.labelText}`}>{i.softwareQuality.charAt(0) + i.softwareQuality.slice(1).toLowerCase()}</span>
-                      <span className={`inline-flex items-center gap-1 font-semibold px-2 py-1 ${s.statusBg} ${s.icon}`}>
-                        <span className={`w-4 h-4 rounded-full flex items-center justify-center ${s.iconBg}`}>
-                          {i.severity === "INFO" ? (
-                            <span className="text-[10px] font-bold text-white leading-none">i</span>
-                          ) : (
-                            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d={isUp ? "M4.5 15.75l7.5-7.5 7.5 7.5" : "M19.5 8.25l-7.5 7.5-7.5-7.5"} />
-                            </svg>
-                          )}
-                        </span>
-                        {i.severity.charAt(0) + i.severity.slice(1).toLowerCase()}
-                      </span>
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-            );
-          })}
-          {sqFiltered.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-2">{sevFilter || selectedLangs.size ? "No rules match your filters" : "No rules found"}</p>}
-        </div>
-        {sqVisible < sqFiltered.length && (
-          <div className="flex justify-center mt-4">
-            <button onClick={() => setSqVisible(v => v + 30)} className="h-9 px-5 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 hover:text-text transition-colors">
-              Load more ({sqFiltered.length - sqVisible} remaining)
-            </button>
-          </div>
-        )}
-        </>);
-      })()}
-      </div>{/* end flex-1 */}
-      </div>{/* end flex gap-4 sidebar layout */}
     </div>
   );
 }
@@ -644,7 +447,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
       setNewRuleId("custom.my-rule");
       setNewRuleError("");
     }
-  }, [adding]);
+  }, [adding, SEMGREP_TEMPLATE]);
 
   // Load disabled overrides for built-in rules
   useEffect(() => {
@@ -800,8 +603,8 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {!r.isBuiltin && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600 shrink-0">User</span>}
                 <button type="button" onClick={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)}
-                  className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-[1px]"}`} />
+                  className={`w-8 h-4.5 rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
+                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-3.5" : "left-px"}`} />
                 </button>
               </div>
               <p className="text-sm text-text leading-relaxed">{r.name}</p>

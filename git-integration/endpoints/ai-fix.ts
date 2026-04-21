@@ -198,7 +198,7 @@ export const createFixMR = api(
       }
       return { mrUrl: pr.html_url || "", mrId: String(pr.number || pr.id), mrTitle: title };
 
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token, "Content-Type": "application/json" };
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);

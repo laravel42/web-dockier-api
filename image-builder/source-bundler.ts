@@ -27,7 +27,7 @@ export async function bundleAndUploadSource(
   let cloneUrl: string;
   if (gitToken && gitProvider === "github") {
     cloneUrl = `https://x-access-token:${gitToken}@github.com/${sourceRepo}.git`;
-  } else if (gitToken && (gitProvider === "gitlab" || gitProvider === "gitlab_self_hosted")) {
+  } else if (gitToken && (gitProvider === "gitlab" || gitProvider === "gitlabSelfHosted")) {
     const host = new URL(gitEndpoint || "https://gitlab.com").host;
     cloneUrl = `https://oauth2:${gitToken}@${host}/${sourceRepo}.git`;
   } else if (gitToken && gitProvider === "bitbucket") {

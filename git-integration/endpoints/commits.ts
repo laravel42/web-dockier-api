@@ -52,7 +52,7 @@ export const getRecentCommits = api(
           url: c.html_url || "",
         })),
       };
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const headers: Record<string, string> = { "PRIVATE-TOKEN": conn.personal_token };
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);

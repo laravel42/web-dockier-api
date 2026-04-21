@@ -1,4 +1,5 @@
 import { OpenAIApiKey } from "../shared";
+import { DEV_DUMMY_ANALYSIS } from "./dev-dummy-analysis";
 import type { TechStackItem } from "./tech-stack";
 import type { DetectedService } from "./services";
 
@@ -294,6 +295,13 @@ export async function analyzeWithAI(
   techStack: TechStackItem[],
   detectedServices: DetectedService[],
 ): Promise<AIRepoAnalysis | null> {
+
+  // Dev mode: return dummy data to avoid wasting OpenAI tokens
+  if (process.env.ENCORE_RUNTIME_ENV !== "production" && process.env.AI_SKIP_DEV !== "false") {
+    console.log("[AI] Dev mode — returning dummy analysis data (set AI_SKIP_DEV=false to use real AI)");
+    return DEV_DUMMY_ANALYSIS;
+  }
+
   const apiKey = OpenAIApiKey();
   if (!apiKey) { console.error("[AI] OpenAIApiKey not configured"); return null; }
 

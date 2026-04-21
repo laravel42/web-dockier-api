@@ -40,7 +40,7 @@ export const createGitIssue = api(
       return { issueId: String(data.id), issueUrl: data.html_url, issueNumber: data.number };
     }
 
-    if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const base = (conn.endpoint || "https://gitlab.com").replace(/\/+$/, "");
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
       const res = await fetch(`${base}/api/v4/projects/${projectPath}/issues`, {

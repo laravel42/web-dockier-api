@@ -9,7 +9,7 @@ export async function fetchRepoFile(provider: string, token: string, endpoint: s
       });
       if (!res.ok) return null;
       return await res.text();
-    } else if (provider === "gitlab" || provider === "gitlab_self_hosted") {
+    } else if (provider === "gitlab" || provider === "gitlabSelfHosted") {
       const baseUrl = endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${owner}/${repo}`);
       const filePath = encodeURIComponent(path);

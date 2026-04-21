@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS notification_channels (
+    id          TEXT PRIMARY KEY,
+    app_id      TEXT NOT NULL,
+    type        TEXT NOT NULL,
+    config      TEXT NOT NULL DEFAULT '{}',
+    enabled     BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_channels_app ON notification_channels(app_id);

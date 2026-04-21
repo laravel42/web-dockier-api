@@ -3,7 +3,7 @@ import DevIcon from "./DevIcon";
 const SC_PROVIDERS: Record<string, { icon: string; name: string; description: string }> = {
   github: { icon: "github", name: "GitHub", description: "GitHub repositories and organizations." },
   gitlab: { icon: "gitlab", name: "GitLab", description: "GitLab projects and groups." },
-  gitlab_self_hosted: { icon: "gitlab", name: "GitLab", description: "Self-hosted GitLab instance." },
+  gitlabSelfHosted: { icon: "gitlab", name: "GitLab", description: "Self-hosted GitLab instance." },
   bitbucket: { icon: "bitbucket", name: "Bitbucket", description: "Bitbucket repositories and workspaces." },
 };
 

@@ -38,7 +38,7 @@ export async function analyzeStack(
     let cloneUrl: string;
     if (provider === "github") {
       cloneUrl = `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
-    } else if (provider === "gitlab" || provider === "gitlab_self_hosted") {
+    } else if (provider === "gitlab" || provider === "gitlabSelfHosted") {
       const host = endpoint ? new URL(endpoint).host : "gitlab.com";
       cloneUrl = `https://oauth2:${token}@${host}/${owner}/${repo}.git`;
     } else if (provider === "bitbucket") {

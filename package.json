@@ -8,6 +8,9 @@
   "scripts": {
     "test": "vitest --run",
     "test:watch": "vitest",
+    "db:migrate": "npx tsx prisma/migrate.ts",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:reset": "npx tsx prisma/reset.ts",
     "postinstall": "pip3 install semgrep || pip install semgrep || true"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
@@ -36,6 +39,7 @@
     "jsonwebtoken": "^9.0.3",
     "otplib": "^13.4.0",
     "pg": "^8.20.0",
+    "pg-copy-streams": "^7.0.0",
     "qrcode": "^1.5.4",
     "uuid": "^13.0.0"
   }
