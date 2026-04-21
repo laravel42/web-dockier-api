@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v3.6.13
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./docker/routes.yml:/etc/traefik/routes.yml:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file:
+      - docker/.env
+    volumes:
+      - pgdata:/var/lib/postgresql/18/main
+    restart: unless-stopped
+
+volumes:
+  pgdata:
