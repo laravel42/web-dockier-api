@@ -12,7 +12,6 @@ const SmtpHost = secret("SmtpHost");
 const SmtpPort = secret("SmtpPort");
 const SmtpUser = secret("SmtpUser");
 const SmtpPass = secret("SmtpPass");
-const SlackWebhookUrl = secret("SlackWebhookUrl");
 
 // ─── Interfaces ───
 
@@ -200,7 +199,7 @@ const _ = new Subscription(notificationTopic, "notification-processor", {
         break;
       case "slack":
         try {
-          await fetch(event.channelConfig.webhookUrl || SlackWebhookUrl(), {
+          await fetch(event.channelConfig.webhookUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: `*${event.title}*\n${event.message}` }),

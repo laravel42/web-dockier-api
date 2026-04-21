@@ -1,1 +1,0 @@
-ALTER TABLE deployments ADD COLUMN tofu_script TEXT NOT NULL DEFAULT '';

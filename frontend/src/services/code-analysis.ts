@@ -21,7 +21,7 @@ export const codeAnalysisApi = {
   getScan: (scanId: string) =>
     request<Scan & { summary: ScanSummaryApi }>(`/code-analysis/scans/${scanId}`),
 
-  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }) =>
+  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableCustomRules?: boolean }) =>
     request<{
       id: string;
       status: string;
@@ -63,20 +63,9 @@ export const codeAnalysisApi = {
   updateOpengrepRuleContent: (path: string, content: string) =>
     request("/code-analysis/semgrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
 
-  listSonarProfiles: () =>
-    request<{ profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }> }>("/code-analysis/sonar/profiles"),
-
-  listSonarRules: (profileKey: string, page?: number, query?: string) =>
-    request<{ rules: Array<{ key: string; name: string; severity: string; lang: string; langName: string; type: string; status: string; isActive: boolean; cleanCodeAttribute: string; impacts: Array<{ softwareQuality: string; severity: string }> }>; total: number }>(
-      `/code-analysis/sonar/rules?profileKey=${encodeURIComponent(profileKey)}${page ? `&page=${page}` : ""}${query ? `&query=${encodeURIComponent(query)}` : ""}`
-    ),
-
-  toggleSonarRule: (profileKey: string, ruleKey: string, activate: boolean) =>
-    request("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
-
-  listRuleOverrides: (tool: "semgrep" | "sonarqube") =>
+  listRuleOverrides: (tool: string) =>
     request<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }>(`/code-analysis/rule-overrides?tool=${tool}`),
 
-  toggleRule: (tool: "semgrep" | "sonarqube", ruleId: string, enabled: boolean) =>
+  toggleRule: (tool: string, ruleId: string, enabled: boolean) =>
     request("/code-analysis/rule-overrides", { method: "POST", body: JSON.stringify({ tool, ruleId, enabled }) }),
 };

@@ -54,7 +54,7 @@ export const analyzeRepo = api(
           const commits = await res.json() as any[];
           if (commits.length > 0) latestSha = commits[0].sha || "";
         }
-      } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+      } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
         const baseUrl = conn.endpoint || "https://gitlab.com";
         const projectPath = encodeURIComponent(repoKey);
         const res = await fetch(`${baseUrl}/api/v4/projects/${projectPath}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=1`, {
@@ -140,7 +140,7 @@ export const analyzeRepo = api(
           files = treeData.tree.filter((f: any) => f.type === "blob").map((f: any) => f.path);
         }
       }
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const headers = { "PRIVATE-TOKEN": conn.personal_token };
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);

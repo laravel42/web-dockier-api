@@ -1,0 +1,3 @@
+-- Semgrep rules seeder: uses COPY from CSV
+-- This file is a placeholder; the actual data is loaded from 004_seed_semgrep_rules.csv
+-- by the seed runner (prisma/seed.ts and prisma/reset.ts)

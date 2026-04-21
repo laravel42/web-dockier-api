@@ -6,7 +6,7 @@ import { db, type GitConnectionResponse } from "../shared";
 export const addConnection = api(
   { expose: true, method: "POST", path: "/git/connections", auth: true },
   async (params: {
-    provider: "github" | "gitlab" | "gitlab_self_hosted" | "bitbucket";
+    provider: "github" | "gitlab" | "gitlabSelfHosted" | "bitbucket";
     personalToken: string;
     label: string;
     repoUrl: string;

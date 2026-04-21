@@ -1,54 +1,59 @@
 # Dockier
 
-Dockier is a developer platform that connects your source code repositories to automated security scanning, AI-powered project analysis, deployment pipelines, and project management — all from a single dashboard.
+Dockier is a developer platform that connects source code repositories to automated security scanning, AI-powered project analysis, deployment pipelines, and project management — all from a single dashboard.
 
 ## What It Does
 
-Dockier brings together the tools developers need to ship secure code faster:
+- **Project Management** — Connect GitHub, GitLab, or Bitbucket repositories and organize them as projects with branch tracking, tech stack detection, recent commits, and deployment status.
 
-- **Project Management** — Connect GitHub, GitLab, or Bitbucket repositories and organize them as projects with branch tracking, tech stack detection, recent commits, recent deploys, and deployment status at a glance.
+- **AI-Powered Project Analysis** — Generates comprehensive project documentation using OpenAI (gpt-5.4-mini): architecture, tech stack, deployment guides, security considerations, and code quality insights. Organized in a tabbed interface with 7 sections (Overview, How It Works, Architecture, Data & Storage, Code Quality, Security, Deployment) plus Dependencies and Sensitive Data tabs. Cached per commit, refreshable on demand.
 
-- **AI-Powered Project Analysis** — Automatically generates a comprehensive project overview using OpenAI (gpt-5.4-mini), including architecture documentation, tech stack breakdown, deployment guides, security considerations, and code quality insights — organized in a tabbed Notion-style interface with 8 sections (Overview, How It Works, Tech Stack, Architecture, Data & Storage, Code Quality, Security, Deployment). Analysis is cached per commit and refreshable on demand.
+- **Sensitive Data Scanner** — Upload a SQL schema file for AI-powered analysis that detects credentials, PII, financial data, auth tokens, health records, and location data. Results cached in DB per project. Falls back to static regex parsing when AI is unavailable.
 
-- **Sensitive Data Scanner** — Code-based scanner (no AI) that parses SQL migrations, Prisma schemas, PHP Eloquent models, TypeScript interfaces, and Python classes to detect personal, sensitive, and secret data fields. Classifies fields by sensitivity level (personal, sensitive, secret) and groups them by entity in an interactive sidebar view.
+- **Dependency Vulnerability Scanner** — Parses package.json, composer.json, requirements.txt, and Gemfile. Checks each dependency against the OSV.dev vulnerability database. Lists versions, status, and vulnerabilities by severity. Filterable by production/dev/vulnerable.
 
-- **Dependency Vulnerability Scanner** — Parses `package.json`, `composer.json`, `requirements.txt`, and `Gemfile` to extract all dependencies. Checks each against the [OSV.dev](https://osv.dev) vulnerability database (free, no API key). Lists dependencies with version, status, ecosystem, repository link, and vulnerabilities grouped by severity (critical, high, medium, low). Filterable by production/dev/vulnerable.
+- **Security Scanning** — Automated code analysis powered by Semgrep (1935 built-in rules stored in DB) and a custom regex rules engine. Detects SQL injection, XSS, command injection, weak cryptography, path traversal, and more across PHP, JavaScript, TypeScript, Python, Go, Java, Ruby, and 20+ languages. Rules are editable via YAML editor in the UI.
 
-- **Security Scanning** — Run automated code analysis powered by Semgrep, SonarQube, and a built-in custom rules engine. Scans detect SQL injection, XSS, command injection, weak cryptography, path traversal, and dozens of other vulnerability classes across PHP, JavaScript, TypeScript, Python, Go, Java, Ruby, and more.
+- **AI-Assisted Remediation** — Generate fix merge requests from scan findings using OpenAI. Assign reviewers and track fixes without leaving the platform.
 
-- **AI-Assisted Remediation** — Generate fix merge requests directly from scan findings using OpenAI-powered code suggestions. Assign reviewers and track fixes without leaving the platform.
+- **Issue Tracking** — Create issues in GitHub, GitLab, or Bitbucket directly from security findings with AI-generated titles and effort estimates. Supports assignees.
 
-- **Issue Tracking Integration** — Create issues in Jira, Linear, or other project management tools directly from security findings, with AI-generated titles, severity-based priority mapping, and effort estimates.
+- **Deployment Automation** — Configure server providers (AWS) and trigger deployments tied to branches and commits. Track deployment history with status, provider, strategy, app URL, and docker image.
 
-- **Deployment Automation** — Configure server providers (AWS, GCP) and trigger deployments tied to specific branches and commits. Track deployment history per project with recent deploys list showing status, provider, strategy, app URL, and docker image.
+- **Notifications** — Multi-channel alerting via email, Slack, webhooks, and in-app notifications.
 
-- **Notifications** — Multi-channel alerting via email, Slack, webhooks, and in-app notifications for scan results, deployments, and other events.
-
-- **Authentication & Access Control** — User registration, JWT-based auth, two-factor authentication (TOTP), social login (GitHub, GitLab, Bitbucket), and role-based permissions with group management.
-
-## Project Detail Page
-
-Each project has a rich detail page featuring:
-
-- **Repository info** with branch, last commit (hash, author, time ago), and tech stack badges (filtered to frameworks/CMS/UI kits via an editable whitelist)
-- **Project Overview** — Tabbed AI-generated documentation with 8 sections plus Sensitive Data and Dependencies tabs
-- **KPI Dashboard** — Stars, forks, open issues, watchers, commits, contributors, and language breakdown with percentage bars
-- **Contributors Grid** — Top contributors with avatars and commit counts
-- **Recent Commits** — Last 5 commits with author, message, hash, and relative time
-- **Recent Deploys** — Last 5 deployments with status badge, provider badge, strategy, docker image, app URL link, and view details
-- **Last Deploy Card** — Detailed view of the most recent deployment with destroy capability
+- **Authentication & Access Control** — JWT-based auth, two-factor authentication (TOTP), role-based permissions (Admin/Viewer + custom roles), and per-feature permission gating in the UI.
 
 ## Architecture
 
-Dockier is built as a set of microservices using [Encore.ts](https://encore.dev) on the backend and React with Tailwind CSS on the frontend.
+**Backend:** 10 microservices built with Encore.ts, sharing a single PostgreSQL database via `lib/db.ts`:
 
-**Backend services:** Auth, Users, Groups, Roles, Projects, Git Integration (with AI analysis, sensitive data scanner, dependency scanner, tech stack detection), Code Analysis, Notifications, Deploy, Image Builder, and Integrations.
+| Service | Endpoints | Purpose |
+|---|---|---|
+| auth | 6 | Login, register, 2FA, JWT auth handler |
+| users | 5 | User CRUD with password hashing |
+| roles | 5 | Role CRUD with permission arrays |
+| projects | 5 | Project CRUD with branch/connection tracking |
+| git-integration | 19 | Git provider connections, repo analysis, AI analysis, sensitive data, commits, branches, issues |
+| code-analysis | 14 | Security scans, findings, custom rules, semgrep rules (DB-backed), rule overrides |
+| deploy | 10 | Server providers, deployments, SSH keys, tofu generation |
+| image-builder | 6 | Docker builds via AWS CodeBuild |
+| notifications | 7 | Channels, notifications, mark read |
+| integrations | 4 | PM tool integration (Jira, Linear) |
 
-**Frontend:** Single-page React app (Vite + React 19 + Tailwind CSS v4) with dark mode default, portal-based dropdown selects, session-cached analysis, and shared badge components (SensitivityBadge, StatusBadge, TechBadge, ProviderBadge, SourceControlBadge).
+**Frontend:** React 19 + Vite + Tailwind CSS v4. Dark mode default. Extracted components (Sidebar, Toolbar, Spinner, Modal, ComboBox). Centralized types in `frontend/src/types/`. Session-cached analysis. Permission-gated navigation and actions.
 
-**AI Integration:** OpenAI API (gpt-5.4-mini) with server-side API key (`OpenAIApiKey` Encore secret). Used for project analysis (sections, deploy options) and security fix generation. Response format enforced as `json_object`. Results cached in PostgreSQL `analysis_cache` table keyed by repo + branch + commit SHA.
+**Database:** 21 tables managed via `prisma/migrations/` (one SQL file per table). Seeders in `prisma/seeders/` including 1935 Semgrep rules loaded from CSV. Scripts: `pnpm db:migrate`, `pnpm db:seed`, `pnpm db:reset`.
 
-**Vulnerability Scanning:** Dependencies checked against [OSV.dev](https://osv.dev) batch API. Sensitive data detected via pattern matching on field names from migrations and models — no AI credits consumed.
+**AI:** OpenAI gpt-5.4-mini with `response_format: { type: "json_object" }`, `temperature: 0`, `max_completion_tokens`. Used for project analysis (7 parallel section calls), sensitive data analysis, fix generation, and finding summarization.
+
+**Security Scanning:** Semgrep CLI (installed via pip postinstall, gracefully skipped if unavailable). 1935 built-in YAML rules stored in `semgrep_rules` DB table. Custom regex rules in `custom_rules` table. During scans, enabled rules are written to a temp directory for the Semgrep CLI.
+
+## Testing
+
+- 48 unit tests (tech stack detection, dependency scanning, sensitive data, badge whitelist, markdown)
+- 47 API smoke tests covering all 93 endpoints against a running Encore instance
+- Run: `pnpm test` (requires `encore run` for smoke tests)
 
 ## License
 

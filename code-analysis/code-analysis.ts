@@ -3,18 +3,13 @@ import { v4 as uuidv4 } from "uuid";
 import { getAuthData } from "~encore/auth";
 import { git_integration } from "~encore/clients";
 import { execSync, spawnSync } from "child_process";
-import { mkdtempSync, rmSync, readFileSync, existsSync, readdirSync, statSync, writeFileSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync, readdirSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { secret } from "encore.dev/config";
 import { db, initDb } from "../lib/db";
 
-const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
-
-// ─── SonarQube Configuration (optional) ───
 const DatabaseUrl = secret("DatabaseUrl");
-const SonarQubeUrl = secret("SonarQubeUrl");
-const SonarQubeToken = secret("SonarQubeToken");
 
 initDb(DatabaseUrl());
 
@@ -424,7 +419,7 @@ interface ScanProgress {
 
 export const runScan = api(
   { expose: true, method: "POST", path: "/code-analysis/scans/:scanId/run", auth: true },
-  async (params: { scanId: string; enableSemgrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
+  async (params: { scanId: string; enableSemgrep?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
     const scan = await db.queryRow<{
       id: string; app_id: string; project_id: string; connection_id: string;
       repo: string; branch: string; status: string; summary: ScanSummary;
@@ -440,7 +435,6 @@ export const runScan = api(
 
     const tools = {
       semgrep: params.enableSemgrep !== false,
-      sonarqube: params.enableSonarqube !== false,
       customRules: params.enableCustomRules !== false,
     };
 
@@ -530,10 +524,20 @@ export const updateCustomRule = api(
     const authData = getAuthData()!;
     const row = await db.queryRow<{ app_id: string; type: string }>`SELECT app_id, type FROM custom_rules WHERE id = ${params.ruleDbId}`;
     if (!row) throw APIError.notFound("Rule not found");
-    if (row.app_id === "" && params.enabled === undefined) throw APIError.permissionDenied("Cannot edit system rules");
     if (row.app_id !== "" && row.app_id !== authData.appId) throw APIError.permissionDenied("Not your rule");
     if (params.pattern && row.type === "custom") { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
-    if (row.app_id === "") {
+    if (row.app_id === "" && params.enabled === undefined) {
+      // System rule: allow editing fields but not deletion
+      await db.exec`UPDATE custom_rules SET
+        rule_id = COALESCE(${params.ruleId ?? null}, rule_id),
+        severity = COALESCE(${params.severity ?? null}, severity),
+        message = COALESCE(${params.message ?? null}, message),
+        pattern = COALESCE(${params.pattern ?? null}, pattern),
+        extensions = COALESCE(${params.extensions ?? null}, extensions),
+        enabled = COALESCE(${params.enabled ?? null}, enabled),
+        yaml_content = COALESCE(${params.yamlContent ?? null}, yaml_content)
+        WHERE id = ${params.ruleDbId}`;
+    } else if (row.app_id === "") {
       await db.exec`UPDATE custom_rules SET enabled = ${params.enabled ?? true} WHERE id = ${params.ruleDbId}`;
     } else {
       await db.exec`UPDATE custom_rules SET
@@ -585,58 +589,21 @@ export const listSemgrepRules = api(
       return { rules: _ogRulesCache, languages: langs };
     }
 
-    if (!existsSync(RULES_DIR)) throw APIError.failedPrecondition("Semgrep rules not found. Clone rules into code-analysis/rules/opengrep");
-
-    const langDirs = new Set([
-      "java", "javascript", "python", "php", "go", "ruby", "rust", "typescript",
-      "c", "csharp", "kotlin", "swift", "scala", "bash", "dockerfile", "terraform",
-      "html", "json", "yaml", "elixir", "ocaml", "solidity", "clojure", "apex",
-      "generic", "ai",
-    ]);
-
     const rules: OGRule[] = [];
-    const walkYaml = (dir: string, base: string) => {
-      try {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
-          const rel = base ? `${base}/${entry.name}` : entry.name;
-          if (entry.isDirectory() && !entry.name.startsWith(".")) {
-            walkYaml(join(dir, entry.name), rel);
-          } else if (entry.isFile() && entry.name.endsWith(".yaml") && !entry.name.startsWith(".")) {
-            const parts = rel.split("/");
-            const lang = parts[0];
-            if (!langDirs.has(lang)) return;
-            const fileName = parts[parts.length - 1].replace(".yaml", "");
-            const category = parts.length > 2 ? parts[1] : "general";
-            // Read severity + message from YAML
-            let severity = "info";
-            let message = "";
-            try {
-              const raw = readFileSync(join(dir, entry.name), "utf-8");
-              // Extract severity
-              const sevMatch = raw.match(/^\s+severity:\s*(\S+)/m);
-              if (sevMatch) {
-                const s = sevMatch[1].toUpperCase();
-                severity = s === "ERROR" ? "error" : s === "WARNING" ? "warning" : "info";
-              }
-              // Extract message
-              const msgMatch = raw.match(/^\s+message:\s*>-?\s*\n([\s\S]*?)(?=\n\s+\w+:|\n\s+-\s)/m);
-              if (msgMatch) {
-                message = msgMatch[1].replace(/\n\s+/g, " ").trim();
-              } else {
-                const inlineMatch = raw.match(/^\s+message:\s*(.+)$/m);
-                if (inlineMatch) message = inlineMatch[1].replace(/^['">-]+\s*/, "").replace(/['"]$/, "").trim();
-              }
-            } catch { /* ignore */ }
-            rules.push({
-              id: rel.replace(/\.yaml$/, "").replace(/\//g, "."),
-              name: fileName.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
-              lang, path: rel, severity, category, message,
-            });
-          }
-        }
-      } catch { /* permission errors */ }
-    };
-    walkYaml(RULES_DIR, "");
+    const rows = db.query<{
+      id: string; rule_id: string; name: string; lang: string; severity: string; category: string; message: string;
+    }>`SELECT id, rule_id, name, lang, severity, category, message FROM semgrep_rules ORDER BY lang, rule_id`;
+    for await (const r of rows) {
+      rules.push({
+        id: r.rule_id,
+        name: r.name,
+        lang: r.lang,
+        path: r.rule_id, // use rule_id as path key for DB rules
+        severity: r.severity,
+        category: r.category,
+        message: r.message,
+      });
+    }
 
     _ogRulesCache = rules;
     const langs = [...new Set(rules.map(r => r.lang))].sort();
@@ -647,155 +614,58 @@ export const listSemgrepRules = api(
 export const getSemgrepRuleContent = api(
   { expose: true, method: "GET", path: "/code-analysis/semgrep-rules/content", auth: true },
   async (params: { path: string }): Promise<{ content: string }> => {
-    const filePath = join(RULES_DIR, params.path);
-    if (!filePath.startsWith(RULES_DIR) || !existsSync(filePath)) throw APIError.notFound("Rule file not found");
-    return { content: readFileSync(filePath, "utf-8") };
+    const row = await db.queryRow<{ yaml_content: string }>`SELECT yaml_content FROM semgrep_rules WHERE rule_id = ${params.path}`;
+    if (!row) throw APIError.notFound("Rule not found");
+    return { content: row.yaml_content };
   }
 );
 
 export const updateSemgrepRuleContent = api(
   { expose: true, method: "PUT", path: "/code-analysis/semgrep-rules/content", auth: true },
   async (params: { path: string; content: string }): Promise<{ success: boolean }> => {
-    const filePath = join(RULES_DIR, params.path);
-    if (!filePath.startsWith(RULES_DIR)) throw APIError.invalidArgument("Invalid path");
-    writeFileSync(filePath, params.content, "utf-8");
+    // Update YAML content and re-parse severity/message
+    let severity = "info";
+    let message = "";
+    const sevMatch = params.content.match(/^\s+severity:\s*(\S+)/m);
+    if (sevMatch) {
+      const s = sevMatch[1].toUpperCase();
+      severity = s === "ERROR" ? "error" : s === "WARNING" ? "warning" : "info";
+    }
+    const msgMatch = params.content.match(/^\s+message:\s*>-?\s*\n([\s\S]*?)(?=\n\s+\w+:|\n\s+-\s)/m);
+    if (msgMatch) {
+      message = msgMatch[1].replace(/\n\s+/g, " ").trim();
+    } else {
+      const inlineMatch = params.content.match(/^\s+message:\s*(.+)$/m);
+      if (inlineMatch) message = inlineMatch[1].replace(/^['">-]+\s*/, "").replace(/['"]$/, "").trim();
+    }
+
+    await db.exec`UPDATE semgrep_rules SET yaml_content = ${params.content}, severity = ${severity}, message = ${message} WHERE rule_id = ${params.path}`;
     _ogRulesCache = null; // invalidate cache
     return { success: true };
   }
 );
 
-// ─── SonarQube Rule Management ───
-
-interface SQProfile {
-  key: string;
-  name: string;
-  language: string;
-  languageName: string;
-  isDefault: boolean;
-  activeRuleCount: number;
-}
-
-interface SQRule {
-  key: string;
-  name: string;
-  severity: string;
-  lang: string;
-  langName: string;
-  type: string;
-  status: string;
-  isActive: boolean;
-  cleanCodeAttribute: string;
-  impacts: Array<{ softwareQuality: string; severity: string }>;
-}
-
-export const listSonarProfiles = api(
-  { expose: true, method: "GET", path: "/code-analysis/sonar/profiles", auth: true },
-  async (): Promise<{ profiles: SQProfile[] }> => {
-    const data = await sonarFetch("/api/qualityprofiles/search");
-    const profiles: SQProfile[] = (data.profiles || []).map((p: any) => ({
-      key: p.key, name: p.name, language: p.language, languageName: p.languageName,
-      isDefault: p.isDefault, activeRuleCount: p.activeRuleCount || 0,
-    }));
-    return { profiles };
-  }
-);
-
-export const listSonarRules = api(
-  { expose: true, method: "GET", path: "/code-analysis/sonar/rules", auth: true },
-  async (params: { profileKey: string; page?: number; query?: string }): Promise<{ rules: SQRule[]; total: number }> => {
-    // Get active rule keys for this profile
-    const activeData = await sonarFetch("/api/rules/search", {
-      activation: "true",
-      qprofile: params.profileKey,
-      ps: "500",
-      p: String(params.page || 1),
-      f: "name,severity,lang,langName,status,cleanCodeAttribute",
-      ...(params.query ? { q: params.query } : {}),
-    });
-    const activeKeys = new Set((activeData.rules || []).map((r: any) => r.key));
-    const activeRules: SQRule[] = (activeData.rules || []).map((r: any) => ({
-      key: r.key, name: r.name, severity: r.severity, lang: r.lang,
-      langName: r.langName, type: r.type, status: r.status, isActive: true,
-      cleanCodeAttribute: r.cleanCodeAttribute || "",
-      impacts: (r.impacts || []).map((i: any) => ({ softwareQuality: i.softwareQuality, severity: i.severity })),
-    }));
-
-    if (params.query) {
-      const inactiveData = await sonarFetch("/api/rules/search", {
-        activation: "false",
-        qprofile: params.profileKey,
-        ps: "500",
-        p: String(params.page || 1),
-        f: "name,severity,lang,langName,status,cleanCodeAttribute",
-        q: params.query,
-      });
-      for (const r of inactiveData.rules || []) {
-        if (!activeKeys.has(r.key)) {
-          activeRules.push({
-            key: r.key, name: r.name, severity: r.severity, lang: r.lang,
-            langName: r.langName, type: r.type, status: r.status, isActive: false,
-            cleanCodeAttribute: r.cleanCodeAttribute || "",
-            impacts: (r.impacts || []).map((i: any) => ({ softwareQuality: i.softwareQuality, severity: i.severity })),
-          });
-        }
-      }
-    }
-
-    return { rules: activeRules, total: activeData.total || activeRules.length };
-  }
-);
-
-export const toggleSonarRule = api(
-  { expose: true, method: "POST", path: "/code-analysis/sonar/rules/toggle", auth: true },
-  async (params: { profileKey: string; ruleKey: string; activate: boolean }): Promise<{ success: boolean }> => {
-    if (params.activate) {
-      await sonarFetch("/api/qualityprofiles/activate_rule", {
-        key: params.profileKey,
-        rule: params.ruleKey,
-      }, "POST");
-    } else {
-      await sonarFetch("/api/qualityprofiles/deactivate_rule", {
-        key: params.profileKey,
-        rule: params.ruleKey,
-      }, "POST");
-    }
-    return { success: true };
-  }
-);
-
-// ─── Global Rule Overrides (Semgrep & SonarQube) ───
+// ─── Global Rule Overrides (Semgrep) ───
 
 export const listRuleOverrides = api(
   { expose: true, method: "GET", path: "/code-analysis/rule-overrides", auth: true },
-  async (params: { tool: "semgrep" | "sonarqube" }): Promise<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }> => {
+  async (params: { tool: string }): Promise<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }> => {
     const overrides: Array<{ id: string; ruleId: string; enabled: boolean }> = [];
-    if (params.tool === "semgrep") {
-      const rows = db.query<{ id: string; rule_id: string; enabled: boolean }>`
-        SELECT id, rule_id, enabled FROM opengrep_rules`;
-      for await (const r of rows) overrides.push({ id: r.id, ruleId: r.rule_id, enabled: r.enabled });
-    } else {
-      const rows = db.query<{ id: string; rule_id: string; enabled: boolean }>`
-        SELECT id, rule_id, enabled FROM sonarqube_rules`;
-      for await (const r of rows) overrides.push({ id: r.id, ruleId: r.rule_id, enabled: r.enabled });
-    }
+    const rows = db.query<{ id: string; rule_id: string; enabled: boolean }>`
+      SELECT id, rule_id, enabled FROM opengrep_rules`;
+    for await (const r of rows) overrides.push({ id: r.id, ruleId: r.rule_id, enabled: r.enabled });
     return { overrides };
   }
 );
 
 export const toggleRule = api(
   { expose: true, method: "POST", path: "/code-analysis/rule-overrides", auth: true },
-  async (params: { tool: "semgrep" | "sonarqube"; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
+  async (params: { tool: string; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
     const id = uuidv4();
-    if (params.tool === "semgrep") {
-      await db.exec`INSERT INTO opengrep_rules (id, app_id, rule_id, enabled)
-        VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
-        ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
-    } else {
-      await db.exec`INSERT INTO sonarqube_rules (id, app_id, rule_id, enabled)
-        VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
-        ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
-    }
+    await db.exec`INSERT INTO opengrep_rules (id, app_id, rule_id, enabled)
+      VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
+      ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
     return { success: true };
   }
 );
@@ -815,181 +685,8 @@ async function updateProgress(scanId: string, progress: ScanProgress) {
   await db.exec`UPDATE scans SET summary = ${JSON.stringify(summary)}::jsonb, updated_at = NOW() WHERE id = ${scanId}`;
 }
 
-// ─── SonarQube Scanner Integration ───
-
-interface SonarIssue {
-  ruleId: string;
-  severity: "error" | "warning" | "info";
-  message: string;
-  filePath: string;
-  startLine: number;
-  endLine: number;
-  snippet: string;
-}
-
-function mapSonarSeverity(s: string): "error" | "warning" | "info" {
-  switch (s) {
-    case "BLOCKER":
-    case "CRITICAL": return "error";
-    case "MAJOR": return "warning";
-    case "MINOR":
-    case "INFO":
-    default: return "info";
-  }
-}
-
-function findSonarScanner(): string | null {
-  const candidates = [
-    "sonar-scanner",
-    join(process.env.HOME || "", ".sonar/native-sonar-scanner/sonar-scanner"),
-    "/usr/local/bin/sonar-scanner",
-    "/opt/sonar-scanner/bin/sonar-scanner",
-  ];
-  for (const bin of candidates) {
-    try {
-      const result = spawnSync(bin, ["--version"], { stdio: "pipe", timeout: 5000 });
-      if (result.status === 0) return bin;
-    } catch { /* try next */ }
-  }
-  return null;
-}
-
-async function sonarFetch(path: string, params: Record<string, string> = {}, method: "GET" | "POST" = "GET"): Promise<any> {
-  const baseUrl = SonarQubeUrl();
-  const token = SonarQubeToken();
-  if (!baseUrl || !token) throw new Error("SonarQube URL or token not configured");
-
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-
-  let res: Response;
-  if (method === "POST") {
-    const url = new URL(path, baseUrl);
-    headers["Content-Type"] = "application/x-www-form-urlencoded";
-    res = await fetch(url.toString(), { method: "POST", headers, body: new URLSearchParams(params).toString() });
-  } else {
-    const url = new URL(path, baseUrl);
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    res = await fetch(url.toString(), { headers });
-  }
-  if (!res.ok) throw new Error(`SonarQube API ${path} returned ${res.status}: ${await res.text()}`);
-  const text = await res.text();
-  return text ? JSON.parse(text) : {};
-}
-
-async function waitForSonarAnalysis(taskId: string, timeoutMs = 120_000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const data = await sonarFetch("/api/ce/task", { id: taskId });
-    const status = data.task?.status;
-    if (status === "SUCCESS") return;
-    if (status === "FAILED" || status === "CANCELED") {
-      throw new Error(`SonarQube analysis ${status}: ${data.task?.errorMessage || "unknown error"}`);
-    }
-    await new Promise((r) => setTimeout(r, 3000));
-  }
-  throw new Error("SonarQube analysis timed out");
-}
-
-async function runSonarScanner(repoDir: string, projectKey: string): Promise<SonarIssue[]> {
-  const baseUrl = SonarQubeUrl();
-  const token = SonarQubeToken();
-  if (!baseUrl || !token) {
-    console.log("[sonar] SonarQube not configured, skipping");
-    return [];
-  }
-
-  const scannerBin = findSonarScanner();
-  if (!scannerBin) {
-    console.log("[sonar] sonar-scanner binary not found, skipping");
-    return [];
-  }
-
-  console.log(`[sonar] Running sonar-scanner for project ${projectKey}...`);
-
-  // Write sonar-project.properties
-  const props = [
-    `sonar.projectKey=${projectKey}`,
-    `sonar.sources=.`,
-    `sonar.host.url=${baseUrl}`,
-    `sonar.token=${token}`,
-    `sonar.sourceEncoding=UTF-8`,
-    `sonar.scm.disabled=true`,
-  ].join("\n");
-  writeFileSync(join(repoDir, "sonar-project.properties"), props);
-
-  // Run scanner
-  try {
-    execSync(`${JSON.stringify(scannerBin)}`, {
-      cwd: repoDir,
-      timeout: 300_000,
-      stdio: "pipe",
-      env: { ...process.env },
-    });
-  } catch (err: any) {
-    const stderr = err.stderr?.toString() || "";
-    console.error(`[sonar] Scanner failed: ${stderr || err.message}`);
-    // Try to continue — scanner may have uploaded partial results
-  }
-
-  // Read the task ID from .scannerwork/report-task.txt
-  const reportTaskPath = join(repoDir, ".scannerwork", "report-task.txt");
-  if (!existsSync(reportTaskPath)) {
-    console.log("[sonar] No report-task.txt found, scanner may have failed");
-    return [];
-  }
-
-  const reportContent = readFileSync(reportTaskPath, "utf-8");
-  const ceTaskIdMatch = reportContent.match(/ceTaskId=(.+)/);
-  if (!ceTaskIdMatch) {
-    console.log("[sonar] Could not find ceTaskId in report-task.txt");
-    return [];
-  }
-
-  // Wait for server to process
-  console.log(`[sonar] Waiting for analysis task ${ceTaskIdMatch[1]}...`);
-  await waitForSonarAnalysis(ceTaskIdMatch[1]);
-
-  // Pull issues from API
-  console.log("[sonar] Fetching issues...");
-  const issues: SonarIssue[] = [];
-  let page = 1;
-  const pageSize = 500;
-
-  while (true) {
-    const data = await sonarFetch("/api/issues/search", {
-      componentKeys: projectKey,
-      resolved: "false",
-      ps: String(pageSize),
-      p: String(page),
-    });
-
-    for (const issue of data.issues || []) {
-      // Extract file path from component key (format: projectKey:path/to/file.ts)
-      const component = issue.component || "";
-      const filePath = component.includes(":") ? component.split(":").slice(1).join(":") : component;
-
-      issues.push({
-        ruleId: `sonar.${issue.rule || "unknown"}`,
-        severity: mapSonarSeverity(issue.severity || "INFO"),
-        message: issue.message || "SonarQube issue",
-        filePath,
-        startLine: issue.line || issue.textRange?.startLine || 1,
-        endLine: issue.textRange?.endLine || issue.line || 1,
-        snippet: (issue.message || "").slice(0, 200),
-      });
-    }
-
-    const total = data.paging?.total || 0;
-    if (page * pageSize >= total) break;
-    page++;
-  }
-
-  console.log(`[sonar] Found ${issues.length} issues`);
-  return issues;
-}
-
-async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; app_id: string; project_id: string; created_at: Date }, tools: { semgrep: boolean; sonarqube: boolean; customRules: boolean } = { semgrep: true, sonarqube: true, customRules: true }) {
-  console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, tools: semgrep=${tools.semgrep} sonarqube=${tools.sonarqube} customRules=${tools.customRules}`);
+async function doScan(scanId: string, scan: { connection_id: string; repo: string; branch: string; id: string; app_id: string; project_id: string; created_at: Date }, tools: { semgrep: boolean; customRules: boolean } = { semgrep: true, customRules: true }) {
+  console.log(`[doScan] Starting scan ${scanId} for ${scan.repo}@${scan.branch}, tools: semgrep=${tools.semgrep} customRules=${tools.customRules}`);
   const tmpDir = mkdtempSync(join(tmpdir(), "semgrep-scan-"));
 
   try {
@@ -1000,7 +697,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     let cloneUrl: string;
     if (conn.provider === "github") {
       cloneUrl = `https://x-access-token:${conn.token}@github.com/${scan.repo}.git`;
-    } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+    } else if (conn.provider === "gitlab" || conn.provider === "gitlabSelfHosted") {
       const endpoint = conn.endpoint || "https://gitlab.com";
       const host = new URL(endpoint).host;
       cloneUrl = `https://oauth2:${conn.token}@${host}/${scan.repo}.git`;
@@ -1045,12 +742,9 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
 
     // Load globally disabled rule IDs
     const disabledSemgrep = new Set<string>();
-    const disabledSonar = new Set<string>();
     {
       const ogRows = db.query<{ rule_id: string }>`SELECT rule_id FROM opengrep_rules WHERE enabled = false`;
       for await (const r of ogRows) disabledSemgrep.add(r.rule_id);
-      const sqRows = db.query<{ rule_id: string }>`SELECT rule_id FROM sonarqube_rules WHERE enabled = false`;
-      for await (const r of sqRows) disabledSonar.add(r.rule_id);
     }
 
     // 2. Run Semgrep (if enabled)
@@ -1073,7 +767,30 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       } else {
       await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Running Semgrep scanner…" });
       console.log(`[doScan] Running semgrep: ${SEMGREP_BIN} in ${repoDir}`);
-      const configFlag = existsSync(RULES_DIR) ? `--config ${JSON.stringify(RULES_DIR)}` : "--config auto";
+
+      // Write enabled semgrep rules from DB to a temp directory for the CLI
+      const rulesDir = join(tmpDir, "semgrep-rules");
+      mkdirSync(rulesDir, { recursive: true });
+      let ruleCount = 0;
+      const enabledRows = db.query<{ rule_id: string; yaml_content: string }>`
+        SELECT rule_id, yaml_content FROM semgrep_rules WHERE enabled = true AND yaml_content != ''`;
+      for await (const r of enabledRows) {
+        if (disabledSemgrep.has(r.rule_id)) continue;
+        const ruleFile = join(rulesDir, r.rule_id.replace(/\./g, "_") + ".yaml");
+        writeFileSync(ruleFile, r.yaml_content, "utf-8");
+        ruleCount++;
+      }
+      // Also write user-created semgrep rules from custom_rules table
+      const userSemgrepRows = db.query<{ rule_id: string; yaml_content: string }>`
+        SELECT rule_id, yaml_content FROM custom_rules WHERE type = 'semgrep' AND enabled = true AND yaml_content != ''`;
+      for await (const r of userSemgrepRows) {
+        const ruleFile = join(rulesDir, "user_" + r.rule_id.replace(/\./g, "_") + ".yaml");
+        writeFileSync(ruleFile, r.yaml_content, "utf-8");
+        ruleCount++;
+      }
+      console.log(`[doScan] Wrote ${ruleCount} semgrep rules to temp dir`);
+
+      const configFlag = ruleCount > 0 ? `--config ${JSON.stringify(rulesDir)}` : "--config auto";
       try {
         execSync(
           `${JSON.stringify(SEMGREP_BIN)} scan ${configFlag} --json --quiet --json-output=${JSON.stringify(outputFile)} .`,
@@ -1125,29 +842,6 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
       }
     } else {
       console.log("[doScan] Custom rules disabled, skipping");
-    }
-
-    // 3c. Run SonarQube scanner (if enabled and configured)
-    let sonarFindings: SonarIssue[] = [];
-    if (tools.sonarqube) {
-      await updateProgress(scanId, { phase: "scanning", filesScanned, filesInRepo, findingsCount: findingsByFile.size, currentFile: "Running SonarQube scanner…" });
-      try {
-        const sonarProjectKey = `scan-${scanId}`;
-        sonarFindings = await runSonarScanner(repoDir, sonarProjectKey);
-        console.log(`[doScan] SonarQube found ${sonarFindings.length} issues`);
-      } catch (sonarErr: any) {
-        console.log(`[doScan] SonarQube scan skipped or failed: ${sonarErr.message}`);
-      }
-    } else {
-      console.log("[doScan] SonarQube disabled, skipping");
-    }
-
-    // Merge sonar findings into the map (skip disabled rules)
-    for (const sf of sonarFindings) {
-      if (disabledSonar.has(sf.ruleId)) continue;
-      const arr = findingsByFile.get(sf.filePath) || [];
-      arr.push(sf);
-      findingsByFile.set(sf.filePath, arr);
     }
 
     // 4. Persist findings file-by-file, updating progress after each file

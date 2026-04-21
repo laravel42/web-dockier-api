@@ -47,7 +47,7 @@ export default function FindingsList({
 
   // Provider filter pills
   const counts = findings.reduce<Record<string, number>>((acc, f) => {
-    const p = f.ruleId.startsWith("sonar.") ? "sonar" : f.ruleId.startsWith("custom.") ? "custom" : "semgrep";
+    const p = f.ruleId.startsWith("custom.") ? "custom" : "semgrep";
     acc[p] = (acc[p] || 0) + 1;
     return acc;
   }, {});
@@ -55,7 +55,6 @@ export default function FindingsList({
   const providers = [
     { key: "", label: "All Providers", count: findings.length },
     { key: "semgrep", label: "Semgrep", count: counts["semgrep"] || 0 },
-    { key: "sonar", label: "SonarQube", count: counts["sonar"] || 0 },
     { key: "custom", label: "Custom Rules", count: counts["custom"] || 0 },
   ].filter(p => p.key === "" || p.count > 0);
 
@@ -63,9 +62,8 @@ export default function FindingsList({
     .filter((f) => !severityFilter || f.severity === severityFilter)
     .filter((f) => {
       if (!providerFilter) return true;
-      if (providerFilter === "sonar") return f.ruleId.startsWith("sonar.");
       if (providerFilter === "custom") return f.ruleId.startsWith("custom.");
-      return !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.");
+      return !f.ruleId.startsWith("custom.");
     });
 
   const grouped = Object.entries(
@@ -227,7 +225,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
           const lineNum = start + i + 1;
           const isVulnerable = lineNum >= f.startLine && lineNum <= f.endLine;
           return (
-            <div key={lineNum} className={`flex ${isVulnerable ? "bg-danger-500/15" : "hover:bg-white/[0.03]"}`}>
+            <div key={lineNum} className={`flex ${isVulnerable ? "bg-danger-500/15" : "hover:bg-white/3"}`}>
               <span className={`shrink-0 select-none text-right pr-3 pl-3 ${isVulnerable ? "text-danger-400 bg-danger-500/10" : "text-gray-600"}`} style={{ width: `${gutterWidth + 3}ch` }}>
                 {lineNum}
               </span>
