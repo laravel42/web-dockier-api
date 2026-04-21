@@ -69,7 +69,7 @@ function formatTechName(raw: string): string {
     laravel: "Laravel", symfony: "Symfony", wordpress: "WordPress",
     django: "Django", flask: "Flask", fastapi: "FastAPI",
     rails: "Rails", spring: "Spring", express: "Express",
-    fastify: "Fastify", nestjs: "NestJS", prisma: "Prisma",
+    fastify: "Fastify", prisma: "Prisma",
     docker: "Docker", postgresql: "PostgreSQL", mysql: "MySQL",
     redis: "Redis", mongodb: "MongoDB", elasticsearch: "Elasticsearch",
     graphql: "GraphQL", grpc: "gRPC",

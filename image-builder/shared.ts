@@ -35,10 +35,10 @@ export function getBuildspecContent(): string {
 
 // ─── Secrets (optional — read from env vars) ───
 
-export function getgetAwsAccessKeyId(): string {
+export function getAwsAccessKeyId(): string {
   try { return process.env.ImageBuilderAwsAccessKeyId || ""; } catch { return ""; }
 }
-export function getgetAwsSecretAccessKey(): string {
+export function getAwsSecretAccessKey(): string {
   try { return process.env.ImageBuilderAwsSecretAccessKey || ""; } catch { return ""; }
 }
 export function getAwsRegion(): string {
