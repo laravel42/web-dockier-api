@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { Project, RepoStats } from "../types";
 import { cardCls } from "../constants";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
@@ -35,7 +34,6 @@ function timeAgo(dateStr: string): string {
 
 export default function RepoInfoCard({ project, stats, badges, allBadges }: Props) {
   const isTemplate = project.sourceType === "template";
-  const [showAll, setShowAll] = useState(true);
 
   if (isTemplate) {
     return (

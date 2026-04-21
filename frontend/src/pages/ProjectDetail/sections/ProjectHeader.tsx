@@ -1,5 +1,5 @@
 import type { Project } from "../types";
-import { btnPrimary, btnSecondary } from "../constants";
+import { btnPrimary } from "../constants";
 import { usePermissions } from "../../../context/PermissionsContext";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";

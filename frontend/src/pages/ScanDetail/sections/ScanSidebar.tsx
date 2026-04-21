@@ -1,12 +1,11 @@
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
-import type { Scan, Finding, ScanProgress } from "../types";
+import type { Scan, ScanProgress } from "../types";
 
 interface Props {
   scanId: string | undefined;
   allScans: Scan[];
   allScansLoading: boolean;
-  findings: Finding[];
   scanRunning: boolean;
   scanProgress: ScanProgress | null;
   scanError: string;
@@ -16,7 +15,7 @@ interface Props {
 }
 
 export default function ScanSidebar({
-  scanId, allScans, allScansLoading, findings,
+  scanId, allScans, allScansLoading,
   scanRunning, scanProgress, scanError,
   hasConnectionId, onRunScan, onSelectScan,
 }: Props) {
@@ -27,7 +26,7 @@ export default function ScanSidebar({
           type="button"
           onClick={onRunScan}
           disabled={scanRunning || !hasConnectionId}
-          className="w-full h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+          className="w-full h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
         >
           {scanRunning ? (
             <>
@@ -107,14 +106,14 @@ export default function ScanSidebar({
                         {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 mt-1.5 ml-[18px]">
+                    <div className="flex items-center gap-2 mt-1.5 ml-4.5">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
                       </svg>
                       <span className="text-xs text-text font-semibold font-mono truncate">{s.branch}</span>
                     </div>
                     {s.commitSha && (
-                      <div className="flex items-center gap-2 mt-1 ml-[18px]">
+                      <div className="flex items-center gap-2 mt-1 ml-4.5">
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
                         </svg>
@@ -123,7 +122,7 @@ export default function ScanSidebar({
                       </div>
                     )}
                     {s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0) && (
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-[18px]">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-4.5">
                         {s.summary.errors > 0 && <SeverityBadge severity="error" count={s.summary.errors} />}
                         {s.summary.warnings > 0 && <SeverityBadge severity="warning" count={s.summary.warnings} />}
                         {s.summary.infos > 0 && <SeverityBadge severity="info" count={s.summary.infos} />}

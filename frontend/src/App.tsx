@@ -4,7 +4,6 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { PermissionsProvider } from "./context/PermissionsContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
 import AuthCallback from "./pages/AuthCallback";
 import Dashboard from "./pages/Dashboard";
 import Notifications from "./pages/Notifications";

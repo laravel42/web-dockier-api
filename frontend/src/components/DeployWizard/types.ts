@@ -1,4 +1,5 @@
-export type { Provider } from "../../types";
+import type { Provider } from "../../types";
+export type { Provider };
 
 export interface DetectedService {
   type: string;

@@ -10,7 +10,6 @@ export default function SecurityScans() {
     loading,
     projects,
     grouped,
-    projectLangs,
     sortedProjectIds,
   } = useSecurityScans();
 

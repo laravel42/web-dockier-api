@@ -41,7 +41,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        findings={core.findings}
         scanRunning={core.scanRunning}
         scanProgress={core.scanProgress}
         scanError={core.scanError}
@@ -156,7 +155,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        findings={core.findings}
         scanRunning={core.scanRunning}
         scanProgress={core.scanProgress}
         scanError={core.scanError}
