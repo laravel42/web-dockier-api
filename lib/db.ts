@@ -13,7 +13,7 @@ function getPool(): pg.Pool {
     if (!_dbUrl) throw new Error("Database not initialized. Call initDb(DatabaseUrl()) from a service first.");
     pool = new pg.Pool({
       connectionString: _dbUrl,
-      ssl: _dbUrl.includes("neon") || _dbUrl.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+      ssl: _dbUrl.includes("neon") || _dbUrl.includes("prisma") || _dbUrl.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
     });
   }
   return pool;
