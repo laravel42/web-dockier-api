@@ -66,9 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userId");
-    sessionStorage.removeItem("userProfile");
+    localStorage.clear();
+    sessionStorage.clear();
     setToken(null);
     setUserId(null);
     setUserProfileState(null);

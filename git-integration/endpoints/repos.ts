@@ -69,7 +69,6 @@ export const listBranches = api(
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
     if (!conn) throw APIError.notFound("Connection not found");
     const branches: string[] = [];
-    const staleThreshold = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3 months
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
       const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
@@ -77,19 +76,7 @@ export const listBranches = api(
       if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
-      // Fetch commit dates in parallel to filter stale branches
-      const withDates = await Promise.all(data.map(async (b: any) => {
-        try {
-          const cRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits/${b.commit.sha}`, { headers });
-          if (!cRes.ok) return { name: b.name, date: 0 };
-          const c = await cRes.json() as any;
-          return { name: b.name, date: new Date(c.commit?.committer?.date || 0).getTime() };
-        } catch { return { name: b.name, date: 0 }; }
-      }));
-      withDates
-        .filter(b => b.date > staleThreshold)
-        .sort((a, b) => b.date - a.date)
-        .forEach(b => branches.push(b.name));
+      for (const b of data) branches.push(b.name);
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
@@ -97,11 +84,7 @@ export const listBranches = api(
       if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
-      const dated = data
-        .map((b: any) => ({ name: b.name, date: new Date(b.commit?.committed_date || 0).getTime() }))
-        .filter((b: any) => b.date > staleThreshold)
-        .sort((a: any, b: any) => b.date - a.date);
-      for (const b of dated) branches.push(b.name);
+      for (const b of data) branches.push(b.name);
     }
     return { branches };
   }

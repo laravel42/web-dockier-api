@@ -69,10 +69,10 @@ export default function ProjectDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
-        <ProjectDetailsCard project={project} />
+        <ProjectDetailsCard project={project} lastCommitDate={stats?.lastCommitDate} />
       </div>
 
-      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} onRefresh={refreshAnalysis} />
+      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} onRefresh={refreshAnalysis} projectId={project.id} />
 
       {/* UserJourneyTree hidden for now */}
 

@@ -23,4 +23,7 @@ export const rolesApi = {
 
   update: (roleId: string, data: { name?: string; description?: string; permissions?: string[] }) =>
     request(`/roles/${roleId}`, { method: "PUT", body: JSON.stringify({ roleId, ...data }) }),
+
+  get: (roleId: string) =>
+    request<{ id: string; name: string; description: string; permissions: string[]; createdAt: string }>(`/roles/${roleId}`),
 };

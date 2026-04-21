@@ -1,5 +1,6 @@
 import { btnPrimary } from "../../utils/styles";
 import { useDashboard } from "./useDashboard";
+import { usePermissions } from "../../context/PermissionsContext";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 import KpiGrid from "./sections/KpiGrid";
 import RecentDeploys from "./sections/RecentDeploys";
@@ -14,6 +15,8 @@ export default function Dashboard() {
     recentDeploys, recentScans,
     projectMap,
   } = useDashboard();
+  const { has } = usePermissions();
+  const canViewDeploys = has("deploy:view");
 
   if (loading) {
     return (
@@ -44,15 +47,18 @@ export default function Dashboard() {
         scans={scans.length}
         totalFindings={totalFindings}
         onNavigate={navigate}
+        showDeploys={canViewDeploys}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentDeploys
-          deploys={recentDeploys}
-          providers={providers}
-          onViewAll={() => navigate("/deploy")}
-          onViewDeploy={(id) => navigate(`/deploy/${id}`)}
-        />
+        {canViewDeploys && (
+          <RecentDeploys
+            deploys={recentDeploys}
+            providers={providers}
+            onViewAll={() => navigate("/deploy")}
+            onViewDeploy={(id) => navigate(`/deploy/${id}`)}
+          />
+        )}
         <RecentScans
           scans={recentScans}
           projectMap={projectMap}

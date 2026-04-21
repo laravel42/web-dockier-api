@@ -113,7 +113,6 @@ function classifyField(fieldName: string): { sensitivity: "personal" | "sensitiv
 function parseSqlMigrations(contents: Record<string, string>): SensitiveField[] {
   const results: SensitiveField[] = [];
   const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)["`]?\s*\(([\s\S]*?)\);/gi;
-  const columnRegex = /^\s*["`]?(\w+)["`]?\s+\w+/gm;
 
   for (const [, sql] of Object.entries(contents)) {
     let match;
@@ -122,9 +121,59 @@ function parseSqlMigrations(contents: Record<string, string>): SensitiveField[] 
       if (SKIP_TABLES.test(tableName)) continue;
 
       const body = match[2];
-      let colMatch;
       const colRegex = /^\s*["`]?(\w+)["`]?\s+(?:VARCHAR|TEXT|INT|INTEGER|BIGINT|BOOLEAN|BOOL|TIMESTAMP|DATE|DATETIME|DECIMAL|FLOAT|DOUBLE|JSON|JSONB|UUID|CHAR|BLOB|ENUM|SET|SERIAL|SMALLINT|NUMERIC|REAL|BYTEA|INET|CIDR|MACADDR|MONEY|BIT|ARRAY|HSTORE|XML|POINT|LINE|POLYGON|CIRCLE|TSVECTOR|TSQUERY)\b/gim;
+      let colMatch;
       while ((colMatch = colRegex.exec(body)) !== null) {
+        const field = colMatch[1];
+        const classification = classifyField(field);
+        if (classification) {
+          results.push({ entity: tableName, field, ...classification });
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// ─── Laravel PHP Migration Parser ───
+
+function parseLaravelMigrations(contents: Record<string, string>): SensitiveField[] {
+  const results: SensitiveField[] = [];
+  // Match Schema::create('table_name', function (...) { ... });
+  const schemaCreateRegex = /Schema::create\s*\(\s*['"](\w+)['"]\s*,\s*function\s*\([^)]*\)\s*\{([\s\S]*?)\}\s*\)/g;
+  // Match $table->type('column_name')
+  const columnRegex = /\$table->(?:string|text|integer|bigInteger|smallInteger|tinyInteger|boolean|date|dateTime|timestamp|decimal|float|double|json|jsonb|binary|char|enum|uuid|ipAddress|macAddress|longText|mediumText|unsignedBigInteger|unsignedInteger|foreignId|morphs|nullableMorphs|rememberToken)\s*\(\s*['"](\w+)['"]/g;
+
+  for (const [filePath, content] of Object.entries(contents)) {
+    if (!filePath.endsWith(".php")) continue;
+
+    let match;
+    while ((match = schemaCreateRegex.exec(content)) !== null) {
+      const tableName = match[1];
+      if (SKIP_TABLES.test(tableName)) continue;
+
+      const body = match[2];
+      let colMatch;
+      const colRe = new RegExp(columnRegex.source, columnRegex.flags);
+      while ((colMatch = colRe.exec(body)) !== null) {
+        const field = colMatch[1];
+        const classification = classifyField(field);
+        if (classification) {
+          results.push({ entity: tableName, field, ...classification });
+        }
+      }
+    }
+
+    // Also match Schema::table (alter table migrations)
+    const schemaTableRegex = /Schema::table\s*\(\s*['"](\w+)['"]\s*,\s*function\s*\([^)]*\)\s*\{([\s\S]*?)\}\s*\)/g;
+    while ((match = schemaTableRegex.exec(content)) !== null) {
+      const tableName = match[1];
+      if (SKIP_TABLES.test(tableName)) continue;
+
+      const body = match[2];
+      let colMatch;
+      const colRe = new RegExp(columnRegex.source, columnRegex.flags);
+      while ((colMatch = colRe.exec(body)) !== null) {
         const field = colMatch[1];
         const classification = classifyField(field);
         if (classification) {
@@ -226,12 +275,13 @@ export function scanSensitiveData(schemaFiles: Record<string, string>, configFil
   }
 
   const sqlResults = parseSqlMigrations(sqlFiles);
+  const laravelResults = parseLaravelMigrations(allFiles);
   const modelResults = parseModelFiles(modelFiles);
 
   // Merge and deduplicate
   const seen = new Set<string>();
   const merged: SensitiveField[] = [];
-  for (const r of [...sqlResults, ...modelResults]) {
+  for (const r of [...sqlResults, ...laravelResults, ...modelResults]) {
     const key = `${r.entity}:${r.field}`;
     if (!seen.has(key)) {
       seen.add(key);

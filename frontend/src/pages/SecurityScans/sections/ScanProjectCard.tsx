@@ -1,6 +1,5 @@
-import TechBadge from "../../../components/TechBadge";
 import SeverityBadge from "../../../components/SeverityBadge";
-import type { Scan, Project, TechBadgeInfo } from "../types";
+import type { Scan, Project } from "../types";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
@@ -8,11 +7,10 @@ interface Props {
   project: Project | undefined;
   projectId: string;
   scans: Scan[];
-  badges: TechBadgeInfo[] | undefined;
   onSelect: (scanId: string) => void;
 }
 
-export default function ScanProjectCard({ project, projectId, scans, badges, onSelect }: Props) {
+export default function ScanProjectCard({ project, projectId, scans, onSelect }: Props) {
   const sorted = [...scans].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const latest = sorted[0];
   const latestCompleted = sorted.find((s) => s.status === "completed");
@@ -36,24 +34,21 @@ export default function ScanProjectCard({ project, projectId, scans, badges, onS
           <ShieldCheckIcon className="w-6 h-6 shrink-0 text-success-500" />
           <span className="text-sm text-text-secondary truncate">{sorted.length} scan{sorted.length !== 1 ? "s" : ""}</span>
         </div>
-        {summary && (
-          <div className="flex items-center gap-1 shrink-0">
+      </div>
+
+      {/* Project name + severity summary */}
+      <div className="min-w-0">
+        <h3 className="text-lg font-bold text-text truncate">{project?.name || projectId.slice(0, 8)}</h3>
+        {summary && summary.totalFindings > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {summary.errors > 0 && <SeverityBadge severity="error" count={summary.errors} />}
             {summary.warnings > 0 && <SeverityBadge severity="warning" count={summary.warnings} />}
             {summary.infos > 0 && <SeverityBadge severity="info" count={summary.infos} />}
-            {isClean && <SeverityBadge severity="clean" label="Clean" />}
           </div>
         )}
-      </div>
-
-      {/* Project name + language icons */}
-      <div className="min-w-0">
-        <h3 className="text-lg font-bold text-text truncate">{project?.name || projectId.slice(0, 8)}</h3>
-        {badges && badges.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {badges.slice(0, 4).map((b) => (
-              <TechBadge key={b.name} name={b.name} />
-            ))}
+        {summary && summary.totalFindings === 0 && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <SeverityBadge severity="clean" label="Clean" />
           </div>
         )}
       </div>
@@ -74,14 +69,6 @@ export default function ScanProjectCard({ project, projectId, scans, badges, onS
         )}
       </div>
 
-      {latestCompleted?.commitSha && (
-        <div className="flex items-center gap-2 text-[11px] text-text-muted truncate">
-          <span className="font-mono shrink-0">{latestCompleted.commitSha.slice(0, 8)}</span>
-          {latestCompleted.commitMessage && (
-            <span className="truncate">{latestCompleted.commitMessage}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

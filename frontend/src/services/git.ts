@@ -206,4 +206,33 @@ export const gitApi = {
       method: "POST",
       body: JSON.stringify({ connectionId, owner, repo, title, body, ...(assignee ? { assignee } : {}) }),
     }),
+
+  getSensitiveData: (connectionId: string, owner: string, repo: string, branch?: string) =>
+    request<{ sensitiveData: Array<{ entity: string; field: string; sensitivity: "personal" | "sensitive" | "secret"; reason: string }> }>(
+      `/git/connections/${connectionId}/sensitive-data?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`
+    ),
+
+  analyzeSensitiveData: (schema: string, projectId?: string) =>
+    request<{
+      tables: Array<{
+        name: string;
+        riskScore: number;
+        columns: Array<{
+          name: string;
+          type: string;
+          category: string;
+          sensitivity: string;
+          reason: string;
+          confidence: number;
+        }>;
+      }>;
+      summary: {
+        totalTables: number;
+        highRiskTables: number;
+        criticalFindings: string[];
+      };
+    }>("/git/analyze-sensitive-data", {
+      method: "POST",
+      body: JSON.stringify({ schema, projectId }),
+    }),
 };

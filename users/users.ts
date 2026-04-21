@@ -16,6 +16,8 @@ interface User {
   country: string;
   language: string;
   timezone: string;
+  roleId: string;
+  roleName: string;
   createdAt: string;
 }
 
@@ -26,6 +28,7 @@ interface UpdateUserParams {
   country?: string;
   language?: string;
   timezone?: string;
+  roleId?: string;
 }
 
 interface ListUsersParams {
@@ -51,6 +54,7 @@ type UserRow = {
   country: string;
   language: string;
   timezone: string;
+  role_id: string | null;
   created_at: Date;
 };
 
@@ -63,13 +67,16 @@ function toUser(row: UserRow): User {
     country: row.country,
     language: row.language,
     timezone: row.timezone,
+    roleId: row.role_id || "",
+    roleName: "",
     createdAt: row.created_at.toISOString(),
   };
 }
 
 async function ensureUser(userId: string): Promise<UserRow> {
   let user = await db.queryRow<UserRow>`
-    SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users WHERE id = ${userId}`;
+    SELECT id, email, name, avatar_url, country, language, timezone, role_id, created_at
+    FROM users WHERE id = ${userId}`;
   if (user) return user;
 
   const authData = getAuthData();
@@ -83,7 +90,8 @@ async function ensureUser(userId: string): Promise<UserRow> {
     ON CONFLICT (id) DO NOTHING`;
 
   user = await db.queryRow<UserRow>`
-    SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users WHERE id = ${userId}`;
+    SELECT id, email, name, avatar_url, country, language, timezone, role_id, created_at
+    FROM users WHERE id = ${userId}`;
   if (!user) throw APIError.notFound("User not found");
   return user;
 }
@@ -95,19 +103,24 @@ export const createUser = api(
   async (params: {
     email: string;
     name: string;
+    password?: string;
     country?: string;
     language?: string;
     timezone?: string;
+    roleId?: string;
   }): Promise<User> => {
     const { v4: uuidv4 } = await import("uuid");
+    const bcrypt = await import("bcryptjs");
     const id = uuidv4();
 
     const existing = await db.queryRow<{ id: string }>`SELECT id FROM users WHERE email = ${params.email}`;
     if (existing) throw APIError.alreadyExists("A user with this email already exists");
 
+    const passwordHash = params.password ? await bcrypt.hash(params.password, 12) : null;
+
     await db.exec`
-      INSERT INTO users (id, email, name, app_id, country, language, timezone, created_at)
-      VALUES (${id}, ${params.email}, ${params.name}, ${getAuthData()!.appId}, ${params.country || ""}, ${params.language || "en"}, ${params.timezone || "UTC"}, NOW())`;
+      INSERT INTO users (id, email, password_hash, name, app_id, country, language, timezone, role_id, created_at)
+      VALUES (${id}, ${params.email}, ${passwordHash}, ${params.name}, ${getAuthData()!.appId}, ${params.country || ""}, ${params.language || "en"}, ${params.timezone || "UTC"}, ${params.roleId || null}, NOW())`;
 
     const row = await db.queryRow<UserRow>`
       SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users WHERE id = ${id}`;
@@ -145,33 +158,27 @@ export const listUsers = api(
         WHERE app_id = ${authData.appId} AND (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern})`;
       total = countRow?.count || 0;
 
-      const rows = db.query<{
-        id: string; email: string; name: string; avatar_url: string | null;
-        country: string; language: string; timezone: string; created_at: Date;
-      }>`SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users
-         WHERE app_id = ${authData.appId} AND (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern})
-         ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+      const rows = db.query<UserRow>`
+        SELECT id, email, name, avatar_url, country, language, timezone, role_id, created_at
+        FROM users
+        WHERE app_id = ${authData.appId} AND (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern})
+        ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
       users = [];
-      for await (const row of rows) {
-        users.push({ id: row.id, email: row.email, name: row.name, avatarUrl: row.avatar_url || undefined, country: row.country, language: row.language, timezone: row.timezone, createdAt: row.created_at.toISOString() });
-      }
+      for await (const row of rows) users.push(toUser(row));
     } else {
       const countRow = await db.queryRow<{ count: number }>`
         SELECT COUNT(*)::int as count FROM users WHERE app_id = ${authData.appId}`;
       total = countRow?.count || 0;
 
-      const rows = db.query<{
-        id: string; email: string; name: string; avatar_url: string | null;
-        country: string; language: string; timezone: string; created_at: Date;
-      }>`SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users
-         WHERE app_id = ${authData.appId}
-         ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+      const rows = db.query<UserRow>`
+        SELECT id, email, name, avatar_url, country, language, timezone, role_id, created_at
+        FROM users
+        WHERE app_id = ${authData.appId}
+        ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
       users = [];
-      for await (const row of rows) {
-        users.push({ id: row.id, email: row.email, name: row.name, avatarUrl: row.avatar_url || undefined, country: row.country, language: row.language, timezone: row.timezone, createdAt: row.created_at.toISOString() });
-      }
+      for await (const row of rows) users.push(toUser(row));
     }
 
     return { users, total, page, limit };
@@ -200,9 +207,13 @@ export const updateUser = api(
     if (params.timezone !== undefined) {
       await db.exec`UPDATE users SET timezone = ${params.timezone}, updated_at = NOW() WHERE id = ${params.userId}`;
     }
+    if (params.roleId !== undefined) {
+      await db.exec`UPDATE users SET role_id = ${params.roleId || null}, updated_at = NOW() WHERE id = ${params.userId}`;
+    }
 
     const updated = await db.queryRow<UserRow>`
-      SELECT id, email, name, avatar_url, country, language, timezone, created_at FROM users WHERE id = ${params.userId}`;
+      SELECT id, email, name, avatar_url, country, language, timezone, role_id, created_at
+      FROM users WHERE id = ${params.userId}`;
     if (!updated) throw APIError.notFound("User not found");
     return toUser(updated);
   }

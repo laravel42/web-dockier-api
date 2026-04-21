@@ -40,4 +40,7 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  getMe: () =>
+    request<{ userId: string; email: string; name: string; roleId: string; appId: string }>("/auth/me"),
 };

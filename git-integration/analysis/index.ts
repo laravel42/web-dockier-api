@@ -27,6 +27,7 @@ interface RepoAnalysis {
   aiAnalysis?: AIRepoAnalysis;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
+  _scannersRan?: boolean;
 }
 
 export const analyzeRepo = api(
@@ -90,9 +91,9 @@ export const analyzeRepo = api(
           const parsed = parseResult(cached.result);
           const ai = parsed.aiAnalysis;
           const aiComplete = !!(ai?.sections);
-          const scannersComplete = !!(parsed.sensitiveData && parsed.dependencies);
-          console.log(`[analyzeRepo] Cache hit: repo=${repoKey} aiComplete=${aiComplete} scannersComplete=${scannersComplete}`);
-          if (!(params.aiType && OpenAIApiKey() && !aiComplete) && scannersComplete) {
+          const scannersRan = parsed._scannersRan === true;
+          console.log(`[analyzeRepo] Cache hit: repo=${repoKey} aiComplete=${aiComplete} scannersRan=${scannersRan}`);
+          if (!(params.aiType && OpenAIApiKey() && !aiComplete) && scannersRan) {
             return parsed;
           }
         } else {
@@ -108,8 +109,8 @@ export const analyzeRepo = api(
           const parsed = parseResult(cached.result);
           const ai = parsed.aiAnalysis;
           const aiComplete = !!(ai?.sections);
-          const scannersComplete = !!(parsed.sensitiveData && parsed.dependencies);
-          if (!(params.aiType && OpenAIApiKey() && !aiComplete) && scannersComplete) {
+          const scannersRan = parsed._scannersRan === true;
+          if (!(params.aiType && OpenAIApiKey() && !aiComplete) && scannersRan) {
             return parsed;
           }
         }
@@ -221,8 +222,8 @@ export const analyzeRepo = api(
 
       // Fetch schema/migration/model files
       const schemaPatterns = [
-        /migrations?\/.*\.sql$/i,
-        /database\/.*\.sql$/i,
+        /migrations?\/.*\.(sql|php)$/i,
+        /database\/.*\.(sql|php)$/i,
         /schema\.(sql|prisma|graphql|ts|rb)$/i,
         /models?\.(ts|js|py|rb|php)$/i,
         /models\/.*\.(ts|js|py|rb|php)$/i,
@@ -236,6 +237,7 @@ export const analyzeRepo = api(
         /db\/.*\.(sql|ts|js)$/i,
       ];
       const matchedSchemaFiles = files.filter(f => schemaPatterns.some(p => p.test(f))).slice(0, 30);
+      console.log(`[analyzeRepo] Schema files matched: ${matchedSchemaFiles.length}`, matchedSchemaFiles.slice(0, 10));
       const schemaPromises = matchedSchemaFiles.map(async (sf) => {
         const content = await fetchRepoFile(conn.provider, conn.personal_token, conn.endpoint || "", params.owner, params.repo, branch, sf);
         if (content) schemaFiles[sf] = content;
@@ -256,7 +258,6 @@ export const analyzeRepo = api(
           configContents,
           techStack,
           detectedServices,
-          schemaFiles,
         );
         if (result) aiAnalysis = result;
       }
@@ -264,6 +265,7 @@ export const analyzeRepo = api(
 
     // ── Scan for sensitive data (code-based, no AI) ──
     const sensitiveData = scanSensitiveData(schemaFiles, configContents);
+    console.log(`[analyzeRepo] Sensitive data scan: ${Object.keys(schemaFiles).length} schema files, ${Object.keys(configContents).length} config files => ${sensitiveData.length} findings`);
 
     // ── Scan dependencies for vulnerabilities ──
     const dependencies = await scanDependencies(configContents);
@@ -279,6 +281,7 @@ export const analyzeRepo = api(
       aiAnalysis,
       sensitiveData: sensitiveData.length > 0 ? sensitiveData : undefined,
       dependencies: dependencies.length > 0 ? dependencies : undefined,
+      _scannersRan: true,
     };
 
     // ── Write to cache ──

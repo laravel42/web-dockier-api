@@ -352,3 +352,16 @@ export const socialLogin = api(
     return { token: generateToken(userId, email, appId), userId };
   }
 );
+
+// ─── Get Current User (Me) ───
+
+export const getMe = api(
+  { method: "GET", path: "/auth/me", auth: true },
+  async (): Promise<{ userId: string; email: string; name: string; roleId: string; appId: string }> => {
+    const authData = getAuthData()!;
+    const user = await db.queryRow<{ id: string; email: string; name: string; role_id: string | null; app_id: string }>`
+      SELECT id, email, name, role_id, app_id FROM users WHERE id = ${authData.userID}`;
+    if (!user) throw APIError.notFound("User not found");
+    return { userId: user.id, email: user.email, name: user.name, roleId: user.role_id || "", appId: user.app_id };
+  }
+);

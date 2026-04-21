@@ -2,25 +2,27 @@ import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { usePermissions } from "../context/PermissionsContext";
 import { notificationsApi } from "../services/api";
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" },
-  { to: "/projects", label: "Projects", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" },
-  { to: "/deploy", label: "Deployments", icon: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" },
-  { to: "/security", label: "Security Scan", icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" },
-  { to: "/settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
+  { to: "/dashboard", label: "Dashboard", icon: "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z", permission: "" },
+  { to: "/projects", label: "Projects", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z", permission: "project:view" },
+  { to: "/deploy", label: "Deployments", icon: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12", permission: "deploy:view" },
+  { to: "/security", label: "Security Scan", icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z", permission: "scan:view" },
+  { to: "/settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z", permission: "" },
 ];
 
 export default function Layout() {
   const { logout, userProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { has, roleName } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [search, setSearch] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message: string; read: boolean; createdAt: string }>>([]);
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,8 +52,8 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex bg-surface">
       {/* Sidebar */}
-      <aside className="w-[260px] bg-sidebar border-r border-border/80 flex flex-col shrink-0">
-        <div className="h-[72px] flex items-center px-6 border-b border-border/80">
+      <aside className="w-65 bg-sidebar border-r border-border/80 flex flex-col shrink-0">
+        <div className="h-18 flex items-center px-6 border-b border-border/80">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Dockier logo" className="w-9 h-9 rounded-xl shadow-sm" />
             <span className="text-2xl font-display font-semibold text-text tracking-tight">Dockier</span>
@@ -59,7 +61,7 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto" aria-label="Main navigation">
-          {navItems.map((item) => {
+          {navItems.filter(item => !item.permission || has(item.permission)).map((item) => {
             const active = location.pathname === item.to;
             return (
               <Link
@@ -71,7 +73,7 @@ export default function Layout() {
                     : "text-text-secondary hover:bg-secondary-50/80 hover:text-text"
                 }`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px] shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5 shrink-0 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                 </svg>
                 {item.label}
@@ -87,7 +89,7 @@ export default function Layout() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-text truncate">{userProfile?.name || "User"}</p>
-              <p className="text-xs text-text-muted">Admin</p>
+              <p className="text-xs text-text-muted">{roleName || "No role"}</p>
             </div>
             <button
               onClick={handleLogout}
@@ -105,7 +107,7 @@ export default function Layout() {
       {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Toolbar */}
-        <header className="h-[72px] bg-card/80 backdrop-blur-sm border-b border-border/80 flex items-center justify-between px-8 shrink-0">
+        <header className="h-18 bg-card/80 backdrop-blur-sm border-b border-border/80 flex items-center justify-between px-8 shrink-0">
           {/* Search */}
           <div className="relative w-80">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -159,7 +161,7 @@ export default function Layout() {
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/80 rounded-2xl shadow-[var(--shadow-card-hover)] z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/80 rounded-2xl shadow-(--shadow-card-hover) z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                     <span className="text-sm font-semibold text-text">Notifications</span>
                     <Link to="/notifications" onClick={() => setNotifOpen(false)} className="text-xs text-primary-500 hover:text-primary-700 font-medium">

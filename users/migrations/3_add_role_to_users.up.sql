@@ -1,0 +1,5 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS app_id TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS idx_users_app ON users(app_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role_id);

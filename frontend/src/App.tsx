@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { PermissionsProvider } from "./context/PermissionsContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -25,10 +26,11 @@ export default function App() {
   return (
     <ThemeProvider>
     <AuthProvider>
+    <PermissionsProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/register" element={<Navigate to="/login" replace />} />
           <Route path="/auth/callback/:provider" element={<AuthCallback />} />
           <Route
             element={
@@ -51,6 +53,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
+    </PermissionsProvider>
     </AuthProvider>
     </ThemeProvider>
   );

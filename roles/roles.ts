@@ -59,3 +59,13 @@ export const updateRole = api(
     return { id: row!.id, name: row!.name, description: row!.description, permissions: row!.permissions || [], createdAt: row!.created_at.toISOString() };
   }
 );
+
+export const getRole = api(
+  { method: "GET", path: "/roles/:roleId", auth: true },
+  async (params: { roleId: string }): Promise<Role> => {
+    const row = await db.queryRow<{ id: string; name: string; description: string; permissions: string[]; created_at: Date }>`
+      SELECT id, name, description, permissions, created_at FROM roles WHERE id = ${params.roleId}`;
+    if (!row) throw APIError.notFound("Role not found");
+    return { id: row.id, name: row.name, description: row.description, permissions: row.permissions || [], createdAt: row.created_at.toISOString() };
+  }
+);
