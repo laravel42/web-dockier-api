@@ -19,11 +19,15 @@ const SonarQubeToken = secret("SonarQubeToken");
 initDb(DatabaseUrl());
 
 // Resolve semgrep binary path at module load
-function findSemgrep(): string {
+function findSemgrep(): string | null {
   const candidates = [
     "semgrep",
     join(process.env.HOME || "", ".local/bin/semgrep"),
     "/usr/local/bin/semgrep",
+    "/opt/homebrew/bin/semgrep",
+    // pip install locations
+    join(process.env.HOME || "", ".local/pipx/venvs/semgrep/bin/semgrep"),
+    "/usr/bin/semgrep",
   ];
   for (const bin of candidates) {
     try {
@@ -31,10 +35,18 @@ function findSemgrep(): string {
       if (result.status === 0) return bin;
     } catch { /* try next */ }
   }
-  return "semgrep"; // fallback, hope it's in PATH
+  // Last resort: use `which` to find it anywhere in PATH
+  try {
+    const which = spawnSync("which", ["semgrep"], { stdio: "pipe", timeout: 5000 });
+    if (which.status === 0) {
+      const path = which.stdout.toString().trim();
+      if (path) return path;
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 const SEMGREP_BIN = findSemgrep();
-console.log(`[code-analysis] Resolved semgrep binary: ${SEMGREP_BIN}`);
+console.log(`[code-analysis] Semgrep binary: ${SEMGREP_BIN || "NOT FOUND (scans will skip semgrep)"}`);
 
 // Helper to handle double-encoded jsonb summary
 function parseSummary(raw: any): ScanSummary {
@@ -1056,6 +1068,9 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     let filesScanned = 0;
 
     if (tools.semgrep) {
+      if (!SEMGREP_BIN) {
+        console.log("[doScan] Semgrep not installed, skipping");
+      } else {
       await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Running Semgrep scanner…" });
       console.log(`[doScan] Running semgrep: ${SEMGREP_BIN} in ${repoDir}`);
       const configFlag = existsSync(RULES_DIR) ? `--config ${JSON.stringify(RULES_DIR)}` : "--config auto";
@@ -1089,6 +1104,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
         const arr = findingsByFile.get(r.path) || [];
         arr.push({ ruleId: r.check_id, severity: mapSeverity(r.extra.severity), message: r.extra.message, filePath: r.path, startLine: r.start.line, endLine: r.end.line, snippet: (r.extra.lines || "").trim().slice(0, 200) });
         findingsByFile.set(r.path, arr);
+      }
       }
     } else {
       console.log("[doScan] Semgrep disabled, skipping");
