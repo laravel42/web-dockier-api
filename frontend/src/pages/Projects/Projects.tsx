@@ -21,7 +21,8 @@ export default function Projects() {
     repos, selectedRepo, setSelectedRepo,
     branches, selectedBranch, setSelectedBranch,
     loadingRepos, loadingBranches, loadingConnections,
-    error,
+    refreshRepos, refreshingRepos,
+    error, submitting,
     openCreate, closeForm, handleSubmit,
     confirmDelete,
     deployments, projectLangs,
@@ -82,6 +83,9 @@ export default function Projects() {
           }
         }}
         loadingRepos={loadingRepos}
+        onRefreshRepos={refreshRepos}
+        refreshingRepos={refreshingRepos}
+        submitting={submitting}
         branches={branches}
         selectedBranch={selectedBranch}
         onBranchChange={setSelectedBranch}

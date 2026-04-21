@@ -2,6 +2,7 @@ import type { DeployInfo, ProviderInfo } from "../types";
 import { cardCls } from "../constants";
 import ProviderBadge from "../../../components/ProviderBadge";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
+import StatusBadge from "../../../components/badges/StatusBadge";
 
 interface Props {
   deploys: DeployInfo[];
@@ -24,15 +25,6 @@ function timeAgo(dateStr: string): string {
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
 }
-
-const statusColors: Record<string, string> = {
-  success: "bg-emerald-100 text-emerald-700",
-  failed: "bg-red-100 text-red-700",
-  building: "bg-amber-100 text-amber-700",
-  deploying: "bg-blue-100 text-blue-700",
-  pending: "bg-gray-100 text-gray-600",
-  destroyed: "bg-gray-100 text-gray-500",
-};
 
 const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate" };
 
@@ -61,15 +53,13 @@ export default function RecentDeploys({ deploys, allProviders, navigate }: Props
                 >
                   {d.branch}{d.commitHash ? ` @ ${d.commitHash.substring(0, 7)}` : ""}
                 </button>
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none shrink-0 ${statusColors[d.status] || "bg-gray-100 text-gray-600"}`}>
-                  {d.status}
-                </span>
+                <StatusBadge status={d.status} />
                 <ProviderBadge provider={providerKey(d.providerId)} suffix={d.deployStrategy ? ` · ${strategyLabels[d.deployStrategy] || d.deployStrategy}` : ""} iconSize="w-3 h-3" />
                 <span className="text-xs text-text-muted ml-auto shrink-0">{timeAgo(d.createdAt)}</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-text-muted">
                 {d.dockerImage && (
-                  <span className="font-mono truncate max-w-[120px]" title={d.dockerImage}>
+                  <span className="font-mono truncate max-w-30" title={d.dockerImage}>
                     {d.dockerImage.split("/").pop()?.split(":")[0] || d.dockerImage}
                   </span>
                 )}

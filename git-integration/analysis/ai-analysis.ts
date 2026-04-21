@@ -251,7 +251,7 @@ IMPORTANT:
   return result?.label ? result : null;
 }
 
-// ─── Main entry point: run all 3 calls in parallel ───
+// ─── Main entry point: only core AI analysis ───
 
 export async function analyzeWithAI(
   _aiType: string,
@@ -271,24 +271,14 @@ export async function analyzeWithAI(
 
   const context = buildContext(techStack, detectedServices, files, configSummary);
 
-  console.log("[AI] Starting 3 parallel analysis calls...");
-  const [core, dataFlow, userJourney] = await Promise.all([
-    fetchCoreAnalysis(context),
-    fetchDataFlow(context, schemaFiles || {}),
-    fetchUserJourney(context),
-  ]);
+  console.log("[AI] Calling core analysis...");
+  const core = await fetchCoreAnalysis(context);
 
   if (!core) {
     console.error("[AI] Core analysis failed");
     return null;
   }
 
-  const result: AIRepoAnalysis = {
-    ...(core as AIRepoAnalysis),
-    dataFlow: dataFlow || undefined,
-    userJourney: userJourney || undefined,
-  };
-
-  console.log(`[AI] Done. sections=${!!result.sections} dataFlow=${!!result.dataFlow} userJourney=${!!result.userJourney}`);
-  return result;
+  console.log(`[AI] Done. sections=${!!core.sections}`);
+  return core as AIRepoAnalysis;
 }

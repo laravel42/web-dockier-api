@@ -103,7 +103,6 @@ export function useScanDetail() {
 
   const handleSeverityFilter = (severity: string) => {
     setSeverityFilter(severity);
-    if (scanId) fetchFindings(scanId, severity);
   };
 
   const handleRunScan = async () => {

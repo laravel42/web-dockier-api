@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Project, RepoStats } from "../types";
 import { cardCls } from "../constants";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
@@ -8,7 +9,8 @@ import TechBadge from "../../../components/TechBadge";
 interface Props {
   project: Project;
   stats: RepoStats | null;
-  techStack?: Array<{ name: string; category: string; confidence: number }>;
+  badges?: Array<{ name: string; category: string; confidence: number }>;
+  allBadges?: Array<{ name: string; category: string; confidence: number }>;
 }
 
 const templateDescriptions: Record<string, string> = {
@@ -31,8 +33,9 @@ function timeAgo(dateStr: string): string {
   return `${months}mo ago`;
 }
 
-export default function RepoInfoCard({ project, stats, techStack }: Props) {
+export default function RepoInfoCard({ project, stats, badges, allBadges }: Props) {
   const isTemplate = project.sourceType === "template";
+  const [showAll, setShowAll] = useState(false);
 
   if (isTemplate) {
     return (
@@ -111,11 +114,21 @@ export default function RepoInfoCard({ project, stats, techStack }: Props) {
             </div>
           </div>
         )}
-        {techStack && techStack.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-border">
-            {techStack.slice(0, 4).map((b) => (
-              <TechBadge key={b.name} name={b.name} iconSize="w-5 h-5" />
-            ))}
+        {badges && badges.length > 0 && (
+          <div className="pt-3 mt-2 border-t border-border">
+            <div className="flex flex-wrap items-center gap-2">
+              {(showAll && allBadges ? allBadges : badges).map((b) => (
+                <TechBadge key={b.name} name={b.name} iconSize="w-5 h-5" />
+              ))}
+              {allBadges && allBadges.length > badges.length && (
+                <button
+                  onClick={() => setShowAll(!showAll)}
+                  className="text-[11px] text-primary-500 hover:text-primary-400 font-medium transition-colors"
+                >
+                  {showAll ? "show less" : `+${allBadges.length - badges.length} more`}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

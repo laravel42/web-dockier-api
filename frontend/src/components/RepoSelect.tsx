@@ -13,9 +13,11 @@ interface Props {
   onChange: (fullName: string) => void;
   repos: Repo[];
   loading?: boolean;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
-export default function RepoSelect({ value, onChange, repos, loading }: Props) {
+export default function RepoSelect({ value, onChange, repos, loading, onRefresh, refreshing }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -62,6 +64,7 @@ export default function RepoSelect({ value, onChange, repos, loading }: Props) {
 
   return (
     <div>
+      <div className="flex gap-1.5">
       <button
         ref={triggerRef}
         type="button"
@@ -82,6 +85,20 @@ export default function RepoSelect({ value, onChange, repos, loading }: Props) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
         </svg>
       </button>
+      {onRefresh && (
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="h-11 w-11 shrink-0 rounded-[var(--radius-input)] border border-border bg-card flex items-center justify-center text-text-muted hover:text-primary-500 hover:border-primary-500/30 transition-colors disabled:opacity-50"
+          title="Refresh repository list"
+        >
+          <svg className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
+          </svg>
+        </button>
+      )}
+      </div>
 
       {open && pos && createPortal(
         <div

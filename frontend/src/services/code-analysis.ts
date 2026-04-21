@@ -36,29 +36,32 @@ export const codeAnalysisApi = {
   deleteScan: (scanId: string) =>
     request(`/code-analysis/scans/${scanId}`, { method: "DELETE" }),
 
-  listCustomRules: () =>
-    request<{ rules: Array<{
+  listCustomRules: (type?: string) => {
+    const qs = type ? `?type=${type}` : "";
+    return request<{ rules: Array<{
       id: string; ruleId: string; severity: string; message: string;
-      pattern: string; extensions: string[]; enabled: boolean; isSystem: boolean; createdAt: string;
-    }> }>("/code-analysis/custom-rules"),
+      pattern: string; extensions: string[]; enabled: boolean; isSystem: boolean;
+      type: string; yamlContent: string; createdAt: string;
+    }> }>(`/code-analysis/custom-rules${qs}`);
+  },
 
-  createCustomRule: (data: { ruleId: string; severity: string; message: string; pattern: string; extensions: string[] }) =>
+  createCustomRule: (data: { ruleId: string; severity: string; message: string; pattern: string; extensions: string[]; type?: string; yamlContent?: string }) =>
     request<{ id: string; ruleId: string }>("/code-analysis/custom-rules", { method: "POST", body: JSON.stringify(data) }),
 
-  updateCustomRule: (ruleDbId: string, data: { ruleId?: string; severity?: string; message?: string; pattern?: string; extensions?: string[]; enabled?: boolean }) =>
+  updateCustomRule: (ruleDbId: string, data: { ruleId?: string; severity?: string; message?: string; pattern?: string; extensions?: string[]; enabled?: boolean; yamlContent?: string }) =>
     request(`/code-analysis/custom-rules/${ruleDbId}`, { method: "PUT", body: JSON.stringify({ ruleDbId, ...data }) }),
 
   deleteCustomRule: (ruleDbId: string) =>
     request(`/code-analysis/custom-rules/${ruleDbId}`, { method: "DELETE" }),
 
   listOpengrepRules: () =>
-    request<{ rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>; languages: string[] }>("/code-analysis/opengrep-rules"),
+    request<{ rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>; languages: string[] }>("/code-analysis/semgrep-rules"),
 
   getOpengrepRuleContent: (path: string) =>
-    request<{ content: string }>(`/code-analysis/opengrep-rules/content?path=${encodeURIComponent(path)}`),
+    request<{ content: string }>(`/code-analysis/semgrep-rules/content?path=${encodeURIComponent(path)}`),
 
   updateOpengrepRuleContent: (path: string, content: string) =>
-    request("/code-analysis/opengrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
+    request("/code-analysis/semgrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
 
   listSonarProfiles: () =>
     request<{ profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }> }>("/code-analysis/sonar/profiles"),
@@ -71,9 +74,9 @@ export const codeAnalysisApi = {
   toggleSonarRule: (profileKey: string, ruleKey: string, activate: boolean) =>
     request("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
 
-  listRuleOverrides: (tool: "opengrep" | "sonarqube") =>
+  listRuleOverrides: (tool: "semgrep" | "sonarqube") =>
     request<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }>(`/code-analysis/rule-overrides?tool=${tool}`),
 
-  toggleRule: (tool: "opengrep" | "sonarqube", ruleId: string, enabled: boolean) =>
+  toggleRule: (tool: "semgrep" | "sonarqube", ruleId: string, enabled: boolean) =>
     request("/code-analysis/rule-overrides", { method: "POST", body: JSON.stringify({ tool, ruleId, enabled }) }),
 };

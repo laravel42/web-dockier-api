@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--color-zinc-950);
+  --color-foreground: var(--color-zinc-100);
+  --color-muted: var(--color-zinc-800);
+  --color-muted-foreground: var(--color-zinc-400);
+  --color-border: var(--color-zinc-800);
+  --color-accent: var(--color-zinc-800);
+  --color-accent-foreground: var(--color-zinc-100);
+  --color-primary: var(--color-blue-500);
+  --color-primary-foreground: var(--color-white);
+  --color-destructive: var(--color-red-500);
+  --color-destructive-foreground: var(--color-white);
+  --color-success: var(--color-emerald-500);
+  --color-warning: var(--color-amber-500);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
+}

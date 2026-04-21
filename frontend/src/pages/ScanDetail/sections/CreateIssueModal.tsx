@@ -6,6 +6,7 @@ import type { PMIntegration, PMTeam, PMMember } from "../types";
 interface Props {
   open: boolean;
   onClose: () => void;
+  repoUrl?: string;
   // form state
   pmIntegrations: PMIntegration[];
   issueIntegration: string;
@@ -28,6 +29,9 @@ interface Props {
   pmMembers: PMMember[];
   selectedPmAssignee: string;
   onAssigneeChange: (id: string) => void;
+  gitMembers?: Array<{ id: string; username: string; name: string; avatarUrl: string }>;
+  selectedGitAssignee?: string;
+  onGitAssigneeChange?: (username: string) => void;
   issueCreating: boolean;
   issueSuccess: string;
   issueSuccessUrl: string;
@@ -37,13 +41,14 @@ interface Props {
 }
 
 export default function CreateIssueModal({
-  open, onClose,
+  open, onClose, repoUrl,
   pmIntegrations, issueIntegration, onIntegrationChange,
   pmProjects, pmProjectsLoading, selectedPmProject, pmTeamLabel, pmProjectLabel,
   pmSubProjects, pmSubProjectsLoading, selectedPmSubProject, onSubProjectChange, onTeamChange,
   issueTitle, onTitleChange, titleGenerating,
   issueDescription, onDescriptionChange,
   pmMembers, selectedPmAssignee, onAssigneeChange,
+  gitMembers, selectedGitAssignee, onGitAssigneeChange,
   issueCreating, issueSuccess, issueSuccessUrl, issueError, onDismissError,
   onSubmit,
 }: Props) {
@@ -85,6 +90,13 @@ export default function CreateIssueModal({
               Creating in {pmIntegrations[0].name}
             </div>
           )}
+          {pmIntegrations.length === 0 && repoUrl && (
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
+              <input type="text" value={repoUrl} readOnly className={`${inputCls} bg-secondary-50 text-text-muted cursor-default`} />
+            </div>
+          )}
+          {pmIntegrations.length > 0 && (<>
           <div>
             <label htmlFor="issue-pm-team" className="block text-sm font-medium text-text-secondary mb-1.5">
               {pmTeamLabel}
@@ -126,6 +138,7 @@ export default function CreateIssueModal({
               )}
             </div>
           )}
+          </>)}
           <div>
             <label htmlFor="issue-title" className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
             <input id="issue-title" type="text" value={issueTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
@@ -145,6 +158,15 @@ export default function CreateIssueModal({
               </select>
             </div>
           )}
+          {pmIntegrations.length === 0 && gitMembers && gitMembers.length > 0 && onGitAssigneeChange && (
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
+              <select value={selectedGitAssignee || ""} onChange={(e) => onGitAssigneeChange(e.target.value)} className={selectCls}>
+                <option value="">Unassigned</option>
+                {gitMembers.map(m => <option key={m.id} value={m.id}>{m.name}{m.name !== m.username ? ` (${m.username})` : ""}</option>)}
+              </select>
+            </div>
+          )}
           {issueError && (
             <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
               <p>{issueError}</p>
@@ -152,7 +174,7 @@ export default function CreateIssueModal({
             </div>
           )}
           <div className="flex justify-end">
-            <button type="submit" disabled={issueCreating || !issueIntegration || (!selectedPmProject && pmProjects.length > 0)}
+            <button type="submit" disabled={issueCreating || (pmIntegrations.length > 0 && (!issueIntegration || (!selectedPmProject && pmProjects.length > 0)))}
               className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 transition-colors">
               {issueCreating ? "Creating..." : "Create Issue"}
             </button>

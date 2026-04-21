@@ -4,10 +4,23 @@ import { throwProviderError, parseRepoUrl } from "../helpers";
 
 export const listRepos = api(
   { method: "GET", path: "/git/connections/:connectionId/repos", auth: true },
-  async (params: { connectionId: string }): Promise<{ repos: GitRepo[] }> => {
+  async (params: { connectionId: string; refresh?: boolean }): Promise<{ repos: GitRepo[]; cached: boolean }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
     if (!conn) throw APIError.notFound("Connection not found");
+
+    // Check cache (unless refresh requested)
+    if (!params.refresh) {
+      try {
+        const cached = await db.queryRow<{ repos: string }>`
+          SELECT repos FROM repo_cache WHERE connection_id = ${params.connectionId}`;
+        if (cached) {
+          const repos = typeof cached.repos === "string" ? JSON.parse(cached.repos) : cached.repos;
+          return { repos: repos as GitRepo[], cached: true };
+        }
+      } catch {}
+    }
+
     const repos: GitRepo[] = [];
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
@@ -36,7 +49,16 @@ export const listRepos = api(
       const data = (await res.json()) as { values?: Array<any> };
       for (const r of data.values || []) repos.push({ name: r.name, fullName: r.full_name, url: r.links.html.href, defaultBranch: r.mainbranch?.name || "main", private: r.is_private });
     }
-    return { repos };
+
+    // Cache the result
+    try {
+      await db.exec`
+        INSERT INTO repo_cache (connection_id, repos, created_at)
+        VALUES (${params.connectionId}, ${JSON.stringify(repos)}::jsonb, NOW())
+        ON CONFLICT (connection_id) DO UPDATE SET repos = ${JSON.stringify(repos)}::jsonb, created_at = NOW()`;
+    } catch {}
+
+    return { repos, cached: false };
   }
 );
 

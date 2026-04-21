@@ -106,26 +106,6 @@ export default function ScanSidebar({
                       <span className={`text-sm font-medium truncate ${isActive ? "text-primary-600" : "text-text"}`}>
                         {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      {s.summary?.totalFindings != null && s.summary.totalFindings > 0 && (() => {
-                        if (isActive && findings.length > 0) {
-                          const hasOg = findings.some(f => !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom."));
-                          const hasSq = findings.some(f => f.ruleId.startsWith("sonar."));
-                          const hasCr = findings.some(f => f.ruleId.startsWith("custom."));
-                          return (
-                            <div className="flex items-center gap-2 ml-auto shrink-0">
-                              {hasOg && <img src="/devicons/semgrep.svg" alt="Semgrep" className="w-4 h-4 rounded" />}
-                              {hasSq && <img src="/devicons/sonarqube.svg" alt="SonarQube" className="w-4 h-4 rounded" />}
-                              {hasCr && <img src="/logo.png" alt="Custom" className="w-4 h-4 rounded" />}
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="flex items-center gap-2 ml-auto shrink-0">
-                            <img src="/devicons/semgrep.svg" alt="Semgrep" className="w-4 h-4 rounded" />
-                            <img src="/devicons/sonarqube.svg" alt="SonarQube" className="w-4 h-4 rounded" />
-                          </div>
-                        );
-                      })()}
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 ml-[18px]">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -142,18 +122,13 @@ export default function ScanSidebar({
                         {s.commitMessage && <span className="text-xs text-text-muted truncate">{s.commitMessage.split("\n")[0]}</span>}
                       </div>
                     )}
-                    {isActive && findings.length > 0 && (() => {
-                      const errs = findings.filter(f => f.severity === "error").length;
-                      const warns = findings.filter(f => f.severity === "warning").length;
-                      const infos = findings.filter(f => f.severity === "info").length;
-                      return (
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-[18px]">
-                          {errs > 0 && <SeverityBadge severity="error" count={errs} />}
-                          {warns > 0 && <SeverityBadge severity="warning" count={warns} />}
-                          {infos > 0 && <SeverityBadge severity="info" count={infos} />}
-                        </div>
-                      );
-                    })()}
+                    {s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0) && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-[18px]">
+                        {s.summary.errors > 0 && <SeverityBadge severity="error" count={s.summary.errors} />}
+                        {s.summary.warnings > 0 && <SeverityBadge severity="warning" count={s.summary.warnings} />}
+                        {s.summary.infos > 0 && <SeverityBadge severity="info" count={s.summary.infos} />}
+                      </div>
+                    )}
                   </button>
                 );
               })}

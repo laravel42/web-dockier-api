@@ -159,7 +159,7 @@ export default function SourceControlTab() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {connections.map((conn) => (
-            <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
+            <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-(--radius-card) p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0">
                   <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />

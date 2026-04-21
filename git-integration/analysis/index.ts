@@ -1,5 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { v4 as uuidv4 } from "uuid";
+import { getAuthData } from "~encore/auth";
 import { db, OpenAIApiKey } from "../shared";
 import { throwProviderError } from "../helpers";
 import { type TechStackItem, detectTechStack } from "./tech-stack";
@@ -7,6 +8,13 @@ import { type DeployOption, suggestDeployOptions } from "./deploy-options";
 import { type DetectedService, detectServices } from "./services";
 import { fetchRepoFile } from "./fetch-file";
 import { type AIRepoAnalysis, CONFIG_FILES_TO_FETCH, analyzeWithAI } from "./ai-analysis";
+import { type SensitiveField, scanSensitiveData } from "./sensitive-data-scanner";
+import { type Dependency, scanDependencies } from "./dependency-scanner";
+
+function parseResult(raw: unknown): RepoAnalysis {
+  if (typeof raw === "string") return JSON.parse(raw);
+  return raw as RepoAnalysis;
+}
 
 interface RepoAnalysis {
   techStack: TechStackItem[];
@@ -17,11 +25,13 @@ interface RepoAnalysis {
   hasDocker: boolean;
   hasCi: boolean;
   aiAnalysis?: AIRepoAnalysis;
+  sensitiveData?: SensitiveField[];
+  dependencies?: Dependency[];
 }
 
 export const analyzeRepo = api(
   { method: "GET", path: "/git/connections/:connectionId/repo-analyze", auth: true },
-  async (params: { connectionId: string; owner: string; repo: string; branch?: string; aiType?: string }): Promise<RepoAnalysis> => {
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string; aiType?: string; projectId?: string }): Promise<RepoAnalysis> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
     }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -77,11 +87,12 @@ export const analyzeRepo = api(
             SELECT result FROM analysis_cache WHERE repo = ${repoKey} AND branch = ${branch} ORDER BY created_at DESC LIMIT 1`;
         }
         if (cached) {
-          const parsed = JSON.parse(cached.result) as RepoAnalysis;
+          const parsed = parseResult(cached.result);
           const ai = parsed.aiAnalysis;
-          const aiComplete = !!(ai?.sections && ai?.dataFlow && ai?.userJourney);
-          console.log(`[analyzeRepo] Cache hit: repo=${repoKey} aiComplete=${aiComplete}`);
-          if (!(params.aiType && OpenAIApiKey() && !aiComplete)) {
+          const aiComplete = !!(ai?.sections);
+          const scannersComplete = !!(parsed.sensitiveData && parsed.dependencies);
+          console.log(`[analyzeRepo] Cache hit: repo=${repoKey} aiComplete=${aiComplete} scannersComplete=${scannersComplete}`);
+          if (!(params.aiType && OpenAIApiKey() && !aiComplete) && scannersComplete) {
             return parsed;
           }
         } else {
@@ -94,10 +105,11 @@ export const analyzeRepo = api(
         const cached = await db.queryRow<{ result: string }>`
           SELECT result FROM analysis_cache WHERE repo = ${repoKey} AND branch = ${branch} ORDER BY created_at DESC LIMIT 1`;
         if (cached) {
-          const parsed = JSON.parse(cached.result) as RepoAnalysis;
+          const parsed = parseResult(cached.result);
           const ai = parsed.aiAnalysis;
-          const aiComplete = !!(ai?.sections && ai?.dataFlow && ai?.userJourney);
-          if (!(params.aiType && OpenAIApiKey() && !aiComplete)) {
+          const aiComplete = !!(ai?.sections);
+          const scannersComplete = !!(parsed.sensitiveData && parsed.dependencies);
+          if (!(params.aiType && OpenAIApiKey() && !aiComplete) && scannersComplete) {
             return parsed;
           }
         }
@@ -175,17 +187,14 @@ export const analyzeRepo = api(
     const detectedLang = techStack.find(t => t.category === "language" || (t.category === "runtime" && t.confidence > 50));
     const effectivePrimaryLanguage = detectedLang?.name || primaryLanguage;
 
-    // ── AI-powered deep analysis (if OpenAI key is configured) ──
-    let aiAnalysis: AIRepoAnalysis | undefined;
-    const hasOpenAI = !!OpenAIApiKey();
-    console.log(`[analyzeRepo] aiType=${params.aiType} hasOpenAI=${hasOpenAI}`);
-    if (params.aiType && hasOpenAI) {
-      // Fetch key config files from repo
-      const configContents: Record<string, string> = {};
+    // ── Fetch config files from repo ──
+    const configContents: Record<string, string> = {};
+    const schemaFiles: Record<string, string> = {};
+
+    if (conn && files.length > 0) {
       const filesToFetch = CONFIG_FILES_TO_FETCH.filter(cf =>
         files.some(f => f.toLowerCase().endsWith(cf.toLowerCase()) || f.toLowerCase() === cf.toLowerCase())
       );
-      // Also fetch Laravel-specific files if detected
       const laravelFiles = ["config/app.php", "config/database.php", "config/queue.php", "config/cache.php", "config/horizon.php", "config/octane.php"];
       const djangoFiles = ["settings.py", "requirements.txt"];
       const allFetchFiles = [...filesToFetch];
@@ -203,7 +212,6 @@ export const analyzeRepo = api(
         }
       }
 
-      // Fetch up to 10 config files in parallel
       const fetchPromises = allFetchFiles.slice(0, 10).map(async (cf) => {
         const actualPath = files.find(f => f.toLowerCase().endsWith(cf.toLowerCase())) || cf;
         const content = await fetchRepoFile(conn.provider, conn.personal_token, conn.endpoint || "", params.owner, params.repo, branch, actualPath);
@@ -211,8 +219,7 @@ export const analyzeRepo = api(
       });
       await Promise.all(fetchPromises);
 
-      // Also fetch schema/migration/model files for data flow analysis
-      const schemaFiles: Record<string, string> = {};
+      // Fetch schema/migration/model files
       const schemaPatterns = [
         /migrations?\/.*\.sql$/i,
         /database\/.*\.sql$/i,
@@ -234,7 +241,13 @@ export const analyzeRepo = api(
         if (content) schemaFiles[sf] = content;
       });
       await Promise.all(schemaPromises);
+    }
 
+    // ── AI-powered deep analysis (if OpenAI key is configured) ──
+    let aiAnalysis: AIRepoAnalysis | undefined;
+    const hasOpenAI = !!OpenAIApiKey();
+    console.log(`[analyzeRepo] aiType=${params.aiType} hasOpenAI=${hasOpenAI}`);
+    if (params.aiType && hasOpenAI) {
       if (Object.keys(configContents).length > 0 || files.length > 0) {
         const result = await analyzeWithAI(
           params.aiType,
@@ -249,6 +262,12 @@ export const analyzeRepo = api(
       }
     }
 
+    // ── Scan for sensitive data (code-based, no AI) ──
+    const sensitiveData = scanSensitiveData(schemaFiles, configContents);
+
+    // ── Scan dependencies for vulnerabilities ──
+    const dependencies = await scanDependencies(configContents);
+
     const result = {
       techStack,
       deployOptions: aiAnalysis?.deployOptions?.length ? aiAnalysis.deployOptions : deployOptions,
@@ -258,17 +277,21 @@ export const analyzeRepo = api(
       hasDocker,
       hasCi,
       aiAnalysis,
+      sensitiveData: sensitiveData.length > 0 ? sensitiveData : undefined,
+      dependencies: dependencies.length > 0 ? dependencies : undefined,
     };
 
     // ── Write to cache ──
     if (latestSha) {
       const id = uuidv4();
+      const authData = getAuthData();
+      const appId = authData?.appId || "";
       try {
         await db.exec`
-          INSERT INTO analysis_cache (id, repo, branch, commit_sha, result, created_at)
-          VALUES (${id}, ${repoKey}, ${branch}, ${latestSha}, ${JSON.stringify(result)}::jsonb, NOW())
-          ON CONFLICT (repo, branch) DO UPDATE SET commit_sha = ${latestSha}, result = ${JSON.stringify(result)}::jsonb, created_at = NOW()`;
-        console.log(`[analyzeRepo] Cache written: repo=${repoKey} sha=${latestSha} hasAi=${!!aiAnalysis}`);
+          INSERT INTO analysis_cache (id, repo, branch, commit_sha, result, created_at, app_id, project_id)
+          VALUES (${id}, ${repoKey}, ${branch}, ${latestSha}, ${JSON.stringify(result)}::jsonb, NOW(), ${appId}, ${params.projectId || ""})
+          ON CONFLICT (repo, branch) DO UPDATE SET commit_sha = ${latestSha}, result = ${JSON.stringify(result)}::jsonb, created_at = NOW(), project_id = ${params.projectId || ""}`;
+        console.log(`[analyzeRepo] Cache written: repo=${repoKey} sha=${latestSha}`);
       } catch (e: any) { console.error(`[analyzeRepo] Cache write failed: ${e.message}`); }
     } else {
       console.log(`[analyzeRepo] Skipped cache write: no latestSha`);
@@ -282,8 +305,14 @@ export const analyzeRepo = api(
 
 export const clearAnalysisCache = api(
   { method: "DELETE", path: "/git/analysis-cache", auth: true },
-  async (): Promise<{ deleted: boolean }> => {
-    await db.exec`DELETE FROM analysis_cache`;
+  async (params: { repo?: string; branch?: string }): Promise<{ deleted: boolean }> => {
+    if (params.repo && params.branch) {
+      await db.exec`DELETE FROM analysis_cache WHERE repo = ${params.repo} AND branch = ${params.branch}`;
+    } else if (params.repo) {
+      await db.exec`DELETE FROM analysis_cache WHERE repo = ${params.repo}`;
+    } else {
+      await db.exec`DELETE FROM analysis_cache`;
+    }
     return { deleted: true };
   }
 );

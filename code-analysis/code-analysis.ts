@@ -457,25 +457,29 @@ interface CustomRuleResponse {
   extensions: string[];
   enabled: boolean;
   isSystem: boolean;
+  type: string;
+  yamlContent: string;
   createdAt: string;
 }
 
 export const listCustomRules = api(
   { method: "GET", path: "/code-analysis/custom-rules", auth: true },
-  async (): Promise<{ rules: CustomRuleResponse[] }> => {
+  async (params: { type?: string }): Promise<{ rules: CustomRuleResponse[] }> => {
     const authData = getAuthData()!;
+    const typeFilter = params.type || "custom";
     const rows = db.query<{
       id: string; app_id: string; rule_id: string; severity: string; message: string;
-      pattern: string; extensions: string[]; enabled: boolean; created_at: Date;
-    }>`SELECT id, app_id, rule_id, severity, message, pattern, extensions, enabled, created_at
-       FROM custom_rules WHERE app_id = '' OR app_id = ${authData.appId}
+      pattern: string; extensions: string[]; enabled: boolean; type: string; yaml_content: string; created_at: Date;
+    }>`SELECT id, app_id, rule_id, severity, message, pattern, extensions, enabled, type, yaml_content, created_at
+       FROM custom_rules WHERE (app_id = '' OR app_id = ${authData.appId}) AND type = ${typeFilter}
        ORDER BY rule_id`;
     const rules: CustomRuleResponse[] = [];
     for await (const r of rows) {
       rules.push({
         id: r.id, ruleId: r.rule_id, severity: r.severity, message: r.message,
         pattern: r.pattern, extensions: r.extensions, enabled: r.enabled,
-        isSystem: r.app_id === "", createdAt: r.created_at.toISOString(),
+        isSystem: r.app_id === "", type: r.type, yamlContent: r.yaml_content || "",
+        createdAt: r.created_at.toISOString(),
       });
     }
     return { rules };
@@ -486,16 +490,21 @@ export const createCustomRule = api(
   { method: "POST", path: "/code-analysis/custom-rules", auth: true },
   async (params: {
     ruleId: string; severity: string; message: string; pattern: string; extensions: string[];
+    type?: string; yamlContent?: string;
   }): Promise<CustomRuleResponse> => {
     const authData = getAuthData()!;
-    try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); }
+    const ruleType = params.type || "custom";
+    if (ruleType === "custom") {
+      try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); }
+    }
     const id = uuidv4();
-    await db.exec`INSERT INTO custom_rules (id, app_id, rule_id, severity, message, pattern, extensions)
-      VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern}, ${params.extensions})`;
+    await db.exec`INSERT INTO custom_rules (id, app_id, rule_id, severity, message, pattern, extensions, type, yaml_content)
+      VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern || ""}, ${params.extensions || []}, ${ruleType}, ${params.yamlContent || ""})`;
     return {
       id, ruleId: params.ruleId, severity: params.severity, message: params.message,
-      pattern: params.pattern, extensions: params.extensions, enabled: true,
-      isSystem: false, createdAt: new Date().toISOString(),
+      pattern: params.pattern || "", extensions: params.extensions || [], enabled: true,
+      isSystem: false, type: ruleType, yamlContent: params.yamlContent || "",
+      createdAt: new Date().toISOString(),
     };
   }
 );
@@ -504,14 +513,14 @@ export const updateCustomRule = api(
   { method: "PUT", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
   async (params: {
     ruleDbId: string; ruleId?: string; severity?: string; message?: string;
-    pattern?: string; extensions?: string[]; enabled?: boolean;
+    pattern?: string; extensions?: string[]; enabled?: boolean; yamlContent?: string;
   }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
-    const row = await db.queryRow<{ app_id: string }>`SELECT app_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    const row = await db.queryRow<{ app_id: string; type: string }>`SELECT app_id, type FROM custom_rules WHERE id = ${params.ruleDbId}`;
     if (!row) throw APIError.notFound("Rule not found");
     if (row.app_id === "" && params.enabled === undefined) throw APIError.permissionDenied("Cannot edit system rules");
     if (row.app_id !== "" && row.app_id !== authData.appId) throw APIError.permissionDenied("Not your rule");
-    if (params.pattern) { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
+    if (params.pattern && row.type === "custom") { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
     if (row.app_id === "") {
       await db.exec`UPDATE custom_rules SET enabled = ${params.enabled ?? true} WHERE id = ${params.ruleDbId}`;
     } else {
@@ -521,7 +530,8 @@ export const updateCustomRule = api(
         message = COALESCE(${params.message ?? null}, message),
         pattern = COALESCE(${params.pattern ?? null}, pattern),
         extensions = COALESCE(${params.extensions ?? null}, extensions),
-        enabled = COALESCE(${params.enabled ?? null}, enabled)
+        enabled = COALESCE(${params.enabled ?? null}, enabled),
+        yaml_content = COALESCE(${params.yamlContent ?? null}, yaml_content)
         WHERE id = ${params.ruleDbId}`;
     }
     return { success: true };
@@ -763,14 +773,15 @@ export const listRuleOverrides = api(
 export const toggleRule = api(
   { method: "POST", path: "/code-analysis/rule-overrides", auth: true },
   async (params: { tool: "semgrep" | "sonarqube"; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
+    const authData = getAuthData()!;
     const id = uuidv4();
     if (params.tool === "semgrep") {
-      await db.exec`INSERT INTO opengrep_rules (id, rule_id, enabled)
-        VALUES (${id}, ${params.ruleId}, ${params.enabled})
+      await db.exec`INSERT INTO opengrep_rules (id, app_id, rule_id, enabled)
+        VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
         ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
     } else {
-      await db.exec`INSERT INTO sonarqube_rules (id, rule_id, enabled)
-        VALUES (${id}, ${params.ruleId}, ${params.enabled})
+      await db.exec`INSERT INTO sonarqube_rules (id, app_id, rule_id, enabled)
+        VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
         ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
     }
     return { success: true };

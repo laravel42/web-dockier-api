@@ -11,8 +11,6 @@ import ContributorsGrid from "./sections/ContributorsGrid";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
 import ProjectDescription from "./sections/ProjectDescription";
-import DataFlowDiagram from "./sections/DataFlowDiagram";
-import UserJourneyTree from "./sections/UserJourneyTree";
 import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
@@ -23,8 +21,9 @@ export default function ProjectDetail() {
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
     handleDelete, handlePullOrigin, handleOpenBranchModal,
     showDeployWizard, setShowDeployWizard,
-    allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy,
+    allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy, refreshAnalysis,
     stats, statsLoading, statsError,
+    badges, allBadges,
     recentCommits, commitsLoading, commitsError,
     showBranchModal, setShowBranchModal,
     branchList, branchLoading, branchSearch, setBranchSearch, handleSwitchBranch,
@@ -69,15 +68,11 @@ export default function ProjectDetail() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <RepoInfoCard project={project} stats={stats} techStack={analysis?.techStack} />
+        <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
         <ProjectDetailsCard project={project} />
       </div>
 
-      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} />
-
-      {analysis?.aiAnalysis?.dataFlow && (
-        <DataFlowDiagram dataFlow={analysis.aiAnalysis.dataFlow} />
-      )}
+      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} onRefresh={refreshAnalysis} />
 
       {/* UserJourneyTree hidden for now */}
 

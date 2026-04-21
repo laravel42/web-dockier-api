@@ -1,0 +1,15 @@
+{
+  "name": "@observability/sdk",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@observability/types": "workspace:*"
+  }
+}

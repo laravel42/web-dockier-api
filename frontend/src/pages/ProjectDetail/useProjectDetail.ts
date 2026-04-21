@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
-import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
+import { parseOwnerRepo, getRepoKey } from "../../utils/parseOwnerRepo";
+import { BADGE_WHITELIST } from "../../data/badgeWhitelist";
 import type { Project, RepoStats, DeployInfo, ProviderInfo, CommitInfo } from "./types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
 // ─── Analysis cache (survives navigation within session) ───
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 8;
 function getCachedAnalysis(key: string): RepoAnalysis | null {
   try {
     const raw = sessionStorage.getItem(`analysis:v${CACHE_VERSION}:${key}`);
@@ -89,6 +90,10 @@ export function useProjectDetail() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
 
+  // Tech badges (from getRepoBadges — shared with card list)
+  const [badges, setBadges] = useState<Array<{ name: string; category: string; confidence: number }>>([]);
+  const [allBadges, setAllBadges] = useState<Array<{ name: string; category: string; confidence: number }>>([]);
+
   // Recent commits
   const [recentCommits, setRecentCommits] = useState<CommitInfo[]>([]);
   const [commitsLoading, setCommitsLoading] = useState(false);
@@ -144,10 +149,23 @@ export function useProjectDetail() {
           if (parsed) {
             setStatsLoading(true);
             setStatsError("");
-            gitApi.getRepoStats(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined)
+            gitApi.getRepoStats(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, p.id)
               .then(setStats)
               .catch((err: any) => setStatsError(err.message || "Failed to load stats"))
               .finally(() => setStatsLoading(false));
+
+            // Fetch badges (same source as card list)
+            const repoKey = getRepoKey(p.repository);
+            if (repoKey) {
+              gitApi.getRepoBadges(repoKey, p.branch || undefined, p.connectionId)
+                .then((res) => {
+                  const all = res.badges || [];
+                  const filtered = all.filter(b => BADGE_WHITELIST.has(b.name)).slice(0, 4);
+                  setBadges(filtered);
+                  setAllBadges(all);
+                })
+                .catch(() => {});
+            }
 
             setCommitsLoading(true);
             setCommitsError("");
@@ -160,15 +178,18 @@ export function useProjectDetail() {
             setAnalysisError("");
             const cacheKey = `${parsed.owner}/${parsed.repo}:${p.branch || "main"}`;
             const cached = getCachedAnalysis(cacheKey);
-            if (cached?.aiAnalysis?.sections && cached?.aiAnalysis?.dataFlow && cached?.aiAnalysis?.userJourney) {
+            if (cached?.aiAnalysis?.sections) {
               setAnalysis(cached);
               setAnalysisLoading(false);
             } else {
-              gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, "openai")
+              gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, "openai", p.id)
                 .then((res) => { setCachedAnalysis(cacheKey, res); setAnalysis(res); })
                 .catch((err: any) => setAnalysisError(err.message || "Failed to analyze repo"))
                 .finally(() => setAnalysisLoading(false));
             }
+
+            // Trigger stack analysis in background (cached on server)
+            gitApi.getStackAnalysis(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, p.id).catch(() => {});
           }
         }
       })
@@ -192,7 +213,15 @@ export function useProjectDetail() {
 
   // Actions
   const handleDelete = async () => {
-    if (!projectId) return;
+    if (!projectId || !project) return;
+    // Clear all caches for this project
+    const parsed = parseOwnerRepo(project.repository);
+    if (parsed) {
+      const repoKey = `${parsed.owner}/${parsed.repo}`;
+      gitApi.invalidateStackCache(repoKey).catch(() => {});
+      gitApi.invalidateStatsCache(repoKey).catch(() => {});
+      gitApi.invalidateAnalysisCache(repoKey).catch(() => {});
+    }
     await projectsApi.delete(projectId);
     navigate("/projects");
   };
@@ -206,6 +235,12 @@ export function useProjectDetail() {
     try {
       const res = await gitApi.pullOrigin(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", stats?.lastCommitHash);
       setPullLog(res.log);
+      // Invalidate and re-run stack analysis + stats after pull
+      const repoKey = `${parsed.owner}/${parsed.repo}`;
+      gitApi.invalidateStackCache(repoKey, project.branch || "main")
+        .then(() => gitApi.getStackAnalysis(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, project.id))
+        .catch(() => {});
+      gitApi.invalidateStatsCache(repoKey, project.branch || "main").catch(() => {});
     } catch (err: any) {
       setPullLog((prev) => [...(prev || []), `error: ${err.message || "Pull failed"}`]);
     } finally {
@@ -233,6 +268,15 @@ export function useProjectDetail() {
 
   const handleSwitchBranch = async (branch: string) => {
     if (!project || !projectId) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (parsed) {
+      // Invalidate stack cache + stats and re-run for the new branch
+      const repoKey = `${parsed.owner}/${parsed.repo}`;
+      gitApi.invalidateStackCache(repoKey)
+        .then(() => gitApi.getStackAnalysis(project.connectionId, parsed.owner, parsed.repo, branch, project.id))
+        .catch(() => {});
+      gitApi.invalidateStatsCache(repoKey).catch(() => {});
+    }
     await projectsApi.update(projectId, { branch });
     setShowBranchModal(false);
     window.location.reload();
@@ -266,8 +310,32 @@ export function useProjectDetail() {
     allProviders,
     analysis, analysisLoading, analysisError,
     fetchLastDeploy,
+    refreshAnalysis: async () => {
+      if (!project) return;
+      const parsed = parseOwnerRepo(project.repository);
+      if (!parsed) return;
+      const repoKey = `${parsed.owner}/${parsed.repo}`;
+      const cacheKey = `${repoKey}:${project.branch || "main"}`;
+      // Clear all caches
+      try { sessionStorage.removeItem(`analysis:v${CACHE_VERSION}:${cacheKey}`); } catch {}
+      await Promise.all([
+        gitApi.invalidateAnalysisCache(repoKey, project.branch || "main").catch(() => {}),
+        gitApi.invalidateStackCache(repoKey, project.branch || "main").catch(() => {}),
+        gitApi.invalidateStatsCache(repoKey, project.branch || "main").catch(() => {}),
+      ]);
+      // Re-run analysis
+      setAnalysisLoading(true);
+      setAnalysisError("");
+      gitApi.analyzeRepo(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, "openai", project.id)
+        .then((res) => { setCachedAnalysis(cacheKey, res); setAnalysis(res); })
+        .catch((err: any) => setAnalysisError(err.message || "Failed to analyze repo"))
+        .finally(() => setAnalysisLoading(false));
+      // Re-run stack analysis in background
+      gitApi.getStackAnalysis(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, project.id).catch(() => {});
+    },
     // Stats
     stats, statsLoading, statsError,
+    badges, allBadges,
     // Recent commits
     recentCommits, commitsLoading, commitsError,
     // Branch modal

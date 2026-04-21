@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
+import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import type { Connection, Repo, Project, ProjectSourceType } from "./types";
 import { PROJECT_TEMPLATES } from "./templates";
@@ -31,9 +32,11 @@ export function useProjects() {
   const [branches, setBranches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("");
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [refreshingRepos, setRefreshingRepos] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [deployments, setDeployments] = useState<Array<{ id: string; repo: string; branch: string; status: string; createdAt: string }>>([]);
 
@@ -96,6 +99,17 @@ export function useProjects() {
     return () => { cancelled = true; };
   }, [selectedConnectionId]);
 
+  const refreshRepos = async () => {
+    if (!selectedConnectionId) return;
+    setRefreshingRepos(true);
+    try {
+      const res = await gitApi.listRepos(selectedConnectionId, true);
+      setRepos(res.repos);
+    } catch { /* ignore */ } finally {
+      setRefreshingRepos(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedConnectionId || !selectedRepo) {
       setBranches([]); setSelectedBranch("");
@@ -136,13 +150,13 @@ export function useProjects() {
     setSourceType("repository"); setSelectedTemplate("");
   };
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditing(null);
     setForm({ name: "", repository: "", branch: "" });
     resetSelections();
     setShowForm(true);
     fetchConnections();
-  };
+  }, []);
 
   // Auto-open create modal when navigated with state
   useEffect(() => {
@@ -150,10 +164,12 @@ export function useProjects() {
       openCreate();
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state]);
+  }, [location.state, location.pathname, navigate, openCreate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
+    try {
 
     if (sourceType === "template") {
       const tpl = PROJECT_TEMPLATES.find((t) => t.id === selectedTemplate);
@@ -179,22 +195,24 @@ export function useProjects() {
         await projectsApi.update(editing.id, submitData);
       } else {
         await projectsApi.create(submitData);
-        // Pre-warm analysis cache in the background
+        // Run stack analysis before returning to index (so badges show immediately)
         try {
           const repoUrl = repo?.url || form.repository;
-          const u = new URL(repoUrl);
-          const parts = u.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/").filter(Boolean);
-          if (parts.length >= 2) {
-            const owner = parts[0];
-            const repoName = parts[1];
+          const parsed = parseOwnerRepo(repoUrl);
+          if (parsed) {
             const br = selectedBranch || form.branch || "main";
-            gitApi.analyzeRepo(selectedConnectionId, owner, repoName, br).catch(() => {});
+            await gitApi.getStackAnalysis(selectedConnectionId, parsed.owner, parsed.repo, br);
+            // AI analysis in background (takes longer)
+            gitApi.analyzeRepo(selectedConnectionId, parsed.owner, parsed.repo, br, "openai").catch(() => {});
           }
-        } catch { /* pre-warm is fire-and-forget */ }
+        } catch { /* don't block on failure */ }
       }
     }
 
     setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const closeForm = () => {
@@ -226,7 +244,8 @@ export function useProjects() {
     repos, selectedRepo, setSelectedRepo,
     branches, selectedBranch, setSelectedBranch,
     loadingRepos, loadingBranches, loadingConnections,
-    error,
+    refreshRepos, refreshingRepos,
+    error, submitting,
     openCreate, closeForm, handleSubmit,
     confirmDelete,
     // derived
