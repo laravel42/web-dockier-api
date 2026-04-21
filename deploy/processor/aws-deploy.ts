@@ -1,4 +1,4 @@
-import { db, DeployCallbackUrl, type DeployEvent } from "../shared";
+import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
 import { git_integration } from "~encore/clients";
 import { appendLog, ts, generateAwsBuildspec } from "./helpers";
 
@@ -80,7 +80,7 @@ export async function handleAwsDeploy(
   const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
 
   let callbackUrl = "";
-  try { callbackUrl = DeployCallbackUrl(); } catch {}
+  try { callbackUrl = getDeployCallbackUrl(); } catch { /* ignore */ }
 
   await sns.send(new PublishCommand({
     TopicArn: buildRequestTopicArn, Subject: "build-request",

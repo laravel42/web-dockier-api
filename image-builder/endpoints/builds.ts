@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { git_integration } from "~encore/clients";
 import { readFileSync } from "node:fs";
 import {
-  db, AwsAccessKeyId, AwsSecretAccessKey, getAwsRegion, getCodeBuildProject, getCallbackUrl,
+  db, getAwsAccessKeyId, getAwsSecretAccessKey, getAwsRegion, getCodeBuildProject, getCallbackUrl,
   deriveImageRepo, getAwsAccountId, rowToBuild, refreshBuildStatus, buildToStatusResponse,
   type StartBuildParams, type BuildRecord, type BuildStatusResponse, type BuildLogsResponse,
 } from "../shared";
@@ -26,8 +26,8 @@ export const startBuild = api(
     const imageRepo = params.imageRepo || deriveImageRepo(params.sourceRepo);
     const tags = params.tags || [];
 
-    const accessKeyId = AwsAccessKeyId();
-    const secretAccessKey = AwsSecretAccessKey();
+    const accessKeyId = getAwsAccessKeyId();
+    const secretAccessKey = getAwsSecretAccessKey();
     const region = getAwsRegion();
     const codebuildProject = getCodeBuildProject();
 
@@ -146,7 +146,7 @@ export const getBuildStatus = api(
         const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
         const cb = new CodeBuildClient({
           region: getAwsRegion(),
-          credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+          credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
         });
         const listResult = await cb.send(new ListBuildsForProjectCommand({
           projectName: getCodeBuildProject(),
@@ -192,7 +192,7 @@ export const getBuildLogs = api(
         const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
         const cb = new CodeBuildClient({
           region: getAwsRegion(),
-          credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+          credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
         });
         const listResult = await cb.send(new ListBuildsForProjectCommand({
           projectName: getCodeBuildProject(),
@@ -223,7 +223,7 @@ export const getBuildLogs = api(
       const { CloudWatchLogsClient, GetLogEventsCommand } = await import("@aws-sdk/client-cloudwatch-logs");
       const cwl = new CloudWatchLogsClient({
         region: getAwsRegion(),
-        credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+        credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
       });
 
       const logStreamName = build.codebuildId.includes(":")
@@ -299,7 +299,7 @@ export const cancelBuild = api(
     if (build.codebuildId) {
       try {
         const { CodeBuildClient, StopBuildCommand } = await import("@aws-sdk/client-codebuild");
-        const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() } });
+        const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() } });
         await cb.send(new StopBuildCommand({ id: build.codebuildId }));
       } catch { /* best-effort */ }
     }

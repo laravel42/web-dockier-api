@@ -2,7 +2,7 @@
 
 import { api, APIError } from "encore.dev/api";
 import {
-  db, AwsAccessKeyId, AwsSecretAccessKey, getAwsRegion,
+  db, getAwsAccessKeyId, getAwsSecretAccessKey, getAwsRegion,
   rowToBuild,
 } from "../shared";
 
@@ -30,7 +30,7 @@ export const getDeployStatus = api(
       const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
       const cfn = new CloudFormationClient({
         region: getAwsRegion(),
-        credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+        credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
       });
       const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
       const stack = result.Stacks?.[0];

@@ -33,22 +33,22 @@ export function getBuildspecContent(): string {
   throw new Error(`buildspec.yml not found in any of: ${candidates.join(", ")}`);
 }
 
-// ─── Secrets ───
+// ─── Secrets (optional — read from env vars) ───
 
-export const AwsAccessKeyId = secret("ImageBuilderAwsAccessKeyId");
-export const AwsSecretAccessKey = secret("ImageBuilderAwsSecretAccessKey");
-export const AwsRegion = secret("ImageBuilderAwsRegion");
-export const CodeBuildProjectName = secret("ImageBuilderCodeBuildProject");
-export const CallbackUrlSecret = secret("ImageBuilderCallbackUrl");
-
+export function getgetAwsAccessKeyId(): string {
+  try { return process.env.ImageBuilderAwsAccessKeyId || ""; } catch { return ""; }
+}
+export function getgetAwsSecretAccessKey(): string {
+  try { return process.env.ImageBuilderAwsSecretAccessKey || ""; } catch { return ""; }
+}
 export function getAwsRegion(): string {
-  try { return AwsRegion() || "us-east-1"; } catch { return "us-east-1"; }
+  try { return process.env.ImageBuilderAwsRegion || "us-east-1"; } catch { return "us-east-1"; }
 }
 export function getCodeBuildProject(): string {
-  try { return CodeBuildProjectName() || "image-builder"; } catch { return "image-builder"; }
+  try { return process.env.ImageBuilderCodeBuildProject || "image-builder"; } catch { return "image-builder"; }
 }
 export function getCallbackUrl(): string {
-  try { return CallbackUrlSecret() || ""; } catch { return ""; }
+  try { return process.env.ImageBuilderCallbackUrl || ""; } catch { return ""; }
 }
 
 // ─── Database ───
@@ -186,7 +186,7 @@ export function safeJsonParse<T>(val: string, fallback: T): T {
 
 export async function refreshBuildStatus(build: BuildRecord): Promise<BuildRecord> {
   const { CodeBuildClient, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
-  const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() } });
+  const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() } });
   const result = await cb.send(new BatchGetBuildsCommand({ ids: [build.codebuildId] }));
   const cbBuild = result.builds?.[0];
   if (!cbBuild) return build;
@@ -205,7 +205,7 @@ export async function refreshBuildStatus(build: BuildRecord): Promise<BuildRecor
       imageUri = imageVar.value;
     } else {
       try {
-        const accountId = await getAwsAccountId(AwsAccessKeyId(), AwsSecretAccessKey(), getAwsRegion());
+        const accountId = await getAwsAccountId(getAwsAccessKeyId(), getAwsSecretAccessKey(), getAwsRegion());
         imageUri = `${accountId}.dkr.ecr.${getAwsRegion()}.amazonaws.com/${build.imageRepo}:latest`;
       } catch { /* best effort */ }
     }

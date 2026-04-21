@@ -10,14 +10,6 @@ import { db, initDb } from "../lib/db";
 // Secrets (with local dev fallbacks)
 const DatabaseUrl = secret("DatabaseUrl");
 const JwtSecret = secret("JwtSecret");
-const GoogleClientId = secret("GoogleClientId");
-const GoogleClientSecret = secret("GoogleClientSecret");
-const GitHubClientId = secret("GitHubClientId");
-const GitHubClientSecret = secret("GitHubClientSecret");
-const GitLabClientId = secret("GitLabClientId");
-const GitLabClientSecret = secret("GitLabClientSecret");
-const BitbucketClientId = secret("BitbucketClientId");
-const BitbucketClientSecret = secret("BitbucketClientSecret");
 
 initDb(DatabaseUrl());
 
@@ -56,13 +48,6 @@ interface Verify2FAParams {
 interface Setup2FAResponse {
   secret: string;
   qrCodeUrl: string;
-}
-
-interface SocialLoginParams {
-  provider: "google" | "github" | "gitlab" | "bitbucket";
-  code: string;
-  redirectUri: string;
-  appId: string;
 }
 
 export interface AuthData {
@@ -226,130 +211,6 @@ export const verify2FA = api(
     if (!result.valid) throw APIError.unauthenticated("Invalid 2FA token");
 
     return { token: generateToken(user.id, user.email, user.app_id), userId: user.id };
-  }
-);
-
-// ─── Social Login ───
-
-export const socialLogin = api(
-  { method: "POST", path: "/auth/social", expose: true },
-  async (params: SocialLoginParams): Promise<AuthResponse> => {
-    let email: string;
-    let name: string;
-    let providerId: string;
-
-    if (params.provider === "github") {
-      const tokenRes = await fetch(
-        "https://github.com/login/oauth/access_token",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            code: params.code,
-            client_id: GitHubClientId(),
-            client_secret: GitHubClientSecret(),
-            redirect_uri: params.redirectUri,
-          }),
-        }
-      );
-      const tokenData = (await tokenRes.json()) as { access_token: string };
-
-      const userRes = await fetch("https://api.github.com/user", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const userData = (await userRes.json()) as {
-        id: number; email: string; name: string;
-      };
-
-      const emailRes = await fetch("https://api.github.com/user/emails", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const emails = (await emailRes.json()) as { email: string; primary: boolean }[];
-      email = userData.email || emails.find((e) => e.primary)?.email || "";
-      name = userData.name || "";
-      providerId = String(userData.id);
-    } else if (params.provider === "gitlab") {
-      const tokenRes = await fetch("https://gitlab.com/oauth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code: params.code,
-          client_id: GitLabClientId(),
-          client_secret: GitLabClientSecret(),
-          redirect_uri: params.redirectUri,
-          grant_type: "authorization_code",
-        }),
-      });
-      const tokenData = (await tokenRes.json()) as { access_token: string };
-
-      const userRes = await fetch("https://gitlab.com/api/v4/user", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const userData = (await userRes.json()) as {
-        id: number; email: string; name: string; username: string;
-      };
-      email = userData.email;
-      name = userData.name || userData.username || "";
-      providerId = String(userData.id);
-    } else if (params.provider === "bitbucket") {
-      const tokenRes = await fetch("https://bitbucket.org/site/oauth2/access_token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Basic ${Buffer.from(`${BitbucketClientId()}:${BitbucketClientSecret()}`).toString("base64")}`,
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code: params.code,
-          redirect_uri: params.redirectUri,
-        }).toString(),
-      });
-      const tokenData = (await tokenRes.json()) as { access_token: string };
-
-      const userRes = await fetch("https://api.bitbucket.org/2.0/user", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const userData = (await userRes.json()) as {
-        uuid: string; display_name: string; username: string;
-      };
-
-      const emailRes = await fetch("https://api.bitbucket.org/2.0/user/emails", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const emailData = (await emailRes.json()) as {
-        values: Array<{ email: string; is_primary: boolean; is_confirmed: boolean }>;
-      };
-      email = emailData.values?.find((e) => e.is_primary)?.email || "";
-      name = userData.display_name || userData.username || "";
-      providerId = userData.uuid;
-    } else {
-      throw APIError.invalidArgument(`Unsupported provider: ${params.provider}`);
-    }
-
-    if (!email) throw APIError.invalidArgument("Could not retrieve email");
-
-    let user = await db.queryRow<{ id: string; app_id: string }>`
-      SELECT id, app_id FROM users WHERE email = ${email}`;
-
-    let userId: string;
-    let appId: string;
-    if (!user) {
-      userId = uuidv4();
-      appId = params.appId;
-      await db.exec`
-        INSERT INTO users (id, email, name, app_id, created_at)
-        VALUES (${userId}, ${email}, ${name}, ${appId}, NOW())`;
-    } else {
-      userId = user.id;
-      appId = user.app_id;
-    }
-
-    await db.exec`
-      INSERT INTO social_connections (id, user_id, provider, provider_id, app_id, created_at)
-      VALUES (${uuidv4()}, ${userId}, ${params.provider}, ${providerId}, ${appId}, NOW())
-      ON CONFLICT (user_id, provider) DO UPDATE SET provider_id = ${providerId}`;
-
-    return { token: generateToken(userId, email, appId), userId };
   }
 );
 

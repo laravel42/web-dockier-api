@@ -7,7 +7,9 @@ initDb(DatabaseUrl());
 
 export const db = _db;
 
-export const DeployCallbackUrl = secret("DeployCallbackUrl");
+export function getDeployCallbackUrl(): string {
+  try { return process.env.DeployCallbackUrl || ""; } catch { return ""; }
+}
 
 // ─── Provider Registry ───
 
