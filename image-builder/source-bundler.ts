@@ -116,7 +116,8 @@ for sf in sorted(pathlib.Path(".").rglob("settings.py")):
       const dockerignore = [
         "node_modules", ".next", ".git", ".gitignore",
         "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store",
-        "vendor", ".env", ".env.*", "*.log",
+        "vendor", ".env", "*.log",
+        "!.env.example",
         "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv",
         "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor",
       ].join("\n");

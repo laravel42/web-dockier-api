@@ -6,8 +6,9 @@ import { v4 as uuidv4 } from "uuid";
 import { git_integration } from "~encore/clients";
 import { readFileSync } from "node:fs";
 import {
-  db, getAwsAccessKeyId, getAwsSecretAccessKey, getAwsRegion, getCodeBuildProject, getCallbackUrl,
+  db, getCodeBuildProject, getCallbackUrl,
   deriveImageRepo, getAwsAccountId, rowToBuild, refreshBuildStatus, buildToStatusResponse,
+  resolveAwsCredentials,
   type StartBuildParams, type BuildRecord, type BuildStatusResponse, type BuildLogsResponse,
 } from "../shared";
 import { bundleAndUploadSource } from "../source-bundler";
@@ -26,9 +27,8 @@ export const startBuild = api(
     const imageRepo = params.imageRepo || deriveImageRepo(params.sourceRepo);
     const tags = params.tags || [];
 
-    const accessKeyId = getAwsAccessKeyId();
-    const secretAccessKey = getAwsSecretAccessKey();
-    const region = getAwsRegion();
+    // Prefer user-provided provider credentials over global env vars
+    const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(params.providerId || "");
     const codebuildProject = getCodeBuildProject();
 
     if (!accessKeyId || !secretAccessKey) {
@@ -50,10 +50,14 @@ export const startBuild = api(
 
     await db.exec`
       INSERT INTO builds (id, app_id, project_id, source_repo, source_ref, commit_sha,
-        dockerfile_path, build_context, image_repo, cache_repo_uri, status, tags, created_at, updated_at)
+        dockerfile_path, build_context, image_repo, cache_repo_uri, status, tags,
+        provider_id,
+        created_at, updated_at)
       VALUES (${id}, ${authData.appId}, ${params.projectId || ""}, ${params.sourceRepo},
         ${sourceRef}, ${params.commitSha || ""}, ${dockerfilePath}, ${buildContext},
-        ${imageRepo}, ${`${ecrBase}/${cacheRepoName}`}, 'pending', ${JSON.stringify(tags)}, NOW(), NOW())`;
+        ${imageRepo}, ${`${ecrBase}/${cacheRepoName}`}, 'pending', ${JSON.stringify(tags)},
+        ${params.providerId || ""},
+        NOW(), NOW())`;
 
     try {
       // 0. Get git token for private repo access
@@ -142,29 +146,33 @@ export const getBuildStatus = api(
 
     // If codebuildId is missing but build was submitted, try to find it
     if (!build.codebuildId && (build.status === "submitted" || build.status === "pending")) {
-      try {
-        const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
-        const cb = new CodeBuildClient({
-          region: getAwsRegion(),
-          credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
-        });
-        const listResult = await cb.send(new ListBuildsForProjectCommand({
-          projectName: getCodeBuildProject(),
-          sortOrder: "DESCENDING",
-        }));
-        const buildIds = (listResult.ids || []).slice(0, 10);
-        if (buildIds.length > 0) {
-          const batchResult = await cb.send(new BatchGetBuildsCommand({ ids: buildIds }));
-          const match = (batchResult.builds || []).find(b => {
-            const loc = b.source?.location || "";
-            return loc.includes(`${params.buildId}.zip`);
+      const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(build.providerId);
+
+      if (accessKeyId && secretAccessKey) {
+        try {
+          const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
+          const cb = new CodeBuildClient({
+            region,
+            credentials: { accessKeyId, secretAccessKey },
           });
-          if (match?.id) {
-            build.codebuildId = match.id;
-            await db.exec`UPDATE builds SET codebuild_id = ${match.id}, updated_at = NOW() WHERE id = ${params.buildId}`;
+          const listResult = await cb.send(new ListBuildsForProjectCommand({
+            projectName: getCodeBuildProject(),
+            sortOrder: "DESCENDING",
+          }));
+          const buildIds = (listResult.ids || []).slice(0, 10);
+          if (buildIds.length > 0) {
+            const batchResult = await cb.send(new BatchGetBuildsCommand({ ids: buildIds }));
+            const match = (batchResult.builds || []).find(b => {
+              const loc = b.source?.location || "";
+              return loc.includes(`${params.buildId}.zip`);
+            });
+            if (match?.id) {
+              build.codebuildId = match.id;
+              await db.exec`UPDATE builds SET codebuild_id = ${match.id}, updated_at = NOW() WHERE id = ${params.buildId}`;
+            }
           }
-        }
-      } catch { /* best effort */ }
+        } catch { /* best effort */ }
+      }
     }
 
     if (build.codebuildId && (build.status === "submitted" || build.status === "in_progress")) {
@@ -188,30 +196,34 @@ export const getBuildLogs = api(
 
     if (!build.codebuildId) {
       // Try to find the CodeBuild build ID by listing recent builds
-      try {
-        const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
-        const cb = new CodeBuildClient({
-          region: getAwsRegion(),
-          credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
-        });
-        const listResult = await cb.send(new ListBuildsForProjectCommand({
-          projectName: getCodeBuildProject(),
-          sortOrder: "DESCENDING",
-        }));
-        const buildIds = (listResult.ids || []).slice(0, 10);
-        if (buildIds.length > 0) {
-          const batchResult = await cb.send(new BatchGetBuildsCommand({ ids: buildIds }));
-          const match = (batchResult.builds || []).find(b => {
-            const loc = b.source?.location || "";
-            return loc.includes(`${params.buildId}.zip`);
+      const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(build.providerId);
+
+      if (accessKeyId && secretAccessKey) {
+        try {
+          const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
+          const cb = new CodeBuildClient({
+            region,
+            credentials: { accessKeyId, secretAccessKey },
           });
-          if (match?.id) {
-            await db.exec`UPDATE builds SET codebuild_id = ${match.id}, updated_at = NOW() WHERE id = ${params.buildId}`;
-            build.codebuildId = match.id;
+          const listResult = await cb.send(new ListBuildsForProjectCommand({
+            projectName: getCodeBuildProject(),
+            sortOrder: "DESCENDING",
+          }));
+          const buildIds = (listResult.ids || []).slice(0, 10);
+          if (buildIds.length > 0) {
+            const batchResult = await cb.send(new BatchGetBuildsCommand({ ids: buildIds }));
+            const match = (batchResult.builds || []).find(b => {
+              const loc = b.source?.location || "";
+              return loc.includes(`${params.buildId}.zip`);
+            });
+            if (match?.id) {
+              await db.exec`UPDATE builds SET codebuild_id = ${match.id}, updated_at = NOW() WHERE id = ${params.buildId}`;
+              build.codebuildId = match.id;
+            }
           }
+        } catch (e: any) {
+          console.warn(`Failed to look up CodeBuild ID: ${e.message}`);
         }
-      } catch (e: any) {
-        console.warn(`Failed to look up CodeBuild ID: ${e.message}`);
       }
     }
 
@@ -221,9 +233,10 @@ export const getBuildLogs = api(
 
     try {
       const { CloudWatchLogsClient, GetLogEventsCommand } = await import("@aws-sdk/client-cloudwatch-logs");
+      const { accessKeyId: logAccessKeyId, secretAccessKey: logSecretAccessKey, region: logRegion } = await resolveAwsCredentials(build.providerId);
       const cwl = new CloudWatchLogsClient({
-        region: getAwsRegion(),
-        credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
+        region: logRegion,
+        credentials: { accessKeyId: logAccessKeyId, secretAccessKey: logSecretAccessKey },
       });
 
       const logStreamName = build.codebuildId.includes(":")
@@ -299,7 +312,8 @@ export const cancelBuild = api(
     if (build.codebuildId) {
       try {
         const { CodeBuildClient, StopBuildCommand } = await import("@aws-sdk/client-codebuild");
-        const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() } });
+        const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(build.providerId);
+        const cb = new CodeBuildClient({ region, credentials: { accessKeyId, secretAccessKey } });
         await cb.send(new StopBuildCommand({ id: build.codebuildId }));
       } catch { /* best-effort */ }
     }

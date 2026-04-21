@@ -12,6 +12,7 @@ export const imageBuilderApi = {
     projectId?: string;
     gitConnectionId?: string;
     deployTarget?: "ecs" | "ec2" | "s3";
+    providerId?: string;
     deployParams?: {
       appName?: string;
       containerPort?: number;
