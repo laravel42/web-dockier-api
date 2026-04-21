@@ -33,7 +33,6 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
 
   useEffect(() => {
     if (open) {
-      setSearch("");
       updatePos();
       setTimeout(() => inputRef.current?.focus(), 0);
     } else {
@@ -65,8 +64,8 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => { if (!open) updatePos(); setOpen(!open); }}
-        className="w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
+        onClick={() => { if (!open) { setSearch(""); updatePos(); } setOpen(!open); }}
+        className="w-full h-11 px-3 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
       >
         {value ? (
           <>
@@ -84,7 +83,7 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
       {open && pos && createPortal(
         <div
           ref={dropdownRef}
-          className="bg-card border border-border rounded-[var(--radius-input)] shadow-lg max-h-64 flex flex-col"
+          className="bg-card border border-border rounded-(--radius-input) shadow-lg max-h-64 flex flex-col"
           style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
         >
           <div className="p-2 border-b border-border">

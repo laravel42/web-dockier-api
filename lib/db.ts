@@ -11,7 +11,10 @@ export function initDb(url: string) {
 function getPool(): pg.Pool {
   if (!pool) {
     if (!_dbUrl) throw new Error("Database not initialized. Call initDb(DatabaseUrl()) from a service first.");
-    pool = new pg.Pool({ connectionString: _dbUrl });
+    pool = new pg.Pool({
+      connectionString: _dbUrl,
+      ssl: _dbUrl.includes("neon") || _dbUrl.includes("prisma") || _dbUrl.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+    });
   }
   return pool;
 }

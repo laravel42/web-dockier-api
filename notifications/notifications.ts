@@ -56,7 +56,7 @@ export const notificationTopic = new Topic<NotificationEvent>("notifications", {
 // ─── Channel Management ───
 
 export const addChannel = api(
-  { method: "POST", path: "/notifications/channels", auth: true },
+  { expose: true, method: "POST", path: "/notifications/channels", auth: true },
   async (params: {
     type: "email" | "slack" | "webhook" | "in_app";
     config: Record<string, string>;
@@ -78,7 +78,7 @@ export const addChannel = api(
 );
 
 export const listChannels = api(
-  { method: "GET", path: "/notifications/channels", auth: true },
+  { expose: true, method: "GET", path: "/notifications/channels", auth: true },
   async (): Promise<{ channels: NotificationChannel[] }> => {
     const authData = getAuthData();
     if (!authData) throw APIError.unauthenticated("Not authenticated");
@@ -101,7 +101,7 @@ export const listChannels = api(
 );
 
 export const toggleChannel = api(
-  { method: "PUT", path: "/notifications/channels/:channelId/toggle", auth: true },
+  { expose: true, method: "PUT", path: "/notifications/channels/:channelId/toggle", auth: true },
   async (params: { channelId: string; enabled: boolean }): Promise<{ success: boolean }> => {
     await db.exec`UPDATE notification_channels SET enabled = ${params.enabled} WHERE id = ${params.channelId}`;
     return { success: true };
@@ -109,7 +109,7 @@ export const toggleChannel = api(
 );
 
 export const deleteChannel = api(
-  { method: "DELETE", path: "/notifications/channels/:channelId", auth: true },
+  { expose: true, method: "DELETE", path: "/notifications/channels/:channelId", auth: true },
   async (params: { channelId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM notification_channels WHERE id = ${params.channelId}`;
     return { success: true };
@@ -119,7 +119,7 @@ export const deleteChannel = api(
 // ─── Send Notification ───
 
 export const send = api(
-  { method: "POST", path: "/notifications/send", auth: true },
+  { expose: true, method: "POST", path: "/notifications/send", auth: true },
   async (params: SendNotificationParams): Promise<{ sent: number }> => {
     const authData = getAuthData();
     if (!authData) throw APIError.unauthenticated("Not authenticated");
@@ -155,7 +155,7 @@ export const send = api(
 // ─── List In-App Notifications ───
 
 export const listNotifications = api(
-  { method: "GET", path: "/notifications", auth: true },
+  { expose: true, method: "GET", path: "/notifications", auth: true },
   async (params: { unreadOnly?: boolean }): Promise<{ notifications: Notification[] }> => {
     const authData = getAuthData();
     if (!authData) throw APIError.unauthenticated("Not authenticated");
@@ -183,7 +183,7 @@ export const listNotifications = api(
 );
 
 export const markRead = api(
-  { method: "PUT", path: "/notifications/:notificationId/read", auth: true },
+  { expose: true, method: "PUT", path: "/notifications/:notificationId/read", auth: true },
   async (params: { notificationId: string }): Promise<{ success: boolean }> => {
     await db.exec`UPDATE notifications SET read = true WHERE id = ${params.notificationId}`;
     return { success: true };

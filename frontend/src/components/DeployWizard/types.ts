@@ -1,4 +1,5 @@
-export type { Provider } from "../../types";
+import type { Provider } from "../../types";
+export type { Provider };
 
 export interface DetectedService {
   type: string;
@@ -72,6 +73,33 @@ export interface RepoAnalysis {
   hasDocker: boolean;
   hasCi: boolean;
   aiAnalysis?: AIAnalysis;
+  sensitiveData?: SensitiveField[];
+  dependencies?: Dependency[];
+}
+
+export interface SensitiveField {
+  entity: string;
+  field: string;
+  sensitivity: "personal" | "sensitive" | "secret";
+  reason: string;
+}
+
+export interface Dependency {
+  name: string;
+  version: string;
+  type: "production" | "dev";
+  ecosystem: "npm" | "composer" | "pip" | "gem" | "go" | "cargo";
+  repoUrl: string;
+  latestVersion?: string;
+  status: "active" | "outdated" | "deprecated" | "unknown";
+  vulnerabilities: Array<{
+    id: string;
+    severity: "critical" | "high" | "medium" | "low";
+    title: string;
+    details: string;
+    aliases: string[];
+    url: string;
+  }>;
 }
 
 export interface WizardState {

@@ -47,34 +47,35 @@ export default function KpiDashboard({ stats, statsLoading, statsError }: Props)
         ))}
       </div>
       {/* Languages breakdown */}
-      {stats.languages && Object.keys(stats.languages).length > 0 && (
+      {stats.languages && Object.keys(stats.languages).length > 0 && (() => {
+        const langs = Object.entries(stats.languages)
+          .filter(([, pct]) => pct >= 0.1)
+          .sort(([, a], [, b]) => b - a);
+        return (
         <div className={`${cardCls} p-4 mt-3`}>
           <p className="text-xs text-text-muted mb-3">Languages</p>
           <div className="flex h-2.5 rounded-full overflow-hidden mb-3">
-            {Object.entries(stats.languages)
-              .sort(([, a], [, b]) => b - a)
-              .map(([lang, pct], i) => (
+            {langs.map(([lang, pct], i) => (
                 <div
                   key={lang}
                   className={`${langColors[i % langColors.length]}`}
-                  style={{ width: `${Math.max(pct, 1)}%` }}
+                  style={{ width: `${Math.max(pct, 0.5)}%` }}
                   title={`${lang}: ${pct}%`}
                 />
               ))}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {Object.entries(stats.languages)
-              .sort(([, a], [, b]) => b - a)
-              .map(([lang, pct], i) => (
+            {langs.map(([lang, pct], i) => (
                 <div key={lang} className="flex items-center gap-1.5 text-xs">
                   <span className={`w-2.5 h-2.5 rounded-full ${langColors[i % langColors.length]}`} />
                   <span className="text-text-secondary">{lang}</span>
-                  <span className="text-text-muted">{pct}%</span>
+                  <span className="text-text-muted">{pct < 1 ? `<1` : Math.round(pct)}%</span>
                 </div>
               ))}
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { getAuthData } from "~encore/auth";
 import { db } from "../shared";
 
 export const listSshKeys = api(
-  { method: "GET", path: "/deploy/ssh-keys", auth: true },
+  { expose: true, method: "GET", path: "/deploy/ssh-keys", auth: true },
   async (): Promise<{ keys: Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }> }> => {
     const authData = getAuthData()!;
     const rows = db.query<{ id: string; label: string; public_key: string; fingerprint: string; created_at: Date }>`
@@ -18,7 +18,7 @@ export const listSshKeys = api(
 );
 
 export const addSshKey = api(
-  { method: "POST", path: "/deploy/ssh-keys", auth: true },
+  { expose: true, method: "POST", path: "/deploy/ssh-keys", auth: true },
   async (params: { label: string; publicKey: string }): Promise<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -34,7 +34,7 @@ export const addSshKey = api(
 );
 
 export const deleteSshKey = api(
-  { method: "DELETE", path: "/deploy/ssh-keys/:keyId", auth: true },
+  { expose: true, method: "DELETE", path: "/deploy/ssh-keys/:keyId", auth: true },
   async (params: { keyId: string }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
     await db.exec`DELETE FROM ssh_keys WHERE id = ${params.keyId} AND app_id = ${authData.appId}`;

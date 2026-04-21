@@ -4,6 +4,7 @@ import SourceControlBadge from "../../../components/SourceControlBadge";
 
 interface Props {
   project: Project;
+  lastCommitDate?: string;
 }
 
 const templateLabels: Record<string, string> = {
@@ -18,7 +19,7 @@ function detectProvider(repo: string): string {
   return "git";
 }
 
-export default function ProjectDetailsCard({ project }: Props) {
+export default function ProjectDetailsCard({ project, lastCommitDate }: Props) {
   const isTemplate = project.sourceType === "template";
 
   return (
@@ -27,7 +28,7 @@ export default function ProjectDetailsCard({ project }: Props) {
       <div className="space-y-3">
         <div>
           <p className="text-xs">Project ID</p>
-          <p className="text-sm text-text-secondary font-mono mt-0.5">{project.id}</p>
+          <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-secondary-50 border border-border text-[11px] text-text-muted font-mono select-all">{project.id}</span>
         </div>
         <div>
           <p className="text-xs">Source</p>
@@ -48,8 +49,14 @@ export default function ProjectDetailsCard({ project }: Props) {
         </div>
         <div>
           <p className="text-xs">Created</p>
-          <p className="text-sm text-text-secondary mt-0.5">{new Date(project.createdAt).toLocaleString()}</p>
+          <p className="text-xs text-text-secondary mt-0.5">{new Date(project.createdAt).toLocaleString()}</p>
         </div>
+        {lastCommitDate && (
+          <div>
+            <p className="text-xs">Last Commit</p>
+            <p className="text-xs text-text-secondary mt-0.5">{new Date(lastCommitDate).toLocaleString()}</p>
+          </div>
+        )}
       </div>
     </div>
   );

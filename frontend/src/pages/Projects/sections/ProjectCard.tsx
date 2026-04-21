@@ -28,7 +28,7 @@ export default function ProjectCard({ project: p, deployments, badges, onSelect 
         .filter((d) => d.repo === repoKey && (!p.branch || d.branch === p.branch))
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
     : null;
-  const scProvider = p.repository?.includes("gitlab") ? "gitlab" : "github";
+  const scProvider = p.repository?.includes("gitlab") ? "gitlab" : p.repository?.includes("bitbucket") ? "bitbucket" : "github";
 
   return (
     <div

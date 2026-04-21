@@ -20,7 +20,7 @@ interface Project {
 }
 
 export const createProject = api(
-  { method: "POST", path: "/projects", auth: true },
+  { expose: true, method: "POST", path: "/projects", auth: true },
   async (params: { name: string; repository: string; branch: string; connectionId: string; platform?: string; sourceType?: string; template?: string }): Promise<Project> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -34,7 +34,7 @@ export const createProject = api(
 );
 
 export const getProject = api(
-  { method: "GET", path: "/projects/:projectId", auth: true },
+  { expose: true, method: "GET", path: "/projects/:projectId", auth: true },
   async (params: { projectId: string }): Promise<Project> => {
     const row = await db.queryRow<{
       id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; source_type: string; template: string; created_at: Date;
@@ -45,7 +45,7 @@ export const getProject = api(
 );
 
 export const listProjects = api(
-  { method: "GET", path: "/projects", auth: true },
+  { expose: true, method: "GET", path: "/projects", auth: true },
   async (): Promise<{ projects: Project[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{
@@ -60,7 +60,7 @@ export const listProjects = api(
 );
 
 export const updateProject = api(
-  { method: "PUT", path: "/projects/:projectId", auth: true },
+  { expose: true, method: "PUT", path: "/projects/:projectId", auth: true },
   async (params: { projectId: string; name?: string; repository?: string; branch?: string; connectionId?: string; platform?: string; sourceType?: string; template?: string }): Promise<Project> => {
     const existing = await db.queryRow<{ id: string }>`SELECT id FROM projects WHERE id = ${params.projectId}`;
     if (!existing) throw APIError.notFound("Project not found");
@@ -77,7 +77,7 @@ export const updateProject = api(
 );
 
 export const deleteProject = api(
-  { method: "DELETE", path: "/projects/:projectId", auth: true },
+  { expose: true, method: "DELETE", path: "/projects/:projectId", auth: true },
   async (params: { projectId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM projects WHERE id = ${params.projectId}`;
     return { success: true };

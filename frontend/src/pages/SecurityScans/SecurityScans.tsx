@@ -11,7 +11,6 @@ export default function SecurityScans() {
     loading,
     projects,
     grouped,
-    projectLangs,
     sortedProjectIds,
   } = useSecurityScans();
 
@@ -67,7 +66,6 @@ export default function SecurityScans() {
               project={projects[projectId]}
               projectId={projectId}
               scans={projectScans}
-              badges={projectLangs[projectId]}
               onSelect={(scanId) => navigate(`/security/${scanId}`)}
             />
           );

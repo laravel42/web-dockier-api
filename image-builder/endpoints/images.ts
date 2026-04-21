@@ -9,7 +9,7 @@ import {
 // ─── API: Get Image for Revision ───
 
 export const getImageForRevision = api(
-  { method: "GET", path: "/image-builder/images/:revision", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/images/:revision", auth: true },
   async (params: { revision: string }): Promise<ImageForRevisionResponse> => {
     const row = await db.queryRow`
       SELECT * FROM builds

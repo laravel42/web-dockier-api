@@ -1,18 +1,11 @@
 import { useState } from "react";
 import type { AIAnalysis } from "../../../components/DeployWizard/types";
 import { cardCls } from "../../../utils/styles";
+import SensitivityBadge, { getSensitivityStyle } from "../../../components/badges/SensitivityBadge";
 
 interface Props {
   dataFlow: NonNullable<AIAnalysis["dataFlow"]>;
 }
-
-const SENSITIVITY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  public:    { bg: "bg-emerald-100", text: "text-emerald-700", label: "Public" },
-  internal:  { bg: "bg-blue-100",    text: "text-blue-700",    label: "Internal" },
-  personal:  { bg: "bg-amber-100",   text: "text-amber-700",   label: "Personal" },
-  sensitive: { bg: "bg-orange-100",  text: "text-orange-700",  label: "Sensitive" },
-  secret:    { bg: "bg-red-100",     text: "text-red-700",     label: "Secret" },
-};
 
 export default function DataFlowDiagram({ dataFlow }: Props) {
   const entities = (dataFlow.entities || []).filter(e => e.fields?.length > 0);
@@ -28,13 +21,14 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
 
   const toggle = (i: number) => setExpanded(prev => {
     const next = new Set(prev);
-    next.has(i) ? next.delete(i) : next.add(i);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
     return next;
   });
 
   return (
     <div className={`${cardCls} mb-6 overflow-hidden`}>
-      <div className="h-1 bg-gradient-to-r from-amber-500 via-orange-400 to-rose-400" />
+      <div className="h-1 bg-linear-to-r from-amber-500 via-orange-400 to-rose-400" />
       <div className="px-5 py-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
@@ -53,7 +47,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
               const order = ["public", "internal", "personal", "sensitive", "secret"];
               return order.indexOf(a) - order.indexOf(b);
             }).map(([key, count]) => {
-              const s = SENSITIVITY_STYLES[key] || SENSITIVITY_STYLES.internal;
+              const s = getSensitivityStyle(key);
               return (
                 <span key={key} className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
                   {s.label} ({count})
@@ -85,16 +79,13 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
                 </button>
                 {isOpen && entity.fields?.length > 0 && (
                   <div className="divide-y divide-border">
-                    {entity.fields.map((field, j) => {
-                      const s = SENSITIVITY_STYLES[field.sensitivity] || SENSITIVITY_STYLES.internal;
-                      return (
+                    {entity.fields.map((field, j) => (
                         <div key={j} className="flex items-center px-3 py-1.5 gap-3 hover:bg-secondary-50/50 transition-colors">
                           <span className="text-xs font-mono text-text w-1/3 truncate" title={field.name}>{field.name}</span>
                           <span className="text-[11px] text-text-muted w-1/4 truncate">{field.type}</span>
-                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ml-auto shrink-0 ${s.bg} ${s.text}`}>{s.label}</span>
+                          <span className="ml-auto"><SensitivityBadge level={field.sensitivity} /></span>
                         </div>
-                      );
-                    })}
+                    ))}
                   </div>
                 )}
               </div>

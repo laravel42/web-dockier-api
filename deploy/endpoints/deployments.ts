@@ -7,7 +7,7 @@ import { runCmd } from "../processor/run-cmd";
 import { setupPulumiWorkspace } from "../processor/pulumi-workspace";
 
 export const createDeployment = api(
-  { method: "POST", path: "/deploy/deployments", auth: true },
+  { expose: true, method: "POST", path: "/deploy/deployments", auth: true },
   async (params: {
     providerId: string;
     gitConnectionId: string;
@@ -63,7 +63,7 @@ export const createDeployment = api(
 );
 
 export const listDeployments = api(
-  { method: "GET", path: "/deploy/deployments", auth: true },
+  { expose: true, method: "GET", path: "/deploy/deployments", auth: true },
   async (params: { providerId?: string }): Promise<{ deployments: Deployment[] }> => {
     const authData = getAuthData()!;
     const rows = params.providerId
@@ -79,7 +79,7 @@ export const listDeployments = api(
 );
 
 export const getDeployment = api(
-  { method: "GET", path: "/deploy/deployments/:deploymentId", auth: true },
+  { expose: true, method: "GET", path: "/deploy/deployments/:deploymentId", auth: true },
   async (params: { deploymentId: string }): Promise<Deployment> => {
     const row = await db.queryRow<DeploymentRow>`SELECT * FROM deployments WHERE id = ${params.deploymentId}`;
     if (!row) throw APIError.notFound("Deployment not found");
@@ -88,7 +88,7 @@ export const getDeployment = api(
 );
 
 export const updateDeployment = api(
-  { method: "PUT", path: "/deploy/deployments/:deploymentId", auth: true },
+  { expose: true, method: "PUT", path: "/deploy/deployments/:deploymentId", auth: true },
   async (params: {
     deploymentId: string;
     status?: "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";
@@ -125,7 +125,7 @@ export const updateDeployment = api(
 );
 
 export const destroyDeployment = api(
-  { method: "POST", path: "/deploy/deployments/:deploymentId/destroy", auth: true },
+  { expose: true, method: "POST", path: "/deploy/deployments/:deploymentId/destroy", auth: true },
   async (params: { deploymentId: string }): Promise<{ success: boolean; message: string }> => {
     const authData = getAuthData()!;
     const row = await db.queryRow<{

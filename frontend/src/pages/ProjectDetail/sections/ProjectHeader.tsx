@@ -1,5 +1,6 @@
 import type { Project } from "../../../types";
-import { btnPrimary, btnSecondary } from "../../../utils/styles";
+import { btnPrimary } from "../../../utils/styles";
+import { usePermissions } from "../../../context/PermissionsContext";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon";
@@ -21,6 +22,9 @@ interface Props {
 export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, onCloseMenu, onDeploy, onPull, onSwitchBranch, onDelete }: Props) {
   const isTemplate = project.sourceType === "template";
   const hasGitActions = !isTemplate && !!project.connectionId;
+  const { has } = usePermissions();
+  const canDeploy = has("deploy:create");
+  const canDelete = has("project:delete");
 
   return (
     <div className="flex items-center justify-between mb-6">
@@ -41,10 +45,12 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
         </div>
       </div>
       <div className="relative flex items-center gap-4">
-        <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
-          <RocketIcon className="w-4 h-4" />
-          Deploy
-        </button>
+        {canDeploy && (
+          <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
+            <RocketIcon className="w-4 h-4" />
+            Deploy
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggleMenu}
@@ -75,17 +81,21 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
                     <ShareIcon className="w-4 h-4 text-text-muted" />
                     Switch branch
                   </button>
-                  <div className="border-t border-border my-1" />
                 </>
               )}
-              <button
-                type="button"
-                onClick={() => { onCloseMenu(); onDelete(); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger-500 hover:bg-danger-500/5 transition-colors"
-              >
-                <TrashIcon className="w-4 h-4" />
-                Delete project
-              </button>
+              {canDelete && (
+                <>
+                  {hasGitActions && <div className="border-t border-border my-1" />}
+                  <button
+                    type="button"
+                    onClick={() => { onCloseMenu(); onDelete(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger-500 hover:bg-danger-500/5 transition-colors"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    Delete project
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

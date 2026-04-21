@@ -4,7 +4,7 @@ import { db } from "../shared";
 // ─── Get Connection Details for Scan (service-to-service) ───
 
 export const getConnectionForScan = api(
-  { method: "GET", path: "/git/connections/:connectionId/scan-auth", auth: false },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/scan-auth", auth: false },
   async (params: { connectionId: string }): Promise<{ provider: string; token: string; endpoint: string }> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;

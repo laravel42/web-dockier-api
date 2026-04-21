@@ -9,7 +9,7 @@ import {
 // ─── API: Webhook (called by Lambda when deploy completes) ───
 
 export const webhook = api(
-  { method: "POST", path: "/image-builder/webhook", auth: false },
+  { expose: true, method: "POST", path: "/image-builder/webhook", auth: false },
   async (params: WebhookPayload): Promise<{ ok: boolean }> => {
     if (!params.buildId) return { ok: false };
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;

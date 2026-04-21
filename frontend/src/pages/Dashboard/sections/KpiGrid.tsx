@@ -23,15 +23,18 @@ interface Props {
   scans: number;
   totalFindings: number;
   onNavigate: (path: string) => void;
+  showDeploys?: boolean;
 }
 
-export default function KpiGrid({ projects, deploys, successDeploys, failedDeploys, scans, totalFindings, onNavigate }: Props) {
+export default function KpiGrid({ projects, deploys, successDeploys, failedDeploys, scans, totalFindings, onNavigate, showDeploys = true }: Props) {
   const iconCls = "w-5 h-5";
   const kpis: KpiItem[] = [
     { label: "Projects", value: projects, icon: <FolderIcon className={iconCls} />, color: "text-primary-500", onClick: () => onNavigate("/projects") },
-    { label: "Deployments", value: deploys, icon: <RocketIcon className={iconCls} />, color: "text-primary-500", onClick: () => onNavigate("/deploy") },
-    { label: "Successful", value: successDeploys, icon: <CheckCircleIcon className={iconCls} />, color: "text-success-500", onClick: () => onNavigate("/deploy") },
-    { label: "Failed", value: failedDeploys, icon: <AlertCircleIcon className={iconCls} />, color: "text-danger-500", onClick: () => onNavigate("/deploy") },
+    ...(showDeploys ? [
+      { label: "Deployments", value: deploys, icon: <RocketIcon className={iconCls} />, color: "text-primary-500", onClick: () => onNavigate("/deploy") },
+      { label: "Successful", value: successDeploys, icon: <CheckCircleIcon className={iconCls} />, color: "text-success-500", onClick: () => onNavigate("/deploy") },
+      { label: "Failed", value: failedDeploys, icon: <AlertCircleIcon className={iconCls} />, color: "text-danger-500", onClick: () => onNavigate("/deploy") },
+    ] : []),
     { label: "Scans", value: scans, icon: <ShieldCheckIcon className={iconCls} />, color: "text-success-500", onClick: () => onNavigate("/security") },
     { label: "Findings", value: totalFindings, icon: <WarningIcon className={iconCls} />, color: totalFindings > 0 ? "text-warning-500" : "text-text-muted", onClick: () => onNavigate("/security") },
   ];

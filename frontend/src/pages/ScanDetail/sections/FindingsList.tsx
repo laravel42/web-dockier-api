@@ -59,13 +59,14 @@ export default function FindingsList({
     { key: "custom", label: "Custom Rules", count: counts["custom"] || 0 },
   ].filter(p => p.key === "" || p.count > 0);
 
-  const filtered = providerFilter
-    ? findings.filter((f) => {
-        if (providerFilter === "sonar") return f.ruleId.startsWith("sonar.");
-        if (providerFilter === "custom") return f.ruleId.startsWith("custom.");
-        return !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.");
-      })
-    : findings;
+  const filtered = findings
+    .filter((f) => !severityFilter || f.severity === severityFilter)
+    .filter((f) => {
+      if (!providerFilter) return true;
+      if (providerFilter === "sonar") return f.ruleId.startsWith("sonar.");
+      if (providerFilter === "custom") return f.ruleId.startsWith("custom.");
+      return !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.");
+    });
 
   const grouped = Object.entries(
     filtered.reduce<Record<string, Finding[]>>((acc, f) => {
@@ -162,18 +163,16 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
         <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
         {(pmIntegrations.length > 0 || hasConnectionId) && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
-            {pmIntegrations.length > 0 && (
-              <button
-                type="button"
-                onClick={() => onCreateIssue(f)}
-                className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                </svg>
-                Create issue
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onCreateIssue(f)}
+              className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              Create issue
+            </button>
             {hasConnectionId && (
               <button
                 type="button"

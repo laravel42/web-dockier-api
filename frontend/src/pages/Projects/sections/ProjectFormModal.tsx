@@ -30,6 +30,9 @@ interface Props {
   selectedRepo: string;
   onRepoChange: (val: string) => void;
   loadingRepos: boolean;
+  onRefreshRepos?: () => void;
+  refreshingRepos?: boolean;
+  submitting?: boolean;
   branches: string[];
   selectedBranch: string;
   onBranchChange: (val: string) => void;
@@ -50,6 +53,7 @@ export default function ProjectFormModal({
   sourceType, onSourceTypeChange, selectedTemplate, onTemplateChange,
   connections, selectedConnectionId, onConnectionChange, loadingConnections,
   repos, selectedRepo, onRepoChange, loadingRepos,
+  onRefreshRepos, refreshingRepos, submitting,
   branches, selectedBranch, onBranchChange, loadingBranches,
   error,
 }: Props) {
@@ -81,7 +85,7 @@ export default function ProjectFormModal({
               <button
                 type="button"
                 onClick={() => onSourceTypeChange("repository")}
-                className={`flex items-center gap-3 p-3 rounded-[var(--radius-input)] border text-left transition-all ${
+                className={`flex items-center gap-3 p-3 rounded-(--radius-input) border text-left transition-all ${
                   sourceType === "repository"
                     ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
                     : "border-border bg-card hover:border-secondary-300"
@@ -100,7 +104,7 @@ export default function ProjectFormModal({
               <button
                 type="button"
                 onClick={() => onSourceTypeChange("template")}
-                className={`flex items-center gap-3 p-3 rounded-[var(--radius-input)] border text-left transition-all ${
+                className={`flex items-center gap-3 p-3 rounded-(--radius-input) border text-left transition-all ${
                   sourceType === "template"
                     ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
                     : "border-border bg-card hover:border-secondary-300"
@@ -123,7 +127,7 @@ export default function ProjectFormModal({
         )}
 
         {error && (
-          <div className="rounded-[var(--radius-input)] bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
+          <div className="rounded-(--radius-input) bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
             {error}
           </div>
         )}
@@ -154,7 +158,7 @@ export default function ProjectFormModal({
             {selectedConnectionId && (
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
-                <RepoSelect value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} />
+                <RepoSelect value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} onRefresh={onRefreshRepos} refreshing={refreshingRepos} />
               </div>
             )}
 
@@ -180,7 +184,7 @@ export default function ProjectFormModal({
                     onTemplateChange(tpl.id);
                     if (!form.name) onFormChange({ ...form, name: tpl.name });
                   }}
-                  className={`flex items-center gap-4 p-4 rounded-[var(--radius-input)] border text-left transition-all ${
+                  className={`flex items-center gap-4 p-4 rounded-(--radius-input) border text-left transition-all ${
                     selectedTemplate === tpl.id
                       ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
                       : "border-border bg-card hover:border-secondary-300"
@@ -220,9 +224,14 @@ export default function ProjectFormModal({
           <button
             type="submit"
             className={btnPrimary}
-            disabled={!canSubmit}
+            disabled={!canSubmit || submitting}
           >
-            {editing ? "Save Changes" : "Create Project"}
+            {submitting ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Analyzing…
+              </span>
+            ) : editing ? "Save Changes" : "Create Project"}
           </button>
         </div>
       </form>

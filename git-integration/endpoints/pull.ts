@@ -5,7 +5,7 @@ import { throwProviderError } from "../helpers";
 // ─── Pull from Origin ───
 
 export const pullOrigin = api(
-  { method: "POST", path: "/git/connections/:connectionId/pull", auth: true },
+  { expose: true, method: "POST", path: "/git/connections/:connectionId/pull", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch: string; currentHash?: string }): Promise<{ log: string[] }> => {
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;

@@ -54,10 +54,10 @@ export default function ProfileTab() {
   ];
 
   return (
-    <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 max-w-lg">
+    <div className="bg-card rounded-(--radius-card) shadow-(--shadow-card) p-6 max-w-lg">
       <h2 className="text-base font-semibold text-text mb-1">Profile</h2>
       <p className="text-sm text-text-secondary mb-5">Manage your personal information.</p>
-      {message && <div className="mb-4 p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
+      {message && <div className="mb-4 p-3 rounded-(--radius-btn) bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
       <form onSubmit={handleSave} className="space-y-4">
         <div>
           <label htmlFor="profile-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>

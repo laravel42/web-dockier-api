@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Modal from "./Modal";
 
 interface Permission {
@@ -54,6 +54,16 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    name: "Security Scans",
+    permissions: [
+      { key: "scan:view", label: "Allow members to view security scan results" },
+      { key: "scan:run", label: "Allow members to run security scans" },
+      { key: "scan:manage", label: "Allow members to manage scan settings and rules" },
+      { key: "scan:create_issue", label: "Allow members to create issues from findings" },
+      { key: "scan:create_mr", label: "Allow members to create fix merge requests from findings" },
+    ],
+  },
+  {
     name: "Notification",
     permissions: [
       { key: "notification:view", label: "Allow members to view notifications" },
@@ -92,25 +102,23 @@ interface Props {
 }
 
 export default function RoleFormModal({ open, onClose, onSubmit, initialData, title, submitLabel }: Props) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set(ALL_LOCKED));
+  const [mountKey, setMountKey] = useState(0);
+
+  return (
+    <Modal open={open} onClose={onClose} title={title || "New role"}>
+      {open && <RoleFormInner key={mountKey} onSubmit={(data) => { onSubmit(data); setMountKey(k => k + 1); }} initialData={initialData} submitLabel={submitLabel} />}
+    </Modal>
+  );
+}
+
+function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props["onSubmit"]; initialData?: Props["initialData"]; submitLabel?: string }) {
+  const [name, setName] = useState(initialData?.name || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(initialData?.permissions?.length ? initialData.permissions : ALL_LOCKED)
+  );
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (open && initialData) {
-      setName(initialData.name);
-      setDescription(initialData.description);
-      setSelected(new Set(initialData.permissions.length > 0 ? initialData.permissions : ALL_LOCKED));
-    } else if (open) {
-      setName("");
-      setDescription("");
-      setSelected(new Set(ALL_LOCKED));
-    }
-    setSearch("");
-    setCollapsed(new Set());
-  }, [open]);
 
   const inputCls =
     "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
@@ -165,24 +173,9 @@ export default function RoleFormModal({ open, onClose, onSubmit, initialData, ti
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({ name, description, permissions: Array.from(selected) });
-    setName("");
-    setDescription("");
-    setSelected(new Set(ALL_LOCKED));
-    setSearch("");
-    setCollapsed(new Set());
-  };
-
-  const handleClose = () => {
-    onClose();
-    setName("");
-    setDescription("");
-    setSelected(new Set(ALL_LOCKED));
-    setSearch("");
-    setCollapsed(new Set());
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title={title || "New role"}>
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Name */}
         <div>
@@ -232,12 +225,12 @@ export default function RoleFormModal({ open, onClose, onSubmit, initialData, ti
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search"
-              className="w-full h-9 pl-9 pr-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors"
+              className="w-full h-9 pl-9 pr-3 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors"
             />
           </div>
 
           {/* Permission groups */}
-          <div className="border border-border rounded-[var(--radius-input)] max-h-72 overflow-y-auto">
+          <div className="border border-border rounded-(--radius-input) max-h-72 overflow-y-auto">
             {filteredGroups.map((group) => {
               const checkState = getGroupCheckState(group);
               const isCollapsed = collapsed.has(group.name);
@@ -343,12 +336,11 @@ export default function RoleFormModal({ open, onClose, onSubmit, initialData, ti
           <button
             type="submit"
             disabled={!name.trim()}
-            className="h-9 px-5 bg-text text-card text-sm font-medium rounded-[var(--radius-btn)] hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-9 px-5 bg-text text-card text-sm font-medium rounded-(--radius-btn) hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {submitLabel || "Create role"}
           </button>
         </div>
       </form>
-    </Modal>
   );
 }

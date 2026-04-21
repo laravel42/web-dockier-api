@@ -16,7 +16,7 @@ interface Role {
 }
 
 export const createRole = api(
-  { method: "POST", path: "/roles", auth: true },
+  { expose: true, method: "POST", path: "/roles", auth: true },
   async (params: { name: string; description?: string; permissions: string[] }): Promise<Role> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -27,7 +27,7 @@ export const createRole = api(
 );
 
 export const listRoles = api(
-  { method: "GET", path: "/roles", auth: true },
+  { expose: true, method: "GET", path: "/roles", auth: true },
   async (): Promise<{ roles: Role[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{ id: string; name: string; description: string; permissions: string[]; created_at: Date }>`
@@ -39,7 +39,7 @@ export const listRoles = api(
 );
 
 export const deleteRole = api(
-  { method: "DELETE", path: "/roles/:roleId", auth: true },
+  { expose: true, method: "DELETE", path: "/roles/:roleId", auth: true },
   async (params: { roleId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM roles WHERE id = ${params.roleId}`;
     return { success: true };
@@ -47,7 +47,7 @@ export const deleteRole = api(
 );
 
 export const updateRole = api(
-  { method: "PUT", path: "/roles/:roleId", auth: true },
+  { expose: true, method: "PUT", path: "/roles/:roleId", auth: true },
   async (params: { roleId: string; name?: string; description?: string; permissions?: string[] }): Promise<Role> => {
     const existing = await db.queryRow<{ id: string }>`SELECT id FROM roles WHERE id = ${params.roleId}`;
     if (!existing) throw APIError.notFound("Role not found");
@@ -57,5 +57,15 @@ export const updateRole = api(
     const row = await db.queryRow<{ id: string; name: string; description: string; permissions: string[]; created_at: Date }>`
       SELECT id, name, description, permissions, created_at FROM roles WHERE id = ${params.roleId}`;
     return { id: row!.id, name: row!.name, description: row!.description, permissions: row!.permissions || [], createdAt: row!.created_at.toISOString() };
+  }
+);
+
+export const getRole = api(
+  { expose: true, method: "GET", path: "/roles/:roleId", auth: true },
+  async (params: { roleId: string }): Promise<Role> => {
+    const row = await db.queryRow<{ id: string; name: string; description: string; permissions: string[]; created_at: Date }>`
+      SELECT id, name, description, permissions, created_at FROM roles WHERE id = ${params.roleId}`;
+    if (!row) throw APIError.notFound("Role not found");
+    return { id: row.id, name: row.name, description: row.description, permissions: row.permissions || [], createdAt: row.created_at.toISOString() };
   }
 );

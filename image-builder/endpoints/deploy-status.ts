@@ -2,14 +2,14 @@
 
 import { api, APIError } from "encore.dev/api";
 import {
-  db, AwsAccessKeyId, AwsSecretAccessKey, getAwsRegion,
+  db, getAwsAccessKeyId, getAwsSecretAccessKey, getAwsRegion,
   rowToBuild,
 } from "../shared";
 
 // ─── API: Get Deploy Status (polls CloudFormation for stack status) ───
 
 export const getDeployStatus = api(
-  { method: "GET", path: "/image-builder/builds/:buildId/deploy-status", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds/:buildId/deploy-status", auth: true },
   async (params: { buildId: string }): Promise<{ status: string; appUrl: string; stackName: string }> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");
@@ -30,7 +30,7 @@ export const getDeployStatus = api(
       const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
       const cfn = new CloudFormationClient({
         region: getAwsRegion(),
-        credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+        credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
       });
       const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
       const stack = result.Stacks?.[0];

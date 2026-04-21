@@ -4,7 +4,7 @@ import { getAuthData } from "~encore/auth";
 import { db, type GitConnectionResponse } from "../shared";
 
 export const addConnection = api(
-  { method: "POST", path: "/git/connections", auth: true },
+  { expose: true, method: "POST", path: "/git/connections", auth: true },
   async (params: {
     provider: "github" | "gitlab" | "gitlab_self_hosted" | "bitbucket";
     personalToken: string;
@@ -29,7 +29,7 @@ export const addConnection = api(
 );
 
 export const listConnections = api(
-  { method: "GET", path: "/git/connections", auth: true },
+  { expose: true, method: "GET", path: "/git/connections", auth: true },
   async (): Promise<{ connections: GitConnectionResponse[] }> => {
     const authData = getAuthData()!;
     const rows = db.query<{ id: string; provider: string; label: string; repo_url: string; endpoint: string; created_at: Date }>`
@@ -43,7 +43,7 @@ export const listConnections = api(
 );
 
 export const deleteConnection = api(
-  { method: "DELETE", path: "/git/connections/:connectionId", auth: true },
+  { expose: true, method: "DELETE", path: "/git/connections/:connectionId", auth: true },
   async (params: { connectionId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM git_connections WHERE id = ${params.connectionId}`;
     return { success: true };
@@ -51,7 +51,7 @@ export const deleteConnection = api(
 );
 
 export const updateConnection = api(
-  { method: "PUT", path: "/git/connections/:connectionId", auth: true },
+  { expose: true, method: "PUT", path: "/git/connections/:connectionId", auth: true },
   async (params: { connectionId: string; label: string }): Promise<GitConnectionResponse> => {
     const row = await db.queryRow<{ id: string; provider: string; label: string; repo_url: string; endpoint: string; created_at: Date }>`
       SELECT id, provider, label, repo_url, endpoint, created_at FROM git_connections WHERE id = ${params.connectionId}`;

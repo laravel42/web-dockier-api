@@ -19,11 +19,15 @@ const SonarQubeToken = secret("SonarQubeToken");
 initDb(DatabaseUrl());
 
 // Resolve semgrep binary path at module load
-function findSemgrep(): string {
+function findSemgrep(): string | null {
   const candidates = [
     "semgrep",
     join(process.env.HOME || "", ".local/bin/semgrep"),
     "/usr/local/bin/semgrep",
+    "/opt/homebrew/bin/semgrep",
+    // pip install locations
+    join(process.env.HOME || "", ".local/pipx/venvs/semgrep/bin/semgrep"),
+    "/usr/bin/semgrep",
   ];
   for (const bin of candidates) {
     try {
@@ -31,10 +35,18 @@ function findSemgrep(): string {
       if (result.status === 0) return bin;
     } catch { /* try next */ }
   }
-  return "semgrep"; // fallback, hope it's in PATH
+  // Last resort: use `which` to find it anywhere in PATH
+  try {
+    const which = spawnSync("which", ["semgrep"], { stdio: "pipe", timeout: 5000 });
+    if (which.status === 0) {
+      const path = which.stdout.toString().trim();
+      if (path) return path;
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 const SEMGREP_BIN = findSemgrep();
-console.log(`[code-analysis] Resolved semgrep binary: ${SEMGREP_BIN}`);
+console.log(`[code-analysis] Semgrep binary: ${SEMGREP_BIN || "NOT FOUND (scans will skip semgrep)"}`);
 
 // Helper to handle double-encoded jsonb summary
 function parseSummary(raw: any): ScanSummary {
@@ -256,7 +268,7 @@ interface Scan {
 // ─── Create Scan ───
 
 export const createScan = api(
-  { method: "POST", path: "/code-analysis/scans", auth: true },
+  { expose: true, method: "POST", path: "/code-analysis/scans", auth: true },
   async (params: {
     projectId: string;
     connectionId: string;
@@ -284,7 +296,7 @@ export const createScan = api(
 // ─── List Scans ───
 
 export const listScans = api(
-  { method: "GET", path: "/code-analysis/scans", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/scans", auth: true },
   async (params: { projectId?: string; branch?: string }): Promise<{ scans: Scan[] }> => {
     const authData = getAuthData()!;
 
@@ -333,7 +345,7 @@ export const listScans = api(
 // ─── Get Scan ───
 
 export const getScan = api(
-  { method: "GET", path: "/code-analysis/scans/:scanId", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/scans/:scanId", auth: true },
   async (params: { scanId: string }): Promise<Scan> => {
     const row = await db.queryRow<{
       id: string; project_id: string; connection_id: string;
@@ -359,7 +371,7 @@ export const getScan = api(
 // ─── Get Findings for a Scan ───
 
 export const listFindings = api(
-  { method: "GET", path: "/code-analysis/scans/:scanId/findings", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/scans/:scanId/findings", auth: true },
   async (params: { scanId: string; severity?: string }): Promise<{ findings: Finding[] }> => {
     const rows = params.severity
       ? db.query<{
@@ -393,7 +405,7 @@ export const listFindings = api(
 // ─── Delete Scan ───
 
 export const deleteScan = api(
-  { method: "DELETE", path: "/code-analysis/scans/:scanId", auth: true },
+  { expose: true, method: "DELETE", path: "/code-analysis/scans/:scanId", auth: true },
   async (params: { scanId: string }): Promise<{ success: boolean }> => {
     await db.exec`DELETE FROM scans WHERE id = ${params.scanId}`;
     return { success: true };
@@ -411,7 +423,7 @@ interface ScanProgress {
 }
 
 export const runScan = api(
-  { method: "POST", path: "/code-analysis/scans/:scanId/run", auth: true },
+  { expose: true, method: "POST", path: "/code-analysis/scans/:scanId/run", auth: true },
   async (params: { scanId: string; enableSemgrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }): Promise<Scan> => {
     const scan = await db.queryRow<{
       id: string; app_id: string; project_id: string; connection_id: string;
@@ -457,25 +469,29 @@ interface CustomRuleResponse {
   extensions: string[];
   enabled: boolean;
   isSystem: boolean;
+  type: string;
+  yamlContent: string;
   createdAt: string;
 }
 
 export const listCustomRules = api(
-  { method: "GET", path: "/code-analysis/custom-rules", auth: true },
-  async (): Promise<{ rules: CustomRuleResponse[] }> => {
+  { expose: true, method: "GET", path: "/code-analysis/custom-rules", auth: true },
+  async (params: { type?: string }): Promise<{ rules: CustomRuleResponse[] }> => {
     const authData = getAuthData()!;
+    const typeFilter = params.type || "custom";
     const rows = db.query<{
       id: string; app_id: string; rule_id: string; severity: string; message: string;
-      pattern: string; extensions: string[]; enabled: boolean; created_at: Date;
-    }>`SELECT id, app_id, rule_id, severity, message, pattern, extensions, enabled, created_at
-       FROM custom_rules WHERE app_id = '' OR app_id = ${authData.appId}
+      pattern: string; extensions: string[]; enabled: boolean; type: string; yaml_content: string; created_at: Date;
+    }>`SELECT id, app_id, rule_id, severity, message, pattern, extensions, enabled, type, yaml_content, created_at
+       FROM custom_rules WHERE (app_id = '' OR app_id = ${authData.appId}) AND type = ${typeFilter}
        ORDER BY rule_id`;
     const rules: CustomRuleResponse[] = [];
     for await (const r of rows) {
       rules.push({
         id: r.id, ruleId: r.rule_id, severity: r.severity, message: r.message,
         pattern: r.pattern, extensions: r.extensions, enabled: r.enabled,
-        isSystem: r.app_id === "", createdAt: r.created_at.toISOString(),
+        isSystem: r.app_id === "", type: r.type, yamlContent: r.yaml_content || "",
+        createdAt: r.created_at.toISOString(),
       });
     }
     return { rules };
@@ -483,35 +499,40 @@ export const listCustomRules = api(
 );
 
 export const createCustomRule = api(
-  { method: "POST", path: "/code-analysis/custom-rules", auth: true },
+  { expose: true, method: "POST", path: "/code-analysis/custom-rules", auth: true },
   async (params: {
     ruleId: string; severity: string; message: string; pattern: string; extensions: string[];
+    type?: string; yamlContent?: string;
   }): Promise<CustomRuleResponse> => {
     const authData = getAuthData()!;
-    try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); }
+    const ruleType = params.type || "custom";
+    if (ruleType === "custom") {
+      try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); }
+    }
     const id = uuidv4();
-    await db.exec`INSERT INTO custom_rules (id, app_id, rule_id, severity, message, pattern, extensions)
-      VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern}, ${params.extensions})`;
+    await db.exec`INSERT INTO custom_rules (id, app_id, rule_id, severity, message, pattern, extensions, type, yaml_content)
+      VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.severity}, ${params.message}, ${params.pattern || ""}, ${params.extensions || []}, ${ruleType}, ${params.yamlContent || ""})`;
     return {
       id, ruleId: params.ruleId, severity: params.severity, message: params.message,
-      pattern: params.pattern, extensions: params.extensions, enabled: true,
-      isSystem: false, createdAt: new Date().toISOString(),
+      pattern: params.pattern || "", extensions: params.extensions || [], enabled: true,
+      isSystem: false, type: ruleType, yamlContent: params.yamlContent || "",
+      createdAt: new Date().toISOString(),
     };
   }
 );
 
 export const updateCustomRule = api(
-  { method: "PUT", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
+  { expose: true, method: "PUT", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
   async (params: {
     ruleDbId: string; ruleId?: string; severity?: string; message?: string;
-    pattern?: string; extensions?: string[]; enabled?: boolean;
+    pattern?: string; extensions?: string[]; enabled?: boolean; yamlContent?: string;
   }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
-    const row = await db.queryRow<{ app_id: string }>`SELECT app_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
+    const row = await db.queryRow<{ app_id: string; type: string }>`SELECT app_id, type FROM custom_rules WHERE id = ${params.ruleDbId}`;
     if (!row) throw APIError.notFound("Rule not found");
     if (row.app_id === "" && params.enabled === undefined) throw APIError.permissionDenied("Cannot edit system rules");
     if (row.app_id !== "" && row.app_id !== authData.appId) throw APIError.permissionDenied("Not your rule");
-    if (params.pattern) { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
+    if (params.pattern && row.type === "custom") { try { new RegExp(params.pattern); } catch { throw APIError.invalidArgument("Invalid regex pattern"); } }
     if (row.app_id === "") {
       await db.exec`UPDATE custom_rules SET enabled = ${params.enabled ?? true} WHERE id = ${params.ruleDbId}`;
     } else {
@@ -521,7 +542,8 @@ export const updateCustomRule = api(
         message = COALESCE(${params.message ?? null}, message),
         pattern = COALESCE(${params.pattern ?? null}, pattern),
         extensions = COALESCE(${params.extensions ?? null}, extensions),
-        enabled = COALESCE(${params.enabled ?? null}, enabled)
+        enabled = COALESCE(${params.enabled ?? null}, enabled),
+        yaml_content = COALESCE(${params.yamlContent ?? null}, yaml_content)
         WHERE id = ${params.ruleDbId}`;
     }
     return { success: true };
@@ -529,7 +551,7 @@ export const updateCustomRule = api(
 );
 
 export const deleteCustomRule = api(
-  { method: "DELETE", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
+  { expose: true, method: "DELETE", path: "/code-analysis/custom-rules/:ruleDbId", auth: true },
   async (params: { ruleDbId: string }): Promise<{ success: boolean }> => {
     const authData = getAuthData()!;
     const row = await db.queryRow<{ app_id: string }>`SELECT app_id FROM custom_rules WHERE id = ${params.ruleDbId}`;
@@ -556,7 +578,7 @@ interface OGRule {
 let _ogRulesCache: OGRule[] | null = null;
 
 export const listSemgrepRules = api(
-  { method: "GET", path: "/code-analysis/semgrep-rules", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/semgrep-rules", auth: true },
   async (): Promise<{ rules: OGRule[]; languages: string[] }> => {
     if (_ogRulesCache) {
       const langs = [...new Set(_ogRulesCache.map(r => r.lang))].sort();
@@ -623,7 +645,7 @@ export const listSemgrepRules = api(
 );
 
 export const getSemgrepRuleContent = api(
-  { method: "GET", path: "/code-analysis/semgrep-rules/content", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/semgrep-rules/content", auth: true },
   async (params: { path: string }): Promise<{ content: string }> => {
     const filePath = join(RULES_DIR, params.path);
     if (!filePath.startsWith(RULES_DIR) || !existsSync(filePath)) throw APIError.notFound("Rule file not found");
@@ -632,7 +654,7 @@ export const getSemgrepRuleContent = api(
 );
 
 export const updateSemgrepRuleContent = api(
-  { method: "PUT", path: "/code-analysis/semgrep-rules/content", auth: true },
+  { expose: true, method: "PUT", path: "/code-analysis/semgrep-rules/content", auth: true },
   async (params: { path: string; content: string }): Promise<{ success: boolean }> => {
     const filePath = join(RULES_DIR, params.path);
     if (!filePath.startsWith(RULES_DIR)) throw APIError.invalidArgument("Invalid path");
@@ -667,7 +689,7 @@ interface SQRule {
 }
 
 export const listSonarProfiles = api(
-  { method: "GET", path: "/code-analysis/sonar/profiles", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/sonar/profiles", auth: true },
   async (): Promise<{ profiles: SQProfile[] }> => {
     const data = await sonarFetch("/api/qualityprofiles/search");
     const profiles: SQProfile[] = (data.profiles || []).map((p: any) => ({
@@ -679,7 +701,7 @@ export const listSonarProfiles = api(
 );
 
 export const listSonarRules = api(
-  { method: "GET", path: "/code-analysis/sonar/rules", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/sonar/rules", auth: true },
   async (params: { profileKey: string; page?: number; query?: string }): Promise<{ rules: SQRule[]; total: number }> => {
     // Get active rule keys for this profile
     const activeData = await sonarFetch("/api/rules/search", {
@@ -724,7 +746,7 @@ export const listSonarRules = api(
 );
 
 export const toggleSonarRule = api(
-  { method: "POST", path: "/code-analysis/sonar/rules/toggle", auth: true },
+  { expose: true, method: "POST", path: "/code-analysis/sonar/rules/toggle", auth: true },
   async (params: { profileKey: string; ruleKey: string; activate: boolean }): Promise<{ success: boolean }> => {
     if (params.activate) {
       await sonarFetch("/api/qualityprofiles/activate_rule", {
@@ -744,7 +766,7 @@ export const toggleSonarRule = api(
 // ─── Global Rule Overrides (Semgrep & SonarQube) ───
 
 export const listRuleOverrides = api(
-  { method: "GET", path: "/code-analysis/rule-overrides", auth: true },
+  { expose: true, method: "GET", path: "/code-analysis/rule-overrides", auth: true },
   async (params: { tool: "semgrep" | "sonarqube" }): Promise<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }> => {
     const overrides: Array<{ id: string; ruleId: string; enabled: boolean }> = [];
     if (params.tool === "semgrep") {
@@ -761,16 +783,17 @@ export const listRuleOverrides = api(
 );
 
 export const toggleRule = api(
-  { method: "POST", path: "/code-analysis/rule-overrides", auth: true },
+  { expose: true, method: "POST", path: "/code-analysis/rule-overrides", auth: true },
   async (params: { tool: "semgrep" | "sonarqube"; ruleId: string; enabled: boolean }): Promise<{ success: boolean }> => {
+    const authData = getAuthData()!;
     const id = uuidv4();
     if (params.tool === "semgrep") {
-      await db.exec`INSERT INTO opengrep_rules (id, rule_id, enabled)
-        VALUES (${id}, ${params.ruleId}, ${params.enabled})
+      await db.exec`INSERT INTO opengrep_rules (id, app_id, rule_id, enabled)
+        VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
         ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
     } else {
-      await db.exec`INSERT INTO sonarqube_rules (id, rule_id, enabled)
-        VALUES (${id}, ${params.ruleId}, ${params.enabled})
+      await db.exec`INSERT INTO sonarqube_rules (id, app_id, rule_id, enabled)
+        VALUES (${id}, ${authData.appId}, ${params.ruleId}, ${params.enabled})
         ON CONFLICT (rule_id) DO UPDATE SET enabled = ${params.enabled}`;
     }
     return { success: true };
@@ -1045,6 +1068,9 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
     let filesScanned = 0;
 
     if (tools.semgrep) {
+      if (!SEMGREP_BIN) {
+        console.log("[doScan] Semgrep not installed, skipping");
+      } else {
       await updateProgress(scanId, { phase: "scanning", filesScanned: 0, filesInRepo, findingsCount: 0, currentFile: "Running Semgrep scanner…" });
       console.log(`[doScan] Running semgrep: ${SEMGREP_BIN} in ${repoDir}`);
       const configFlag = existsSync(RULES_DIR) ? `--config ${JSON.stringify(RULES_DIR)}` : "--config auto";
@@ -1078,6 +1104,7 @@ async function doScan(scanId: string, scan: { connection_id: string; repo: strin
         const arr = findingsByFile.get(r.path) || [];
         arr.push({ ruleId: r.check_id, severity: mapSeverity(r.extra.severity), message: r.extra.message, filePath: r.path, startLine: r.start.line, endLine: r.end.line, snippet: (r.extra.lines || "").trim().slice(0, 200) });
         findingsByFile.set(r.path, arr);
+      }
       }
     } else {
       console.log("[doScan] Semgrep disabled, skipping");

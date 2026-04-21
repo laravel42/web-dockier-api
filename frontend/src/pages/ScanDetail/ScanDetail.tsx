@@ -42,7 +42,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        findings={core.findings}
         scanRunning={core.scanRunning}
         scanProgress={core.scanProgress}
         scanError={core.scanError}
@@ -97,6 +96,7 @@ export default function ScanDetail() {
         <CreateIssueModal
           open={issue.issueModal.open}
           onClose={issue.closeIssueModal}
+          repoUrl={core.project?.repository || ""}
           pmIntegrations={issue.pmIntegrations}
           issueIntegration={issue.issueIntegration}
           onIntegrationChange={issue.handleIntegrationChange}
@@ -118,6 +118,9 @@ export default function ScanDetail() {
           pmMembers={issue.pmMembers}
           selectedPmAssignee={issue.selectedPmAssignee}
           onAssigneeChange={issue.setSelectedPmAssignee}
+          gitMembers={issue.gitMembers}
+          selectedGitAssignee={issue.selectedGitAssignee}
+          onGitAssigneeChange={issue.setSelectedGitAssignee}
           issueCreating={issue.issueCreating}
           issueSuccess={issue.issueSuccess}
           issueSuccessUrl={issue.issueSuccessUrl}
@@ -153,7 +156,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        findings={core.findings}
         scanRunning={core.scanRunning}
         scanProgress={core.scanProgress}
         scanError={core.scanError}

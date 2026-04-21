@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { git_integration } from "~encore/clients";
 import { readFileSync } from "node:fs";
 import {
-  db, AwsAccessKeyId, AwsSecretAccessKey, getAwsRegion, getCodeBuildProject, getCallbackUrl,
+  db, getAwsAccessKeyId, getAwsSecretAccessKey, getAwsRegion, getCodeBuildProject, getCallbackUrl,
   deriveImageRepo, getAwsAccountId, rowToBuild, refreshBuildStatus, buildToStatusResponse,
   type StartBuildParams, type BuildRecord, type BuildStatusResponse, type BuildLogsResponse,
 } from "../shared";
@@ -15,7 +15,7 @@ import { bundleAndUploadSource } from "../source-bundler";
 // ─── API: Start Build ───
 
 export const startBuild = api(
-  { method: "POST", path: "/image-builder/builds", auth: true },
+  { expose: true, method: "POST", path: "/image-builder/builds", auth: true },
   async (params: StartBuildParams): Promise<BuildRecord> => {
     const authData = getAuthData()!;
 
@@ -26,8 +26,8 @@ export const startBuild = api(
     const imageRepo = params.imageRepo || deriveImageRepo(params.sourceRepo);
     const tags = params.tags || [];
 
-    const accessKeyId = AwsAccessKeyId();
-    const secretAccessKey = AwsSecretAccessKey();
+    const accessKeyId = getAwsAccessKeyId();
+    const secretAccessKey = getAwsSecretAccessKey();
     const region = getAwsRegion();
     const codebuildProject = getCodeBuildProject();
 
@@ -134,7 +134,7 @@ export const startBuild = api(
 // ─── API: Get Build Status ───
 
 export const getBuildStatus = api(
-  { method: "GET", path: "/image-builder/builds/:buildId", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds/:buildId", auth: true },
   async (params: { buildId: string }): Promise<BuildStatusResponse> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");
@@ -146,7 +146,7 @@ export const getBuildStatus = api(
         const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
         const cb = new CodeBuildClient({
           region: getAwsRegion(),
-          credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+          credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
         });
         const listResult = await cb.send(new ListBuildsForProjectCommand({
           projectName: getCodeBuildProject(),
@@ -180,7 +180,7 @@ export const getBuildStatus = api(
 // ─── API: Get Build Logs (from CloudWatch) ───
 
 export const getBuildLogs = api(
-  { method: "GET", path: "/image-builder/builds/:buildId/logs", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds/:buildId/logs", auth: true },
   async (params: { buildId: string; nextToken?: string }): Promise<BuildLogsResponse> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");
@@ -192,7 +192,7 @@ export const getBuildLogs = api(
         const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
         const cb = new CodeBuildClient({
           region: getAwsRegion(),
-          credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+          credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
         });
         const listResult = await cb.send(new ListBuildsForProjectCommand({
           projectName: getCodeBuildProject(),
@@ -223,7 +223,7 @@ export const getBuildLogs = api(
       const { CloudWatchLogsClient, GetLogEventsCommand } = await import("@aws-sdk/client-cloudwatch-logs");
       const cwl = new CloudWatchLogsClient({
         region: getAwsRegion(),
-        credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() },
+        credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
       });
 
       const logStreamName = build.codebuildId.includes(":")
@@ -261,7 +261,7 @@ export const getBuildLogs = api(
 // ─── API: List Builds ───
 
 export const listBuilds = api(
-  { method: "GET", path: "/image-builder/builds", auth: true },
+  { expose: true, method: "GET", path: "/image-builder/builds", auth: true },
   async (params: { sourceRepo?: string; status?: string; limit?: number }): Promise<{ builds: BuildStatusResponse[] }> => {
     const authData = getAuthData()!;
     const limit = Math.min(params.limit || 50, 100);
@@ -288,7 +288,7 @@ export const listBuilds = api(
 // ─── API: Cancel Build ───
 
 export const cancelBuild = api(
-  { method: "POST", path: "/image-builder/builds/:buildId/cancel", auth: true },
+  { expose: true, method: "POST", path: "/image-builder/builds/:buildId/cancel", auth: true },
   async (params: { buildId: string }): Promise<BuildStatusResponse> => {
     const row = await db.queryRow`SELECT * FROM builds WHERE id = ${params.buildId}`;
     if (!row) throw APIError.notFound("Build not found");
@@ -299,7 +299,7 @@ export const cancelBuild = api(
     if (build.codebuildId) {
       try {
         const { CodeBuildClient, StopBuildCommand } = await import("@aws-sdk/client-codebuild");
-        const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: AwsAccessKeyId(), secretAccessKey: AwsSecretAccessKey() } });
+        const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() } });
         await cb.send(new StopBuildCommand({ id: build.codebuildId }));
       } catch { /* best-effort */ }
     }

@@ -8,7 +8,8 @@ import TechBadge from "../../../components/TechBadge";
 interface Props {
   project: Project;
   stats: RepoStats | null;
-  techStack?: Array<{ name: string; category: string; confidence: number }>;
+  badges?: Array<{ name: string; category: string; confidence: number }>;
+  allBadges?: Array<{ name: string; category: string; confidence: number }>;
 }
 
 const templateDescriptions: Record<string, string> = {
@@ -31,7 +32,7 @@ function timeAgo(dateStr: string): string {
   return `${months}mo ago`;
 }
 
-export default function RepoInfoCard({ project, stats, techStack }: Props) {
+export default function RepoInfoCard({ project, stats, badges, allBadges }: Props) {
   const isTemplate = project.sourceType === "template";
 
   if (isTemplate) {
@@ -111,11 +112,13 @@ export default function RepoInfoCard({ project, stats, techStack }: Props) {
             </div>
           </div>
         )}
-        {techStack && techStack.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 pt-3 mt-2 border-t border-border">
-            {techStack.slice(0, 4).map((b) => (
-              <TechBadge key={b.name} name={b.name} iconSize="w-5 h-5" />
-            ))}
+        {badges && badges.length > 0 && (
+          <div className="pt-3 mt-2 border-t border-border">
+            <div className="flex flex-wrap items-center gap-2">
+              {(allBadges && allBadges.length > 0 ? allBadges : badges)?.map((b) => (
+                <TechBadge key={b.name} name={b.name} iconSize="w-5 h-5" />
+              ))}
+            </div>
           </div>
         )}
       </div>

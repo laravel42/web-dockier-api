@@ -102,7 +102,7 @@ Instructions:
 // ─── Create PR/MR with AI Fix ───
 
 export const createFixMR = api(
-  { method: "POST", path: "/git/connections/:connectionId/create-mr", auth: true },
+  { expose: true, method: "POST", path: "/git/connections/:connectionId/create-mr", auth: true },
   async (params: {
     connectionId: string;
     owner: string;
@@ -293,7 +293,7 @@ export const createFixMR = api(
 // ─── Summarize Finding into Short Title ───
 
 export const summarizeFinding = api(
-  { method: "POST", path: "/git/ai/summarize-finding", auth: true },
+  { expose: true, method: "POST", path: "/git/ai/summarize-finding", auth: true },
   async (params: { severity: string; message: string; filePath: string; snippet?: string }): Promise<{ title: string; estimateMinutes: number }> => {
     try {
       const result = await summarizeFindingAI(params.severity, params.message, params.filePath, params.snippet || "");

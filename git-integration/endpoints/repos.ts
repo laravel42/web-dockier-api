@@ -3,11 +3,24 @@ import { db, type GitRepo } from "../shared";
 import { throwProviderError, parseRepoUrl } from "../helpers";
 
 export const listRepos = api(
-  { method: "GET", path: "/git/connections/:connectionId/repos", auth: true },
-  async (params: { connectionId: string }): Promise<{ repos: GitRepo[] }> => {
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repos", auth: true },
+  async (params: { connectionId: string; refresh?: boolean }): Promise<{ repos: GitRepo[]; cached: boolean }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
     if (!conn) throw APIError.notFound("Connection not found");
+
+    // Check cache (unless refresh requested)
+    if (!params.refresh) {
+      try {
+        const cached = await db.queryRow<{ repos: string }>`
+          SELECT repos FROM repo_cache WHERE connection_id = ${params.connectionId}`;
+        if (cached) {
+          const repos = typeof cached.repos === "string" ? JSON.parse(cached.repos) : cached.repos;
+          return { repos: repos as GitRepo[], cached: true };
+        }
+      } catch {}
+    }
+
     const repos: GitRepo[] = [];
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
@@ -36,18 +49,26 @@ export const listRepos = api(
       const data = (await res.json()) as { values?: Array<any> };
       for (const r of data.values || []) repos.push({ name: r.name, fullName: r.full_name, url: r.links.html.href, defaultBranch: r.mainbranch?.name || "main", private: r.is_private });
     }
-    return { repos };
+
+    // Cache the result
+    try {
+      await db.exec`
+        INSERT INTO repo_cache (connection_id, repos, created_at)
+        VALUES (${params.connectionId}, ${JSON.stringify(repos)}::jsonb, NOW())
+        ON CONFLICT (connection_id) DO UPDATE SET repos = ${JSON.stringify(repos)}::jsonb, created_at = NOW()`;
+    } catch {}
+
+    return { repos, cached: false };
   }
 );
 
 export const listBranches = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-branches", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-branches", auth: true },
   async (params: { connectionId: string; owner: string; repo: string }): Promise<{ branches: string[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
     if (!conn) throw APIError.notFound("Connection not found");
     const branches: string[] = [];
-    const staleThreshold = Date.now() - 90 * 24 * 60 * 60 * 1000; // 3 months
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
       const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
@@ -55,19 +76,7 @@ export const listBranches = api(
       if (!res.ok) throwProviderError("GitHub", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitHub");
-      // Fetch commit dates in parallel to filter stale branches
-      const withDates = await Promise.all(data.map(async (b: any) => {
-        try {
-          const cRes = await fetch(`${baseUrl}/repos/${params.owner}/${params.repo}/commits/${b.commit.sha}`, { headers });
-          if (!cRes.ok) return { name: b.name, date: 0 };
-          const c = await cRes.json() as any;
-          return { name: b.name, date: new Date(c.commit?.committer?.date || 0).getTime() };
-        } catch { return { name: b.name, date: 0 }; }
-      }));
-      withDates
-        .filter(b => b.date > staleThreshold)
-        .sort((a, b) => b.date - a.date)
-        .forEach(b => branches.push(b.name));
+      for (const b of data) branches.push(b.name);
     } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
       const baseUrl = conn.endpoint || "https://gitlab.com";
       const projectPath = encodeURIComponent(`${params.owner}/${params.repo}`);
@@ -75,18 +84,14 @@ export const listBranches = api(
       if (!res.ok) throwProviderError("GitLab", res.status, res.statusText);
       const data = await res.json();
       if (!Array.isArray(data)) throw APIError.internal("Unexpected response from GitLab");
-      const dated = data
-        .map((b: any) => ({ name: b.name, date: new Date(b.commit?.committed_date || 0).getTime() }))
-        .filter((b: any) => b.date > staleThreshold)
-        .sort((a: any, b: any) => b.date - a.date);
-      for (const b of dated) branches.push(b.name);
+      for (const b of data) branches.push(b.name);
     }
     return { branches };
   }
 );
 
 export const getConnectionBranches = api(
-  { method: "GET", path: "/git/connections/:connectionId/branches", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/branches", auth: true },
   async (params: { connectionId: string }): Promise<{ branches: string[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; repo_url: string; endpoint: string }>`
       SELECT provider, personal_token, repo_url, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -124,7 +129,7 @@ export const getConnectionBranches = api(
 interface RepoFile { path: string; type: "file" | "dir"; size: number; }
 
 export const getRepoTree = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-tree", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-tree", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<{ files: RepoFile[] }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -163,7 +168,7 @@ export const getRepoTree = api(
 );
 
 export const getFileContent = api(
-  { method: "GET", path: "/git/connections/:connectionId/file-content", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/file-content", auth: true },
   async (params: { connectionId: string; owner: string; repo: string; branch: string; path: string }): Promise<{ content: string }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
@@ -193,7 +198,7 @@ export const getFileContent = api(
 // ─── List Repo Members (for assignee/reviewer selection) ───
 
 export const listRepoMembers = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-members", auth: true },
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-members", auth: true },
   async (params: { connectionId: string; owner: string; repo: string }): Promise<{ members: Array<{ id: string; username: string; name: string; avatarUrl: string }> }> => {
     const conn = await db.queryRow<{ provider: string; personal_token: string; endpoint: string }>`
       SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;

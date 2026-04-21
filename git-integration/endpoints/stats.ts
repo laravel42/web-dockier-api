@@ -28,15 +28,39 @@ interface RepoStats {
 }
 
 export const getRepoStats = api(
-  { method: "GET", path: "/git/connections/:connectionId/repo-stats", auth: true },
-  async (params: { connectionId: string; owner: string; repo: string; branch?: string }): Promise<RepoStats> => {
+  { expose: true, method: "GET", path: "/git/connections/:connectionId/repo-stats", auth: true },
+  async (params: { connectionId: string; owner: string; repo: string; branch?: string; refresh?: boolean; projectId?: string }): Promise<RepoStats> => {
     const branch = params.branch || "main";
+    const repoKey = `${params.owner}/${params.repo}`;
+
+    // Check cache (unless refresh requested)
+    if (!params.refresh) {
+      try {
+        const cached = await db.queryRow<{ result: string }>`
+          SELECT result FROM stats_cache WHERE repo = ${repoKey} AND branch = ${branch}`;
+        if (cached) {
+          const parsed = typeof cached.result === "string" ? JSON.parse(cached.result) : cached.result;
+          return parsed as RepoStats;
+        }
+      } catch { /* fall through */ }
+    }
 
     const conn = await db.queryRow<{
       provider: string; personal_token: string; endpoint: string;
     }>`SELECT provider, personal_token, endpoint FROM git_connections WHERE id = ${params.connectionId}`;
 
     if (!conn) throw APIError.notFound("Connection not found");
+
+    // Helper to cache stats before returning
+    const cacheAndReturn = async (stats: RepoStats): Promise<RepoStats> => {
+      try {
+        await db.exec`
+          INSERT INTO stats_cache (repo, branch, result, created_at, project_id)
+          VALUES (${repoKey}, ${branch}, ${JSON.stringify(stats)}::jsonb, NOW(), ${params.projectId || ""})
+          ON CONFLICT (repo, branch) DO UPDATE SET result = ${JSON.stringify(stats)}::jsonb, created_at = NOW(), project_id = ${params.projectId || ""}`;
+      } catch { /* ignore */ }
+      return stats;
+    };
 
     if (conn.provider === "github") {
       const baseUrl = conn.endpoint || "https://api.github.com";
@@ -103,7 +127,7 @@ export const getRepoStats = api(
             const total = Object.values(langData).reduce((s, v) => s + v, 0);
             if (total > 0) {
               languages = Object.fromEntries(
-                Object.entries(langData).map(([k, v]) => [k, Math.round((v / total) * 100)])
+                Object.entries(langData).map(([k, v]) => [k, Math.round((v / total) * 1000) / 10])
               );
             }
             if (!language && Object.keys(langData).length > 0) {
@@ -141,7 +165,7 @@ export const getRepoStats = api(
         }
       } catch {}
 
-      return ({
+      return cacheAndReturn({
         stars: repoData.stargazers_count ?? 0,
         forks: repoData.forks_count ?? 0,
         openIssues: repoData.open_issues_count ?? 0,
@@ -199,7 +223,7 @@ export const getRepoStats = api(
           if (langData && typeof langData === "object") {
             // GitLab returns percentages directly (e.g. { "TypeScript": 85.5, "CSS": 14.5 })
             languages = Object.fromEntries(
-              Object.entries(langData).map(([k, v]) => [k, Math.round(v)])
+              Object.entries(langData).map(([k, v]) => [k, Math.round(v * 10) / 10])
             );
             if (!language && Object.keys(langData).length > 0) {
               language = Object.keys(langData)[0];
@@ -243,7 +267,7 @@ export const getRepoStats = api(
         }
       } catch {}
 
-      return ({
+      return cacheAndReturn({
         stars: repoData.star_count ?? 0,
         forks: repoData.forks_count ?? 0,
         openIssues: repoData.open_issues_count ?? 0,
@@ -308,7 +332,7 @@ export const getRepoStats = api(
         } catch { /* ignore */ }
       }
 
-      return ({
+      return cacheAndReturn({
         stars: 0,
         forks: 0,
         openIssues,
@@ -326,5 +350,19 @@ export const getRepoStats = api(
     }
 
     throw APIError.unimplemented("Stats not supported for this provider");
+  }
+);
+
+// ─── Invalidate Stats Cache ───
+
+export const invalidateStatsCache = api(
+  { expose: true, method: "DELETE", path: "/git/stats-cache", auth: true },
+  async (params: { repo: string; branch?: string }): Promise<{ done: boolean }> => {
+    if (params.branch) {
+      await db.exec`DELETE FROM stats_cache WHERE repo = ${params.repo} AND branch = ${params.branch}`;
+    } else {
+      await db.exec`DELETE FROM stats_cache WHERE repo = ${params.repo}`;
+    }
+    return { done: true };
   }
 );
