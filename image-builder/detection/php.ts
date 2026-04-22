@@ -40,7 +40,52 @@ const EXT_APT_DEPS: Record<string, string[]> = {
   imagick: ["libmagickwand-dev"],
   mbstring: ["libonig-dev"],
   xml: ["libxml2-dev"],
+  imap: ["libc-client-dev", "libkrb5-dev"],
+  ldap: ["libldap2-dev"],
+  snmp: ["libsnmp-dev"],
+  tidy: ["libtidy-dev"],
+  xsl: ["libxslt1-dev"],
+  bz2: ["libbz2-dev"],
+  enchant: ["libenchant-2-dev"],
+  gmp: ["libgmp-dev"],
+  readline: ["libreadline-dev"],
 };
+
+/** Parse "major.minor" into [major, minor]; returns null on bad input */
+function parseMajorMinor(phpVer: string): [number, number] | null {
+  const [majStr, minStr] = phpVer.split(".");
+  const maj = parseInt(majStr, 10);
+  const min = parseInt(minStr, 10);
+  if (isNaN(maj) || isNaN(min)) return null;
+  return [maj, min];
+}
+
+/**
+ * Map a PHP version to the correct Debian variant for the official Docker image.
+ * - PHP 7.x  → bullseye (last Debian release with official 7.x images)
+ * - PHP 8.0  → bullseye (bookworm images were never published for 8.0)
+ * - PHP 8.1+ → bookworm
+ */
+function debianVariant(phpVer: string): string {
+  const parsed = parseMajorMinor(phpVer);
+  if (!parsed) return "bookworm";
+  const [major, minor] = parsed;
+  if (major < 8 || (major === 8 && minor < 1)) return "bullseye";
+  return "bookworm";
+}
+
+/**
+ * Pick the right Composer Docker image tag.
+ * Composer 2.8+ requires PHP ≥ 8.1 at runtime, so older PHP versions
+ * must use the 2.2 LTS line which supports PHP ≥ 7.2.
+ */
+function composerImageTag(phpVer: string): string {
+  const parsed = parseMajorMinor(phpVer);
+  if (!parsed) return "2";
+  const [major, minor] = parsed;
+  if (major < 8 || (major === 8 && minor < 1)) return "2.2";
+  return "2";
+}
 
 /** Scan composer.json (require + require-dev ext-* keys) to find required PHP extensions */
 function detectRequiredExtensions(appDir: string): Set<string> {
@@ -86,6 +131,43 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
     }
   } catch {}
 
+  // Check composer.lock for the actual minimum PHP version required by locked packages.
+  // The lock file may contain packages that need a higher PHP version than composer.json declares
+  // (e.g. composer.json says ^8.0 but locked deps require ^8.1).
+  try {
+    const lockPath = join(appDir, "composer.lock");
+    if (existsSync(lockPath)) {
+      const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+      let highest = parseMajorMinor(phpVer);
+      for (const pkg of [...(lock.packages || []), ...(lock["packages-dev"] || [])]) {
+        const phpReq = pkg?.require?.["php"];
+        if (typeof phpReq !== "string") continue;
+        // Only extract lower-bound versions from constraints like ^8.1, >=8.1, ~8.1
+        // Skip upper-bound markers like <9.0, !=8.2, etc.
+        const lowerBounds = phpReq.matchAll(/(?:[\^~>=]*\s*)(\d+)\.(\d+)/g);
+        for (const m of lowerBounds) {
+          const maj = parseInt(m[1], 10);
+          const min = parseInt(m[2], 10);
+          if (isNaN(maj) || isNaN(min)) continue;
+          // Skip if this looks like an upper bound (preceded by < or !)
+          const prefix = phpReq.slice(0, m.index).trim();
+          if (prefix.endsWith("<") || prefix.endsWith("!") || prefix.endsWith("!=")) continue;
+          if (!highest || maj > highest[0] || (maj === highest[0] && min > highest[1])) {
+            highest = [maj, min];
+          }
+        }
+      }
+      if (highest) {
+        // Cap to the latest released PHP major.minor to avoid picking up future versions
+        const maxReleased: [number, number] = [8, 4];
+        if (highest[0] > maxReleased[0] || (highest[0] === maxReleased[0] && highest[1] > maxReleased[1])) {
+          highest = maxReleased;
+        }
+        phpVer = `${highest[0]}.${highest[1]}`;
+      }
+    }
+  } catch {}
+
   const lines: string[] = [];
 
   if (stack.framework === "laravel") {
@@ -108,23 +190,40 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
       for (const pkg of (EXT_APT_DEPS[ext] || [])) aptPkgs.add(pkg);
     }
 
-    lines.push(`FROM public.ecr.aws/docker/library/php:${phpVer}-fpm-bookworm AS base`);
+    const variant = debianVariant(phpVer);
+    lines.push(`FROM public.ecr.aws/docker/library/php:${phpVer}-fpm-${variant} AS base`);
+    // For older Debian variants whose repos may have expired Release files, disable date checks
+    if (variant === "bullseye" || variant === "buster") {
+      lines.push('RUN echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf.d/99no-check-valid-until');
+    }
+    // Install system packages
     lines.push(`RUN apt-get update && apt-get install -y \\`);
     lines.push(`    ${[...aptPkgs].sort().join(" ")} \\`);
-
-    // Configure extensions that need it (gd, intl don't need special config besides gd)
-    if (installable.includes("gd")) {
-      lines.push("    && docker-php-ext-configure gd --with-freetype --with-jpeg \\");
-    }
-    if (installable.length > 0) {
-      lines.push(`    && docker-php-ext-install ${installable.sort().join(" ")} \\`);
-    }
-    for (const ext of pecl) {
-      lines.push(`    && pecl install ${ext} && docker-php-ext-enable ${ext} \\`);
-    }
     lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
 
-    lines.push("COPY --from=public.ecr.aws/docker/library/composer:2 /usr/bin/composer /usr/bin/composer");
+    // Configure and install PHP extensions
+    const configCmds: string[] = [];
+    if (installable.includes("gd")) {
+      configCmds.push("docker-php-ext-configure gd --with-freetype --with-jpeg");
+    }
+    if (installable.includes("imap")) {
+      configCmds.push("docker-php-ext-configure imap --with-kerberos --with-imap-ssl");
+    }
+    if (installable.length > 0) {
+      configCmds.push(`docker-php-ext-install ${installable.sort().join(" ")}`);
+    }
+    if (configCmds.length > 0) {
+      lines.push(`RUN ${configCmds.join(" \\\n    && ")}`);
+    }
+
+    // Install PECL extensions
+    if (pecl.length > 0) {
+      const peclCmds = pecl.map(ext => `pecl install ${ext} && docker-php-ext-enable ${ext}`);
+      lines.push(`RUN ${peclCmds.join(" \\\n    && ")}`);
+    }
+
+    const composerTag = composerImageTag(phpVer);
+    lines.push(`COPY --from=public.ecr.aws/docker/library/composer:${composerTag} /usr/bin/composer /usr/bin/composer`);
     lines.push("WORKDIR /var/www/html");
     lines.push("");
     lines.push("FROM base AS deps");
@@ -160,7 +259,9 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
     lines.push("    && php artisan config:clear 2>/dev/null || true \\");
     lines.push("    && php artisan route:clear 2>/dev/null || true \\");
     lines.push("    && php artisan view:clear 2>/dev/null || true \\");
-    lines.push("    && chown -R www-data:www-data storage bootstrap/cache");
+    lines.push("    && mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \\");
+    lines.push("    && chown -R www-data:www-data storage bootstrap/cache \\");
+    lines.push("    && chmod -R 775 storage bootstrap/cache");
     lines.push("");
     lines.push("# Nginx config");
     lines.push("RUN cat > /etc/nginx/sites-available/default <<'NGINXCONF'\nserver {\n  listen 80;\n  server_name _;\n  root /var/www/html/public;\n  index index.php;\n  client_max_body_size 100M;\n  location / { try_files $uri $uri/ /index.php?$query_string; }\n  location ~ \\.php$ { fastcgi_pass 127.0.0.1:9000; fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name; include fastcgi_params; }\n  location ~ /\\.(?!well-known).* { deny all; }\n}\nNGINXCONF");
@@ -181,19 +282,33 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
       for (const pkg of (EXT_APT_DEPS[ext] || [])) aptPkgs.add(pkg);
     }
 
-    lines.push(`FROM public.ecr.aws/docker/library/php:${phpVer}-cli-bookworm`);
+    const variant = debianVariant(phpVer);
+    lines.push(`FROM public.ecr.aws/docker/library/php:${phpVer}-cli-${variant}`);
+    if (variant === "bullseye" || variant === "buster") {
+      lines.push('RUN echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf.d/99no-check-valid-until');
+    }
     lines.push(`RUN apt-get update && apt-get install -y ${[...aptPkgs].sort().join(" ")} \\`);
+    lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
+
+    const configCmds: string[] = [];
     if (installable.includes("gd")) {
-      lines.push("    && docker-php-ext-configure gd --with-freetype --with-jpeg \\");
+      configCmds.push("docker-php-ext-configure gd --with-freetype --with-jpeg");
+    }
+    if (installable.includes("imap")) {
+      configCmds.push("docker-php-ext-configure imap --with-kerberos --with-imap-ssl");
     }
     if (installable.length > 0) {
-      lines.push(`    && docker-php-ext-install ${installable.sort().join(" ")} \\`);
+      configCmds.push(`docker-php-ext-install ${installable.sort().join(" ")}`);
     }
-    for (const ext of pecl) {
-      lines.push(`    && pecl install ${ext} && docker-php-ext-enable ${ext} \\`);
+    if (configCmds.length > 0) {
+      lines.push(`RUN ${configCmds.join(" \\\n    && ")}`);
     }
-    lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
-    lines.push("COPY --from=public.ecr.aws/docker/library/composer:2 /usr/bin/composer /usr/bin/composer");
+    if (pecl.length > 0) {
+      const peclCmds = pecl.map(ext => `pecl install ${ext} && docker-php-ext-enable ${ext}`);
+      lines.push(`RUN ${peclCmds.join(" \\\n    && ")}`);
+    }
+    const composerTag = composerImageTag(phpVer);
+    lines.push(`COPY --from=public.ecr.aws/docker/library/composer:${composerTag} /usr/bin/composer /usr/bin/composer`);
     lines.push("WORKDIR /app");
     lines.push("COPY composer.json composer.lock* ./");
     lines.push("RUN composer install --no-dev --prefer-dist");

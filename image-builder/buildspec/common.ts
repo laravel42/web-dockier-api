@@ -26,13 +26,31 @@ export function buildAndPush(): string {
         set -euo pipefail
         source /tmp/build_env.sh
         echo "Building \${IMAGE_URI}:\${SHORT_TAG}"
+        # Only use --cache-from when the image already exists in the registry
+        CACHE_FLAG=""
+        if docker manifest inspect \${IMAGE_URI}:latest >/dev/null 2>&1; then
+          CACHE_FLAG="--cache-from \${IMAGE_URI}:latest"
+          echo "Cache image found — using --cache-from"
+        else
+          echo "No cache image found — building without cache"
+        fi
+        # Capture all build output to a file so we can display it even on failure
+        set +e
         DOCKER_BUILDKIT=1 docker build \\
           --progress=plain \\
           --build-arg BUILDKIT_INLINE_CACHE=1 \\
-          --cache-from \${IMAGE_URI}:latest \\
+          \${CACHE_FLAG} \\
           --tag \${IMAGE_URI}:\${SHORT_TAG} \\
           --tag \${IMAGE_URI}:latest \\
-          .
+          . > /tmp/docker_build.log 2>&1
+        BUILD_EXIT=\$?
+        set -e
+        echo "=== Docker Build Output ==="
+        cat /tmp/docker_build.log
+        echo "=== End Docker Build Output (exit code: \$BUILD_EXIT) ==="
+        if [ \$BUILD_EXIT -ne 0 ]; then
+          exit \$BUILD_EXIT
+        fi
       - |
         source /tmp/build_env.sh
         echo "Pushing \${IMAGE_URI}:\${SHORT_TAG}"

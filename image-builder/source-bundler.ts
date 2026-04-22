@@ -116,7 +116,7 @@ for sf in sorted(pathlib.Path(".").rglob("settings.py")):
       const dockerignore = [
         "node_modules", ".next", ".git", ".gitignore",
         "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store",
-        "vendor", ".env", "*.log",
+        "/vendor", ".env", "*.log",
         "!.env.example",
         "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv",
         "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor",
@@ -130,11 +130,14 @@ for sf in sorted(pathlib.Path(".").rglob("settings.py")):
     // Create zip
     const { default: AdmZip } = await import("adm-zip");
     const zip = new AdmZip();
-    const skipDirs = new Set(["node_modules", ".git", ".pnpm-store", ".turbo", ".cache", "__pycache__", ".venv", "venv", "vendor"]);
+    const skipDirs = new Set(["node_modules", ".git", ".pnpm-store", ".turbo", ".cache", "__pycache__", ".venv", "venv"]);
+    // Only skip root-level vendor (Composer deps), not nested vendor dirs like resources/views/vendor
+    const skipRootOnly = new Set(["vendor"]);
     const addDir = (dirPath: string, zipPrefix: string) => {
       const items = readdirSync(dirPath, { withFileTypes: true });
       for (const item of items) {
         if (item.isDirectory() && skipDirs.has(item.name)) continue;
+        if (item.isDirectory() && skipRootOnly.has(item.name) && !zipPrefix) continue;
         const fullPath = join(dirPath, item.name);
         if (item.isDirectory()) {
           addDir(fullPath, zipPrefix ? `${zipPrefix}/${item.name}` : item.name);
