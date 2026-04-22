@@ -155,6 +155,10 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
             cpu: plan?.cpu?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.cpu.match(/[\d.]+/)![0]) * 1024)) : undefined,
             memory: plan?.ram?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.ram.match(/[\d.]+/)![0]) * 1024)) : undefined,
             envVars: state.envVars.length > 0 ? state.envVars : undefined,
+            selfHostedServices: Object.entries(state.servicesModes)
+              .filter(([, mode]) => mode === "vps")
+              .map(([type]) => type),
+            techStack: analysis?.techStack?.map(t => t.name) || undefined,
           },
         });
 

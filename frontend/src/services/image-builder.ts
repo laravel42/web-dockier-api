@@ -26,6 +26,8 @@ export const imageBuilderApi = {
       vpcId?: string;
       subnetIds?: string[];
       envVars?: Array<{ name: string; value: string }>;
+      selfHostedServices?: string[];
+      techStack?: string[];
     };
   }) =>
     request<{

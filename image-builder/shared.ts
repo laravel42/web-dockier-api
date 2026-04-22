@@ -86,6 +86,10 @@ export interface StartBuildParams {
     vpcId?: string;
     subnetIds?: string[];
     envVars?: Array<{ name: string; value: string }>;
+    /** Self-hosted services to install on the EC2 instance (e.g. database, cache, queue) */
+    selfHostedServices?: string[];
+    /** Tech stack identifiers for service-specific setup (e.g. "laravel") */
+    techStack?: string[];
   };
 }
 
