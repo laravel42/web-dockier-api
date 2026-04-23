@@ -45,8 +45,10 @@ export function buildAndPush(): string {
           . > /tmp/docker_build.log 2>&1
         BUILD_EXIT=\$?
         set -e
-        echo "=== Docker Build Output ==="
-        cat /tmp/docker_build.log
+        echo "=== Docker Build ERRORS ==="
+        grep -i "error\|failed\|fatal\|denied\|not found" /tmp/docker_build.log || echo "(no error lines found)"
+        echo "=== Docker Build Output (last 30 lines) ==="
+        tail -30 /tmp/docker_build.log
         echo "=== End Docker Build Output (exit code: \$BUILD_EXIT) ==="
         if [ \$BUILD_EXIT -ne 0 ]; then
           exit \$BUILD_EXIT

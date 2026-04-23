@@ -27,6 +27,21 @@ const BUILTIN_EXTS = new Set([
 // Extensions that need pecl install instead of docker-php-ext-install
 const PECL_EXTS = new Set(["redis", "imagick", "xdebug", "apcu", "memcached", "swoole", "mongodb"]);
 
+// Extensions removed from PHP core in specific versions — must use PECL on those versions
+const PECL_SINCE: Record<string, [number, number]> = {
+  imap: [8, 4],    // removed from core in PHP 8.4
+};
+
+/** Check if an extension needs PECL install for the given PHP version */
+function isPeclExt(ext: string, phpVer: string): boolean {
+  if (PECL_EXTS.has(ext)) return true;
+  const since = PECL_SINCE[ext];
+  if (!since) return false;
+  const parsed = parseMajorMinor(phpVer);
+  if (!parsed) return false;
+  return parsed[0] > since[0] || (parsed[0] === since[0] && parsed[1] >= since[1]);
+}
+
 // Map extensions to the apt packages they need at build time
 const EXT_APT_DEPS: Record<string, string[]> = {
   gd: ["libpng-dev", "libjpeg-dev", "libfreetype6-dev"],
@@ -142,19 +157,26 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
       for (const pkg of [...(lock.packages || []), ...(lock["packages-dev"] || [])]) {
         const phpReq = pkg?.require?.["php"];
         if (typeof phpReq !== "string") continue;
-        // Only extract lower-bound versions from constraints like ^8.1, >=8.1, ~8.1
-        // Skip upper-bound markers like <9.0, !=8.2, etc.
-        const lowerBounds = phpReq.matchAll(/(?:[\^~>=]*\s*)(\d+)\.(\d+)/g);
-        for (const m of lowerBounds) {
+        // For each package, find the LOWEST version it accepts (minimum requirement).
+        // Constraints like "^8.1 || ^8.2 || ^8.3" accept 8.1+, so minimum is 8.1.
+        // Constraints like ">=8.2" accept 8.2+, so minimum is 8.2.
+        let pkgMin: [number, number] | null = null;
+        const bounds = phpReq.matchAll(/(\d+)\.(\d+)/g);
+        for (const m of bounds) {
           const maj = parseInt(m[1], 10);
           const min = parseInt(m[2], 10);
           if (isNaN(maj) || isNaN(min)) continue;
-          // Skip if this looks like an upper bound (preceded by < or !)
+          // Skip if preceded by < or != (upper bound / exclusion)
           const prefix = phpReq.slice(0, m.index).trim();
           if (prefix.endsWith("<") || prefix.endsWith("!") || prefix.endsWith("!=")) continue;
-          if (!highest || maj > highest[0] || (maj === highest[0] && min > highest[1])) {
-            highest = [maj, min];
+          // Take the lowest accepted version for this package
+          if (!pkgMin || maj < pkgMin[0] || (maj === pkgMin[0] && min < pkgMin[1])) {
+            pkgMin = [maj, min];
           }
+        }
+        // The highest "lowest requirement" across all packages is the version we need
+        if (pkgMin && (!highest || pkgMin[0] > highest[0] || (pkgMin[0] === highest[0] && pkgMin[1] > highest[1]))) {
+          highest = pkgMin;
         }
       }
       if (highest) {
@@ -179,8 +201,8 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
     }
 
     // Separate into installable vs pecl vs builtin
-    const installable = [...requiredExts].filter(e => !BUILTIN_EXTS.has(e) && !PECL_EXTS.has(e));
-    const pecl = [...requiredExts].filter(e => PECL_EXTS.has(e));
+    const installable = [...requiredExts].filter(e => !BUILTIN_EXTS.has(e) && !isPeclExt(e, phpVer));
+    const pecl = [...requiredExts].filter(e => isPeclExt(e, phpVer));
     // Always include redis via pecl for Laravel
     if (!pecl.includes("redis")) pecl.push("redis");
 
@@ -274,8 +296,8 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
     const requiredExts = detectRequiredExtensions(appDir);
     for (const ext of ["zip", "pdo", "pdo_mysql"]) requiredExts.add(ext);
 
-    const installable = [...requiredExts].filter(e => !BUILTIN_EXTS.has(e) && !PECL_EXTS.has(e));
-    const pecl = [...requiredExts].filter(e => PECL_EXTS.has(e));
+    const installable = [...requiredExts].filter(e => !BUILTIN_EXTS.has(e) && !isPeclExt(e, phpVer));
+    const pecl = [...requiredExts].filter(e => isPeclExt(e, phpVer));
 
     const aptPkgs = new Set(["git", "unzip"]);
     for (const ext of [...installable, ...pecl]) {
