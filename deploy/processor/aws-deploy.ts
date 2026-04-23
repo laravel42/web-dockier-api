@@ -37,7 +37,7 @@ export async function handleAwsDeploy(
   const accountId = identity.Account || "";
 
   const codebuildProject = "image-builder";
-  const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const cacheRepoName = `${imageRepoName}-cache`;
   const bucketName = `${codebuildProject}-source-${accountId}`;
 

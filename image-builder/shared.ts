@@ -188,7 +188,7 @@ export async function resolveAwsCredentials(providerId: string): Promise<{ acces
 
 export function deriveImageRepo(sourceRepo: string): string {
   const parts = sourceRepo.split("/");
-  return parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  return parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9-]/g, "-");
 }
 
 export async function getAwsAccountId(accessKeyId: string, secretAccessKey: string, region: string): Promise<string> {

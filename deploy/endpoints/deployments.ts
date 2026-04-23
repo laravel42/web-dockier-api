@@ -142,8 +142,8 @@ export const destroyDeployment = api(
     const repoName = row.repo.split("/").pop() || "app";
     const rawAppName = row.docker_image
       ? row.docker_image.split(":")[0]
-      : repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-    const appName = rawAppName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+      : repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const appName = rawAppName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
     const region = providerRow.region || "us-east-1";
     const errors: string[] = [];
 
