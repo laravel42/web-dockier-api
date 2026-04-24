@@ -275,6 +275,11 @@ export async function handlePulumiDeploy(
 
   // Transfer Docker image to server (VPS providers with a server IP)
   if (serverIp && !event.registryUrl && !isStaticDeploy) {
+    // PHP/Laravel images bundle nginx+php-fpm via supervisor and listen on port 80 inside
+    // the container, while other runtimes listen on their configured app port.
+    const isPhpRuntime = event.primaryLanguage?.toLowerCase() === "php" ||
+      event.techStack.some(s => s.toLowerCase() === "laravel" || s.toLowerCase() === "php");
+    const containerPort = isPhpRuntime ? 80 : 0; // 0 means "use APP_PORT from nginx config"
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ── Transfer Docker Image ──────────`);
     const tarPath = join(workDir, `${actualImage.replace(":", "-")}.tar`);
@@ -291,12 +296,17 @@ export async function handlePulumiDeploy(
           if (check.output.includes("READY")) break;
           await new Promise(r => setTimeout(r, 10_000));
         }
+        // Build the port mapping: for PHP, map host APP_PORT → container 80;
+        // for other runtimes, map APP_PORT → APP_PORT
+        const portMapping = containerPort
+          ? `127.0.0.1:\${APP_PORT}:${containerPort}`
+          : `127.0.0.1:\${APP_PORT}:\${APP_PORT}`;
         const loadResult = await runCmd("ssh", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", `root@${serverIp}`,
           `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && ` +
           `APP_PORT=$(grep proxy_pass /etc/nginx/sites-available/* 2>/dev/null | head -1 | sed 's/.*://;s/;.*//') && ` +
           `APP_PORT=\${APP_PORT:-3000} && ` +
           `docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; ` +
-          `docker run -d --name ${repoName} --restart=always -p 127.0.0.1:\${APP_PORT}:\${APP_PORT} --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=\${APP_PORT} ${actualImage}`
+          `docker run -d --name ${repoName} --restart=always -p ${portMapping} --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=\${APP_PORT} ${actualImage}`
         ], { cwd: workDir });
         if (loadResult.code === 0) await appendLog(deploymentId, `[${ts()}] ✓ Docker image transferred and running on server`);
         else await appendLog(deploymentId, `[${ts()}] ⚠ Failed to load image on server`);

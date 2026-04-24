@@ -128,8 +128,11 @@ elif [ -n "$ECR_IMAGE" ]; then
   done
   docker stop ${p.appName} 2>/dev/null || true
   docker rm ${p.appName} 2>/dev/null || true
+  # PHP/Laravel images run nginx on port 80 inside the container;
+  # other runtimes listen on the configured runtime port.
+  CONTAINER_PORT=${p.runtime.name === "php" ? "80" : String(p.runtime.port)}
   docker run -d --name ${p.appName} --restart=always \\
-    -p 127.0.0.1:${p.runtime.port}:${p.runtime.port} \\
+    -p 127.0.0.1:${p.runtime.port}:$CONTAINER_PORT \\
     --add-host=host.docker.internal:host-gateway \\
     -e APP_ENV=production \\
     -e PORT=${p.runtime.port} \\
