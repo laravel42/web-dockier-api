@@ -358,6 +358,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         deployStrategy: state.deployStrategy,
         buildMethod: state.buildMethod,
         templateId: project.sourceType === "template" ? project.template : undefined,
+        envVars: state.envVars.length > 0 ? state.envVars : undefined,
       });
       setState(prev => ({ ...prev, deploymentId: deployment.id }));
 

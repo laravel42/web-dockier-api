@@ -22,6 +22,7 @@ export const createDeployment = api(
     buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
     skipPipeline?: boolean;
     templateId?: string;
+    envVars?: Array<{ name: string; value: string }>;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -48,6 +49,7 @@ export const createDeployment = api(
         deployStrategy: params.deployStrategy || "managed",
         buildMethod: params.buildMethod || "dockerfile",
         templateId: params.templateId || undefined,
+        envVars: params.envVars || undefined,
       });
     }
 
@@ -210,7 +212,7 @@ async function destroyGcpManagedNoState(
     const accessToken = await getGcpAccessToken(providerRow.api_key);
 
     if (accessToken && gcpProjectId) {
-      const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+      const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
       const arRegion = extractRegionFromScript(tofuScript) || providerRow.region || "us-central1";
       const serviceNameMatch = tofuScript.match(/new gcp\.cloudrunv2\.Service\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
       const serviceName = serviceNameMatch?.[1] || arRepo;
@@ -408,7 +410,7 @@ async function destroyWithPulumiState(
         const accessToken = await getGcpAccessToken(providerRow.api_key);
 
         if (accessToken && gcpProjectId) {
-          const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+          const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
           const arRegion = extractRegionFromScript(pulumiScript) || providerRow.region || "us-central1";
           const arBase = `https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`;
 

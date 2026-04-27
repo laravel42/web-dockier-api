@@ -162,7 +162,7 @@ export async function handlePulumiDeploy(
       await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry API enabled`);
 
       const arHost = `${arRegion}-docker.pkg.dev`;
-      const arRepo = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+      const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
       const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
 
       // Create Artifact Registry repository
@@ -183,11 +183,85 @@ export async function handlePulumiDeploy(
 
       await runCmd("pulumi", ["config", "set", "imageUri", arImageUri, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
     }
+    // For Compute Engine (VPS), push image to Artifact Registry so the startup script can pull it
+    if (event.deployStrategy !== "managed" && event.deployStrategy !== "static" && gcpProjectId && !isStaticDeploy) {
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Push Image to Artifact Registry ─`);
+
+      const arRegion = extractRegionFromScript(event.tofuScript) || region;
+      const accessToken = await getGcpAccessToken(ctx.providerRow.api_key);
+      if (!accessToken) throw new Error("Failed to get GCP access token from service account key");
+
+      await appendLog(deploymentId, `[${ts()}] ℹ Enabling Artifact Registry API...`);
+      await enableGcpApis(gcpProjectId, accessToken, ["artifactregistry.googleapis.com", "compute.googleapis.com"]);
+      await new Promise(r => setTimeout(r, 5_000));
+      await appendLog(deploymentId, `[${ts()}] ✓ APIs enabled`);
+
+      const arHost = `${arRegion}-docker.pkg.dev`;
+      const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
+      const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
+
+      const repoResult = await ensureArtifactRegistryRepo(gcpProjectId, arRegion, arRepo, accessToken);
+      if (repoResult.created) {
+        await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository created`);
+      } else if (repoResult.error) {
+        await appendLog(deploymentId, `[${ts()}] ⚠ Create repo: ${repoResult.error}`);
+      } else {
+        await appendLog(deploymentId, `[${ts()}] ✓ Artifact Registry repository already exists`);
+      }
+
+      await pushToArtifactRegistry({
+        localImage: actualImage, arImageUri, arHost, accessToken, workDir, runCmd, env: providerEnv,
+      });
+      await appendLog(deploymentId, `[${ts()}] ✓ Image pushed: ${arImageUri}`);
+
+      // Replace the AR image and token placeholders in the Pulumi program so the startup script can pull
+      const indexPath = join(pulumiDir, "index.ts");
+      let program = await ctx.readFs(indexPath, "utf-8");
+      program = program.replace(/__AR_IMAGE_URI__/g, arImageUri);
+      program = program.replace(/__AR_TOKEN__/g, accessToken);
+      await ctx.writeFile(indexPath, program, "utf-8");
+    }
     // Don't set gcp:region here — the Pulumi template already has the wizard-selected region as default
   }
   // For non-GCP providers, set region from provider config (GCP uses the region baked into the Pulumi script)
   if (provider !== "gcp") {
     await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+  }
+
+  // Replace user-provided env vars placeholder in the Pulumi program
+  {
+    const indexPath = join(pulumiDir, "index.ts");
+    let program = await ctx.readFs(indexPath, "utf-8");
+    if (event.envVars?.length) {
+      // Escape values for embedding inside a JS template literal that becomes a bash script:
+      // - Use single quotes to prevent bash variable expansion (values like ${APP_NAME} stay literal)
+      // - $ must be \$ so JS doesn't interpret ${...} as template interpolation
+      // - backticks must be \` so they don't break the template literal
+      // - single quotes in values are escaped with '\'' (end quote, escaped quote, start quote)
+      const userEnvFlags = event.envVars.map(e => {
+        const escaped = e.value.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$").replace(/'/g, "'\\''");
+        return `-e ${e.name}='${escaped}'`;
+      }).join(" ");
+      program = program.replace(/__USER_ENV_FLAGS__/g, userEnvFlags);
+    } else {
+      program = program.replace(/__USER_ENV_FLAGS__/g, "");
+    }
+    await ctx.writeFile(indexPath, program, "utf-8");
+  }
+
+  // Replace database credential placeholders with user's actual values
+  {
+    const indexPath = join(pulumiDir, "index.ts");
+    let program = await ctx.readFs(indexPath, "utf-8");
+    const envMap = new Map((event.envVars || []).map(e => [e.name, e.value]));
+    const dbName = envMap.get("DB_DATABASE") || "forge";
+    const dbUser = envMap.get("DB_USERNAME") || "appuser";
+    const dbPass = envMap.get("DB_PASSWORD") || "apppass123";
+    program = program.replace(/__DEPLOY_DB_NAME__/g, dbName);
+    program = program.replace(/__DEPLOY_DB_USER__/g, dbUser);
+    program = program.replace(/__DEPLOY_DB_PASS__/g, dbPass);
+    await ctx.writeFile(indexPath, program, "utf-8");
   }
 
   // Restore state from previous deployment (prefer successful, fall back to failed with partial state)
@@ -214,7 +288,7 @@ export async function handlePulumiDeploy(
 
       if (accessToken && gcpProjectId) {
         const arRegion = extractRegionFromScript(event.tofuScript) || region;
-        const serviceName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+        const serviceName = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
 
         const checkRes = await fetch(
           `https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`,
@@ -238,7 +312,36 @@ export async function handlePulumiDeploy(
 
   await appendLog(deploymentId, `[${ts()}]`);
   await appendLog(deploymentId, `[${ts()}] ── Pulumi Up ──────────────────────`);
-  const upResult = await runCmd("pulumi", ["up", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+  let upResult = await runCmd("pulumi", ["up", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+
+  // If pulumi up fails because a resource in state no longer exists (404/notFound)
+  // or a resource already exists outside of state (409/alreadyExists),
+  // wipe the stack state entirely and retry as a fresh deploy.
+  if (upResult.code !== 0 && /was not found|notFound|Error 404|already exists|alreadyExists|Error 409/.test(upResult.output)) {
+    await appendLog(deploymentId, `[${ts()}] ⚠ Resource conflict — wiping state and retrying fresh...`);
+    // Force-remove the stack (--force skips the destroy step that would fail on missing resources)
+    await runCmd("pulumi", ["stack", "rm", "--yes", "--force", "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    // Re-apply all config that was set earlier
+    if (provider === "gcp") {
+      const gcpProjectId = getGcpProjectId(ctx.providerRow.api_key);
+      if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    }
+    if (provider !== "gcp") {
+      await runCmd("pulumi", ["config", "set", "region", region, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    }
+    await runCmd("pulumi", ["config", "set", "resourceSuffix", shortId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    if (provider === "gcp" && event.deployStrategy !== "managed" && event.deployStrategy !== "static") {
+      const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
+      if (sshKeyRow) {
+        const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
+        await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+      }
+    }
+    await appendLog(deploymentId, `[${ts()}] ℹ Clean state — retrying pulumi up`);
+    upResult = await runCmd("pulumi", ["up", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+  }
+
   if (upResult.code !== 0) {
     const errorLines = upResult.output.split("\n").filter(l => l.trim()).slice(-20);
     for (const line of errorLines) await appendLog(deploymentId, `[${ts()}] ✗ ${line}`);
@@ -275,11 +378,10 @@ export async function handlePulumiDeploy(
 
   // Transfer Docker image to server (VPS providers with a server IP)
   if (serverIp && !event.registryUrl && !isStaticDeploy) {
-    // PHP/Laravel images bundle nginx+php-fpm via supervisor and listen on port 80 inside
-    // the container, while other runtimes listen on their configured app port.
-    const isPhpRuntime = event.primaryLanguage?.toLowerCase() === "php" ||
-      event.techStack.some(s => s.toLowerCase() === "laravel" || s.toLowerCase() === "php");
-    const containerPort = isPhpRuntime ? 80 : 0; // 0 means "use APP_PORT from nginx config"
+    // All runtimes (including PHP/Laravel) listen on their configured app port inside
+    // the container (e.g. php artisan serve --port=8080). The host nginx reverse-proxies
+    // to the same port on 127.0.0.1, so we always map APP_PORT → APP_PORT.
+    const containerPort = 0; // 0 means "use APP_PORT from nginx config"
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ── Transfer Docker Image ──────────`);
     const tarPath = join(workDir, `${actualImage.replace(":", "-")}.tar`);
@@ -296,17 +398,39 @@ export async function handlePulumiDeploy(
           if (check.output.includes("READY")) break;
           await new Promise(r => setTimeout(r, 10_000));
         }
-        // Build the port mapping: for PHP, map host APP_PORT → container 80;
-        // for other runtimes, map APP_PORT → APP_PORT
+        // Wait for the startup script to finish configuring nginx
+        await appendLog(deploymentId, `[${ts()}] ℹ Waiting for startup script to finish...`);
+        for (let i = 0; i < 30; i++) {
+          const check2 = await runCmd("ssh", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10", `root@${serverIp}`,
+            "grep -q proxy_pass /etc/nginx/sites-available/* 2>/dev/null && echo READY || echo WAITING"], { cwd: workDir });
+          if (check2.output.includes("READY")) break;
+          await new Promise(r => setTimeout(r, 10_000));
+        }
+        // Build the port mapping: map host APP_PORT → container APP_PORT
         const portMapping = containerPort
           ? `127.0.0.1:\${APP_PORT}:${containerPort}`
           : `127.0.0.1:\${APP_PORT}:\${APP_PORT}`;
+        // Build env flags from wizard-provided env vars (user vars first, then infra overrides)
+        const userEnvFlags = (event.envVars || []).map(e => `-e ${e.name}='${e.value.replace(/'/g, "'\\''")}'`).join(" ");
+        // Infrastructure env vars that must override user values (e.g. DB_HOST must point to host, not localhost)
+        const infraEnvFlags = ["-e APP_ENV=production", `-e PORT=\${APP_PORT}`];
+        // Detect if VPS database is provisioned and add correct connection env vars
+        const hasVpsDb = event.techStack?.some(s => s.toLowerCase() === "database") ||
+          event.tofuScript?.includes("postgresql") || event.tofuScript?.includes("mysql");
+        if (hasVpsDb || event.tofuScript?.includes("DB_HOST")) {
+          infraEnvFlags.push("-e DB_HOST=host.docker.internal");
+        }
+        const allEnvStr = `${userEnvFlags} ${infraEnvFlags.join(" ")}`;
         const loadResult = await runCmd("ssh", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", `root@${serverIp}`,
           `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && ` +
           `APP_PORT=$(grep proxy_pass /etc/nginx/sites-available/* 2>/dev/null | head -1 | sed 's/.*://;s/;.*//') && ` +
           `APP_PORT=\${APP_PORT:-3000} && ` +
           `docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; ` +
-          `docker run -d --name ${repoName} --restart=always -p ${portMapping} --add-host=host.docker.internal:host-gateway -e APP_ENV=production -e PORT=\${APP_PORT} ${actualImage}`
+          `docker run -d --name ${repoName} --restart=always -p ${portMapping} --add-host=host.docker.internal:host-gateway ${allEnvStr} ${actualImage} && ` +
+          // Ensure the nginx proxy is active (handles both fresh deploys and redeploys
+          // where the startup script may not have re-run)
+          `sleep 2 && NGINX_CONF=$(ls /etc/nginx/sites-available/* 2>/dev/null | grep -v default | head -1) && ` +
+          `if [ -n "$NGINX_CONF" ]; then ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/ && rm -f /etc/nginx/sites-enabled/default && nginx -t && systemctl reload nginx; fi`
         ], { cwd: workDir });
         if (loadResult.code === 0) await appendLog(deploymentId, `[${ts()}] ✓ Docker image transferred and running on server`);
         else await appendLog(deploymentId, `[${ts()}] ⚠ Failed to load image on server`);

@@ -61,7 +61,7 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
   } catch {}
 
   if (composer.require?.["laravel/framework"]) {
-    for (const ext of ["zip", "intl", "bcmath", "pcntl", "pdo_mysql", "pdo_pgsql", "gd"]) {
+    for (const ext of ["zip", "intl", "bcmath", "pcntl", "pdo_mysql", "pdo_pgsql", "gd", "redis"]) {
       extensions.add(ext);
     }
   }

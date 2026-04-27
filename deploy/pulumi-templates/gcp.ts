@@ -13,6 +13,7 @@ function buildGcpComputeEngine(p: DeployParams): string {
   const userData = buildDockerUserData(p);
   const managedDb = p.services.find(s => s.type === "database" && s.mode === "managed");
   const managedStorage = p.services.find(s => s.type === "storage" && s.mode === "managed");
+  const managedCache = p.services.find(s => s.type === "cache" && s.mode === "managed");
 
   let dbBlock = "";
   if (managedDb) {
@@ -62,6 +63,23 @@ export const bucketName = bucket.name;
 `;
   }
 
+  let cacheBlock = "";
+  if (managedCache) {
+    cacheBlock = `
+// ── Memorystore (Redis) ──
+const redisInstance = new gcp.redis.Instance("${p.appName}-redis", {
+  name: "${p.appName}-redis",
+  tier: "BASIC",
+  memorySizeGb: 1,
+  region: region,
+  redisVersion: "REDIS_7_0",
+  authorizedNetwork: network.selfLink,
+});
+
+export const redisHost = redisInstance.host;
+`;
+  }
+
   return `import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 
@@ -76,6 +94,16 @@ const region = config.get("region") || "${p.region}";
 const sshPublicKey = config.require("sshPublicKey");
 const suffix = config.get("keyPairSuffix") || "";
 const resName = suffix ? \`${p.appName}-\${suffix}\` : "${p.appName}";
+const gcpConfig = new pulumi.Config("gcp");
+const project = gcpConfig.require("project");
+
+// ── Artifact Registry (created by deploy processor, managed here for cleanup) ──
+const arRepo = new gcp.artifactregistry.Repository("${p.appName}-repo", {
+  repositoryId: "${p.appName}",
+  location: region,
+  format: "DOCKER",
+  cleanupPolicyDryRun: false,
+}, { import: \`projects/\${project}/locations/\${region}/repositories/${p.appName}\`, retainOnDelete: false });
 
 // ── Pick an available zone (prefer -b, -c, -f over -a for better availability) ──
 const zones = gcp.compute.getZonesOutput({ region, status: "UP" });
@@ -134,7 +162,7 @@ const instance = new gcp.compute.Instance(resName, {
   },
   metadataStartupScript: \`${userData.replace(/`/g, "\\`").replace(/\$/g, "\\$")}\`,
 });
-${dbBlock}${storageBlock}
+${dbBlock}${storageBlock}${cacheBlock}
 export const serverIp = staticIp.address;
 export const appUrl = staticIp.address.apply((ip) => \`http://\${ip}\`);
 `;
@@ -143,6 +171,7 @@ export const appUrl = staticIp.address.apply((ip) => \`http://\${ip}\`);
 function buildGcpCloudRun(p: DeployParams): string {
   const managedDb = p.services.find(s => s.type === "database" && s.mode === "managed");
   const managedStorage = p.services.find(s => s.type === "storage" && s.mode === "managed");
+  const managedCache = p.services.find(s => s.type === "cache" && s.mode === "managed");
 
   // Parse CPU/memory from instanceType (e.g. "1 vCPU / 512 MB" or fallback)
   const cpuMatch = p.instanceType?.match(/([\d.]+)\s*vCPU/i) || p.instanceType?.match(/([\d.]+)-cpu/i);
@@ -209,6 +238,27 @@ export const bucketName = bucket.name;
         { name: "STORAGE_BUCKET", value: bucket.name },`;
   }
 
+  let cacheBlock = "";
+  let cacheEnvBlock = "";
+  if (managedCache) {
+    cacheBlock = `
+// ── Memorystore (Redis) ──
+const redisInstance = new gcp.redis.Instance("${p.appName}-redis", {
+  name: "${p.appName}-redis",
+  tier: "BASIC",
+  memorySizeGb: 1,
+  region: region,
+  redisVersion: "REDIS_7_0",
+});
+
+export const redisHost = redisInstance.host;
+`;
+    cacheEnvBlock = `
+        { name: "REDIS_HOST", value: redisInstance.host },
+        { name: "CACHE_DRIVER", value: "redis" },
+        { name: "SESSION_DRIVER", value: "redis" },`;
+  }
+
   return `import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 
@@ -243,8 +293,8 @@ const registry = new gcp.artifactregistry.Repository("${p.appName}-repo", {
   location: region,
   format: "DOCKER",
   cleanupPolicyDryRun: false,
-}, { dependsOn: [artifactRegistryApi], import: \`projects/\${project}/locations/\${region}/repositories/${p.appName}\` });
-${dbBlock}${storageBlock}
+}, { dependsOn: [artifactRegistryApi], import: \`projects/\${project}/locations/\${region}/repositories/${p.appName}\`, retainOnDelete: false });
+${dbBlock}${storageBlock}${cacheBlock}
 // ── Cloud Run Service ──
 const service = new gcp.cloudrunv2.Service("${p.appName}", {
   name: "${p.appName}",
@@ -266,7 +316,7 @@ const service = new gcp.cloudrunv2.Service("${p.appName}", {
         },
       },
       envs: [
-        { name: "NODE_ENV", value: "production" },${dbEnvBlock}${storageEnvBlock}
+        { name: "NODE_ENV", value: "production" },${dbEnvBlock}${storageEnvBlock}${cacheEnvBlock}
       ],
     }],
   },
