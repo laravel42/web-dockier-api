@@ -76,6 +76,14 @@ export async function handleAwsDeploy(
   const deployParams: Record<string, any> = { appName: repoName, containerPort: ctx.repoConfig.port || 3000 };
   if (deployTarget === "ecs") { deployParams.cpu = "512"; deployParams.memory = "1024"; }
   if (deployTarget === "ec2") { deployParams.instanceType = "t3.small"; }
+  if (event.envVars && event.envVars.length > 0) { deployParams.envVars = event.envVars; }
+  if (event.techStack && event.techStack.length > 0) { deployParams.techStack = event.techStack; }
+  const selfHostedServices: string[] = [];
+  const hasDbEnvVars = (event.envVars || []).some(v => ["DB_CONNECTION", "DB_DATABASE", "DB_HOST"].includes(v.name));
+  if (event.techStack?.some(t => t.toLowerCase() === "laravel") || hasDbEnvVars) {
+    selfHostedServices.push("database");
+  }
+  if (selfHostedServices.length > 0) { deployParams.selfHostedServices = selfHostedServices; }
 
   const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
   const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });

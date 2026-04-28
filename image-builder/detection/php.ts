@@ -283,7 +283,7 @@ export function phpDockerfile(stack: Extract<DetectedStack, { runtime: "php" }>,
     lines.push("    && php artisan view:clear 2>/dev/null || true \\");
     lines.push("    && mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \\");
     lines.push("    && chown -R www-data:www-data storage bootstrap/cache \\");
-    lines.push("    && chmod -R 775 storage bootstrap/cache");
+    lines.push("    && chmod -R 777 storage bootstrap/cache");
     lines.push("");
     lines.push("# Nginx config");
     lines.push("RUN cat > /etc/nginx/sites-available/default <<'NGINXCONF'\nserver {\n  listen 80;\n  server_name _;\n  root /var/www/html/public;\n  index index.php;\n  client_max_body_size 100M;\n  location / { try_files $uri $uri/ /index.php?$query_string; }\n  location ~ \\.php$ { fastcgi_pass 127.0.0.1:9000; fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name; include fastcgi_params; }\n  location ~ /\\.(?!well-known).* { deny all; }\n}\nNGINXCONF");

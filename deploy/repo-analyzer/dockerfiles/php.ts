@@ -80,6 +80,8 @@ export function generatePhpDockerfile(config: RepoConfig): string {
   lines.push("COPY --from=composer /app/vendor ./vendor");
   if (hasNodeAssets) lines.push("COPY --from=node-builder /app/public ./public");
   lines.push(`COPY ${copyPrefix}. .`);
+  // Laravel requires writable storage and bootstrap/cache directories
+  lines.push("RUN mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache");
   lines.push(`ENV PORT=${config.port}`);
   lines.push(`EXPOSE ${config.port}`);
   lines.push(`CMD ${JSON.stringify((config.startCommand || "php artisan serve --host=0.0.0.0 --port=8080").split(" "))}`);
