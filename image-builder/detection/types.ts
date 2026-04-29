@@ -1,8 +1,6 @@
 // ─── Stack Detection Types ───
+// Re-exported from the canonical location in deploy/repo-analyzer/types.ts.
+// The image-builder service imports from here for convenience, but the
+// single source of truth is deploy/repo-analyzer/types.ts.
 
-export type DetectedStack =
-  | { runtime: "node"; framework: "nextjs" | "nuxt" | "sveltekit" | "spa" | "generic"; packageManager: "npm" | "pnpm" | "yarn" | "bun"; hasStandalone: boolean; isStatic: boolean; subDir: string }
-  | { runtime: "php"; framework: "laravel" | "generic"; hasNodeAssets: boolean; subDir: string }
-  | { runtime: "python"; framework: "django" | "fastapi" | "flask" | "generic"; subDir: string }
-  | { runtime: "go"; subDir: string }
-  | { runtime: "unknown"; subDir: string };
+export type { DetectedStack } from "../../deploy/repo-analyzer/types";

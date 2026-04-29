@@ -2,8 +2,30 @@ import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
 import { git_integration } from "~encore/clients";
 import { appendLog, ts, generateAwsBuildspec } from "./helpers";
 
+/**
+ * @deprecated This file is deprecated. The AWS deploy logic has been refactored into
+ * individual adapter files under `deploy/processor/adapters/`:
+ * - `aws-ecs.ts` — ECS Fargate (managed) deployments
+ * - `aws-ec2.ts` — EC2 (VPS) deployments
+ * - `aws-s3.ts` — S3 + CloudFront (static) deployments
+ *
+ * This file is kept intact for backward compatibility with `buildMethod: "codebuild"` flows.
+ * New code should use the adapter pattern via `getAdapter()` from `deploy/processor/adapters/index.ts`.
+ */
+
 type RunCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }) => Promise<{ code: number; output: string }>;
 
+/**
+ * @deprecated Use the unified adapter dispatch via `getAdapter(provider, strategy)` from
+ * `deploy/processor/adapters/index.ts` instead. This function is retained only for
+ * backward compatibility with `buildMethod: "codebuild"` flows that route through the
+ * AWS CodeBuild → CloudFormation pipeline.
+ *
+ * The AWS deploy logic has moved to:
+ * - `deploy/processor/adapters/aws-ecs.ts` (managed / ECS Fargate)
+ * - `deploy/processor/adapters/aws-ec2.ts` (vps / EC2)
+ * - `deploy/processor/adapters/aws-s3.ts` (static / S3 + CloudFront)
+ */
 export async function handleAwsDeploy(
   event: DeployEvent,
   ctx: {

@@ -4,8 +4,29 @@ import { getGcpAccessToken, getGcpProjectId, enableGcpApis, ensureArtifactRegist
 import { setupPulumiWorkspace, restorePulumiState, savePulumiState } from "./pulumi-workspace";
 import type { RunCmdFn } from "./run-cmd";
 
+/**
+ * @deprecated This file is deprecated. The GCP deploy logic has been refactored into
+ * individual adapter files under `deploy/processor/adapters/`:
+ * - `gcp-cloudrun.ts` — Cloud Run (managed) deployments
+ * - `gcp-compute.ts` — Compute Engine (VPS) deployments
+ * - `gcp-storage.ts` — Cloud Storage + CDN (static) deployments
+ *
+ * This file is kept intact for backward compatibility with `buildMethod: "codebuild"` flows.
+ * New code should use the adapter pattern via `getAdapter()` from `deploy/processor/adapters/index.ts`.
+ */
+
 type RunCmd = RunCmdFn;
 
+/**
+ * @deprecated Use the unified adapter dispatch via `getAdapter(provider, strategy)` from
+ * `deploy/processor/adapters/index.ts` instead. This function is retained only for
+ * backward compatibility with legacy deploy flows.
+ *
+ * The GCP deploy logic has moved to:
+ * - `deploy/processor/adapters/gcp-cloudrun.ts` (managed / Cloud Run)
+ * - `deploy/processor/adapters/gcp-compute.ts` (vps / Compute Engine)
+ * - `deploy/processor/adapters/gcp-storage.ts` (static / Cloud Storage + CDN)
+ */
 export async function handlePulumiDeploy(
   event: DeployEvent,
   ctx: {
@@ -26,6 +47,10 @@ export async function handlePulumiDeploy(
 ) {
   const { deploymentId, repoName, shortId, provider, region, repoDir, workDir, commitHash, runCmd } = ctx;
   const { execSync } = await import("node:child_process");
+
+  // The startup script (user-data) uses a sanitized container name (appName) that
+  // replaces non-alphanumeric chars with hyphens. We must use the same name here.
+  const containerName = repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 
   if (!event.tofuScript) throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
   const { join } = await import("node:path");
@@ -126,8 +151,11 @@ export async function handlePulumiDeploy(
   if ((provider === "gcp" && event.deployStrategy !== "managed" && event.deployStrategy !== "static")) {
     const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
     if (!sshKeyRow) throw new Error("No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.");
-    // Combine user key + deploy key so both can access the server
-    const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
+    // Combine user key + deploy key so both can access the server.
+    // GCP ssh-keys metadata requires each line to be prefixed with "username:".
+    // The Pulumi template wraps the first key as `root:${sshPublicKey}`, so the
+    // second key must also start with "root:" on its own line.
+    const combinedKeys = `${sshKeyRow.public_key.trim()}\nroot:${deployPubKey}`;
     await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
   if (provider === "gcp") {
@@ -334,7 +362,7 @@ export async function handlePulumiDeploy(
     if (provider === "gcp" && event.deployStrategy !== "managed" && event.deployStrategy !== "static") {
       const sshKeyRow = await db.queryRow<{ public_key: string }>`SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId} ORDER BY created_at DESC LIMIT 1`;
       if (sshKeyRow) {
-        const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
+        const combinedKeys = `${sshKeyRow.public_key.trim()}\nroot:${deployPubKey}`;
         await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
       }
     }
@@ -452,8 +480,8 @@ export async function handlePulumiDeploy(
           `docker load -i /tmp/app-image.tar && rm /tmp/app-image.tar && ` +
           `APP_PORT=$(grep proxy_pass /etc/nginx/sites-available/* 2>/dev/null | head -1 | sed 's/.*://;s/;.*//') && ` +
           `APP_PORT=\${APP_PORT:-3000} && ` +
-          `docker stop ${repoName} 2>/dev/null; docker rm ${repoName} 2>/dev/null; ` +
-          `docker run -d --name ${repoName} --restart=always -p ${portMapping} --add-host=host.docker.internal:host-gateway ${allEnvStr} ${actualImage} && ` +
+          `docker stop ${containerName} 2>/dev/null; docker rm ${containerName} 2>/dev/null; ` +
+          `docker run -d --name ${containerName} --restart=always -p ${portMapping} --add-host=host.docker.internal:host-gateway ${allEnvStr} ${actualImage} && ` +
           // Ensure the nginx proxy is active (handles both fresh deploys and redeploys
           // where the startup script may not have re-run)
           `sleep 2 && NGINX_CONF=$(ls /etc/nginx/sites-available/* 2>/dev/null | grep -v default | head -1) && ` +
@@ -468,9 +496,9 @@ export async function handlePulumiDeploy(
             await appendLog(deploymentId, `[${ts()}] ℹ Running Laravel post-deploy commands...`);
             await runCmd("ssh", ["-i", deployKeyPath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", `root@${serverIp}`,
               `sleep 3 && ` +
-              `docker exec ${repoName} php artisan config:clear 2>/dev/null; ` +
-              `docker exec ${repoName} php artisan migrate --force 2>/dev/null; ` +
-              `docker exec ${repoName} php artisan config:cache 2>/dev/null; ` +
+              `docker exec ${containerName} php artisan config:clear 2>/dev/null; ` +
+              `docker exec ${containerName} php artisan migrate --force 2>/dev/null; ` +
+              `docker exec ${containerName} php artisan config:cache 2>/dev/null; ` +
               `echo LARAVEL_SETUP_DONE`
             ], { cwd: workDir });
             await appendLog(deploymentId, `[${ts()}] ✓ Laravel post-deploy commands completed`);

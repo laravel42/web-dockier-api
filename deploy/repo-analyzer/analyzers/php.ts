@@ -71,9 +71,9 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
   if (composer.require?.["laravel/framework"]) {
     config.framework = "Laravel";
     config.frameworkVersion = cleanVersion(composer.require["laravel/framework"]);
-    config.port = 8080;
+    config.port = 80;
     config.buildCommand = "composer install --no-dev --optimize-autoloader && php artisan config:cache && php artisan route:cache && php artisan view:cache";
-    config.startCommand = "php artisan serve --host=0.0.0.0 --port=8080";
+    config.startCommand = "/usr/bin/supervisord -c /etc/supervisor/conf.d/app.conf";
     if (composer.require?.["laravel/horizon"]) config.features.add("queue-worker");
     if (composer.require?.["laravel/reverb"] || composer.require?.["beyondcode/laravel-websockets"]) config.features.add("websockets");
     if (composer.require?.["laravel/octane"]) {

@@ -129,8 +129,8 @@ Refactor the deploy pipeline from two divergent code paths (GCP via Pulumi, AWS 
   - Ensure `deploy/processor/index.ts` compiles without errors
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Extend the unified DetectedStack type
-  - [ ] 8.1 Extend `deploy/repo-analyzer/types.ts` with the unified `DetectedStack` discriminated union
+- [x] 8. Extend the unified DetectedStack type
+  - [x] 8.1 Extend `deploy/repo-analyzer/types.ts` with the unified `DetectedStack` discriminated union
     - Add `DetectedStack` type as a discriminated union on `runtime` field
     - Node variant: framework (nextjs | nuxt | sveltekit | spa | angular | astro | generic), packageManager, packageManagerVersion, nodeVersion, hasStandalone, isStatic, subDir, port, nativeDeps, startCommand
     - PHP variant: framework (laravel | generic), phpVersion, phpExtensions, hasNodeAssets, subDir, port
@@ -152,8 +152,8 @@ Refactor the deploy pipeline from two divergent code paths (GCP via Pulumi, AWS 
     - Generate random nested directory structures with runtime marker files in subdirectories but not root
     - Verify correct subdirectory identification and scoped detection
 
-- [ ] 9. Consolidate PHP Dockerfile generator
-  - [ ] 9.1 Replace `deploy/repo-analyzer/dockerfiles/php.ts` with the image-builder's production-ready php-fpm pattern
+- [x] 9. Consolidate PHP Dockerfile generator
+  - [x] 9.1 Replace `deploy/repo-analyzer/dockerfiles/php.ts` with the image-builder's production-ready php-fpm pattern
     - Port the `phpDockerfile` function from `image-builder/detection/php.ts` to `deploy/repo-analyzer/dockerfiles/php.ts`
     - Use `php:X.Y-fpm-{debian}` base image with nginx and supervisord for Laravel
     - Include multi-stage build: base, deps, frontend (when Node assets present), runner
@@ -177,7 +177,7 @@ Refactor the deploy pipeline from two divergent code paths (GCP via Pulumi, AWS 
     - Generate random composer.json with ext-* requirements across PHP versions
     - Verify correct install commands (docker-php-ext-install for standard, pecl install for PECL, version-specific handling)
 
-- [ ] 10. Verify Node.js, Python, and Go Dockerfile generators
+- [x] 10. Verify Node.js, Python, and Go Dockerfile generators
   - [ ]* 10.1 Write property test for Node.js Dockerfile generation
     - **Property 5: Node.js Dockerfile uses correct version and package manager**
     - **Validates: Requirements 2.6, 2.7**
@@ -196,16 +196,16 @@ Refactor the deploy pipeline from two divergent code paths (GCP via Pulumi, AWS 
     - Generate random repos with/without existing Dockerfiles
     - Verify that existing Dockerfiles are preserved and generation is skipped
 
-- [ ] 11. Checkpoint — Verify Dockerfile generators and property tests
+- [x] 11. Checkpoint — Verify Dockerfile generators and property tests
   - Ensure all Dockerfile generators compile without errors
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Wire image-builder to import from deploy/repo-analyzer
-  - [ ] 12.1 Update `image-builder/detection/types.ts` to re-export from `deploy/repo-analyzer/types.ts`
+- [x] 12. Wire image-builder to import from deploy/repo-analyzer
+  - [x] 12.1 Update `image-builder/detection/types.ts` to re-export from `deploy/repo-analyzer/types.ts`
     - Replace the local `DetectedStack` type definition with `export type { DetectedStack } from "../../deploy/repo-analyzer/types"`
     - _Requirements: 1.9, 12.2_
 
-  - [ ] 12.2 Update `image-builder/detection/index.ts` to delegate to `deploy/repo-analyzer`
+  - [x] 12.2 Update `image-builder/detection/index.ts` to delegate to `deploy/repo-analyzer`
     - Import `detectStack` and `generateDockerfile` from `deploy/repo-analyzer` (or bridge through the existing detection functions)
     - Preserve the existing public API exports so `image-builder/source-bundler.ts` and other consumers continue to work
     - Ensure `detectStack` returns the unified `DetectedStack` type
@@ -217,7 +217,7 @@ Refactor the deploy pipeline from two divergent code paths (GCP via Pulumi, AWS 
     - Test that the exported `DetectedStack` type matches the unified type from `deploy/repo-analyzer/types.ts`
     - _Requirements: 12.1, 12.2_
 
-- [ ] 13. Environment variable injection and precedence
+- [x] 13. Environment variable injection and precedence
   - [ ]* 13.1 Write property test for environment variable injection
     - **Property 9: Environment variables are injected through provider-appropriate mechanism**
     - **Validates: Requirements 15.1**
@@ -230,13 +230,13 @@ Refactor the deploy pipeline from two divergent code paths (GCP via Pulumi, AWS 
     - Generate conflicting user + infrastructure env vars (e.g., user provides DB_HOST, infra also provides DB_HOST)
     - Verify infrastructure-derived values take precedence in the final application environment
 
-- [ ] 14. Deprecate old code paths
-  - [ ] 14.1 Add deprecation comments to `deploy/processor/pulumi-deploy.ts` and `deploy/processor/aws-deploy.ts`
+- [x] 14. Deprecate old code paths
+  - [x] 14.1 Add deprecation comments to `deploy/processor/pulumi-deploy.ts` and `deploy/processor/aws-deploy.ts`
     - Add `@deprecated` JSDoc comments explaining logic has moved to adapter files
     - Keep the files intact for `buildMethod: "codebuild"` backward compatibility
     - _Requirements: 13.6_
 
-- [ ] 15. Final checkpoint — Full integration verification
+- [x] 15. Final checkpoint — Full integration verification
   - Ensure all adapter files, processor, repo-analyzer, and image-builder detection compile without errors
   - Ensure all tests pass, ask the user if questions arise.
   - Verify the adapter registry returns correct adapters for all 6 (provider, strategy) combinations

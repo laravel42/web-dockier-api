@@ -156,6 +156,14 @@ export const destroyDeployment = api(
     const tofuScript = tofuRow?.tofu_script || "";
     const stateMarker = tofuScript.indexOf("/* STATE */\n");
 
+    // Clean up local Docker image to prevent stale image reuse on next deploy
+    if (row.docker_image) {
+      try {
+        const { execSync } = await import("node:child_process");
+        execSync(`docker rmi ${JSON.stringify(row.docker_image)} 2>/dev/null`, { timeout: 15_000, stdio: "pipe" });
+      } catch {}
+    }
+
     // ── Pulumi-based providers (GCP, AWS with saved Pulumi state) ──
     if (providerRow.provider !== "aws" || stateMarker !== -1) {
       if (stateMarker === -1) {
@@ -178,7 +186,7 @@ function destroyTs(): string {
 
 /** Mark deployment as destroyed in DB with a log message. */
 async function markDestroyed(deploymentId: string, logMessage: string): Promise<void> {
-  await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', logs = logs || ${logMessage}, updated_at = NOW() WHERE id = ${deploymentId}`;
+  await db.exec`UPDATE deployments SET status = 'destroyed', app_url = '', tofu_script = '', docker_image = '', logs = logs || ${logMessage}, updated_at = NOW() WHERE id = ${deploymentId}`;
 }
 
 /** GCP no-state destroy: clean up resources via direct API calls. */

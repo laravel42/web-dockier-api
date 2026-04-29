@@ -103,7 +103,12 @@ export async function handleTemplateDeploy(
     await runCmd("ssh-keygen", ["-t", "ed25519", "-f", deployKeyPath, "-N", "", "-q"], { cwd: workDir });
     const { readFile: readFs } = await import("node:fs/promises");
     const deployPubKey = (await readFs(`${deployKeyPath}.pub`, "utf-8")).trim();
-    const combinedKeys = `${sshKeyRow.public_key.trim()}\n${deployPubKey}`;
+    // GCP ssh-keys metadata requires each line to be prefixed with "username:".
+    // The Pulumi template wraps the first key as `root:${sshPublicKey}`, so the
+    // second key must also start with "root:" on its own line for GCP.
+    // AWS uses the key directly without a username prefix.
+    const secondKey = provider === "gcp" ? `root:${deployPubKey}` : deployPubKey;
+    const combinedKeys = `${sshKeyRow.public_key.trim()}\n${secondKey}`;
     await runCmd("pulumi", ["config", "set", "sshPublicKey", combinedKeys, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
   }
 

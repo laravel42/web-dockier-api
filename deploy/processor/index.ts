@@ -118,7 +118,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
         }
       }
 
-      const df = generateDockerfile(repoConfig);
+      const df = generateDockerfile(repoConfig, repoDir);
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
       const dockerignore = ["node_modules", ".next", ".git", ".gitignore", "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store", "/vendor", ".env", "*.log", "!.env.example", "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv", "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor", "Dockerfile*", ".dockerignore", "pulumi", ".pulumi-state"].join("\n");
       await writeFile(join(repoDir, ".dockerignore"), dockerignore, "utf-8");
@@ -151,6 +151,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
           SELECT docker_image FROM deployments
           WHERE repo = ${event.repo} AND branch = ${event.branch} AND commit_hash = ${commitHash}
             AND docker_image != '' AND id != ${deploymentId}
+            AND status NOT IN ('destroyed', 'failed')
           ORDER BY created_at DESC LIMIT 1`;
         if (cachedImage?.docker_image) {
           try {
