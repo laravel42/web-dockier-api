@@ -3,7 +3,6 @@ import { db, deployTopic, type DeployEvent, DEFAULT_REGIONS, extractRegionFromSc
 import { git_integration } from "~encore/clients";
 import { appendLog, ts } from "./helpers";
 import { handleAwsDeploy } from "./aws-deploy";
-import { handlePulumiDeploy } from "./pulumi-deploy";
 import { getTemplateConfig } from "../templates";
 import { handleTemplateDeploy } from "./template-deploy";
 import { createStreamingRunCmd } from "./run-cmd";
@@ -126,7 +125,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";
       await appendLog(deploymentId, `[${ts()}] ✓ Generated Dockerfile (${repoConfig.runtime}/${repoConfig.framework || "generic"}, pm: ${pm}, subDir: ${repoConfig.subDir || "/"})`);
 
-      // ── Legacy CodeBuild path (backward compatibility) ──
+      // ── AWS CodeBuild path (remote build on AWS) ──
       if (event.buildMethod === "codebuild") {
         await handleAwsDeploy(event, {
           deploymentId, repoName, shortId, provider, region,

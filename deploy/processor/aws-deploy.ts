@@ -1,30 +1,25 @@
 import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
-import { git_integration } from "~encore/clients";
 import { appendLog, ts, generateAwsBuildspec } from "./helpers";
 
 /**
- * @deprecated This file is deprecated. The AWS deploy logic has been refactored into
- * individual adapter files under `deploy/processor/adapters/`:
- * - `aws-ecs.ts` — ECS Fargate (managed) deployments
- * - `aws-ec2.ts` — EC2 (VPS) deployments
- * - `aws-s3.ts` — S3 + CloudFront (static) deployments
+ * AWS CodeBuild deploy path — builds Docker images remotely via CodeBuild,
+ * pushes to ECR, and provisions infrastructure through CloudFormation.
  *
- * This file is kept intact for backward compatibility with `buildMethod: "codebuild"` flows.
- * New code should use the adapter pattern via `getAdapter()` from `deploy/processor/adapters/index.ts`.
+ * This is one of two AWS build strategies:
+ * - **CodeBuild** (`buildMethod: "codebuild"`): Remote build on AWS. Source is
+ *   zipped, uploaded to S3, and an SNS message triggers a CodeBuild project
+ *   that builds the image, pushes to ECR, and deploys via CloudFormation.
+ *   Handled by this file.
+ * - **Local build** (`buildMethod: "dockerfile"`): Build happens on the deploy
+ *   server. Uses the unified adapter dispatch in `deploy/processor/adapters/`:
+ *   `aws-ecs.ts`, `aws-ec2.ts`, `aws-s3.ts`.
  */
 
-type RunCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }) => Promise<{ code: number; output: string }>;
-
 /**
- * @deprecated Use the unified adapter dispatch via `getAdapter(provider, strategy)` from
- * `deploy/processor/adapters/index.ts` instead. This function is retained only for
- * backward compatibility with `buildMethod: "codebuild"` flows that route through the
- * AWS CodeBuild → CloudFormation pipeline.
+ * Handle an AWS deploy using the CodeBuild pipeline.
  *
- * The AWS deploy logic has moved to:
- * - `deploy/processor/adapters/aws-ecs.ts` (managed / ECS Fargate)
- * - `deploy/processor/adapters/aws-ec2.ts` (vps / EC2)
- * - `deploy/processor/adapters/aws-s3.ts` (static / S3 + CloudFront)
+ * Flow: zip source → S3 upload → SNS trigger → CodeBuild builds image →
+ * ECR push → CloudFormation provisions infrastructure → poll for completion.
  */
 export async function handleAwsDeploy(
   event: DeployEvent,
