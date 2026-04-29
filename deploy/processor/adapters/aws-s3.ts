@@ -1,5 +1,5 @@
-import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { join, extname } from "node:path";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -358,7 +358,6 @@ export class AwsS3Adapter implements DeployAdapter {
 
     // Build the static site
     await appendLog("ℹ Building static site...");
-    const { existsSync } = await import("node:fs");
 
     const isNuxt = event.techStack.some((t) => t.toLowerCase().includes("nuxt"));
     const isNext = event.techStack.some((t) => t.toLowerCase().includes("next"));
@@ -414,7 +413,6 @@ export class AwsS3Adapter implements DeployAdapter {
    * Checks common framework output directories in priority order.
    */
   private findBuildOutputDir(repoDir: string): string {
-    const { existsSync, readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
 
     const possibleDirs = [
       ".output/public", // Nuxt
@@ -473,8 +471,6 @@ export class AwsS3Adapter implements DeployAdapter {
     uploadDir: string,
     appendLog: (line: string) => Promise<void>,
   ): Promise<void> {
-    const { readdirSync, statSync, readFileSync } = await import("node:fs");
-    const { extname } = await import("node:path");
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
 
     const mimeTypes: Record<string, string> = {
