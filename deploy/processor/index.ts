@@ -7,6 +7,8 @@ import { handlePulumiDeploy } from "./pulumi-deploy";
 import { getTemplateConfig } from "../templates";
 import { handleTemplateDeploy } from "./template-deploy";
 import { createStreamingRunCmd } from "./run-cmd";
+import { getAdapter } from "./adapters";
+import type { AdapterContext, DetectedStackInfo } from "./adapters/types";
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
@@ -124,8 +126,8 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";
       await appendLog(deploymentId, `[${ts()}] ✓ Generated Dockerfile (${repoConfig.runtime}/${repoConfig.framework || "generic"}, pm: ${pm}, subDir: ${repoConfig.subDir || "/"})`);
 
-      // ── Dispatch to provider-specific handler ──
-      if (provider === "aws") {
+      // ── Legacy CodeBuild path (backward compatibility) ──
+      if (event.buildMethod === "codebuild") {
         await handleAwsDeploy(event, {
           deploymentId, repoName, shortId, provider, region,
           providerRow: providerRow!,
@@ -134,15 +136,122 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
           writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
           rm,
         });
+        return;
+      }
+
+      // ── Unified adapter dispatch ──
+      const isStaticDeploy = event.deployStrategy === "static";
+      const imageName = `${repoName}:${shortId}`;
+      let actualImage = imageName;
+      let skipBuild = isStaticDeploy;
+
+      // Check for cached image from previous deployment
+      if (!isStaticDeploy) {
+        const cachedImage = await db.queryRow<{ docker_image: string }>`
+          SELECT docker_image FROM deployments
+          WHERE repo = ${event.repo} AND branch = ${event.branch} AND commit_hash = ${commitHash}
+            AND docker_image != '' AND id != ${deploymentId}
+          ORDER BY created_at DESC LIMIT 1`;
+        if (cachedImage?.docker_image) {
+          try {
+            execSync(`docker image inspect ${JSON.stringify(cachedImage.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
+            actualImage = cachedImage.docker_image;
+            skipBuild = true;
+            await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image: ${actualImage}`);
+          } catch {}
+        }
+      }
+
+      // Build Docker image locally (unless static or cached)
+      if (!skipBuild) {
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ── Build Docker Image ─────────────`);
+        const MAX_BUILD_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
+          const buildArgs = ["build", "--platform", "linux/amd64", "-t", imageName];
+          if (attempt > 1) buildArgs.push("--no-cache");
+          buildArgs.push(".");
+          const buildResult = await runCmd("docker", buildArgs, { cwd: repoDir });
+          if (buildResult.code === 0) { await appendLog(deploymentId, `[${ts()}] ✓ Docker image built: ${imageName}`); break; }
+          if (attempt < MAX_BUILD_ATTEMPTS) {
+            const { patchDockerfile } = await import("../repo-analyzer");
+            const currentDf = await readFs(join(repoDir, "Dockerfile"), "utf-8");
+            const fix = patchDockerfile(buildResult.output, currentDf);
+            if (fix) {
+              await appendLog(deploymentId, `[${ts()}] ⚠ Build failed — auto-fixing: ${fix.description}`);
+              await writeFile(join(repoDir, "Dockerfile"), fix.patched, "utf-8");
+              continue;
+            }
+          }
+          throw new Error(`docker build failed (exit code ${buildResult.code})`);
+        }
+      }
+
+      // Save Docker image reference
+      if (!isStaticDeploy) {
+        await db.exec`UPDATE deployments SET docker_image = ${actualImage} WHERE id = ${deploymentId}`;
+      }
+
+      // ── Look up adapter and dispatch ──
+      const deployStrategy = event.deployStrategy || "managed";
+      const adapter = getAdapter(provider, deployStrategy);
+      await appendLog(deploymentId, `[${ts()}] ℹ Using adapter: ${adapter.id}`);
+
+      // Build DetectedStackInfo from repoConfig
+      const detectedStack: DetectedStackInfo = {
+        runtime: repoConfig.runtime,
+        framework: repoConfig.framework || "",
+        packageManager: repoConfig.packageManager,
+        port: repoConfig.port,
+        subDir: repoConfig.subDir || "",
+        isStatic: isStaticDeploy,
+      };
+
+      // Build AdapterContext
+      const adapterCtx: AdapterContext = {
+        deploymentId,
+        repoName,
+        shortId,
+        region,
+        repoDir,
+        workDir,
+        commitHash,
+        providerCredentials: { apiKey: providerRow!.api_key, apiSecret: providerRow!.api_secret },
+        event,
+        detectedStack,
+        runCmd,
+        appendLog: (line: string) => appendLog(deploymentId, line),
+        writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
+        readFile: (p, e) => readFs(p, e as BufferEncoding),
+        rm,
+      };
+
+      // Inject environment variables
+      await adapter.injectEnvVars(adapterCtx, event.envVars || []);
+
+      // Push image to provider registry
+      await db.exec`UPDATE deployments SET status = 'deploying', updated_at = NOW() WHERE id = ${deploymentId}`;
+      const pushResult = await adapter.pushImage(adapterCtx, actualImage);
+
+      // Provision infrastructure
+      const imageUri = pushResult.skipped ? "" : pushResult.remoteImageUri;
+      const provision = await adapter.provisionInfrastructure(adapterCtx, imageUri || actualImage);
+
+      // Run post-deploy steps
+      await adapter.runPostDeploy(adapterCtx, provision);
+
+      // ── Update deployment record with success ──
+      const finalUrl = provision.appUrl || "";
+      await appendLog(deploymentId, `[${ts()}]`);
+      await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
+      await appendLog(deploymentId, `[${ts()}] ✓ ${isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`}`);
+      await appendLog(deploymentId, `[${ts()}] ✓ Infrastructure provisioned via ${adapter.id}`);
+      if (finalUrl) {
+        await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${finalUrl}`);
+        await db.exec`UPDATE deployments SET status = 'success', app_url = ${finalUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
       } else {
-        await handlePulumiDeploy(event, {
-          deploymentId, repoName, shortId, provider, region,
-          providerRow: providerRow!,
-          repoDir, workDir, commitHash, runCmd,
-          writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
-          readFs: (p, e) => readFs(p, e as BufferEncoding),
-          rm,
-        });
+        await appendLog(deploymentId, `[${ts()}] ⚠ Could not determine app URL — check cloud console`);
+        await db.exec`UPDATE deployments SET status = 'success', updated_at = NOW() WHERE id = ${deploymentId}`;
       }
     } catch (e: any) {
       await appendLog(deploymentId, `[${ts()}]`);
