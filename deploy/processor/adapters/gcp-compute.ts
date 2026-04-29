@@ -566,15 +566,54 @@ export class GcpComputeAdapter implements DeployAdapter {
           const infraEnvFlags = ["-e APP_ENV=production", `-e PORT=\${APP_PORT}`];
 
           // Detect if VPS database is provisioned and add correct connection env vars
+          const vpsSvcs = (event.services || []).filter(s => s.mode === "vps");
           const hasVpsDb =
-            event.techStack?.some((s) => s.toLowerCase() === "database") ||
+            vpsSvcs.some(s => s.type === "database") ||
+            event.tofuScript?.includes("mysql-server") ||
             event.tofuScript?.includes("postgresql") ||
-            event.tofuScript?.includes("mysql");
-          if (hasVpsDb || event.tofuScript?.includes("DB_HOST")) {
+            event.tofuScript?.includes("apt-get install -y mysql") ||
+            event.envVars?.some(e => e.name === "DB_HOST");
+          if (hasVpsDb) {
             infraEnvFlags.push("-e DB_HOST=host.docker.internal");
           }
 
+          // Detect if VPS cache (Redis) is provisioned
+          const hasVpsCache =
+            vpsSvcs.some(s => s.type === "cache") ||
+            event.tofuScript?.includes("redis-server") ||
+            event.tofuScript?.includes("apt-get install -y redis");
+          if (hasVpsCache) {
+            infraEnvFlags.push("-e REDIS_HOST=host.docker.internal");
+          }
+
           const allEnvStr = `${userEnvFlags} ${infraEnvFlags.join(" ")}`;
+
+          // If a VPS database is provisioned, wait for it to be ready before starting the container
+          if (hasVpsDb) {
+            await appendLog("ℹ Waiting for database to be ready...");
+            const needsMysql = event.techStack?.some(s => s.toLowerCase().includes("mysql")) ||
+              vpsSvcs.some(s => s.type === "database" && s.name.toLowerCase().includes("mysql")) ||
+              event.envVars?.some(e => e.name === "DB_CONNECTION" && e.value === "mysql");
+            const dbCheckCmd = needsMysql
+              ? "mysqladmin ping -h localhost --silent 2>/dev/null && echo DB_READY || echo DB_WAITING"
+              : "pg_isready -h localhost 2>/dev/null && echo DB_READY || echo DB_WAITING";
+            for (let i = 0; i < 30; i++) {
+              const dbCheck = await runCmd(
+                "ssh",
+                [
+                  "-i", deployKeyPath,
+                  "-o", "StrictHostKeyChecking=no",
+                  "-o", "UserKnownHostsFile=/dev/null",
+                  "-o", "ConnectTimeout=10",
+                  `root@${serverIp}`,
+                  dbCheckCmd,
+                ],
+                { cwd: workDir },
+              );
+              if (dbCheck.output.includes("DB_READY")) { await appendLog("✓ Database is ready"); break; }
+              await new Promise(r => setTimeout(r, 5_000));
+            }
+          }
 
           const loadResult = await runCmd(
             "ssh",
@@ -598,6 +637,28 @@ export class GcpComputeAdapter implements DeployAdapter {
 
           if (loadResult.code === 0) {
             await appendLog("✓ Docker image transferred and running on server");
+
+            // Run Laravel post-deploy commands if applicable (clear cached config, run migrations)
+            const isLaravel = event.techStack?.some(s => s.toLowerCase() === "laravel");
+            if (isLaravel) {
+              await appendLog("ℹ Running Laravel post-deploy commands...");
+              await runCmd(
+                "ssh",
+                [
+                  "-i", deployKeyPath,
+                  "-o", "StrictHostKeyChecking=no",
+                  "-o", "UserKnownHostsFile=/dev/null",
+                  `root@${serverIp}`,
+                  `sleep 3 && ` +
+                  `docker exec ${repoName} php artisan config:clear 2>/dev/null; ` +
+                  `docker exec ${repoName} php artisan migrate --force 2>/dev/null; ` +
+                  `docker exec ${repoName} php artisan config:cache 2>/dev/null; ` +
+                  `echo LARAVEL_SETUP_DONE`,
+                ],
+                { cwd: workDir },
+              );
+              await appendLog("✓ Laravel post-deploy commands completed");
+            }
           } else {
             await appendLog("⚠ Failed to load image on server");
           }

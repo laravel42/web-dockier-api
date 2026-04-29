@@ -1,5 +1,23 @@
 import { createSign } from "node:crypto";
 
+/** Retry a fetch call with exponential backoff for transient network errors. */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (err: any) {
+      if (attempt === maxRetries) throw err;
+      // Exponential backoff: 2s, 4s, 8s
+      await new Promise((r) => setTimeout(r, 2_000 * Math.pow(2, attempt - 1)));
+    }
+  }
+  throw new Error("fetchWithRetry: unreachable");
+}
+
 /**
  * Get a GCP access token from a service account JSON key.
  * Centralizes the JWT → OAuth2 token exchange used across deploy, destroy, and AR push flows.
@@ -25,7 +43,7 @@ export async function getGcpAccessToken(
   signer.update(signInput);
   const signature = signer.sign(saKey.private_key, "base64url");
 
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+  const tokenRes = await fetchWithRetry("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
@@ -51,7 +69,7 @@ export async function enableGcpApis(
 ): Promise<void> {
   for (const api of apis) {
     try {
-      await fetch(
+      await fetchWithRetry(
         `https://serviceusage.googleapis.com/v1/projects/${projectId}/services/${api}:enable`,
         {
           method: "POST",
@@ -74,7 +92,7 @@ export async function ensureArtifactRegistryRepo(
   accessToken: string
 ): Promise<{ created: boolean; error?: string }> {
   try {
-    const createRes = await fetch(
+    const createRes = await fetchWithRetry(
       `https://artifactregistry.googleapis.com/v1/projects/${projectId}/locations/${region}/repositories?repositoryId=${repoName}`,
       {
         method: "POST",
@@ -86,7 +104,7 @@ export async function ensureArtifactRegistryRepo(
       // Poll until accessible
       for (let i = 0; i < 12; i++) {
         await new Promise(r => setTimeout(r, 5_000));
-        const checkRes = await fetch(
+        const checkRes = await fetchWithRetry(
           `https://artifactregistry.googleapis.com/v1/projects/${projectId}/locations/${region}/repositories/${repoName}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );

@@ -85,6 +85,7 @@ export interface DeployEvent {
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   templateId?: string;
   envVars?: Array<{ name: string; value: string }>;
+  services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {

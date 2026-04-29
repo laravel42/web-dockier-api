@@ -23,6 +23,7 @@ export const createDeployment = api(
     skipPipeline?: boolean;
     templateId?: string;
     envVars?: Array<{ name: string; value: string }>;
+    services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
@@ -50,6 +51,7 @@ export const createDeployment = api(
         buildMethod: params.buildMethod || "dockerfile",
         templateId: params.templateId || undefined,
         envVars: params.envVars || undefined,
+        services: params.services || undefined,
       });
     }
 

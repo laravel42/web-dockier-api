@@ -39,8 +39,17 @@ export function buildDockerUserData(p: DeployParams): string {
       mysql --defaults-file=/etc/mysql/debian.cnf -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'%';"
     fi
     mysql --defaults-file=/etc/mysql/debian.cnf -e "FLUSH PRIVILEGES;"
-    sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf 2>/dev/null || true
-    systemctl restart mysql`;
+    # Bind MySQL to all interfaces so Docker containers can connect via host.docker.internal
+    # Handle all possible config locations on Ubuntu 22.04/24.04 with MySQL 8.0
+    for CNFFILE in /etc/mysql/mysql.conf.d/mysqld.cnf /etc/mysql/my.cnf /etc/mysql/conf.d/mysql.cnf; do
+      if [ -f "$CNFFILE" ]; then
+        sed -i 's/^[[:space:]]*bind-address[[:space:]]*=.*/bind-address = 0.0.0.0/' "$CNFFILE"
+        sed -i 's/^[[:space:]]*mysqlx-bind-address[[:space:]]*=.*/mysqlx-bind-address = 0.0.0.0/' "$CNFFILE"
+      fi
+    done
+    systemctl restart mysql
+    # Wait for MySQL to be fully ready after restart before proceeding
+    for i in $(seq 1 30); do mysqladmin ping -h localhost --silent && break; sleep 2; done`;
     } else {
       dbSetup = `
     # ── PostgreSQL ──
