@@ -159,7 +159,7 @@ export class AwsS3Adapter implements DeployAdapter {
     await appendLog("✓ Template uploaded to S3");
 
     // 8. Build CloudFormation parameters
-    const stackName = `${codebuildProject}-app-${repoName}`;
+    const stackName = `${codebuildProject}-app-${repoName.replace(/[^a-zA-Z0-9-]/g, "-")}`;
     const params = [
       { ParameterKey: "AppName", ParameterValue: repoName },
       { ParameterKey: "SourceBucket", ParameterValue: websiteBucket },

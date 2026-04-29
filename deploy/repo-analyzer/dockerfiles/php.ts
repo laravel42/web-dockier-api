@@ -82,6 +82,12 @@ export function generatePhpDockerfile(config: RepoConfig): string {
   lines.push(`COPY ${copyPrefix}. .`);
   // Laravel requires writable storage and bootstrap/cache directories
   lines.push("RUN mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache");
+  // Ensure .env exists — Laravel crashes without it. If the repo ships .env.example,
+  // copy it as a base; runtime env vars (APP_KEY, DB_*, etc.) injected via docker run
+  // will override values in the file.
+  if (config.framework === "Laravel") {
+    lines.push("RUN cp -n .env.example .env 2>/dev/null || touch .env");
+  }
   lines.push(`ENV PORT=${config.port}`);
   lines.push(`EXPOSE ${config.port}`);
   lines.push(`CMD ${JSON.stringify((config.startCommand || "php artisan serve --host=0.0.0.0 --port=8080").split(" "))}`);

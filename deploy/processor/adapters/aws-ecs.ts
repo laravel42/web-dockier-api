@@ -169,7 +169,7 @@ export class AwsEcsAdapter implements DeployAdapter {
 
     const codebuildProject = "image-builder";
     const templateBucket = `${codebuildProject}-templates-${accountId}`;
-    const stackName = `${codebuildProject}-app-${repoName}`;
+    const stackName = `${codebuildProject}-app-${repoName.replace(/[^a-zA-Z0-9-]/g, "-")}`;
     const containerPort = ctx.detectedStack.port || 3000;
 
     // 1. Read the ecs-fargate.yml template
