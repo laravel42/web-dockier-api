@@ -238,14 +238,14 @@ export class AwsEcsAdapter implements DeployAdapter {
 
     await ctx.appendLog("── Destroy AWS ECS Resources ──────");
 
-    // Delete CloudFormation stack
+    // Delete CloudFormation stack (fire and forget — stack deletion can take several minutes)
     try {
       const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
       const cfn = new CloudFormationClient({ region: ctx.region, credentials });
       try {
         await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
         await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-        await waitForStackDelete(cfn, stackName, ctx.appendLog);
+        await ctx.appendLog(`✓ Stack deletion initiated: ${stackName}`);
       } catch (e: any) { if (!e.message?.includes("does not exist")) throw e; }
     } catch (e: any) { errors.push(`CloudFormation: ${e.message}`); }
 
