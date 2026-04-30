@@ -15,7 +15,10 @@ import type {
   AdapterContext,
   PushImageResult,
   ProvisionResult,
+  DestroyContext,
+  DestroyResult,
 } from "./types";
+import { runCmd } from "../run-cmd";
 
 /**
  * GCP Cloud Storage + CDN adapter.
@@ -606,5 +609,111 @@ export class GcpStorageAdapter implements DeployAdapter {
       runCmd,
       db,
     });
+  }
+
+  async destroy(ctx: DestroyContext): Promise<DestroyResult> {
+    const errors: string[] = [];
+    const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
+    const accessToken = await getGcpAccessToken(ctx.providerCredentials.apiKey);
+    const stateMarker = ctx.tofuScript.indexOf("/* STATE */\n");
+
+    await ctx.appendLog("── Destroy GCP Storage + CDN ──────");
+
+    if (stateMarker !== -1) {
+      const savedState = ctx.tofuScript.slice(stateMarker + "/* STATE */\n".length);
+      const pulumiScript = ctx.tofuScript.slice(0, stateMarker).trim();
+
+      const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+      const { join: joinPath } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+
+      const workDir = await mkdtemp(joinPath(tmpdir(), `destroy-${ctx.deploymentId.slice(0, 8)}-`));
+      try {
+        const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
+          workDir, appName: ctx.repoName, provider: "gcp",
+          region: ctx.region, providerRow: { api_key: ctx.providerCredentials.apiKey, api_secret: ctx.providerCredentials.apiSecret },
+          indexTs: pulumiScript,
+        });
+
+        await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
+        const stackName = `destroy-${ctx.deploymentId.slice(0, 8)}`;
+        await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+        if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+        const stateFile = joinPath(pulumiDir, "state.json");
+        await writeFile(stateFile, savedState, "utf-8");
+        const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--force", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
+        if (importResult.code !== 0) {
+          errors.push(`State import failed: ${importResult.output.split("\n").slice(-3).join(" ")}`);
+        } else {
+          const destroyResult = await runCmd("pulumi", ["destroy", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+          if (destroyResult.code !== 0) {
+            errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
+          }
+        }
+      } catch (e: any) {
+        errors.push(e.message || "Unknown error during Pulumi destroy");
+      } finally {
+        try { await rm(workDir, { recursive: true, force: true }); } catch {}
+      }
+    } else if (accessToken && gcpProjectId) {
+      // No-state fallback: delete GCS bucket + CDN resources via API
+      const authHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+      // Delete GCS bucket
+      const bucketPattern = /new gcp\.storage\.Bucket\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s;
+      const bucketMatch = ctx.tofuScript.match(bucketPattern);
+      const bucketName = bucketMatch?.[1] || bucketMatch?.[2];
+      if (bucketName) {
+        try {
+          const listRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o`, { headers: authHeaders });
+          if (listRes.ok) {
+            const objData = await listRes.json() as { items?: { name: string }[] };
+            for (const obj of objData.items || []) {
+              await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o/${encodeURIComponent(obj.name)}`, { method: "DELETE", headers: authHeaders });
+            }
+          }
+          const deleteRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`, { method: "DELETE", headers: authHeaders });
+          if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`Bucket delete: ${(await deleteRes.text()).slice(0, 150)}`);
+        } catch (e: any) { errors.push(`Bucket delete: ${e.message}`); }
+      }
+
+      // Delete CDN / LB resources
+      const resourceTypes = ["globalForwardingRules", "targetHttpProxies", "urlMaps", "backendBuckets", "globalAddresses"];
+      const resourcePatterns: Record<string, RegExp> = {
+        globalForwardingRules: /new gcp\.compute\.GlobalForwardingRule\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s,
+        targetHttpProxies: /new gcp\.compute\.TargetHttpProxy\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s,
+        urlMaps: /new gcp\.compute\.URLMap\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s,
+        backendBuckets: /new gcp\.compute\.BackendBucket\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s,
+        globalAddresses: /new gcp\.compute\.GlobalAddress\([^,]+,\s*\{[^}]*name:\s*(?:"([^"]+)"|`([^`]+)`)/s,
+      };
+
+      for (const type of resourceTypes) {
+        const match = ctx.tofuScript.match(resourcePatterns[type]);
+        if (!match) continue;
+        let name = (match[1] || match[2] || "").replace(/\$\{[^}]+\}/g, "").replace(/-+$/, "");
+        if (!name) continue;
+        try {
+          const listRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}`, { headers: authHeaders });
+          if (listRes.ok) {
+            const listData = await listRes.json() as { items?: { name: string }[] };
+            for (const r of (listData.items || []).filter((r: { name: string }) => r.name.startsWith(name))) {
+              const delRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${r.name}`, { method: "DELETE", headers: authHeaders });
+              if (!delRes.ok && delRes.status !== 404) errors.push(`${type} delete ${r.name}: ${(await delRes.text()).slice(0, 150)}`);
+              await new Promise(r => setTimeout(r, 2_000));
+            }
+          }
+        } catch (e: any) { errors.push(`${type} delete: ${e.message}`); }
+      }
+    } else {
+      await ctx.appendLog("⚠ No Pulumi state and no GCP credentials — marked as destroyed");
+    }
+
+    return {
+      success: errors.length === 0,
+      message: errors.length > 0 ? `Partially destroyed: ${errors.join("; ")}` : "Cloud Storage + CDN resources destroyed",
+      errors,
+    };
   }
 }

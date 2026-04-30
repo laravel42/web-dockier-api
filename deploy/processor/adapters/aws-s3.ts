@@ -5,12 +5,15 @@ import type {
   AdapterContext,
   PushImageResult,
   ProvisionResult,
+  DestroyContext,
+  DestroyResult,
 } from "./types";
 import {
   getAwsAccountId,
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
+  waitForStackDelete,
   type AwsCredentials,
 } from "../aws-helpers";
 
@@ -434,5 +437,43 @@ export class AwsS3Adapter implements DeployAdapter {
 
     await uploadRecursive(uploadDir, "");
     await appendLog(`✓ ${fileCount} files uploaded to s3://${bucket}`);
+  }
+
+  async destroy(ctx: DestroyContext): Promise<DestroyResult> {
+    const errors: string[] = [];
+    const credentials: AwsCredentials = { accessKeyId: ctx.providerCredentials.apiKey, secretAccessKey: ctx.providerCredentials.apiSecret };
+    const stackName = `image-builder-app-${ctx.appName}`;
+
+    await ctx.appendLog("── Destroy AWS S3 Resources ───────");
+
+    // Delete CloudFormation stack
+    try {
+      const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+      const cfn = new CloudFormationClient({ region: ctx.region, credentials });
+      try {
+        await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+        await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+        await waitForStackDelete(cfn, stackName, ctx.appendLog);
+      } catch (e: any) { if (!e.message?.includes("does not exist")) throw e; }
+    } catch (e: any) { errors.push(`CloudFormation: ${e.message}`); }
+
+    // Delete S3 static site bucket (empty objects first)
+    try {
+      const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await import("@aws-sdk/client-s3");
+      const s3 = new S3Client({ region: ctx.region, credentials });
+      const bucketName = `${ctx.appName}-static-site`;
+      const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName }));
+      if (listed.Contents && listed.Contents.length > 0) {
+        await s3.send(new DeleteObjectsCommand({ Bucket: bucketName, Delete: { Objects: listed.Contents.map(o => ({ Key: o.Key! })) } }));
+      }
+      await s3.send(new DeleteBucketCommand({ Bucket: bucketName }));
+      await ctx.appendLog(`✓ S3 bucket ${bucketName} deleted`);
+    } catch {}
+
+    return {
+      success: errors.length === 0,
+      message: errors.length > 0 ? `Partially destroyed: ${errors.join("; ")}` : `Destroyed stack ${stackName}, S3 bucket`,
+      errors,
+    };
   }
 }
