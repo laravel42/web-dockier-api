@@ -15,37 +15,19 @@ const adapters: DeployAdapter[] = [
   new AwsS3Adapter(),
 ];
 
-/** Strategy normalization: maps user-facing strategy names to internal names */
-const STRATEGY_MAP: Record<string, string> = {
-  managed: "managed",
-  vps: "vps",
-  static: "static",
-};
-
 /**
  * Look up the adapter for a given provider + deploy strategy.
  * Throws a descriptive error if no adapter is registered.
  */
 export function getAdapter(provider: string, deployStrategy: string): DeployAdapter {
-  const strategy = STRATEGY_MAP[deployStrategy] || deployStrategy;
-  const adapter = adapters.find((a) => a.supports(provider, strategy));
+  const adapter = adapters.find((a) => a.supports(provider, deployStrategy));
   if (!adapter) {
     throw new Error(
-      `No deploy adapter registered for provider="${provider}" strategy="${strategy}". ` +
+      `No deploy adapter registered for provider="${provider}" strategy="${deployStrategy}". ` +
         `Supported combinations: ${adapters.map((a) => a.id).join(", ")}`,
     );
   }
   return adapter;
-}
-
-/** Register a new adapter (for extensibility) */
-export function registerAdapter(adapter: DeployAdapter): void {
-  adapters.push(adapter);
-}
-
-/** List all registered adapter IDs (for diagnostics) */
-export function listAdapterIds(): string[] {
-  return adapters.map((a) => a.id);
 }
 
 export type {
@@ -53,6 +35,4 @@ export type {
   AdapterContext,
   PushImageResult,
   ProvisionResult,
-  AdapterResult,
-  DetectedStackInfo,
 } from "./types";

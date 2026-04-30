@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getBuildspecContent } from "./shared";
+import { buildCloneUrl } from "../lib/git-url";
 
 export async function bundleAndUploadSource(
   sourceRepo: string,
@@ -23,18 +24,13 @@ export async function bundleAndUploadSource(
   const { tmpdir } = await import("node:os");
   const { readdirSync } = await import("node:fs");
 
-  // Build clone URL with auth (same pattern as deploy/code-analysis)
-  let cloneUrl: string;
-  if (gitToken && gitProvider === "github") {
-    cloneUrl = `https://x-access-token:${gitToken}@github.com/${sourceRepo}.git`;
-  } else if (gitToken && (gitProvider === "gitlab" || gitProvider === "gitlab_self_hosted")) {
-    const host = new URL(gitEndpoint || "https://gitlab.com").host;
-    cloneUrl = `https://oauth2:${gitToken}@${host}/${sourceRepo}.git`;
-  } else if (gitToken && gitProvider === "bitbucket") {
-    cloneUrl = `https://x-token-auth:${gitToken}@bitbucket.org/${sourceRepo}.git`;
-  } else {
-    cloneUrl = `https://github.com/${sourceRepo}.git`;
-  }
+  // Build clone URL with auth
+  const cloneUrl = buildCloneUrl({
+    provider: gitProvider || "",
+    token: gitToken || "",
+    repo: sourceRepo,
+    endpoint: gitEndpoint,
+  });
 
   const tmpDir = mkdtempSync(join(tmpdir(), `ib-${buildId}-`));
   try {
@@ -47,10 +43,11 @@ export async function bundleAndUploadSource(
     const repoDir = join(tmpDir, "repo");
 
     // Detect tech stack and inject tailored buildspec + Dockerfile
-    const { detectStack, generateDockerfile: genDF } = await import("./detection");
+    const { analyzeRepoConfig, generateDockerfile: genDF, toDetectedStack } = await import("../deploy/repo-analyzer");
     const { generateBuildspec, generateStaticBuildspec } = await import("./buildspec");
     const { existsSync } = await import("node:fs");
-    const stack = detectStack(repoDir);
+    const repoConfig = analyzeRepoConfig(repoDir);
+    const stack = toDetectedStack(repoConfig);
     console.log(`Detected stack: ${stack.runtime}${stack.subDir ? ` (subDir: ${stack.subDir})` : ""}`);
 
     // For static deploys (S3 + CloudFront), use static buildspec — no Docker needed
@@ -67,7 +64,7 @@ export async function bundleAndUploadSource(
     // Generate Dockerfile if the repo doesn't already have one
     let generatedDockerfile = false;
     if (!existsSync(join(repoDir, "Dockerfile"))) {
-      const dockerfile = genDF(stack, repoDir);
+      const dockerfile = genDF(repoConfig, repoDir);
       if (dockerfile) {
         writeFileSync(join(repoDir, "Dockerfile"), dockerfile);
         generatedDockerfile = true;

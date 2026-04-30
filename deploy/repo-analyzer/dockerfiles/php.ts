@@ -190,8 +190,7 @@ function resolvePhpVersion(appDir: string, fallback: string): string {
  * Generate a production-ready PHP Dockerfile.
  *
  * For Laravel projects: uses php-fpm + nginx + supervisord with a multi-stage build
- * (base → deps → frontend → runner). This is the production-ready pattern ported from
- * image-builder/detection/php.ts.
+ * (base → deps → frontend → runner). This is the production-ready pattern.
  *
  * For generic PHP projects: uses php-cli with the built-in development server.
  *

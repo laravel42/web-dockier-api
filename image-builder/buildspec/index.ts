@@ -1,6 +1,6 @@
 // ─── Buildspec Generator Orchestrator ───
 
-import type { DetectedStack } from "../detection/types";
+import type { DetectedStack } from "../../deploy/repo-analyzer/types";
 import { commonPreBuild, commonPostBuild, staticBuildAndSync, staticPostBuild } from "./common";
 import { nodeBuildPhase, phpBuildPhase, pythonBuildPhase, goBuildPhase, fallbackBuildPhase } from "./phases";
 

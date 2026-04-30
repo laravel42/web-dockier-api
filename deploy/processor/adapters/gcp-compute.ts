@@ -25,7 +25,6 @@ import type {
  *
  * Handles deployments to GCP Compute Engine via Artifact Registry + Pulumi,
  * including SCP image transfer and container startup on the provisioned VM.
- * Extracted from the `handlePulumiDeploy` function in `pulumi-deploy.ts`.
  */
 export class GcpComputeAdapter implements DeployAdapter {
   readonly id = "gcp-compute";

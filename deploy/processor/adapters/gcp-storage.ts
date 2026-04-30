@@ -23,7 +23,6 @@ import type {
  * Handles static site deployments to GCP Cloud Storage with a CDN frontend.
  * No Docker image is needed — the adapter builds the static site locally
  * and uploads the output files to a GCS bucket via the GCS JSON API.
- * Extracted from the `handlePulumiDeploy` function in `pulumi-deploy.ts`.
  */
 export class GcpStorageAdapter implements DeployAdapter {
   readonly id = "gcp-storage";
@@ -354,7 +353,7 @@ export class GcpStorageAdapter implements DeployAdapter {
           await appendLog("⚠ Could not get upload token — files not uploaded");
         } else {
           // Detect package manager from the context
-          const packageManager = ctx.detectedStack.packageManager || "npm";
+          const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
 
           // Install dependencies using the detected package manager
           await appendLog("ℹ Installing dependencies...");
