@@ -149,3 +149,123 @@ export async function pushToArtifactRegistry(opts: {
   const pushResult = await runCmd("docker", ["push", arImageUri], { cwd: workDir, env });
   if (pushResult.code !== 0) throw new Error("Failed to push image to Artifact Registry");
 }
+
+
+/**
+ * Delete a GCP Compute Engine firewall rule by name (idempotent — ignores 404).
+ */
+export async function deleteGcpFirewall(
+  projectId: string,
+  firewallName: string,
+  accessToken: string,
+): Promise<boolean> {
+  try {
+    const res = await fetchWithRetry(
+      `https://compute.googleapis.com/compute/v1/projects/${projectId}/global/firewalls/${firewallName}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete a GCP Compute Engine static IP address by name (idempotent — ignores 404).
+ */
+export async function deleteGcpAddress(
+  projectId: string,
+  region: string,
+  addressName: string,
+  accessToken: string,
+): Promise<boolean> {
+  try {
+    const res = await fetchWithRetry(
+      `https://compute.googleapis.com/compute/v1/projects/${projectId}/regions/${region}/addresses/${addressName}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete a GCP Compute Engine instance by name (idempotent — ignores 404).
+ */
+export async function deleteGcpInstance(
+  projectId: string,
+  zone: string,
+  instanceName: string,
+  accessToken: string,
+): Promise<boolean> {
+  try {
+    const res = await fetchWithRetry(
+      `https://compute.googleapis.com/compute/v1/projects/${projectId}/zones/${zone}/instances/${instanceName}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delete orphaned GCP Compute Engine resources left behind by a failed deploy.
+ * Deletes instance, firewall, and static IP in order (instance first since it
+ * may hold a reference to the IP). All operations are idempotent.
+ */
+export async function deleteOrphanedComputeResources(opts: {
+  projectId: string;
+  region: string;
+  resName: string;
+  accessToken: string;
+  appendLog: (msg: string) => Promise<void>;
+}): Promise<void> {
+  const { projectId, region, resName, accessToken, appendLog } = opts;
+
+  // Try to delete instance first (it holds a reference to the static IP)
+  // We don't know the exact zone, so find it via aggregated list
+  try {
+    const listRes = await fetchWithRetry(
+      `https://compute.googleapis.com/compute/v1/projects/${projectId}/aggregated/instances?filter=name="${resName}"`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (listRes.ok) {
+      const data = await listRes.json() as { items?: Record<string, { instances?: Array<{ zone: string; name: string }> }> };
+      for (const [scopeKey, scope] of Object.entries(data.items || {})) {
+        for (const inst of scope.instances || []) {
+          if (inst.name === resName) {
+            const zone = scopeKey.replace("zones/", "");
+            await appendLog(`ℹ Deleting orphaned instance ${resName} in ${zone}...`);
+            await deleteGcpInstance(projectId, zone, resName, accessToken);
+            // Wait a bit for the instance to release the IP
+            await new Promise((r) => setTimeout(r, 10_000));
+          }
+        }
+      }
+    }
+  } catch {
+    // Instance may not exist, that's fine
+  }
+
+  // Delete firewall rule
+  await appendLog(`ℹ Deleting orphaned firewall ${resName}-fw...`);
+  await deleteGcpFirewall(projectId, `${resName}-fw`, accessToken);
+
+  // Delete static IP
+  await appendLog(`ℹ Deleting orphaned address ${resName}-ip...`);
+  await deleteGcpAddress(projectId, region, `${resName}-ip`, accessToken);
+
+  // Give GCP a moment to fully release the resources
+  await new Promise((r) => setTimeout(r, 5_000));
+}

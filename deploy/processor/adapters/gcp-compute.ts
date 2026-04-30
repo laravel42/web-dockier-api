@@ -6,6 +6,7 @@ import {
   enableGcpApis,
   ensureArtifactRegistryRepo,
   pushToArtifactRegistry,
+  deleteOrphanedComputeResources,
 } from "../gcp-helpers";
 import {
   setupPulumiWorkspace,
@@ -298,9 +299,9 @@ export class GcpComputeAdapter implements DeployAdapter {
       let program = await readFs(indexPath, "utf-8");
       const envVars = (ctx as any)._envVars || event.envVars || [];
       const envMap = new Map(envVars.map((e: { name: string; value: string }) => [e.name, e.value]));
-      const dbName = envMap.get("DB_DATABASE") || "forge";
-      const dbUser = envMap.get("DB_USERNAME") || "appuser";
-      const dbPass = envMap.get("DB_PASSWORD") || "apppass123";
+      const dbName = (envMap.get("DB_DATABASE") as string) || "forge";
+      const dbUser = (envMap.get("DB_USERNAME") as string) || "appuser";
+      const dbPass = (envMap.get("DB_PASSWORD") as string) || "apppass123";
       program = program.replace(/__DEPLOY_DB_NAME__/g, dbName);
       program = program.replace(/__DEPLOY_DB_USER__/g, dbUser);
       program = program.replace(/__DEPLOY_DB_PASS__/g, dbPass);
@@ -339,14 +340,27 @@ export class GcpComputeAdapter implements DeployAdapter {
 
     // If pulumi up fails because a resource in state no longer exists (404/notFound)
     // or a resource already exists outside of state (409/alreadyExists),
-    // wipe the stack state entirely and retry as a fresh deploy.
+    // delete orphaned GCP resources, wipe the stack state, and retry as a fresh deploy.
     if (
       upResult.code !== 0 &&
       /was not found|notFound|Error 404|already exists|alreadyExists|Error 409/.test(
         upResult.output,
       )
     ) {
-      await appendLog("⚠ Resource conflict — wiping state and retrying fresh...");
+      await appendLog("⚠ Resource conflict — cleaning up orphaned resources...");
+
+      // Delete orphaned GCP resources that exist outside Pulumi state
+      const cleanupToken = (ctx as any)._gcpAccessToken || await getGcpAccessToken(providerCredentials.apiKey);
+      if (gcpProjectId && cleanupToken) {
+        await deleteOrphanedComputeResources({
+          projectId: gcpProjectId,
+          region,
+          resName: repoName,
+          accessToken: cleanupToken,
+          appendLog,
+        });
+      }
+
       // Force-remove the stack
       await runCmd(
         "pulumi",
