@@ -12,13 +12,6 @@ import type { RepoConfig } from "../../deploy/repo-analyzer/types";
 // Re-export the unified type
 export type { DetectedStack } from "./types";
 
-// Preserve existing named exports for backward compatibility
-export { detectNodePM, detectSubDir } from "./helpers";
-export { detectNode, nodeDockerfile } from "./node";
-export { detectPhp, phpDockerfile } from "./php";
-export { detectPython, pythonDockerfile } from "./python";
-export { detectGo, goDockerfile } from "./go";
-
 /**
  * Convert a legacy RepoConfig (from deploy/repo-analyzer) into the unified DetectedStack type.
  * This bridges the two type systems during migration.
