@@ -21,8 +21,9 @@ export function getDeployCallbackUrl(): string {
  *  3. Register it in pulumi-templates/index.ts (providerBuilders map)
  *  4. Add default region in endpoints/tofu.ts (DEFAULT_REGIONS)
  *  5. Add resource estimation in endpoints/tofu.ts (RESOURCE_ESTIMATORS)
- *  6. Add URL pattern in processor/helpers.ts (URL_GENERATORS)
- *  7. Add frontend style in frontend/src/data/providers.ts
+ *  6. Create an adapter in processor/adapters/<provider>-<strategy>.ts
+ *  7. Register it in processor/adapters/index.ts
+ *  8. Add frontend style in frontend/src/data/providers.ts
  */
 export type DeployProvider = "aws" | "gcp";
 
