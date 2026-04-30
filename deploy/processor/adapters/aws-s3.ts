@@ -6,6 +6,13 @@ import type {
   PushImageResult,
   ProvisionResult,
 } from "./types";
+import {
+  getAwsAccountId,
+  cleanupStuckStack,
+  createOrUpdateStack,
+  pollStackStatus,
+  type AwsCredentials,
+} from "../aws-helpers";
 
 /**
  * AWS S3 + CloudFront adapter.
@@ -59,7 +66,7 @@ export class AwsS3Adapter implements DeployAdapter {
     ctx: AdapterContext,
     _imageUri: string,
   ): Promise<ProvisionResult> {
-    const { deploymentId, repoName, repoDir, region, providerCredentials, event, runCmd, appendLog } =
+    const { deploymentId, repoName, repoDir, region, providerCredentials, appendLog } =
       ctx;
 
     const accessKeyId = providerCredentials.apiKey;
@@ -68,14 +75,11 @@ export class AwsS3Adapter implements DeployAdapter {
       throw new Error("AWS credentials not configured on provider.");
     }
 
-    const credentials = { accessKeyId, secretAccessKey };
+    const credentials: AwsCredentials = { accessKeyId, secretAccessKey };
 
     // 1. Get AWS account ID via STS
     await appendLog("── AWS S3 Static Site Deploy ──────");
-    const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-    const sts = new STSClient({ region, credentials });
-    const identity = await sts.send(new GetCallerIdentityCommand({}));
-    const accountId = identity.Account || "";
+    const accountId = await getAwsAccountId(region, credentials);
     if (!accountId) {
       throw new Error("Could not determine AWS account ID from credentials");
     }
@@ -167,140 +171,24 @@ export class AwsS3Adapter implements DeployAdapter {
     ];
 
     // 9. Create or update CloudFormation stack
-    const {
-      CloudFormationClient,
-      CreateStackCommand,
-      UpdateStackCommand,
-      DescribeStacksCommand,
-      DeleteStackCommand,
-    } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient } = await import("@aws-sdk/client-cloudformation");
     const cfn = new CloudFormationClient({ region, credentials });
 
-    // Handle ROLLBACK_COMPLETE state by deleting and recreating
-    try {
-      const descResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-      const existingStack = descResult.Stacks?.[0];
-      if (existingStack) {
-        const stackStatus = existingStack.StackStatus || "";
-        if (
-          stackStatus === "ROLLBACK_COMPLETE" ||
-          stackStatus === "ROLLBACK_FAILED" ||
-          stackStatus === "CREATE_FAILED" ||
-          stackStatus === "DELETE_FAILED"
-        ) {
-          await appendLog(`ℹ Stack in ${stackStatus} — deleting before re-create`);
-          await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-          await this.waitForStackDelete(cfn, stackName, appendLog);
-        }
-      }
-    } catch {
-      // Stack doesn't exist yet — that's fine
-    }
+    await cleanupStuckStack(cfn, stackName, appendLog);
 
-    // Try create, fall back to update if stack already exists
-    let isUpdate = false;
-    try {
-      await cfn.send(
-        new CreateStackCommand({
-          StackName: stackName,
-          TemplateURL: templateUrl,
-          Parameters: params,
-          Capabilities: ["CAPABILITY_NAMED_IAM"],
-          Tags: [
-            { Key: "BuildId", Value: deploymentId },
-            { Key: "ManagedBy", Value: "image-builder" },
-          ],
-          OnFailure: "ROLLBACK",
-        }),
-      );
-      await appendLog("✓ CloudFormation stack creation initiated");
-    } catch (createErr: any) {
-      if (
-        createErr.name === "AlreadyExistsException" ||
-        createErr.message?.includes("already exists")
-      ) {
-        isUpdate = true;
-        try {
-          await cfn.send(
-            new UpdateStackCommand({
-              StackName: stackName,
-              TemplateURL: templateUrl,
-              Parameters: params,
-              Capabilities: ["CAPABILITY_NAMED_IAM"],
-            }),
-          );
-          await appendLog("✓ CloudFormation stack update initiated");
-        } catch (updateErr: any) {
-          // "No updates are to be performed" is not an error
-          if (updateErr.message?.includes("No updates are to be performed")) {
-            await appendLog("ℹ No infrastructure changes needed");
-            return await this.extractStackOutputs(cfn, stackName, appendLog);
-          }
-          throw new Error(`CloudFormation update failed: ${updateErr.message}`);
-        }
-      } else {
-        throw new Error(`CloudFormation create failed: ${createErr.message}`);
-      }
-    }
+    const { isUpdate, noUpdatesResult } = await createOrUpdateStack({
+      cfn,
+      stackName,
+      templateUrl,
+      params,
+      deploymentId,
+      appendLog,
+    });
+
+    if (noUpdatesResult) return noUpdatesResult;
 
     // 10. Poll stack status
-    const successStatuses = isUpdate ? ["UPDATE_COMPLETE"] : ["CREATE_COMPLETE"];
-    const failurePatterns = [
-      "ROLLBACK_COMPLETE",
-      "ROLLBACK_FAILED",
-      "CREATE_FAILED",
-      "DELETE_COMPLETE",
-      "UPDATE_ROLLBACK_COMPLETE",
-      "UPDATE_FAILED",
-    ];
-
-    for (let attempt = 0; attempt < 60; attempt++) {
-      await new Promise((r) => setTimeout(r, 15_000));
-
-      try {
-        const stackResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-        const stack = stackResult.Stacks?.[0];
-        if (!stack) {
-          if (attempt % 4 === 0) {
-            await appendLog("ℹ Waiting for CloudFormation stack...");
-          }
-          continue;
-        }
-
-        const stackStatus = stack.StackStatus || "";
-
-        if (successStatuses.includes(stackStatus)) {
-          const outputs = Object.fromEntries(
-            (stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
-          );
-          const appUrl = outputs.AppUrl || "";
-          await appendLog(`✓ CloudFormation stack: ${stackStatus}`);
-          if (appUrl) {
-            await appendLog(`✓ App URL: ${appUrl}`);
-          }
-          return { appUrl, outputs };
-        }
-
-        if (failurePatterns.some((p) => stackStatus.includes(p))) {
-          const reason = stack.StackStatusReason || stackStatus;
-          throw new Error(`CloudFormation stack failed: ${stackStatus} — ${reason}`);
-        }
-
-        // Log progress periodically
-        if (attempt % 4 === 0) {
-          await appendLog(`ℹ CloudFormation: ${stackStatus}...`);
-        }
-      } catch (pollErr: any) {
-        if (pollErr.message?.includes("CloudFormation stack failed")) {
-          throw pollErr;
-        }
-        if (attempt % 4 === 0) {
-          await appendLog("ℹ Waiting for CloudFormation stack...");
-        }
-      }
-    }
-
-    throw new Error("CloudFormation stack did not complete within timeout (15 minutes)");
+    return await pollStackStatus({ cfn, stackName, isUpdate, appendLog });
   }
 
   /**
@@ -546,47 +434,5 @@ export class AwsS3Adapter implements DeployAdapter {
 
     await uploadRecursive(uploadDir, "");
     await appendLog(`✓ ${fileCount} files uploaded to s3://${bucket}`);
-  }
-
-  private async waitForStackDelete(
-    cfn: any,
-    stackName: string,
-    appendLog: (line: string) => Promise<void>,
-  ): Promise<void> {
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 5_000));
-      try {
-        const { DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-        const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-        const stack = result.Stacks?.[0];
-        if (!stack || stack.StackStatus === "DELETE_COMPLETE") {
-          await appendLog("✓ Previous stack deleted");
-          return;
-        }
-      } catch {
-        // Stack no longer exists
-        await appendLog("✓ Previous stack deleted");
-        return;
-      }
-    }
-    throw new Error("Timed out waiting for stack deletion");
-  }
-
-  private async extractStackOutputs(
-    cfn: any,
-    stackName: string,
-    appendLog: (line: string) => Promise<void>,
-  ): Promise<ProvisionResult> {
-    const { DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-    const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-    const stack = result.Stacks?.[0];
-    const outputs = Object.fromEntries(
-      (stack?.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
-    );
-    const appUrl = outputs.AppUrl || "";
-    if (appUrl) {
-      await appendLog(`✓ App URL: ${appUrl}`);
-    }
-    return { appUrl, outputs };
   }
 }

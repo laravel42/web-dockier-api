@@ -6,6 +6,15 @@ import type {
   PushImageResult,
   ProvisionResult,
 } from "./types";
+import {
+  pushToEcr,
+  getAwsAccountId,
+  getDefaultVpcAndSubnets,
+  cleanupStuckStack,
+  createOrUpdateStack,
+  pollStackStatus,
+  type AwsCredentials,
+} from "../aws-helpers";
 
 /**
  * AWS EC2 adapter.
@@ -23,19 +32,16 @@ export class AwsEc2Adapter implements DeployAdapter {
   /** Stored env vars from injectEnvVars, used as EnvVarsJson CloudFormation parameter */
   private pendingEnvVars: Array<{ name: string; value: string }> = [];
 
+  /** AWS state populated by pushImage, consumed by provisionInfrastructure */
+  private awsAccountId = "";
+  private awsCredentials: AwsCredentials | null = null;
+
   supports(provider: string, deployStrategy: string): boolean {
     return provider === "aws" && deployStrategy === "vps";
   }
 
   /**
    * Push Docker image to AWS ECR.
-   *
-   * Same ECR push flow as the AWS ECS adapter:
-   * 1. Get AWS account ID via STS
-   * 2. Create ECR repository if it doesn't exist
-   * 3. Login to ECR
-   * 4. Tag and push Docker image to ECR
-   * 5. Return the ECR image URI
    */
   async pushImage(ctx: AdapterContext, localImage: string): Promise<PushImageResult> {
     const { repoName, shortId, region, providerCredentials, runCmd, appendLog } = ctx;
@@ -46,87 +52,21 @@ export class AwsEc2Adapter implements DeployAdapter {
       throw new Error("AWS credentials not configured on provider.");
     }
 
-    const credentials = { accessKeyId, secretAccessKey };
+    const result = await pushToEcr({
+      localImage,
+      repoName,
+      shortId,
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+      runCmd,
+      appendLog,
+    });
 
-    await appendLog("── Push Image to ECR ───────────────");
+    // Store for provisionInfrastructure
+    this.awsAccountId = result.accountId;
+    this.awsCredentials = result.credentials;
 
-    // 1. Get AWS account ID via STS
-    const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-    const sts = new STSClient({ region, credentials });
-    const identity = await sts.send(new GetCallerIdentityCommand({}));
-    const accountId = identity.Account || "";
-    if (!accountId) {
-      throw new Error("Could not determine AWS account ID from credentials");
-    }
-
-    const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-    const ecrUri = `${accountId}.dkr.ecr.${region}.amazonaws.com`;
-    const remoteImageUri = `${ecrUri}/${imageRepoName}:${shortId}`;
-
-    // 2. Create ECR repository if it doesn't exist
-    const { ECRClient, CreateRepositoryCommand, DescribeRepositoriesCommand } = await import(
-      "@aws-sdk/client-ecr"
-    );
-    const ecr = new ECRClient({ region, credentials });
-
-    try {
-      await ecr.send(new DescribeRepositoriesCommand({ repositoryNames: [imageRepoName] }));
-      await appendLog("✓ ECR repository already exists");
-    } catch {
-      try {
-        await ecr.send(new CreateRepositoryCommand({ repositoryName: imageRepoName }));
-        await appendLog("✓ ECR repository created");
-      } catch (createErr: any) {
-        if (!createErr.name?.includes("AlreadyExists")) {
-          throw new Error(`Failed to create ECR repository: ${createErr.message}`);
-        }
-        await appendLog("✓ ECR repository already exists");
-      }
-    }
-
-    // 3. Login to ECR
-    const { GetAuthorizationTokenCommand } = await import("@aws-sdk/client-ecr");
-    const authResult = await ecr.send(new GetAuthorizationTokenCommand({}));
-    const authData = authResult.authorizationData?.[0];
-    if (!authData?.authorizationToken) {
-      throw new Error("Failed to get ECR authorization token");
-    }
-
-    const decodedToken = Buffer.from(authData.authorizationToken, "base64").toString("utf-8");
-    const [username, password] = decodedToken.split(":");
-
-    const loginResult = await runCmd(
-      "docker",
-      ["login", "--username", username, "--password", password, ecrUri],
-    );
-    if (loginResult.code !== 0) {
-      throw new Error(`ECR login failed: ${loginResult.output.split("\n").slice(-3).join(" ")}`);
-    }
-    await appendLog("✓ Logged in to ECR");
-
-    // 4. Tag and push Docker image
-    const tagResult = await runCmd("docker", ["tag", localImage, remoteImageUri]);
-    if (tagResult.code !== 0) {
-      throw new Error(`Docker tag failed: ${tagResult.output}`);
-    }
-
-    // Also tag as latest
-    const latestUri = `${ecrUri}/${imageRepoName}:latest`;
-    await runCmd("docker", ["tag", localImage, latestUri]);
-
-    const pushResult = await runCmd("docker", ["push", remoteImageUri]);
-    if (pushResult.code !== 0) {
-      throw new Error(`Docker push failed: ${pushResult.output.split("\n").slice(-5).join("\n")}`);
-    }
-    await runCmd("docker", ["push", latestUri]);
-
-    await appendLog(`✓ Image pushed: ${remoteImageUri}`);
-
-    // Store accountId and credentials for provisionInfrastructure
-    (ctx as any)._awsAccountId = accountId;
-    (ctx as any)._awsCredentials = credentials;
-
-    return { remoteImageUri, skipped: false };
+    return { remoteImageUri: result.remoteImageUri, skipped: false };
   }
 
   /**
@@ -165,9 +105,8 @@ export class AwsEc2Adapter implements DeployAdapter {
 
     const accessKeyId = providerCredentials.apiKey;
     const secretAccessKey = providerCredentials.apiSecret;
-    const credentials = (ctx as any)._awsCredentials || { accessKeyId, secretAccessKey };
-    const accountId =
-      (ctx as any)._awsAccountId || (await this.getAccountId(region, credentials));
+    const credentials = this.awsCredentials || { accessKeyId, secretAccessKey };
+    const accountId = this.awsAccountId || (await getAwsAccountId(region, credentials));
 
     await appendLog("── CloudFormation Deploy ──────────");
 
@@ -203,7 +142,7 @@ export class AwsEc2Adapter implements DeployAdapter {
     await appendLog("✓ Template uploaded to S3");
 
     // 3. Get default VPC and subnets (EC2 uses a single SubnetId)
-    const { vpcId, subnetIds } = await this.getDefaultVpcAndSubnets(region, credentials);
+    const { vpcId, subnetIds } = await getDefaultVpcAndSubnets(region, credentials);
     if (!vpcId) {
       throw new Error("No default VPC found. Please configure a VPC for EC2 deployment.");
     }
@@ -257,146 +196,24 @@ export class AwsEc2Adapter implements DeployAdapter {
     }
 
     // 6. Create or update CloudFormation stack
-    const {
-      CloudFormationClient,
-      CreateStackCommand,
-      UpdateStackCommand,
-      DescribeStacksCommand,
-      DeleteStackCommand,
-    } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient } = await import("@aws-sdk/client-cloudformation");
     const cfn = new CloudFormationClient({ region, credentials });
 
-    // Handle ROLLBACK_COMPLETE state by deleting and recreating
-    try {
-      const descResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-      const existingStack = descResult.Stacks?.[0];
-      if (existingStack) {
-        const stackStatus = existingStack.StackStatus || "";
-        if (
-          stackStatus === "ROLLBACK_COMPLETE" ||
-          stackStatus === "ROLLBACK_FAILED" ||
-          stackStatus === "CREATE_FAILED" ||
-          stackStatus === "DELETE_FAILED"
-        ) {
-          await appendLog(`ℹ Stack in ${stackStatus} — deleting before re-create`);
-          await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-          await this.waitForStackDelete(cfn, stackName, appendLog);
-        }
-      }
-    } catch {
-      // Stack doesn't exist yet — that's fine
-    }
+    await cleanupStuckStack(cfn, stackName, appendLog);
 
-    // Try create, fall back to update if stack already exists
-    let isUpdate = false;
-    try {
-      await cfn.send(
-        new CreateStackCommand({
-          StackName: stackName,
-          TemplateURL: templateUrl,
-          Parameters: params,
-          Capabilities: ["CAPABILITY_NAMED_IAM"],
-          Tags: [
-            { Key: "BuildId", Value: deploymentId },
-            { Key: "ManagedBy", Value: "image-builder" },
-          ],
-          OnFailure: "ROLLBACK",
-        }),
-      );
-      await appendLog("✓ CloudFormation stack creation initiated");
-    } catch (createErr: any) {
-      if (createErr.name === "AlreadyExistsException" || createErr.message?.includes("already exists")) {
-        isUpdate = true;
-        try {
-          await cfn.send(
-            new UpdateStackCommand({
-              StackName: stackName,
-              TemplateURL: templateUrl,
-              Parameters: params,
-              Capabilities: ["CAPABILITY_NAMED_IAM"],
-            }),
-          );
-          await appendLog("✓ CloudFormation stack update initiated");
-        } catch (updateErr: any) {
-          if (updateErr.message?.includes("No updates are to be performed")) {
-            await appendLog("ℹ No infrastructure changes needed");
-            return await this.extractStackOutputs(cfn, stackName, appendLog);
-          }
-          throw new Error(`CloudFormation update failed: ${updateErr.message}`);
-        }
-      } else {
-        throw new Error(`CloudFormation create failed: ${createErr.message}`);
-      }
-    }
+    const { isUpdate, noUpdatesResult } = await createOrUpdateStack({
+      cfn,
+      stackName,
+      templateUrl,
+      params,
+      deploymentId,
+      appendLog,
+    });
+
+    if (noUpdatesResult) return noUpdatesResult;
 
     // 7. Poll stack status until complete or failure
-    const successStatuses = isUpdate
-      ? ["UPDATE_COMPLETE"]
-      : ["CREATE_COMPLETE"];
-    const failurePatterns = [
-      "ROLLBACK_COMPLETE",
-      "ROLLBACK_FAILED",
-      "CREATE_FAILED",
-      "DELETE_COMPLETE",
-      "UPDATE_ROLLBACK_COMPLETE",
-      "UPDATE_FAILED",
-    ];
-
-    for (let attempt = 0; attempt < 60; attempt++) {
-      await new Promise((r) => setTimeout(r, 15_000));
-
-      try {
-        const stackResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-        const stack = stackResult.Stacks?.[0];
-        if (!stack) {
-          if (attempt % 4 === 0) {
-            await appendLog("ℹ Waiting for CloudFormation stack...");
-          }
-          continue;
-        }
-
-        const stackStatus = stack.StackStatus || "";
-
-        if (successStatuses.includes(stackStatus)) {
-          const outputs = Object.fromEntries(
-            (stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
-          );
-          const appUrl = outputs.AppUrl || "";
-          const publicIp = outputs.PublicIp || "";
-          await appendLog(`✓ CloudFormation stack: ${stackStatus}`);
-          if (appUrl) {
-            await appendLog(`✓ App URL: ${appUrl}`);
-          }
-          if (publicIp) {
-            await appendLog(`✓ Public IP: ${publicIp}`);
-          }
-          return {
-            appUrl,
-            serverIp: publicIp,
-            outputs,
-          };
-        }
-
-        if (failurePatterns.some((p) => stackStatus.includes(p))) {
-          const reason = stack.StackStatusReason || stackStatus;
-          throw new Error(`CloudFormation stack failed: ${stackStatus} — ${reason}`);
-        }
-
-        // Log progress periodically
-        if (attempt % 4 === 0) {
-          await appendLog(`ℹ CloudFormation: ${stackStatus}...`);
-        }
-      } catch (pollErr: any) {
-        if (pollErr.message?.includes("CloudFormation stack failed")) {
-          throw pollErr;
-        }
-        if (attempt % 4 === 0) {
-          await appendLog("ℹ Waiting for CloudFormation stack...");
-        }
-      }
-    }
-
-    throw new Error("CloudFormation stack did not complete within timeout (15 minutes)");
+    return await pollStackStatus({ cfn, stackName, isUpdate, appendLog });
   }
 
   /**
@@ -410,90 +227,5 @@ export class AwsEc2Adapter implements DeployAdapter {
    */
   async runPostDeploy(_ctx: AdapterContext, _provision: ProvisionResult): Promise<void> {
     // EC2 cfn-init handles all post-deploy steps — nothing to do here
-  }
-
-  // ── Private helpers ──────────────────────────────────────────────
-
-  private async getAccountId(
-    region: string,
-    credentials: { accessKeyId: string; secretAccessKey: string },
-  ): Promise<string> {
-    const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-    const sts = new STSClient({ region, credentials });
-    const identity = await sts.send(new GetCallerIdentityCommand({}));
-    return identity.Account || "";
-  }
-
-  private async getDefaultVpcAndSubnets(
-    region: string,
-    credentials: { accessKeyId: string; secretAccessKey: string },
-  ): Promise<{ vpcId: string; subnetIds: string[] }> {
-    const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await import(
-      "@aws-sdk/client-ec2"
-    );
-    const ec2 = new EC2Client({ region, credentials });
-
-    const vpcsResult = await ec2.send(
-      new DescribeVpcsCommand({
-        Filters: [{ Name: "is-default", Values: ["true"] }],
-      }),
-    );
-    const vpcId = vpcsResult.Vpcs?.[0]?.VpcId || "";
-    if (!vpcId) return { vpcId: "", subnetIds: [] };
-
-    const subnetsResult = await ec2.send(
-      new DescribeSubnetsCommand({
-        Filters: [{ Name: "vpc-id", Values: [vpcId] }],
-      }),
-    );
-    const subnetIds = (subnetsResult.Subnets || []).map((s) => s.SubnetId || "").filter(Boolean);
-
-    return { vpcId, subnetIds };
-  }
-
-  private async waitForStackDelete(
-    cfn: any,
-    stackName: string,
-    appendLog: (line: string) => Promise<void>,
-  ): Promise<void> {
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 5_000));
-      try {
-        const { DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-        const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-        const stack = result.Stacks?.[0];
-        if (!stack || stack.StackStatus === "DELETE_COMPLETE") {
-          await appendLog("✓ Previous stack deleted");
-          return;
-        }
-      } catch {
-        // Stack no longer exists
-        await appendLog("✓ Previous stack deleted");
-        return;
-      }
-    }
-    throw new Error("Timed out waiting for stack deletion");
-  }
-
-  private async extractStackOutputs(
-    cfn: any,
-    stackName: string,
-    appendLog: (line: string) => Promise<void>,
-  ): Promise<ProvisionResult> {
-    const { DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-    const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-    const stack = result.Stacks?.[0];
-    const outputs = Object.fromEntries(
-      (stack?.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
-    );
-    const appUrl = outputs.AppUrl || "";
-    const publicIp = outputs.PublicIp || "";
-    if (appUrl) {
-      await appendLog(`✓ App URL: ${appUrl}`);
-    }
-    if (publicIp) {
-      await appendLog(`✓ Public IP: ${publicIp}`);
-    }
-    return { appUrl, serverIp: publicIp, outputs };
   }
 }
