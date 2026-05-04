@@ -43,7 +43,7 @@ export async function bundleAndUploadSource(
     const repoDir = join(tmpDir, "repo");
 
     // Detect tech stack and inject tailored buildspec + Dockerfile
-    const { analyzeRepoConfig, generateDockerfile: genDF, toDetectedStack } = await import("../deploy/repo-analyzer");
+    const { analyzeRepoConfig, generateDockerfile: genDF, toDetectedStack } = await import("../lib/repo-analyzer");
     const { generateBuildspec, generateStaticBuildspec } = await import("./buildspec");
     const { existsSync } = await import("node:fs");
     const repoConfig = analyzeRepoConfig(repoDir);

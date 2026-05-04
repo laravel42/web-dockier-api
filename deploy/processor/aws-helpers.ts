@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { RunCmdFn } from "./run-cmd";
 import type { ProvisionResult } from "./adapters/types";
 
@@ -20,20 +22,17 @@ export interface PushToEcrResult {
 // ─── CloudFormation Template Reader ────────────────────────────────
 
 /**
- * Read a CloudFormation template from the image-builder/deploy-templates directory.
+ * Read a CloudFormation template from the deploy/cfn-templates directory.
  *
  * Tries __dirname-relative path first (works in Encore build output),
  * then falls back to process.cwd()-relative path (works in local dev).
  */
 export function readCfnTemplate(templateName: string): string {
-  const { readFileSync } = require("node:fs");
-  const { join } = require("node:path");
-
   try {
-    const templatePath = join(__dirname, "..", "..", "..", "image-builder", "deploy-templates", templateName);
+    const templatePath = join(__dirname, "..", "..", "cfn-templates", templateName);
     return readFileSync(templatePath, "utf-8");
   } catch {
-    const templatePath = join(process.cwd(), "image-builder", "deploy-templates", templateName);
+    const templatePath = join(process.cwd(), "deploy", "cfn-templates", templateName);
     return readFileSync(templatePath, "utf-8");
   }
 }

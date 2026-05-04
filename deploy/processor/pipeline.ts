@@ -10,11 +10,11 @@ import { db } from "../shared";
 import type { DeployEvent } from "../shared";
 import { appendLog, ts, waitForAppReady } from "./helpers";
 import type { RunCmdFn } from "./run-cmd";
-import type { RepoConfig } from "../repo-analyzer/types";
+import type { RepoConfig } from "../../lib/repo-analyzer/types";
 import type { AdapterContext } from "./adapters/types";
 import { getAdapter } from "./adapters";
 import { buildCloneUrl } from "../../lib/git-url";
-import { analyzeRepoConfig, generateDockerfile, configSummary, patchDockerfile, toDetectedStack } from "../repo-analyzer";
+import { analyzeRepoConfig, generateDockerfile, configSummary, patchDockerfile, toDetectedStack } from "../../lib/repo-analyzer";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
