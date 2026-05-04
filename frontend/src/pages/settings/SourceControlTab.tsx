@@ -42,7 +42,10 @@ export default function SourceControlTab() {
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingConn) return;
-    await gitApi.updateConnection(editingConn.id, { label: editForm.label });
+    await gitApi.updateConnection(editingConn.id, {
+      label: editForm.label,
+      ...(editForm.personalToken ? { personalToken: editForm.personalToken } : {}),
+    });
     setEditingConn(null); fetch_();
   };
 
@@ -136,6 +139,13 @@ export default function SourceControlTab() {
               <div>
                 <label htmlFor="edit-conn-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
                 <input id="edit-conn-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} className={inputCls} required />
+              </div>
+              <div>
+                <label htmlFor="edit-conn-token" className="block text-sm font-medium text-text-secondary mb-1.5">
+                  Personal Access Token <span className="text-text-muted font-normal">(leave empty to keep current)</span>
+                </label>
+                <input id="edit-conn-token" type="password" value={editForm.personalToken} onChange={(e) => setEditForm({ ...editForm, personalToken: e.target.value })} className={inputCls} placeholder="••••••••" autoComplete="off" />
+                <p className="text-xs text-text-muted mt-1">Enter a new token to replace the existing one. Leave blank to keep the current token.</p>
               </div>
               <div>
                 <label htmlFor="edit-conn-endpoint" className="block text-sm font-medium text-text-secondary mb-1.5">
