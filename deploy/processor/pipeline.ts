@@ -8,7 +8,7 @@
 
 import { db } from "../shared";
 import type { DeployEvent } from "../shared";
-import { appendLog, ts } from "./helpers";
+import { appendLog, ts, waitForAppReady } from "./helpers";
 import type { RunCmdFn } from "./run-cmd";
 import type { RepoConfig } from "../repo-analyzer/types";
 import type { AdapterContext } from "./adapters/types";
@@ -267,6 +267,10 @@ export async function dispatchToAdapter(opts: {
   await appendLog(deploymentId, `[${ts()}] ✓ ${isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`}`);
   await appendLog(deploymentId, `[${ts()}] ✓ Infrastructure provisioned via ${adapter.id}`);
   if (finalUrl) {
+    // Run health check before marking as success — keeps status as "deploying"
+    // so the frontend shows progress while the app boots
+    await waitForAppReady(deploymentId, finalUrl);
+
     await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${finalUrl}`);
     await db.exec`UPDATE deployments SET status = 'success', app_url = ${finalUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
   } else {

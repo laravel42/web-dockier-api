@@ -116,6 +116,16 @@ export default function StepDeploy({ state }: { state: WizardState }) {
           </a>
         </div>
       )}
+
+      {/* VPS warm-up notice — shown when deploy succeeds on a VPS strategy */}
+      {state.deployAppUrl && state.deployStatus === "success" && state.deployStrategy === "vps" && (
+        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+          <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
+          <p className="text-xs text-text-muted leading-relaxed">
+            If you see an nginx welcome page, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes as the container starts and configures itself.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
