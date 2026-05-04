@@ -17,6 +17,27 @@ export interface PushToEcrResult {
   credentials: AwsCredentials;
 }
 
+// ─── CloudFormation Template Reader ────────────────────────────────
+
+/**
+ * Read a CloudFormation template from the image-builder/deploy-templates directory.
+ *
+ * Tries __dirname-relative path first (works in Encore build output),
+ * then falls back to process.cwd()-relative path (works in local dev).
+ */
+export function readCfnTemplate(templateName: string): string {
+  const { readFileSync } = require("node:fs");
+  const { join } = require("node:path");
+
+  try {
+    const templatePath = join(__dirname, "..", "..", "..", "image-builder", "deploy-templates", templateName);
+    return readFileSync(templatePath, "utf-8");
+  } catch {
+    const templatePath = join(process.cwd(), "image-builder", "deploy-templates", templateName);
+    return readFileSync(templatePath, "utf-8");
+  }
+}
+
 // ─── ECR Helpers ───────────────────────────────────────────────────
 
 /**

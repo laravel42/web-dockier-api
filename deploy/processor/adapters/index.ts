@@ -33,6 +33,7 @@ export function getAdapter(provider: string, deployStrategy: string): DeployAdap
 export type {
   DeployAdapter,
   AdapterContext,
+  AdapterState,
   PushImageResult,
   ProvisionResult,
   DestroyContext,

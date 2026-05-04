@@ -244,6 +244,7 @@ export async function dispatchToAdapter(opts: {
     writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
     readFile: (p, e) => readFile(p, e as BufferEncoding),
     rm,
+    state: {},
   };
 
   // Inject environment variables

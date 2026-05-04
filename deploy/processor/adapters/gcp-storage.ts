@@ -298,8 +298,8 @@ export class GcpStorageAdapter implements DeployAdapter {
     }
 
     // Store pulumiDir and providerEnv for runPostDeploy
-    (ctx as any)._pulumiDir = pulumiDir;
-    (ctx as any)._providerEnv = providerEnv;
+    ctx.state.pulumiDir = pulumiDir;
+    ctx.state.providerEnv = providerEnv;
 
     return {
       appUrl,
@@ -334,10 +334,9 @@ export class GcpStorageAdapter implements DeployAdapter {
       appendLog,
     } = ctx;
 
-    const pulumiDir = (ctx as any)._pulumiDir || provision.outputs.pulumiDir;
-    const providerEnv = (ctx as any)._providerEnv
-      ? (ctx as any)._providerEnv
-      : JSON.parse(provision.outputs.providerEnvJson || "{}");
+    const pulumiDir = ctx.state.pulumiDir || provision.outputs.pulumiDir;
+    const providerEnv = ctx.state.providerEnv
+      || JSON.parse(provision.outputs.providerEnvJson || "{}");
     const gcsBucket = provision.outputs.bucketName || "";
 
     // Upload static files to GCS bucket

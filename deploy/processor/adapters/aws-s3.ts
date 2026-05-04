@@ -1,5 +1,5 @@
 import { join, extname } from "node:path";
-import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -14,6 +14,7 @@ import {
   createOrUpdateStack,
   pollStackStatus,
   waitForStackDelete,
+  readCfnTemplate,
   type AwsCredentials,
 } from "../aws-helpers";
 
@@ -131,23 +132,7 @@ export class AwsS3Adapter implements DeployAdapter {
 
     // 6. Read the s3.yml CloudFormation template
     await appendLog("── CloudFormation Deploy ──────────");
-    let templateBody: string;
-    try {
-      const templatePath = join(
-        __dirname,
-        "..",
-        "..",
-        "..",
-        "image-builder",
-        "deploy-templates",
-        "s3.yml",
-      );
-      templateBody = readFileSync(templatePath, "utf-8");
-    } catch {
-      // Fallback: try relative to process.cwd()
-      const templatePath = join(process.cwd(), "image-builder", "deploy-templates", "s3.yml");
-      templateBody = readFileSync(templatePath, "utf-8");
-    }
+    const templateBody = readCfnTemplate("s3.yml");
 
     // 7. Upload template to S3
     const codebuildProject = "image-builder";
