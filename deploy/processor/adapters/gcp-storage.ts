@@ -600,6 +600,39 @@ export class GcpStorageAdapter implements DeployAdapter {
       await appendLog(`⚠ Static file upload error: ${e.message}`);
     }
 
+    // Wait for CDN / Global Load Balancer to propagate before marking deploy as done.
+    // GCP global LBs typically take 1–3 minutes to become reachable after creation.
+    const cdnUrl = provision.appUrl || (provision.outputs.cdnIp ? `http://${provision.outputs.cdnIp}` : "");
+    if (cdnUrl) {
+      await appendLog("── Waiting for CDN to propagate ───");
+      const maxAttempts = 18;
+      const intervalMs = 10_000;
+      let live = false;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch(cdnUrl, {
+            method: "GET",
+            redirect: "follow",
+            signal: AbortSignal.timeout(5_000),
+          });
+          if (res.ok) {
+            live = true;
+            await appendLog(`✓ CDN is live (attempt ${attempt}/${maxAttempts})`);
+            break;
+          }
+          await appendLog(`⏳ CDN not ready — HTTP ${res.status} (attempt ${attempt}/${maxAttempts})`);
+        } catch {
+          await appendLog(`⏳ CDN not reachable yet (attempt ${attempt}/${maxAttempts})`);
+        }
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, intervalMs));
+        }
+      }
+      if (!live) {
+        await appendLog("⚠ CDN did not respond within 3 minutes — it may need another minute to propagate");
+      }
+    }
+
     // Save Pulumi state to DB
     await savePulumiState({
       deploymentId,
