@@ -56,7 +56,7 @@ function buildDeployParams(
 // Read ec2.yml once for template-level assertions
 // ---------------------------------------------------------------------------
 
-const ec2YmlPath = join(__dirname, "..", "..", "image-builder", "deploy-templates", "ec2.yml");
+const ec2YmlPath = join(__dirname, "..", "cfn-templates", "ec2.yml");
 const ec2YmlContent = readFileSync(ec2YmlPath, "utf-8");
 
 // Extract step blocks once for reuse across tests

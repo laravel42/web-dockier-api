@@ -1,4 +1,5 @@
 import { db } from "../shared";
+import { pollUntil } from "./poll-until";
 
 export function ts(): string {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -30,43 +31,43 @@ export async function waitForAppReady(deploymentId: string, appUrl: string): Pro
   await appendLog(deploymentId, `[${ts()}] ── Health Check ──────────────────`);
   await appendLog(deploymentId, `[${ts()}] ℹ Waiting for application to become reachable...`);
 
-  const deadline = Date.now() + HEALTH_CHECK_TIMEOUT_MS;
-  let attempt = 0;
+  const result = await pollUntil({
+    check: async (attempt) => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_REQUEST_TIMEOUT_MS);
 
-  while (Date.now() < deadline) {
-    attempt++;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_REQUEST_TIMEOUT_MS);
+        const response = await fetch(appUrl, {
+          method: "GET",
+          signal: controller.signal,
+          redirect: "follow",
+          headers: { "User-Agent": "Dockier-HealthCheck/1.0" },
+        });
+        clearTimeout(timeout);
 
-      const response = await fetch(appUrl, {
-        method: "GET",
-        signal: controller.signal,
-        redirect: "follow",
-        headers: { "User-Agent": "Dockier-HealthCheck/1.0" },
-      });
-      clearTimeout(timeout);
+        if (response.ok) {
+          const body = await response.text();
+          const isNginxDefault = body.includes("Welcome to nginx") && body.includes("nginx.org");
 
-      if (response.ok) {
-        const body = await response.text();
-        const isNginxDefault = body.includes("Welcome to nginx") && body.includes("nginx.org");
-
-        if (isNginxDefault) {
-          await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: nginx default page (app still starting...)`);
-        } else {
+          if (isNginxDefault) {
+            await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: nginx default page (app still starting...)`);
+            return null;
+          }
           await appendLog(deploymentId, `[${ts()}] ✓ Health check passed — application is live`);
           return true;
         }
-      } else {
         await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: HTTP ${response.status} (retrying...)`);
+      } catch {
+        await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: not reachable yet (retrying...)`);
       }
-    } catch {
-      await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: not reachable yet (retrying...)`);
-    }
+      return null;
+    },
+    intervalMs: HEALTH_CHECK_INTERVAL_MS,
+    timeoutMs: HEALTH_CHECK_TIMEOUT_MS,
+    onTimeout: async () => {
+      await appendLog(deploymentId, `[${ts()}] ⚠ Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS / 1000}s — the app may still need a moment`);
+    },
+  });
 
-    await new Promise(resolve => setTimeout(resolve, HEALTH_CHECK_INTERVAL_MS));
-  }
-
-  await appendLog(deploymentId, `[${ts()}] ⚠ Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS / 1000}s — the app may still need a moment`);
-  return false;
+  return result.success;
 }

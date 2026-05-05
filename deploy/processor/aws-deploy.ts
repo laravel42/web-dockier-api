@@ -1,7 +1,7 @@
 import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
 import { appendLog, ts } from "./helpers";
-import type { RepoConfig } from "../repo-analyzer/types";
-import { toDetectedStack } from "../repo-analyzer";
+import type { RepoConfig } from "../../lib/repo-analyzer/types";
+import { toDetectedStack } from "../../lib/repo-analyzer";
 import { generateBuildspec } from "../../image-builder/buildspec";
 
 /**

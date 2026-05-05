@@ -1,5 +1,5 @@
 import type { DeployEvent } from "../../shared";
-import type { DetectedStack } from "../../repo-analyzer/types";
+import type { DetectedStack } from "../../../lib/repo-analyzer/types";
 import type { RunCmdFn } from "../run-cmd";
 
 /**
