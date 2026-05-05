@@ -250,9 +250,27 @@ export async function dispatchToAdapter(opts: {
   // Inject environment variables
   await adapter.injectEnvVars(adapterCtx, event.envVars || []);
 
-  // Push image to provider registry
+  // Push image to provider registry (skip if already remote, e.g., built by CodeBuild)
   await db.exec`UPDATE deployments SET status = 'deploying', updated_at = NOW() WHERE id = ${deploymentId}`;
-  const pushResult = await adapter.pushImage(adapterCtx, actualImage);
+  let pushResult: { remoteImageUri: string; skipped: boolean };
+
+  const isAlreadyRemote = actualImage.includes(".dkr.ecr.") || actualImage.includes("gcr.io") || actualImage.includes("docker.pkg.dev");
+  if (isAlreadyRemote) {
+    // Image was built and pushed remotely (e.g., CodeBuild) — skip local push
+    await adapterCtx.appendLog(`ℹ Image already in registry: ${actualImage}`);
+    pushResult = { remoteImageUri: actualImage, skipped: true };
+
+    // Populate adapter state that provisionInfrastructure needs
+    if (actualImage.includes(".dkr.ecr.")) {
+      const { getAwsAccountId } = await import("./aws-helpers");
+      const credentials = { accessKeyId: providerRow.api_key, secretAccessKey: providerRow.api_secret };
+      const accountId = await getAwsAccountId(region, credentials);
+      adapterCtx.state.awsAccountId = accountId;
+      adapterCtx.state.awsCredentials = credentials;
+    }
+  } else {
+    pushResult = await adapter.pushImage(adapterCtx, actualImage);
+  }
 
   // Provision infrastructure
   const imageUri = pushResult.skipped ? "" : pushResult.remoteImageUri;

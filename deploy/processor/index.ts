@@ -74,6 +74,8 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
           repoConfig, event,
         });
         actualImage = result.remoteImageUri;
+        // Save image reference (buildDockerImage does this for local builds)
+        await db.exec`UPDATE deployments SET docker_image = ${actualImage} WHERE id = ${deploymentId}`;
       } else {
         const imageName = `${repoName}:${shortId}`;
         const result = await buildDockerImage({
