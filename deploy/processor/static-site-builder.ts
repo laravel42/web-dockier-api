@@ -133,28 +133,34 @@ export async function buildSite(opts: {
   const isNuxt = techStack.some((t) => t.toLowerCase().includes("nuxt"));
   const isNext = techStack.some((t) => t.toLowerCase().includes("next"));
   let buildOk = false;
+  let frameworkBuildAttempted = false;
 
   if (isNuxt) {
+    frameworkBuildAttempted = true;
     buildOk = await buildNuxt(repoDir, runCmd, appendLog);
   } else if (isNext) {
+    frameworkBuildAttempted = true;
     buildOk = await buildNext(repoDir, runCmd, appendLog);
   }
 
   // Generic fallback for React (CRA/Vite), Vue, Svelte, Angular, Astro, etc.
-  if (!buildOk) {
+  // Skip `npm run build` if a framework-specific build already attempted it.
+  if (!buildOk && !frameworkBuildAttempted) {
     const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
     if (buildRes.code === 0) {
       buildOk = true;
       await appendLog("✓ Static site built");
+    }
+  }
+
+  // Last resort: try generate script if no build succeeded
+  if (!buildOk) {
+    const genRes = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir });
+    if (genRes.code === 0) {
+      buildOk = true;
+      await appendLog("✓ Static site generated");
     } else {
-      // Last resort: try generate script if it exists
-      const genRes = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir });
-      if (genRes.code === 0) {
-        buildOk = true;
-        await appendLog("✓ Static site generated");
-      } else {
-        await appendLog("⚠ Build failed — uploading source files as fallback");
-      }
+      await appendLog("⚠ Build failed — uploading source files as fallback");
     }
   }
 
