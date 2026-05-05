@@ -1,11 +1,11 @@
 import { Subscription } from "encore.dev/pubsub";
 import { db, deployTopic, type DeployEvent, DEFAULT_REGIONS, extractRegionFromScript } from "../shared";
 import { appendLog, ts } from "./helpers";
-import { handleAwsDeploy } from "./aws-deploy";
 import { getTemplateConfig } from "../templates";
 import { handleTemplateDeploy } from "./template-deploy";
 import { createStreamingRunCmd } from "./run-cmd";
 import { cloneRepository, analyzeAndGenerateDockerfile, buildDockerImage, dispatchToAdapter } from "./pipeline";
+import { buildViaCodeBuild } from "./codebuild-builder";
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
   handler: async (event: DeployEvent) => {
@@ -65,27 +65,24 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
       // 2. Analyze and generate Dockerfile
       const { repoConfig } = await analyzeAndGenerateDockerfile({ deploymentId, repoDir });
 
-      // 3. CodeBuild bypass
+      // 3. Build image (local Docker or remote CodeBuild)
+      let actualImage: string;
       if (event.buildMethod === "codebuild") {
-        const { writeFile, rm } = await import("node:fs/promises");
-        await handleAwsDeploy(event, {
-          deploymentId, repoName, shortId, provider, region,
-          providerRow: providerRow!,
-          repoDir, workDir, commitHash,
-          repoConfig,
-          writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
-          rm,
+        const result = await buildViaCodeBuild({
+          deploymentId, repoName, shortId, region,
+          providerRow: providerRow!, repoDir, workDir, commitHash,
+          repoConfig, event,
         });
-        return;
+        actualImage = result.remoteImageUri;
+      } else {
+        const imageName = `${repoName}:${shortId}`;
+        const result = await buildDockerImage({
+          deploymentId, repoDir, imageName, commitHash, event, runCmd,
+        });
+        actualImage = result.actualImage;
       }
 
-      // 4. Build Docker image
-      const imageName = `${repoName}:${shortId}`;
-      const { actualImage } = await buildDockerImage({
-        deploymentId, repoDir, imageName, commitHash, event, runCmd,
-      });
-
-      // 5. Dispatch to adapter
+      // 4. Dispatch to adapter (push + provision + post-deploy)
       await dispatchToAdapter({
         deploymentId, repoName, shortId, region, repoDir, workDir, commitHash,
         provider, providerRow: providerRow!, event, repoConfig, actualImage, runCmd,
