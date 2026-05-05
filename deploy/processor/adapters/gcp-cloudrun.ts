@@ -17,7 +17,10 @@ import type {
   AdapterContext,
   PushImageResult,
   ProvisionResult,
+  DestroyContext,
+  DestroyResult,
 } from "./types";
+import { runCmd } from "../run-cmd";
 
 /**
  * GCP Cloud Run adapter.
@@ -438,5 +441,101 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       runCmd,
       db,
     });
+  }
+
+  async destroy(ctx: DestroyContext): Promise<DestroyResult> {
+    const errors: string[] = [];
+    const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
+    const accessToken = await getGcpAccessToken(ctx.providerCredentials.apiKey);
+    const arRepo = ctx.repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
+    const arRegion = extractRegionFromScript(ctx.tofuScript) || ctx.region || "us-central1";
+
+    await ctx.appendLog("── Destroy GCP Cloud Run Resources ─");
+
+    const stateMarker = ctx.tofuScript.indexOf("/* STATE */\n");
+
+    // If we have Pulumi state, use pulumi destroy
+    if (stateMarker !== -1) {
+      const pulumiErrors = await this.destroyWithPulumi(ctx, stateMarker);
+      errors.push(...pulumiErrors);
+    } else if (accessToken && gcpProjectId) {
+      // No-state fallback: delete resources via direct API calls
+      const authHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+      // Delete Cloud Run service
+      const serviceNameMatch = ctx.tofuScript.match(/new gcp\.cloudrunv2\.Service\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
+      const serviceName = serviceNameMatch?.[1] || arRepo;
+      try {
+        const res = await fetch(`https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`, { method: "DELETE", headers: authHeaders });
+        if (!res.ok && res.status !== 404) errors.push(`Cloud Run delete: ${res.status} ${(await res.text()).slice(0, 150)}`);
+      } catch (e: any) { errors.push(`Cloud Run delete: ${e.message}`); }
+
+      // Delete Cloud SQL instance if present
+      const dbMatch = ctx.tofuScript.match(/new gcp\.sql\.DatabaseInstance\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
+      if (dbMatch) {
+        try {
+          const res = await fetch(`https://sqladmin.googleapis.com/v1/projects/${gcpProjectId}/instances/${dbMatch[1]}`, { method: "DELETE", headers: authHeaders });
+          if (!res.ok && res.status !== 404) errors.push(`Cloud SQL delete: ${res.status} ${(await res.text()).slice(0, 150)}`);
+        } catch (e: any) { errors.push(`Cloud SQL delete: ${e.message}`); }
+      }
+    }
+
+    // Clean up Artifact Registry repo (force deletes all images)
+    if (accessToken && gcpProjectId) {
+      const arBase = `https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`;
+      try {
+        const deleteRes = await fetch(`${arBase}?force=true`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`AR repo delete: ${deleteRes.status} ${(await deleteRes.text()).slice(0, 150)}`);
+      } catch (e: any) { errors.push(`AR repo delete: ${e.message}`); }
+    }
+
+    return {
+      success: errors.length === 0,
+      message: errors.length > 0 ? `Partially destroyed: ${errors.join("; ")}` : "Cloud Run resources destroyed",
+      errors,
+    };
+  }
+
+  private async destroyWithPulumi(ctx: DestroyContext, stateMarker: number): Promise<string[]> {
+    const errors: string[] = [];
+    const savedState = ctx.tofuScript.slice(stateMarker + "/* STATE */\n".length);
+    const pulumiScript = ctx.tofuScript.slice(0, stateMarker).trim();
+
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { join: joinPath } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+
+    const workDir = await mkdtemp(joinPath(tmpdir(), `destroy-${ctx.deploymentId.slice(0, 8)}-`));
+    try {
+      const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
+        workDir, appName: ctx.repoName, provider: "gcp",
+        region: ctx.region, providerRow: { api_key: ctx.providerCredentials.apiKey, api_secret: ctx.providerCredentials.apiSecret },
+        indexTs: pulumiScript,
+      });
+
+      await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
+      const stackName = `destroy-${ctx.deploymentId.slice(0, 8)}`;
+      await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+      const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
+      if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+      const stateFile = joinPath(pulumiDir, "state.json");
+      await writeFile(stateFile, savedState, "utf-8");
+      const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--force", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
+      if (importResult.code !== 0) {
+        errors.push(`State import failed: ${importResult.output.split("\n").slice(-3).join(" ")}`);
+      } else {
+        const destroyResult = await runCmd("pulumi", ["destroy", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+        if (destroyResult.code !== 0) {
+          errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
+        }
+      }
+    } catch (e: any) {
+      errors.push(e.message || "Unknown error during Pulumi destroy");
+    } finally {
+      try { await rm(workDir, { recursive: true, force: true }); } catch {}
+    }
+    return errors;
   }
 }

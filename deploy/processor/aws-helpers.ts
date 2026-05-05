@@ -203,6 +203,42 @@ export async function waitForStackDelete(
 }
 
 /**
+ * Wait for a CloudFormation stack to reach a stable (non-IN_PROGRESS) state.
+ * Polls every 15 seconds for up to 30 minutes.
+ * Returns the final stack status, or throws on timeout.
+ */
+export async function waitForStackStable(
+  cfn: any,
+  stackName: string,
+  appendLog: (line: string) => Promise<void>,
+): Promise<string> {
+  const { DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+
+  for (let i = 0; i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 15_000));
+    try {
+      const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+      const stack = result.Stacks?.[0];
+      if (!stack) return "DELETE_COMPLETE";
+
+      const status = stack.StackStatus || "";
+      if (!status.endsWith("_IN_PROGRESS")) {
+        await appendLog(`✓ Stack reached ${status}`);
+        return status;
+      }
+
+      if (i % 4 === 0) {
+        await appendLog(`ℹ Waiting for stack: ${status}...`);
+      }
+    } catch {
+      // Stack may have been deleted
+      return "DELETE_COMPLETE";
+    }
+  }
+  throw new Error(`Stack ${stackName} did not stabilize within 30 minutes`);
+}
+
+/**
  * Extract outputs from an existing CloudFormation stack.
  * Used when a stack already exists and no updates are needed.
  */
@@ -229,9 +265,10 @@ export async function extractStackOutputs(
 }
 
 /**
- * Handle a CloudFormation stack that's in a stuck state by deleting it.
- * Checks the current stack status and deletes if it's in a non-recoverable state.
- * No-op if the stack doesn't exist or is in a healthy state.
+ * Handle a CloudFormation stack that's in a stuck or in-progress state.
+ * - Stuck states (ROLLBACK_COMPLETE, CREATE_FAILED, etc.): deletes the stack
+ * - In-progress states (CREATE_IN_PROGRESS, UPDATE_IN_PROGRESS, etc.): waits for completion
+ * - No-op if the stack doesn't exist or is in a healthy completed state.
  */
 export async function cleanupStuckStack(
   cfn: any,
@@ -246,10 +283,19 @@ export async function cleanupStuckStack(
     const existingStack = descResult.Stacks?.[0];
     if (existingStack) {
       const stackStatus = existingStack.StackStatus || "";
+
+      // Stack is stuck in a non-recoverable state — delete it
       if ((CFN_STUCK_STATUSES as readonly string[]).includes(stackStatus)) {
         await appendLog(`ℹ Stack in ${stackStatus} — deleting before re-create`);
         await cfn.send(new DeleteStackCommand({ StackName: stackName }));
         await waitForStackDelete(cfn, stackName, appendLog);
+        return;
+      }
+
+      // Stack has an operation in progress — wait for it to finish
+      if (stackStatus.endsWith("_IN_PROGRESS")) {
+        await appendLog(`ℹ Stack in ${stackStatus} — waiting for current operation to complete`);
+        await waitForStackStable(cfn, stackName, appendLog);
       }
     }
   } catch {

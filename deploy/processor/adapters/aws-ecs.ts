@@ -5,6 +5,8 @@ import type {
   AdapterContext,
   PushImageResult,
   ProvisionResult,
+  DestroyContext,
+  DestroyResult,
 } from "./types";
 import {
   pushToEcr,
@@ -12,6 +14,7 @@ import {
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
+  waitForStackDelete,
   type AwsCredentials,
 } from "../aws-helpers";
 
@@ -226,5 +229,44 @@ export class AwsEcsAdapter implements DeployAdapter {
    */
   async runPostDeploy(_ctx: AdapterContext, _provision: ProvisionResult): Promise<void> {
     // ECS containers start automatically — nothing to do here
+  }
+
+  async destroy(ctx: DestroyContext): Promise<DestroyResult> {
+    const errors: string[] = [];
+    const credentials: AwsCredentials = { accessKeyId: ctx.providerCredentials.apiKey, secretAccessKey: ctx.providerCredentials.apiSecret };
+    const stackName = `image-builder-app-${ctx.appName}`;
+
+    await ctx.appendLog("── Destroy AWS ECS Resources ──────");
+
+    // Delete CloudFormation stack (fire and forget — stack deletion can take several minutes)
+    try {
+      const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+      const cfn = new CloudFormationClient({ region: ctx.region, credentials });
+      try {
+        await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+        await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+        await ctx.appendLog(`✓ Stack deletion initiated: ${stackName}`);
+      } catch (e: any) { if (!e.message?.includes("does not exist")) throw e; }
+    } catch (e: any) { errors.push(`CloudFormation: ${e.message}`); }
+
+    // Delete ECR repos
+    await this.deleteEcrRepo(ctx.appName, ctx.region, credentials, errors);
+    await this.deleteEcrRepo(`${ctx.appName}-cache`, ctx.region, credentials, []);
+
+    return {
+      success: errors.length === 0,
+      message: errors.length > 0 ? `Partially destroyed: ${errors.join("; ")}` : `Destroyed stack ${stackName}, ECR repo ${ctx.appName}`,
+      errors,
+    };
+  }
+
+  private async deleteEcrRepo(repoName: string, region: string, credentials: AwsCredentials, errors: string[]): Promise<void> {
+    try {
+      const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
+      const ecr = new ECRClient({ region, credentials });
+      await ecr.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
+    } catch (e: any) {
+      if (!e.name?.includes("RepositoryNotFoundException")) errors.push(`ECR ${repoName}: ${e.message}`);
+    }
   }
 }

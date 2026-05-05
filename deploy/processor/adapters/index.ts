@@ -35,4 +35,6 @@ export type {
   AdapterContext,
   PushImageResult,
   ProvisionResult,
+  DestroyContext,
+  DestroyResult,
 } from "./types";

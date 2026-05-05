@@ -39,6 +39,26 @@ export interface ProvisionResult {
   outputs: Record<string, string>;
 }
 
+/** Context for destroy operations */
+export interface DestroyContext {
+  deploymentId: string;
+  repoName: string;
+  appName: string;
+  region: string;
+  providerCredentials: { apiKey: string; apiSecret: string };
+  /** The full tofu_script column value (Pulumi program + optional state after STATE marker) */
+  tofuScript: string;
+  deployStrategy: string;
+  appendLog: (line: string) => Promise<void>;
+}
+
+/** Result from a destroy operation */
+export interface DestroyResult {
+  success: boolean;
+  message: string;
+  errors: string[];
+}
+
 /** The interface all provider adapters implement */
 export interface DeployAdapter {
   /** Unique identifier for this adapter (e.g., "gcp-cloudrun") */
@@ -62,4 +82,8 @@ export interface DeployAdapter {
   /** Run post-deploy steps (SCP image transfer, static file upload, migrations).
    *  Called after provisionInfrastructure completes. */
   runPostDeploy(ctx: AdapterContext, provision: ProvisionResult): Promise<void>;
+
+  /** Destroy cloud resources provisioned by this adapter.
+   *  Optional — if not implemented, the destroy orchestrator falls back to generic logic. */
+  destroy?(ctx: DestroyContext): Promise<DestroyResult>;
 }

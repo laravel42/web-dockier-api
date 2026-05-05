@@ -52,11 +52,15 @@ export const deleteConnection = api(
 
 export const updateConnection = api(
   { expose: true, method: "PUT", path: "/git/connections/:connectionId", auth: true },
-  async (params: { connectionId: string; label: string }): Promise<GitConnectionResponse> => {
+  async (params: { connectionId: string; label: string; personalToken?: string }): Promise<GitConnectionResponse> => {
     const row = await db.queryRow<{ id: string; provider: string; label: string; repo_url: string; endpoint: string; created_at: Date }>`
       SELECT id, provider, label, repo_url, endpoint, created_at FROM git_connections WHERE id = ${params.connectionId}`;
     if (!row) throw APIError.notFound("Connection not found");
-    await db.exec`UPDATE git_connections SET label = ${params.label} WHERE id = ${params.connectionId}`;
+    if (params.personalToken) {
+      await db.exec`UPDATE git_connections SET label = ${params.label}, personal_token = ${params.personalToken} WHERE id = ${params.connectionId}`;
+    } else {
+      await db.exec`UPDATE git_connections SET label = ${params.label} WHERE id = ${params.connectionId}`;
+    }
     return { id: row.id, provider: row.provider, label: params.label, repoUrl: row.repo_url, endpoint: row.endpoint, createdAt: row.created_at.toISOString() };
   }
 );

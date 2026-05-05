@@ -20,7 +20,7 @@ export const gitApi = {
   deleteConnection: (connectionId: string) =>
     request(`/git/connections/${connectionId}`, { method: "DELETE" }),
 
-  updateConnection: (connectionId: string, data: { label: string }) =>
+  updateConnection: (connectionId: string, data: { label: string; personalToken?: string }) =>
     request(`/git/connections/${connectionId}`, { method: "PUT", body: JSON.stringify({ connectionId, ...data }) }),
 
   listRepos: (connectionId: string, refresh?: boolean) =>
