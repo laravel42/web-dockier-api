@@ -599,39 +599,6 @@ export class GcpStorageAdapter implements DeployAdapter {
       await appendLog(`⚠ Static file upload error: ${e.message}`);
     }
 
-    // Wait for CDN / Global Load Balancer to propagate before marking deploy as done.
-    // GCP global LBs typically take 1–3 minutes to become reachable after creation.
-    const cdnUrl = provision.appUrl || (provision.outputs.cdnIp ? `http://${provision.outputs.cdnIp}` : "");
-    if (cdnUrl) {
-      await appendLog("── Waiting for CDN to propagate ───");
-      const maxAttempts = 18;
-      const intervalMs = 10_000;
-      let live = false;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          const res = await fetch(cdnUrl, {
-            method: "GET",
-            redirect: "follow",
-            signal: AbortSignal.timeout(5_000),
-          });
-          if (res.ok) {
-            live = true;
-            await appendLog(`✓ CDN is live (attempt ${attempt}/${maxAttempts})`);
-            break;
-          }
-          await appendLog(`⏳ CDN not ready — HTTP ${res.status} (attempt ${attempt}/${maxAttempts})`);
-        } catch {
-          await appendLog(`⏳ CDN not reachable yet (attempt ${attempt}/${maxAttempts})`);
-        }
-        if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, intervalMs));
-        }
-      }
-      if (!live) {
-        await appendLog("⚠ CDN did not respond within 3 minutes — it may need another minute to propagate");
-      }
-    }
-
     // Save Pulumi state to DB
     await savePulumiState({
       deploymentId,
@@ -699,13 +666,17 @@ export class GcpStorageAdapter implements DeployAdapter {
       const bucketName = bucketMatch?.[1] || bucketMatch?.[2];
       if (bucketName) {
         try {
-          const listRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o`, { headers: authHeaders });
-          if (listRes.ok) {
-            const objData = await listRes.json() as { items?: { name: string }[] };
+          let pageToken: string | undefined;
+          do {
+            const listUrl = `https://storage.googleapis.com/storage/v1/b/${bucketName}/o` + (pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : "");
+            const listRes = await fetch(listUrl, { headers: authHeaders });
+            if (!listRes.ok) break;
+            const objData = await listRes.json() as { items?: { name: string }[]; nextPageToken?: string };
             for (const obj of objData.items || []) {
               await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o/${encodeURIComponent(obj.name)}`, { method: "DELETE", headers: authHeaders });
             }
-          }
+            pageToken = objData.nextPageToken;
+          } while (pageToken);
           const deleteRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`, { method: "DELETE", headers: authHeaders });
           if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`Bucket delete: ${(await deleteRes.text()).slice(0, 150)}`);
         } catch (e: any) { errors.push(`Bucket delete: ${e.message}`); }
@@ -730,10 +701,15 @@ export class GcpStorageAdapter implements DeployAdapter {
           const listRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}`, { headers: authHeaders });
           if (listRes.ok) {
             const listData = await listRes.json() as { items?: { name: string }[] };
-            for (const r of (listData.items || []).filter((r: { name: string }) => r.name.startsWith(name))) {
-              const delRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${r.name}`, { method: "DELETE", headers: authHeaders });
-              if (!delRes.ok && delRes.status !== 404) errors.push(`${type} delete ${r.name}: ${(await delRes.text()).slice(0, 150)}`);
-              await new Promise(r => setTimeout(r, 2_000));
+            const matching = (listData.items || []).filter((r: { name: string }) => r.name.startsWith(name));
+            const results = await Promise.allSettled(
+              matching.map(async (r) => {
+                const delRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${r.name}`, { method: "DELETE", headers: authHeaders });
+                if (!delRes.ok && delRes.status !== 404) errors.push(`${type} delete ${r.name}: ${(await delRes.text()).slice(0, 150)}`);
+              })
+            );
+            for (const result of results) {
+              if (result.status === "rejected") errors.push(`${type} delete: ${result.reason?.message || "Unknown error"}`);
             }
           }
         } catch (e: any) { errors.push(`${type} delete: ${e.message}`); }
