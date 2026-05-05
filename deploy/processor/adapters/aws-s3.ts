@@ -13,10 +13,10 @@ import {
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
-  waitForStackDelete,
   readCfnTemplate,
   type AwsCredentials,
 } from "../aws-helpers";
+import { installDeps, buildSite, findOutputDir, MIME_TYPES, SKIP_DIRS } from "../static-site-builder";
 
 /**
  * AWS S3 + CloudFront adapter.
@@ -91,10 +91,12 @@ export class AwsS3Adapter implements DeployAdapter {
 
     // 2. Build the static site locally
     await appendLog("── Build Static Site ──────────────");
-    await this.buildStaticSite(ctx);
+    const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
+    await installDeps({ repoDir, packageManager, runCmd: ctx.runCmd, appendLog });
+    await buildSite({ repoDir, techStack: ctx.event.techStack, runCmd: ctx.runCmd, appendLog });
 
     // 3. Identify the output directory
-    const uploadDir = this.findBuildOutputDir(repoDir);
+    const uploadDir = findOutputDir(repoDir);
     await appendLog(`ℹ Build output: ${uploadDir.replace(repoDir, ".")}`);
 
     // 4. Create S3 bucket if it doesn't exist
@@ -190,152 +192,6 @@ export class AwsS3Adapter implements DeployAdapter {
   // ── Private helpers ──────────────────────────────────────────────
 
   /**
-   * Build the static site locally using the detected package manager.
-   */
-  private async buildStaticSite(ctx: AdapterContext): Promise<void> {
-    const { repoDir, event, runCmd, appendLog } = ctx;
-    const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
-
-    // Install dependencies
-    await appendLog("ℹ Installing dependencies...");
-    let installOk = false;
-    if (packageManager === "pnpm") {
-      const result = await runCmd("pnpm", ["install", "--frozen-lockfile"], { cwd: repoDir });
-      installOk = result.code === 0;
-      if (!installOk) {
-        await appendLog("⚠ pnpm install --frozen-lockfile failed, trying pnpm install...");
-        const fallback = await runCmd("pnpm", ["install"], { cwd: repoDir });
-        installOk = fallback.code === 0;
-      }
-    } else if (packageManager === "yarn") {
-      const result = await runCmd("yarn", ["install", "--frozen-lockfile"], { cwd: repoDir });
-      installOk = result.code === 0;
-      if (!installOk) {
-        await appendLog("⚠ yarn install --frozen-lockfile failed, trying yarn install...");
-        const fallback = await runCmd("yarn", ["install"], { cwd: repoDir });
-        installOk = fallback.code === 0;
-      }
-    } else {
-      // Default to npm
-      const result = await runCmd("npm", ["ci"], { cwd: repoDir });
-      installOk = result.code === 0;
-      if (!installOk) {
-        await appendLog("⚠ npm ci failed, trying npm install...");
-        const fallback = await runCmd("npm", ["install"], { cwd: repoDir });
-        installOk = fallback.code === 0;
-      }
-    }
-
-    if (installOk) {
-      await appendLog("✓ Dependencies installed");
-    } else {
-      await appendLog("⚠ Dependency installation had issues — attempting build anyway");
-    }
-
-    // Build the static site
-    await appendLog("ℹ Building static site...");
-
-    const isNuxt = event.techStack.some((t) => t.toLowerCase().includes("nuxt"));
-    const isNext = event.techStack.some((t) => t.toLowerCase().includes("next"));
-    let buildOk = false;
-
-    if (isNuxt) {
-      const genResult = await runCmd("npx", ["nuxt", "generate"], {
-        cwd: repoDir,
-        env: { NITRO_PRESET: "static" },
-      });
-      if (genResult.code === 0) {
-        buildOk = true;
-        await appendLog("✓ Nuxt static site generated");
-      } else {
-        await appendLog("ℹ nuxt generate failed, falling back to npm run build...");
-        const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
-        buildOk = buildRes.code === 0;
-        if (buildOk) await appendLog("✓ Nuxt site built");
-      }
-    } else if (isNext) {
-      const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
-      if (buildRes.code === 0) {
-        buildOk = true;
-        // Try next export if out/ doesn't exist yet
-        if (!existsSync(join(repoDir, "out"))) {
-          await runCmd("npx", ["next", "export"], { cwd: repoDir });
-        }
-        await appendLog("✓ Next.js static site built");
-      }
-    }
-
-    // Generic fallback for React (CRA/Vite), Vue, Svelte, Angular, Astro, etc.
-    if (!buildOk) {
-      const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
-      if (buildRes.code === 0) {
-        buildOk = true;
-        await appendLog("✓ Static site built");
-      } else {
-        // Last resort: try generate script if it exists
-        const genRes = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir });
-        if (genRes.code === 0) {
-          buildOk = true;
-          await appendLog("✓ Static site generated");
-        } else {
-          await appendLog("⚠ Build failed — uploading source files as fallback");
-        }
-      }
-    }
-  }
-
-  /**
-   * Find the build output directory from the repo.
-   * Checks common framework output directories in priority order.
-   */
-  private findBuildOutputDir(repoDir: string): string {
-
-    const possibleDirs = [
-      ".output/public", // Nuxt
-      "out",            // Next.js
-      "dist",           // Vite (React/Vue/Svelte), Astro, Angular
-      "build",          // Create React App, SvelteKit
-      ".next/out",      // Next.js (older)
-      "output",         // Generic
-      "public",         // Hugo, some configs
-    ];
-
-    // Prefer a dir that has index.html
-    for (const dir of possibleDirs) {
-      const candidate = join(repoDir, dir);
-      if (existsSync(join(candidate, "index.html"))) {
-        return candidate;
-      }
-    }
-
-    // If none had index.html, pick the first that exists
-    for (const dir of possibleDirs) {
-      if (existsSync(join(repoDir, dir))) {
-        return join(repoDir, dir);
-      }
-    }
-
-    // For Angular, check dist/<project-name>/browser or dist/<project-name>
-    if (existsSync(join(repoDir, "dist"))) {
-      const distEntries = readdirSync(join(repoDir, "dist"));
-      for (const entry of distEntries) {
-        const candidate = join(repoDir, "dist", entry);
-        if (statSync(candidate).isDirectory()) {
-          if (existsSync(join(candidate, "browser", "index.html"))) {
-            return join(candidate, "browser");
-          }
-          if (existsSync(join(candidate, "index.html"))) {
-            return candidate;
-          }
-        }
-      }
-    }
-
-    // Fallback to repo root
-    return repoDir;
-  }
-
-  /**
    * Sync files from a local directory to an S3 bucket.
    * Uploads with correct MIME types and cache headers:
    * - HTML files: no-cache (always revalidate)
@@ -349,46 +205,12 @@ export class AwsS3Adapter implements DeployAdapter {
   ): Promise<void> {
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
 
-    const mimeTypes: Record<string, string> = {
-      ".html": "text/html",
-      ".css": "text/css",
-      ".js": "application/javascript",
-      ".mjs": "application/javascript",
-      ".json": "application/json",
-      ".png": "image/png",
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".gif": "image/gif",
-      ".svg": "image/svg+xml",
-      ".ico": "image/x-icon",
-      ".woff": "font/woff",
-      ".woff2": "font/woff2",
-      ".ttf": "font/ttf",
-      ".eot": "application/vnd.ms-fontobject",
-      ".txt": "text/plain",
-      ".xml": "application/xml",
-      ".webp": "image/webp",
-      ".avif": "image/avif",
-      ".map": "application/json",
-      ".webmanifest": "application/manifest+json",
-    };
-
-    const skipDirs = new Set([
-      "node_modules",
-      ".git",
-      ".nuxt",
-      ".output",
-      ".next",
-      ".cache",
-      "__pycache__",
-    ]);
-
     let fileCount = 0;
 
     const uploadRecursive = async (dir: string, prefix: string) => {
       const entries = readdirSync(dir);
       for (const entry of entries) {
-        if (skipDirs.has(entry)) continue;
+        if (SKIP_DIRS.has(entry)) continue;
 
         const fullPath = join(dir, entry);
         const objectKey = prefix ? `${prefix}/${entry}` : entry;
@@ -398,7 +220,7 @@ export class AwsS3Adapter implements DeployAdapter {
         } else {
           const content = readFileSync(fullPath);
           const ext = extname(fullPath).toLowerCase();
-          const contentType = mimeTypes[ext] || "application/octet-stream";
+          const contentType = MIME_TYPES[ext] || "application/octet-stream";
 
           // HTML files get no-cache, everything else gets long-lived immutable cache
           const isHtml = ext === ".html";
