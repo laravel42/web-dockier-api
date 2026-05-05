@@ -43,8 +43,8 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
 
   return (
     <div className="space-y-4">
-      {/* Docker toggle — hidden for template projects (pre-built image) */}
-      {!isTemplate && (
+      {/* Docker toggle — hidden for template projects and static deploys (no container needed) */}
+      {!isTemplate && state.deployStrategy !== "static" && (
       <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface">
         <div className="flex items-center gap-2">
           <DockerIcon className="w-5 h-5 text-blue-500" />
@@ -65,8 +65,8 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       </div>
       )}
 
-      {/* Build method selector — hidden for template projects */}
-      {!isTemplate && state.useDocker && (() => {
+      {/* Build method selector for non-static deploys */}
+      {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (() => {
         const isAws = state.selectedProvider === "aws";
         const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
           { id: "dockerfile", label: "Dockerfile", desc: "Auto-generated Dockerfile with auto-fix on failure", icon: <DockerfileIcon className="w-4 h-4 text-blue-500" /> },
@@ -101,6 +101,34 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
         </div>
         );
       })()}
+
+      {/* Optional CodeBuild for AWS static deploys — build remotely instead of locally */}
+      {!isTemplate && state.deployStrategy === "static" && state.selectedProvider === "aws" && (
+        <div>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Build Method <span className="text-text-muted font-normal normal-case">(optional)</span></p>
+          <p className="text-xs text-text-secondary mb-2">
+            By default the static site is built locally. You can optionally use AWS CodeBuild to build remotely instead.
+          </p>
+          <button
+            type="button"
+            onClick={() => onBuildMethodChange(state.buildMethod === "codebuild" ? "dockerfile" : "codebuild")}
+            className={`w-full p-3 rounded-lg border text-left transition-all ${
+              state.buildMethod === "codebuild"
+                ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                : "border-border bg-surface hover:border-primary-500/30"
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <CodeBuildIcon className="w-4 h-4 text-orange-500" />
+              <span className="text-sm font-medium text-text">CodeBuild</span>
+              {state.buildMethod === "codebuild" && (
+                <span className="ml-auto text-xs text-primary-500 font-medium">Active</span>
+              )}
+            </div>
+            <p className="text-xs text-text-muted">AWS CodeBuild builds your site remotely — no local build needed</p>
+          </button>
+        </div>
+      )}
 
       {/* Resources */}
       {state.tofuResources.length > 0 && (

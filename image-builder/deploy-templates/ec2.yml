@@ -280,16 +280,34 @@ Resources:
                 docker stop ${AppName} 2>/dev/null || true
                 docker rm ${AppName} 2>/dev/null || true
 
-                ENV_FLAGS=""
-                for row in $(echo '${EnvVarsJson}' | python3 -c "import sys,json; [print(f\"{e['name']}={e['value']}\") for e in json.load(sys.stdin)]" 2>/dev/null); do
-                  ENV_FLAGS="$ENV_FLAGS -e $row"
-                done
-
-                # Add self-hosted service connection env vars
+                # Write env file: defaults first, then user values (user overrides defaults)
+                # Infrastructure overrides (DB_HOST, REDIS_HOST) go as -e flags after the file
                 SERVICES="${SelfHostedServices}"
-                SVC_FLAGS=""
+                TECH="${TechStack}"
+                IS_LARAVEL=false
+                if echo "$TECH" | grep -qi "laravel"; then IS_LARAVEL=true; fi
+
+                # Start building the env file with defaults
+                > /tmp/${AppName}.env
+
+                # Laravel defaults (only if user didn't provide them)
+                if [ "$IS_LARAVEL" = true ]; then
+                  HAS_APP_KEY=$(echo '${EnvVarsJson}' | python3 -c "
+                import sys, json
+                try:
+                  evs = json.load(sys.stdin)
+                  print('yes' if any(e.get('name') == 'APP_KEY' for e in evs) else 'no')
+                except: print('no')
+                " 2>/dev/null)
+                  if [ "$HAS_APP_KEY" != "yes" ]; then
+                    echo "APP_KEY=base64:$(openssl rand -base64 32)" >> /tmp/${AppName}.env
+                  fi
+                  echo "APP_ENV=production" >> /tmp/${AppName}.env
+                fi
+
+                # Self-hosted service defaults (user env vars override these)
+                SVC_OVERRIDES=""
                 if echo "$SERVICES" | grep -q "database"; then
-                  # Detect DB engine from user env vars
                   DB_ENGINE="mysql"
                   USER_DB_CONN=$(echo '${EnvVarsJson}' | python3 -c "
                 import sys, json
@@ -305,26 +323,52 @@ Resources:
                     DB_ENGINE="pgsql"
                   fi
                   if [ "$DB_ENGINE" = "pgsql" ]; then
-                    SVC_FLAGS="$SVC_FLAGS -e DB_CONNECTION=pgsql -e DB_HOST=host.docker.internal -e DB_PORT=5432 -e DB_DATABASE=appdb -e DB_USERNAME=appuser -e DB_PASSWORD=apppass123"
+                    echo "DB_CONNECTION=pgsql" >> /tmp/${AppName}.env
+                    echo "DB_PORT=5432" >> /tmp/${AppName}.env
+                    echo "DB_DATABASE=appdb" >> /tmp/${AppName}.env
+                    echo "DB_USERNAME=appuser" >> /tmp/${AppName}.env
+                    echo "DB_PASSWORD=apppass123" >> /tmp/${AppName}.env
                   else
-                    SVC_FLAGS="$SVC_FLAGS -e DB_CONNECTION=mysql -e DB_HOST=host.docker.internal -e DB_PORT=3306 -e DB_DATABASE=appdb -e DB_USERNAME=appuser -e DB_PASSWORD=apppass123"
+                    echo "DB_CONNECTION=mysql" >> /tmp/${AppName}.env
+                    echo "DB_PORT=3306" >> /tmp/${AppName}.env
+                    echo "DB_DATABASE=appdb" >> /tmp/${AppName}.env
+                    echo "DB_USERNAME=appuser" >> /tmp/${AppName}.env
+                    echo "DB_PASSWORD=apppass123" >> /tmp/${AppName}.env
                   fi
+                  # DB_HOST must always point to the host machine from inside Docker
+                  SVC_OVERRIDES="$SVC_OVERRIDES -e DB_HOST=host.docker.internal"
                 fi
                 if echo "$SERVICES" | grep -q "cache" || echo "$SERVICES" | grep -q "broadcasting"; then
-                  SVC_FLAGS="$SVC_FLAGS -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379"
+                  SVC_OVERRIDES="$SVC_OVERRIDES -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379"
                 fi
                 if echo "$SERVICES" | grep -q "queue"; then
-                  SVC_FLAGS="$SVC_FLAGS -e QUEUE_CONNECTION=redis"
+                  echo "QUEUE_CONNECTION=redis" >> /tmp/${AppName}.env
                 fi
 
+                # Append user env vars (these override the defaults above)
+                echo '${EnvVarsJson}' | python3 -c "
+                import sys, json
+                try:
+                  for e in json.load(sys.stdin):
+                    print(e['name'] + '=' + e['value'])
+                except: pass
+                " >> /tmp/${AppName}.env 2>/dev/null
+
+                ENV_FILE_FLAG=""
+                if [ -s /tmp/${AppName}.env ]; then
+                  ENV_FILE_FLAG="--env-file /tmp/${AppName}.env"
+                fi
+
+                # Env file: defaults then user values (later lines win for same key)
+                # -e flags: infrastructure overrides that must always be correct
                 docker run -d \
                   --name ${AppName} \
                   --restart unless-stopped \
                   -p 127.0.0.1:8080:${ContainerPort} \
                   --add-host=host.docker.internal:host-gateway \
                   -e PORT=${ContainerPort} \
-                  $SVC_FLAGS \
-                  $ENV_FLAGS \
+                  $ENV_FILE_FLAG \
+                  $SVC_OVERRIDES \
                   "${ImageUri}"
             04_nginx_proxy:
               command: !Sub |

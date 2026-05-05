@@ -1,9 +1,26 @@
 import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
-import { git_integration } from "~encore/clients";
 import { appendLog, ts, generateAwsBuildspec } from "./helpers";
 
-type RunCmd = (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }) => Promise<{ code: number; output: string }>;
+/**
+ * AWS CodeBuild deploy path — builds Docker images remotely via CodeBuild,
+ * pushes to ECR, and provisions infrastructure through CloudFormation.
+ *
+ * This is one of two AWS build strategies:
+ * - **CodeBuild** (`buildMethod: "codebuild"`): Remote build on AWS. Source is
+ *   zipped, uploaded to S3, and an SNS message triggers a CodeBuild project
+ *   that builds the image, pushes to ECR, and deploys via CloudFormation.
+ *   Handled by this file.
+ * - **Local build** (`buildMethod: "dockerfile"`): Build happens on the deploy
+ *   server. Uses the unified adapter dispatch in `deploy/processor/adapters/`:
+ *   `aws-ecs.ts`, `aws-ec2.ts`, `aws-s3.ts`.
+ */
 
+/**
+ * Handle an AWS deploy using the CodeBuild pipeline.
+ *
+ * Flow: zip source → S3 upload → SNS trigger → CodeBuild builds image →
+ * ECR push → CloudFormation provisions infrastructure → poll for completion.
+ */
 export async function handleAwsDeploy(
   event: DeployEvent,
   ctx: {

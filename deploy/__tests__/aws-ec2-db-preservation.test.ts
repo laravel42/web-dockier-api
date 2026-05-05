@@ -184,28 +184,28 @@ describe("Preservation: Default Credentials and Non-DB Behavior Unchanged", () =
      * **Validates: Requirements 3.4**
      *
      * The ec2.yml step 03_deploy_container passes all user env vars through
-     * $ENV_FLAGS — verify the Python parsing loop processes all env vars.
+     * an env file — verify the Python parsing loop processes all env vars.
      */
     it("should have a Python parsing loop in step 03 that iterates all env vars", () => {
       expect(step03Content.length).toBeGreaterThan(0);
 
       // The Python one-liner that parses EnvVarsJson and prints name=value pairs
-      // The Python one-liner parses EnvVarsJson — check for the key parts
-      const hasPythonImport = step03Content.includes("import sys,json");
+      const hasPythonImport = step03Content.includes("import sys, json");
       const hasJsonLoad = step03Content.includes("json.load(sys.stdin)");
       expect(hasPythonImport).toBe(true);
       expect(hasJsonLoad).toBe(true);
     });
 
-    it("should build ENV_FLAGS from the Python parser output", () => {
-      // The loop that builds ENV_FLAGS from each row
-      expect(step03Content).toContain('ENV_FLAGS="$ENV_FLAGS -e $row"');
+    it("should write user env vars to an env file for docker", () => {
+      // User env vars are written to an env file to handle values with spaces
+      expect(step03Content).toContain(".env");
+      expect(step03Content).toContain("--env-file");
     });
 
-    it("should include ENV_FLAGS in the docker run command", () => {
+    it("should include env file flag in the docker run command", () => {
       const dockerRunMatch = step03Content.match(/docker run[\s\S]*?\$\{ImageUri\}/);
       expect(dockerRunMatch).not.toBeNull();
-      expect(dockerRunMatch![0]).toContain("$ENV_FLAGS");
+      expect(dockerRunMatch![0]).toContain("$ENV_FILE_FLAG");
     });
   });
 
@@ -236,12 +236,12 @@ describe("Preservation: Default Credentials and Non-DB Behavior Unchanged", () =
       expect(step02Content).toContain("Scheduler will be configured after container starts");
     });
 
-    it("should inject Redis env vars in step 03 SVC_FLAGS for cache service", () => {
+    it("should inject Redis env vars in step 03 as infrastructure overrides for cache service", () => {
       expect(step03Content).toContain("REDIS_HOST=host.docker.internal");
       expect(step03Content).toContain("REDIS_PORT=6379");
     });
 
-    it("should inject QUEUE_CONNECTION in step 03 SVC_FLAGS for queue service", () => {
+    it("should inject QUEUE_CONNECTION in step 03 env file for queue service", () => {
       expect(step03Content).toContain("QUEUE_CONNECTION=redis");
     });
 
@@ -293,23 +293,19 @@ describe("Preservation: Default Credentials and Non-DB Behavior Unchanged", () =
       expect(step02Content).toContain("10.0.0.0/8 md5");
     });
 
-    it("should use default DB credentials in step 03 SVC_FLAGS for MySQL", () => {
-      // Step 03 injects hardcoded defaults into SVC_FLAGS
-      expect(step03Content).toContain("-e DB_DATABASE=appdb");
-      expect(step03Content).toContain("-e DB_USERNAME=appuser");
-      expect(step03Content).toContain("-e DB_PASSWORD=apppass123");
+    it("should use default DB credentials in step 03 env file for MySQL", () => {
+      // Step 03 writes defaults to the env file before user values
+      expect(step03Content).toContain("DB_DATABASE=appdb");
+      expect(step03Content).toContain("DB_USERNAME=appuser");
+      expect(step03Content).toContain("DB_PASSWORD=apppass123");
     });
 
-    it("should use default DB credentials in step 03 SVC_FLAGS for PostgreSQL", () => {
-      // The pgsql branch also uses the same defaults
-      const pgsqlSvcMatch = step03Content.match(
-        /if \[ "\$DB_ENGINE" = "pgsql" \]; then\s*\n\s*(SVC_FLAGS="[^"]*")/,
-      );
-      expect(pgsqlSvcMatch).not.toBeNull();
-      const pgsqlSvcFlags = pgsqlSvcMatch![1];
-      expect(pgsqlSvcFlags).toContain("DB_DATABASE=appdb");
-      expect(pgsqlSvcFlags).toContain("DB_USERNAME=appuser");
-      expect(pgsqlSvcFlags).toContain("DB_PASSWORD=apppass123");
+    it("should use default DB credentials in step 03 env file for PostgreSQL", () => {
+      // The pgsql branch also uses the same defaults written to env file
+      expect(step03Content).toContain("DB_CONNECTION=pgsql");
+      expect(step03Content).toContain("DB_DATABASE=appdb");
+      expect(step03Content).toContain("DB_USERNAME=appuser");
+      expect(step03Content).toContain("DB_PASSWORD=apppass123");
     });
 
     it("should detect DB engine from DB_CONNECTION in EnvVarsJson", () => {

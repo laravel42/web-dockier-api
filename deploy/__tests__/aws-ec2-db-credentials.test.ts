@@ -186,8 +186,8 @@ describe("Bug Condition: AWS EC2 Deploy Ignores User DB Credentials", () => {
     });
   });
 
-  // ── Assertion 4: docker run flag order — $SVC_FLAGS before $ENV_FLAGS ───
-  describe("ec2.yml step 03_deploy_container flag ordering", () => {
+  // ── Assertion 4: docker run uses env file with user values overriding defaults ───
+  describe("ec2.yml step 03_deploy_container env var handling", () => {
     // Extract the 03_deploy_container command block from ec2.yml
     const step03Match = ec2YmlContent.match(
       /03_deploy_container:\s*\n\s*command:\s*!Sub\s*\|\s*\n([\s\S]*?)(?=\n\s{12}\d{2}_|\n\s{8}files:)/,
@@ -198,26 +198,36 @@ describe("Bug Condition: AWS EC2 Deploy Ignores User DB Credentials", () => {
       expect(step03Content.length).toBeGreaterThan(0);
     });
 
-    it("should place $SVC_FLAGS BEFORE $ENV_FLAGS in the docker run command", () => {
-      // EXPECTED: docker run ... $SVC_FLAGS ... $ENV_FLAGS ...
-      //   (user values in $ENV_FLAGS override service defaults in $SVC_FLAGS)
-      // ACTUAL (unfixed): docker run ... $ENV_FLAGS ... $SVC_FLAGS ...
-      //   (hardcoded $SVC_FLAGS overwrite user $ENV_FLAGS)
+    it("should write defaults before user env vars in the env file so user values win", () => {
+      // Defaults are written to the env file first, then user env vars are appended.
+      // In Docker --env-file, later lines for the same key override earlier ones.
+      const defaultDbWrite = step03Content.indexOf('echo "DB_DATABASE=appdb"');
+      // The user env var append section is marked with this comment
+      const userEnvAppend = step03Content.indexOf("# Append user env vars");
 
-      // Find the docker run command block
+      expect(defaultDbWrite).toBeGreaterThan(-1);
+      expect(userEnvAppend).toBeGreaterThan(-1);
+
+      // Defaults should come BEFORE user env var append
+      expect(defaultDbWrite).toBeLessThan(userEnvAppend);
+    });
+
+    it("should use --env-file for user env vars and -e for infrastructure overrides", () => {
       const dockerRunMatch = step03Content.match(/docker run[\s\S]*?\$\{ImageUri\}/);
       expect(dockerRunMatch).not.toBeNull();
 
       const dockerRunCmd = dockerRunMatch![0];
 
-      const svcFlagsIndex = dockerRunCmd.indexOf("$SVC_FLAGS");
-      const envFlagsIndex = dockerRunCmd.indexOf("$ENV_FLAGS");
+      // Env file flag should be present (handles values with spaces correctly)
+      expect(dockerRunCmd).toContain("$ENV_FILE_FLAG");
 
-      expect(svcFlagsIndex).toBeGreaterThan(-1);
-      expect(envFlagsIndex).toBeGreaterThan(-1);
+      // Infrastructure overrides (DB_HOST) should be -e flags that always win
+      expect(dockerRunCmd).toContain("$SVC_OVERRIDES");
 
-      // $SVC_FLAGS should come BEFORE $ENV_FLAGS so user values win
-      expect(svcFlagsIndex).toBeLessThan(envFlagsIndex);
+      // $SVC_OVERRIDES should come AFTER $ENV_FILE_FLAG so infra values win
+      const envFileIndex = dockerRunCmd.indexOf("$ENV_FILE_FLAG");
+      const overridesIndex = dockerRunCmd.indexOf("$SVC_OVERRIDES");
+      expect(overridesIndex).toBeGreaterThan(envFileIndex);
     });
   });
 });

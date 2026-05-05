@@ -12,7 +12,7 @@ import { generatePythonDockerfile } from "./dockerfiles/python";
 import { generateGoDockerfile } from "./dockerfiles/go";
 
 // Re-export everything for public API
-export type { RepoConfig, NativeDep, DockerFix } from "./types";
+export type { DetectedStack, RepoConfig, NativeDep, DockerFix } from "./types";
 export { configSummary } from "./utils";
 export { patchDockerfile } from "./docker-fixer";
 export { buildWithRailpack, isRailpackAvailable, buildWithNixpacks, isNixpacksAvailable } from "./builders";
@@ -65,10 +65,10 @@ export function analyzeRepoConfig(repoDir: string): RepoConfig {
   return config;
 }
 
-export function generateDockerfile(config: RepoConfig): string {
+export function generateDockerfile(config: RepoConfig, repoDir?: string): string {
   switch (config.runtime) {
     case "node": return generateNodeDockerfile(config);
-    case "php": return generatePhpDockerfile(config);
+    case "php": return generatePhpDockerfile(config, repoDir);
     case "python": return generatePythonDockerfile(config);
     case "go": return generateGoDockerfile(config);
     default: return generateNodeDockerfile(config);

@@ -359,6 +359,9 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         buildMethod: state.buildMethod,
         templateId: project.sourceType === "template" ? project.template : undefined,
         envVars: state.envVars.length > 0 ? state.envVars : undefined,
+        services: analysis?.detectedServices?.length
+          ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: state.servicesModes[svc.type] || "vps" as const }))
+          : undefined,
       });
       setState(prev => ({ ...prev, deploymentId: deployment.id }));
 

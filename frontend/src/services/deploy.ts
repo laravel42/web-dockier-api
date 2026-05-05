@@ -45,6 +45,7 @@ export const deployApi = {
     skipPipeline?: boolean;
     templateId?: string;
     envVars?: Array<{ name: string; value: string }>;
+    services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
   }) =>
     request<{
       id: string;

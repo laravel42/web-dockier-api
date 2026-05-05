@@ -9,6 +9,12 @@ export function buildDockerUserData(p: DeployParams): string {
 
   const isLaravel = p.techStack.some(s => s.toLowerCase() === "laravel");
 
+  // The container port is what the app listens on inside the container.
+  // The host port is what Docker binds to on 127.0.0.1 for nginx to proxy to.
+  // These must differ from 80 because nginx already listens on port 80 externally.
+  const containerPort = p.runtime.port;
+  const hostPort = containerPort === 80 || containerPort === 443 ? 8080 : containerPort;
+
   let dbSetup = "";
   if (hasVpsDb && !p.templateSetupScript) {
     // Detect whether the app needs MySQL or PostgreSQL based on extensions and tech stack
@@ -39,8 +45,17 @@ export function buildDockerUserData(p: DeployParams): string {
       mysql --defaults-file=/etc/mysql/debian.cnf -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'%';"
     fi
     mysql --defaults-file=/etc/mysql/debian.cnf -e "FLUSH PRIVILEGES;"
-    sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf 2>/dev/null || true
-    systemctl restart mysql`;
+    # Bind MySQL to all interfaces so Docker containers can connect via host.docker.internal
+    # Handle all possible config locations on Ubuntu 22.04/24.04 with MySQL 8.0
+    for CNFFILE in /etc/mysql/mysql.conf.d/mysqld.cnf /etc/mysql/my.cnf /etc/mysql/conf.d/mysql.cnf; do
+      if [ -f "$CNFFILE" ]; then
+        sed -i 's/^[[:space:]]*bind-address[[:space:]]*=.*/bind-address = 0.0.0.0/' "$CNFFILE"
+        sed -i 's/^[[:space:]]*mysqlx-bind-address[[:space:]]*=.*/mysqlx-bind-address = 0.0.0.0/' "$CNFFILE"
+      fi
+    done
+    systemctl restart mysql
+    # Wait for MySQL to be fully ready after restart before proceeding
+    for i in $(seq 1 30); do mysqladmin ping -h localhost --silent && break; sleep 2; done`;
     } else {
       dbSetup = `
     # ── PostgreSQL ──
@@ -60,7 +75,8 @@ export function buildDockerUserData(p: DeployParams): string {
     # ── Redis ──
     apt-get install -y redis-server
     systemctl enable redis-server
-    sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf
+    sed -i 's/^bind .*/bind 127.0.0.1 172.17.0.1/' /etc/redis/redis.conf
+    sed -i 's/^protected-mode yes/protected-mode no/' /etc/redis/redis.conf
     systemctl restart redis-server`;
   }
 
@@ -102,7 +118,7 @@ SUPERVISOR
   const envEntries = (p.dockerEnvVars || []).map(e => `-e ${e.name}="${e.value}"`);
   const defaultEnvFlags = [
     `-e APP_ENV=production`,
-    `-e PORT=${p.runtime.port}`,
+    `-e PORT=${containerPort}`,
     ...envEntries,
   ];
   const overrideEnvFlags: string[] = [];
@@ -179,7 +195,7 @@ if [ -n "$PUBLIC_IMAGE" ]; then
   systemctl disable nginx 2>/dev/null || true
   # Bind directly to 0.0.0.0:80 — no Nginx needed for template deploys
   docker run -d --name ${p.appName} --restart=always \\
-    -p 0.0.0.0:80:${p.runtime.port} \\
+    -p 0.0.0.0:80:${containerPort} \\
     --add-host=host.docker.internal:host-gateway \\
     ${defaultEnvStr} \\
     ${userEnvPlaceholder} \\
@@ -205,10 +221,9 @@ elif [ -n "$ECR_IMAGE" ]; then
   docker stop ${p.appName} 2>/dev/null || true
   docker rm ${p.appName} 2>/dev/null || true
   # All runtimes listen on their configured port inside the container.
-  # PHP/Laravel uses php artisan serve on the configured port, not nginx on 80.
-  CONTAINER_PORT=${String(p.runtime.port)}
+  # The host port may differ from the container port to avoid conflicting with nginx on port 80.
   docker run -d --name ${p.appName} --restart=always \\
-    -p 127.0.0.1:${p.runtime.port}:$CONTAINER_PORT \\
+    -p 127.0.0.1:${hostPort}:${containerPort} \\
     --add-host=host.docker.internal:host-gateway \\
     ${defaultEnvStr} \\
     ${userEnvPlaceholder} \\
@@ -229,7 +244,7 @@ elif echo "$AR_IMAGE" | grep -q "docker.pkg.dev"; then
   docker stop ${p.appName} 2>/dev/null || true
   docker rm ${p.appName} 2>/dev/null || true
   docker run -d --name ${p.appName} --restart=always \\
-    -p 127.0.0.1:${p.runtime.port}:${p.runtime.port} \\
+    -p 127.0.0.1:${hostPort}:${containerPort} \\
     --add-host=host.docker.internal:host-gateway \\
     ${defaultEnvStr} \\
     ${userEnvPlaceholder} \\
@@ -245,7 +260,7 @@ server {
     server_name _;
     client_max_body_size 100M;
     location / {
-        proxy_pass http://127.0.0.1:${p.runtime.port};
+        proxy_pass http://127.0.0.1:${hostPort};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

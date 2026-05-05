@@ -10,30 +10,6 @@ export async function appendLog(deploymentId: string, line: string) {
   await db.exec`UPDATE deployments SET logs = logs || ${sanitized + "\n"} WHERE id = ${deploymentId}`;
 }
 
-export function generateAppUrl(provider: string, repoName: string, shortId: string, region: string, deployStrategy?: string): string {
-  const slug = `${repoName}-${shortId}`;
-  const generator = URL_GENERATORS[provider];
-  return generator ? generator(slug, region, deployStrategy) : `https://${slug}.deploy.app`;
-}
-
-type UrlGenerator = (slug: string, region: string, deployStrategy?: string) => string;
-
-/**
- * URL generators per provider.
- * To add a new provider, register its URL pattern here.
- */
-const URL_GENERATORS: Record<string, UrlGenerator> = {
-  aws: (slug, region, deployStrategy) => {
-    if (deployStrategy === "vps") return `http://ec2-${slug}.compute-1.amazonaws.com`;
-    return `https://${slug}.${region}.elb.amazonaws.com`;
-  },
-  gcp: (slug, region, deployStrategy) => {
-    if (deployStrategy === "managed") return `https://${slug}-${region}.run.app`;
-    if (deployStrategy === "static") return `http://${slug}.storage.googleapis.com`;
-    return `http://${slug}.${region}.compute.gcp`;
-  },
-};
-
 export function generateAwsBuildspec(): string {
   return `version: 0.2
 
