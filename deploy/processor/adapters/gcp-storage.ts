@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { db, extractRegionFromScript } from "../../shared";
+import { db } from "../../shared";
 import {
   getGcpAccessToken,
   getGcpProjectId,
@@ -10,6 +10,7 @@ import {
   restorePulumiState,
   savePulumiState,
 } from "../pulumi-workspace";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, SKIP_DIRS } from "../static-site-builder";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -357,206 +358,24 @@ export class GcpStorageAdapter implements DeployAdapter {
           // Detect package manager from the context
           const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
 
-          // Install dependencies using the detected package manager
-          await appendLog("ℹ Installing dependencies...");
-          let installOk = false;
-          if (packageManager === "pnpm") {
-            const result = await runCmd("pnpm", ["install", "--frozen-lockfile"], { cwd: repoDir });
-            installOk = result.code === 0;
-            if (!installOk) {
-              await appendLog("⚠ pnpm install --frozen-lockfile failed, trying pnpm install...");
-              const fallback = await runCmd("pnpm", ["install"], { cwd: repoDir });
-              installOk = fallback.code === 0;
-            }
-          } else if (packageManager === "yarn") {
-            const result = await runCmd("yarn", ["install", "--frozen-lockfile"], { cwd: repoDir });
-            installOk = result.code === 0;
-            if (!installOk) {
-              await appendLog("⚠ yarn install --frozen-lockfile failed, trying yarn install...");
-              const fallback = await runCmd("yarn", ["install"], { cwd: repoDir });
-              installOk = fallback.code === 0;
-            }
-          } else {
-            // Default to npm
-            const result = await runCmd("npm", ["ci"], { cwd: repoDir });
-            installOk = result.code === 0;
-            if (!installOk) {
-              await appendLog("⚠ npm ci failed, trying npm install...");
-              const fallback = await runCmd("npm", ["install"], { cwd: repoDir });
-              installOk = fallback.code === 0;
-            }
-          }
+          // Install dependencies and build the static site
+          await installDeps({ repoDir, packageManager, runCmd, appendLog });
+          await buildSite({ repoDir, techStack: event.techStack, runCmd, appendLog });
 
-          // Build the static site
-          await appendLog("ℹ Building static site...");
-          const { existsSync, writeFileSync, readdirSync, statSync, readFileSync, copyFileSync, mkdirSync } = await import("node:fs");
-          const { extname } = await import("node:path");
-          const isNuxt = event.techStack.some((t) => t.toLowerCase().includes("nuxt"));
-          const isNext = event.techStack.some((t) => t.toLowerCase().includes("next"));
+          // Find the build output directory
+          const uploadDir = findOutputDir(repoDir);
 
-          // ── Step 1: Build the project ──
-          // Each framework has its own build command and output directory.
-          // We try the most specific approach first, then fall back to generic `npm run build`.
-          let buildOk = false;
-
-          if (isNuxt) {
-            // Nuxt: try `nuxt generate` for full SSG, fall back to normal build for SPA
-            const genResult = await runCmd("npx", ["nuxt", "generate"], {
-              cwd: repoDir,
-              env: { NITRO_PRESET: "static" },
-            });
-            if (genResult.code === 0) {
-              buildOk = true;
-              await appendLog("✓ Nuxt static site generated");
-            } else {
-              await appendLog("ℹ nuxt generate failed (likely API deps), building as SPA...");
-              // Save the 200.html produced by the failed generate — it has correct script/link tags
-              const outputPublicDir = join(repoDir, ".output/public");
-              const saved200 = existsSync(join(outputPublicDir, "200.html"))
-                ? readFileSync(join(outputPublicDir, "200.html"), "utf-8")
-                : null;
-              // Normal build produces client assets without triggering prerender
-              const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
-              if (
-                buildRes.code === 0 ||
-                existsSync(join(outputPublicDir, "_nuxt")) ||
-                existsSync(join(repoDir, ".nuxt/dist/client/_nuxt"))
-              ) {
-                // Ensure .output/public/_nuxt exists
-                if (!existsSync(join(outputPublicDir, "_nuxt"))) {
-                  const src = join(repoDir, ".nuxt/dist/client/_nuxt");
-                  if (existsSync(src)) {
-                    const { cpSync } = await import("node:fs");
-                    mkdirSync(outputPublicDir, { recursive: true });
-                    cpSync(src, join(outputPublicDir, "_nuxt"), { recursive: true });
-                  }
-                }
-                // Restore saved 200.html as index.html
-                if (saved200 && existsSync(join(outputPublicDir, "_nuxt"))) {
-                  writeFileSync(join(outputPublicDir, "index.html"), saved200, "utf-8");
-                }
-                buildOk = existsSync(join(outputPublicDir, "_nuxt"));
-                if (buildOk) await appendLog("✓ Nuxt SPA built");
-              }
-            }
-          } else if (isNext) {
-            // Next.js: `next build` then `next export` (or output: 'export' in next.config)
-            const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
-            if (buildRes.code === 0) {
-              buildOk = true;
-              // Try next export if out/ doesn't exist yet
-              if (!existsSync(join(repoDir, "out"))) {
-                await runCmd("npx", ["next", "export"], { cwd: repoDir });
-              }
-              await appendLog("✓ Next.js static site built");
-            }
-          }
-
-          // Generic fallback for React (CRA/Vite), Vue, Svelte, Angular, Astro, etc.
-          if (!buildOk) {
-            const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
-            if (buildRes.code === 0) {
-              buildOk = true;
-              await appendLog("✓ Static site built");
-            } else {
-              // Last resort: try generate script if it exists
-              const genRes = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir });
-              if (genRes.code === 0) {
-                buildOk = true;
-                await appendLog("✓ Static site generated");
-              } else {
-                await appendLog("⚠ Build failed — uploading source files as fallback");
-              }
-            }
-          }
-
-          // ── Step 2: Find the build output directory ──
-          // Frameworks output to different directories:
-          //   Nuxt: .output/public    Next.js: out         Astro: dist
-          //   React/Vue/Svelte: dist  Angular: dist/<name>  SvelteKit: build
-          const possibleDirs = [
-            ".output/public", // Nuxt
-            "out",            // Next.js
-            "dist",           // Vite (React/Vue/Svelte), Astro, Angular
-            "build",          // Create React App, SvelteKit
-            ".next/out",      // Next.js (older)
-            "output",         // Generic
-            "public",         // Hugo, some configs
-          ];
-          let uploadDir = repoDir;
-          // Prefer a dir that has index.html
-          for (const dir of possibleDirs) {
-            const candidate = join(repoDir, dir);
-            if (existsSync(join(candidate, "index.html"))) {
-              uploadDir = candidate;
-              break;
-            }
-          }
-          // If none had index.html, pick the first that exists
-          if (uploadDir === repoDir) {
-            for (const dir of possibleDirs) {
-              if (existsSync(join(repoDir, dir))) {
-                uploadDir = join(repoDir, dir);
-                break;
-              }
-            }
-          }
-          // For Angular, check dist/<project-name>/browser or dist/<project-name>
-          if (uploadDir === repoDir && existsSync(join(repoDir, "dist"))) {
-            const distEntries = readdirSync(join(repoDir, "dist"));
-            for (const entry of distEntries) {
-              const candidate = join(repoDir, "dist", entry);
-              if (statSync(candidate).isDirectory()) {
-                if (existsSync(join(candidate, "browser", "index.html"))) {
-                  uploadDir = join(candidate, "browser");
-                  break;
-                }
-                if (existsSync(join(candidate, "index.html"))) {
-                  uploadDir = candidate;
-                  break;
-                }
-              }
-            }
-          }
-
-          // ── Step 3: Ensure index.html exists ──
-          if (!existsSync(join(uploadDir, "index.html"))) {
-            // Check for 200.html (Nuxt SPA fallback)
-            if (existsSync(join(uploadDir, "200.html"))) {
-              copyFileSync(join(uploadDir, "200.html"), join(uploadDir, "index.html"));
-              await appendLog("✓ Using 200.html as index.html");
-            } else {
-              await appendLog("⚠ No index.html found in build output");
-            }
-          }
+          // Ensure index.html exists
+          await ensureIndexHtml(uploadDir, appendLog);
 
           await appendLog(`ℹ Uploading from: ${uploadDir.replace(repoDir, ".")}`);
 
-          // ── Step 4: Upload files recursively using GCS JSON API ──
-          const mimeTypes: Record<string, string> = {
-            ".html": "text/html",
-            ".css": "text/css",
-            ".js": "application/javascript",
-            ".json": "application/json",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".svg": "image/svg+xml",
-            ".ico": "image/x-icon",
-            ".woff": "font/woff",
-            ".woff2": "font/woff2",
-            ".ttf": "font/ttf",
-            ".txt": "text/plain",
-            ".xml": "application/xml",
-            ".webp": "image/webp",
-            ".map": "application/json",
-          };
+          // Upload files recursively using GCS JSON API
+          const { readdirSync, statSync, readFileSync } = await import("node:fs");
 
           const uploadFile = async (filePath: string, objectName: string) => {
             const content = readFileSync(filePath);
-            const ext = extname(filePath).toLowerCase();
-            const contentType = mimeTypes[ext] || "application/octet-stream";
+            const contentType = getMimeType(filePath);
             await fetch(
               `https://storage.googleapis.com/upload/storage/v1/b/${gcsBucket}/o?uploadType=media&name=${encodeURIComponent(objectName)}`,
               {
@@ -573,14 +392,7 @@ export class GcpStorageAdapter implements DeployAdapter {
           const uploadDirRecursive = async (dir: string, prefix: string) => {
             const entries = readdirSync(dir);
             for (const entry of entries) {
-              // Skip non-deployable directories
-              if (
-                ["node_modules", ".git", ".nuxt", ".output", ".next", ".cache", "__pycache__"].includes(
-                  entry,
-                )
-              ) {
-                continue;
-              }
+              if (SKIP_DIRS.has(entry)) continue;
               const fullPath = join(dir, entry);
               const objectName = prefix ? `${prefix}/${entry}` : entry;
               if (statSync(fullPath).isDirectory()) {
@@ -599,38 +411,6 @@ export class GcpStorageAdapter implements DeployAdapter {
       await appendLog(`⚠ Static file upload error: ${e.message}`);
     }
 
-    // Wait for CDN / Global Load Balancer to propagate before marking deploy as done.
-    // GCP global LBs typically take 1–3 minutes to become reachable after creation.
-    const cdnUrl = provision.appUrl || (provision.outputs.cdnIp ? `http://${provision.outputs.cdnIp}` : "");
-    if (cdnUrl) {
-      await appendLog("── Waiting for CDN to propagate ───");
-      const maxAttempts = 18;
-      const intervalMs = 10_000;
-      let live = false;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          const res = await fetch(cdnUrl, {
-            method: "GET",
-            redirect: "follow",
-            signal: AbortSignal.timeout(5_000),
-          });
-          if (res.ok) {
-            live = true;
-            await appendLog(`✓ CDN is live (attempt ${attempt}/${maxAttempts})`);
-            break;
-          }
-          await appendLog(`⏳ CDN not ready — HTTP ${res.status} (attempt ${attempt}/${maxAttempts})`);
-        } catch {
-          await appendLog(`⏳ CDN not reachable yet (attempt ${attempt}/${maxAttempts})`);
-        }
-        if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, intervalMs));
-        }
-      }
-      if (!live) {
-        await appendLog("⚠ CDN did not respond within 3 minutes — it may need another minute to propagate");
-      }
-    }
 
     // Save Pulumi state to DB
     await savePulumiState({
@@ -699,13 +479,17 @@ export class GcpStorageAdapter implements DeployAdapter {
       const bucketName = bucketMatch?.[1] || bucketMatch?.[2];
       if (bucketName) {
         try {
-          const listRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o`, { headers: authHeaders });
-          if (listRes.ok) {
-            const objData = await listRes.json() as { items?: { name: string }[] };
+          let pageToken: string | undefined;
+          do {
+            const listUrl = `https://storage.googleapis.com/storage/v1/b/${bucketName}/o` + (pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : "");
+            const listRes = await fetch(listUrl, { headers: authHeaders });
+            if (!listRes.ok) break;
+            const objData = await listRes.json() as { items?: { name: string }[]; nextPageToken?: string };
             for (const obj of objData.items || []) {
               await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o/${encodeURIComponent(obj.name)}`, { method: "DELETE", headers: authHeaders });
             }
-          }
+            pageToken = objData.nextPageToken;
+          } while (pageToken);
           const deleteRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`, { method: "DELETE", headers: authHeaders });
           if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`Bucket delete: ${(await deleteRes.text()).slice(0, 150)}`);
         } catch (e: any) { errors.push(`Bucket delete: ${e.message}`); }
@@ -730,10 +514,15 @@ export class GcpStorageAdapter implements DeployAdapter {
           const listRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}`, { headers: authHeaders });
           if (listRes.ok) {
             const listData = await listRes.json() as { items?: { name: string }[] };
-            for (const r of (listData.items || []).filter((r: { name: string }) => r.name.startsWith(name))) {
-              const delRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${r.name}`, { method: "DELETE", headers: authHeaders });
-              if (!delRes.ok && delRes.status !== 404) errors.push(`${type} delete ${r.name}: ${(await delRes.text()).slice(0, 150)}`);
-              await new Promise(r => setTimeout(r, 2_000));
+            const matching = (listData.items || []).filter((r: { name: string }) => r.name.startsWith(name));
+            const results = await Promise.allSettled(
+              matching.map(async (r) => {
+                const delRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}/${r.name}`, { method: "DELETE", headers: authHeaders });
+                if (!delRes.ok && delRes.status !== 404) errors.push(`${type} delete ${r.name}: ${(await delRes.text()).slice(0, 150)}`);
+              })
+            );
+            for (const result of results) {
+              if (result.status === "rejected") errors.push(`${type} delete: ${result.reason?.message || "Unknown error"}`);
             }
           }
         } catch (e: any) { errors.push(`${type} delete: ${e.message}`); }
