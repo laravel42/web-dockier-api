@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -16,6 +15,7 @@ import {
   createOrUpdateStack,
   pollStackStatus,
   waitForStackDelete,
+  readCfnTemplate,
   type AwsCredentials,
 } from "../aws-helpers";
 
@@ -31,13 +31,6 @@ import {
  */
 export class AwsEc2Adapter implements DeployAdapter {
   readonly id = "aws-ec2";
-
-  /** Stored env vars from injectEnvVars, used as EnvVarsJson CloudFormation parameter */
-  private pendingEnvVars: Array<{ name: string; value: string }> = [];
-
-  /** AWS state populated by pushImage, consumed by provisionInfrastructure */
-  private awsAccountId = "";
-  private awsCredentials: AwsCredentials | null = null;
 
   supports(provider: string, deployStrategy: string): boolean {
     return provider === "aws" && deployStrategy === "vps";
@@ -65,9 +58,9 @@ export class AwsEc2Adapter implements DeployAdapter {
       appendLog,
     });
 
-    // Store for provisionInfrastructure
-    this.awsAccountId = result.accountId;
-    this.awsCredentials = result.credentials;
+    // Store for provisionInfrastructure via typed state
+    ctx.state.awsAccountId = result.accountId;
+    ctx.state.awsCredentials = result.credentials;
 
     return { remoteImageUri: result.remoteImageUri, skipped: false };
   }
@@ -79,10 +72,10 @@ export class AwsEc2Adapter implements DeployAdapter {
    * template, which uses them in cfn-init scripts to configure the container.
    */
   async injectEnvVars(
-    _ctx: AdapterContext,
+    ctx: AdapterContext,
     envVars: Array<{ name: string; value: string }>,
   ): Promise<void> {
-    this.pendingEnvVars = envVars;
+    ctx.state.pendingEnvVars = envVars;
   }
 
   /**
@@ -108,8 +101,8 @@ export class AwsEc2Adapter implements DeployAdapter {
 
     const accessKeyId = providerCredentials.apiKey;
     const secretAccessKey = providerCredentials.apiSecret;
-    const credentials = this.awsCredentials || { accessKeyId, secretAccessKey };
-    const accountId = this.awsAccountId || (await getAwsAccountId(region, credentials));
+    const credentials = ctx.state.awsCredentials || { accessKeyId, secretAccessKey };
+    const accountId = ctx.state.awsAccountId || (await getAwsAccountId(region, credentials));
 
     await appendLog("── CloudFormation Deploy ──────────");
 
@@ -119,15 +112,7 @@ export class AwsEc2Adapter implements DeployAdapter {
     const containerPort = ctx.detectedStack.port || 3000;
 
     // 1. Read the ec2.yml template
-    let templateBody: string;
-    try {
-      const templatePath = join(__dirname, "..", "..", "..", "image-builder", "deploy-templates", "ec2.yml");
-      templateBody = readFileSync(templatePath, "utf-8");
-    } catch {
-      // Fallback: try relative to process.cwd()
-      const templatePath = join(process.cwd(), "image-builder", "deploy-templates", "ec2.yml");
-      templateBody = readFileSync(templatePath, "utf-8");
-    }
+    const templateBody = readCfnTemplate("ec2.yml");
 
     // 2. Upload template to S3
     const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
@@ -174,7 +159,7 @@ export class AwsEc2Adapter implements DeployAdapter {
     ];
 
     // Pass env vars as EnvVarsJson
-    const envVars = this.pendingEnvVars;
+    const envVars = ctx.state.pendingEnvVars || [];
     if (envVars.length > 0) {
       params.push({
         ParameterKey: "EnvVarsJson",

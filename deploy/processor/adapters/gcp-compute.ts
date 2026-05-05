@@ -13,6 +13,7 @@ import {
   restorePulumiState,
   savePulumiState,
 } from "../pulumi-workspace";
+import { replacePulumiPlaceholders } from "../pulumi-placeholders";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -97,8 +98,8 @@ export class GcpComputeAdapter implements DeployAdapter {
     await appendLog(`✓ Image pushed: ${arImageUri}`);
 
     // Store the access token for use in injectEnvVars (AR_TOKEN placeholder)
-    (ctx as any)._gcpAccessToken = accessToken;
-    (ctx as any)._arImageUri = arImageUri;
+    ctx.state.gcpAccessToken = accessToken;
+    ctx.state.arImageUri = arImageUri;
 
     return { remoteImageUri: arImageUri, skipped: false };
   }
@@ -119,7 +120,7 @@ export class GcpComputeAdapter implements DeployAdapter {
     // Store envVars for later use in provisionInfrastructure
     // The actual placeholder replacement happens in provisionInfrastructure
     // after the Pulumi workspace is set up and we have the pulumiDir path.
-    (ctx as any)._envVars = envVars;
+    ctx.state.pendingEnvVars = envVars;
   }
 
   /**
@@ -260,53 +261,19 @@ export class GcpComputeAdapter implements DeployAdapter {
     {
       const indexPath = join(pulumiDir, "index.ts");
       let program = await readFs(indexPath, "utf-8");
-      const arImageUri = (ctx as any)._arImageUri || imageUri;
-      const accessToken = (ctx as any)._gcpAccessToken || "";
+      const arImageUri = ctx.state.arImageUri || imageUri;
+      const accessToken = ctx.state.gcpAccessToken || "";
       program = program.replace(/__AR_IMAGE_URI__/g, arImageUri);
       program = program.replace(/__AR_TOKEN__/g, accessToken);
       await writeFs(indexPath, program, "utf-8");
     }
 
-    // Replace user-provided env vars placeholder in the Pulumi program
+    // Replace user-provided env vars and DB credential placeholders in the Pulumi program
     {
       const indexPath = join(pulumiDir, "index.ts");
       let program = await readFs(indexPath, "utf-8");
-      const envVars = (ctx as any)._envVars || event.envVars || [];
-      if (envVars.length) {
-        // Escape values for embedding inside a JS template literal that becomes a bash script:
-        // - Use single quotes to prevent bash variable expansion
-        // - $ must be \$ so JS doesn't interpret ${...} as template interpolation
-        // - backticks must be \` so they don't break the template literal
-        // - single quotes in values are escaped with '\'' (end quote, escaped quote, start quote)
-        const userEnvFlags = envVars
-          .map((e: { name: string; value: string }) => {
-            const escaped = e.value
-              .replace(/\\/g, "\\\\")
-              .replace(/`/g, "\\`")
-              .replace(/\$/g, "\\$")
-              .replace(/'/g, "'\\''");
-            return `-e ${e.name}='${escaped}'`;
-          })
-          .join(" ");
-        program = program.replace(/__USER_ENV_FLAGS__/g, userEnvFlags);
-      } else {
-        program = program.replace(/__USER_ENV_FLAGS__/g, "");
-      }
-      await writeFs(indexPath, program, "utf-8");
-    }
-
-    // Replace database credential placeholders with user's actual values
-    {
-      const indexPath = join(pulumiDir, "index.ts");
-      let program = await readFs(indexPath, "utf-8");
-      const envVars = (ctx as any)._envVars || event.envVars || [];
-      const envMap = new Map(envVars.map((e: { name: string; value: string }) => [e.name, e.value]));
-      const dbName = (envMap.get("DB_DATABASE") as string) || "forge";
-      const dbUser = (envMap.get("DB_USERNAME") as string) || "appuser";
-      const dbPass = (envMap.get("DB_PASSWORD") as string) || "apppass123";
-      program = program.replace(/__DEPLOY_DB_NAME__/g, dbName);
-      program = program.replace(/__DEPLOY_DB_USER__/g, dbUser);
-      program = program.replace(/__DEPLOY_DB_PASS__/g, dbPass);
+      const envVars = ctx.state.pendingEnvVars || event.envVars || [];
+      program = replacePulumiPlaceholders(program, envVars);
       await writeFs(indexPath, program, "utf-8");
     }
 
@@ -352,7 +319,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       await appendLog("⚠ Resource conflict — cleaning up orphaned resources...");
 
       // Delete orphaned GCP resources that exist outside Pulumi state
-      const cleanupToken = (ctx as any)._gcpAccessToken || await getGcpAccessToken(providerCredentials.apiKey);
+      const cleanupToken = ctx.state.gcpAccessToken || await getGcpAccessToken(providerCredentials.apiKey);
       if (gcpProjectId && cleanupToken) {
         await deleteOrphanedComputeResources({
           projectId: gcpProjectId,
@@ -454,9 +421,9 @@ export class GcpComputeAdapter implements DeployAdapter {
     }
 
     // Store pulumiDir, providerEnv, and deployKeyPath for runPostDeploy
-    (ctx as any)._pulumiDir = pulumiDir;
-    (ctx as any)._providerEnv = providerEnv;
-    (ctx as any)._deployKeyPath = deployKeyPath;
+    ctx.state.pulumiDir = pulumiDir;
+    ctx.state.providerEnv = providerEnv;
+    ctx.state.deployKeyPath = deployKeyPath;
 
     return {
       appUrl,
@@ -492,11 +459,10 @@ export class GcpComputeAdapter implements DeployAdapter {
       appendLog,
     } = ctx;
 
-    const pulumiDir = (ctx as any)._pulumiDir || provision.outputs.pulumiDir;
-    const providerEnv = (ctx as any)._providerEnv
-      ? (ctx as any)._providerEnv
-      : JSON.parse(provision.outputs.providerEnvJson || "{}");
-    const deployKeyPath = (ctx as any)._deployKeyPath || provision.outputs.deployKeyPath;
+    const pulumiDir = ctx.state.pulumiDir || provision.outputs.pulumiDir;
+    const providerEnv = ctx.state.providerEnv
+      || JSON.parse(provision.outputs.providerEnvJson || "{}");
+    const deployKeyPath = ctx.state.deployKeyPath || provision.outputs.deployKeyPath;
     const serverIp = provision.serverIp || "";
 
     // Transfer Docker image to server (VPS providers with a server IP)
@@ -514,7 +480,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       await appendLog("── Transfer Docker Image ──────────");
 
       // Determine the actual image name (could be the local image or a cached one)
-      const actualImage = (ctx as any)._actualImage || `${repoName}:${ctx.shortId}`;
+      const actualImage = ctx.state.actualImage || `${repoName}:${ctx.shortId}`;
       const tarPath = join(workDir, `${actualImage.replace(":", "-")}.tar`);
       const saveResult = await runCmd("docker", ["save", "-o", tarPath, actualImage], {
         cwd: workDir,

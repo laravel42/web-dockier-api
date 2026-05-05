@@ -12,6 +12,7 @@ import {
   restorePulumiState,
   savePulumiState,
 } from "../pulumi-workspace";
+import { replacePulumiPlaceholders } from "../pulumi-placeholders";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -236,39 +237,11 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       { cwd: pulumiDir, env: providerEnv },
     );
 
-    // Replace user-provided env vars placeholder in the Pulumi program
+    // Replace user-provided env vars and DB credential placeholders in the Pulumi program
     {
       const indexPath = join(pulumiDir, "index.ts");
       let program = await readFs(indexPath, "utf-8");
-      if (event.envVars?.length) {
-        const userEnvFlags = event.envVars
-          .map((e) => {
-            const escaped = e.value
-              .replace(/\\/g, "\\\\")
-              .replace(/`/g, "\\`")
-              .replace(/\$/g, "\\$")
-              .replace(/'/g, "'\\''");
-            return `-e ${e.name}='${escaped}'`;
-          })
-          .join(" ");
-        program = program.replace(/__USER_ENV_FLAGS__/g, userEnvFlags);
-      } else {
-        program = program.replace(/__USER_ENV_FLAGS__/g, "");
-      }
-      await writeFs(indexPath, program, "utf-8");
-    }
-
-    // Replace database credential placeholders with user's actual values
-    {
-      const indexPath = join(pulumiDir, "index.ts");
-      let program = await readFs(indexPath, "utf-8");
-      const envMap = new Map((event.envVars || []).map((e) => [e.name, e.value]));
-      const dbName = envMap.get("DB_DATABASE") || "forge";
-      const dbUser = envMap.get("DB_USERNAME") || "appuser";
-      const dbPass = envMap.get("DB_PASSWORD") || "apppass123";
-      program = program.replace(/__DEPLOY_DB_NAME__/g, dbName);
-      program = program.replace(/__DEPLOY_DB_USER__/g, dbUser);
-      program = program.replace(/__DEPLOY_DB_PASS__/g, dbPass);
+      program = replacePulumiPlaceholders(program, event.envVars || []);
       await writeFs(indexPath, program, "utf-8");
     }
 
@@ -414,8 +387,8 @@ export class GcpCloudRunAdapter implements DeployAdapter {
     }
 
     // Store pulumiDir and providerEnv for runPostDeploy
-    (ctx as any)._pulumiDir = pulumiDir;
-    (ctx as any)._providerEnv = providerEnv;
+    ctx.state.pulumiDir = pulumiDir;
+    ctx.state.providerEnv = providerEnv;
 
     return {
       appUrl,
@@ -428,10 +401,9 @@ export class GcpCloudRunAdapter implements DeployAdapter {
    */
   async runPostDeploy(ctx: AdapterContext, provision: ProvisionResult): Promise<void> {
     const { deploymentId, event, runCmd } = ctx;
-    const pulumiDir = (ctx as any)._pulumiDir || provision.outputs.pulumiDir;
-    const providerEnv = (ctx as any)._providerEnv
-      ? (ctx as any)._providerEnv
-      : JSON.parse(provision.outputs.providerEnvJson || "{}");
+    const pulumiDir = ctx.state.pulumiDir || provision.outputs.pulumiDir;
+    const providerEnv = ctx.state.providerEnv
+      || JSON.parse(provision.outputs.providerEnvJson || "{}");
 
     await savePulumiState({
       deploymentId,

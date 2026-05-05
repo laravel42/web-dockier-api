@@ -2,6 +2,37 @@ import type { DeployEvent } from "../../shared";
 import type { DetectedStack } from "../../repo-analyzer/types";
 import type { RunCmdFn } from "../run-cmd";
 
+/**
+ * Mutable state bag shared across adapter method calls for a single deployment.
+ *
+ * Adapters populate fields during earlier pipeline stages (pushImage, injectEnvVars)
+ * and consume them in later stages (provisionInfrastructure, runPostDeploy).
+ * This replaces the previous pattern of storing state in adapter instance variables
+ * or casting ctx to `any`.
+ */
+export interface AdapterState {
+  // ── AWS state (populated by pushImage, consumed by provisionInfrastructure) ──
+  awsAccountId?: string;
+  awsCredentials?: { accessKeyId: string; secretAccessKey: string };
+
+  // ── GCP state (populated by pushImage, consumed by provision/postDeploy) ──
+  gcpAccessToken?: string;
+  arImageUri?: string;
+
+  // ── Env vars (populated by injectEnvVars, consumed by provisionInfrastructure) ──
+  pendingEnvVars?: Array<{ name: string; value: string }>;
+
+  // ── Pulumi workspace (populated by provisionInfrastructure, consumed by runPostDeploy) ──
+  pulumiDir?: string;
+  providerEnv?: Record<string, string>;
+
+  // ── VPS deploy key (populated by provisionInfrastructure, consumed by runPostDeploy) ──
+  deployKeyPath?: string;
+
+  // ── Actual image name (may differ from the original if cached) ──
+  actualImage?: string;
+}
+
 /** Context shared across all adapter method calls for a single deployment */
 export interface AdapterContext {
   deploymentId: string;
@@ -19,6 +50,9 @@ export interface AdapterContext {
   writeFile: (path: string, data: string, enc: string) => Promise<void>;
   readFile: (path: string, enc: string) => Promise<string>;
   rm: (path: string, opts: { recursive: boolean; force: boolean }) => Promise<void>;
+
+  /** Mutable state shared across adapter pipeline stages. */
+  state: AdapterState;
 }
 
 /** Result from pushImage */

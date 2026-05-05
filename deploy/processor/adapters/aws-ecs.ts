@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -10,11 +9,13 @@ import type {
 } from "./types";
 import {
   pushToEcr,
+  getAwsAccountId,
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
   waitForStackDelete,
+  readCfnTemplate,
   type AwsCredentials,
 } from "../aws-helpers";
 
@@ -27,13 +28,6 @@ import {
  */
 export class AwsEcsAdapter implements DeployAdapter {
   readonly id = "aws-ecs";
-
-  /** Stored env vars from injectEnvVars, used during provisionInfrastructure */
-  private pendingEnvVars: Array<{ name: string; value: string }> = [];
-
-  /** AWS state populated by pushImage, consumed by provisionInfrastructure */
-  private awsAccountId = "";
-  private awsCredentials: AwsCredentials | null = null;
 
   supports(provider: string, deployStrategy: string): boolean {
     return provider === "aws" && deployStrategy === "managed";
@@ -61,9 +55,9 @@ export class AwsEcsAdapter implements DeployAdapter {
       appendLog,
     });
 
-    // Store for provisionInfrastructure
-    this.awsAccountId = result.accountId;
-    this.awsCredentials = result.credentials;
+    // Store for provisionInfrastructure via typed state
+    ctx.state.awsAccountId = result.accountId;
+    ctx.state.awsCredentials = result.credentials;
 
     return { remoteImageUri: result.remoteImageUri, skipped: false };
   }
@@ -75,10 +69,10 @@ export class AwsEcsAdapter implements DeployAdapter {
    * Environment section by modifying the CloudFormation template before upload.
    */
   async injectEnvVars(
-    _ctx: AdapterContext,
+    ctx: AdapterContext,
     envVars: Array<{ name: string; value: string }>,
   ): Promise<void> {
-    this.pendingEnvVars = envVars;
+    ctx.state.pendingEnvVars = envVars;
   }
 
   /**
@@ -101,8 +95,8 @@ export class AwsEcsAdapter implements DeployAdapter {
 
     const accessKeyId = providerCredentials.apiKey;
     const secretAccessKey = providerCredentials.apiSecret;
-    const credentials = this.awsCredentials || { accessKeyId, secretAccessKey };
-    const accountId = this.awsAccountId || (await import("../aws-helpers").then(m => m.getAwsAccountId(region, credentials)));
+    const credentials = ctx.state.awsCredentials || { accessKeyId, secretAccessKey };
+    const accountId = ctx.state.awsAccountId || (await getAwsAccountId(region, credentials));
 
     await appendLog("── CloudFormation Deploy ──────────");
 
@@ -112,18 +106,10 @@ export class AwsEcsAdapter implements DeployAdapter {
     const containerPort = ctx.detectedStack.port || 3000;
 
     // 1. Read the ecs-fargate.yml template
-    let templateBody: string;
-    try {
-      const templatePath = join(__dirname, "..", "..", "..", "image-builder", "deploy-templates", "ecs-fargate.yml");
-      templateBody = readFileSync(templatePath, "utf-8");
-    } catch {
-      // Fallback: try relative to process.cwd()
-      const templatePath = join(process.cwd(), "image-builder", "deploy-templates", "ecs-fargate.yml");
-      templateBody = readFileSync(templatePath, "utf-8");
-    }
+    let templateBody = readCfnTemplate("ecs-fargate.yml");
 
     // 2. If env vars are present, inject them into the template
-    const envVars = this.pendingEnvVars;
+    const envVars = ctx.state.pendingEnvVars || [];
     let templateKey = "ecs-fargate.yml";
 
     if (envVars.length > 0) {
