@@ -1,6 +1,6 @@
 // ─── Unified DetectedStack Type ───
 // Discriminated union on `runtime` field. Used by both Dockerfile generators and provider adapters.
-// This is the canonical type — image-builder/detection/types.ts re-exports from here.
+// This is the canonical type — all consumers import from here.
 
 export type DetectedStack =
   | {

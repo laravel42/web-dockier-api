@@ -206,7 +206,7 @@ export class AwsS3Adapter implements DeployAdapter {
    */
   private async buildStaticSite(ctx: AdapterContext): Promise<void> {
     const { repoDir, event, runCmd, appendLog } = ctx;
-    const packageManager = ctx.detectedStack.packageManager || "npm";
+    const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
 
     // Install dependencies
     await appendLog("ℹ Installing dependencies...");

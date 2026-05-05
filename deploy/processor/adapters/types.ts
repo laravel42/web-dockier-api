@@ -1,15 +1,6 @@
 import type { DeployEvent } from "../../shared";
+import type { DetectedStack } from "../../repo-analyzer/types";
 import type { RunCmdFn } from "../run-cmd";
-
-/** Detected stack information passed to adapters */
-export interface DetectedStackInfo {
-  runtime: string;
-  framework: string;
-  packageManager: string;
-  port: number;
-  subDir: string;
-  isStatic: boolean;
-}
 
 /** Context shared across all adapter method calls for a single deployment */
 export interface AdapterContext {
@@ -22,7 +13,7 @@ export interface AdapterContext {
   commitHash: string;
   providerCredentials: { apiKey: string; apiSecret: string };
   event: DeployEvent;
-  detectedStack: DetectedStackInfo;
+  detectedStack: DetectedStack;
   runCmd: RunCmdFn;
   appendLog: (line: string) => Promise<void>;
   writeFile: (path: string, data: string, enc: string) => Promise<void>;
@@ -46,12 +37,6 @@ export interface ProvisionResult {
   serverIp?: string;
   /** Additional outputs from the infrastructure provider */
   outputs: Record<string, string>;
-}
-
-/** Result from the full adapter execution */
-export interface AdapterResult {
-  appUrl: string;
-  dockerImage: string;
 }
 
 /** The interface all provider adapters implement */

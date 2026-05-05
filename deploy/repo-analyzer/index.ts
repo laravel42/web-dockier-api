@@ -65,6 +65,80 @@ export function analyzeRepoConfig(repoDir: string): RepoConfig {
   return config;
 }
 
+/** Convert a RepoConfig to the discriminated-union DetectedStack type. */
+export function toDetectedStack(config: RepoConfig): import("./types").DetectedStack {
+  switch (config.runtime) {
+    case "node":
+      return {
+        runtime: "node",
+        framework: normalizeNodeFramework(config.framework),
+        packageManager: config.packageManager as "npm" | "pnpm" | "yarn" | "bun",
+        packageManagerVersion: config.packageManagerVersion,
+        nodeVersion: config.nodeVersion || "20",
+        hasStandalone: config.hasStandalone,
+        isStatic: config.features.has("static"),
+        subDir: config.subDir,
+        port: config.port,
+        nativeDeps: config.nativeDeps,
+        startCommand: config.startCommand,
+      };
+    case "php":
+      return {
+        runtime: "php",
+        framework: config.framework === "laravel" ? "laravel" : "generic",
+        phpVersion: config.phpVersion || "8.3",
+        phpExtensions: config.phpExtensions,
+        hasNodeAssets: config.features.has("node-assets") || false,
+        subDir: config.subDir,
+        port: config.port,
+      };
+    case "python":
+      return {
+        runtime: "python",
+        framework: normalizePythonFramework(config.framework),
+        pythonVersion: config.pythonVersion || "3.12",
+        subDir: config.subDir,
+        port: config.port,
+      };
+    case "go":
+      return {
+        runtime: "go",
+        goVersion: config.goVersion || "1.22",
+        subDir: config.subDir,
+        port: config.port,
+      };
+    default:
+      return {
+        runtime: "unknown",
+        subDir: config.subDir,
+        port: config.port,
+      };
+  }
+}
+
+function normalizeNodeFramework(
+  framework: string,
+): "nextjs" | "nuxt" | "sveltekit" | "spa" | "angular" | "astro" | "generic" {
+  switch (framework) {
+    case "nextjs": case "nuxt": case "sveltekit": case "spa":
+    case "angular": case "astro": case "generic":
+      return framework;
+    default:
+      return "generic";
+  }
+}
+
+function normalizePythonFramework(
+  framework: string,
+): "django" | "fastapi" | "flask" | "generic" {
+  switch (framework) {
+    case "django": case "fastapi": case "flask":
+      return framework;
+    default:
+      return "generic";
+  }
+}
+
 export function generateDockerfile(config: RepoConfig, repoDir?: string): string {
   switch (config.runtime) {
     case "node": return generateNodeDockerfile(config);

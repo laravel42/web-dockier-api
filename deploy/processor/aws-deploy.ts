@@ -1,5 +1,8 @@
 import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
-import { appendLog, ts, generateAwsBuildspec } from "./helpers";
+import { appendLog, ts } from "./helpers";
+import type { RepoConfig } from "../repo-analyzer/types";
+import { toDetectedStack } from "../repo-analyzer";
+import { generateBuildspec } from "../../image-builder/buildspec";
 
 /**
  * AWS CodeBuild deploy path — builds Docker images remotely via CodeBuild,
@@ -33,7 +36,7 @@ export async function handleAwsDeploy(
     repoDir: string;
     workDir: string;
     commitHash: string;
-    repoConfig: { port: number; packageManager: string };
+    repoConfig: RepoConfig;
     writeFile: (path: string, data: string, enc: string) => Promise<void>;
     rm: (path: string, opts: { recursive: boolean; force: boolean }) => Promise<void>;
   }
@@ -58,7 +61,7 @@ export async function handleAwsDeploy(
   const cacheRepoName = `${imageRepoName}-cache`;
   const bucketName = `${codebuildProject}-source-${accountId}`;
 
-  const buildspecContent = generateAwsBuildspec();
+  const buildspecContent = generateBuildspec(toDetectedStack(ctx.repoConfig));
   await ctx.writeFile(`${repoDir}/buildspec.yml`, buildspecContent, "utf-8");
 
   await ctx.rm(`${repoDir}/.git`, { recursive: true, force: true });

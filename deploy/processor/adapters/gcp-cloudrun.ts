@@ -23,7 +23,6 @@ import type {
  * GCP Cloud Run adapter.
  *
  * Handles deployments to GCP Cloud Run via Artifact Registry + Pulumi.
- * Extracted from the `handlePulumiDeploy` function in `pulumi-deploy.ts`.
  */
 export class GcpCloudRunAdapter implements DeployAdapter {
   readonly id = "gcp-cloudrun";
