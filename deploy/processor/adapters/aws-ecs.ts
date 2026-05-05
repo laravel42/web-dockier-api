@@ -96,7 +96,7 @@ export class AwsEcsAdapter implements DeployAdapter {
     const accessKeyId = providerCredentials.apiKey;
     const secretAccessKey = providerCredentials.apiSecret;
     const credentials = ctx.state.awsCredentials || { accessKeyId, secretAccessKey };
-    const accountId = ctx.state.awsAccountId || (await import("../aws-helpers").then(m => m.getAwsAccountId(region, credentials)));
+    const accountId = ctx.state.awsAccountId || (await getAwsAccountId(region, credentials));
 
     await appendLog("── CloudFormation Deploy ──────────");
 
@@ -248,14 +248,8 @@ export class AwsEcsAdapter implements DeployAdapter {
 
   private async deleteEcrRepo(repoName: string, region: string, credentials: AwsCredentials, errors: string[]): Promise<void> {
     try {
-      const { ECRClient, DeleteRepositoryCommand, BatchDeleteImageCommand, ListImagesCommand } = await import("@aws-sdk/client-ecr");
+      const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
       const ecr = new ECRClient({ region, credentials });
-      try {
-        const listed = await ecr.send(new ListImagesCommand({ repositoryName: repoName }));
-        if (listed.imageIds && listed.imageIds.length > 0) {
-          await ecr.send(new BatchDeleteImageCommand({ repositoryName: repoName, imageIds: listed.imageIds }));
-        }
-      } catch {}
       await ecr.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
     } catch (e: any) {
       if (!e.name?.includes("RepositoryNotFoundException")) errors.push(`ECR ${repoName}: ${e.message}`);

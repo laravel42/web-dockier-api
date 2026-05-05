@@ -269,10 +269,14 @@ export class AwsS3Adapter implements DeployAdapter {
       const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await import("@aws-sdk/client-s3");
       const s3 = new S3Client({ region: ctx.region, credentials });
       const bucketName = `${ctx.appName}-static-site`;
-      const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName }));
-      if (listed.Contents && listed.Contents.length > 0) {
-        await s3.send(new DeleteObjectsCommand({ Bucket: bucketName, Delete: { Objects: listed.Contents.map(o => ({ Key: o.Key! })) } }));
-      }
+      let continuationToken: string | undefined;
+      do {
+        const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, ContinuationToken: continuationToken }));
+        if (listed.Contents && listed.Contents.length > 0) {
+          await s3.send(new DeleteObjectsCommand({ Bucket: bucketName, Delete: { Objects: listed.Contents.map(o => ({ Key: o.Key! })) } }));
+        }
+        continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+      } while (continuationToken);
       await s3.send(new DeleteBucketCommand({ Bucket: bucketName }));
       await ctx.appendLog(`✓ S3 bucket ${bucketName} deleted`);
     } catch {}
