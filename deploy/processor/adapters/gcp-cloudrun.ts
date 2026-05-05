@@ -480,20 +480,11 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       }
     }
 
-    // Clean up Artifact Registry images & repo
+    // Clean up Artifact Registry repo (force deletes all images)
     if (accessToken && gcpProjectId) {
       const arBase = `https://artifactregistry.googleapis.com/v1/projects/${gcpProjectId}/locations/${arRegion}/repositories/${arRepo}`;
       try {
-        const listRes = await fetch(`${arBase}/dockerImages`, { headers: { Authorization: `Bearer ${accessToken}` } });
-        if (listRes.ok) {
-          const listData = await listRes.json() as { dockerImages?: { name: string }[] };
-          for (const img of listData.dockerImages || []) {
-            try { await fetch(`https://artifactregistry.googleapis.com/v1/${img.name}`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }); } catch {}
-          }
-        }
-      } catch {}
-      try {
-        const deleteRes = await fetch(arBase, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
+        const deleteRes = await fetch(`${arBase}?force=true`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
         if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`AR repo delete: ${deleteRes.status} ${(await deleteRes.text()).slice(0, 150)}`);
       } catch (e: any) { errors.push(`AR repo delete: ${e.message}`); }
     }
