@@ -135,10 +135,12 @@ const RESOURCE_ESTIMATORS: Record<string, ResourceEstimator> = {
     } else if (deployStrategy === "managed") {
       r.push("gcp_artifact_registry_repository", "gcp_cloud_run_v2_service", "gcp_cloud_run_v2_service_iam_member (public access)");
       if (managedSvcs.some(s => s.type === "database")) r.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+      if (managedSvcs.some(s => s.type === "cache")) r.push("gcp_redis_instance (Memorystore Redis)");
       if (managedSvcs.some(s => s.type === "storage")) r.push("gcp_storage_bucket (Cloud Storage)");
     } else {
       r.push("gcp_compute_instance (e2-small)", "gcp_compute_firewall", "gcp_compute_network", "gcp_compute_address (Static IP)");
       if (managedSvcs.some(s => s.type === "database")) r.push("gcp_sql_database_instance (Cloud SQL PostgreSQL)");
+      if (managedSvcs.some(s => s.type === "cache")) r.push("gcp_redis_instance (Memorystore Redis)");
       if (managedSvcs.some(s => s.type === "storage")) r.push("gcp_storage_bucket (Cloud Storage)");
     }
     return r;

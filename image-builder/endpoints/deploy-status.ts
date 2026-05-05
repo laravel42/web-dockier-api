@@ -2,8 +2,7 @@
 
 import { api, APIError } from "encore.dev/api";
 import {
-  db, getAwsAccessKeyId, getAwsSecretAccessKey, getAwsRegion,
-  rowToBuild,
+  db, rowToBuild, resolveAwsCredentials,
 } from "../shared";
 
 // ─── API: Get Deploy Status (polls CloudFormation for stack status) ───
@@ -27,10 +26,16 @@ export const getDeployStatus = api(
     const appName = build.sourceRepo.split("/").pop()?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || "";
     const stackName = `image-builder-app-${appName}`;
     try {
+      const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(build.providerId);
+
+      if (!accessKeyId || !secretAccessKey) {
+        return { status: "pending", appUrl: "", stackName };
+      }
+
       const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
       const cfn = new CloudFormationClient({
-        region: getAwsRegion(),
-        credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() },
+        region,
+        credentials: { accessKeyId, secretAccessKey },
       });
       const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
       const stack = result.Stacks?.[0];

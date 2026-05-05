@@ -71,6 +71,8 @@ export interface StartBuildParams {
   projectId?: string;
   gitConnectionId?: string;
   deployTarget?: "ecs" | "ec2" | "s3";
+  /** Provider ID to look up AWS credentials from the deploy service */
+  providerId?: string;
   deployParams?: {
     appName?: string;
     containerPort?: number;
@@ -84,6 +86,10 @@ export interface StartBuildParams {
     vpcId?: string;
     subnetIds?: string[];
     envVars?: Array<{ name: string; value: string }>;
+    /** Self-hosted services to install on the EC2 instance (e.g. database, cache, queue) */
+    selfHostedServices?: string[];
+    /** Tech stack identifiers for service-specific setup (e.g. "laravel") */
+    techStack?: string[];
   };
 }
 
@@ -108,6 +114,8 @@ export interface BuildRecord {
   finishedAt: string;
   createdAt: string;
   updatedAt: string;
+  /** Provider ID for looking up AWS credentials from the deploy service */
+  providerId: string;
 }
 
 export interface BuildStatusResponse {
@@ -153,9 +161,34 @@ export interface WebhookPayload {
 
 // ─── Helpers ───
 
+/** Resolve AWS credentials: look up from deploy service by providerId, fall back to env vars */
+export async function resolveAwsCredentials(providerId: string): Promise<{ accessKeyId: string; secretAccessKey: string; region: string }> {
+  if (providerId) {
+    try {
+      const { deploy } = await import("~encore/clients");
+      const creds = await deploy.getProviderCredentials({ providerId });
+      if (creds.apiKey && creds.apiSecret) {
+        return {
+          accessKeyId: creds.apiKey,
+          secretAccessKey: creds.apiSecret,
+          region: creds.region || getAwsRegion(),
+        };
+      }
+    } catch (e: any) {
+      console.warn(`Failed to fetch provider credentials for ${providerId}: ${e.message}`);
+    }
+  }
+  // Fall back to env vars
+  return {
+    accessKeyId: getAwsAccessKeyId(),
+    secretAccessKey: getAwsSecretAccessKey(),
+    region: getAwsRegion(),
+  };
+}
+
 export function deriveImageRepo(sourceRepo: string): string {
   const parts = sourceRepo.split("/");
-  return parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  return parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9-]/g, "-");
 }
 
 export async function getAwsAccountId(accessKeyId: string, secretAccessKey: string, region: string): Promise<string> {
@@ -177,6 +210,7 @@ export function rowToBuild(row: any): BuildRecord {
     startedAt: row.started_at ? row.started_at.toISOString() : "",
     finishedAt: row.finished_at ? row.finished_at.toISOString() : "",
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
+    providerId: row.provider_id || "",
   };
 }
 
@@ -185,8 +219,12 @@ export function safeJsonParse<T>(val: string, fallback: T): T {
 }
 
 export async function refreshBuildStatus(build: BuildRecord): Promise<BuildRecord> {
+  const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(build.providerId);
+
+  if (!accessKeyId || !secretAccessKey) return build;
+
   const { CodeBuildClient, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
-  const cb = new CodeBuildClient({ region: getAwsRegion(), credentials: { accessKeyId: getAwsAccessKeyId(), secretAccessKey: getAwsSecretAccessKey() } });
+  const cb = new CodeBuildClient({ region, credentials: { accessKeyId, secretAccessKey } });
   const result = await cb.send(new BatchGetBuildsCommand({ ids: [build.codebuildId] }));
   const cbBuild = result.builds?.[0];
   if (!cbBuild) return build;
@@ -205,8 +243,8 @@ export async function refreshBuildStatus(build: BuildRecord): Promise<BuildRecor
       imageUri = imageVar.value;
     } else {
       try {
-        const accountId = await getAwsAccountId(getAwsAccessKeyId(), getAwsSecretAccessKey(), getAwsRegion());
-        imageUri = `${accountId}.dkr.ecr.${getAwsRegion()}.amazonaws.com/${build.imageRepo}:latest`;
+        const accountId = await getAwsAccountId(accessKeyId, secretAccessKey, region);
+        imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${build.imageRepo}:latest`;
       } catch { /* best effort */ }
     }
   }

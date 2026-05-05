@@ -37,7 +37,7 @@ export async function handleAwsDeploy(
   const accountId = identity.Account || "";
 
   const codebuildProject = "image-builder";
-  const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const cacheRepoName = `${imageRepoName}-cache`;
   const bucketName = `${codebuildProject}-source-${accountId}`;
 
@@ -49,11 +49,13 @@ export async function handleAwsDeploy(
   const { readdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const zip = new AdmZip();
-  const skipDirs = new Set(["node_modules", ".git", ".pnpm-store", ".turbo", ".cache", "__pycache__", ".venv", "venv", "vendor"]);
+  const skipDirs = new Set(["node_modules", ".git", ".pnpm-store", ".turbo", ".cache", "__pycache__", ".venv", "venv"]);
+  const skipRootOnly = new Set(["vendor"]);
   const addDir = (dirPath: string, zipPrefix: string) => {
     const items = readdirSync(dirPath, { withFileTypes: true });
     for (const item of items) {
       if (item.isDirectory() && skipDirs.has(item.name)) continue;
+      if (item.isDirectory() && skipRootOnly.has(item.name) && !zipPrefix) continue;
       const fullPath = join(dirPath, item.name);
       if (item.isDirectory()) addDir(fullPath, zipPrefix ? `${zipPrefix}/${item.name}` : item.name);
       else zip.addLocalFile(fullPath, zipPrefix || undefined);
@@ -74,6 +76,14 @@ export async function handleAwsDeploy(
   const deployParams: Record<string, any> = { appName: repoName, containerPort: ctx.repoConfig.port || 3000 };
   if (deployTarget === "ecs") { deployParams.cpu = "512"; deployParams.memory = "1024"; }
   if (deployTarget === "ec2") { deployParams.instanceType = "t3.small"; }
+  if (event.envVars && event.envVars.length > 0) { deployParams.envVars = event.envVars; }
+  if (event.techStack && event.techStack.length > 0) { deployParams.techStack = event.techStack; }
+  const selfHostedServices: string[] = [];
+  const hasDbEnvVars = (event.envVars || []).some(v => ["DB_CONNECTION", "DB_DATABASE", "DB_HOST"].includes(v.name));
+  if (event.techStack?.some(t => t.toLowerCase() === "laravel") || hasDbEnvVars) {
+    selfHostedServices.push("database");
+  }
+  if (selfHostedServices.length > 0) { deployParams.selfHostedServices = selfHostedServices; }
 
   const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
   const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });

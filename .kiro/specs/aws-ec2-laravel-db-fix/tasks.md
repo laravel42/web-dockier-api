@@ -1,0 +1,104 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - AWS EC2 Deploy Ignores User DB Credentials
+  - **IMPORTANT**: Write this property-based test BEFORE implementing the fix
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the three-part credential mismatch bug
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases — deploy events with custom DB credentials (`DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`) targeting AWS EC2 with a self-hosted database service
+  - **Bug Condition**: `isBugCondition(input)` where `input.envVars` contains any of `['DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD']` AND `input.provider == 'aws'` AND `input.deployStrategy == 'vps'` AND `'database' IN input.selfHostedServices`
+  - **Test file**: `deploy/__tests__/aws-ec2-db-credentials.test.ts`
+  - **Test assertions** (expected behavior after fix):
+    - (a) The SNS message `deployParams` object includes `envVars` containing the user's DB credentials
+    - (b) The SNS message `deployParams` includes `techStack` and `selfHostedServices`
+    - (c) The `ec2.yml` step `02_self_hosted_services` credential parsing logic extracts `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` from `EnvVarsJson` (test the parsing logic in isolation using a helper)
+    - (d) The `ec2.yml` step `03_deploy_container` places `$SVC_FLAGS` BEFORE `$ENV_FLAGS` in the `docker run` command (so user values override defaults)
+  - Run test on UNFIXED code - expect FAILURE (this confirms the bug exists)
+  - Document counterexamples found (e.g., "deployParams lacks envVars field", "docker run uses $ENV_FLAGS $SVC_FLAGS ordering")
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Default Credentials and Non-DB Behavior Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - **Test file**: `deploy/__tests__/aws-ec2-db-preservation.test.ts`
+  - Observe on UNFIXED code:
+    - `handleAwsDeploy` with empty `envVars` produces SNS message with `deployParams` containing `appName`, `containerPort`, `instanceType` (no `envVars` field)
+    - `ec2.yml` step `02_self_hosted_services` with empty `EnvVarsJson` (`'[]'`) creates database with defaults `appdb`/`appuser`/`apppass123`
+    - `ec2.yml` step `03_deploy_container` passes non-DB env vars (`APP_KEY`, `APP_URL`, `MAIL_HOST`) through `$ENV_FLAGS` unchanged
+    - Redis/queue/scheduler service flags are unaffected by DB credential changes
+    - ECS deploys (`deployStrategy == 'managed'`) set `deployTarget = 'ecs'` with `cpu`/`memory` params, no EC2-specific changes
+  - Write property-based tests:
+    - For all deploy events WITHOUT custom DB credentials, `deployParams` structure matches observed baseline (additive fields like `techStack` are acceptable)
+    - For all empty/non-DB `EnvVarsJson` inputs, credential parsing falls back to `appdb`/`appuser`/`apppass123`
+    - For all non-DB env var sets, `$ENV_FLAGS` contains all user vars regardless of fix
+    - For all ECS deploys, `deployTarget` is `'ecs'` and EC2-specific template logic is not invoked
+  - Verify tests PASS on UNFIXED code
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 3. Fix for AWS EC2 Laravel DB credential mismatch
+
+  - [x] 3.1 Add `envVars`, `techStack`, and `selfHostedServices` to `deployParams` in `aws-deploy.ts`
+    - In `deploy/processor/aws-deploy.ts`, after the existing `deployParams` construction block (~line 100)
+    - Add `deployParams.envVars = event.envVars` when `event.envVars` is non-empty
+    - Add `deployParams.techStack = event.techStack` when `event.techStack` is non-empty
+    - Derive `selfHostedServices` from event context (database needed when tech stack includes Laravel or user has DB env vars)
+    - Add `deployParams.selfHostedServices = selfHostedServices` when non-empty
+    - _Bug_Condition: isBugCondition(input) where input.envVars contains DB credentials AND provider=aws AND deployStrategy=vps_
+    - _Expected_Behavior: SNS message deployParams includes envVars, techStack, selfHostedServices so they flow through CodeBuild → Lambda → CloudFormation_
+    - _Preservation: Deploys without envVars continue to omit the field; ECS deploys unaffected; existing deployParams fields (appName, containerPort, instanceType, cpu, memory) unchanged_
+    - _Requirements: 2.4, 3.2, 3.3_
+
+  - [x] 3.2 Parse user DB credentials from `EnvVarsJson` in `ec2.yml` step `02_self_hosted_services`
+    - In `image-builder/deploy-templates/ec2.yml`, step `02_self_hosted_services` command block
+    - After the existing `DB_ENGINE` detection (which already parses `DB_CONNECTION` from `EnvVarsJson`), add parsing for `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` using the same `python3 -c` pattern
+    - Apply bash fallback defaults: `DB_NAME="${USER_DB_NAME:-appdb}"`, `DB_USER="${USER_DB_USER:-appuser}"`, `DB_PASS="${USER_DB_PASS:-apppass123}"`
+    - Replace hardcoded `appdb`/`appuser`/`apppass123` in MySQL setup with `$DB_NAME`/`$DB_USER`/`$DB_PASS`
+    - Replace hardcoded `appdb`/`appuser`/`apppass123` in PostgreSQL setup with `$DB_NAME`/`$DB_USER`/`$DB_PASS`
+    - Update `pg_hba.conf` entry to use `$DB_USER` instead of `appuser`
+    - Update echo messages to use variables instead of hardcoded values
+    - _Bug_Condition: EnvVarsJson contains DB_DATABASE/DB_USERNAME/DB_PASSWORD but step 02 ignores them_
+    - _Expected_Behavior: Database created with user-provided credentials; falls back to appdb/appuser/apppass123 when not provided_
+    - _Preservation: Empty EnvVarsJson or EnvVarsJson without DB vars → defaults appdb/appuser/apppass123 used (same as before)_
+    - _Requirements: 2.1, 2.2, 3.1_
+
+  - [x] 3.3 Swap `$ENV_FLAGS` and `$SVC_FLAGS` order in `ec2.yml` step `03_deploy_container`
+    - In `image-builder/deploy-templates/ec2.yml`, step `03_deploy_container` command block
+    - Change `docker run` command from `$ENV_FLAGS $SVC_FLAGS` to `$SVC_FLAGS $ENV_FLAGS`
+    - This ensures user-provided env vars (in `$ENV_FLAGS`) override hardcoded service defaults (in `$SVC_FLAGS`) for duplicate keys, since Docker uses the last `-e` flag value
+    - _Bug_Condition: docker run uses $ENV_FLAGS $SVC_FLAGS so hardcoded SVC_FLAGS overwrite user values_
+    - _Expected_Behavior: docker run uses $SVC_FLAGS $ENV_FLAGS so user values override service defaults_
+    - _Preservation: Non-duplicate env vars unaffected; Redis/queue/scheduler flags still injected; container still gets PORT, all SVC_FLAGS, and all ENV_FLAGS_
+    - _Requirements: 2.3, 3.4, 3.5_
+
+  - [x] 3.4 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - AWS EC2 Deploy Forwards User DB Credentials
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied:
+      - SNS message `deployParams` includes `envVars` with user's DB credentials
+      - Credential parsing extracts user values from `EnvVarsJson`
+      - `docker run` places `$SVC_FLAGS` before `$ENV_FLAGS`
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 3.5 Verify preservation tests still pass
+    - **Property 2: Preservation** - Default Credentials and Non-DB Behavior Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all tests still pass after fix (no regressions):
+      - Default credentials `appdb`/`appuser`/`apppass123` still used when no custom DB vars provided
+      - ECS deploys unaffected
+      - Non-DB env vars pass through unchanged
+      - Redis/queue/scheduler services unchanged
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run full test suite: `pnpm test` from workspace root
+  - Ensure all property-based tests pass (both bug condition and preservation)
+  - Ensure no existing tests are broken by the changes
+  - Ask the user if questions arise

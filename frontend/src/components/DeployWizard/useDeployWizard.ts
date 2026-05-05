@@ -147,6 +147,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
           projectId: project.id,
           gitConnectionId: project.connectionId,
           deployTarget,
+          providerId: state.selectedProviderId,
           deployParams: {
             appName: state.tofuAppName || project.name?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || undefined,
             containerPort: analysis?.aiAnalysis?.port || 3000,
@@ -154,6 +155,10 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
             cpu: plan?.cpu?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.cpu.match(/[\d.]+/)![0]) * 1024)) : undefined,
             memory: plan?.ram?.match(/[\d.]+/)?.[0] ? String(Math.round(parseFloat(plan.ram.match(/[\d.]+/)![0]) * 1024)) : undefined,
             envVars: state.envVars.length > 0 ? state.envVars : undefined,
+            selfHostedServices: Object.entries(state.servicesModes)
+              .filter(([, mode]) => mode === "vps")
+              .map(([type]) => type),
+            techStack: analysis?.techStack?.map(t => t.name) || undefined,
           },
         });
 
@@ -194,6 +199,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         syncDeployRecord("building", formattedLogs);
 
         const seenPhases = new Set<string>();
+        const seenLogLines = new Set<string>();
 
         // Poll CodeBuild until image is ready
         const pollCodeBuild = async () => {
@@ -205,12 +211,29 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
               const logsResp = await imageBuilderApi.getBuildLogs(build.id);
               if (logsResp.logs.length > 0) {
                 for (const line of logsResp.logs) {
+                  // Deduplicate log lines
+                  if (seenLogLines.has(line)) continue;
+                  seenLogLines.add(line);
+
+                  // Track phase transitions
                   const phaseMatch = line.match(/Entering phase (\w+)/);
                   if (phaseMatch && !seenPhases.has(phaseMatch[1])) {
                     seenPhases.add(phaseMatch[1]);
                     formattedLogs.push(`[${ts}] ℹ CodeBuild: ${phaseMatch[1]}...`);
+                    continue;
+                  }
+
+                  // Show Docker build output and errors (skip noisy internal CodeBuild lines)
+                  const msg = line.replace(/^\[[\d\s:-]+\]\s*/, "").trim();
+                  if (!msg) continue;
+                  if (msg.startsWith("[Container]")) {
+                    // Extract the actual command/output after the container timestamp
+                    const inner = msg.replace(/^\[Container\]\s*\d{4}\/\d{2}\/\d{2}\s+[\d:.]+\s*/, "").trim();
+                    if (!inner || inner.startsWith("Registering with agent") || inner.startsWith("Waiting for")) continue;
+                    formattedLogs.push(`[${ts}] ${inner}`);
                   }
                 }
+                setState(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
               }
             } catch {}
 
@@ -335,6 +358,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         deployStrategy: state.deployStrategy,
         buildMethod: state.buildMethod,
         templateId: project.sourceType === "template" ? project.template : undefined,
+        envVars: state.envVars.length > 0 ? state.envVars : undefined,
       });
       setState(prev => ({ ...prev, deploymentId: deployment.id }));
 

@@ -414,6 +414,13 @@ Resources:
                 params.append({'ParameterKey': 'SubnetId', 'ParameterValue': subnets[0]})
                 if deploy_params.get('instanceType'):
                   params.append({'ParameterKey': 'InstanceType', 'ParameterValue': str(deploy_params['instanceType'])})
+                # Pass self-hosted services and tech stack
+                self_hosted = deploy_params.get('selfHostedServices', [])
+                if self_hosted:
+                  params.append({'ParameterKey': 'SelfHostedServices', 'ParameterValue': ','.join(self_hosted)})
+                tech_stack = deploy_params.get('techStack', [])
+                if tech_stack:
+                  params.append({'ParameterKey': 'TechStack', 'ParameterValue': ','.join(tech_stack)})
 
               # Pass environment variables if provided
               env_vars = deploy_params.get('envVars', [])

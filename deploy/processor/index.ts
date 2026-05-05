@@ -118,7 +118,7 @@ const _ = new Subscription(deployTopic, "deploy-processor", {
 
       const df = generateDockerfile(repoConfig);
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
-      const dockerignore = ["node_modules", ".next", ".git", ".gitignore", "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store", "vendor", ".env", ".env.*", "*.log", "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv", "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor", "Dockerfile*", ".dockerignore", "pulumi", ".pulumi-state"].join("\n");
+      const dockerignore = ["node_modules", ".next", ".git", ".gitignore", "dist", "build", "out", "output", ".turbo", ".cache", ".pnpm-store", "/vendor", ".env", "*.log", "!.env.example", "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv", "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor", "Dockerfile*", ".dockerignore", "pulumi", ".pulumi-state"].join("\n");
       await writeFile(join(repoDir, ".dockerignore"), dockerignore, "utf-8");
 
       const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";

@@ -11,13 +11,44 @@ export function buildDockerUserData(p: DeployParams): string {
 
   let dbSetup = "";
   if (hasVpsDb && !p.templateSetupScript) {
-    // Default PostgreSQL setup (skip if template provides its own DB setup, e.g. MySQL for WordPress)
-    dbSetup = `
+    // Detect whether the app needs MySQL or PostgreSQL based on extensions and tech stack
+    const needsMysql = p.aiAnalysis?.phpExtensions?.includes("pdo_mysql") ||
+      p.techStack.some(s => s.toLowerCase().includes("mysql")) ||
+      vpsSvcs.some(s => s.type === "database" && s.name.toLowerCase().includes("mysql"));
+
+    if (needsMysql) {
+      dbSetup = `
+    # ── MySQL ──
+    apt-get install -y mysql-server
+    systemctl enable mysql
+    systemctl start mysql
+    for i in $(seq 1 30); do mysqladmin ping -h localhost --silent && break; sleep 2; done
+    # Create database and user (placeholders replaced at deploy time with user's actual values)
+    # MySQL 8.0 on Ubuntu 24.04: root uses mysql_native_password with a random password.
+    # Use debian-sys-maint (auto-generated credentials) to bootstrap.
+    DB_NAME="__DEPLOY_DB_NAME__"
+    DB_USER="__DEPLOY_DB_USER__"
+    DB_PASS="__DEPLOY_DB_PASS__"
+    mysql --defaults-file=/etc/mysql/debian.cnf -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+    if [ "$DB_USER" = "root" ]; then
+      mysql --defaults-file=/etc/mysql/debian.cnf -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASS';"
+      mysql --defaults-file=/etc/mysql/debian.cnf -e "CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '$DB_PASS';"
+      mysql --defaults-file=/etc/mysql/debian.cnf -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;"
+    else
+      mysql --defaults-file=/etc/mysql/debian.cnf -e "CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASS';"
+      mysql --defaults-file=/etc/mysql/debian.cnf -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'%';"
+    fi
+    mysql --defaults-file=/etc/mysql/debian.cnf -e "FLUSH PRIVILEGES;"
+    sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf 2>/dev/null || true
+    systemctl restart mysql`;
+    } else {
+      dbSetup = `
     # ── PostgreSQL ──
     apt-get install -y postgresql postgresql-contrib
     systemctl enable postgresql
     sudo -u postgres psql -c "CREATE USER appuser WITH PASSWORD 'apppass123';"
     sudo -u postgres psql -c "CREATE DATABASE appdb OWNER appuser;"`;
+    }
   }
 
   // Template-specific setup (e.g. MySQL for WordPress)
@@ -52,6 +83,10 @@ SUPERVISOR
   const ecrImageUri = p.ecrImageUri || "";
   // Public Docker image (for template deploys like WordPress)
   const publicImage = p.publicDockerImage || "";
+  // GCP Artifact Registry image (placeholder — replaced at deploy time by the deploy processor)
+  const arImageUri = "__AR_IMAGE_URI__";
+  // GCP access token for one-time docker login (placeholder — replaced at deploy time)
+  const arToken = "__AR_TOKEN__";
 
   const isAws = p.provider === "aws";
   const basePkgs = "curl git unzip nginx certbot python3-certbot-nginx";
@@ -60,13 +95,51 @@ SUPERVISOR
   const needsAwsCli = isAws && !publicImage;
 
   // Build env var flags for docker run
+  // Two categories:
+  //   1. "defaults" — come BEFORE user env vars so user values override them
+  //   2. "overrides" — come AFTER user env vars because they must be correct for the infra
+  //      (e.g. DB_HOST must be host.docker.internal, not 127.0.0.1 from a local .env)
   const envEntries = (p.dockerEnvVars || []).map(e => `-e ${e.name}="${e.value}"`);
-  const allEnvFlags = [
+  const defaultEnvFlags = [
     `-e APP_ENV=production`,
     `-e PORT=${p.runtime.port}`,
     ...envEntries,
   ];
-  const envFlagsStr = allEnvFlags.join(" \\\n    ");
+  const overrideEnvFlags: string[] = [];
+
+  // Add database connection env vars when a VPS database is provisioned
+  if (hasVpsDb && !p.templateSetupScript) {
+    const needsMysql = p.aiAnalysis?.phpExtensions?.includes("pdo_mysql") ||
+      p.techStack.some(s => s.toLowerCase().includes("mysql")) ||
+      vpsSvcs.some(s => s.type === "database" && s.name.toLowerCase().includes("mysql"));
+
+    // DB_HOST must always point to the host machine from inside Docker — override user value
+    overrideEnvFlags.push(`-e DB_HOST=host.docker.internal`);
+    // These are defaults the user can override via wizard env vars
+    defaultEnvFlags.push(`-e DB_PORT=${needsMysql ? "3306" : "5432"}`);
+    defaultEnvFlags.push(`-e DB_DATABASE=${needsMysql ? "forge" : "appdb"}`);
+    defaultEnvFlags.push(`-e DB_USERNAME=appuser`);
+    defaultEnvFlags.push(`-e DB_PASSWORD=apppass123`);
+    defaultEnvFlags.push(`-e DB_CONNECTION=${needsMysql ? "mysql" : "pgsql"}`);
+    if (isLaravel) {
+      defaultEnvFlags.push(`-e APP_KEY=base64:$(openssl rand -base64 32)`);
+    }
+  }
+
+  // Add Redis env vars when a VPS cache is provisioned
+  if (hasVpsCache) {
+    // REDIS_HOST must point to host machine — override user value
+    overrideEnvFlags.push(`-e REDIS_HOST=host.docker.internal`);
+    // These are defaults the user can override
+    defaultEnvFlags.push(`-e CACHE_DRIVER=redis`);
+    defaultEnvFlags.push(`-e SESSION_DRIVER=redis`);
+  }
+
+  const defaultEnvStr = defaultEnvFlags.join(" \\\n    ");
+  const overrideEnvStr = overrideEnvFlags.join(" \\\n    ");
+
+  // Placeholder for user-provided env vars from the deploy wizard (replaced at deploy time)
+  const userEnvPlaceholder = "__USER_ENV_FLAGS__";
 
   return `#!/bin/bash
 set -euo pipefail
@@ -91,6 +164,7 @@ ${dbSetup}${templateSetup}${cacheSetup}
 # ── Pull & Run Docker Image ──
 ECR_IMAGE="${ecrImageUri}"
 PUBLIC_IMAGE="${publicImage}"
+AR_IMAGE="${arImageUri}"
 
 if [ -n "$PUBLIC_IMAGE" ]; then
   # Template deploy: pull public Docker image and bind directly to port 80
@@ -107,7 +181,9 @@ if [ -n "$PUBLIC_IMAGE" ]; then
   docker run -d --name ${p.appName} --restart=always \\
     -p 0.0.0.0:80:${p.runtime.port} \\
     --add-host=host.docker.internal:host-gateway \\
-    ${envFlagsStr} \\
+    ${defaultEnvStr} \\
+    ${userEnvPlaceholder} \\
+    ${overrideEnvStr} \\
     "$PUBLIC_IMAGE"
   # Increase PHP and Apache limits for WordPress (large imports, media uploads)
   docker exec ${p.appName} bash -c 'printf "upload_max_filesize = 512M\\npost_max_size = 512M\\nmemory_limit = 1024M\\nmax_execution_time = 600\\nmax_input_time = 600\\n" > /usr/local/etc/php/conf.d/uploads.ini' 2>/dev/null || true
@@ -128,12 +204,37 @@ elif [ -n "$ECR_IMAGE" ]; then
   done
   docker stop ${p.appName} 2>/dev/null || true
   docker rm ${p.appName} 2>/dev/null || true
+  # All runtimes listen on their configured port inside the container.
+  # PHP/Laravel uses php artisan serve on the configured port, not nginx on 80.
+  CONTAINER_PORT=${String(p.runtime.port)}
+  docker run -d --name ${p.appName} --restart=always \\
+    -p 127.0.0.1:${p.runtime.port}:$CONTAINER_PORT \\
+    --add-host=host.docker.internal:host-gateway \\
+    ${defaultEnvStr} \\
+    ${userEnvPlaceholder} \\
+    ${overrideEnvStr} \\
+    "$ECR_IMAGE"
+elif echo "$AR_IMAGE" | grep -q "docker.pkg.dev"; then
+  # GCP Artifact Registry: authenticate using deploy-time access token
+  AR_HOST=$(echo "$AR_IMAGE" | cut -d/ -f1)
+  AR_TOKEN="${arToken}"
+  if [ -n "$AR_TOKEN" ]; then
+    echo "$AR_TOKEN" | docker login -u oauth2accesstoken --password-stdin "https://$AR_HOST" 2>/dev/null || true
+  fi
+  # Retry pull (image may not be available immediately after push)
+  for i in $(seq 1 12); do
+    docker pull "$AR_IMAGE" && break
+    sleep 15
+  done
+  docker stop ${p.appName} 2>/dev/null || true
+  docker rm ${p.appName} 2>/dev/null || true
   docker run -d --name ${p.appName} --restart=always \\
     -p 127.0.0.1:${p.runtime.port}:${p.runtime.port} \\
     --add-host=host.docker.internal:host-gateway \\
-    -e APP_ENV=production \\
-    -e PORT=${p.runtime.port} \\
-    "$ECR_IMAGE"
+    ${defaultEnvStr} \\
+    ${userEnvPlaceholder} \\
+    ${overrideEnvStr} \\
+    "$AR_IMAGE"
 fi
 
 # ── Nginx Reverse Proxy ──

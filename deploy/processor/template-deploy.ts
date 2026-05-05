@@ -127,7 +127,7 @@ export async function handleTemplateDeploy(
       await new Promise(r => setTimeout(r, 5000));
 
       const arHost = `${arRegion}-docker.pkg.dev`;
-      const arRepo = appName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+      const arRepo = appName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
       const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
 
       // Create AR repo

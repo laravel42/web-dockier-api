@@ -12,6 +12,7 @@ export const imageBuilderApi = {
     projectId?: string;
     gitConnectionId?: string;
     deployTarget?: "ecs" | "ec2" | "s3";
+    providerId?: string;
     deployParams?: {
       appName?: string;
       containerPort?: number;
@@ -25,6 +26,8 @@ export const imageBuilderApi = {
       vpcId?: string;
       subnetIds?: string[];
       envVars?: Array<{ name: string; value: string }>;
+      selfHostedServices?: string[];
+      techStack?: string[];
     };
   }) =>
     request<{

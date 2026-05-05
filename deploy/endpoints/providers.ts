@@ -73,3 +73,14 @@ export const updateProvider = api(
     };
   }
 );
+
+export const getProviderCredentials = api(
+  { expose: false, method: "GET", path: "/deploy/providers/:providerId/credentials", auth: false },
+  async (params: { providerId: string }): Promise<{ provider: string; region: string; apiKey: string; apiSecret: string }> => {
+    const row = await db.queryRow<{
+      provider: string; region: string; api_key: string; api_secret: string;
+    }>`SELECT provider, region, api_key, api_secret FROM server_providers WHERE id = ${params.providerId}`;
+    if (!row) throw APIError.notFound("Provider not found");
+    return { provider: row.provider, region: row.region, apiKey: row.api_key, apiSecret: row.api_secret };
+  }
+);

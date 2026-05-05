@@ -67,7 +67,7 @@ export function generatePhpDockerfile(config: RepoConfig): string {
   for (const ext of config.phpExtensions) {
     if (ext === "gd") { runtimeAptPkgs.add(isTrixie ? "libpng16-16t64" : "libpng16-16"); runtimeAptPkgs.add("libjpeg62-turbo"); runtimeAptPkgs.add("libfreetype6"); }
     if (ext === "pgsql" || ext === "pdo_pgsql") runtimeAptPkgs.add("libpq5");
-    if (ext === "zip") runtimeAptPkgs.add(isTrixie ? "libzip5" : "libzip4");
+    if (ext === "zip") runtimeAptPkgs.add("libzip-dev");
     if (ext === "intl") runtimeAptPkgs.add(isBullseye ? "libicu67" : isTrixie ? "libicu76" : "libicu72");
     if (ext === "imagick") runtimeAptPkgs.add(isBullseye ? "libmagickwand-6.q16-6" : "libmagickwand-6.q16-7");
   }
@@ -80,6 +80,8 @@ export function generatePhpDockerfile(config: RepoConfig): string {
   lines.push("COPY --from=composer /app/vendor ./vendor");
   if (hasNodeAssets) lines.push("COPY --from=node-builder /app/public ./public");
   lines.push(`COPY ${copyPrefix}. .`);
+  // Laravel requires writable storage and bootstrap/cache directories
+  lines.push("RUN mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache");
   lines.push(`ENV PORT=${config.port}`);
   lines.push(`EXPOSE ${config.port}`);
   lines.push(`CMD ${JSON.stringify((config.startCommand || "php artisan serve --host=0.0.0.0 --port=8080").split(" "))}`);
