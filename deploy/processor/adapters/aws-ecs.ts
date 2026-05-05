@@ -96,7 +96,7 @@ export class AwsEcsAdapter implements DeployAdapter {
     const accessKeyId = providerCredentials.apiKey;
     const secretAccessKey = providerCredentials.apiSecret;
     const credentials = ctx.state.awsCredentials || { accessKeyId, secretAccessKey };
-    const accountId = ctx.state.awsAccountId || (await import("../aws-helpers").then(m => m.getAwsAccountId(region, credentials)));
+    const accountId = ctx.state.awsAccountId || (await getAwsAccountId(region, credentials));
 
     await appendLog("── CloudFormation Deploy ──────────");
 
