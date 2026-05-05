@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Helpers — replicate the deployParams construction logic from aws-deploy.ts
+// Helpers — replicate the deployParams construction logic from codebuild-builder.ts
 // ---------------------------------------------------------------------------
 
 interface DeployEvent {
