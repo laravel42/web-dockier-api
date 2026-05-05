@@ -7,7 +7,7 @@
  * can hand off to the standard adapter dispatch for infrastructure provisioning.
  */
 
-import { db, getDeployCallbackUrl, type DeployEvent } from "../shared";
+import { getDeployCallbackUrl, type DeployEvent } from "../shared";
 import { appendLog, ts } from "./helpers";
 import type { RepoConfig } from "../../lib/repo-analyzer/types";
 import { toDetectedStack } from "../../lib/repo-analyzer";
