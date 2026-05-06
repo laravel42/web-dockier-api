@@ -14,6 +14,8 @@ import {
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
+  stackNameFor,
+  destroyCfnStack,
   type AwsCredentials,
 } from "../aws-helpers";
 import { installDeps, buildSite, findOutputDir, MIME_TYPES, SKIP_DIRS } from "../static-site-builder";
@@ -153,7 +155,7 @@ export class AwsS3Adapter implements DeployAdapter {
     await appendLog("✓ Template uploaded to S3");
 
     // 8. Build CloudFormation parameters
-    const stackName = `${codebuildProject}-app-${repoName.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+    const stackName = stackNameFor(repoName);
     const params = [
       { ParameterKey: "AppName", ParameterValue: repoName },
       { ParameterKey: "SourceBucket", ParameterValue: websiteBucket },
@@ -249,20 +251,12 @@ export class AwsS3Adapter implements DeployAdapter {
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
     const credentials: AwsCredentials = { accessKeyId: ctx.providerCredentials.apiKey, secretAccessKey: ctx.providerCredentials.apiSecret };
-    const stackName = `image-builder-app-${ctx.appName}`;
+    const stackName = stackNameFor(ctx.appName);
 
     await ctx.appendLog("── Destroy AWS S3 Resources ───────");
 
     // Delete CloudFormation stack (fire and forget — CloudFront distributions take 15-20 min to delete)
-    try {
-      const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-      const cfn = new CloudFormationClient({ region: ctx.region, credentials });
-      try {
-        await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-        await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-        await ctx.appendLog(`✓ Stack deletion initiated: ${stackName}`);
-      } catch (e: any) { if (!e.message?.includes("does not exist")) throw e; }
-    } catch (e: any) { errors.push(`CloudFormation: ${e.message}`); }
+    await destroyCfnStack(stackName, ctx.region, credentials, ctx.appendLog, errors);
 
     // Delete S3 static site bucket (empty objects first, do this before stack finishes deleting)
     try {
