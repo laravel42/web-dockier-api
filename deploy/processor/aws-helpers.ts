@@ -396,7 +396,7 @@ export async function createOrUpdateStack(opts: {
 
 /** Canonical CloudFormation stack name for an app deployed by this platform. */
 export function stackNameFor(appName: string): string {
-  return `image-builder-app-${appName.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  return "image-builder-app-" + appName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 }
 
 /**
@@ -432,19 +432,17 @@ export async function destroyCfnStack(
   errors: string[],
 ): Promise<void> {
   try {
-    const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import(
+    const { CloudFormationClient, DeleteStackCommand } = await import(
       "@aws-sdk/client-cloudformation"
     );
     const cfn = new CloudFormationClient({ region, credentials });
-    try {
-      await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-      await cfn.send(new DeleteStackCommand({ StackName: stackName }));
-      await appendLog(`✓ Stack deletion initiated: ${stackName}`);
-    } catch (e: any) {
-      if (!e.message?.includes("does not exist")) throw e;
-    }
+    await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+    await appendLog(`✓ Stack deletion initiated: ${stackName}`);
   } catch (e: any) {
-    errors.push(`CloudFormation: ${e.message}`);
+    // DeleteStackCommand throws if the stack doesn't exist — that's fine
+    if (!e.message?.includes("does not exist")) {
+      errors.push(`CloudFormation: ${e.message}`);
+    }
   }
 }
 
