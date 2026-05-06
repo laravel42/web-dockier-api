@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Helpers — replicate the deployParams construction logic from aws-deploy.ts
+// Helpers — replicate the deployParams construction logic from codebuild-builder.ts
 // ---------------------------------------------------------------------------
 
 interface DeployEvent {
@@ -29,7 +29,7 @@ interface DeployEvent {
 }
 
 /**
- * Replicates the deployParams construction logic from aws-deploy.ts (lines 75-78).
+ * Replicates the deployParams construction logic from codebuild-builder.ts.
  * This is the CURRENT (unfixed) logic — it only sets appName, containerPort,
  * and instanceType/cpu/memory.
  */

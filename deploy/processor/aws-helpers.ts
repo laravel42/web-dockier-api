@@ -146,7 +146,8 @@ export async function pushToEcr(opts: {
 
   const loginResult = await runCmd(
     "docker",
-    ["login", "--username", username, "--password", password, ecrUri],
+    ["login", "--username", username, "--password-stdin", ecrUri],
+    { stdin: password },
   );
   if (loginResult.code !== 0) {
     throw new Error(`ECR login failed: ${loginResult.output.split("\n").slice(-3).join(" ")}`);

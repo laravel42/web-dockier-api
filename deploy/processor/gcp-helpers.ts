@@ -132,15 +132,15 @@ export async function pushToArtifactRegistry(opts: {
   arHost: string;
   accessToken: string;
   workDir: string;
-  runCmd: (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string> }) => Promise<{ code: number; output: string }>;
+  runCmd: (cmd: string, args: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) => Promise<{ code: number; output: string }>;
   env?: Record<string, string>;
 }): Promise<void> {
   const { localImage, arImageUri, arHost, accessToken, workDir, runCmd, env } = opts;
 
   // Login (retry once)
-  const loginResult = await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password", accessToken, arHost], { cwd: workDir });
+  const loginResult = await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password-stdin", arHost], { cwd: workDir, stdin: accessToken });
   if (loginResult.code !== 0) {
-    await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password", accessToken, arHost], { cwd: workDir });
+    await runCmd("docker", ["login", "-u", "oauth2accesstoken", "--password-stdin", arHost], { cwd: workDir, stdin: accessToken });
   }
 
   const tagResult = await runCmd("docker", ["tag", localImage, arImageUri], { cwd: workDir });
@@ -231,7 +231,10 @@ export async function deleteOrphanedComputeResources(opts: {
   accessToken: string;
   appendLog: (msg: string) => Promise<void>;
 }): Promise<void> {
-  const { projectId, region, resName, accessToken, appendLog } = opts;
+  const { projectId, region, accessToken, appendLog } = opts;
+  // GCP resource names must match [a-z]([-a-z0-9]*[a-z0-9])? — sanitize the same way
+  // the Pulumi GCP provider does (underscores → hyphens, lowercase).
+  const resName = opts.resName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
   // Try to delete instance first (it holds a reference to the static IP)
   // We don't know the exact zone, so find it via aggregated list
@@ -248,8 +251,15 @@ export async function deleteOrphanedComputeResources(opts: {
             const zone = scopeKey.replace("zones/", "");
             await appendLog(`ℹ Deleting orphaned instance ${resName} in ${zone}...`);
             await deleteGcpInstance(projectId, zone, resName, accessToken);
-            // Wait a bit for the instance to release the IP
-            await new Promise((r) => setTimeout(r, 10_000));
+            // Poll until the instance is fully terminated (can take 30-60s)
+            for (let i = 0; i < 12; i++) {
+              await new Promise((r) => setTimeout(r, 10_000));
+              const checkRes = await fetchWithRetry(
+                `https://compute.googleapis.com/compute/v1/projects/${projectId}/zones/${zone}/instances/${resName}`,
+                { headers: { Authorization: `Bearer ${accessToken}` } },
+              );
+              if (checkRes.status === 404) break;
+            }
           }
         }
       }
@@ -266,6 +276,23 @@ export async function deleteOrphanedComputeResources(opts: {
   await appendLog(`ℹ Deleting orphaned address ${resName}-ip...`);
   await deleteGcpAddress(projectId, region, `${resName}-ip`, accessToken);
 
-  // Give GCP a moment to fully release the resources
-  await new Promise((r) => setTimeout(r, 5_000));
+  // Wait for GCP to fully process the deletions (operations are async)
+  await new Promise((r) => setTimeout(r, 10_000));
+
+  // Verify resources are gone — retry deletion if still present
+  for (let i = 0; i < 3; i++) {
+    const fwCheck = await fetchWithRetry(
+      `https://compute.googleapis.com/compute/v1/projects/${projectId}/global/firewalls/${resName}-fw`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const ipCheck = await fetchWithRetry(
+      `https://compute.googleapis.com/compute/v1/projects/${projectId}/regions/${region}/addresses/${resName}-ip`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (fwCheck.status === 404 && ipCheck.status === 404) break;
+    // Resources still exist — retry deletion
+    if (fwCheck.status !== 404) await deleteGcpFirewall(projectId, `${resName}-fw`, accessToken);
+    if (ipCheck.status !== 404) await deleteGcpAddress(projectId, region, `${resName}-ip`, accessToken);
+    await new Promise((r) => setTimeout(r, 10_000));
+  }
 }

@@ -5,7 +5,7 @@ import { join } from "node:path";
 export type RunCmdFn = (
   cmd: string,
   args: string[],
-  opts?: { cwd?: string; env?: Record<string, string> }
+  opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }
 ) => Promise<{ code: number; output: string }>;
 
 /** Augmented PATH that includes Pulumi binary locations. */
@@ -27,15 +27,19 @@ const augmentedPath = getAugmentedPath();
 export function runCmd(
   cmd: string,
   args: string[],
-  opts?: { cwd?: string; env?: Record<string, string> }
+  opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }
 ): Promise<{ code: number; output: string }> {
   return new Promise((resolve) => {
     const proc = spawn(cmd, args, {
       cwd: opts?.cwd,
       env: { ...process.env, PATH: augmentedPath, ...opts?.env },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [opts?.stdin ? "pipe" : "ignore", "pipe", "pipe"],
       shell: process.platform === "win32",
     });
+    if (opts?.stdin) {
+      proc.stdin!.write(opts.stdin);
+      proc.stdin!.end();
+    }
     let output = "";
     proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
     proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
@@ -58,9 +62,13 @@ export function createStreamingRunCmd(
       const proc = spawn(cmd, args, {
         cwd: opts?.cwd || undefined,
         env: { ...process.env, PATH: augmentedPath, ...opts?.env },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [opts?.stdin ? "pipe" : "ignore", "pipe", "pipe"],
         shell: process.platform === "win32",
       });
+      if (opts?.stdin) {
+        proc.stdin!.write(opts.stdin);
+        proc.stdin!.end();
+      }
       let output = "";
       const onData = async (data: Buffer) => {
         const lines = data.toString().split("\n").filter(Boolean);
