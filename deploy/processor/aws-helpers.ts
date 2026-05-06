@@ -392,6 +392,64 @@ export async function createOrUpdateStack(opts: {
   }
 }
 
+// ─── Shared Destroy Helpers ─────────────────────────────────────────
+
+/** Canonical CloudFormation stack name for an app deployed by this platform. */
+export function stackNameFor(appName: string): string {
+  return `image-builder-app-${appName.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+}
+
+/**
+ * Delete an ECR repository by name (idempotent — ignores RepositoryNotFoundException).
+ * Collects errors into the provided array instead of throwing.
+ */
+export async function deleteEcrRepo(
+  repoName: string,
+  region: string,
+  credentials: AwsCredentials,
+  errors: string[],
+): Promise<void> {
+  try {
+    const { ECRClient, DeleteRepositoryCommand } = await import("@aws-sdk/client-ecr");
+    const ecr = new ECRClient({ region, credentials });
+    await ecr.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
+  } catch (e: any) {
+    if (!e.name?.includes("RepositoryNotFoundException")) {
+      errors.push(`ECR ${repoName}: ${e.message}`);
+    }
+  }
+}
+
+/**
+ * Delete a CloudFormation stack (fire-and-forget).
+ * Ignores "does not exist" errors. Collects other errors into the provided array.
+ */
+export async function destroyCfnStack(
+  stackName: string,
+  region: string,
+  credentials: AwsCredentials,
+  appendLog: (line: string) => Promise<void>,
+  errors: string[],
+): Promise<void> {
+  try {
+    const { CloudFormationClient, DeleteStackCommand, DescribeStacksCommand } = await import(
+      "@aws-sdk/client-cloudformation"
+    );
+    const cfn = new CloudFormationClient({ region, credentials });
+    try {
+      await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+      await cfn.send(new DeleteStackCommand({ StackName: stackName }));
+      await appendLog(`✓ Stack deletion initiated: ${stackName}`);
+    } catch (e: any) {
+      if (!e.message?.includes("does not exist")) throw e;
+    }
+  } catch (e: any) {
+    errors.push(`CloudFormation: ${e.message}`);
+  }
+}
+
+// ─── CloudFormation Polling ────────────────────────────────────────
+
 /**
  * Poll a CloudFormation stack until it reaches a success or failure state.
  * Polls every 15 seconds for up to 15 minutes.

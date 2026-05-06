@@ -4,6 +4,7 @@ import { api, APIError } from "encore.dev/api";
 import {
   db, rowToBuild, resolveAwsCredentials,
 } from "../shared";
+import { stackNameFor } from "../../deploy/processor/aws-helpers";
 
 // ─── API: Get Deploy Status (polls CloudFormation for stack status) ───
 
@@ -24,7 +25,7 @@ export const getDeployStatus = api(
 
     // Poll CloudFormation directly
     const appName = build.sourceRepo.split("/").pop()?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || "";
-    const stackName = `image-builder-app-${appName}`;
+    const stackName = stackNameFor(appName);
     try {
       const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(build.providerId);
 
