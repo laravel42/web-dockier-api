@@ -7,10 +7,11 @@ import { git_integration } from "~encore/clients";
 import { readFileSync } from "node:fs";
 import {
   db, getCodeBuildProject, getCallbackUrl,
-  deriveImageRepo, getAwsAccountId, rowToBuild, refreshBuildStatus, buildToStatusResponse,
+  deriveImageRepo, rowToBuild, refreshBuildStatus, buildToStatusResponse,
   resolveAwsCredentials,
   type StartBuildParams, type BuildRecord, type BuildStatusResponse, type BuildLogsResponse,
 } from "../shared";
+import { getAwsAccountId } from "../../lib/aws";
 import { bundleAndUploadSource } from "../source-bundler";
 
 // ─── API: Start Build ───
@@ -37,7 +38,7 @@ export const startBuild = api(
 
     let accountId: string;
     try {
-      accountId = await getAwsAccountId(accessKeyId, secretAccessKey, region);
+      accountId = await getAwsAccountId(region, { accessKeyId, secretAccessKey });
     } catch (e: any) {
       throw APIError.internal(`Failed to get AWS account ID: ${e.message}`);
     }

@@ -2,13 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunCmdFn } from "./run-cmd";
 import type { ProvisionResult } from "./adapters/types";
+import { getAwsAccountId, type AwsCredentials } from "../../lib/aws";
 
-// ─── Types ─────────────────────────────────────────────────────────
-
-export interface AwsCredentials {
-  accessKeyId: string;
-  secretAccessKey: string;
-}
+// Re-export for consumers that import from this file
+export { getAwsAccountId, type AwsCredentials } from "../../lib/aws";
 
 export interface PushToEcrResult {
   /** Full ECR image URI with tag (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app:abc12345) */
@@ -38,19 +35,6 @@ export function readCfnTemplate(templateName: string): string {
 }
 
 // ─── ECR Helpers ───────────────────────────────────────────────────
-
-/**
- * Get the AWS account ID from credentials via STS.
- */
-export async function getAwsAccountId(
-  region: string,
-  credentials: AwsCredentials,
-): Promise<string> {
-  const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-  const sts = new STSClient({ region, credentials });
-  const identity = await sts.send(new GetCallerIdentityCommand({}));
-  return identity.Account || "";
-}
 
 /**
  * Get the default VPC and its subnets for a given region.
