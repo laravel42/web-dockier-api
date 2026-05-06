@@ -5,6 +5,13 @@ export function commonPreBuild(): string {
     commands:
       - set -euo pipefail
       - |
+        for var in AWS_ACCOUNT_ID AWS_DEFAULT_REGION IMAGE_REPO_NAME CACHE_REPO_NAME; do
+          if [ -z "\${!var}" ]; then
+            echo "ERROR: Required environment variable $var is not set. It must be provided via CodeBuild environment overrides."
+            exit 1
+          fi
+        done
+      - |
         IMAGE_URI="\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com/\${IMAGE_REPO_NAME}"
         CACHE_URI="\${AWS_ACCOUNT_ID}.dkr.ecr.\${AWS_DEFAULT_REGION}.amazonaws.com/\${CACHE_REPO_NAME}"
         IMAGE_TAG="\${CODEBUILD_RESOLVED_SOURCE_VERSION:-latest}"

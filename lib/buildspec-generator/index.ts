@@ -23,10 +23,10 @@ export function generateBuildspec(stack: DetectedStack): string {
 env:
   shell: bash
   variables:
-    AWS_ACCOUNT_ID: "123456789012"
-    AWS_DEFAULT_REGION: "us-east-1"
-    IMAGE_REPO_NAME: "my-app"
-    CACHE_REPO_NAME: "my-app-cache"
+    AWS_ACCOUNT_ID: ""
+    AWS_DEFAULT_REGION: ""
+    IMAGE_REPO_NAME: ""
+    CACHE_REPO_NAME: ""
 
 phases:
 `;
@@ -71,9 +71,9 @@ export function generateStaticBuildspec(): string {
 env:
   shell: bash
   variables:
-    AWS_ACCOUNT_ID: "123456789012"
-    AWS_DEFAULT_REGION: "us-east-1"
-    IMAGE_REPO_NAME: "my-app"
+    AWS_ACCOUNT_ID: ""
+    AWS_DEFAULT_REGION: ""
+    IMAGE_REPO_NAME: ""
 
 phases:
 `;

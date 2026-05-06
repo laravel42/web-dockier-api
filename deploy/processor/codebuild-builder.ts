@@ -123,7 +123,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
 
   // 7. Poll CodeBuild until image is ready
   const remoteImageUri = await pollCodeBuild({
-    deploymentId, region, accessKeyId, secretAccessKey, accountId, imageRepoName,
+    deploymentId, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash,
   });
 
   return { remoteImageUri, imageRepoName };
@@ -136,25 +136,25 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
  */
 async function zipSourceDirectory(repoDir: string): Promise<Buffer> {
   const { default: AdmZip } = await import("adm-zip");
-  const { readdirSync } = await import("node:fs");
+  const { readdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
 
   const zip = new AdmZip();
   const skipDirs = new Set(["node_modules", ".git", ".pnpm-store", ".turbo", ".cache", "__pycache__", ".venv", "venv"]);
   const skipRootOnly = new Set(["vendor"]);
 
-  const addDir = (dirPath: string, zipPrefix: string) => {
-    const items = readdirSync(dirPath, { withFileTypes: true });
+  const addDir = async (dirPath: string, zipPrefix: string) => {
+    const items = await readdir(dirPath, { withFileTypes: true });
     for (const item of items) {
       if (item.isDirectory() && skipDirs.has(item.name)) continue;
       if (item.isDirectory() && skipRootOnly.has(item.name) && !zipPrefix) continue;
       const fullPath = join(dirPath, item.name);
-      if (item.isDirectory()) addDir(fullPath, zipPrefix ? `${zipPrefix}/${item.name}` : item.name);
+      if (item.isDirectory()) await addDir(fullPath, zipPrefix ? `${zipPrefix}/${item.name}` : item.name);
       else zip.addLocalFile(fullPath, zipPrefix || undefined);
     }
   };
 
-  addDir(repoDir, "");
+  await addDir(repoDir, "");
   return zip.toBuffer();
 }
 
@@ -212,8 +212,9 @@ async function pollCodeBuild(opts: {
   secretAccessKey: string;
   accountId: string;
   imageRepoName: string;
+  commitHash: string;
 }): Promise<string> {
-  const { deploymentId, region, accessKeyId, secretAccessKey, accountId, imageRepoName } = opts;
+  const { deploymentId, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash } = opts;
   const credentials = { accessKeyId, secretAccessKey };
 
   const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
@@ -254,7 +255,8 @@ async function pollCodeBuild(opts: {
           if (cbStatus === "SUCCEEDED") {
             await appendLog(deploymentId, `[${ts()}] ✓ CodeBuild succeeded — image pushed to ECR`);
             const ecrUri = `${accountId}.dkr.ecr.${region}.amazonaws.com`;
-            return `${ecrUri}/${imageRepoName}:latest`;
+            const shortTag = commitHash.slice(0, 12);
+            return `${ecrUri}/${imageRepoName}:${shortTag}`;
           } else if (["FAILED", "FAULT", "TIMED_OUT", "STOPPED"].includes(cbStatus)) {
             const reason = cbBuild.phases?.find(p => p.phaseStatus === "FAILED")?.contexts?.[0]?.message || cbStatus;
             throw new Error(`CodeBuild failed: ${reason}`);
