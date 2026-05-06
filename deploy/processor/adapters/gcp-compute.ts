@@ -277,25 +277,63 @@ export class GcpComputeAdapter implements DeployAdapter {
       await writeFs(indexPath, program, "utf-8");
     }
 
-    // Restore state from previous deployment (prefer successful, fall back to failed with partial state)
+    // Fix port mapping if the detected container port differs from what the template assumed.
+    // The template may have been generated with port 8080 (artisan serve) but the Dockerfile
+    // actually uses php-fpm+nginx on port 80. Patch the startup script to use the correct mapping.
+    {
+      const indexPath = join(pulumiDir, "index.ts");
+      let program = await readFs(indexPath, "utf-8");
+      const detectedPort = ctx.detectedStack.port || 80;
+      // The template uses: -p 127.0.0.1:HOST_PORT:CONTAINER_PORT
+      // If the container port in the script doesn't match the detected port, fix it.
+      // Use global regex to fix ALL occurrences (ECR path + AR path in user-data).
+      const portMappingRegex = /-p 127\.0\.0\.1:(\d+):(\d+)/g;
+      const firstMatch = program.match(/-p 127\.0\.0\.1:(\d+):(\d+)/);
+      if (firstMatch) {
+        const templateContainerPort = parseInt(firstMatch[2], 10);
+        const templateHostPort = firstMatch[1];
+        if (templateContainerPort !== detectedPort) {
+          const newHostPort = detectedPort === 80 || detectedPort === 443 ? 8080 : detectedPort;
+          // Replace all port mappings in docker run commands
+          program = program.replace(portMappingRegex, `-p 127.0.0.1:${newHostPort}:${detectedPort}`);
+          // Also fix the nginx proxy_pass port (all occurrences)
+          program = program.replace(
+            new RegExp(`proxy_pass http://127\\.0\\.0\\.1:${templateHostPort}`, "g"),
+            `proxy_pass http://127.0.0.1:${newHostPort}`,
+          );
+          await writeFs(indexPath, program, "utf-8");
+        }
+      }
+    }
+
+    // Restore state from previous successful deployment only
     const prevDeploy = await db.queryRow<{ tofu_script: string }>`
       SELECT tofu_script FROM deployments WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
         AND deploy_strategy = ${event.deployStrategy}
         AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
-        AND status IN ('success', 'failed')
-        ORDER BY (CASE WHEN status = 'success' THEN 0 ELSE 1 END), created_at DESC LIMIT 1`;
+        AND status = 'success'
+        ORDER BY created_at DESC LIMIT 1`;
     if (prevDeploy?.tofu_script) {
-      const { restored } = await restorePulumiState({
-        prevTofuScript: prevDeploy.tofu_script,
-        stackName,
-        pulumiDir,
-        providerEnv,
-        runCmd,
-      });
-      if (restored) {
-        await appendLog("ℹ Restored state from previous deployment");
+      // Skip state restoration if it references a different region (stale state from region change)
+      const stateSection = prevDeploy.tofu_script.slice(prevDeploy.tofu_script.indexOf("/* STATE */"));
+      const stateReferencesWrongRegion = stateSection.includes("zones/") &&
+        !stateSection.includes(`zones/${region}-`);
+
+      if (stateReferencesWrongRegion) {
+        await appendLog("⚠ Previous state references a different region — deploying fresh");
       } else {
-        await appendLog("⚠ State import failed, deploying fresh");
+        const { restored } = await restorePulumiState({
+          prevTofuScript: prevDeploy.tofu_script,
+          stackName,
+          pulumiDir,
+          providerEnv,
+          runCmd,
+        });
+        if (restored) {
+          await appendLog("ℹ Restored state from previous deployment");
+        } else {
+          await appendLog("⚠ State import failed, deploying fresh");
+        }
       }
     }
 
@@ -466,7 +504,13 @@ export class GcpComputeAdapter implements DeployAdapter {
     const serverIp = provision.serverIp || "";
 
     // Transfer Docker image to server (VPS providers with a server IP)
-    if (serverIp && !event.registryUrl) {
+    // Skip SCP transfer if the image is already in a remote registry (Artifact Registry / ECR)
+    // — the startup script will pull it directly, which is much faster than SCP.
+    const imageInRegistry = !!(ctx.state.arImageUri || (ctx.state.actualImage && (
+      ctx.state.actualImage.includes("docker.pkg.dev") ||
+      ctx.state.actualImage.includes(".dkr.ecr.")
+    )));
+    if (serverIp && !event.registryUrl && !imageInRegistry) {
       // The container port is the port the app actually listens on inside the container.
       // For php-fpm+nginx Dockerfiles this is 80, for artisan serve it's 8080, etc.
       // The host nginx proxies to this port on 127.0.0.1.
@@ -721,6 +765,120 @@ export class GcpComputeAdapter implements DeployAdapter {
             }
           }
         }
+      }
+    }
+
+    // When image is in a remote registry, the startup script pulls and starts it.
+    // Wait for the container to come up, then run post-deploy commands.
+    if (serverIp && imageInRegistry) {
+      const containerPort = ctx.detectedStack.port || 80;
+      const containerName = repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+      await appendLog("── Waiting for Startup Script ─────");
+      await appendLog("ℹ Image is in registry — startup script will pull and start container");
+
+      const sshOpts = [
+        "-i", deployKeyPath,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "ConnectTimeout=30",
+      ];
+
+      // Wait for SSH
+      await appendLog("ℹ Waiting for server SSH to be ready...");
+      let sshReady = false;
+      for (let i = 0; i < 12; i++) {
+        if (i === 0) await new Promise((r) => setTimeout(r, 30_000));
+        else await new Promise((r) => setTimeout(r, 10_000));
+        const probe = await runCmd(
+          "ssh",
+          [...sshOpts, `root@${serverIp}`, "echo SSH_OK"],
+          { cwd: workDir },
+        );
+        if (probe.output.includes("SSH_OK")) { sshReady = true; break; }
+      }
+
+      if (sshReady) {
+        // Wait for the container to be running (startup script installs Docker, pulls, starts)
+        await appendLog("ℹ Waiting for container to start...");
+        let containerRunning = false;
+        for (let i = 0; i < 40; i++) {
+          const check = await runCmd(
+            "ssh",
+            [
+              ...sshOpts,
+              `root@${serverIp}`,
+              `docker ps --filter name=${containerName} --filter status=running -q 2>/dev/null`,
+            ],
+            { cwd: workDir },
+          );
+          if (check.output.trim()) {
+            containerRunning = true;
+            await appendLog("✓ Container running (pulled from registry by startup script)");
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 15_000));
+        }
+
+        if (!containerRunning) {
+          await appendLog("⚠ Container not detected after waiting — check server logs");
+        }
+
+        // Ensure the container is running with the correct port mapping.
+        // The startup script may have used a stale port from the template generation.
+        // Restart the container with the detected port and fix the nginx proxy config.
+        if (containerRunning) {
+          const hostPort = containerPort === 80 || containerPort === 443 ? 8080 : containerPort;
+          await runCmd(
+            "ssh",
+            [
+              ...sshOpts,
+              `root@${serverIp}`,
+              // Check current port mapping — if wrong, restart with correct mapping
+              `CURRENT_PORT=$(docker port ${containerName} 2>/dev/null | head -1 | sed 's/.*://' ) && ` +
+              `if [ "$CURRENT_PORT" != "${hostPort}" ] || ! docker port ${containerName} | grep -q ":${containerPort}->"; then ` +
+              `  echo "Fixing port mapping: host ${hostPort} -> container ${containerPort}" && ` +
+              `  IMG=$(docker inspect --format='{{.Config.Image}}' ${containerName}) && ` +
+              `  ENV_ARGS=$(docker inspect --format='{{range .Config.Env}}-e {{.}} {{end}}' ${containerName}) && ` +
+              `  docker stop ${containerName} && docker rm ${containerName} && ` +
+              `  docker run -d --name ${containerName} --restart=always -p 127.0.0.1:${hostPort}:${containerPort} --add-host=host.docker.internal:host-gateway $ENV_ARGS $IMG; ` +
+              `fi && ` +
+              // Ensure nginx proxy points to the correct host port
+              `NGINX_CONF=$(ls /etc/nginx/sites-available/* 2>/dev/null | grep -v default | head -1) && ` +
+              `if [ -n "$NGINX_CONF" ]; then ` +
+              `  sed -i "s|proxy_pass http://127.0.0.1:[0-9]*|proxy_pass http://127.0.0.1:${hostPort}|g" "$NGINX_CONF" && ` +
+              `  ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/ && rm -f /etc/nginx/sites-enabled/default && ` +
+              `  nginx -t && systemctl reload nginx; ` +
+              `fi`,
+            ],
+            { cwd: workDir },
+          );
+          await appendLog(`✓ Port mapping verified: host ${hostPort} → container ${containerPort}`);
+        }
+
+        // Run Laravel post-deploy commands
+        if (containerRunning) {
+          const isLaravel = event.techStack?.some(s => s.toLowerCase() === "laravel");
+          if (isLaravel) {
+            await appendLog("ℹ Running Laravel post-deploy commands...");
+            await runCmd(
+              "ssh",
+              [
+                ...sshOpts,
+                `root@${serverIp}`,
+                `sleep 3 && ` +
+                `docker exec ${containerName} php artisan config:clear 2>/dev/null; ` +
+                `docker exec ${containerName} php artisan migrate --force 2>/dev/null; ` +
+                `docker exec ${containerName} php artisan config:cache 2>/dev/null; ` +
+                `echo LARAVEL_SETUP_DONE`,
+              ],
+              { cwd: workDir },
+            );
+            await appendLog("✓ Laravel post-deploy commands completed");
+          }
+        }
+      } else {
+        await appendLog("⚠ SSH not available — startup script will handle container setup autonomously");
       }
     }
 

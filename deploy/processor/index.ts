@@ -8,8 +8,17 @@ import { cloneRepository, analyzeAndGenerateDockerfile, buildDockerImage, dispat
 import { buildViaCodeBuild } from "./codebuild-builder";
 
 const _ = new Subscription(deployTopic, "deploy-processor", {
+  ackDeadline: "30m",
   handler: async (event: DeployEvent) => {
     const { deploymentId } = event;
+
+    // Idempotency guard: skip if this deployment is already being processed
+    const current = await db.queryRow<{ status: string }>`
+      SELECT status FROM deployments WHERE id = ${deploymentId}`;
+    if (current?.status === "building" || current?.status === "deploying") {
+      return;
+    }
+
     const repoName = event.repo.split("/").pop() || "app";
     const shortId = deploymentId.slice(0, 8);
 

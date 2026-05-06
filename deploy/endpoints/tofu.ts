@@ -96,7 +96,7 @@ function getDefaultRegion(provider: string): string {
 function detectRuntime(lang: string, techStack: string[]): { name: string; version: string; buildCmd: string; startCmd: string; port: number } {
   const lower = lang.toLowerCase();
   const stack = techStack.map(s => s.toLowerCase());
-  if (stack.includes("laravel") || lower === "php") return { name: "php", version: "8.3", buildCmd: "composer install --no-dev --optimize-autoloader && php artisan config:cache && php artisan route:cache", startCmd: "php artisan serve --host=0.0.0.0 --port=8080", port: 8080 };
+  if (stack.includes("laravel") || lower === "php") return { name: "php", version: "8.3", buildCmd: "composer install --no-dev --optimize-autoloader && php artisan config:cache && php artisan route:cache", startCmd: "/usr/bin/supervisord -c /etc/supervisor/conf.d/app.conf", port: 80 };
   if (stack.includes("next.js") || stack.includes("nuxt")) return { name: "node", version: "20", buildCmd: "npm ci && npm run build", startCmd: "npm start", port: 3000 };
   if (lower === "typescript" || lower === "javascript" || stack.includes("node.js")) return { name: "node", version: "20", buildCmd: "npm ci && npm run build", startCmd: "npm start", port: 3000 };
   if (lower === "python" || stack.includes("django") || stack.includes("flask") || stack.includes("fastapi")) return { name: "python", version: "3.12", buildCmd: "pip install -r requirements.txt", startCmd: "gunicorn app:app --bind 0.0.0.0:8000", port: 8000 };
