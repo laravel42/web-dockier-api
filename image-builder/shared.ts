@@ -1,14 +1,12 @@
 // ─── Shared utilities, types, secrets, and helpers for image-builder ───
 
-import { api, APIError } from "encore.dev/api";
 import { db, initDb } from "../lib/db";
 import { secret } from "encore.dev/config";
-import { v4 as uuidv4 } from "uuid";
-import { getAuthData } from "~encore/auth";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { git_integration } from "~encore/clients";
+import { resolveAwsCredentials as _resolveAwsCredentials } from "../lib/provider-credentials";
+import { getAwsAccountId } from "../lib/aws";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -163,39 +161,24 @@ export interface WebhookPayload {
 
 /** Resolve AWS credentials: look up from deploy service by providerId, fall back to env vars */
 export async function resolveAwsCredentials(providerId: string): Promise<{ accessKeyId: string; secretAccessKey: string; region: string }> {
-  if (providerId) {
-    try {
+  return _resolveAwsCredentials({
+    providerId,
+    fallback: {
+      accessKeyId: getAwsAccessKeyId(),
+      secretAccessKey: getAwsSecretAccessKey(),
+      region: getAwsRegion(),
+    },
+    fetchCredentials: async (id: string) => {
       const { deploy } = await import("~encore/clients");
-      const creds = await deploy.getProviderCredentials({ providerId });
-      if (creds.apiKey && creds.apiSecret) {
-        return {
-          accessKeyId: creds.apiKey,
-          secretAccessKey: creds.apiSecret,
-          region: creds.region || getAwsRegion(),
-        };
-      }
-    } catch (e: any) {
-      console.warn(`Failed to fetch provider credentials for ${providerId}: ${e.message}`);
-    }
-  }
-  // Fall back to env vars
-  return {
-    accessKeyId: getAwsAccessKeyId(),
-    secretAccessKey: getAwsSecretAccessKey(),
-    region: getAwsRegion(),
-  };
+      const creds = await deploy.getProviderCredentials({ providerId: id });
+      return { apiKey: creds.apiKey, apiSecret: creds.apiSecret, region: creds.region };
+    },
+  });
 }
 
 export function deriveImageRepo(sourceRepo: string): string {
   const parts = sourceRepo.split("/");
   return parts[parts.length - 1].toLowerCase().replace(/[^a-z0-9-]/g, "-");
-}
-
-export async function getAwsAccountId(accessKeyId: string, secretAccessKey: string, region: string): Promise<string> {
-  const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-  const sts = new STSClient({ region, credentials: { accessKeyId, secretAccessKey } });
-  const identity = await sts.send(new GetCallerIdentityCommand({}));
-  return identity.Account || "";
 }
 
 export function rowToBuild(row: any): BuildRecord {
@@ -243,7 +226,7 @@ export async function refreshBuildStatus(build: BuildRecord): Promise<BuildRecor
       imageUri = imageVar.value;
     } else {
       try {
-        const accountId = await getAwsAccountId(accessKeyId, secretAccessKey, region);
+        const accountId = await getAwsAccountId(region, { accessKeyId, secretAccessKey });
         imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${build.imageRepo}:latest`;
       } catch { /* best effort */ }
     }
@@ -268,10 +251,3 @@ export function buildToStatusResponse(build: BuildRecord): BuildStatusResponse {
     startedAt: build.startedAt, finishedAt: build.finishedAt, createdAt: build.createdAt,
   };
 }
-
-// Re-export commonly needed imports for endpoint files
-export { api, APIError } from "encore.dev/api";
-export { v4 as uuidv4 } from "uuid";
-export { getAuthData } from "~encore/auth";
-export { readFileSync } from "node:fs";
-export { git_integration } from "~encore/clients";

@@ -163,10 +163,15 @@ export class AwsEcsAdapter implements DeployAdapter {
     ];
 
     if (envVars.length > 0) {
-      params.push({
-        ParameterKey: "EnvVarsJson",
-        ParameterValue: JSON.stringify(envVars),
-      });
+      const envVarsJson = JSON.stringify(envVars);
+      if (envVarsJson.length <= 4000) {
+        params.push({
+          ParameterKey: "EnvVarsJson",
+          ParameterValue: envVarsJson,
+        });
+      }
+      // When > 4000 chars, env vars are already injected into the template YAML above,
+      // so we skip the parameter to avoid CloudFormation's 4096 char limit.
     }
 
     // 5. Create or update CloudFormation stack
