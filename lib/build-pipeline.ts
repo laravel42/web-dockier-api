@@ -98,6 +98,9 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
       { cwd: workDir, timeout: 120_000, stdio: "pipe" },
     );
   } catch (err) {
+    // Clean up the temp directory since the caller won't have access to it
+    const { rm } = await import("node:fs/promises");
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
     throw new BuildError(`Failed to clone ${git.repo}@${branch}`, "clone", err);
   }
 
@@ -124,7 +127,7 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
  */
 export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeResult> {
   const { repoDir, logger, skipExistingDockerfile } = opts;
-  const { existsSync, readFileSync } = await import("node:fs");
+  const { existsSync } = await import("node:fs");
   const { readFile, writeFile, copyFile } = await import("node:fs/promises");
 
   await logger.section("Analyze Repository");
@@ -168,7 +171,7 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
   if (hasExistingDockerfile && skipExistingDockerfile) {
     // Use existing Dockerfile — just detect port from it
     try {
-      const df = readFileSync(join(repoDir, "Dockerfile"), "utf-8");
+      const df = await readFile(join(repoDir, "Dockerfile"), "utf-8");
       const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
       if (exposeMatch) detectedPort = parseInt(exposeMatch[1], 10);
     } catch { /* use default port */ }
@@ -181,12 +184,12 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
       dockerfileGenerated = true;
       const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
       if (exposeMatch) detectedPort = parseInt(exposeMatch[1], 10);
-    }
 
-    const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";
-    await logger.success(
-      `Generated Dockerfile (${repoConfig.runtime}/${repoConfig.framework || "generic"}, pm: ${pm}, subDir: ${repoConfig.subDir || "/"})`,
-    );
+      const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";
+      await logger.success(
+        `Generated Dockerfile (${repoConfig.runtime}/${repoConfig.framework || "generic"}, pm: ${pm}, subDir: ${repoConfig.subDir || "/"})`,
+      );
+    }
   }
 
   // Generate .dockerignore if not present

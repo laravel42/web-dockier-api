@@ -41,8 +41,8 @@ export function runCmd(
       proc.stdin!.end();
     }
     let output = "";
-    proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
-    proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+    proc.stdout!.on("data", (d: Buffer) => { output += d.toString(); });
+    proc.stderr!.on("data", (d: Buffer) => { output += d.toString(); });
     proc.on("close", (code) => resolve({ code: code ?? 1, output }));
     proc.on("error", (err) => resolve({ code: 1, output: err.message }));
   });
@@ -87,11 +87,11 @@ export function createStreamingRunCmd(
           await logFn(deploymentId, `[${tsFn()}] ${line}`);
         }
       };
-      proc.stdout.on("data", onData);
-      proc.stderr.on("data", onData);
-      proc.on("close", (code) => {
+      proc.stdout!.on("data", onData);
+      proc.stderr!.on("data", onData);
+      proc.on("close", async (code) => {
         if (suppressedCount > 20) {
-          logFn(deploymentId, `[${tsFn()}] ... (${suppressedCount} verbose lines suppressed)`);
+          await logFn(deploymentId, `[${tsFn()}] ... (${suppressedCount} verbose lines suppressed)`);
         }
         resolve({ code: code ?? 1, output });
       });
