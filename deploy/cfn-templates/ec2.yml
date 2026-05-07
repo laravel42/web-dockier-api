@@ -42,6 +42,10 @@ Parameters:
   EnvVarsJson:
     Type: String
     Default: '[]'
+  EnvVarsS3Uri:
+    Type: String
+    Default: ''
+    Description: S3 URI containing env vars JSON (used when payload exceeds 4096 chars)
   SelfHostedServices:
     Type: String
     Default: ''
@@ -111,6 +115,14 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchCheckLayerAvailability
                 Resource: "*"
+        - PolicyName: S3EnvVarsRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: "*"
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -156,6 +168,17 @@ Resources:
             01_ecr_login:
               command: !Sub |
                 aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin $(echo "${ImageUri}" | cut -d/ -f1)
+            01b_resolve_env_vars:
+              command: !Sub |
+                set -eu
+                # Resolve env vars: download from S3 if EnvVarsS3Uri is set, otherwise use inline
+                ENV_S3_URI="${EnvVarsS3Uri}"
+                if [ -n "$ENV_S3_URI" ]; then
+                  echo "Downloading env vars from S3..."
+                  aws s3 cp "$ENV_S3_URI" /tmp/env-vars.json --region ${AWS::Region}
+                else
+                  echo '${EnvVarsJson}' > /tmp/env-vars.json
+                fi
             02_self_hosted_services:
               command: !Sub |
                 set -eu
@@ -168,7 +191,7 @@ Resources:
                 if echo "$SERVICES" | grep -q "database"; then
                   # Detect DB engine from user env vars, default to mysql
                   DB_ENGINE="mysql"
-                  USER_DB_CONN=$(echo '${EnvVarsJson}' | python3 -c "
+                  USER_DB_CONN=$(cat /tmp/env-vars.json | python3 -c "
                 import sys, json
                 try:
                   evs = json.load(sys.stdin)
@@ -182,34 +205,39 @@ Resources:
                     DB_ENGINE="pgsql"
                   fi
 
-                  # Parse user DB credentials from EnvVarsJson, fall back to defaults
-                  USER_DB_NAME=$(echo '${EnvVarsJson}' | python3 -c "
-                import sys, json
+                  # Parse user DB credentials from env vars, fall back to defaults
+                  USER_DB_NAME=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json, re
                 try:
                   evs = json.load(sys.stdin)
                   for e in evs:
                     if e.get('name') == 'DB_DATABASE':
-                      print(e.get('value', ''))
+                      val = e.get('value', '').split('#')[0].strip()
+                      val = re.sub(r'[^a-zA-Z0-9_-]', '', val)
+                      print(val)
                       break
                 except: pass
                 " 2>/dev/null)
-                  USER_DB_USER=$(echo '${EnvVarsJson}' | python3 -c "
-                import sys, json
+                  USER_DB_USER=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json, re
                 try:
                   evs = json.load(sys.stdin)
                   for e in evs:
                     if e.get('name') == 'DB_USERNAME':
-                      print(e.get('value', ''))
+                      val = e.get('value', '').split('#')[0].strip()
+                      val = re.sub(r'[^a-zA-Z0-9_-]', '', val)
+                      print(val)
                       break
                 except: pass
                 " 2>/dev/null)
-                  USER_DB_PASS=$(echo '${EnvVarsJson}' | python3 -c "
+                  USER_DB_PASS=$(cat /tmp/env-vars.json | python3 -c "
                 import sys, json
                 try:
                   evs = json.load(sys.stdin)
                   for e in evs:
                     if e.get('name') == 'DB_PASSWORD':
-                      print(e.get('value', ''))
+                      val = e.get('value', '').split('#')[0].strip()
+                      print(val)
                       break
                 except: pass
                 " 2>/dev/null)
@@ -236,9 +264,9 @@ Resources:
                     systemctl enable mysql
                     systemctl start mysql
                     for i in $(seq 1 30); do mysqladmin ping -h localhost --silent && break; sleep 2; done
-                    mysql -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;" || true
+                    mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;" || true
                     mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASS';" || true
-                    mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'%';" || true
+                    mysql -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'%';" || true
                     mysql -e "FLUSH PRIVILEGES;" || true
                     sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf || true
                     systemctl restart mysql
@@ -292,7 +320,7 @@ Resources:
 
                 # Laravel defaults (only if user didn't provide them)
                 if [ "$IS_LARAVEL" = true ]; then
-                  HAS_APP_KEY=$(echo '${EnvVarsJson}' | python3 -c "
+                  HAS_APP_KEY=$(cat /tmp/env-vars.json | python3 -c "
                 import sys, json
                 try:
                   evs = json.load(sys.stdin)
@@ -309,7 +337,7 @@ Resources:
                 SVC_OVERRIDES=""
                 if echo "$SERVICES" | grep -q "database"; then
                   DB_ENGINE="mysql"
-                  USER_DB_CONN=$(echo '${EnvVarsJson}' | python3 -c "
+                  USER_DB_CONN=$(cat /tmp/env-vars.json | python3 -c "
                 import sys, json
                 try:
                   evs = json.load(sys.stdin)
@@ -346,11 +374,17 @@ Resources:
                 fi
 
                 # Append user env vars (these override the defaults above)
-                echo '${EnvVarsJson}' | python3 -c "
-                import sys, json
+                # Strip inline comments (# ...) from values that look like .env comments
+                cat /tmp/env-vars.json | python3 -c "
+                import sys, json, re
                 try:
                   for e in json.load(sys.stdin):
-                    print(e['name'] + '=' + e['value'])
+                    val = e['value']
+                    # Strip inline comments: value followed by space(s) + # + text
+                    # But preserve # that are part of the value (e.g., passwords, base64)
+                    # Only strip if there's a space before the #
+                    val = re.sub(r'\s+#\s+.*$', '', val)
+                    print(e['name'] + '=' + val)
                 except: pass
                 " >> /tmp/${AppName}.env 2>/dev/null
 

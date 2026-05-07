@@ -159,13 +159,32 @@ export class AwsEc2Adapter implements DeployAdapter {
       { ParameterKey: "BuildId", ParameterValue: deploymentId },
     ];
 
-    // Pass env vars as EnvVarsJson
+    // Pass env vars — use S3 if the JSON exceeds CloudFormation's 4096 char limit
     const envVars = ctx.state.pendingEnvVars || [];
     if (envVars.length > 0) {
-      params.push({
-        ParameterKey: "EnvVarsJson",
-        ParameterValue: JSON.stringify(envVars),
-      });
+      const envVarsJson = JSON.stringify(envVars);
+      if (envVarsJson.length > 4000) {
+        // Upload env vars to S3 and pass the URI as a parameter
+        const envVarsKey = `env-vars/${stackName}/${deploymentId}.json`;
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: templateBucket,
+            Key: envVarsKey,
+            Body: envVarsJson,
+            ContentType: "application/json",
+          }),
+        );
+        params.push({
+          ParameterKey: "EnvVarsS3Uri",
+          ParameterValue: `s3://${templateBucket}/${envVarsKey}`,
+        });
+        await appendLog("✓ Env vars uploaded to S3 (too large for inline parameter)");
+      } else {
+        params.push({
+          ParameterKey: "EnvVarsJson",
+          ParameterValue: envVarsJson,
+        });
+      }
     }
 
     // Pass SelfHostedServices
