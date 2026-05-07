@@ -1,24 +1,17 @@
 import type {
-  DeployAdapter,
   AdapterContext,
-  PushImageResult,
   ProvisionResult,
-  DestroyContext,
-  DestroyResult,
 } from "./types";
+import { AwsCloudFormationAdapter } from "./aws-cfn-base";
 import {
-  pushToEcr,
-  getAwsAccountId,
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
   stackNameFor,
-  deleteEcrRepo,
-  destroyCfnStack,
-  type AwsCredentials,
 } from "../aws-helpers";
+import { getAwsAccountId } from "../../../lib/aws";
 
 /**
  * AWS EC2 adapter.
@@ -30,53 +23,15 @@ import {
  * The ec2.yml template handles self-hosted services, env vars,
  * and post-deploy commands internally via cfn-init steps.
  */
-export class AwsEc2Adapter implements DeployAdapter {
+export class AwsEc2Adapter extends AwsCloudFormationAdapter {
   readonly id = "aws-ec2";
 
   supports(provider: string, deployStrategy: string): boolean {
     return provider === "aws" && deployStrategy === "vps";
   }
 
-  /**
-   * Push Docker image to AWS ECR.
-   */
-  async pushImage(ctx: AdapterContext, localImage: string): Promise<PushImageResult> {
-    const { repoName, shortId, region, providerCredentials, runCmd, appendLog } = ctx;
-
-    const accessKeyId = providerCredentials.apiKey;
-    const secretAccessKey = providerCredentials.apiSecret;
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error("AWS credentials not configured on provider.");
-    }
-
-    const result = await pushToEcr({
-      localImage,
-      repoName,
-      shortId,
-      region,
-      credentials: { accessKeyId, secretAccessKey },
-      runCmd,
-      appendLog,
-    });
-
-    // Store for provisionInfrastructure via typed state
-    ctx.state.awsAccountId = result.accountId;
-    ctx.state.awsCredentials = result.credentials;
-
-    return { remoteImageUri: result.remoteImageUri, skipped: false };
-  }
-
-  /**
-   * Store env vars for later use as the EnvVarsJson CloudFormation parameter.
-   *
-   * For EC2, env vars are passed as a JSON string parameter to the CloudFormation
-   * template, which uses them in cfn-init scripts to configure the container.
-   */
-  async injectEnvVars(
-    ctx: AdapterContext,
-    envVars: Array<{ name: string; value: string }>,
-  ): Promise<void> {
-    ctx.state.pendingEnvVars = envVars;
+  protected getDestroyLogHeader(): string {
+    return "AWS EC2 Resources";
   }
 
   /**
@@ -235,25 +190,5 @@ export class AwsEc2Adapter implements DeployAdapter {
    */
   async runPostDeploy(_ctx: AdapterContext, _provision: ProvisionResult): Promise<void> {
     // EC2 cfn-init handles all post-deploy steps — nothing to do here
-  }
-
-  async destroy(ctx: DestroyContext): Promise<DestroyResult> {
-    const errors: string[] = [];
-    const credentials: AwsCredentials = { accessKeyId: ctx.providerCredentials.apiKey, secretAccessKey: ctx.providerCredentials.apiSecret };
-    const stackName = stackNameFor(ctx.appName);
-
-    await ctx.appendLog("── Destroy AWS EC2 Resources ──────");
-
-    await destroyCfnStack(stackName, ctx.region, credentials, ctx.appendLog, errors);
-
-    // Delete ECR repos
-    await deleteEcrRepo(ctx.appName, ctx.region, credentials, errors);
-    await deleteEcrRepo(`${ctx.appName}-cache`, ctx.region, credentials, []);
-
-    return {
-      success: errors.length === 0,
-      message: errors.length > 0 ? `Partially destroyed: ${errors.join("; ")}` : `Destroyed stack ${stackName}, ECR repo ${ctx.appName}`,
-      errors,
-    };
   }
 }
