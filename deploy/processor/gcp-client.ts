@@ -44,6 +44,8 @@ export interface GcpClientConfig {
   maxRetries?: number;
   /** Base delay in ms for exponential backoff. Default: 2000 */
   baseDelayMs?: number;
+  /** Request timeout in ms. Default: 30000 (30 seconds) */
+  requestTimeoutMs?: number;
 }
 
 interface GcpRequestOptions {
@@ -52,6 +54,8 @@ interface GcpRequestOptions {
   body?: string | object;
   /** Skip retry logic for this request. */
   noRetry?: boolean;
+  /** Override the default request timeout (ms) for this specific request. */
+  timeoutMs?: number;
 }
 
 // ─── Client ─────────────────────────────────────────────────────────
@@ -59,6 +63,7 @@ interface GcpRequestOptions {
 export class GcpClient {
   private readonly maxRetries: number;
   private readonly baseDelayMs: number;
+  private readonly requestTimeoutMs: number;
   private readonly accessToken: string;
   private readonly projectId: string;
 
@@ -71,6 +76,7 @@ export class GcpClient {
     this.projectId = projectId;
     this.maxRetries = config.maxRetries ?? 3;
     this.baseDelayMs = config.baseDelayMs ?? 2000;
+    this.requestTimeoutMs = config.requestTimeoutMs ?? 30_000;
   }
 
   /** The GCP project ID this client is configured for. */
@@ -90,8 +96,9 @@ export class GcpClient {
    * Handles retries with exponential backoff for transient errors.
    */
   async request(url: string, opts: GcpRequestOptions = {}): Promise<Response> {
-    const { method = "GET", headers = {}, body, noRetry } = opts;
+    const { method = "GET", headers = {}, body, noRetry, timeoutMs } = opts;
     const maxAttempts = noRetry ? 1 : this.maxRetries;
+    const timeout = timeoutMs ?? this.requestTimeoutMs;
 
     const init: RequestInit = {
       method,
@@ -99,6 +106,7 @@ export class GcpClient {
         Authorization: `Bearer ${this.accessToken}`,
         ...headers,
       },
+      signal: AbortSignal.timeout(timeout),
     };
 
     if (body) {
@@ -171,9 +179,9 @@ export class GcpClient {
 
   // ─── Service Usage ────────────────────────────────────────────────
 
-  /** Enable one or more GCP APIs (idempotent). */
+  /** Enable one or more GCP APIs (idempotent). Runs in parallel for performance. */
   async enableApis(apis: string[]): Promise<void> {
-    for (const apiName of apis) {
+    await Promise.all(apis.map(async (apiName) => {
       try {
         await this.request(
           `https://serviceusage.googleapis.com/v1/projects/${this.projectId}/services/${apiName}:enable`,
@@ -182,7 +190,7 @@ export class GcpClient {
       } catch {
         // Best effort — API may already be enabled or permission denied
       }
-    }
+    }));
   }
 
   // ─── Artifact Registry ────────────────────────────────────────────
@@ -202,14 +210,14 @@ export class GcpClient {
       );
 
       if (res.ok) {
-        // Poll until accessible
+        // Poll until accessible (check immediately, then every 5s)
         for (let i = 0; i < 12; i++) {
-          await new Promise(r => setTimeout(r, 5_000));
           const checkRes = await this.request(
             `https://artifactregistry.googleapis.com/v1/projects/${this.projectId}/locations/${region}/repositories/${repoName}`,
             { noRetry: true },
           );
           if (checkRes.ok) break;
+          if (i < 11) await new Promise(r => setTimeout(r, 5_000));
         }
         return { created: true };
       } else if (res.status === 409) {
@@ -368,12 +376,31 @@ export async function getGcpAccessToken(
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
+        signal: AbortSignal.timeout(30_000),
       });
+
+      // Throw on transient errors so the retry loop catches them
+      if (tokenRes.status === 429 || tokenRes.status >= 500) {
+        throw new Error(`GCP token exchange failed (transient): ${tokenRes.status}`);
+      }
+
+      // Non-retryable errors (400, 401, 403) — credentials are invalid
+      if (!tokenRes.ok) {
+        const body = await tokenRes.text();
+        throw new Error(`GCP token exchange failed: ${tokenRes.status} ${body.slice(0, 200)}`);
+      }
+
       const tokenData = await tokenRes.json() as { access_token?: string };
       return tokenData.access_token || "";
     } catch (err: any) {
       if (attempt === maxRetries) throw err;
-      await new Promise(r => setTimeout(r, 2_000 * Math.pow(2, attempt - 1)));
+      // Only retry on transient/network errors
+      if (err.message?.includes("(transient)") || err.name === "TimeoutError" || !err.message?.includes("GCP token exchange failed")) {
+        await new Promise(r => setTimeout(r, 2_000 * Math.pow(2, attempt - 1)));
+        continue;
+      }
+      // Non-retryable auth errors — throw immediately
+      throw err;
     }
   }
   return "";

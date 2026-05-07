@@ -109,18 +109,18 @@ function shouldSuppressLine(line: string): boolean {
   const stripped = line.replace(/^#\d+\s+[\d.]+\s+/, "");
 
   // Docker layer progress (hash: Pushing/Pulling/Waiting/Preparing/Pushed)
-  if (/^[0-9a-f]{12}:\s*(Waiting|Preparing|Layer already exists|Pushing|Pulling fs layer|Pushed)\s*$/i.test(line)) return true;
+  if (/^[0-9a-f]{12}:\s*(Waiting|Preparing|Layer already exists|Pushing|Pulling fs layer|Pushed)\s*$/i.test(stripped)) return true;
   // Docker layer download/upload byte progress
-  if (/^#\d+\s+sha256:[0-9a-f]+\s+[\d.]+[kMG]?B\s*\/\s*[\d.]+[kMG]?B/.test(line)) return true;
+  if (/^sha256:[0-9a-f]+\s+[\d.]+[kMG]?B\s*\/\s*[\d.]+[kMG]?B/.test(stripped)) return true;
   // Docker extracting layers
-  if (/^#\d+\s+extracting\s+sha256:/.test(line)) return true;
+  if (/^extracting\s+sha256:/.test(stripped)) return true;
   // Dots-only progress
   if (/^\s*\.+\s*$/.test(line)) return true;
   // Pulumi update progress
   if (/^@ updating/.test(line)) return true;
   if (/^\s*Waiting\s*$/.test(line)) return true;
   // Docker layer "Pushed" lines (individual layers)
-  if (/^[0-9a-f]{12}: Pushed\s*$/.test(line)) return true;
+  if (/^[0-9a-f]{12}: Pushed\s*$/.test(stripped)) return true;
 
   // ─── C/C++ compilation noise ───────────────────────────────────────
   // C compiler invocations (gcc/cc with -I/-D/-o flags) — with or without Docker prefix
