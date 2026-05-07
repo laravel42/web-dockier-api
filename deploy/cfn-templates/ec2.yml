@@ -122,7 +122,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                Resource: "*"
+                Resource: !Sub "arn:aws:s3:::image-builder-templates-${AWS::AccountId}/*"
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -177,7 +177,9 @@ Resources:
                   echo "Downloading env vars from S3..."
                   aws s3 cp "$ENV_S3_URI" /tmp/env-vars.json --region ${AWS::Region}
                 else
-                  echo '${EnvVarsJson}' > /tmp/env-vars.json
+                  cat > /tmp/env-vars.json <<'ENVJSONEOF'
+                ${EnvVarsJson}
+                ENVJSONEOF
                 fi
             02_self_hosted_services:
               command: !Sub |
@@ -212,7 +214,7 @@ Resources:
                   evs = json.load(sys.stdin)
                   for e in evs:
                     if e.get('name') == 'DB_DATABASE':
-                      val = e.get('value', '').split('#')[0].strip()
+                      val = re.sub(r'\s+#.*$', '', e.get('value', '')).strip()
                       val = re.sub(r'[^a-zA-Z0-9_-]', '', val)
                       print(val)
                       break
@@ -224,7 +226,7 @@ Resources:
                   evs = json.load(sys.stdin)
                   for e in evs:
                     if e.get('name') == 'DB_USERNAME':
-                      val = e.get('value', '').split('#')[0].strip()
+                      val = re.sub(r'\s+#.*$', '', e.get('value', '')).strip()
                       val = re.sub(r'[^a-zA-Z0-9_-]', '', val)
                       print(val)
                       break
@@ -236,8 +238,7 @@ Resources:
                   evs = json.load(sys.stdin)
                   for e in evs:
                     if e.get('name') == 'DB_PASSWORD':
-                      val = e.get('value', '').split('#')[0].strip()
-                      print(val)
+                      print(e.get('value', ''))
                       break
                 except: pass
                 " 2>/dev/null)
@@ -380,10 +381,8 @@ Resources:
                 try:
                   for e in json.load(sys.stdin):
                     val = e['value']
-                    # Strip inline comments: value followed by space(s) + # + text
-                    # But preserve # that are part of the value (e.g., passwords, base64)
-                    # Only strip if there's a space before the #
-                    val = re.sub(r'\s+#\s+.*$', '', val)
+                    # Strip inline comments: space(s) before # indicates a comment
+                    val = re.sub(r'\s+#.*$', '', val)
                     print(e['name'] + '=' + val)
                 except: pass
                 " >> /tmp/${AppName}.env 2>/dev/null
