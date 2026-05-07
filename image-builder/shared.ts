@@ -71,6 +71,17 @@ export interface StartBuildParams {
   deployTarget?: "ecs" | "ec2" | "s3";
   /** Provider ID to look up AWS credentials from the deploy service */
   providerId?: string;
+  /**
+   * Explicit AWS credentials passed by the calling service.
+   * When provided, these take precedence over providerId lookup.
+   * This is the preferred approach — the caller (deploy service) resolves
+   * credentials and passes them directly, keeping image-builder decoupled.
+   */
+  credentials?: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    region: string;
+  };
   deployParams?: {
     appName?: string;
     containerPort?: number;
@@ -159,8 +170,27 @@ export interface WebhookPayload {
 
 // ─── Helpers ───
 
-/** Resolve AWS credentials: look up from deploy service by providerId, fall back to env vars */
-export async function resolveAwsCredentials(providerId: string): Promise<{ accessKeyId: string; secretAccessKey: string; region: string }> {
+/** Resolve AWS credentials: prefer explicit credentials, then providerId lookup, then env vars.
+ *
+ * Resolution order:
+ * 1. Explicit credentials passed as params (preferred — no service-to-service call)
+ * 2. ProviderId lookup via deploy service (legacy — kept for backward compatibility)
+ * 3. Fall back to environment variables
+ */
+export async function resolveAwsCredentials(
+  providerId: string,
+  explicitCredentials?: { accessKeyId: string; secretAccessKey: string; region: string },
+): Promise<{ accessKeyId: string; secretAccessKey: string; region: string }> {
+  // 1. Prefer explicit credentials (no service-to-service call needed)
+  if (explicitCredentials?.accessKeyId && explicitCredentials?.secretAccessKey) {
+    return {
+      accessKeyId: explicitCredentials.accessKeyId,
+      secretAccessKey: explicitCredentials.secretAccessKey,
+      region: explicitCredentials.region || getAwsRegion(),
+    };
+  }
+
+  // 2. Legacy: resolve via deploy service if providerId is given
   return _resolveAwsCredentials({
     providerId,
     fallback: {
@@ -169,6 +199,9 @@ export async function resolveAwsCredentials(providerId: string): Promise<{ acces
       region: getAwsRegion(),
     },
     fetchCredentials: async (id: string) => {
+      // NOTE: This path is deprecated. Callers should pass credentials explicitly.
+      // Kept for backward compatibility during migration.
+      console.warn(`[image-builder] Fetching credentials from deploy service for providerId=${id}. Prefer passing credentials explicitly.`);
       const { deploy } = await import("~encore/clients");
       const creds = await deploy.getProviderCredentials({ providerId: id });
       return { apiKey: creds.apiKey, apiSecret: creds.apiSecret, region: creds.region };

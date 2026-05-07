@@ -28,8 +28,11 @@ export const startBuild = api(
     const imageRepo = params.imageRepo || deriveImageRepo(params.sourceRepo);
     const tags = params.tags || [];
 
-    // Prefer user-provided provider credentials over global env vars
-    const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(params.providerId || "");
+    // Prefer explicit credentials > provider lookup > global env vars
+    const { accessKeyId, secretAccessKey, region } = await resolveAwsCredentials(
+      params.providerId || "",
+      params.credentials,
+    );
     const codebuildProject = getCodeBuildProject();
 
     if (!accessKeyId || !secretAccessKey) {
