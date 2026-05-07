@@ -3,10 +3,8 @@ import { db, extractRegionFromScript } from "../../shared";
 import {
   getGcpAccessToken,
   getGcpProjectId,
-  enableGcpApis,
-  ensureArtifactRegistryRepo,
-  pushToArtifactRegistry,
   deleteOrphanedComputeResources,
+  pushToGcpArtifactRegistry,
 } from "../gcp-helpers";
 import {
   setupPulumiWorkspace,
@@ -40,68 +38,14 @@ export class GcpComputeAdapter implements DeployAdapter {
   /**
    * Push Docker image to GCP Artifact Registry.
    *
-   * Steps:
-   * 1. Get GCP access token and project ID from service account key
-   * 2. Enable artifactregistry.googleapis.com and compute.googleapis.com APIs
-   * 3. Create Artifact Registry repository (idempotent)
-   * 4. Tag and push Docker image to Artifact Registry
+   * Uses the shared pushToGcpArtifactRegistry helper with Compute Engine-specific
+   * API enablement (compute.googleapis.com) and wait time (5s for API propagation).
    */
   async pushImage(ctx: AdapterContext, localImage: string): Promise<PushImageResult> {
-    const { shortId, region, workDir, providerCredentials, event, runCmd, appendLog } = ctx;
-    const repoName = ctx.repoName;
-
-    const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
-    if (!gcpProjectId) {
-      throw new Error("Could not determine GCP project ID from service account key");
-    }
-
-    await appendLog("── Push Image to Artifact Registry ─");
-
-    const arRegion = extractRegionFromScript(event.tofuScript) || region;
-    const accessToken = await getGcpAccessToken(providerCredentials.apiKey);
-    if (!accessToken) {
-      throw new Error("Failed to get GCP access token from service account key");
-    }
-
-    // Enable APIs — Compute Engine + Artifact Registry
-    await appendLog("ℹ Enabling Artifact Registry API...");
-    await enableGcpApis(gcpProjectId, accessToken, [
-      "artifactregistry.googleapis.com",
-      "compute.googleapis.com",
-    ]);
-    await new Promise((r) => setTimeout(r, 5_000));
-    await appendLog("✓ APIs enabled");
-
-    const arHost = `${arRegion}-docker.pkg.dev`;
-    const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
-    const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
-
-    // Create Artifact Registry repository
-    const repoResult = await ensureArtifactRegistryRepo(gcpProjectId, arRegion, arRepo, accessToken);
-    if (repoResult.created) {
-      await appendLog("✓ Artifact Registry repository created");
-    } else if (repoResult.error) {
-      await appendLog(`⚠ Create repo: ${repoResult.error}`);
-    } else {
-      await appendLog("✓ Artifact Registry repository already exists");
-    }
-
-    // Push image
-    await pushToArtifactRegistry({
-      localImage,
-      arImageUri,
-      arHost,
-      accessToken,
-      workDir,
-      runCmd,
+    return pushToGcpArtifactRegistry(ctx, localImage, {
+      apisToEnable: ["compute.googleapis.com"],
+      apiWaitMs: 5_000,
     });
-    await appendLog(`✓ Image pushed: ${arImageUri}`);
-
-    // Store the access token for use in injectEnvVars (AR_TOKEN placeholder)
-    ctx.state.gcpAccessToken = accessToken;
-    ctx.state.arImageUri = arImageUri;
-
-    return { remoteImageUri: arImageUri, skipped: false };
   }
 
   /**

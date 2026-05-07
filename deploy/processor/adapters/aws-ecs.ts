@@ -1,24 +1,17 @@
 import type {
-  DeployAdapter,
   AdapterContext,
-  PushImageResult,
   ProvisionResult,
-  DestroyContext,
-  DestroyResult,
 } from "./types";
+import { AwsCloudFormationAdapter } from "./aws-cfn-base";
 import {
-  pushToEcr,
-  getAwsAccountId,
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
   stackNameFor,
-  deleteEcrRepo,
-  destroyCfnStack,
-  type AwsCredentials,
 } from "../aws-helpers";
+import { getAwsAccountId } from "../../../lib/aws";
 
 /**
  * AWS ECS Fargate adapter.
@@ -27,53 +20,15 @@ import {
  * Builds Docker images locally, pushes to ECR, and provisions
  * infrastructure using the ecs-fargate.yml CloudFormation template.
  */
-export class AwsEcsAdapter implements DeployAdapter {
+export class AwsEcsAdapter extends AwsCloudFormationAdapter {
   readonly id = "aws-ecs";
 
   supports(provider: string, deployStrategy: string): boolean {
     return provider === "aws" && deployStrategy === "managed";
   }
 
-  /**
-   * Push Docker image to AWS ECR.
-   */
-  async pushImage(ctx: AdapterContext, localImage: string): Promise<PushImageResult> {
-    const { repoName, shortId, region, providerCredentials, runCmd, appendLog } = ctx;
-
-    const accessKeyId = providerCredentials.apiKey;
-    const secretAccessKey = providerCredentials.apiSecret;
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error("AWS credentials not configured on provider.");
-    }
-
-    const result = await pushToEcr({
-      localImage,
-      repoName,
-      shortId,
-      region,
-      credentials: { accessKeyId, secretAccessKey },
-      runCmd,
-      appendLog,
-    });
-
-    // Store for provisionInfrastructure via typed state
-    ctx.state.awsAccountId = result.accountId;
-    ctx.state.awsCredentials = result.credentials;
-
-    return { remoteImageUri: result.remoteImageUri, skipped: false };
-  }
-
-  /**
-   * Store env vars for later injection into the CloudFormation template.
-   *
-   * For ECS, env vars are injected into the task definition's container
-   * Environment section by modifying the CloudFormation template before upload.
-   */
-  async injectEnvVars(
-    ctx: AdapterContext,
-    envVars: Array<{ name: string; value: string }>,
-  ): Promise<void> {
-    ctx.state.pendingEnvVars = envVars;
+  protected getDestroyLogHeader(): string {
+    return "AWS ECS Resources";
   }
 
   /**
@@ -221,25 +176,5 @@ export class AwsEcsAdapter implements DeployAdapter {
    */
   async runPostDeploy(_ctx: AdapterContext, _provision: ProvisionResult): Promise<void> {
     // ECS containers start automatically — nothing to do here
-  }
-
-  async destroy(ctx: DestroyContext): Promise<DestroyResult> {
-    const errors: string[] = [];
-    const credentials: AwsCredentials = { accessKeyId: ctx.providerCredentials.apiKey, secretAccessKey: ctx.providerCredentials.apiSecret };
-    const stackName = stackNameFor(ctx.appName);
-
-    await ctx.appendLog("── Destroy AWS ECS Resources ──────");
-
-    await destroyCfnStack(stackName, ctx.region, credentials, ctx.appendLog, errors);
-
-    // Delete ECR repos
-    await deleteEcrRepo(ctx.appName, ctx.region, credentials, errors);
-    await deleteEcrRepo(`${ctx.appName}-cache`, ctx.region, credentials, []);
-
-    return {
-      success: errors.length === 0,
-      message: errors.length > 0 ? `Partially destroyed: ${errors.join("; ")}` : `Destroyed stack ${stackName}, ECR repo ${ctx.appName}`,
-      errors,
-    };
   }
 }

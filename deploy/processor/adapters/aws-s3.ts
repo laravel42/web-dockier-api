@@ -9,15 +9,14 @@ import type {
   DestroyResult,
 } from "./types";
 import {
-  getAwsAccountId,
   cleanupStuckStack,
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
   stackNameFor,
   destroyCfnStack,
-  type AwsCredentials,
 } from "../aws-helpers";
+import { getAwsAccountId, type AwsCredentials } from "../../../lib/aws";
 import { installDeps, buildSite, findOutputDir, MIME_TYPES, SKIP_DIRS } from "../static-site-builder";
 
 /**

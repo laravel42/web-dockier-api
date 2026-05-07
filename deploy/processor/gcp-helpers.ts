@@ -296,3 +296,95 @@ export async function deleteOrphanedComputeResources(opts: {
     await new Promise((r) => setTimeout(r, 10_000));
   }
 }
+
+// ─── Shared Push Helper ────────────────────────────────────────────
+
+import { extractRegionFromScript } from "../shared";
+import type { AdapterContext, PushImageResult } from "./adapters/types";
+
+/**
+ * Configuration for the shared GCP Artifact Registry push flow.
+ *
+ * The only differences between Cloud Run and Compute Engine pushImage()
+ * are which APIs to enable and how long to wait for API propagation.
+ */
+export interface GcpPushConfig {
+  /** GCP APIs to enable before pushing (e.g., run.googleapis.com, compute.googleapis.com) */
+  apisToEnable: string[];
+  /** Milliseconds to wait after enabling APIs (Cloud Run needs 10s, Compute needs 5s) */
+  apiWaitMs: number;
+}
+
+/**
+ * Shared pushImage logic for GCP adapters.
+ *
+ * Handles the full Artifact Registry push flow:
+ * 1. Get GCP access token and project ID from service account key
+ * 2. Enable required APIs (Artifact Registry + strategy-specific APIs)
+ * 3. Create Artifact Registry repository (idempotent)
+ * 4. Tag and push Docker image to Artifact Registry
+ *
+ * Returns the push result and stores the access token + image URI on ctx.state
+ * for downstream use by provisionInfrastructure and runPostDeploy.
+ */
+export async function pushToGcpArtifactRegistry(
+  ctx: AdapterContext,
+  localImage: string,
+  config: GcpPushConfig,
+): Promise<PushImageResult> {
+  const { shortId, region, workDir, providerCredentials, event, runCmd, appendLog } = ctx;
+  const repoName = ctx.repoName;
+
+  const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
+  if (!gcpProjectId) {
+    throw new Error("Could not determine GCP project ID from service account key");
+  }
+
+  await appendLog("── Push Image to Artifact Registry ─");
+
+  const arRegion = extractRegionFromScript(event.tofuScript) || region;
+  const accessToken = await getGcpAccessToken(providerCredentials.apiKey);
+  if (!accessToken) {
+    throw new Error("Failed to get GCP access token from service account key");
+  }
+
+  // Enable APIs
+  await appendLog("ℹ Enabling Artifact Registry API...");
+  await enableGcpApis(gcpProjectId, accessToken, [
+    "artifactregistry.googleapis.com",
+    ...config.apisToEnable,
+  ]);
+  await new Promise((r) => setTimeout(r, config.apiWaitMs));
+  await appendLog("✓ APIs enabled");
+
+  const arHost = `${arRegion}-docker.pkg.dev`;
+  const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
+  const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
+
+  // Create Artifact Registry repository
+  const repoResult = await ensureArtifactRegistryRepo(gcpProjectId, arRegion, arRepo, accessToken);
+  if (repoResult.created) {
+    await appendLog("✓ Artifact Registry repository created");
+  } else if (repoResult.error) {
+    await appendLog(`⚠ Create repo: ${repoResult.error}`);
+  } else {
+    await appendLog("✓ Artifact Registry repository already exists");
+  }
+
+  // Push image
+  await pushToArtifactRegistry({
+    localImage,
+    arImageUri,
+    arHost,
+    accessToken,
+    workDir,
+    runCmd,
+  });
+  await appendLog(`✓ Image pushed: ${arImageUri}`);
+
+  // Store the access token and image URI for downstream use
+  ctx.state.gcpAccessToken = accessToken;
+  ctx.state.arImageUri = arImageUri;
+
+  return { remoteImageUri: arImageUri, skipped: false };
+}

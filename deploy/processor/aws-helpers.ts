@@ -4,9 +4,6 @@ import type { RunCmdFn } from "./run-cmd";
 import type { ProvisionResult } from "./adapters/types";
 import { getAwsAccountId, type AwsCredentials } from "../../lib/aws";
 
-// Re-export for consumers that import from this file
-export { getAwsAccountId, type AwsCredentials } from "../../lib/aws";
-
 export interface PushToEcrResult {
   /** Full ECR image URI with tag (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app:abc12345) */
   remoteImageUri: string;
