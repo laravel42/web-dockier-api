@@ -91,21 +91,22 @@ export abstract class AwsCloudFormationAdapter implements DeployAdapter {
       accessKeyId: ctx.providerCredentials.apiKey,
       secretAccessKey: ctx.providerCredentials.apiSecret,
     };
-    const stackName = stackNameFor(ctx.appName);
+    const stackName = stackNameFor(ctx.repoName);
 
     await ctx.appendLog(`── Destroy ${this.getDestroyLogHeader()} ──────`);
 
     await destroyCfnStack(stackName, ctx.region, credentials, ctx.appendLog, errors);
 
-    // Delete ECR repos
-    await deleteEcrRepo(ctx.appName, ctx.region, credentials, errors);
-    await deleteEcrRepo(`${ctx.appName}-cache`, ctx.region, credentials, []);
+    // Delete ECR repos — sanitize the same way pushToEcr does during provisioning
+    const ecrRepoName = ctx.repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    await deleteEcrRepo(ecrRepoName, ctx.region, credentials, errors);
+    await deleteEcrRepo(`${ecrRepoName}-cache`, ctx.region, credentials, errors);
 
     return {
       success: errors.length === 0,
       message: errors.length > 0
         ? `Partially destroyed: ${errors.join("; ")}`
-        : `Destroyed stack ${stackName}, ECR repo ${ctx.appName}`,
+        : `Destroyed stack ${stackName} and ECR repositories`,
       errors,
     };
   }

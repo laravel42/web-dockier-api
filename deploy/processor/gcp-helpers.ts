@@ -1,4 +1,6 @@
 import { createSign } from "node:crypto";
+import { extractRegionFromScript } from "../shared";
+import type { AdapterContext, PushImageResult } from "./adapters/types";
 
 /** Retry a fetch call with exponential backoff for transient network errors. */
 async function fetchWithRetry(
@@ -298,9 +300,6 @@ export async function deleteOrphanedComputeResources(opts: {
 }
 
 // ─── Shared Push Helper ────────────────────────────────────────────
-
-import { extractRegionFromScript } from "../shared";
-import type { AdapterContext, PushImageResult } from "./adapters/types";
 
 /**
  * Configuration for the shared GCP Artifact Registry push flow.
