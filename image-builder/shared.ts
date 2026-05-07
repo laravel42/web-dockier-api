@@ -1,14 +1,10 @@
 // ─── Shared utilities, types, secrets, and helpers for image-builder ───
 
-import { api, APIError } from "encore.dev/api";
 import { db, initDb } from "../lib/db";
 import { secret } from "encore.dev/config";
-import { v4 as uuidv4 } from "uuid";
-import { getAuthData } from "~encore/auth";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { git_integration } from "~encore/clients";
 import { resolveAwsCredentials as _resolveAwsCredentials } from "../lib/provider-credentials";
 import { getAwsAccountId } from "../lib/aws";
 
@@ -255,10 +251,3 @@ export function buildToStatusResponse(build: BuildRecord): BuildStatusResponse {
     startedAt: build.startedAt, finishedAt: build.finishedAt, createdAt: build.createdAt,
   };
 }
-
-// Re-export commonly needed imports for endpoint files
-export { api, APIError } from "encore.dev/api";
-export { v4 as uuidv4 } from "uuid";
-export { getAuthData } from "~encore/auth";
-export { readFileSync } from "node:fs";
-export { git_integration } from "~encore/clients";
