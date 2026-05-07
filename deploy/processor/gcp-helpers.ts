@@ -1,86 +1,38 @@
-import { createSign } from "node:crypto";
+/**
+ * GCP helper functions for the deploy service.
+ *
+ * This module re-exports the structured GcpClient and provides backward-compatible
+ * helper functions that delegate to it. New code should use GcpClient directly
+ * via createGcpClient().
+ */
+
 import { extractRegionFromScript } from "../shared";
 import type { AdapterContext, PushImageResult } from "./adapters/types";
+import {
+  GcpClient,
+  GcpApiError,
+  getGcpAccessToken,
+  getGcpProjectId,
+  createGcpClient,
+  type GcpClientConfig,
+} from "./gcp-client";
 
-/** Retry a fetch call with exponential backoff for transient network errors. */
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  maxRetries = 3,
-): Promise<Response> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fetch(url, init);
-    } catch (err: any) {
-      if (attempt === maxRetries) throw err;
-      // Exponential backoff: 2s, 4s, 8s
-      await new Promise((r) => setTimeout(r, 2_000 * Math.pow(2, attempt - 1)));
-    }
-  }
-  throw new Error("fetchWithRetry: unreachable");
-}
+// Re-export the client and factory for direct use
+export { GcpClient, GcpApiError, getGcpAccessToken, getGcpProjectId, createGcpClient };
+export type { GcpClientConfig };
 
-/**
- * Get a GCP access token from a service account JSON key.
- * Centralizes the JWT → OAuth2 token exchange used across deploy, destroy, and AR push flows.
- */
-export async function getGcpAccessToken(
-  apiKey: string,
-  scope = "https://www.googleapis.com/auth/cloud-platform"
-): Promise<string> {
-  const saKey = JSON.parse(apiKey || "{}");
-  if (!saKey.client_email || !saKey.private_key) return "";
-
-  const now = Math.floor(Date.now() / 1000);
-  const jwtHeader = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-  const jwtClaim = Buffer.from(JSON.stringify({
-    iss: saKey.client_email,
-    scope,
-    aud: "https://oauth2.googleapis.com/token",
-    iat: now,
-    exp: now + 3600,
-  })).toString("base64url");
-  const signInput = `${jwtHeader}.${jwtClaim}`;
-  const signer = createSign("RSA-SHA256");
-  signer.update(signInput);
-  const signature = signer.sign(saKey.private_key, "base64url");
-
-  const tokenRes = await fetchWithRetry("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${signInput}.${signature}`,
-  });
-  const tokenData = await tokenRes.json() as { access_token?: string };
-  return tokenData.access_token || "";
-}
-
-/** Extract the GCP project ID from a service account JSON key. */
-export function getGcpProjectId(apiKey: string): string {
-  try {
-    return JSON.parse(apiKey || "{}").project_id || "";
-  } catch {
-    return "";
-  }
-}
+// ─── Backward-Compatible Helper Functions ───────────────────────────
+// These delegate to GcpClient internally but maintain the existing API
+// surface so callers don't need to change immediately.
 
 /** Enable one or more GCP APIs (idempotent). */
 export async function enableGcpApis(
   projectId: string,
   accessToken: string,
-  apis: string[]
+  apis: string[],
 ): Promise<void> {
-  for (const api of apis) {
-    try {
-      await fetchWithRetry(
-        `https://serviceusage.googleapis.com/v1/projects/${projectId}/services/${api}:enable`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        }
-      );
-    } catch {}
-  }
+  const client = new GcpClient(accessToken, projectId);
+  await client.enableApis(apis);
 }
 
 /**
@@ -91,37 +43,10 @@ export async function ensureArtifactRegistryRepo(
   projectId: string,
   region: string,
   repoName: string,
-  accessToken: string
+  accessToken: string,
 ): Promise<{ created: boolean; error?: string }> {
-  try {
-    const createRes = await fetchWithRetry(
-      `https://artifactregistry.googleapis.com/v1/projects/${projectId}/locations/${region}/repositories?repositoryId=${repoName}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "DOCKER" }),
-      }
-    );
-    if (createRes.ok) {
-      // Poll until accessible
-      for (let i = 0; i < 12; i++) {
-        await new Promise(r => setTimeout(r, 5_000));
-        const checkRes = await fetchWithRetry(
-          `https://artifactregistry.googleapis.com/v1/projects/${projectId}/locations/${region}/repositories/${repoName}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        if (checkRes.ok) break;
-      }
-      return { created: true };
-    } else if (createRes.status === 409) {
-      return { created: false }; // already exists
-    } else {
-      const body = await createRes.text();
-      return { created: false, error: `${createRes.status} ${body.slice(0, 200)}` };
-    }
-  } catch (e: any) {
-    return { created: false, error: e.message };
-  }
+  const client = new GcpClient(accessToken, projectId);
+  return client.ensureArtifactRegistryRepo(region, repoName);
 }
 
 /**
@@ -152,7 +77,6 @@ export async function pushToArtifactRegistry(opts: {
   if (pushResult.code !== 0) throw new Error("Failed to push image to Artifact Registry");
 }
 
-
 /**
  * Delete a GCP Compute Engine firewall rule by name (idempotent — ignores 404).
  */
@@ -161,18 +85,8 @@ export async function deleteGcpFirewall(
   firewallName: string,
   accessToken: string,
 ): Promise<boolean> {
-  try {
-    const res = await fetchWithRetry(
-      `https://compute.googleapis.com/compute/v1/projects/${projectId}/global/firewalls/${firewallName}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    );
-    return res.ok || res.status === 404;
-  } catch {
-    return false;
-  }
+  const client = new GcpClient(accessToken, projectId);
+  return client.deleteFirewall(firewallName);
 }
 
 /**
@@ -184,18 +98,8 @@ export async function deleteGcpAddress(
   addressName: string,
   accessToken: string,
 ): Promise<boolean> {
-  try {
-    const res = await fetchWithRetry(
-      `https://compute.googleapis.com/compute/v1/projects/${projectId}/regions/${region}/addresses/${addressName}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    );
-    return res.ok || res.status === 404;
-  } catch {
-    return false;
-  }
+  const client = new GcpClient(accessToken, projectId);
+  return client.deleteAddress(region, addressName);
 }
 
 /**
@@ -207,18 +111,8 @@ export async function deleteGcpInstance(
   instanceName: string,
   accessToken: string,
 ): Promise<boolean> {
-  try {
-    const res = await fetchWithRetry(
-      `https://compute.googleapis.com/compute/v1/projects/${projectId}/zones/${zone}/instances/${instanceName}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    );
-    return res.ok || res.status === 404;
-  } catch {
-    return false;
-  }
+  const client = new GcpClient(accessToken, projectId);
+  return client.deleteInstance(zone, instanceName);
 }
 
 /**
@@ -234,67 +128,43 @@ export async function deleteOrphanedComputeResources(opts: {
   appendLog: (msg: string) => Promise<void>;
 }): Promise<void> {
   const { projectId, region, accessToken, appendLog } = opts;
+  const client = new GcpClient(accessToken, projectId);
+
   // GCP resource names must match [a-z]([-a-z0-9]*[a-z0-9])? — sanitize the same way
   // the Pulumi GCP provider does (underscores → hyphens, lowercase).
   const resName = opts.resName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
   // Try to delete instance first (it holds a reference to the static IP)
-  // We don't know the exact zone, so find it via aggregated list
-  try {
-    const listRes = await fetchWithRetry(
-      `https://compute.googleapis.com/compute/v1/projects/${projectId}/aggregated/instances?filter=name="${resName}"`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (listRes.ok) {
-      const data = await listRes.json() as { items?: Record<string, { instances?: Array<{ zone: string; name: string }> }> };
-      for (const [scopeKey, scope] of Object.entries(data.items || {})) {
-        for (const inst of scope.instances || []) {
-          if (inst.name === resName) {
-            const zone = scopeKey.replace("zones/", "");
-            await appendLog(`ℹ Deleting orphaned instance ${resName} in ${zone}...`);
-            await deleteGcpInstance(projectId, zone, resName, accessToken);
-            // Poll until the instance is fully terminated (can take 30-60s)
-            for (let i = 0; i < 12; i++) {
-              await new Promise((r) => setTimeout(r, 10_000));
-              const checkRes = await fetchWithRetry(
-                `https://compute.googleapis.com/compute/v1/projects/${projectId}/zones/${zone}/instances/${resName}`,
-                { headers: { Authorization: `Bearer ${accessToken}` } },
-              );
-              if (checkRes.status === 404) break;
-            }
-          }
-        }
-      }
+  const instance = await client.findInstance(resName);
+  if (instance) {
+    await appendLog(`ℹ Deleting orphaned instance ${resName} in ${instance.zone}...`);
+    await client.deleteInstance(instance.zone, resName);
+    // Poll until the instance is fully terminated (can take 30-60s)
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 10_000));
+      if (!(await client.instanceExists(instance.zone, resName))) break;
     }
-  } catch {
-    // Instance may not exist, that's fine
   }
 
   // Delete firewall rule
   await appendLog(`ℹ Deleting orphaned firewall ${resName}-fw...`);
-  await deleteGcpFirewall(projectId, `${resName}-fw`, accessToken);
+  await client.deleteFirewall(`${resName}-fw`);
 
   // Delete static IP
   await appendLog(`ℹ Deleting orphaned address ${resName}-ip...`);
-  await deleteGcpAddress(projectId, region, `${resName}-ip`, accessToken);
+  await client.deleteAddress(region, `${resName}-ip`);
 
   // Wait for GCP to fully process the deletions (operations are async)
   await new Promise((r) => setTimeout(r, 10_000));
 
   // Verify resources are gone — retry deletion if still present
   for (let i = 0; i < 3; i++) {
-    const fwCheck = await fetchWithRetry(
-      `https://compute.googleapis.com/compute/v1/projects/${projectId}/global/firewalls/${resName}-fw`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    const ipCheck = await fetchWithRetry(
-      `https://compute.googleapis.com/compute/v1/projects/${projectId}/regions/${region}/addresses/${resName}-ip`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (fwCheck.status === 404 && ipCheck.status === 404) break;
+    const fwExists = await client.firewallExists(`${resName}-fw`);
+    const ipExists = await client.addressExists(region, `${resName}-ip`);
+    if (!fwExists && !ipExists) break;
     // Resources still exist — retry deletion
-    if (fwCheck.status !== 404) await deleteGcpFirewall(projectId, `${resName}-fw`, accessToken);
-    if (ipCheck.status !== 404) await deleteGcpAddress(projectId, region, `${resName}-ip`, accessToken);
+    if (fwExists) await client.deleteFirewall(`${resName}-fw`);
+    if (ipExists) await client.deleteAddress(region, `${resName}-ip`);
     await new Promise((r) => setTimeout(r, 10_000));
   }
 }
@@ -334,22 +204,16 @@ export async function pushToGcpArtifactRegistry(
   const { shortId, region, workDir, providerCredentials, event, runCmd, appendLog } = ctx;
   const repoName = ctx.repoName;
 
-  const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
-  if (!gcpProjectId) {
-    throw new Error("Could not determine GCP project ID from service account key");
-  }
+  // Create a structured client for this push operation
+  const client = await createGcpClient(providerCredentials.apiKey);
 
   await appendLog("── Push Image to Artifact Registry ─");
 
   const arRegion = extractRegionFromScript(event.tofuScript) || region;
-  const accessToken = await getGcpAccessToken(providerCredentials.apiKey);
-  if (!accessToken) {
-    throw new Error("Failed to get GCP access token from service account key");
-  }
 
   // Enable APIs
   await appendLog("ℹ Enabling Artifact Registry API...");
-  await enableGcpApis(gcpProjectId, accessToken, [
+  await client.enableApis([
     "artifactregistry.googleapis.com",
     ...config.apisToEnable,
   ]);
@@ -358,10 +222,10 @@ export async function pushToGcpArtifactRegistry(
 
   const arHost = `${arRegion}-docker.pkg.dev`;
   const arRepo = repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
-  const arImageUri = `${arHost}/${gcpProjectId}/${arRepo}/${arRepo}:${shortId}`;
+  const arImageUri = `${arHost}/${client.getProjectId()}/${arRepo}/${arRepo}:${shortId}`;
 
   // Create Artifact Registry repository
-  const repoResult = await ensureArtifactRegistryRepo(gcpProjectId, arRegion, arRepo, accessToken);
+  const repoResult = await client.ensureArtifactRegistryRepo(arRegion, arRepo);
   if (repoResult.created) {
     await appendLog("✓ Artifact Registry repository created");
   } else if (repoResult.error) {
@@ -375,14 +239,14 @@ export async function pushToGcpArtifactRegistry(
     localImage,
     arImageUri,
     arHost,
-    accessToken,
+    accessToken: client.getAccessToken(),
     workDir,
     runCmd,
   });
   await appendLog(`✓ Image pushed: ${arImageUri}`);
 
   // Store the access token and image URI for downstream use
-  ctx.state.gcpAccessToken = accessToken;
+  ctx.state.gcpAccessToken = client.getAccessToken();
   ctx.state.arImageUri = arImageUri;
 
   return { remoteImageUri: arImageUri, skipped: false };

@@ -105,49 +105,116 @@ export function createStreamingRunCmd(
  * These lines are still captured in the full output for debugging.
  */
 function shouldSuppressLine(line: string): boolean {
+  // Strip Docker BuildKit step prefix for pattern matching (e.g., "#13 75.09 ")
+  const stripped = line.replace(/^#\d+\s+[\d.]+\s+/, "");
+
   // Docker layer progress (hash: Pushing/Pulling/Waiting/Preparing/Pushed)
-  if (/^[0-9a-f]{12}:\s*(Waiting|Preparing|Layer already exists|Pushing|Pulling fs layer|Pushed)\s*$/i.test(line)) return true;
+  if (/^[0-9a-f]{12}:\s*(Waiting|Preparing|Layer already exists|Pushing|Pulling fs layer|Pushed)\s*$/i.test(stripped)) return true;
   // Docker layer download/upload byte progress
-  if (/^#\d+\s+sha256:[0-9a-f]+\s+[\d.]+[kMG]?B\s*\/\s*[\d.]+[kMG]?B/.test(line)) return true;
+  if (/^sha256:[0-9a-f]+\s+[\d.]+[kMG]?B\s*\/\s*[\d.]+[kMG]?B/.test(stripped)) return true;
   // Docker extracting layers
-  if (/^#\d+\s+extracting\s+sha256:/.test(line)) return true;
+  if (/^extracting\s+sha256:/.test(stripped)) return true;
   // Dots-only progress
   if (/^\s*\.+\s*$/.test(line)) return true;
   // Pulumi update progress
   if (/^@ updating/.test(line)) return true;
   if (/^\s*Waiting\s*$/.test(line)) return true;
-  // C compiler invocations (gcc/cc with -I/-D/-o flags)
-  if (/^\s*(cc|gcc|g\+\+|\/usr\/bin\/cc)\s+.*-[IDo]\s/.test(line)) return true;
-  // Libtool compile commands
-  if (/^\/bin\/bash\s+.*libtool\s+--.*--mode=compile/.test(line)) return true;
-  // ./configure checks (checking for X... yes/no) — with or without Docker step prefix
-  if (/^(#\d+\s+[\d.]+\s+)?checking\s+(for|whether|if|how|the|build|host|target)\s/.test(line)) return true;
-  // configure result lines (just "yes", "no", "ok", path)
-  if (/^(#\d+\s+[\d.]+\s+)?(yes|no|ok|none needed|\/usr\/)$/.test(line.trim())) return true;
-  // apt-get verbose output (Reading database, Selecting, Preparing, Unpacking, Setting up)
-  if (/^(#\d+\s+[\d.]+\s+)?(Reading database|\(Reading database|Selecting previously|Preparing to unpack|Unpacking |Setting up )/.test(line)) return true;
-  // apt-get Get: download lines
-  if (/^(#\d+\s+[\d.]+\s+)?Get:\d+/.test(line)) return true;
-  // debconf noise
-  if (/debconf:/.test(line)) return true;
-  // make/mkdir inside build steps
-  if (/^(#\d+\s+[\d.]+\s+)?mkdir\s/.test(line)) return true;
-  // Linker/strip commands
-  if (/^\+\s*strip\s+--strip-all/.test(line)) return true;
-  // find cleanup commands
-  if (/^(#\d+\s+[\d.]+\s+)?find\s+\.\s+-name/.test(line)) return true;
-  // rm cleanup commands
-  if (/^(#\d+\s+[\d.]+\s+)?rm\s+-f/.test(line)) return true;
-  // Composer individual package download/extract lines
-  if (/^\s*-\s+(Downloading|Installing|Extracting)\s/.test(line)) return true;
-  if (/^#\d+\s+[\d.]+\s+-\s+(Downloading|Installing|Extracting)\s/.test(line)) return true;
-  // Composer progress bars
-  if (/^\s*\d+\/\d+\s+\[=*>?-*\]\s+\d+%/.test(line)) return true;
-  if (/^#\d+\s+[\d.]+\s+\d+\/\d+\s+\[=*>?-*\]\s+\d+%/.test(line)) return true;
   // Docker layer "Pushed" lines (individual layers)
-  if (/^[0-9a-f]{12}: Pushed\s*$/.test(line)) return true;
-  // install-php-extensions internal apt/build noise
-  if (/^#\d+\s+[\d.]+\s+###\s+(INSTALLING|RESTORING|WARNING)/.test(line)) return true;
+  if (/^[0-9a-f]{12}: Pushed\s*$/.test(stripped)) return true;
+
+  // ─── C/C++ compilation noise ───────────────────────────────────────
+  // C compiler invocations (gcc/cc with -I/-D/-o flags) — with or without Docker prefix
+  if (/^\s*(cc|gcc|g\+\+|\/usr\/bin\/cc)\s+.*-[IDo]\s/.test(stripped)) return true;
+  // Libtool compile commands
+  if (/^\/bin\/bash\s+.*libtool\s+--.*--mode=(compile|link|install)/.test(stripped)) return true;
+  // Linker commands (cc -shared ...)
+  if (/^\s*(cc|gcc)\s+-shared\s/.test(stripped)) return true;
+  // Object file creation (.libs/*.o)
+  if (/\.(lo|la|o|dep)\s*$/.test(stripped) && /\s-[co]\s/.test(stripped)) return true;
+  // Libtool creating/copying output
+  if (/^(creating|cp\s+\.\/\.libs\/)/.test(stripped)) return true;
+  if (/^\(cd \.libs && rm -f/.test(stripped)) return true;
+  // ldconfig
+  if (/^PATH=.*ldconfig\s/.test(stripped)) return true;
+  if (/^\s*ldconfig\s/.test(stripped)) return true;
+  // strip commands
+  if (/^\+?\s*strip\s+--strip-all/.test(stripped)) return true;
+
+  // ─── ./configure and autotools noise ───────────────────────────────
+  // ./configure checks (checking for X... yes/no)
+  if (/^checking\s+(for|whether|if|how|the|build|host|target|command|dynamic)\s/.test(stripped)) return true;
+  // configure result lines (just "yes", "no", "ok", path, or short tool output)
+  if (/^(yes|no|ok|none needed|none required|GNU\/Linux ld\.so)$/i.test(stripped.trim())) return true;
+  // Bare path output from configure probes
+  if (/^\/usr\/(bin|lib|local|include)\/\S*$/.test(stripped.trim())) return true;
+  // Bare short words that are configure test output (a.out, o, .libs, lib, cc -E)
+  if (/^(a\.out|o|\.libs|lib|cc -E|-I\/usr\/local\/include)$/.test(stripped.trim())) return true;
+  // "configure: creating/patching" lines
+  if (/^configure:\s*(creating|patching)/.test(stripped)) return true;
+  // config.status lines
+  if (/^config\.status:/.test(stripped)) return true;
+  // "appending configuration tag" lines
+  if (/^appending configuration tag/.test(stripped)) return true;
+  // "creating libtool" line
+  if (/^creating libtool$/.test(stripped.trim())) return true;
+
+  // ─── PHP extension build noise ─────────────────────────────────────
+  // "Configuring for:" + PHP Api Version / Zend Module lines
+  if (/^Configuring for:$/.test(stripped.trim())) return true;
+  if (/^(PHP Api Version|Zend (Module Api No|Extension Api No)):/.test(stripped.trim())) return true;
+  // "Build complete." / "Don't forget to run 'make test'."
+  if (/^Build complete\.$/.test(stripped.trim())) return true;
+  if (/^Don't forget to run 'make test'\.$/.test(stripped.trim())) return true;
+  // "Installing shared extensions:" / "Installing header files:"
+  if (/^Installing (shared extensions|header files):/.test(stripped.trim())) return true;
+  // install-php-extensions internal noise
+  if (/^###\s*(INSTALLING|RESTORING|WARNING|MARKING)/.test(stripped)) return true;
+  if (/^#\d+\s+[\d.]+\s+###\s+(INSTALLING|RESTORING|WARNING|MARKING)/.test(line)) return true;
+  // "was already set to manually installed" lines
+  if (/was already set to manually installed/.test(stripped)) return true;
+  // "set to manually installed" lines
+  if (/set to manually installed/.test(stripped)) return true;
+  // "# Packages to be kept/used" comment lines
+  if (/^#\s+Packages to be (kept|used)/.test(stripped)) return true;
+  // Libtool library installation info block
+  if (/^-+$/.test(stripped.trim())) return true;
+  if (/^Libraries have been installed in:/.test(stripped.trim())) return true;
+  if (/^If you ever happen to want to link against/.test(stripped.trim())) return true;
+  if (/^in a given directory, LIBDIR/.test(stripped.trim())) return true;
+  if (/^specify the full pathname of the library/.test(stripped.trim())) return true;
+  if (/^flag during linking and do at least one/.test(stripped.trim())) return true;
+  if (/^- (add LIBDIR|use the|have your system)/.test(stripped.trim())) return true;
+  if (/^during (execution|linking)$/.test(stripped.trim())) return true;
+  if (/^See any operating system documentation/.test(stripped.trim())) return true;
+  if (/^more information, such as the ld/.test(stripped.trim())) return true;
+  // Bare "+" line (make recipe echo)
+  if (/^\+$/.test(stripped.trim())) return true;
+  // Empty lines from build output
+  if (/^#\d+\s+[\d.]+\s*$/.test(line)) return true;
+
+  // ─── apt-get / dpkg noise ──────────────────────────────────────────
+  if (/^(Reading database|\(Reading database|Selecting previously|Preparing to unpack|Unpacking |Setting up )/.test(stripped)) return true;
+  if (/^Get:\d+/.test(stripped)) return true;
+  if (/debconf:/.test(line)) return true;
+  if (/^Processing triggers for/.test(stripped)) return true;
+  // Fetched/Reading package lists
+  if (/^(Fetched|Reading package lists)/.test(stripped)) return true;
+  // "Updating channel" / "Channel ... is up to date"
+  if (/^(Updating channel|Channel .* is up to date)/.test(stripped)) return true;
+
+  // ─── make/mkdir/rm/find noise ──────────────────────────────────────
+  if (/^mkdir\s/.test(stripped)) return true;
+  if (/^mkdir: cannot create directory.*File exists/.test(stripped)) return true;
+  if (/^find\s+\.\s+-name/.test(stripped)) return true;
+  if (/^rm\s+-f/.test(stripped)) return true;
+
+  // ─── Composer noise ────────────────────────────────────────────────
+  if (/^\s*-\s+(Downloading|Installing|Extracting)\s/.test(stripped)) return true;
+  if (/^\s*\d+\/\d+\s+\[=*>?-*\]\s+\d+%/.test(stripped)) return true;
+
+  // ─── npm/yarn noise ────────────────────────────────────────────────
+  if (/^npm warn/.test(stripped)) return true;
+  if (/^added \d+ packages/.test(stripped)) return true;
 
   return false;
 }
