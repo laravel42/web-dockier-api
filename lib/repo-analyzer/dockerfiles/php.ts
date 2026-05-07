@@ -247,12 +247,6 @@ function generateLaravelDockerfile(
   // Always include redis via pecl for Laravel
   if (!pecl.includes("redis")) pecl.push("redis");
 
-  // Collect all apt dependencies for extensions + system packages
-  const aptPkgs = new Set(["git", "unzip", "curl", "nginx", "supervisor"]);
-  for (const ext of [...installable, ...pecl]) {
-    for (const pkg of (EXT_APT_DEPS[ext] || [])) aptPkgs.add(pkg);
-  }
-
   // ── Stage 1: base ──
   const variant = debianVariant(phpVer);
   lines.push(`FROM public.ecr.aws/docker/library/php:${phpVer}-fpm-${variant} AS base`);
@@ -260,30 +254,21 @@ function generateLaravelDockerfile(
   if (variant === "bullseye" || variant === "buster") {
     lines.push('RUN echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf.d/99no-check-valid-until');
   }
-  // Install system packages
+
+  // Use install-php-extensions for fast, pre-compiled extension installation
+  lines.push("ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/");
+
+  // Install system packages (nginx, supervisor, etc. — not extension build deps)
+  const systemPkgs = new Set(["git", "unzip", "curl", "nginx", "supervisor"]);
   lines.push(`RUN apt-get update && apt-get install -y \\`);
-  lines.push(`    ${[...aptPkgs].sort().join(" ")} \\`);
+  lines.push(`    ${[...systemPkgs].sort().join(" ")} \\`);
   lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
 
-  // Configure and install PHP extensions
-  const configCmds: string[] = [];
-  if (installable.includes("gd")) {
-    configCmds.push("docker-php-ext-configure gd --with-freetype --with-jpeg");
-  }
-  if (installable.includes("imap")) {
-    configCmds.push("docker-php-ext-configure imap --with-kerberos --with-imap-ssl");
-  }
-  if (installable.length > 0) {
-    configCmds.push(`docker-php-ext-install ${installable.sort().join(" ")}`);
-  }
-  if (configCmds.length > 0) {
-    lines.push(`RUN ${configCmds.join(" \\\n    && ")}`);
-  }
-
-  // Install PECL extensions
-  if (pecl.length > 0) {
-    const peclCmds = pecl.map(ext => `pecl install ${ext} && docker-php-ext-enable ${ext}`);
-    lines.push(`RUN ${peclCmds.join(" \\\n    && ")}`);
+  // Install all PHP extensions in one layer using install-php-extensions
+  // This uses pre-compiled binaries when available, dramatically faster than docker-php-ext-install
+  const allExts = [...new Set([...installable, ...pecl])].sort();
+  if (allExts.length > 0) {
+    lines.push(`RUN install-php-extensions ${allExts.join(" ")}`);
   }
 
   const composerTag = composerImageTag(phpVer);
@@ -371,35 +356,22 @@ function generateGenericPhpDockerfile(
   const installable = [...requiredExts].filter(e => !BUILTIN_EXTS.has(e) && !isPeclExt(e, phpVer));
   const pecl = [...requiredExts].filter(e => isPeclExt(e, phpVer));
 
-  const aptPkgs = new Set(["git", "unzip"]);
-  for (const ext of [...installable, ...pecl]) {
-    for (const pkg of (EXT_APT_DEPS[ext] || [])) aptPkgs.add(pkg);
-  }
-
   const variant = debianVariant(phpVer);
   lines.push(`FROM public.ecr.aws/docker/library/php:${phpVer}-cli-${variant}`);
   if (variant === "bullseye" || variant === "buster") {
     lines.push('RUN echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf.d/99no-check-valid-until');
   }
-  lines.push(`RUN apt-get update && apt-get install -y ${[...aptPkgs].sort().join(" ")} \\`);
+
+  // Use install-php-extensions for fast, pre-compiled extension installation
+  lines.push("ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/");
+
+  lines.push(`RUN apt-get update && apt-get install -y git unzip \\`);
   lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
 
-  const configCmds: string[] = [];
-  if (installable.includes("gd")) {
-    configCmds.push("docker-php-ext-configure gd --with-freetype --with-jpeg");
-  }
-  if (installable.includes("imap")) {
-    configCmds.push("docker-php-ext-configure imap --with-kerberos --with-imap-ssl");
-  }
-  if (installable.length > 0) {
-    configCmds.push(`docker-php-ext-install ${installable.sort().join(" ")}`);
-  }
-  if (configCmds.length > 0) {
-    lines.push(`RUN ${configCmds.join(" \\\n    && ")}`);
-  }
-  if (pecl.length > 0) {
-    const peclCmds = pecl.map(ext => `pecl install ${ext} && docker-php-ext-enable ${ext}`);
-    lines.push(`RUN ${peclCmds.join(" \\\n    && ")}`);
+  // Install all PHP extensions in one layer
+  const allExts = [...new Set([...installable, ...pecl])].sort();
+  if (allExts.length > 0) {
+    lines.push(`RUN install-php-extensions ${allExts.join(" ")}`);
   }
 
   const composerTag = composerImageTag(phpVer);

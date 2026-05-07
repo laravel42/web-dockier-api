@@ -8,13 +8,14 @@
 
 import { db } from "../shared";
 import type { DeployEvent } from "../shared";
-import { appendLog, ts, waitForAppReady } from "./helpers";
+import { appendLog, waitForAppReady } from "./helpers";
 import type { RunCmdFn } from "./run-cmd";
 import type { RepoConfig } from "../../lib/repo-analyzer/types";
 import type { AdapterContext } from "./adapters/types";
 import { getAdapter } from "./adapters";
-import { buildCloneUrl } from "../../lib/git-url";
-import { analyzeRepoConfig, generateDockerfile, configSummary, patchDockerfile, toDetectedStack } from "../../lib/repo-analyzer";
+import { patchDockerfile, toDetectedStack } from "../../lib/repo-analyzer";
+import { cloneRepo, analyzeAndGenerate } from "../../lib/build-pipeline";
+import { createDeployLogger, BuildError } from "../../lib/logging";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -41,27 +42,21 @@ export async function cloneRepository(opts: {
   event: DeployEvent;
 }): Promise<CloneResult> {
   const { deploymentId, shortId, event } = opts;
-  const { mkdtemp } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  const { tmpdir } = await import("node:os");
-  const { execSync } = await import("node:child_process");
   const { git_integration } = await import("~encore/clients");
 
-  await appendLog(deploymentId, `[${ts()}]`);
-  await appendLog(deploymentId, `[${ts()}] ── Clone Repository ───────────────`);
-
+  const logger = createDeployLogger(appendLog, deploymentId);
   const conn = await git_integration.getConnectionForScan({ connectionId: event.gitConnectionId });
-  const cloneUrl = buildCloneUrl({ provider: conn.provider, token: conn.token, repo: event.repo, endpoint: conn.endpoint });
 
-  const workDir = await mkdtemp(join(tmpdir(), `deploy-${shortId}-`));
-  const repoDir = join(workDir, "repo");
-  execSync(`git clone --depth 1 --branch ${JSON.stringify(event.branch)} ${JSON.stringify(cloneUrl)} repo`, { cwd: workDir, timeout: 120_000, stdio: "pipe" });
-  const commitHash = execSync("git rev-parse HEAD", { cwd: repoDir, timeout: 5_000 }).toString().trim();
+  const result = await cloneRepo({
+    git: { provider: conn.provider, token: conn.token, repo: event.repo, endpoint: conn.endpoint },
+    branch: event.branch,
+    shortId,
+    logger,
+  });
 
-  await appendLog(deploymentId, `[${ts()}] ✓ Repository cloned (commit: ${commitHash.slice(0, 8)})`);
-  await db.exec`UPDATE deployments SET commit_hash = ${commitHash} WHERE id = ${deploymentId}`;
+  await db.exec`UPDATE deployments SET commit_hash = ${result.commitHash} WHERE id = ${deploymentId}`;
 
-  return { repoDir, workDir, commitHash };
+  return result;
 }
 
 // ─── Analyze & Generate Dockerfile ─────────────────────────────────
@@ -71,57 +66,9 @@ export async function analyzeAndGenerateDockerfile(opts: {
   repoDir: string;
 }): Promise<AnalyzeResult> {
   const { deploymentId, repoDir } = opts;
-  const { existsSync } = await import("node:fs");
-  const { readFile, writeFile, copyFile } = await import("node:fs/promises");
-  const { join } = await import("node:path");
 
-  await appendLog(deploymentId, `[${ts()}]`);
-  await appendLog(deploymentId, `[${ts()}] ── Analyze Repository ──────────────`);
-
-  const repoConfig = analyzeRepoConfig(repoDir);
-  for (const line of configSummary(repoConfig)) {
-    await appendLog(deploymentId, `[${ts()}] ℹ ${line}`);
-  }
-
-  // Fix packageManager field for pnpm/yarn projects (corepack requires it)
-  if (repoConfig.runtime === "node" && (repoConfig.packageManager === "pnpm" || repoConfig.packageManager === "yarn")) {
-    const appDir = repoConfig.subDir ? join(repoDir, repoConfig.subDir) : repoDir;
-    try {
-      const pkgPath = join(appDir, "package.json");
-      const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
-      if (!pkg.packageManager) {
-        const pmVer = repoConfig.packageManagerVersion || (repoConfig.packageManager === "pnpm" ? "10.14.0" : "4.5.0");
-        pkg.packageManager = `${repoConfig.packageManager}@${pmVer}`;
-        await writeFile(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
-        await appendLog(deploymentId, `[${ts()}] ℹ Added packageManager field: ${pkg.packageManager}`);
-      }
-    } catch {}
-
-    // Copy lockfile to subdirectory if needed
-    if (repoConfig.subDir) {
-      const lockFiles: Record<string, string> = { pnpm: "pnpm-lock.yaml", yarn: "yarn.lock", bun: "bun.lockb" };
-      const lockFile = lockFiles[repoConfig.packageManager];
-      if (lockFile && existsSync(join(repoDir, lockFile)) && !existsSync(join(appDir, lockFile))) {
-        try { await copyFile(join(repoDir, lockFile), join(appDir, lockFile)); } catch {}
-      }
-    }
-  }
-
-  // Generate Dockerfile and .dockerignore
-  const df = generateDockerfile(repoConfig, repoDir);
-  await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
-
-  const dockerignore = [
-    "node_modules", ".next", ".git", ".gitignore", "dist", "build", "out", "output",
-    ".turbo", ".cache", ".pnpm-store", "/vendor", ".env", "*.log", "!.env.example",
-    "coverage", ".nyc_output", "__pycache__", "*.pyc", ".venv", "venv",
-    "*.md", "*.mdx", "LICENSE", ".vscode", ".idea", ".cursor",
-    "Dockerfile*", ".dockerignore", "pulumi", ".pulumi-state",
-  ].join("\n");
-  await writeFile(join(repoDir, ".dockerignore"), dockerignore, "utf-8");
-
-  const pm = repoConfig.packageManager !== "unknown" ? repoConfig.packageManager : "npm";
-  await appendLog(deploymentId, `[${ts()}] ✓ Generated Dockerfile (${repoConfig.runtime}/${repoConfig.framework || "generic"}, pm: ${pm}, subDir: ${repoConfig.subDir || "/"})`);
+  const logger = createDeployLogger(appendLog, deploymentId);
+  const { repoConfig } = await analyzeAndGenerate({ repoDir, logger });
 
   return { repoConfig };
 }
@@ -141,6 +88,7 @@ export async function buildDockerImage(opts: {
   const { readFile, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
 
+  const logger = createDeployLogger(appendLog, deploymentId);
   const isStaticDeploy = event.deployStrategy === "static";
   let actualImage = imageName;
   let skippedBuild = isStaticDeploy;
@@ -158,15 +106,14 @@ export async function buildDockerImage(opts: {
         execSync(`docker image inspect ${JSON.stringify(cachedImage.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
         actualImage = cachedImage.docker_image;
         skippedBuild = true;
-        await appendLog(deploymentId, `[${ts()}] ℹ Reusing cached image: ${actualImage}`);
+        await logger.info(`Reusing cached image: ${actualImage}`);
       } catch {}
     }
   }
 
   // Build Docker image locally (unless static or cached)
   if (!skippedBuild) {
-    await appendLog(deploymentId, `[${ts()}]`);
-    await appendLog(deploymentId, `[${ts()}] ── Build Docker Image ─────────────`);
+    await logger.section("Build Docker Image");
     const MAX_BUILD_ATTEMPTS = 3;
     for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
       const buildArgs = ["build", "--platform", "linux/amd64", "-t", imageName];
@@ -174,19 +121,19 @@ export async function buildDockerImage(opts: {
       buildArgs.push(".");
       const buildResult = await runCmd("docker", buildArgs, { cwd: repoDir });
       if (buildResult.code === 0) {
-        await appendLog(deploymentId, `[${ts()}] ✓ Docker image built: ${imageName}`);
+        await logger.success(`Docker image built: ${imageName}`);
         break;
       }
       if (attempt < MAX_BUILD_ATTEMPTS) {
         const currentDf = await readFile(join(repoDir, "Dockerfile"), "utf-8");
         const fix = patchDockerfile(buildResult.output, currentDf);
         if (fix) {
-          await appendLog(deploymentId, `[${ts()}] ⚠ Build failed — auto-fixing: ${fix.description}`);
+          await logger.warn(`Build failed — auto-fixing: ${fix.description}`);
           await writeFile(join(repoDir, "Dockerfile"), fix.patched, "utf-8");
           continue;
         }
       }
-      throw new Error(`docker build failed (exit code ${buildResult.code})`);
+      throw new BuildError(`docker build failed (exit code ${buildResult.code})`, "docker-build");
     }
   }
 
@@ -221,10 +168,11 @@ export async function dispatchToAdapter(opts: {
   } = opts;
   const { readFile, writeFile, rm } = await import("node:fs/promises");
 
+  const logger = createDeployLogger(appendLog, deploymentId);
   const isStaticDeploy = event.deployStrategy === "static";
   const deployStrategy = event.deployStrategy || "managed";
   const adapter = getAdapter(provider, deployStrategy);
-  await appendLog(deploymentId, `[${ts()}] ℹ Using adapter: ${adapter.id}`);
+  await logger.info(`Using adapter: ${adapter.id}`);
 
   const detectedStack = toDetectedStack(repoConfig);
 
@@ -257,12 +205,12 @@ export async function dispatchToAdapter(opts: {
   const isAlreadyRemote = actualImage.includes(".dkr.ecr.") || actualImage.includes("gcr.io") || actualImage.includes("docker.pkg.dev");
   if (isAlreadyRemote) {
     // Image was built and pushed remotely (e.g., CodeBuild) — skip local push
-    await adapterCtx.appendLog(`ℹ Image already in registry: ${actualImage}`);
+    await logger.info(`Image already in registry: ${actualImage}`);
     pushResult = { remoteImageUri: actualImage, skipped: true };
 
     // Populate adapter state that provisionInfrastructure needs
     if (actualImage.includes(".dkr.ecr.")) {
-      const { getAwsAccountId } = await import("./aws-helpers");
+      const { getAwsAccountId } = await import("../../lib/aws");
       const credentials = { accessKeyId: providerRow.api_key, secretAccessKey: providerRow.api_secret };
       const accountId = await getAwsAccountId(region, credentials);
       adapterCtx.state.awsAccountId = accountId;
@@ -281,19 +229,18 @@ export async function dispatchToAdapter(opts: {
 
   // Update deployment record with success
   const finalUrl = provision.appUrl || "";
-  await appendLog(deploymentId, `[${ts()}]`);
-  await appendLog(deploymentId, `[${ts()}] ── Complete ───────────────────────`);
-  await appendLog(deploymentId, `[${ts()}] ✓ ${isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`}`);
-  await appendLog(deploymentId, `[${ts()}] ✓ Infrastructure provisioned via ${adapter.id}`);
+  await logger.section("Complete");
+  await logger.success(isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`);
+  await logger.success(`Infrastructure provisioned via ${adapter.id}`);
   if (finalUrl) {
     // Run health check before marking as success — keeps status as "deploying"
     // so the frontend shows progress while the app boots
     await waitForAppReady(deploymentId, finalUrl);
 
-    await appendLog(deploymentId, `[${ts()}] ✓ Application URL: ${finalUrl}`);
+    await logger.success(`Application URL: ${finalUrl}`);
     await db.exec`UPDATE deployments SET status = 'success', app_url = ${finalUrl}, updated_at = NOW() WHERE id = ${deploymentId}`;
   } else {
-    await appendLog(deploymentId, `[${ts()}] ⚠ Could not determine app URL — check cloud console`);
+    await logger.warn("Could not determine app URL — check cloud console");
     await db.exec`UPDATE deployments SET status = 'success', updated_at = NOW() WHERE id = ${deploymentId}`;
   }
 }
