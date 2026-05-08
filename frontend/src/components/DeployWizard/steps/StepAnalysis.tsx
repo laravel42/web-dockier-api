@@ -6,6 +6,17 @@ import Spinner from "../../Spinner";
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
 const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
 
+/** Generic display names for infrastructure service types (provider-agnostic). */
+const SERVICE_DISPLAY_NAMES: Record<string, string> = {
+  database: "Database",
+  cache: "Cache",
+  queue: "Message Queue",
+  storage: "Object Storage",
+  mail: "Mail Service",
+  search: "Search Engine",
+  broadcasting: "WebSocket / Broadcasting",
+};
+
 export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, detectionHints, onChange }: {
   state: WizardState;
   analysis: RepoAnalysis | null;
@@ -123,7 +134,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                 <div key={svc.type} className="rounded-lg border border-border px-3 py-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-medium text-text">{svc.name}</span>
+                      <span className="text-sm font-medium text-text">{SERVICE_DISPLAY_NAMES[svc.type] || svc.name}</span>
                       <span className="text-xs text-text-muted">({svc.type})</span>
                       {svc.confidence >= 0.8 && (
                         <span className="px-1 py-0.5 bg-success-50 text-success-500 rounded text-[10px] font-medium">high confidence</span>
