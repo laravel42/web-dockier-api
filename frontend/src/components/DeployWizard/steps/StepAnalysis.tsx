@@ -3,6 +3,9 @@ import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
 import WarningIcon from "../../icons/outlined/WarningIcon";
 import Spinner from "../../Spinner";
 
+/** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
+const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
+
 export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, onChange }: {
   state: WizardState;
   analysis: RepoAnalysis | null;
@@ -37,6 +40,26 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   const getManagedInfo = (type: string) =>
     MANAGED_INFO[providerName]?.[type] || FALLBACK_MANAGED[type] || { service: "Managed Service", cost: "varies" };
 
+  // Separate provisionable services from auto-configured ones
+  const provisionableServices = analysis.detectedServices.filter(
+    (svc) => !AUTO_CONFIGURED_SERVICES.has(svc.type)
+  );
+  const autoConfiguredServices = analysis.detectedServices.filter(
+    (svc) => AUTO_CONFIGURED_SERVICES.has(svc.type)
+  );
+
+  // Build deployment requirements from aiAnalysis flags + auto-configured services
+  const deployRequirements: Array<{ icon: string; label: string }> = [];
+  if (analysis.aiAnalysis?.needsScheduler || autoConfiguredServices.some(s => s.type === "scheduler")) {
+    deployRequirements.push({ icon: "⏱️", label: "Task Scheduler detected — a cron entry will be configured on the instance" });
+  }
+  if (analysis.aiAnalysis?.needsQueueWorker) {
+    deployRequirements.push({ icon: "📨", label: "Queue Worker detected — a background worker process will be configured" });
+  }
+  if (analysis.aiAnalysis?.needsWebsockets) {
+    deployRequirements.push({ icon: "🔌", label: "WebSockets detected — a WebSocket server will be configured" });
+  }
+
   return (
     <div className="space-y-4">
       {/* AI Summary */}
@@ -70,8 +93,8 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
         </div>
       )}
 
-      {/* Detected Services */}
-      {analysis.detectedServices.length > 0 && (
+      {/* Detected Services (provisionable only) */}
+      {provisionableServices.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
             Infrastructure Components
@@ -80,7 +103,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
             Choose between self-hosted (on the same server, no extra cost) or managed services (separate, provider-managed).
           </p>
           <div className="space-y-2">
-            {analysis.detectedServices.map((svc) => {
+            {provisionableServices.map((svc) => {
               const managed = getManagedInfo(svc.type);
               const isManaged = state.servicesModes[svc.type] === "managed";
               return (
@@ -129,9 +152,29 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
         </div>
       )}
 
-      {analysis.detectedServices.length === 0 && (
+      {provisionableServices.length === 0 && deployRequirements.length === 0 && (
         <div className="rounded-lg bg-secondary-50 p-4 text-center">
           <p className="text-sm text-text-muted">No additional services detected. Your app will be deployed as a standalone container.</p>
+        </div>
+      )}
+
+      {/* Deployment Requirements — auto-configured items */}
+      {deployRequirements.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+            Deployment Requirements
+          </p>
+          <p className="text-xs text-text-muted mb-3">
+            These will be automatically configured on your instance during deployment.
+          </p>
+          <div className="space-y-1.5">
+            {deployRequirements.map((req, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary-50 border border-border">
+                <span className="text-sm">{req.icon}</span>
+                <span className="text-xs text-text-secondary">{req.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
