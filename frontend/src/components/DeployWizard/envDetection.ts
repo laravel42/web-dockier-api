@@ -75,9 +75,77 @@ const MANAGED_PROVIDER_PATTERNS: Array<{ pattern: RegExp; name: string; serviceT
   { pattern: /algolia\.net/i, name: "Algolia", serviceType: "search" },
 ];
 
+/** Values that indicate a local/self-hosted setup */
+const SELF_HOSTED_PATTERNS = [
+  /^127\.0\.0\.1$/,
+  /^localhost$/i,
+  /^0\.0\.0\.0$/,
+  /^host\.docker\.internal$/i,
+  /^172\.\d+\.\d+\.\d+$/,  // Docker network
+  /^10\.\d+\.\d+\.\d+$/,   // Private network
+  /^192\.168\.\d+\.\d+$/,  // Private network
+  /^mysql$/i,               // Docker service name
+  /^postgres$/i,            // Docker service name
+  /^redis$/i,               // Docker service name
+  /^mariadb$/i,             // Docker service name
+];
+
+/** Display names for DB connection drivers */
+const DB_DRIVER_NAMES: Record<string, string> = {
+  mysql: "MySQL",
+  pgsql: "PostgreSQL",
+  postgres: "PostgreSQL",
+  postgresql: "PostgreSQL",
+  sqlite: "SQLite",
+  sqlsrv: "SQL Server",
+  mariadb: "MariaDB",
+};
+
+/** Display names for cache/queue drivers */
+const CACHE_DRIVER_NAMES: Record<string, string> = {
+  redis: "Redis",
+  memcached: "Memcached",
+  file: "File",
+  array: "Array",
+  database: "Database",
+};
+
 export interface EnvDetectionResult {
   mode: "vps" | "managed";
   hint: string;
+}
+
+/**
+ * Check if a value looks like a local/self-hosted address.
+ */
+function isSelfHostedValue(value: string): boolean {
+  return SELF_HOSTED_PATTERNS.some((p) => p.test(value.trim()));
+}
+
+/**
+ * Extract a human-readable driver/engine name from env vars for a given service type.
+ */
+function getDriverName(
+  envVars: Array<{ name: string; value: string }>,
+  serviceType: string,
+): string | null {
+  if (serviceType === "database") {
+    const conn = envVars.find((ev) => /^DB_CONNECTION$/i.test(ev.name));
+    if (conn?.value) return DB_DRIVER_NAMES[conn.value.toLowerCase()] || conn.value;
+  }
+  if (serviceType === "cache") {
+    const driver = envVars.find((ev) => /^CACHE_DRIVER$/i.test(ev.name) || /^CACHE_STORE$/i.test(ev.name));
+    if (driver?.value) return CACHE_DRIVER_NAMES[driver.value.toLowerCase()] || driver.value;
+  }
+  if (serviceType === "queue") {
+    const driver = envVars.find((ev) => /^QUEUE_CONNECTION$/i.test(ev.name) || /^QUEUE_DRIVER$/i.test(ev.name));
+    if (driver?.value) return driver.value.charAt(0).toUpperCase() + driver.value.slice(1);
+  }
+  if (serviceType === "mail") {
+    const mailer = envVars.find((ev) => /^MAIL_MAILER$/i.test(ev.name));
+    if (mailer?.value) return mailer.value.charAt(0).toUpperCase() + mailer.value.slice(1);
+  }
+  return null;
 }
 
 /**
@@ -115,6 +183,9 @@ export function detectServiceModes(
       continue;
     }
 
+    const driverName = getDriverName(envVars, serviceType);
+    const driverLabel = driverName ? `${driverName} ` : "";
+
     // Check if any matching var has a value that matches a known managed provider
     let detectedProvider: string | null = null;
     for (const ev of matchingVars) {
@@ -133,26 +204,43 @@ export function detectServiceModes(
     if (detectedProvider) {
       results[serviceType] = {
         mode: "managed",
-        hint: `🔗 Detected: ${detectedProvider} from your .env`,
+        hint: `🔗 Detected: ${detectedProvider} (${driverLabel || serviceType}) from your .env`,
+      };
+      continue;
+    }
+
+    // Check if any host/URL value points to localhost or a private IP → self-hosted
+    const hostVars = matchingVars.filter((ev) =>
+      /_(HOST|URL)$/i.test(ev.name) || /^DATABASE_URL$/i.test(ev.name)
+    );
+    const isLocal = hostVars.some((ev) => ev.value && isSelfHostedValue(ev.value));
+
+    if (isLocal) {
+      results[serviceType] = {
+        mode: "vps",
+        hint: `🖥️ ${driverLabel}— local credentials detected, will be self-hosted`,
+      };
+      continue;
+    }
+
+    // Key exists but value is empty/placeholder or doesn't match a known provider
+    const hasRealValue = matchingVars.some(
+      (ev) => ev.value && ev.value !== "null" && ev.value !== "your-value-here" && ev.value.length > 3
+    );
+
+    if (hasRealValue) {
+      // Has a value but we can't identify the provider — could be an external host
+      // we don't recognize. Default to managed since they have real credentials.
+      // But if the host is clearly local, we already caught that above.
+      results[serviceType] = {
+        mode: "managed",
+        hint: `🔗 ${driverLabel}credentials detected from your .env`,
       };
     } else {
-      // Key exists but value is empty/placeholder or doesn't match a known provider
-      const hasRealValue = matchingVars.some(
-        (ev) => ev.value && ev.value !== "null" && ev.value !== "your-value-here" && ev.value.length > 3
-      );
-      if (hasRealValue) {
-        // Has a value but we can't identify the provider — still default to managed
-        // since they clearly have credentials for something
-        results[serviceType] = {
-          mode: "managed",
-          hint: "🔗 Credentials detected from your .env",
-        };
-      } else {
-        results[serviceType] = {
-          mode: "vps",
-          hint: "⚠️ No credentials provided — will be self-hosted",
-        };
-      }
+      results[serviceType] = {
+        mode: "vps",
+        hint: `⚠️ No ${driverLabel}credentials provided — will be self-hosted`,
+      };
     }
   }
 
