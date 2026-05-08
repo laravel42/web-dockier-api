@@ -117,6 +117,7 @@ const CACHE_DRIVER_NAMES: Record<string, string> = {
  * If the connection driver is one of these, the service doesn't need provisioning.
  */
 const NO_INFRA_DRIVERS: Record<string, Set<string>> = {
+  database: new Set(["sqlite"]),
   queue: new Set(["sync", "database", "null"]),
   cache: new Set(["file", "array", "null", "database"]),
   storage: new Set(["local", "public"]),
