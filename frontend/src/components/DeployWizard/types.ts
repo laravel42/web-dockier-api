@@ -108,20 +108,23 @@ export interface WizardState {
   selectedProviderId: string;
   // Step 2
   deployStrategy: "vps" | "managed" | "static";
-  // Step 3
+  // Step 3 (Env Vars)
+  envVars: Array<{ name: string; value: string }>;
+  // Step 4 (Analysis)
   servicesModes: Record<string, "vps" | "managed">;
-  // Step 4
+  envDetectionHints: Record<string, string>;
+  manualServiceOverrides: string[];
+  // Step 5 (Plan)
   environment: "staging" | "production";
   selectedPlan: number;
-  // Step 5
+  // Step 6 (Config)
   tofuScript: string;
   tofuResources: string[];
   tofuAppName: string;
   tofuRegion: string;
   useDocker: boolean;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
-  envVars: Array<{ name: string; value: string }>;
-  // Step 6
+  // Step 7 (Deploy)
   deploymentId: string;
   deployStatus: string;
   deployLogs: string[];

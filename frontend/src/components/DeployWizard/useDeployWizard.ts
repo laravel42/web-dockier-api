@@ -4,6 +4,7 @@ import type { WizardState, RepoAnalysis } from "./types";
 import { INITIAL_WIZARD_STATE } from "./constants";
 import { getPlans } from "./plans";
 import { parseOwnerRepo } from "./utils";
+import { detectServiceModes } from "./envDetection";
 
 interface UseDeployWizardParams {
   open: boolean;
@@ -396,29 +397,51 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
     switch (step) {
       case 0: return !!state.selectedProvider && !!state.selectedProviderId;
       case 1: return !!state.deployStrategy;
-      case 2: return !analysisLoading;
-      case 3: return state.selectedPlan >= 0;
-      case 4: return !tofuLoading;
+      case 2: return true; // Env vars step — always can proceed (env vars are optional)
+      case 3: return !analysisLoading;
+      case 4: return state.selectedPlan >= 0;
+      case 5: return !tofuLoading;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (step === 4) {
-      setStep(5);
+    if (step === 5) {
+      setStep(6);
       startDeploy();
       return;
     }
-    if (step === 3) {
-      setStep(4);
+    if (step === 4) {
+      setStep(5);
       generateScript();
       return;
     }
-    setStep(prev => Math.min(prev + 1, 5));
+    // When advancing from Env Vars (2) to Analysis (3), run detection
+    if (step === 2) {
+      const serviceTypes = analysis?.detectedServices?.map(s => s.type) || [];
+      if (serviceTypes.length > 0) {
+        const detection = detectServiceModes(state.envVars, serviceTypes);
+        setState(prev => {
+          const newModes = { ...prev.servicesModes };
+          const newHints: Record<string, string> = {};
+          for (const [svcType, result] of Object.entries(detection)) {
+            newHints[svcType] = result.hint;
+            // Only apply auto-detection if user hasn't manually overridden this service
+            if (!prev.manualServiceOverrides.includes(svcType)) {
+              newModes[svcType] = result.mode;
+            }
+          }
+          return { ...prev, servicesModes: newModes, envDetectionHints: newHints };
+        });
+      }
+      setStep(3);
+      return;
+    }
+    setStep(prev => Math.min(prev + 1, 6));
   };
 
   const handleBack = () => {
-    if (step === 5) return;
+    if (step === 6) return;
     setStep(prev => Math.max(prev - 1, 0));
   };
 

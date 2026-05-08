@@ -6,11 +6,12 @@ import Spinner from "../../Spinner";
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
 const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
 
-export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, onChange }: {
+export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, detectionHints, onChange }: {
   state: WizardState;
   analysis: RepoAnalysis | null;
   analysisLoading?: boolean;
   analysisError?: string;
+  detectionHints?: Record<string, string>;
   onChange: (modes: Record<string, "vps" | "managed">) => void;
 }) {
   if (analysisLoading) {
@@ -155,6 +156,11 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                   {!isManaged && (
                     <div className="mt-1.5 pl-0.5">
                       <span className="text-xs text-text-muted">Installed on the same instance — no extra cost</span>
+                    </div>
+                  )}
+                  {detectionHints?.[svc.type] && (
+                    <div className="mt-1.5 pl-0.5">
+                      <span className="text-xs text-text-secondary">{detectionHints[svc.type]}</span>
                     </div>
                   )}
                 </div>
