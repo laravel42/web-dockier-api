@@ -131,6 +131,10 @@ function getRawDriver(
   envVars: Array<{ name: string; value: string }>,
   serviceType: string,
 ): string | null {
+  if (serviceType === "database") {
+    const v = envVars.find((ev) => /^DB_CONNECTION$/i.test(ev.name));
+    return v?.value?.toLowerCase() || null;
+  }
   if (serviceType === "queue") {
     const v = envVars.find((ev) => /^QUEUE_CONNECTION$/i.test(ev.name) || /^QUEUE_DRIVER$/i.test(ev.name));
     return v?.value?.toLowerCase() || null;
