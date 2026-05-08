@@ -110,6 +110,43 @@ const CACHE_DRIVER_NAMES: Record<string, string> = {
   database: "Database",
 };
 
+/**
+ * Drivers/values that mean "no separate infrastructure needed" for a service type.
+ * If the connection driver is one of these, the service doesn't need provisioning.
+ */
+const NO_INFRA_DRIVERS: Record<string, Set<string>> = {
+  queue: new Set(["sync", "database", "null"]),
+  cache: new Set(["file", "array", "null", "database"]),
+  storage: new Set(["local", "public"]),
+  mail: new Set(["log", "array", "null", "failover"]),
+};
+
+/**
+ * Get the raw driver value for a service type from env vars.
+ */
+function getRawDriver(
+  envVars: Array<{ name: string; value: string }>,
+  serviceType: string,
+): string | null {
+  if (serviceType === "queue") {
+    const v = envVars.find((ev) => /^QUEUE_CONNECTION$/i.test(ev.name) || /^QUEUE_DRIVER$/i.test(ev.name));
+    return v?.value?.toLowerCase() || null;
+  }
+  if (serviceType === "cache") {
+    const v = envVars.find((ev) => /^CACHE_DRIVER$/i.test(ev.name) || /^CACHE_STORE$/i.test(ev.name));
+    return v?.value?.toLowerCase() || null;
+  }
+  if (serviceType === "storage") {
+    const v = envVars.find((ev) => /^FILESYSTEM_DISK$/i.test(ev.name));
+    return v?.value?.toLowerCase() || null;
+  }
+  if (serviceType === "mail") {
+    const v = envVars.find((ev) => /^MAIL_MAILER$/i.test(ev.name));
+    return v?.value?.toLowerCase() || null;
+  }
+  return null;
+}
+
 export interface EnvDetectionResult {
   mode: "vps" | "managed";
   hint: string;
@@ -179,6 +216,18 @@ export function detectServiceModes(
       results[serviceType] = {
         mode: "vps",
         hint: "⚠️ No credentials provided — will be self-hosted",
+      };
+      continue;
+    }
+
+    // Check if the driver means "no separate infrastructure needed"
+    const rawDriver = getRawDriver(envVars, serviceType);
+    const noInfraSet = NO_INFRA_DRIVERS[serviceType];
+    if (rawDriver && noInfraSet?.has(rawDriver)) {
+      const driverDisplay = rawDriver.charAt(0).toUpperCase() + rawDriver.slice(1);
+      results[serviceType] = {
+        mode: "vps",
+        hint: `ℹ️ Driver: ${driverDisplay} — no separate infrastructure needed`,
       };
       continue;
     }
