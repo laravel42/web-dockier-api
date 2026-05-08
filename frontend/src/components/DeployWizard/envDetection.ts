@@ -80,6 +80,8 @@ const SELF_HOSTED_PATTERNS = [
   /^127\.0\.0\.1$/,
   /^localhost$/i,
   /^0\.0\.0\.0$/,
+  /^::1$/,
+  /^\[::1\]$/,
   /^host\.docker\.internal$/i,
   /^172\.\d+\.\d+\.\d+$/,  // Docker network
   /^10\.\d+\.\d+\.\d+$/,   // Private network
