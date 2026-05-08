@@ -59,7 +59,6 @@ export const FALLBACK_MANAGED: Record<string, { service: string; cost: string }>
   search: { service: "Search Service", cost: "~$25/mo" },
   mail: { service: "SMTP Provider", cost: "~$15/mo" },
   broadcasting: { service: "WebSocket Service", cost: "~$10/mo" },
-  scheduler: { service: "Scheduler", cost: "~$5/mo" },
 };
 
 /**
