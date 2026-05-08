@@ -95,6 +95,16 @@ SUPERVISOR
     supervisorctl reread && supervisorctl update`;
   }
 
+  // Scheduler cron — needed for Laravel projects regardless of provider (AWS/GCP)
+  const needsScheduler = p.aiAnalysis?.needsScheduler || vpsSvcs.some(s => s.type === "scheduler");
+  let schedulerSetup = "";
+  if (needsScheduler && isLaravel) {
+    schedulerSetup = `
+# ── Task Scheduler (Cron) ──
+(crontab -l 2>/dev/null; echo "* * * * * docker exec ${p.appName} php artisan schedule:run >> /var/log/${p.appName}-scheduler.log 2>&1") | sort -u | crontab -
+echo "Scheduler cron installed"`;
+  }
+
   // Build ECR image URI from deploy params (available when provider is AWS)
   const ecrImageUri = p.ecrImageUri || "";
   // Public Docker image (for template deploys like WordPress)
@@ -276,6 +286,7 @@ rm -f /etc/nginx/sites-enabled/default
 systemctl restart nginx
 fi
 ${queueSetup}
+${schedulerSetup}
 
 echo "✓ Server provisioned for ${p.appName}"`;
 }
