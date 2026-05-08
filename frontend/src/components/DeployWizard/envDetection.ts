@@ -161,9 +161,25 @@ export interface EnvDetectionResult {
 
 /**
  * Check if a value looks like a local/self-hosted address.
+ * Handles full URLs (postgres://localhost:5432/db), host:port, and bare hostnames.
  */
 function isSelfHostedValue(value: string): boolean {
-  return SELF_HOSTED_PATTERNS.some((p) => p.test(value.trim()));
+  let host = value.trim();
+  try {
+    if (host.includes("://")) {
+      host = new URL(host).hostname;
+    } else {
+      // Strip port from host:port (but handle IPv6 brackets like [::1]:5432)
+      const lastColon = host.lastIndexOf(":");
+      const lastBracket = host.lastIndexOf("]");
+      if (lastColon > lastBracket && lastColon !== -1) {
+        host = host.slice(0, lastColon);
+      }
+    }
+    // Remove IPv6 brackets
+    host = host.replace(/^\[|\]$/g, "");
+  } catch { /* ignore malformed URLs */ }
+  return SELF_HOSTED_PATTERNS.some((p) => p.test(host));
 }
 
 /**
