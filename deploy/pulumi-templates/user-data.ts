@@ -101,7 +101,7 @@ SUPERVISOR
   if (needsScheduler && isLaravel) {
     schedulerSetup = `
 # ── Task Scheduler (Cron) ──
-(crontab -l 2>/dev/null; echo "* * * * * docker exec ${p.appName} php artisan schedule:run >> /var/log/${p.appName}-scheduler.log 2>&1") | sort -u | crontab -
+(crontab -l 2>/dev/null | grep -Fv "artisan schedule:run"; echo "* * * * * docker exec ${p.appName} php artisan schedule:run >> /var/log/${p.appName}-scheduler.log 2>&1") | crontab -
 echo "Scheduler cron installed"`;
   }
 
