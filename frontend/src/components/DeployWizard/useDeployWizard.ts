@@ -41,8 +41,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
     if (open && analysis?.detectedServices?.length) {
       setState(prev => {
         if (Object.keys(prev.servicesModes).length > 0) return prev;
-        const modes: Record<string, "vps" | "managed"> = {};
-        analysis.detectedServices.forEach((s) => { modes[s.type] = "vps"; });
         const envVars = prev.envVars.length > 0 ? prev.envVars
           : (analysis.aiAnalysis?.envVars || []).map(entry => {
               const eqIdx = entry.indexOf("=");
@@ -50,7 +48,19 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
                 ? { name: entry.slice(0, eqIdx), value: entry.slice(eqIdx + 1) }
                 : { name: entry, value: "" };
             });
-        return { ...prev, servicesModes: modes, envVars };
+
+        // Run detection against current env vars to set initial modes
+        const serviceTypes = analysis.detectedServices.map(s => s.type);
+        const detection = detectServiceModes(envVars, serviceTypes);
+        const modes: Record<string, "vps" | "managed"> = {};
+        const hints: Record<string, string> = {};
+        for (const svc of analysis.detectedServices) {
+          const result = detection[svc.type];
+          modes[svc.type] = result?.mode || "vps";
+          if (result?.hint) hints[svc.type] = result.hint;
+        }
+
+        return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars };
       });
     }
   }, [open, analysis]);
