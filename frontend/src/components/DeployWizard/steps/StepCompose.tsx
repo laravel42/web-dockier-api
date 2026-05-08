@@ -1,7 +1,4 @@
-import { useState, useEffect, useRef } from "react";
 import type { WizardState } from "../types";
-import { parseEnvContent, formatEnvContent } from "../utils";
-import EnvEditor from "../../EnvEditor";
 import DockerIcon from "../../icons/filled/DockerIcon";
 import Spinner from "../../Spinner";
 import DockerfileIcon from "../../icons/filled/DockerfileIcon";
@@ -9,38 +6,14 @@ import RailpackIcon from "../../icons/outlined/RailpackIcon";
 import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
 
-export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onEnvChange, isTemplate }: {
+export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, isTemplate }: {
   state: WizardState;
   loading: boolean;
   error: string;
   onToggleDocker: () => void;
   onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
-  onEnvChange: (envVars: Array<{ name: string; value: string }>) => void;
   isTemplate?: boolean;
 }) {
-  const [rawEnv, setRawEnv] = useState(() => formatEnvContent(state.envVars));
-  const isInternalEditRef = useRef(false);
-
-  useEffect(() => {
-    if (isInternalEditRef.current) {
-      isInternalEditRef.current = false;
-      return;
-    }
-    const formatted = formatEnvContent(state.envVars);
-    setRawEnv((prev) => {
-      const parsed = parseEnvContent(prev);
-      const same = state.envVars.length === parsed.length &&
-        state.envVars.every((r, i) => r.name === parsed[i]?.name && r.value === parsed[i]?.value);
-      return same ? prev : formatted;
-    });
-  }, [state.envVars]);
-
-  const handleEnvEdit = (text: string) => {
-    isInternalEditRef.current = true;
-    setRawEnv(text);
-    onEnvChange(parseEnvContent(text));
-  };
-
   return (
     <div className="space-y-4">
       {/* Docker toggle — hidden for template projects and static deploys (no container needed) */}
@@ -153,20 +126,6 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       {/* Error */}
       {error && (
         <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{error}</div>
-      )}
-
-      {/* Environment Variables */}
-      {!loading && (
-        <div>
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Environment Variables</p>
-          <EnvEditor
-            value={rawEnv}
-            onChange={handleEnvEdit}
-            height="140px"
-            placeholder="# Paste your .env file content&#10;KEY=value&#10;ANOTHER=value"
-          />
-          <p className="text-[10px] text-text-muted mt-2">Paste your .env file content. Each line should be KEY=value. Comments (#) and empty lines are ignored.</p>
-        </div>
       )}
     </div>
   );
