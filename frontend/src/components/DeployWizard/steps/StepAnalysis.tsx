@@ -50,11 +50,23 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
 
   // Build deployment requirements from aiAnalysis flags + auto-configured services
   const deployRequirements: Array<{ icon: string; label: string }> = [];
+  const isLaravel = analysis.techStack.some(t => t.name.toLowerCase() === "laravel");
+
   if (analysis.aiAnalysis?.needsScheduler || autoConfiguredServices.some(s => s.type === "scheduler")) {
-    deployRequirements.push({ icon: "⏱️", label: "Task Scheduler detected — a cron entry will be configured on the instance" });
+    deployRequirements.push({
+      icon: "⏱️",
+      label: isLaravel
+        ? "Task Scheduler detected — a cron entry will be configured on the instance"
+        : "Task Scheduler detected — manual configuration may be required after deployment",
+    });
   }
   if (analysis.aiAnalysis?.needsQueueWorker) {
-    deployRequirements.push({ icon: "📨", label: "Queue Worker detected — a background worker process will be configured" });
+    deployRequirements.push({
+      icon: "📨",
+      label: isLaravel
+        ? "Queue Worker detected — a background worker process will be configured"
+        : "Queue Worker detected — manual configuration may be required after deployment",
+    });
   }
   if (analysis.aiAnalysis?.needsWebsockets) {
     deployRequirements.push({ icon: "🔌", label: "WebSockets detected — a WebSocket server will be configured" });
