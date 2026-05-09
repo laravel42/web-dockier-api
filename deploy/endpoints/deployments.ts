@@ -21,10 +21,23 @@ export const createDeployment = api(
     templateId?: string;
     envVars?: Array<{ name: string; value: string }>;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+    postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>;
   }): Promise<Deployment> => {
     const authData = getAuthData()!;
     const id = uuidv4();
     const script = params.tofuScript || "";
+
+    // Validate post-deploy commands
+    if (params.postDeployCommands) {
+      if (params.postDeployCommands.length > 20) {
+        throw APIError.invalidArgument("Maximum 20 post-deploy commands allowed");
+      }
+      for (const cmd of params.postDeployCommands) {
+        if (!cmd.command || cmd.command.length > 500) {
+          throw APIError.invalidArgument("Each command must be 1-500 characters");
+        }
+      }
+    }
 
     await db.exec`
       INSERT INTO deployments (id, app_id, provider_id, git_connection_id, project_id, repo, branch, status, logs, tofu_script, deploy_strategy, created_at, updated_at)
@@ -49,6 +62,7 @@ export const createDeployment = api(
         templateId: params.templateId || undefined,
         envVars: params.envVars || undefined,
         services: params.services || undefined,
+        postDeployCommands: params.postDeployCommands || undefined,
       });
     }
 

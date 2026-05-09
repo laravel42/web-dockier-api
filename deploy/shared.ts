@@ -70,6 +70,13 @@ export interface ProviderResponse {
   createdAt: string;
 }
 
+export interface PostDeployCommand {
+  command: string;
+  enabled: boolean;
+  continueOnFailure: boolean;
+  timeout?: number;
+}
+
 export interface DeployEvent {
   deploymentId: string;
   appId: string;
@@ -87,6 +94,7 @@ export interface DeployEvent {
   templateId?: string;
   envVars?: Array<{ name: string; value: string }>;
   services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+  postDeployCommands?: PostDeployCommand[];
 }
 
 export const deployTopic = new Topic<DeployEvent>("deployments", {

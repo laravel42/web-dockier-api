@@ -5,13 +5,15 @@ import DockerfileIcon from "../../icons/filled/DockerfileIcon";
 import RailpackIcon from "../../icons/outlined/RailpackIcon";
 import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
+import StepPostDeployCommands from "./StepPostDeployCommands";
 
-export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, isTemplate }: {
+export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onPostDeployCommandsChange, isTemplate }: {
   state: WizardState;
   loading: boolean;
   error: string;
   onToggleDocker: () => void;
   onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
+  onPostDeployCommandsChange: (commands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>) => void;
   isTemplate?: boolean;
 }) {
   return (
@@ -113,6 +115,14 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
             ))}
           </div>
         </div>
+      )}
+
+      {/* Post-Deploy Commands — hidden for static deploys */}
+      {state.deployStrategy !== "static" && (
+        <StepPostDeployCommands
+          state={state}
+          onChange={onPostDeployCommandsChange}
+        />
       )}
 
       {/* Loading */}

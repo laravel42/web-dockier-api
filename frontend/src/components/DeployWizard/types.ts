@@ -124,6 +124,7 @@ export interface WizardState {
   tofuRegion: string;
   useDocker: boolean;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+  postDeployCommands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>;
   // Step 7 (Deploy)
   deploymentId: string;
   deployStatus: string;

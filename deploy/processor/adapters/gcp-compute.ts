@@ -687,25 +687,23 @@ export class GcpComputeAdapter implements DeployAdapter {
             }
           }
 
-          // Run Laravel post-deploy commands if the container is running
+          // Laravel filesystem setup (artisan commands are now handled by user-defined post-deploy commands)
           if (containerRunning) {
             const isLaravel = event.techStack?.some(s => s.toLowerCase() === "laravel");
             if (isLaravel) {
-              await appendLog("ℹ Running Laravel post-deploy commands...");
+              await appendLog("ℹ Running Laravel filesystem setup...");
               await runCmd(
                 "ssh",
                 [
                   ...sshOpts,
                   `root@${serverIp}`,
                   `sleep 3 && ` +
-                  `docker exec ${containerName} php artisan config:clear 2>/dev/null; ` +
-                  `docker exec ${containerName} php artisan migrate --force 2>/dev/null; ` +
-                  `docker exec ${containerName} php artisan config:cache 2>/dev/null; ` +
+                  `docker exec ${containerName} sh -c 'mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache' 2>/dev/null; ` +
                   `echo LARAVEL_SETUP_DONE`,
                 ],
                 { cwd: workDir },
               );
-              await appendLog("✓ Laravel post-deploy commands completed");
+              await appendLog("✓ Laravel filesystem setup completed");
             }
           }
         }
@@ -800,25 +798,23 @@ export class GcpComputeAdapter implements DeployAdapter {
           await appendLog(`✓ Port mapping verified: host ${hostPort} → container ${containerPort}`);
         }
 
-        // Run Laravel post-deploy commands
+        // Laravel filesystem setup (artisan commands are now handled by user-defined post-deploy commands)
         if (containerRunning) {
           const isLaravel = event.techStack?.some(s => s.toLowerCase() === "laravel");
           if (isLaravel) {
-            await appendLog("ℹ Running Laravel post-deploy commands...");
+            await appendLog("ℹ Running Laravel filesystem setup...");
             await runCmd(
               "ssh",
               [
                 ...sshOpts,
                 `root@${serverIp}`,
                 `sleep 3 && ` +
-                `docker exec ${containerName} php artisan config:clear 2>/dev/null; ` +
-                `docker exec ${containerName} php artisan migrate --force 2>/dev/null; ` +
-                `docker exec ${containerName} php artisan config:cache 2>/dev/null; ` +
+                `docker exec ${containerName} sh -c 'mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache' 2>/dev/null; ` +
                 `echo LARAVEL_SETUP_DONE`,
               ],
               { cwd: workDir },
             );
-            await appendLog("✓ Laravel post-deploy commands completed");
+            await appendLog("✓ Laravel filesystem setup completed");
           }
         }
       } else {

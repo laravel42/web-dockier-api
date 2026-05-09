@@ -111,6 +111,7 @@ export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   tofuRegion: "",
   useDocker: true,
   buildMethod: "dockerfile",
+  postDeployCommands: [],
   deploymentId: "",
   deployStatus: "",
   deployLogs: [],

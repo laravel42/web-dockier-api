@@ -458,13 +458,9 @@ Resources:
                   echo "Scheduler cron installed"
                 fi
 
-                # ── Laravel post-deploy (migrate, cache) ──
+                # ── Laravel filesystem setup (required for container to function) ──
                 if [ "$IS_LARAVEL" = true ]; then
                   docker exec ${AppName} sh -c 'mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache' 2>/dev/null || true
-                  docker exec ${AppName} php artisan migrate --force 2>/dev/null || true
-                  docker exec ${AppName} php artisan config:cache 2>/dev/null || true
-                  docker exec ${AppName} php artisan route:cache 2>/dev/null || true
-                  docker exec ${AppName} php artisan view:cache 2>/dev/null || true
                   docker exec ${AppName} sh -c 'chown -R www-data:www-data storage bootstrap/cache 2>/dev/null; chmod -R 777 storage bootstrap/cache 2>/dev/null' || true
                 fi
 

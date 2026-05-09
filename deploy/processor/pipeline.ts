@@ -227,6 +227,149 @@ export async function dispatchToAdapter(opts: {
   // Run post-deploy steps
   await adapter.runPostDeploy(adapterCtx, provision);
 
+  // Execute user-defined post-deploy commands
+  const commands = (event.postDeployCommands || []).filter(c => c.enabled);
+  if (commands.length > 0 && deployStrategy !== "static") {
+    // Managed deploys (ECS/Cloud Run) don't support post-deploy commands yet —
+    // the container runs in the cloud, not locally. VPS deploys use SSH.
+    if (deployStrategy === "managed") {
+      await logger.section("Post-Deploy Commands");
+      await logger.warn(`Post-deploy commands are not yet supported for managed deploys (${adapter.id})`);
+      await logger.info("Commands configured: " + commands.map(c => c.command).join(", "));
+      await logger.info("These will be supported via ECS RunTask / Cloud Run Jobs in a future update");
+    } else if (deployStrategy === "vps") {
+      await logger.section("Post-Deploy Commands");
+      await logger.info(`Running ${commands.length} command(s)...`);
+
+      const containerName = repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+      const serverIp = provision.serverIp || "";
+      const deployKeyPath = adapterCtx.state.deployKeyPath || "";
+      const instanceId = provision.outputs.InstanceId || "";
+
+      // AWS EC2: use SSM SendCommand (no SSH key needed)
+      if (instanceId && provider === "aws") {
+        const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
+        const ssm = new SSMClient({
+          region,
+          credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret },
+        });
+
+        // Build a shell script that waits for Docker + container, then runs commands
+        const cmdChain = commands
+          .map(cmd => `docker exec $(docker ps -q | head -1) sh -c '${cmd.command.replace(/'/g, "'\\''")}'`)
+          .join(" && ");
+
+        const script = [
+          "#!/bin/bash",
+          "for i in $(seq 1 60); do",
+          "  if docker ps -q 2>/dev/null | grep -q .; then break; fi",
+          "  sleep 2",
+          "done",
+          cmdChain,
+        ].join("\n");
+
+        await logger.info("Executing via AWS SSM SendCommand...");
+
+        try {
+          const sendResult = await ssm.send(new SendCommandCommand({
+            InstanceIds: [instanceId],
+            DocumentName: "AWS-RunShellScript",
+            Parameters: { commands: [script] },
+            TimeoutSeconds: 120,
+          }));
+
+          const commandId = sendResult.Command?.CommandId;
+          if (commandId) {
+            // Poll for completion
+            let done = false;
+            for (let i = 0; i < 30; i++) {
+              await new Promise(r => setTimeout(r, 5000));
+              try {
+                const invocation = await ssm.send(new GetCommandInvocationCommand({
+                  CommandId: commandId,
+                  InstanceId: instanceId,
+                }));
+                const status = invocation.Status;
+                if (status === "Success") {
+                  await logger.success("All post-deploy commands executed successfully");
+                  if (invocation.StandardOutputContent?.trim()) {
+                    const lines = invocation.StandardOutputContent.trim().split("\n").slice(0, 20);
+                    for (const line of lines) await logger.info(line);
+                  }
+                  done = true;
+                  break;
+                } else if (status === "Failed" || status === "Cancelled" || status === "TimedOut") {
+                  await logger.warn(`SSM command ${status}`);
+                  if (invocation.StandardErrorContent?.trim()) {
+                    await logger.info(invocation.StandardErrorContent.trim().slice(0, 500));
+                  }
+                  done = true;
+                  break;
+                }
+                // InProgress — keep polling
+              } catch {
+                // InvocationDoesNotExist — agent hasn't picked it up yet
+              }
+            }
+            if (!done) {
+              await logger.warn("SSM command still running after timeout — commands may complete in background");
+            }
+          }
+        } catch (err: any) {
+          await logger.warn(`SSM SendCommand failed: ${err.message || err}`);
+          await logger.info("The instance may not have SSM agent ready yet — commands will run via cfn-init instead");
+        }
+
+      // GCP Compute / other VPS: use SSH
+      } else if (serverIp && deployKeyPath) {
+        const sshOpts = [
+          "-i", deployKeyPath,
+          "-o", "StrictHostKeyChecking=no",
+          "-o", "UserKnownHostsFile=/dev/null",
+          "-o", "ConnectTimeout=30",
+          "-o", "LogLevel=ERROR",
+        ];
+
+        // Build the command chain. Find the running container dynamically by ID
+        const cmdChain = commands
+          .map(cmd => {
+            const escaped = cmd.command.replace(/'/g, "'\\''");
+            return `docker exec $(docker ps -q | head -1) sh -c '${escaped}'`;
+          })
+          .join(" && ");
+
+        // Wait until docker daemon is running and a container is up, then execute
+        const remoteCmd = [
+          "for i in $(seq 1 60); do",
+          "  if docker ps -q 2>/dev/null | grep -q .; then break; fi;",
+          "  sleep 2;",
+          "done",
+          `&& ${cmdChain}`,
+          "&& echo POST_DEPLOY_DONE",
+        ].join(" ");
+
+        await logger.info("Commands will execute once container is ready...");
+        const result = await runCmd("ssh", [...sshOpts, `root@${serverIp}`, remoteCmd], { cwd: workDir });
+
+        if (result.output.includes("POST_DEPLOY_DONE")) {
+          await logger.success("All post-deploy commands executed successfully");
+          const outputLines = result.output.split("\n").filter(l =>
+            l.trim() && !l.includes("POST_DEPLOY_DONE") && !l.includes("Warning:")
+          );
+          for (const line of outputLines.slice(0, 20)) {
+            await logger.info(line.trim());
+          }
+        } else {
+          await logger.warn("Post-deploy commands may not have completed successfully");
+          const output = result.output.trim().replace(/Warning:.*\n?/g, "").slice(0, 500);
+          if (output) await logger.info(output);
+        }
+      } else {
+        await logger.warn("Cannot execute post-deploy commands — no SSH key or SSM instance available");
+      }
+    }
+  }
+
   // Update deployment record with success
   const finalUrl = provision.appUrl || "";
   await logger.section("Complete");

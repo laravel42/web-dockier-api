@@ -1,5 +1,5 @@
 import { request } from "./request";
-import type { Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult, CommitInfo } from "../types";
+import type { Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult } from "../types";
 
 export const gitApi = {
   listConnections: () =>

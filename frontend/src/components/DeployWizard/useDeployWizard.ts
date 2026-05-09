@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { deployApi, imageBuilderApi } from "../../services/api";
+import { deployApi, imageBuilderApi, projectsApi } from "../../services/api";
 import type { WizardState, RepoAnalysis } from "./types";
 import { INITIAL_WIZARD_STATE } from "./constants";
 import { getPlans } from "./plans";
@@ -30,6 +30,16 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
       setTofuLoading(false);
       setTofuError("");
       setDeployError("");
+
+      // Load saved post-deploy commands from project config
+      if (project.id) {
+        projectsApi.get(project.id).then(p => {
+          const saved = p.config?.postDeployCommands;
+          if (saved?.length) {
+            setState(prev => ({ ...prev, postDeployCommands: saved }));
+          }
+        }).catch(() => {});
+      }
     }
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
@@ -60,7 +70,16 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
           if (result?.hint) hints[svc.type] = result.hint;
         }
 
-        return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars };
+        // Pre-populate post-deploy commands from AI analysis only if no saved commands loaded
+        const postDeployCommands = prev.postDeployCommands.length > 0
+          ? prev.postDeployCommands
+          : (analysis.aiAnalysis?.postDeployCommands || []).map(cmd => ({
+              command: cmd,
+              enabled: true,
+              continueOnFailure: false,
+            }));
+
+        return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars, postDeployCommands };
       });
     }
   }, [open, analysis]);
@@ -121,6 +140,13 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
       // ── CodeBuild path: build image first via image-builder, then deploy ──
       // Template projects always use the standard path (pre-built Docker images, no CodeBuild needed)
       if (state.buildMethod === "codebuild" && project.sourceType !== "template") {
+        // Persist post-deploy commands to project config
+        if (state.postDeployCommands.length > 0 && project.id) {
+          projectsApi.update(project.id, {
+            config: { postDeployCommands: state.postDeployCommands },
+          }).catch(() => {});
+        }
+
         const ts0 = new Date().toISOString().replace("T", " ").slice(0, 19);
         const deployTargetMap: Record<string, "ecs" | "ec2" | "s3"> = {
           vps: "ec2",
@@ -357,6 +383,13 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
       }
 
       // ── Standard path: local build via deploy service ──
+      // Persist post-deploy commands to project config
+      if (state.postDeployCommands.length > 0 && project.id) {
+        projectsApi.update(project.id, {
+          config: { postDeployCommands: state.postDeployCommands },
+        }).catch(() => {}); // Best-effort — don't block deploy on config save
+      }
+
       const deployment = await deployApi.createDeployment({
         providerId: state.selectedProviderId,
         gitConnectionId: project.connectionId,
@@ -373,6 +406,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         services: analysis?.detectedServices?.length
           ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: state.servicesModes[svc.type] || "vps" as const }))
           : undefined,
+        postDeployCommands: state.postDeployCommands.length > 0 ? state.postDeployCommands : undefined,
       });
       setState(prev => ({ ...prev, deploymentId: deployment.id }));
 
