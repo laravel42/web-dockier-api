@@ -1,5 +1,16 @@
 export type ProjectSourceType = "repository" | "template";
 
+export interface PostDeployCommand {
+  command: string;
+  enabled: boolean;
+  continueOnFailure: boolean;
+  timeout?: number;
+}
+
+export interface ProjectConfig {
+  postDeployCommands?: PostDeployCommand[];
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -9,6 +20,7 @@ export interface Project {
   platform?: string;
   sourceType?: ProjectSourceType;
   template?: string;
+  config?: ProjectConfig;
   createdAt: string;
 }
 

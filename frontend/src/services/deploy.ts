@@ -46,6 +46,7 @@ export const deployApi = {
     templateId?: string;
     envVars?: Array<{ name: string; value: string }>;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+    postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>;
   }) =>
     request<{
       id: string;

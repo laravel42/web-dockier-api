@@ -95,6 +95,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               generateScript({ useDocker: next });
             }}
             onBuildMethodChange={(method) => setState(prev => ({ ...prev, buildMethod: method }))}
+            onPostDeployCommandsChange={(commands) => setState(prev => ({ ...prev, postDeployCommands: commands }))}
           />
         )}
         {step === 6 && <StepDeploy state={state} />}

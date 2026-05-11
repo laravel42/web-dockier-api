@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { db, extractRegionFromScript } from "../../shared";
 import {
+  GcpClient,
   getGcpAccessToken,
   getGcpProjectId,
   deleteOrphanedComputeResources,
@@ -355,7 +356,200 @@ export class GcpComputeAdapter implements DeployAdapter {
       );
     }
 
-    if (upResult.code !== 0) {
+    // If pulumi up fails due to zone resource exhaustion, try alternative zones
+    // and then alternative machine types if all zones are exhausted.
+    // GCP sometimes lacks capacity for specific machine types (especially n2d) in certain regions.
+    if (
+      upResult.code !== 0 &&
+      /does not have enough resources available|ZONE_RESOURCE_POOL_EXHAUSTED|resource-error/.test(
+        upResult.output,
+      )
+    ) {
+      // Extract the failed zone from the error output
+      const failedZoneMatch = upResult.output.match(/zones\/([a-z0-9-]+)/);
+      const failedZone = failedZoneMatch ? failedZoneMatch[1] : `${region}-b`;
+
+      // Extract the machine type that failed from the error output
+      const machineTypeMatch = upResult.output.match(/A ([a-z0-9-]+) VM instance is currently unavailable/);
+      const failedMachineType = machineTypeMatch ? machineTypeMatch[1] : "";
+
+      await appendLog(`⚠ Zone ${failedZone} has insufficient resources for ${failedMachineType || "requested machine type"} — trying alternative zones...`);
+
+      // The Pulumi resource logical name matches the sanitized appName
+      const resName = repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+      // Query GCP for actual available zones in this region (not all regions have the same zones)
+      let availableZones: string[] = [];
+      try {
+        const zoneToken = ctx.state.gcpAccessToken || await getGcpAccessToken(providerCredentials.apiKey);
+        const zoneClient = new GcpClient(zoneToken, gcpProjectId);
+        const zonesData = await zoneClient.requestJson<{
+          items?: Array<{ name: string; status: string }>;
+        }>(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/zones?filter=region="https://www.googleapis.com/compute/v1/projects/${gcpProjectId}/regions/${region}"`);
+        availableZones = (zonesData.items || [])
+          .filter(z => z.status === "UP")
+          .map(z => z.name)
+          .filter(z => z !== failedZone);
+      } catch {
+        // Fallback: try common zone suffixes for the region
+        availableZones = ["a", "b", "c"]
+          .map(s => `${region}-${s}`)
+          .filter(z => z !== failedZone);
+      }
+
+      // Build the list of machine type fallbacks to try if all zones are exhausted.
+      // GCP machine type families have different availability:
+      // - n2d (AMD EPYC): cheapest but least available
+      // - e2 (shared-core/burstable): most widely available
+      // - n2 (Intel Cascade Lake): good availability
+      // - n1 (older Intel): legacy but widely available
+      const machineTypeFallbacks = getMachineTypeFallbacks(failedMachineType);
+
+      const triedZones = new Set([failedZone]);
+      let zoneRetrySuccess = false;
+      let currentMachineTypeIdx = -1; // -1 means using original machine type
+
+      // Outer loop: try each machine type (original first via zone iteration, then fallbacks)
+      while (!zoneRetrySuccess) {
+        // Try all available zones for the current machine type
+        for (const candidateZone of availableZones) {
+          if (triedZones.has(candidateZone)) continue;
+          triedZones.add(candidateZone);
+
+          await appendLog(`ℹ Trying zone ${candidateZone}...`);
+
+          // Set the explicit zone config to override the dynamic zone selection
+          await runCmd(
+            "pulumi",
+            ["config", "set", "zone", candidateZone, "--non-interactive"],
+            { cwd: pulumiDir, env: providerEnv },
+          );
+
+          // Try to remove the failed instance from state (may not exist if creation failed)
+          await runCmd(
+            "pulumi",
+            ["state", "delete", "--yes", "--non-interactive", `urn:pulumi:${stackName}::${repoName}::gcp:compute/instance:Instance::${resName}`],
+            { cwd: pulumiDir, env: providerEnv },
+          );
+
+          upResult = await runCmd(
+            "pulumi",
+            ["up", "--yes", "--non-interactive", "--skip-preview"],
+            { cwd: pulumiDir, env: providerEnv },
+          );
+
+          if (upResult.code === 0) {
+            await appendLog(`✓ Successfully deployed to zone ${candidateZone}`);
+            if (currentMachineTypeIdx >= 0) {
+              const usedType = machineTypeFallbacks[currentMachineTypeIdx];
+              ctx.state.machineTypeFallback = usedType;
+              ctx.state.originalMachineType = failedMachineType;
+            }
+            zoneRetrySuccess = true;
+            break;
+          }
+
+          // If this zone also lacks resources, continue to the next one
+          if (/does not have enough resources available|ZONE_RESOURCE_POOL_EXHAUSTED/.test(upResult.output)) {
+            await appendLog(`⚠ Zone ${candidateZone} also exhausted, trying next...`);
+            continue;
+          }
+
+          // If it's a different error (not zone-related), stop retrying entirely
+          break;
+        }
+
+        // If the inner loop broke due to a non-capacity error, don't try more machine types
+        if (
+          upResult.code !== 0 &&
+          !/does not have enough resources available|ZONE_RESOURCE_POOL_EXHAUSTED/.test(upResult.output)
+        ) {
+          break;
+        }
+
+        if (zoneRetrySuccess) break;
+
+        // All zones exhausted for this machine type — try a fallback machine type
+        currentMachineTypeIdx++;
+        if (currentMachineTypeIdx >= machineTypeFallbacks.length) {
+          // No more fallbacks to try
+          break;
+        }
+
+        const fallbackType = machineTypeFallbacks[currentMachineTypeIdx];
+        await appendLog(`⚠ All zones exhausted for current machine type — falling back to ${fallbackType}...`);
+        await appendLog(`ℹ Note: Your requested instance type (${failedMachineType}) is unavailable in ${region}. Deploying with ${fallbackType} instead.`);
+
+        // Override the machine type via Pulumi config (avoids fragile regex patching of the program)
+        await runCmd(
+          "pulumi",
+          ["config", "set", "machineType", fallbackType, "--non-interactive"],
+          { cwd: pulumiDir, env: providerEnv },
+        );
+
+        // Reset zones so we try all of them again with the new machine type
+        triedZones.clear();
+        triedZones.add(""); // dummy to avoid empty set issues
+
+        // Reset zone config to let the template pick the best zone again
+        await runCmd(
+          "pulumi",
+          ["config", "rm", "zone", "--non-interactive"],
+          { cwd: pulumiDir, env: providerEnv },
+        );
+
+        // Try the first zone with the new machine type
+        const firstZone = availableZones[0] || `${region}-a`;
+        await appendLog(`ℹ Trying zone ${firstZone} with ${fallbackType}...`);
+        triedZones.add(firstZone);
+
+        await runCmd(
+          "pulumi",
+          ["config", "set", "zone", firstZone, "--non-interactive"],
+          { cwd: pulumiDir, env: providerEnv },
+        );
+
+        await runCmd(
+          "pulumi",
+          ["state", "delete", "--yes", "--non-interactive", `urn:pulumi:${stackName}::${repoName}::gcp:compute/instance:Instance::${resName}`],
+          { cwd: pulumiDir, env: providerEnv },
+        );
+
+        upResult = await runCmd(
+          "pulumi",
+          ["up", "--yes", "--non-interactive", "--skip-preview"],
+          { cwd: pulumiDir, env: providerEnv },
+        );
+
+        if (upResult.code === 0) {
+          await appendLog(`✓ Successfully deployed to zone ${firstZone} with ${fallbackType}`);
+          ctx.state.machineTypeFallback = fallbackType;
+          ctx.state.originalMachineType = failedMachineType;
+          zoneRetrySuccess = true;
+          break;
+        }
+
+        if (/does not have enough resources available|ZONE_RESOURCE_POOL_EXHAUSTED/.test(upResult.output)) {
+          await appendLog(`⚠ Zone ${firstZone} exhausted for ${fallbackType}, trying remaining zones...`);
+          // Continue the outer loop — the inner for-loop will try remaining zones
+          continue;
+        }
+
+        // Non-capacity error with fallback type — stop
+        break;
+      }
+
+      if (!zoneRetrySuccess && upResult.code !== 0) {
+        const errorLines = upResult.output
+          .split("\n")
+          .filter((l) => l.trim())
+          .slice(-20);
+        for (const line of errorLines) {
+          await appendLog(`✗ ${line}`);
+        }
+        throw new Error(`pulumi up failed (exit code ${upResult.code})`);
+      }
+    } else if (upResult.code !== 0) {
       const errorLines = upResult.output
         .split("\n")
         .filter((l) => l.trim())
@@ -368,6 +562,11 @@ export class GcpComputeAdapter implements DeployAdapter {
 
     // Extract outputs
     await appendLog("── Extracting outputs ──────────────");
+
+    // Notify user if a machine type fallback was used
+    if (ctx.state.machineTypeFallback) {
+      await appendLog(`⚠ Instance type changed: ${ctx.state.originalMachineType} → ${ctx.state.machineTypeFallback} (original unavailable in ${region})`);
+    }
 
     let appUrl = "";
     let serverIp = "";
@@ -687,25 +886,23 @@ export class GcpComputeAdapter implements DeployAdapter {
             }
           }
 
-          // Run Laravel post-deploy commands if the container is running
+          // Laravel filesystem setup (artisan commands are now handled by user-defined post-deploy commands)
           if (containerRunning) {
             const isLaravel = event.techStack?.some(s => s.toLowerCase() === "laravel");
             if (isLaravel) {
-              await appendLog("ℹ Running Laravel post-deploy commands...");
+              await appendLog("ℹ Running Laravel filesystem setup...");
               await runCmd(
                 "ssh",
                 [
                   ...sshOpts,
                   `root@${serverIp}`,
                   `sleep 3 && ` +
-                  `docker exec ${containerName} php artisan config:clear 2>/dev/null; ` +
-                  `docker exec ${containerName} php artisan migrate --force 2>/dev/null; ` +
-                  `docker exec ${containerName} php artisan config:cache 2>/dev/null; ` +
+                  `docker exec ${containerName} sh -c 'mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache' 2>/dev/null; ` +
                   `echo LARAVEL_SETUP_DONE`,
                 ],
                 { cwd: workDir },
               );
-              await appendLog("✓ Laravel post-deploy commands completed");
+              await appendLog("✓ Laravel filesystem setup completed");
             }
           }
         }
@@ -800,25 +997,23 @@ export class GcpComputeAdapter implements DeployAdapter {
           await appendLog(`✓ Port mapping verified: host ${hostPort} → container ${containerPort}`);
         }
 
-        // Run Laravel post-deploy commands
+        // Laravel filesystem setup (artisan commands are now handled by user-defined post-deploy commands)
         if (containerRunning) {
           const isLaravel = event.techStack?.some(s => s.toLowerCase() === "laravel");
           if (isLaravel) {
-            await appendLog("ℹ Running Laravel post-deploy commands...");
+            await appendLog("ℹ Running Laravel filesystem setup...");
             await runCmd(
               "ssh",
               [
                 ...sshOpts,
                 `root@${serverIp}`,
                 `sleep 3 && ` +
-                `docker exec ${containerName} php artisan config:clear 2>/dev/null; ` +
-                `docker exec ${containerName} php artisan migrate --force 2>/dev/null; ` +
-                `docker exec ${containerName} php artisan config:cache 2>/dev/null; ` +
+                `docker exec ${containerName} sh -c 'mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache' 2>/dev/null; ` +
                 `echo LARAVEL_SETUP_DONE`,
               ],
               { cwd: workDir },
             );
-            await appendLog("✓ Laravel post-deploy commands completed");
+            await appendLog("✓ Laravel filesystem setup completed");
           }
         }
       } else {
@@ -892,4 +1087,71 @@ export class GcpComputeAdapter implements DeployAdapter {
       errors,
     };
   }
+}
+
+// ─── Machine Type Fallback Logic ────────────────────────────────────
+
+/**
+ * Get a list of equivalent machine types to try when the requested type
+ * is unavailable in a region. Returns alternatives with similar vCPU/RAM
+ * from different machine families.
+ *
+ * GCP machine type availability varies by family:
+ * - e2: Most widely available (burstable, cost-effective)
+ * - n2: Good availability (Intel Cascade Lake+)
+ * - n2d: Limited availability (AMD EPYC, cheapest)
+ * - n1: Legacy but widely available
+ * - c2/c2d: Compute-optimized, limited regions
+ */
+function getMachineTypeFallbacks(machineType: string): string[] {
+  if (!machineType) return ["e2-standard-4", "n2-standard-4", "e2-standard-2"];
+
+  // Handle shared-core / non-standard machine types that don't follow family-tier-vcpus pattern
+  // (e.g., f1-micro, g1-small, e2-micro, e2-small, e2-medium)
+  const sharedCoreFallbacks: Record<string, string[]> = {
+    "f1-micro": ["e2-micro", "e2-small", "e2-medium"],
+    "g1-small": ["e2-small", "e2-medium", "e2-standard-2"],
+    "e2-micro": ["e2-small", "e2-medium", "n1-standard-1"],
+    "e2-small": ["e2-medium", "e2-standard-2", "n1-standard-1"],
+    "e2-medium": ["e2-standard-2", "n2-standard-2", "n1-standard-2"],
+  };
+  if (sharedCoreFallbacks[machineType]) {
+    return sharedCoreFallbacks[machineType];
+  }
+
+  // Parse standard machine types: family-tier-vcpus (e.g., "n2d-standard-4")
+  const match = machineType.match(/^([a-z0-9]+)-([a-z]+)-(\d+)$/);
+  if (!match) {
+    // Can't parse — try common alternatives
+    return ["e2-standard-4", "e2-standard-2", "n2-standard-2"];
+  }
+
+  const [, family, tier, vcpusStr] = match;
+  const vcpus = parseInt(vcpusStr, 10);
+
+  // Build fallback list: same size in different families, then smaller sizes
+  const fallbacks: string[] = [];
+
+  // Priority order of families (e2 is most available, then n2, then n1)
+  const familyPriority = ["e2", "n2", "n1", "n2d", "c2"];
+  const sameSizeFamilies = familyPriority.filter(f => f !== family);
+
+  // Same vCPU count in other families
+  for (const f of sameSizeFamilies) {
+    fallbacks.push(`${f}-${tier}-${vcpus}`);
+  }
+
+  // If the requested size is large (4+ vCPUs), also try a smaller size
+  // which is more likely to be available
+  if (vcpus >= 4) {
+    const smallerVcpus = Math.max(2, Math.floor(vcpus / 2));
+    for (const f of ["e2", ...sameSizeFamilies]) {
+      const candidate = `${f}-${tier}-${smallerVcpus}`;
+      if (!fallbacks.includes(candidate)) {
+        fallbacks.push(candidate);
+      }
+    }
+  }
+
+  return fallbacks;
 }

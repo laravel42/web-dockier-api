@@ -31,6 +31,10 @@ export interface AdapterState {
 
   // ── Actual image name (may differ from the original if cached) ──
   actualImage?: string;
+
+  // ── Machine type fallback (populated when zone exhaustion triggers a machine type change) ──
+  machineTypeFallback?: string;
+  originalMachineType?: string;
 }
 
 /** Context shared across all adapter method calls for a single deployment */

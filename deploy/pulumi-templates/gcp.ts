@@ -94,6 +94,7 @@ const region = config.get("region") || "${p.region}";
 const sshPublicKey = config.require("sshPublicKey");
 const suffix = config.get("keyPairSuffix") || "";
 const resName = suffix ? \`${p.appName}-\${suffix}\` : "${p.appName}";
+const machineType = config.get("machineType") || "${p.instanceType || "n2d-standard-2"}";
 const gcpConfig = new pulumi.Config("gcp");
 const project = gcpConfig.require("project");
 
@@ -105,10 +106,10 @@ const arRepo = new gcp.artifactregistry.Repository("${p.appName}-repo", {
   cleanupPolicyDryRun: false,
 }, { import: \`projects/\${project}/locations/\${region}/repositories/${p.appName}\`, retainOnDelete: false });
 
-// ── Pick an available zone (prefer -b, -c, -f over -a for better availability) ──
+// ── Pick an available zone (prefer -c, -f, -b over -a for better availability) ──
 const zones = gcp.compute.getZonesOutput({ region, status: "UP" });
 const zone = config.get("zone") || zones.names.apply(zs => {
-  const preferred = ["-b", "-c", "-f", "-a"];
+  const preferred = ["-c", "-f", "-b", "-a"];
   for (const suffix of preferred) {
     const match = zs.find(z => z.endsWith(suffix));
     if (match) return match;
@@ -139,7 +140,7 @@ const staticIp = new gcp.compute.Address(\`\${resName}-ip\`, {
 // ── Instance ──
 const instance = new gcp.compute.Instance(resName, {
   name: resName,
-  machineType: "${p.instanceType || "n2d-standard-2"}",
+  machineType: machineType,
   zone: zone,
   tags: [\`\${resName}-server\`],
   scheduling: {
