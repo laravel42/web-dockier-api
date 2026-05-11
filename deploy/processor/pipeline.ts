@@ -375,6 +375,9 @@ export async function dispatchToAdapter(opts: {
   await logger.section("Complete");
   await logger.success(isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`);
   await logger.success(`Infrastructure provisioned via ${adapter.id}`);
+  if (adapterCtx.state.machineTypeFallback) {
+    await logger.warn(`Instance type was changed from ${adapterCtx.state.originalMachineType} to ${adapterCtx.state.machineTypeFallback} due to capacity constraints in ${region}. You can redeploy with a different region if you need the original instance type.`);
+  }
   if (finalUrl) {
     // Run health check before marking as success — keeps status as "deploying"
     // so the frontend shows progress while the app boots
