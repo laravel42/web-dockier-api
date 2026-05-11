@@ -102,11 +102,8 @@ export const updateProject = api(
           }
         }
       }
-      // Merge with existing config to avoid wiping other fields
-      const existingRow = await db.queryRow<{ config: string }>`SELECT config FROM projects WHERE id = ${params.projectId}`;
-      const existingConfig = existingRow?.config ? (typeof existingRow.config === "string" ? JSON.parse(existingRow.config) : existingRow.config) : {};
-      const mergedConfig = { ...existingConfig, ...params.config };
-      await db.exec`UPDATE projects SET config = ${JSON.stringify(mergedConfig)}, updated_at = NOW() WHERE id = ${params.projectId}`;
+      // Atomic merge with existing config using Postgres JSONB || operator to avoid race conditions
+      await db.exec`UPDATE projects SET config = COALESCE(config, '{}'::jsonb) || ${JSON.stringify(params.config)}::jsonb, updated_at = NOW() WHERE id = ${params.projectId}`;
     }
     const row = await db.queryRow<{ id: string; name: string; repository: string; branch: string; connection_id: string; platform: string; source_type: string; template: string; config: string; created_at: Date }>`SELECT id, name, repository, branch, connection_id, platform, source_type, template, config, created_at FROM projects WHERE id = ${params.projectId}`;
     const config = typeof row!.config === "string" ? JSON.parse(row!.config) : (row!.config || {});

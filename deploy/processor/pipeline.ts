@@ -254,15 +254,20 @@ export async function dispatchToAdapter(opts: {
           credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret },
         });
 
-        // Build a shell script that waits for Docker + container, then runs commands
+        // Build a shell script that waits for the specific container, then runs commands.
+        // Each command respects its continueOnFailure setting.
         const cmdChain = commands
-          .map(cmd => `docker exec $(docker ps -q | head -1) sh -c '${cmd.command.replace(/'/g, "'\\''")}'`)
+          .map(cmd => {
+            const escaped = cmd.command.replace(/'/g, "'\\''");
+            const exec = `docker exec ${containerName} sh -c '${escaped}'`;
+            return cmd.continueOnFailure ? `(${exec} || true)` : exec;
+          })
           .join(" && ");
 
         const script = [
           "#!/bin/bash",
           "for i in $(seq 1 60); do",
-          "  if docker ps -q 2>/dev/null | grep -q .; then break; fi",
+          `  if docker ps --filter "name=${containerName}" --filter "status=running" -q 2>/dev/null | grep -q .; then break; fi`,
           "  sleep 2",
           "done",
           cmdChain,
@@ -330,18 +335,20 @@ export async function dispatchToAdapter(opts: {
           "-o", "LogLevel=ERROR",
         ];
 
-        // Build the command chain. Find the running container dynamically by ID
+        // Build the command chain targeting the specific container.
+        // Each command respects its continueOnFailure setting.
         const cmdChain = commands
           .map(cmd => {
             const escaped = cmd.command.replace(/'/g, "'\\''");
-            return `docker exec $(docker ps -q | head -1) sh -c '${escaped}'`;
+            const exec = `docker exec ${containerName} sh -c '${escaped}'`;
+            return cmd.continueOnFailure ? `(${exec} || true)` : exec;
           })
           .join(" && ");
 
-        // Wait until docker daemon is running and a container is up, then execute
+        // Wait until the specific app container is running, then execute
         const remoteCmd = [
           "for i in $(seq 1 60); do",
-          "  if docker ps -q 2>/dev/null | grep -q .; then break; fi;",
+          `  if docker ps --filter "name=${containerName}" --filter "status=running" -q 2>/dev/null | grep -q .; then break; fi;`,
           "  sleep 2;",
           "done",
           `&& ${cmdChain}`,

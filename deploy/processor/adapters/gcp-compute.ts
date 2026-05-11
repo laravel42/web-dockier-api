@@ -455,7 +455,15 @@ export class GcpComputeAdapter implements DeployAdapter {
             continue;
           }
 
-          // If it's a different error (not zone-related), stop retrying
+          // If it's a different error (not zone-related), stop retrying entirely
+          break;
+        }
+
+        // If the inner loop broke due to a non-capacity error, don't try more machine types
+        if (
+          upResult.code !== 0 &&
+          !/does not have enough resources available|ZONE_RESOURCE_POOL_EXHAUSTED/.test(upResult.output)
+        ) {
           break;
         }
 
@@ -472,15 +480,12 @@ export class GcpComputeAdapter implements DeployAdapter {
         await appendLog(`⚠ All zones exhausted for current machine type — falling back to ${fallbackType}...`);
         await appendLog(`ℹ Note: Your requested instance type (${failedMachineType}) is unavailable in ${region}. Deploying with ${fallbackType} instead.`);
 
-        // Patch the Pulumi program to use the fallback machine type
-        const indexPath = join(pulumiDir, "index.ts");
-        let program = await readFs(indexPath, "utf-8");
-        // Replace the machineType value in the Instance resource
-        program = program.replace(
-          /machineType:\s*"[^"]+"/,
-          `machineType: "${fallbackType}"`,
+        // Override the machine type via Pulumi config (avoids fragile regex patching of the program)
+        await runCmd(
+          "pulumi",
+          ["config", "set", "machineType", fallbackType, "--non-interactive"],
+          { cwd: pulumiDir, env: providerEnv },
         );
-        await writeFs(indexPath, program, "utf-8");
 
         // Reset zones so we try all of them again with the new machine type
         triedZones.clear();
@@ -1101,7 +1106,20 @@ export class GcpComputeAdapter implements DeployAdapter {
 function getMachineTypeFallbacks(machineType: string): string[] {
   if (!machineType) return ["e2-standard-4", "n2-standard-4", "e2-standard-2"];
 
-  // Parse the machine type: family-class-vcpus (e.g., "n2d-standard-4")
+  // Handle shared-core / non-standard machine types that don't follow family-tier-vcpus pattern
+  // (e.g., f1-micro, g1-small, e2-micro, e2-small, e2-medium)
+  const sharedCoreFallbacks: Record<string, string[]> = {
+    "f1-micro": ["e2-micro", "e2-small", "e2-medium"],
+    "g1-small": ["e2-small", "e2-medium", "e2-standard-2"],
+    "e2-micro": ["e2-small", "e2-medium", "n1-standard-1"],
+    "e2-small": ["e2-medium", "e2-standard-2", "n1-standard-1"],
+    "e2-medium": ["e2-standard-2", "n2-standard-2", "n1-standard-2"],
+  };
+  if (sharedCoreFallbacks[machineType]) {
+    return sharedCoreFallbacks[machineType];
+  }
+
+  // Parse standard machine types: family-tier-vcpus (e.g., "n2d-standard-4")
   const match = machineType.match(/^([a-z0-9]+)-([a-z]+)-(\d+)$/);
   if (!match) {
     // Can't parse — try common alternatives
