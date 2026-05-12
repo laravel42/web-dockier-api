@@ -241,7 +241,12 @@ export async function dispatchToAdapter(opts: {
       await logger.section("Post-Deploy Commands");
       await logger.info(`Running ${commands.length} command(s)...`);
 
-      const containerName = repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+      // Container name must match what the infrastructure startup script uses:
+      // - AWS CloudFormation: uses raw repoName as AppName parameter (--name ${AppName})
+      // - GCP Compute Engine: sanitizes to lowercase alphanumeric + hyphens
+      const containerName = provider === "aws"
+        ? repoName
+        : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
       const serverIp = provision.serverIp || "";
       const deployKeyPath = adapterCtx.state.deployKeyPath || "";
       const instanceId = provision.outputs.InstanceId || "";
@@ -264,13 +269,23 @@ export async function dispatchToAdapter(opts: {
           })
           .join(" && ");
 
+        // Laravel artisan commands require a .env file to exist inside the container.
+        // The env vars are passed via --env-file to docker run, but artisan reads .env directly.
+        // Copy the env file from the host (created by the CloudFormation startup script) into the container.
+        const isLaravel = (event.techStack || []).some(s => s.toLowerCase() === "laravel");
+        const envSetup = isLaravel
+          ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && `
+          : "";
+
         const script = [
           "#!/bin/bash",
+          "CONTAINER_READY=0",
           "for i in $(seq 1 60); do",
-          `  if docker ps --filter "name=${containerName}" --filter "status=running" -q 2>/dev/null | grep -q .; then break; fi`,
+          `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
           "  sleep 2",
           "done",
-          cmdChain,
+          `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 120s"; exit 1; fi`,
+          `${envSetup}${cmdChain}`,
         ].join("\n");
 
         await logger.info("Executing via AWS SSM SendCommand...");
@@ -307,6 +322,10 @@ export async function dispatchToAdapter(opts: {
                   await logger.warn(`SSM command ${status}`);
                   if (invocation.StandardErrorContent?.trim()) {
                     await logger.info(invocation.StandardErrorContent.trim().slice(0, 500));
+                  }
+                  if (invocation.StandardOutputContent?.trim()) {
+                    const lines = invocation.StandardOutputContent.trim().split("\n").slice(-20);
+                    for (const line of lines) await logger.info(line);
                   }
                   done = true;
                   break;
@@ -345,13 +364,21 @@ export async function dispatchToAdapter(opts: {
           })
           .join(" && ");
 
+        // Laravel artisan commands require a .env file to exist inside the container.
+        const isLaravelSsh = (event.techStack || []).some(s => s.toLowerCase() === "laravel");
+        const envSetupSsh = isLaravelSsh
+          ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && `
+          : "";
+
         // Wait until the specific app container is running, then execute
         const remoteCmd = [
+          "CONTAINER_READY=0;",
           "for i in $(seq 1 60); do",
-          `  if docker ps --filter "name=${containerName}" --filter "status=running" -q 2>/dev/null | grep -q .; then break; fi;`,
+          `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi;`,
           "  sleep 2;",
-          "done",
-          `&& ${cmdChain}`,
+          "done;",
+          `[ "$CONTAINER_READY" = "1" ]`,
+          `&& ${envSetupSsh}${cmdChain}`,
           "&& echo POST_DEPLOY_DONE",
         ].join(" ");
 
