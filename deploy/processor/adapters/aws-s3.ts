@@ -1,5 +1,5 @@
 import { join, extname } from "node:path";
-import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
+import { readdirSync, statSync, readFileSync } from "node:fs";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -17,7 +17,35 @@ import {
   destroyCfnStack,
 } from "../aws-helpers";
 import { getAwsAccountId, type AwsCredentials } from "../../../lib/aws";
-import { installDeps, buildSite, findOutputDir, MIME_TYPES, SKIP_DIRS } from "../static-site-builder";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, MIME_TYPES, SKIP_DIRS } from "../static-site-builder";
+
+/**
+ * Sanitize a name for use as an S3 bucket name.
+ * S3 bucket naming rules:
+ * - 3–63 characters
+ * - Lowercase letters, numbers, and hyphens only
+ * - Must start and end with a letter or number
+ * - No consecutive periods or hyphens adjacent to periods
+ */
+function sanitizeBucketName(name: string): string {
+  let sanitized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")  // Replace invalid chars (underscores, dots, etc.) with hyphens
+    .replace(/-{2,}/g, "-")        // Collapse consecutive hyphens
+    .replace(/^-+|-+$/g, "");      // Trim leading/trailing hyphens
+
+  // Ensure minimum length
+  if (sanitized.length < 3) {
+    sanitized = sanitized.padEnd(3, "0");
+  }
+
+  // Truncate to leave room for the "-static-site" suffix (63 - 12 = 51)
+  if (sanitized.length > 51) {
+    sanitized = sanitized.slice(0, 51).replace(/-+$/, "");
+  }
+
+  return sanitized;
+}
 
 /**
  * AWS S3 + CloudFront adapter.
@@ -94,17 +122,19 @@ export class AwsS3Adapter implements DeployAdapter {
     await appendLog("── Build Static Site ──────────────");
     const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
     await installDeps({ repoDir, packageManager, runCmd: ctx.runCmd, appendLog });
-    await buildSite({ repoDir, techStack: ctx.event.techStack, runCmd: ctx.runCmd, appendLog });
+    await buildSite({ repoDir, techStack: ctx.event.techStack, runCmd: ctx.runCmd, appendLog, packageManager });
 
     // 3. Identify the output directory
     const uploadDir = findOutputDir(repoDir);
     await appendLog(`ℹ Build output: ${uploadDir.replace(repoDir, ".")}`);
 
+    // Ensure index.html exists (fall back to 200.html for Nuxt SPA)
+    await ensureIndexHtml(uploadDir, appendLog);
     // 4. Create S3 bucket if it doesn't exist
-    const websiteBucket = `${repoName}-static-site`;
+    const websiteBucket = `${sanitizeBucketName(repoName)}-static-site`;
     await appendLog("── Upload to S3 ───────────────────");
 
-    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } = await import(
+    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutPublicAccessBlockCommand } = await import(
       "@aws-sdk/client-s3"
     );
     const s3 = new S3Client({ region, credentials });
@@ -130,6 +160,19 @@ export class AwsS3Adapter implements DeployAdapter {
       }
     }
 
+    // Allow CloudFormation to attach a bucket policy for CloudFront OAC access.
+    // We keep BlockPublicAcls and IgnorePublicAcls true (no public ACLs), but
+    // allow bucket policies so CloudFront can read via OAC.
+    await s3.send(new PutPublicAccessBlockCommand({
+      Bucket: websiteBucket,
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        IgnorePublicAcls: true,
+        BlockPublicPolicy: false,
+        RestrictPublicBuckets: false,
+      },
+    }));
+
     // 5. Sync static files to S3 with correct content types and cache headers
     await this.syncFilesToS3(s3, websiteBucket, uploadDir, appendLog);
 
@@ -154,9 +197,10 @@ export class AwsS3Adapter implements DeployAdapter {
     await appendLog("✓ Template uploaded to S3");
 
     // 8. Build CloudFormation parameters
+    const sanitizedName = sanitizeBucketName(repoName);
     const stackName = stackNameFor(repoName);
     const params = [
-      { ParameterKey: "AppName", ParameterValue: repoName },
+      { ParameterKey: "AppName", ParameterValue: sanitizedName },
       { ParameterKey: "SourceBucket", ParameterValue: websiteBucket },
       { ParameterKey: "BuildId", ParameterValue: deploymentId },
     ];
@@ -261,7 +305,7 @@ export class AwsS3Adapter implements DeployAdapter {
     try {
       const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await import("@aws-sdk/client-s3");
       const s3 = new S3Client({ region: ctx.region, credentials });
-      const bucketName = `${ctx.appName}-static-site`;
+      const bucketName = `${sanitizeBucketName(ctx.appName)}-static-site`;
       let continuationToken: string | undefined;
       do {
         const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, ContinuationToken: continuationToken }));

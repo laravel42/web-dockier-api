@@ -360,7 +360,7 @@ export class GcpStorageAdapter implements DeployAdapter {
 
           // Install dependencies and build the static site
           await installDeps({ repoDir, packageManager, runCmd, appendLog });
-          await buildSite({ repoDir, techStack: event.techStack, runCmd, appendLog });
+          await buildSite({ repoDir, techStack: event.techStack, runCmd, appendLog, packageManager });
 
           // Find the build output directory
           const uploadDir = findOutputDir(repoDir);

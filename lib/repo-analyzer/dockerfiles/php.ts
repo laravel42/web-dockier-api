@@ -20,6 +20,13 @@ const PECL_SINCE: Record<string, [number, number]> = {
   imap: [8, 4], // removed from core in PHP 8.4
 };
 
+/**
+ * Packages that require native compilation via node-gyp and are incompatible
+ * with modern Node versions. When detected, the frontend stage falls back to
+ * an older Node image that ships with Python + build tools.
+ */
+const LEGACY_NATIVE_PACKAGES = new Set(["node-sass", "fibers", "fsevents"]);
+
 /** Map extensions to the apt packages they need at build time */
 const EXT_APT_DEPS: Record<string, string[]> = {
   gd: ["libpng-dev", "libjpeg-dev", "libfreetype6-dev"],
@@ -126,6 +133,22 @@ export function detectRequiredExtensions(appDir: string): Set<string> {
     } catch {}
   } catch {}
   return extensions;
+}
+
+/**
+ * Detect whether the project uses legacy native Node packages (like node-sass)
+ * that require an older Node runtime with Python + build tools.
+ * Returns true if any legacy native package is found in dependencies or devDependencies.
+ */
+export function hasLegacyNativeNodeDeps(appDir: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf-8"));
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    for (const dep of Object.keys(allDeps)) {
+      if (LEGACY_NATIVE_PACKAGES.has(dep)) return true;
+    }
+  } catch {}
+  return false;
 }
 
 /**
@@ -283,8 +306,15 @@ function generateLaravelDockerfile(
 
   // ── Stage 3: frontend (only when Node assets present) ──
   if (hasNodeAssets) {
+    // Use node:16 for projects with legacy native deps (node-sass, etc.) that
+    // can't compile on Node 20. node:16 ships with Python + build tools.
+    const useLegacyNode = appDir ? hasLegacyNativeNodeDeps(appDir) : false;
+    const nodeImage = useLegacyNode
+      ? "public.ecr.aws/docker/library/node:16"
+      : "public.ecr.aws/docker/library/node:20-slim";
+
     lines.push("");
-    lines.push("FROM public.ecr.aws/docker/library/node:20-slim AS frontend");
+    lines.push(`FROM ${nodeImage} AS frontend`);
     lines.push("WORKDIR /app");
     lines.push("COPY package*.json yarn.lock* pnpm-lock.yaml* bun.lockb* ./");
     lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --no-frozen-lockfile; \\');
@@ -327,8 +357,15 @@ function generateLaravelDockerfile(
   lines.push("# Supervisor config");
   lines.push(`RUN echo '[supervisord]\\nnodaemon=true\\n[program:php-fpm]\\ncommand=php-fpm -F\\nautostart=true\\nautorestart=true\\n[program:nginx]\\ncommand=nginx -g "daemon off;"\\nautostart=true\\nautorestart=true' > /etc/supervisor/conf.d/app.conf`);
 
+  // Startup script — fix storage permissions at runtime before starting services.
+  // This prevents "Permission denied" errors on daily log files created by root.
+  lines.push("");
+  lines.push("# Startup script — ensures storage permissions are correct at runtime");
+  lines.push("RUN printf '#!/bin/sh\\nchown -R www-data:www-data /var/www/html/storage\\nchmod -R 775 /var/www/html/storage\\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/app.conf\\n' > /usr/local/bin/start.sh \\");
+  lines.push("    && chmod +x /usr/local/bin/start.sh");
+
   lines.push("EXPOSE 80");
-  lines.push('CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/app.conf"]');
+  lines.push('CMD ["/usr/local/bin/start.sh"]');
 
   return lines.join("\n") + "\n";
 }

@@ -61,6 +61,7 @@ export function getMimeType(filePath: string): string {
 /**
  * Install dependencies using the detected package manager.
  * Tries the strict/frozen-lockfile variant first, falls back to a permissive install.
+ * Enables corepack for yarn and pnpm projects that require it.
  *
  * @returns true if installation succeeded, false otherwise
  */
@@ -74,6 +75,14 @@ export async function installDeps(opts: {
 
   await appendLog("ℹ Installing dependencies...");
 
+  // Enable corepack for yarn/pnpm — required for projects declaring packageManager in package.json
+  if (packageManager === "yarn" || packageManager === "pnpm") {
+    const corepackResult = await runCmd("corepack", ["enable"], { cwd: repoDir });
+    if (corepackResult.code !== 0) {
+      await appendLog("⚠ corepack enable failed — falling back to global package manager");
+    }
+  }
+
   let installOk = false;
 
   if (packageManager === "pnpm") {
@@ -85,10 +94,11 @@ export async function installDeps(opts: {
       installOk = fallback.code === 0;
     }
   } else if (packageManager === "yarn") {
-    const result = await runCmd("yarn", ["install", "--frozen-lockfile"], { cwd: repoDir });
+    // Yarn v4 (Berry) uses --immutable instead of --frozen-lockfile
+    const result = await runCmd("yarn", ["install", "--immutable"], { cwd: repoDir });
     installOk = result.code === 0;
     if (!installOk) {
-      await appendLog("⚠ yarn install --frozen-lockfile failed, trying yarn install...");
+      await appendLog("⚠ yarn install --immutable failed, trying yarn install...");
       const fallback = await runCmd("yarn", ["install"], { cwd: repoDir });
       installOk = fallback.code === 0;
     }
@@ -116,7 +126,8 @@ export async function installDeps(opts: {
 
 /**
  * Build a static site using framework-specific commands.
- * Tries Nuxt generate, Next.js export, or generic npm run build.
+ * Tries Nuxt generate, Next.js export, or generic build script.
+ * Uses the project's package manager to run scripts (important for yarn PnP).
  *
  * @returns true if the build succeeded, false otherwise
  */
@@ -125,8 +136,9 @@ export async function buildSite(opts: {
   techStack: string[];
   runCmd: RunCmdFn;
   appendLog: (line: string) => Promise<void>;
+  packageManager?: string;
 }): Promise<boolean> {
-  const { repoDir, techStack, runCmd, appendLog } = opts;
+  const { repoDir, techStack, runCmd, appendLog, packageManager = "npm" } = opts;
 
   await appendLog("ℹ Building static site...");
 
@@ -137,16 +149,16 @@ export async function buildSite(opts: {
 
   if (isNuxt) {
     frameworkBuildAttempted = true;
-    buildOk = await buildNuxt(repoDir, runCmd, appendLog);
+    buildOk = await buildNuxt(repoDir, runCmd, appendLog, packageManager);
   } else if (isNext) {
     frameworkBuildAttempted = true;
-    buildOk = await buildNext(repoDir, runCmd, appendLog);
+    buildOk = await buildNext(repoDir, runCmd, appendLog, packageManager);
   }
 
   // Generic fallback for React (CRA/Vite), Vue, Svelte, Angular, Astro, etc.
-  // Skip `npm run build` if a framework-specific build already attempted it.
+  // Skip build if a framework-specific build already attempted it.
   if (!buildOk && !frameworkBuildAttempted) {
-    const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
+    const buildRes = await runScript(runCmd, packageManager, "build", repoDir);
     if (buildRes.code === 0) {
       buildOk = true;
       await appendLog("✓ Static site built");
@@ -155,7 +167,7 @@ export async function buildSite(opts: {
 
   // Last resort: try generate script if no build succeeded
   if (!buildOk) {
-    const genRes = await runCmd("npm", ["run", "generate", "--if-present"], { cwd: repoDir });
+    const genRes = await runScript(runCmd, packageManager, "generate", repoDir);
     if (genRes.code === 0) {
       buildOk = true;
       await appendLog("✓ Static site generated");
@@ -167,16 +179,52 @@ export async function buildSite(opts: {
   return buildOk;
 }
 
+/**
+ * Run a package.json script using the appropriate package manager.
+ * For yarn/pnpm, uses `yarn run <script>` / `pnpm run <script>`.
+ * For npm, uses `npm run <script>`.
+ */
+async function runScript(
+  runCmd: RunCmdFn,
+  packageManager: string,
+  script: string,
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<{ code: number; output: string }> {
+  const pm = packageManager === "yarn" || packageManager === "pnpm" ? packageManager : "npm";
+  return runCmd(pm, ["run", script], { cwd, env });
+}
+
+/**
+ * Run a package binary using the appropriate package manager's exec command.
+ * For yarn, uses `yarn dlx` or `yarn exec`. For pnpm, uses `pnpm exec`.
+ * For npm, uses `npx`.
+ */
+async function runBin(
+  runCmd: RunCmdFn,
+  packageManager: string,
+  bin: string,
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<{ code: number; output: string }> {
+  if (packageManager === "yarn") {
+    // yarn exec runs a binary from the project's dependencies
+    return runCmd("yarn", ["exec", bin, ...args], { cwd, env });
+  } else if (packageManager === "pnpm") {
+    return runCmd("pnpm", ["exec", bin, ...args], { cwd, env });
+  }
+  return runCmd("npx", [bin, ...args], { cwd, env });
+}
+
 async function buildNuxt(
   repoDir: string,
   runCmd: RunCmdFn,
   appendLog: (line: string) => Promise<void>,
+  packageManager: string,
 ): Promise<boolean> {
   // Nuxt: try `nuxt generate` for full SSG, fall back to normal build for SPA
-  const genResult = await runCmd("npx", ["nuxt", "generate"], {
-    cwd: repoDir,
-    env: { NITRO_PRESET: "static" },
-  });
+  const genResult = await runBin(runCmd, packageManager, "nuxt", ["generate"], repoDir, { NITRO_PRESET: "static" });
   if (genResult.code === 0) {
     await appendLog("✓ Nuxt static site generated");
     return true;
@@ -190,7 +238,7 @@ async function buildNuxt(
     : null;
 
   // Normal build produces client assets without triggering prerender
-  const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
+  const buildRes = await runScript(runCmd, packageManager, "build", repoDir);
   if (
     buildRes.code === 0 ||
     existsSync(join(outputPublicDir, "_nuxt")) ||
@@ -221,12 +269,13 @@ async function buildNext(
   repoDir: string,
   runCmd: RunCmdFn,
   appendLog: (line: string) => Promise<void>,
+  packageManager: string,
 ): Promise<boolean> {
-  const buildRes = await runCmd("npm", ["run", "build"], { cwd: repoDir });
+  const buildRes = await runScript(runCmd, packageManager, "build", repoDir);
   if (buildRes.code === 0) {
     // Try next export if out/ doesn't exist yet
     if (!existsSync(join(repoDir, "out"))) {
-      await runCmd("npx", ["next", "export"], { cwd: repoDir });
+      await runBin(runCmd, packageManager, "next", ["export"], repoDir);
     }
     await appendLog("✓ Next.js static site built");
     return true;
