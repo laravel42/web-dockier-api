@@ -410,7 +410,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         .eq("user_id", auth.userId)
         .maybeSingle();
 
-      const currentRole = (membership?.role ?? user.role ?? auth.role) as MembershipRole;
+      const currentRole = (membership?.role ?? user.role) as MembershipRole;
 
       const memberships = await listMembershipsForUser(auth.userId);
 

@@ -16,10 +16,10 @@ export default function Dashboard() {
     recentDeploys, recentScans,
     projectMap,
   } = useDashboard();
-  const { has } = usePermissions();
+  const { has, loading: permLoading } = usePermissions();
   const canViewDeploys = has("deploy:view");
 
-  if (loading) {
+  if (loading || permLoading) {
     return (
       <div className="flex justify-center py-16">
         <Spinner />

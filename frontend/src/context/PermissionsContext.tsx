@@ -56,15 +56,15 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   useEffect(() => { fetchPermissions(); }, [fetchPermissions]);
 
   const has = useCallback((p: string) => {
-    if (loading) return true;
+    if (loading) return false;
     return permissions.has(p);
   }, [permissions, loading]);
   const hasAny = useCallback((...ps: string[]) => {
-    if (loading) return true;
+    if (loading) return false;
     return ps.some(p => permissions.has(p));
   }, [permissions, loading]);
   const hasAll = useCallback((...ps: string[]) => {
-    if (loading) return true;
+    if (loading) return false;
     return ps.every(p => permissions.has(p));
   }, [permissions, loading]);
 
