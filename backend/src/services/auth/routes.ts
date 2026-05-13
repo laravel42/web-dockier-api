@@ -395,11 +395,22 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: user, error: userError } = await supabaseAdmin
         .from("users")
-        .select("id,email,name")
+        .select("id,email,name,role")
         .eq("id", auth.userId)
         .maybeSingle();
       if (userError) throw app.httpErrors.internalServerError(userError.message);
       if (!user) throw app.httpErrors.notFound("User not found");
+
+      // Read the current role from the membership table (source of truth)
+      // rather than from the JWT which may be stale after role changes.
+      const { data: membership } = await supabaseAdmin
+        .from("organization_memberships")
+        .select("role")
+        .eq("organization_id", auth.tenantId)
+        .eq("user_id", auth.userId)
+        .maybeSingle();
+
+      const currentRole = (membership?.role ?? user.role) as MembershipRole;
 
       const memberships = await listMembershipsForUser(auth.userId);
 
@@ -408,8 +419,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         email: user.email,
         name: user.name,
         tenantId: auth.tenantId,
-        role: auth.role,
-        roleId: auth.role,
+        role: currentRole,
+        roleId: currentRole,
         appId: auth.tenantId,
         memberships,
       };

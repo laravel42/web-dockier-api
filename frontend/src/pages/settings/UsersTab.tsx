@@ -4,6 +4,8 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import ComboBox from "../../components/ComboBox";
 import { inputCls, btnPrimary } from "../../utils/styles";
+import { useAuth } from "../../context/AuthContext";
+import { usePermissions } from "../../context/PermissionsContext";
 
 interface UserItem {
   id: string;
@@ -22,6 +24,8 @@ interface RoleItem {
 }
 
 export default function UsersTab() {
+  const { userId } = useAuth();
+  const { refresh: refreshPermissions } = usePermissions();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,6 +143,8 @@ export default function UsersTab() {
         timezone: editTimezone,
         country: tzToCountry[editTimezone] || undefined,
       });
+      // If the edited user is the current user, refresh permissions
+      if (editUser.id === userId) refreshPermissions();
       setEditUser(null);
       fetchData();
     } catch { /* ignore */ }

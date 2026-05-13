@@ -4,8 +4,10 @@ import RoleFormModal from "../../components/RoleFormModal";
 import ConfirmModal from "../../components/ConfirmModal";
 import { btnPrimary } from "../../utils/styles";
 import Spinner from "../../components/Spinner";
+import { usePermissions } from "../../context/PermissionsContext";
 
 export default function RolesTab() {
+  const { roleId: currentRoleId, refresh: refreshPermissions } = usePermissions();
   const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string; permissions: string[] }>>([]);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState<{ id: string; name: string; description: string; permissions: string[] } | null>(null);
@@ -30,6 +32,8 @@ export default function RolesTab() {
     if (!editingRole) return;
     await rolesApi.update(editingRole.id, data);
     setEditingRole(null); fetch_();
+    // If the edited role is the current user's role, refresh permissions
+    if (editingRole.id === currentRoleId) refreshPermissions();
   };
 
   const formatPerm = (p: string) => {

@@ -10,12 +10,16 @@ import SourceControlTab from "./settings/SourceControlTab";
 import NotificationChannelsTab from "./settings/NotificationChannelsTab";
 import IntegrationsTab from "./settings/IntegrationsTab";
 import SecurityRulesTab from "./settings/SecurityRulesTab";
+import Spinner from "../components/Spinner";
 
 type Tab = "profile" | "security" | "users" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
 
 export default function Settings() {
-  const { has } = usePermissions();
+  const { has, loading } = usePermissions();
   const [tab, setTab] = useState<Tab>("profile");
+
+  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+
   const tabCls = (active: boolean) => `h-9 px-4 text-sm font-medium rounded-[var(--radius-btn)] transition-colors ${active ? "bg-primary-500 text-white" : "text-text-secondary hover:bg-secondary-50"}`;
 
   const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [

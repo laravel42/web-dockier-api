@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { usePermissions } from "../context/PermissionsContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -12,6 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const { login } = useAuth();
+  const { refresh: refreshPermissions } = usePermissions();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function Login() {
           type: "email",
         });
         login(res.session.token, res.session.userId);
+        await refreshPermissions();
         navigate("/dashboard");
       }
     } catch (err: unknown) {
@@ -70,6 +73,7 @@ export default function Login() {
     try {
       const res = await authApi.demoLogin();
       login(res.session.token, res.session.userId);
+      await refreshPermissions();
       navigate("/dashboard");
     } catch (err: unknown) {
       setError((err as Error).message);
