@@ -1,0 +1,568 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploy a Docker image to a single EC2 instance with Docker Compose.
+
+Parameters:
+  AppName:
+    Type: String
+  ImageUri:
+    Type: String
+    Description: Full ECR image URI with tag
+  ContainerPort:
+    Type: Number
+    Default: 3000
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - m6i.medium
+      - m6i.large
+      - m6i.xlarge
+      - c6i.large
+      - c6i.xlarge
+    Description: EC2 instance type (amd64)
+  VolumeSize:
+    Type: Number
+    Default: 30
+    MinValue: 8
+    MaxValue: 500
+    Description: Root EBS volume size in GB
+  KeyPairName:
+    Type: String
+    Default: ""
+    Description: EC2 key pair name for SSH access (optional)
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  EnvVarsJson:
+    Type: String
+    Default: '[]'
+  EnvVarsS3Uri:
+    Type: String
+    Default: ''
+    Description: S3 URI containing env vars JSON (used when payload exceeds 4096 chars)
+  SelfHostedServices:
+    Type: String
+    Default: ''
+    Description: Comma-separated list of self-hosted services to install (database,cache,queue,scheduler,mail,storage,broadcasting)
+  TechStack:
+    Type: String
+    Default: ''
+    Description: Comma-separated tech stack identifiers (e.g. Laravel,PHP)
+  BuildId:
+    Type: String
+    Default: ""
+  CallbackUrl:
+    Type: String
+    Default: ""
+
+Conditions:
+  HasKeyPair: !Not [!Equals [!Ref KeyPairName, ""]]
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${AppName} EC2"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ECRPull
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                Resource: "*"
+        - PolicyName: S3EnvVarsRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub "arn:aws:s3:::image-builder-templates-${AWS::AccountId}/*"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          deploy:
+            - setup
+            - app
+        setup:
+          packages:
+            apt:
+              docker.io: []
+              jq: []
+              nginx: []
+              certbot: []
+              python3-certbot-nginx: []
+              unzip: []
+          commands:
+            01_enable_docker:
+              command: systemctl enable docker && systemctl start docker
+            02_install_awscli:
+              command: |
+                if ! command -v aws >/dev/null 2>&1; then
+                  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+                  unzip -q /tmp/awscliv2.zip -d /tmp
+                  /tmp/aws/install
+                  rm -rf /tmp/aws /tmp/awscliv2.zip
+                fi
+            03_install_cfn_helpers:
+              command: |
+                if ! command -v cfn-signal >/dev/null 2>&1; then
+                  pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+                fi
+        app:
+          commands:
+            01_ecr_login:
+              command: !Sub |
+                aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin $(echo "${ImageUri}" | cut -d/ -f1)
+            01b_resolve_env_vars:
+              command: !Sub |
+                set -eu
+                # Resolve env vars: download from S3 if EnvVarsS3Uri is set, otherwise use inline
+                ENV_S3_URI="${EnvVarsS3Uri}"
+                if [ -n "$ENV_S3_URI" ]; then
+                  echo "Downloading env vars from S3..."
+                  aws s3 cp "$ENV_S3_URI" /tmp/env-vars.json --region ${AWS::Region}
+                else
+                  cat > /tmp/env-vars.json <<'ENVJSONEOF'
+                ${EnvVarsJson}
+                ENVJSONEOF
+                fi
+            02_self_hosted_services:
+              command: !Sub |
+                set -eu
+                SERVICES="${SelfHostedServices}"
+                TECH="${TechStack}"
+                IS_LARAVEL=false
+                if echo "$TECH" | grep -qi "laravel"; then IS_LARAVEL=true; fi
+
+                # ── Database ──
+                if echo "$SERVICES" | grep -q "database"; then
+                  # Detect DB engine from user env vars, default to mysql
+                  DB_ENGINE="mysql"
+                  USER_DB_CONN=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json
+                try:
+                  evs = json.load(sys.stdin)
+                  for e in evs:
+                    if e.get('name') == 'DB_CONNECTION':
+                      print(e.get('value', ''))
+                      break
+                except: pass
+                " 2>/dev/null)
+                  if [ "$USER_DB_CONN" = "pgsql" ] || [ "$USER_DB_CONN" = "postgres" ]; then
+                    DB_ENGINE="pgsql"
+                  fi
+
+                  # Parse user DB credentials from env vars, fall back to defaults
+                  USER_DB_NAME=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json, re
+                try:
+                  evs = json.load(sys.stdin)
+                  for e in evs:
+                    if e.get('name') == 'DB_DATABASE':
+                      val = re.sub(r'\s+#.*$', '', e.get('value', '')).strip()
+                      val = re.sub(r'[^a-zA-Z0-9_-]', '', val)
+                      print(val)
+                      break
+                except: pass
+                " 2>/dev/null)
+                  USER_DB_USER=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json, re
+                try:
+                  evs = json.load(sys.stdin)
+                  for e in evs:
+                    if e.get('name') == 'DB_USERNAME':
+                      val = re.sub(r'\s+#.*$', '', e.get('value', '')).strip()
+                      val = re.sub(r'[^a-zA-Z0-9_-]', '', val)
+                      print(val)
+                      break
+                except: pass
+                " 2>/dev/null)
+                  USER_DB_PASS=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json
+                try:
+                  evs = json.load(sys.stdin)
+                  for e in evs:
+                    if e.get('name') == 'DB_PASSWORD':
+                      print(e.get('value', ''))
+                      break
+                except: pass
+                " 2>/dev/null)
+                  DB_NAME="${!USER_DB_NAME:-appdb}"
+                  DB_USER="${!USER_DB_USER:-appuser}"
+                  DB_PASS="${!USER_DB_PASS:-apppass123}"
+
+                  if [ "$DB_ENGINE" = "pgsql" ]; then
+                    echo "Installing PostgreSQL..."
+                    apt-get install -y postgresql postgresql-contrib
+                    systemctl enable postgresql
+                    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" 2>/dev/null || true
+                    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || true
+                    PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+                    echo "host all $DB_USER 172.16.0.0/12 md5" >> "$PG_HBA"
+                    echo "host all $DB_USER 10.0.0.0/8 md5" >> "$PG_HBA"
+                    PG_CONF=$(sudo -u postgres psql -t -c "SHOW config_file;" | xargs)
+                    sed -i "s/^#listen_addresses.*/listen_addresses = '*'/" "$PG_CONF"
+                    systemctl restart postgresql
+                    echo "PostgreSQL ready: host=host.docker.internal user=$DB_USER db=$DB_NAME"
+                  else
+                    echo "Installing MySQL..."
+                    apt-get install -y mysql-server
+                    systemctl enable mysql
+                    systemctl start mysql
+                    for i in $(seq 1 30); do mysqladmin ping -h localhost --silent && break; sleep 2; done
+                    mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;" || true
+                    mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASS';" || true
+                    mysql -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'%';" || true
+                    mysql -e "FLUSH PRIVILEGES;" || true
+                    sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf || true
+                    systemctl restart mysql
+                    echo "MySQL ready: host=host.docker.internal user=$DB_USER db=$DB_NAME"
+                  fi
+                fi
+
+                # ── Cache (Redis) ──
+                if echo "$SERVICES" | grep -q "cache" || echo "$SERVICES" | grep -q "broadcasting"; then
+                  echo "Installing Redis..."
+                  apt-get install -y redis-server
+                  systemctl enable redis-server
+                  # Bind to all interfaces so Docker containers can connect via host.docker.internal
+                  sed -i 's/^bind .*/bind 0.0.0.0/' /etc/redis/redis.conf
+                  sed -i 's/^protected-mode yes/protected-mode no/' /etc/redis/redis.conf
+                  systemctl restart redis-server
+                  echo "Redis ready on 0.0.0.0:6379"
+                fi
+
+                # ── Queue Worker ──
+                if echo "$SERVICES" | grep -q "queue"; then
+                  echo "Installing Supervisor for queue worker..."
+                  apt-get install -y supervisor
+                  echo "Queue worker will be configured after container starts"
+                fi
+
+                # ── Scheduler (Cron) ──
+                if echo "$SERVICES" | grep -q "scheduler"; then
+                  echo "Scheduler will be configured after container starts"
+                fi
+
+                echo "Self-hosted services setup complete"
+            03_deploy_container:
+              command: !Sub |
+                set -eu
+                # Wait for Docker daemon to be ready
+                for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
+                docker pull "${ImageUri}"
+                docker stop ${AppName} 2>/dev/null || true
+                docker rm ${AppName} 2>/dev/null || true
+
+                # Write env file: defaults first, then user values (user overrides defaults)
+                # Infrastructure overrides (DB_HOST, REDIS_HOST) go as -e flags after the file
+                SERVICES="${SelfHostedServices}"
+                TECH="${TechStack}"
+                IS_LARAVEL=false
+                if echo "$TECH" | grep -qi "laravel"; then IS_LARAVEL=true; fi
+
+                # Start building the env file with defaults
+                > /tmp/${AppName}.env
+
+                # Laravel defaults (only if user didn't provide them)
+                if [ "$IS_LARAVEL" = true ]; then
+                  HAS_APP_KEY=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json
+                try:
+                  evs = json.load(sys.stdin)
+                  print('yes' if any(e.get('name') == 'APP_KEY' for e in evs) else 'no')
+                except: print('no')
+                " 2>/dev/null)
+                  if [ "$HAS_APP_KEY" != "yes" ]; then
+                    echo "APP_KEY=base64:$(openssl rand -base64 32)" >> /tmp/${AppName}.env
+                  fi
+                  echo "APP_ENV=production" >> /tmp/${AppName}.env
+                fi
+
+                # Self-hosted service defaults (user env vars override these)
+                SVC_OVERRIDES=""
+                if echo "$SERVICES" | grep -q "database"; then
+                  DB_ENGINE="mysql"
+                  USER_DB_CONN=$(cat /tmp/env-vars.json | python3 -c "
+                import sys, json
+                try:
+                  evs = json.load(sys.stdin)
+                  for e in evs:
+                    if e.get('name') == 'DB_CONNECTION':
+                      print(e.get('value', ''))
+                      break
+                except: pass
+                " 2>/dev/null)
+                  if [ "$USER_DB_CONN" = "pgsql" ] || [ "$USER_DB_CONN" = "postgres" ]; then
+                    DB_ENGINE="pgsql"
+                  fi
+                  if [ "$DB_ENGINE" = "pgsql" ]; then
+                    echo "DB_CONNECTION=pgsql" >> /tmp/${AppName}.env
+                    echo "DB_PORT=5432" >> /tmp/${AppName}.env
+                    echo "DB_DATABASE=appdb" >> /tmp/${AppName}.env
+                    echo "DB_USERNAME=appuser" >> /tmp/${AppName}.env
+                    echo "DB_PASSWORD=apppass123" >> /tmp/${AppName}.env
+                  else
+                    echo "DB_CONNECTION=mysql" >> /tmp/${AppName}.env
+                    echo "DB_PORT=3306" >> /tmp/${AppName}.env
+                    echo "DB_DATABASE=appdb" >> /tmp/${AppName}.env
+                    echo "DB_USERNAME=appuser" >> /tmp/${AppName}.env
+                    echo "DB_PASSWORD=apppass123" >> /tmp/${AppName}.env
+                  fi
+                  # DB_HOST must always point to the host machine from inside Docker
+                  SVC_OVERRIDES="$SVC_OVERRIDES -e DB_HOST=host.docker.internal"
+                fi
+                if echo "$SERVICES" | grep -q "cache" || echo "$SERVICES" | grep -q "broadcasting"; then
+                  SVC_OVERRIDES="$SVC_OVERRIDES -e REDIS_HOST=host.docker.internal -e REDIS_PORT=6379"
+                fi
+                if echo "$SERVICES" | grep -q "queue"; then
+                  echo "QUEUE_CONNECTION=redis" >> /tmp/${AppName}.env
+                fi
+
+                # Append user env vars (these override the defaults above)
+                # Strip inline comments (# ...) from values that look like .env comments
+                cat /tmp/env-vars.json | python3 -c "
+                import sys, json, re
+                try:
+                  for e in json.load(sys.stdin):
+                    val = e['value']
+                    # Strip inline comments: space(s) before # indicates a comment
+                    val = re.sub(r'\s+#.*$', '', val)
+                    print(e['name'] + '=' + val)
+                except: pass
+                " >> /tmp/${AppName}.env 2>/dev/null
+
+                ENV_FILE_FLAG=""
+                if [ -s /tmp/${AppName}.env ]; then
+                  ENV_FILE_FLAG="--env-file /tmp/${AppName}.env"
+                fi
+
+                # Env file: defaults then user values (later lines win for same key)
+                # -e flags: infrastructure overrides that must always be correct
+                docker run -d \
+                  --name ${AppName} \
+                  --restart unless-stopped \
+                  -p 127.0.0.1:8080:${ContainerPort} \
+                  --add-host=host.docker.internal:host-gateway \
+                  -e PORT=${ContainerPort} \
+                  $ENV_FILE_FLAG \
+                  $SVC_OVERRIDES \
+                  "${ImageUri}"
+            04_nginx_proxy:
+              command: !Sub |
+                cat > /etc/nginx/sites-available/${AppName} <<'NGINX'
+                server {
+                    listen 80 default_server;
+                    server_name _;
+                    location / {
+                        proxy_pass http://127.0.0.1:8080;
+                        proxy_set_header Host $host;
+                        proxy_set_header X-Real-IP $remote_addr;
+                        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                        proxy_set_header X-Forwarded-Proto $scheme;
+                        proxy_http_version 1.1;
+                        proxy_set_header Upgrade $http_upgrade;
+                        proxy_set_header Connection "upgrade";
+                    }
+                }
+                NGINX
+                ln -sf /etc/nginx/sites-available/${AppName} /etc/nginx/sites-enabled/default
+                nginx -t && systemctl restart nginx
+            05_post_deploy_services:
+              command: !Sub |
+                set -eu
+                SERVICES="${SelfHostedServices}"
+                TECH="${TechStack}"
+                IS_LARAVEL=false
+                if echo "$TECH" | grep -qi "laravel"; then IS_LARAVEL=true; fi
+
+                # Wait for container to be running
+                for i in $(seq 1 30); do
+                  docker inspect -f '{{.State.Running}}' ${AppName} 2>/dev/null | grep -q true && break
+                  sleep 2
+                done
+
+                # ── Queue Worker (needs running container) ──
+                if echo "$SERVICES" | grep -q "queue" && [ "$IS_LARAVEL" = true ]; then
+                  cat > /etc/supervisor/conf.d/${AppName}-worker.conf << SUPERVISOR
+                [program:${AppName}-worker]
+                command=docker exec ${AppName} php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+                autostart=true
+                autorestart=true
+                numprocs=1
+                stdout_logfile=/var/log/${AppName}-worker.log
+                stderr_logfile=/var/log/${AppName}-worker-error.log
+                SUPERVISOR
+                  supervisorctl reread && supervisorctl update
+                  echo "Queue worker started"
+                fi
+
+                # ── Scheduler (needs running container) ──
+                if echo "$SERVICES" | grep -q "scheduler" && [ "$IS_LARAVEL" = true ]; then
+                  (crontab -l 2>/dev/null; echo "* * * * * docker exec ${AppName} php artisan schedule:run >> /var/log/${AppName}-scheduler.log 2>&1") | sort -u | crontab -
+                  echo "Scheduler cron installed"
+                fi
+
+                # ── Laravel filesystem setup (required for container to function) ──
+                if [ "$IS_LARAVEL" = true ]; then
+                  docker exec ${AppName} sh -c 'mkdir -p storage/logs storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache && chmod -R 777 storage bootstrap/cache' 2>/dev/null || true
+                  docker exec ${AppName} sh -c 'chown -R www-data:www-data storage bootstrap/cache 2>/dev/null; chmod -R 777 storage bootstrap/cache 2>/dev/null' || true
+                fi
+
+                echo "Post-deploy services complete"
+          files:
+            /etc/systemd/system/cfn-hup.service:
+              content: |
+                [Unit]
+                Description=cfn-hup daemon
+                [Service]
+                Type=simple
+                ExecStart=/usr/local/bin/cfn-hup -v
+                Restart=always
+                [Install]
+                WantedBy=multi-user.target
+              mode: "000644"
+              owner: root
+              group: root
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=1
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.Instance.Metadata.AWS::CloudFormation::Init
+                action=cfn-init -v --stack ${AWS::StackName} --resource Instance --configsets deploy --region ${AWS::Region}
+                runas=root
+              mode: "000400"
+              owner: root
+              group: root
+          services:
+            systemd:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+    Properties:
+      ImageId: !Sub "{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}"
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      IamInstanceProfile: !Ref InstanceProfile
+      KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref "AWS::NoValue"]
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: gp3
+            Encrypted: true
+      Tags:
+        - Key: Name
+          Value: !Ref AppName
+        - Key: BuildId
+          Value: !Ref BuildId
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > /var/log/user-data.log 2>&1
+
+          apt-get update -y
+          apt-get install -y python3-pip
+          pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+
+          cfn-init -v --stack ${AWS::StackName} --resource Instance --configsets deploy --region ${AWS::Region}
+
+          systemctl daemon-reload
+          systemctl enable cfn-hup
+          systemctl start cfn-hup
+
+          echo "── Done ──"
+
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref Instance
+      Tags:
+        - Key: Name
+          Value: !Sub "${AppName}-eip"
+
+Outputs:
+  AppUrl:
+    Value: !Sub
+      - "http://ec2-${IPDashed}.compute-1.amazonaws.com"
+      - IPDashed: !Join ["-", !Split [".", !Ref ElasticIp]]
+  PublicIp:
+    Value: !Ref ElasticIp
+  PublicDns:
+    Value: !Sub
+      - "ec2-${IPDashed}.compute-1.amazonaws.com"
+      - IPDashed: !Join ["-", !Split [".", !Ref ElasticIp]]
+  InstanceId:
+    Value: !Ref Instance
+  BuildId:
+    Value: !Ref BuildId

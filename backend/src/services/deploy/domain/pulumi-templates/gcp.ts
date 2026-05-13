@@ -1,0 +1,443 @@
+import type { DeployParams } from "./types.js";
+import { buildDockerUserData } from "./user-data.js";
+
+/** Generate a Pulumi TypeScript program for GCP */
+export function buildGcp(p: DeployParams): string {
+  if (p.deployStrategy === "vps") return buildGcpComputeEngine(p);
+  if (p.deployStrategy === "managed") return buildGcpCloudRun(p);
+  if (p.deployStrategy === "static") return buildGcpCloudStorageCdn(p);
+  return buildGcpComputeEngine(p);
+}
+
+function buildGcpComputeEngine(p: DeployParams): string {
+  const userData = buildDockerUserData(p);
+  const managedDb = p.services.find(s => s.type === "database" && s.mode === "managed");
+  const managedStorage = p.services.find(s => s.type === "storage" && s.mode === "managed");
+  const managedCache = p.services.find(s => s.type === "cache" && s.mode === "managed");
+
+  let dbBlock = "";
+  if (managedDb) {
+    dbBlock = `
+// ── Cloud SQL (PostgreSQL) ──
+const dbInstance = new gcp.sql.DatabaseInstance("${p.appName}-db", {
+  name: "${p.appName}-db",
+  databaseVersion: "POSTGRES_16",
+  region: region,
+  deletionProtection: false,
+  settings: {
+    tier: "db-f1-micro",
+    ipConfiguration: {
+      authorizedNetworks: [{ name: "all", value: "0.0.0.0/0" }],
+    },
+  },
+});
+
+const database = new gcp.sql.Database("${p.appName}-database", {
+  name: "${p.appName}",
+  instance: dbInstance.name,
+});
+
+const dbUser = new gcp.sql.User("${p.appName}-db-user", {
+  name: "appuser",
+  instance: dbInstance.name,
+  password: "apppass123",
+});
+
+export const dbHost = dbInstance.publicIpAddress;
+export const dbName = database.name;
+`;
+  }
+
+  let storageBlock = "";
+  if (managedStorage) {
+    storageBlock = `
+// ── Cloud Storage ──
+const bucket = new gcp.storage.Bucket("${p.appName}-storage", {
+  name: "${p.appName}-storage",
+  location: region,
+  forceDestroy: true,
+  uniformBucketLevelAccess: true,
+});
+
+export const bucketName = bucket.name;
+`;
+  }
+
+  let cacheBlock = "";
+  if (managedCache) {
+    cacheBlock = `
+// ── Memorystore (Redis) ──
+const redisInstance = new gcp.redis.Instance("${p.appName}-redis", {
+  name: "${p.appName}-redis",
+  tier: "BASIC",
+  memorySizeGb: 1,
+  region: region,
+  redisVersion: "REDIS_7_0",
+  authorizedNetwork: network.selfLink,
+});
+
+export const redisHost = redisInstance.host;
+`;
+  }
+
+  return `import * as pulumi from "@pulumi/pulumi";
+import * as gcp from "@pulumi/gcp";
+
+// ─────────────────────────────────────────────────
+// GCP Compute Engine VPS
+// App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
+// Repo: ${p.repo}@${p.branch}
+// ─────────────────────────────────────────────────
+
+const config = new pulumi.Config();
+const region = config.get("region") || "${p.region}";
+const sshPublicKey = config.require("sshPublicKey");
+const suffix = config.get("keyPairSuffix") || "";
+const resName = suffix ? \`${p.appName}-\${suffix}\` : "${p.appName}";
+const machineType = config.get("machineType") || "${p.instanceType || "n2d-standard-2"}";
+const gcpConfig = new pulumi.Config("gcp");
+const project = gcpConfig.require("project");
+
+// ── Artifact Registry (created by deploy processor, managed here for cleanup) ──
+const arRepo = new gcp.artifactregistry.Repository("${p.appName}-repo", {
+  repositoryId: "${p.appName}",
+  location: region,
+  format: "DOCKER",
+  cleanupPolicyDryRun: false,
+}, { import: \`projects/\${project}/locations/\${region}/repositories/${p.appName}\`, retainOnDelete: false });
+
+// ── Pick an available zone (prefer -c, -f, -b over -a for better availability) ──
+const zones = gcp.compute.getZonesOutput({ region, status: "UP" });
+const zone = config.get("zone") || zones.names.apply(zs => {
+  const preferred = ["-c", "-f", "-b", "-a"];
+  for (const suffix of preferred) {
+    const match = zs.find(z => z.endsWith(suffix));
+    if (match) return match;
+  }
+  return zs[0] || \`\${region}-b\`;
+});
+
+// ── Network (use default VPC to avoid orphaned resources) ──
+const network = gcp.compute.getNetworkOutput({ name: "default" });
+
+// ── Firewall ──
+const firewall = new gcp.compute.Firewall(\`\${resName}-fw\`, {
+  name: \`\${resName}-fw\`,
+  network: network.selfLink,
+  allows: [
+    { protocol: "tcp", ports: ["22", "80", "443"] },
+  ],
+  sourceRanges: ["0.0.0.0/0"],
+  targetTags: [\`\${resName}-server\`],
+});
+
+// ── Static IP ──
+const staticIp = new gcp.compute.Address(\`\${resName}-ip\`, {
+  name: \`\${resName}-ip\`,
+  region: region,
+});
+
+// ── Instance ──
+const instance = new gcp.compute.Instance(resName, {
+  name: resName,
+  machineType: machineType,
+  zone: zone,
+  tags: [\`\${resName}-server\`],
+  scheduling: {
+    automaticRestart: true,
+    provisioningModel: "STANDARD",
+  },
+  bootDisk: {
+    initializeParams: {
+      image: "ubuntu-os-cloud/ubuntu-2404-lts-amd64",
+      size: 30,
+      type: "pd-balanced",
+    },
+  },
+  networkInterfaces: [{
+    network: network.selfLink,
+    accessConfigs: [{ natIp: staticIp.address }],
+  }],
+  metadata: {
+    "ssh-keys": \`root:\${sshPublicKey}\`,
+  },
+  metadataStartupScript: \`${userData.replace(/`/g, "\\`").replace(/\$/g, "\\$")}\`,
+});
+${dbBlock}${storageBlock}${cacheBlock}
+export const serverIp = staticIp.address;
+export const appUrl = staticIp.address.apply((ip) => \`http://\${ip}\`);
+`;
+}
+
+function buildGcpCloudRun(p: DeployParams): string {
+  const managedDb = p.services.find(s => s.type === "database" && s.mode === "managed");
+  const managedStorage = p.services.find(s => s.type === "storage" && s.mode === "managed");
+  const managedCache = p.services.find(s => s.type === "cache" && s.mode === "managed");
+
+  // Parse CPU/memory from instanceType (e.g. "1 vCPU / 512 MB" or fallback)
+  const cpuMatch = p.instanceType?.match(/([\d.]+)\s*vCPU/i) || p.instanceType?.match(/([\d.]+)-cpu/i);
+  const memMatch = p.instanceType?.match(/([\d.]+)\s*GB/i) || p.instanceType?.match(/([\d.]+)Mi/i);
+  const cpu = cpuMatch ? cpuMatch[1] : "1";
+  const memoryGb = memMatch ? memMatch[1] : "512Mi";
+  const memory = memoryGb.includes("Mi") ? memoryGb : `${Math.round(parseFloat(memoryGb) * 1024)}Mi`;
+
+  let dbBlock = "";
+  let dbEnvBlock = "";
+  if (managedDb) {
+    dbBlock = `
+// ── Cloud SQL (PostgreSQL) ──
+const dbInstance = new gcp.sql.DatabaseInstance("${p.appName}-db", {
+  name: "${p.appName}-db",
+  databaseVersion: "POSTGRES_16",
+  region: region,
+  deletionProtection: false,
+  settings: {
+    tier: "db-f1-micro",
+    ipConfiguration: {
+      ipv4Enabled: true,
+      authorizedNetworks: [{ name: "all", value: "0.0.0.0/0" }],
+    },
+  },
+});
+
+const database = new gcp.sql.Database("${p.appName}-database", {
+  name: "${p.appName}",
+  instance: dbInstance.name,
+});
+
+const dbUser = new gcp.sql.User("${p.appName}-db-user", {
+  name: "appuser",
+  instance: dbInstance.name,
+  password: "apppass123",
+});
+
+export const dbHost = dbInstance.publicIpAddress;
+export const dbName = database.name;
+`;
+    dbEnvBlock = `
+        { name: "DATABASE_HOST", value: dbInstance.publicIpAddress },
+        { name: "DATABASE_NAME", value: "${p.appName}" },
+        { name: "DATABASE_USER", value: "appuser" },
+        { name: "DATABASE_PASSWORD", value: "apppass123" },`;
+  }
+
+  let storageBlock = "";
+  let storageEnvBlock = "";
+  if (managedStorage) {
+    storageBlock = `
+// ── Cloud Storage ──
+const bucket = new gcp.storage.Bucket("${p.appName}-storage", {
+  name: "${p.appName}-storage",
+  location: region,
+  forceDestroy: true,
+  uniformBucketLevelAccess: true,
+});
+
+export const bucketName = bucket.name;
+`;
+    storageEnvBlock = `
+        { name: "STORAGE_BUCKET", value: bucket.name },`;
+  }
+
+  let cacheBlock = "";
+  let cacheEnvBlock = "";
+  if (managedCache) {
+    cacheBlock = `
+// ── Memorystore (Redis) ──
+const redisInstance = new gcp.redis.Instance("${p.appName}-redis", {
+  name: "${p.appName}-redis",
+  tier: "BASIC",
+  memorySizeGb: 1,
+  region: region,
+  redisVersion: "REDIS_7_0",
+});
+
+export const redisHost = redisInstance.host;
+`;
+    cacheEnvBlock = `
+        { name: "REDIS_HOST", value: redisInstance.host },
+        { name: "CACHE_DRIVER", value: "redis" },
+        { name: "SESSION_DRIVER", value: "redis" },`;
+  }
+
+  return `import * as pulumi from "@pulumi/pulumi";
+import * as gcp from "@pulumi/gcp";
+
+// ─────────────────────────────────────────────────
+// GCP Cloud Run + Artifact Registry
+// App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
+// Repo: ${p.repo}@${p.branch}
+// ─────────────────────────────────────────────────
+
+const config = new pulumi.Config();
+const region = config.get("region") || "${p.region}";
+const gcpConfig = new pulumi.Config("gcp");
+const project = gcpConfig.require("project");
+
+// Image URI is set by the deploy processor after pushing to Artifact Registry
+const imageUri = config.require("imageUri");
+
+// ── Enable required APIs ──
+const artifactRegistryApi = new gcp.projects.Service("artifactregistry-api", {
+  service: "artifactregistry.googleapis.com",
+  disableOnDestroy: false,
+});
+
+const cloudRunApi = new gcp.projects.Service("cloudrun-api", {
+  service: "run.googleapis.com",
+  disableOnDestroy: false,
+});
+
+// ── Artifact Registry Repository (created by deploy processor, imported here) ──
+const registry = new gcp.artifactregistry.Repository("${p.appName}-repo", {
+  repositoryId: "${p.appName}",
+  location: region,
+  format: "DOCKER",
+  cleanupPolicyDryRun: false,
+}, { dependsOn: [artifactRegistryApi], import: \`projects/\${project}/locations/\${region}/repositories/${p.appName}\`, retainOnDelete: false });
+${dbBlock}${storageBlock}${cacheBlock}
+// ── Cloud Run Service ──
+const service = new gcp.cloudrunv2.Service("${p.appName}", {
+  name: "${p.appName}",
+  location: region,
+  deletionProtection: false,
+  ingress: "INGRESS_TRAFFIC_ALL",
+  template: {
+    scaling: {
+      minInstanceCount: 0,
+      maxInstanceCount: 10,
+    },
+    containers: [{
+      image: imageUri,
+      ports: { containerPort: ${p.runtime.port}, name: "http1" },
+      resources: {
+        limits: {
+          cpu: "${cpu}",
+          memory: "${memory}",
+        },
+      },
+      envs: [
+        { name: "NODE_ENV", value: "production" },${dbEnvBlock}${storageEnvBlock}${cacheEnvBlock}
+      ],
+    }],
+  },
+}, { dependsOn: [cloudRunApi] });
+
+// ── Allow unauthenticated access ──
+const iamMember = new gcp.cloudrunv2.ServiceIamMember("${p.appName}-public", {
+  name: service.name,
+  location: region,
+  role: "roles/run.invoker",
+  member: "allUsers",
+});
+
+export const serviceUrl = service.uri;
+export const appUrl = service.uri;
+`;
+}
+
+function buildGcpCloudStorageCdn(p: DeployParams): string {
+  return `import * as pulumi from "@pulumi/pulumi";
+import * as gcp from "@pulumi/gcp";
+
+// ─────────────────────────────────────────────────
+// GCP Cloud Storage + CDN (Static Website)
+// App: ${p.appName} | Runtime: ${p.runtime.name} ${p.runtime.version}
+// Repo: ${p.repo}@${p.branch}
+// ─────────────────────────────────────────────────
+
+const config = new pulumi.Config();
+const region = config.get("region") || "${p.region}";
+const suffix = config.get("resourceSuffix") || "";
+const gcpConfig = new pulumi.Config("gcp");
+const project = gcpConfig.require("project");
+
+// ── Enable required APIs ──
+const computeApi = new gcp.projects.Service("compute-api", {
+  service: "compute.googleapis.com",
+  disableOnDestroy: false,
+});
+
+// ── Cloud Storage Bucket (static website) ──
+// GCS bucket names must be ≤ 63 chars and globally unique.
+// Use project hash + suffix to keep the name short but unique.
+const projectHash = project.replace(/-/g, "").slice(0, 8);
+const bucketName63 = \`${p.appName}-site-\${projectHash}\${suffix ? "-" + suffix : ""}\`.slice(0, 63).replace(/-+$/, "");
+
+const bucket = new gcp.storage.Bucket("${p.appName}-static-site", {
+  name: bucketName63,
+  location: region,
+  forceDestroy: true,
+  uniformBucketLevelAccess: true,
+  website: {
+    mainPageSuffix: "index.html",
+    notFoundPage: "index.html",
+  },
+  cors: [{
+    origins: ["*"],
+    methods: ["GET", "HEAD"],
+    responseHeaders: ["Content-Type"],
+    maxAgeSeconds: 3600,
+  }],
+});
+
+// ── Public access ──
+const bucketIam = new gcp.storage.BucketIAMMember("${p.appName}-public", {
+  bucket: bucket.name,
+  role: "roles/storage.objectViewer",
+  member: "allUsers",
+});
+
+// ── Backend Bucket with CDN ──
+const backendBucket = new gcp.compute.BackendBucket("${p.appName}-cdn", {
+  name: \`${p.appName}-cdn\${suffix ? "-" + suffix : ""}\`,
+  bucketName: bucket.name,
+  enableCdn: true,
+  cdnPolicy: {
+    cacheMode: "CACHE_ALL_STATIC",
+    defaultTtl: 3600,
+    maxTtl: 86400,
+    clientTtl: 3600,
+  },
+  customResponseHeaders: [],
+}, { dependsOn: [computeApi] });
+
+// ── URL Map (SPA: rewrite 404s to index.html with 200 status) ──
+const urlMap = new gcp.compute.URLMap("${p.appName}-url-map", {
+  name: \`${p.appName}-url-map\${suffix ? "-" + suffix : ""}\`,
+  defaultService: backendBucket.selfLink,
+  defaultCustomErrorResponsePolicy: {
+    errorResponseRules: [{
+      matchResponseCodes: ["4xx"],
+      path: "/index.html",
+      overrideResponseCode: 200,
+    }],
+    errorService: backendBucket.selfLink,
+  },
+});
+
+// ── HTTP Proxy ──
+const httpProxy = new gcp.compute.TargetHttpProxy("${p.appName}-http-proxy", {
+  name: \`${p.appName}-http-proxy\${suffix ? "-" + suffix : ""}\`,
+  urlMap: urlMap.selfLink,
+});
+
+// ── Global Static IP ──
+const globalIp = new gcp.compute.GlobalAddress("${p.appName}-ip", {
+  name: \`${p.appName}-ip\${suffix ? "-" + suffix : ""}\`,
+});
+
+// ── Forwarding Rule ──
+const forwardingRule = new gcp.compute.GlobalForwardingRule("${p.appName}-fwd", {
+  name: \`${p.appName}-fwd\${suffix ? "-" + suffix : ""}\`,
+  target: httpProxy.selfLink,
+  ipAddress: globalIp.address,
+  portRange: "80",
+  loadBalancingScheme: "EXTERNAL_MANAGED",
+});
+
+export const bucketName = bucket.name;
+export const cdnIp = globalIp.address;
+export const appUrl = globalIp.address.apply(ip => \`http://\${ip}\`);
+`;
+}
