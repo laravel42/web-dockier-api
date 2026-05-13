@@ -7,6 +7,36 @@ export interface PulumiWorkspaceResult {
   providerEnv: Record<string, string>;
 }
 
+// ─── Default Generators ────────────────────────────────────────────
+
+function generateDefaultPulumiProject(appName: string, provider: string): string {
+  const runtime = "nodejs";
+  return `name: ${appName}\nruntime: ${runtime}\ndescription: Infrastructure for ${appName} (${provider})\n`;
+}
+
+function generateDefaultPackageJson(appName: string, provider: string): string {
+  const deps: Record<string, string> = { "@pulumi/pulumi": "^3" };
+  if (provider === "aws") deps["@pulumi/aws"] = "^6";
+  if (provider === "gcp") deps["@pulumi/gcp"] = "^7";
+  return JSON.stringify({ name: appName, main: "index.ts", dependencies: deps }, null, 2);
+}
+
+function generateDefaultTsConfig(): string {
+  return JSON.stringify({
+    compilerOptions: {
+      strict: true,
+      outDir: "bin",
+      target: "es2020",
+      module: "commonjs",
+      moduleResolution: "node",
+      sourceMap: true,
+      experimentalDecorators: true,
+      forceConsistentCasingInFileNames: true,
+    },
+    files: ["index.ts"],
+  }, null, 2);
+}
+
 /**
  * Set up a Pulumi workspace directory with all required files and provider credentials.
  * Used by deploy, template-deploy, and destroy flows.
@@ -18,9 +48,6 @@ export async function setupPulumiWorkspace(opts: {
   region: string;
   providerRow: { api_key: string; api_secret: string };
   indexTs: string;
-  generatePulumiProject: (appName: string, provider: string) => string;
-  generatePackageJson: (appName: string, provider: string) => string;
-  generateTsConfig: () => string;
 }): Promise<PulumiWorkspaceResult> {
   const { workDir, appName, provider, providerRow, indexTs } = opts;
 
@@ -28,9 +55,9 @@ export async function setupPulumiWorkspace(opts: {
   await mkdir(pulumiDir, { recursive: true });
 
   await writeFile(join(pulumiDir, "index.ts"), indexTs, "utf-8");
-  await writeFile(join(pulumiDir, "Pulumi.yaml"), opts.generatePulumiProject(appName, provider), "utf-8");
-  await writeFile(join(pulumiDir, "package.json"), opts.generatePackageJson(appName, provider), "utf-8");
-  await writeFile(join(pulumiDir, "tsconfig.json"), opts.generateTsConfig(), "utf-8");
+  await writeFile(join(pulumiDir, "Pulumi.yaml"), generateDefaultPulumiProject(appName, provider), "utf-8");
+  await writeFile(join(pulumiDir, "package.json"), generateDefaultPackageJson(appName, provider), "utf-8");
+  await writeFile(join(pulumiDir, "tsconfig.json"), generateDefaultTsConfig(), "utf-8");
 
   // Provider env vars
   const providerEnv: Record<string, string> = {};
