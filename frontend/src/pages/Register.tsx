@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { usePermissions } from "../context/PermissionsContext";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -14,6 +15,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const { login } = useAuth();
+  const { refresh: refreshPermissions } = usePermissions();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function Register() {
           tenantName: workspaceName.trim() || undefined,
         });
         login(res.session.token, res.session.userId);
+        await refreshPermissions();
         navigate("/dashboard");
       }
     } catch (err: unknown) {

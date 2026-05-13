@@ -31,8 +31,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
   const fetchPermissions = useCallback(async () => {
     const token = localStorage.getItem("token");
-    if (!token) { setLoading(false); return; }
+    if (!token) { setPermissions(new Set()); setRoleId(""); setRoleName(""); setLoading(false); return; }
     try {
+      setLoading(true);
       const me = await authApi.getMe();
       setRoleId(me.roleId);
       if (me.roleId) {
@@ -55,18 +56,17 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   useEffect(() => { fetchPermissions(); }, [fetchPermissions]);
 
   const has = useCallback((p: string) => {
-    // If no role assigned, grant all permissions (admin by default)
-    if (!loading && permissions.size === 0 && !roleId) return true;
+    if (loading) return true;
     return permissions.has(p);
-  }, [permissions, loading, roleId]);
+  }, [permissions, loading]);
   const hasAny = useCallback((...ps: string[]) => {
-    if (!loading && permissions.size === 0 && !roleId) return true;
+    if (loading) return true;
     return ps.some(p => permissions.has(p));
-  }, [permissions, loading, roleId]);
+  }, [permissions, loading]);
   const hasAll = useCallback((...ps: string[]) => {
-    if (!loading && permissions.size === 0 && !roleId) return true;
+    if (loading) return true;
     return ps.every(p => permissions.has(p));
-  }, [permissions, loading, roleId]);
+  }, [permissions, loading]);
 
   return (
     <PermissionsContext.Provider value={{ permissions, roleId, roleName, loading, has, hasAny, hasAll, refresh: fetchPermissions }}>
