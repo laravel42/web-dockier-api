@@ -9,6 +9,7 @@ import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domai
 import { destroyDeployment } from "./domain/destroy.js";
 import { applyDeploymentWebhookUpdate, createDeploymentRecord } from "./domain/processor.js";
 import { resolveDeployTemplate } from "./domain/templates.js";
+import { executePipeline } from "./domain/pipeline.js";
 
 function rowToProvider(row: ProviderRow) {
   return {
@@ -373,6 +374,35 @@ export async function registerDeployRoutes(app: FastifyInstance) {
             region: providerRow.region ?? null,
           },
         );
+
+        // Fire-and-forget: trigger the deploy pipeline asynchronously
+        if (!request.body.skipPipeline) {
+          setImmediate(() => {
+            executePipeline({
+              deploymentId: payload.id,
+              appId: auth.appId,
+              providerId: request.body.providerId,
+              gitConnectionId: request.body.gitConnectionId,
+              projectId: request.body.projectId,
+              repo: request.body.repo,
+              branch: request.body.branch,
+              tofuScript: payload.tofu_script || "",
+              techStack: request.body.techStack,
+              primaryLanguage: request.body.primaryLanguage,
+              hasDocker: request.body.buildMethod === "dockerfile",
+              deployStrategy: payload.deploy_strategy || "managed",
+              templateId: request.body.templateId,
+              buildMethod: request.body.buildMethod,
+              registryUrl: request.body.registryUrl,
+              envVars: request.body.envVars,
+              postDeployCommands: request.body.postDeployCommands,
+              services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
+            }).catch((err) => {
+              console.error(`[deploy] Pipeline failed for ${payload.id}:`, err);
+            });
+          });
+        }
+
         return rowToDeployment(payload as any);
       } catch (error) {
         throw app.httpErrors.badRequest((error as Error).message);
