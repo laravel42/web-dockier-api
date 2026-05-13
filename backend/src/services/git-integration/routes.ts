@@ -1,0 +1,1019 @@
+import type { FastifyInstance } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { v4 as uuidv4 } from "uuid";
+import { z } from "zod";
+import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
+import { supabaseAdmin } from "../../shared/supabase/client.js";
+import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
+import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
+import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from "./domain/mr-generator.js";
+
+function parseRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
+  const normalized = repoUrl.replace(/\.git$/, "");
+  const sshMatch = normalized.match(/^git@[^:]+:([^/]+)\/(.+)$/);
+  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
+  try {
+    const url = new URL(normalized);
+    const parts = url.pathname.replace(/^\/+/, "").split("/");
+    if (parts.length >= 2) return { owner: parts[0], repo: parts[1] };
+    return null;
+  } catch {
+    const parts = normalized.split("/");
+    if (parts.length >= 2) return { owner: parts[parts.length - 2], repo: parts[parts.length - 1] };
+    return null;
+  }
+}
+
+function throwProviderError(app: FastifyInstance, provider: string, status: number, statusText: string): never {
+  throw app.httpErrors.badRequest(`${provider} API error ${status}: ${statusText}`);
+}
+
+async function getConnectionOrThrow(db: any, connectionId: string) {
+  const { data } = await db
+    .from("git_connections")
+    .select("id,app_id,provider,personal_token,label,repo_url,endpoint,created_at")
+    .eq("id", connectionId)
+    .single();
+  return data;
+}
+
+export async function registerGitIntegrationRoutes(app: FastifyInstance) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  const db = supabaseAdmin as any;
+
+  typed.post(
+    "/git/connections",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Add git connection",
+        body: z.object({
+          provider: providerSchema,
+          personalToken: z.string().min(1),
+          label: z.string().min(1),
+          repoUrl: z.string().default(""),
+          endpoint: z.string().default(""),
+        }),
+        response: { 200: connectionSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const existing = await db
+        .from("git_connections")
+        .select("id")
+        .eq("app_id", auth.appId)
+        .eq("provider", request.body.provider)
+        .eq("label", request.body.label)
+        .maybeSingle();
+      if (existing.data) throw app.httpErrors.conflict(`A ${request.body.provider} connection with label "${request.body.label}" already exists`);
+
+      const id = uuidv4();
+      const now = new Date().toISOString();
+      const payload = {
+        id,
+        app_id: auth.appId,
+        provider: request.body.provider,
+        personal_token: request.body.personalToken,
+        label: request.body.label,
+        repo_url: request.body.repoUrl,
+        endpoint: request.body.endpoint,
+        created_at: now,
+      };
+      const { error } = await db.from("git_connections").insert(payload);
+      if (error) throw app.httpErrors.badRequest(error.message);
+      return {
+        id,
+        provider: payload.provider,
+        label: payload.label,
+        repoUrl: payload.repo_url,
+        endpoint: payload.endpoint,
+        createdAt: now,
+      };
+    },
+  );
+
+  typed.get(
+    "/git/connections",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "List git connections",
+        response: { 200: listConnectionsResponseSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const { data, error } = await db
+        .from("git_connections")
+        .select("id,provider,label,repo_url,endpoint,created_at")
+        .eq("app_id", auth.appId)
+        .order("created_at", { ascending: false });
+      if (error) throw app.httpErrors.internalServerError(error.message);
+      return {
+        connections: (data ?? []).map((row: any) => ({
+          id: row.id,
+          provider: row.provider,
+          label: row.label,
+          repoUrl: row.repo_url ?? "",
+          endpoint: row.endpoint ?? "",
+          createdAt: row.created_at,
+        })),
+      };
+    },
+  );
+
+  typed.delete(
+    "/git/connections/:connectionId",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Delete git connection",
+        params: connectionIdParamsSchema,
+        response: { 200: successResponseSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const { error } = await db.from("git_connections").delete().eq("id", request.params.connectionId);
+      if (error) throw app.httpErrors.badRequest(error.message);
+      return { success: true as const };
+    },
+  );
+
+  typed.put(
+    "/git/connections/:connectionId",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Update git connection",
+        params: connectionIdParamsSchema,
+        body: z.object({ label: z.string().min(1), personalToken: z.string().optional() }),
+        response: { 200: connectionSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const updates: Record<string, unknown> = { label: request.body.label, updated_at: new Date().toISOString() };
+      if (request.body.personalToken) updates.personal_token = request.body.personalToken;
+      const { error } = await db.from("git_connections").update(updates).eq("id", request.params.connectionId);
+      if (error) throw app.httpErrors.badRequest(error.message);
+      return {
+        id: conn.id,
+        provider: conn.provider,
+        label: request.body.label,
+        repoUrl: conn.repo_url ?? "",
+        endpoint: conn.endpoint ?? "",
+        createdAt: conn.created_at,
+      };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/scan-auth",
+    {
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get connection token for scanning",
+        params: connectionIdParamsSchema,
+        response: { 200: z.object({ provider: z.string(), token: z.string(), endpoint: z.string() }) },
+      },
+    },
+    async (request) => {
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint ?? "" };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/repos",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "List repos for connection",
+        params: connectionIdParamsSchema,
+        querystring: z.object({ refresh: z.coerce.boolean().optional() }),
+        response: {
+          200: z.object({
+            repos: z.array(
+              z.object({
+                name: z.string(),
+                fullName: z.string(),
+                url: z.string(),
+                defaultBranch: z.string(),
+                private: z.boolean(),
+              }),
+            ),
+            cached: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+
+      if (!request.query.refresh) {
+        const cached = await db.from("repo_cache").select("repos").eq("connection_id", request.params.connectionId).maybeSingle();
+        if (cached.data?.repos) {
+          return { repos: typeof cached.data.repos === "string" ? JSON.parse(cached.data.repos) : cached.data.repos, cached: true };
+        }
+      }
+
+      let repos: Array<{ name: string; fullName: string; url: string; defaultBranch: string; private: boolean }>;
+      try {
+        repos = await listRepos(conn);
+      } catch (error) {
+        throw app.httpErrors.badRequest((error as Error).message);
+      }
+
+      await db.from("repo_cache").upsert(
+        {
+          connection_id: request.params.connectionId,
+          repos,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "connection_id" },
+      );
+      return { repos, cached: false };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/repo-branches",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "List branches for owner/repo",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({ owner: z.string(), repo: z.string() }),
+        response: { 200: z.object({ branches: z.array(z.string()) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branches = await listBranches(conn, { owner: request.query.owner, repo: request.query.repo, branch: "main" });
+      return { branches };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/branches",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "List branches for configured repo URL",
+        params: z.object({ connectionId: z.string().uuid() }),
+        response: { 200: z.object({ branches: z.array(z.string()) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      if (!conn.repo_url) throw app.httpErrors.preconditionFailed("No repo URL configured");
+      const parsed = parseRepoUrl(conn.repo_url);
+      if (!parsed) throw app.httpErrors.badRequest("Could not parse owner/repo from URL");
+      const branches = await listBranches(conn, { owner: parsed.owner, repo: parsed.repo, branch: "main" });
+      return { branches };
+    },
+  );
+
+  app.delete(
+    "/git/stats-cache",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Invalidate stats cache",
+        querystring: z.object({ repo: z.string(), branch: z.string().optional() }),
+        response: { 200: z.object({ done: z.literal(true) }) },
+      },
+    },
+    async (request: any) => {
+      const query = request.query as { repo: string; branch?: string };
+      let del = db.from("stats_cache").delete().eq("repo", query.repo);
+      if (query.branch) del = del.eq("branch", query.branch);
+      await del;
+      return { done: true as const };
+    },
+  );
+
+  app.delete(
+    "/git/stack-cache",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Invalidate stack cache",
+        querystring: z.object({ repo: z.string(), branch: z.string().optional() }),
+        response: { 200: z.object({ done: z.literal(true) }) },
+      },
+    },
+    async (request: any) => {
+      const query = request.query as { repo: string; branch?: string };
+      let del = db.from("stack_cache").delete().eq("repo", query.repo);
+      if (query.branch) del = del.eq("branch", query.branch);
+      await del;
+      return { done: true as const };
+    },
+  );
+
+  app.delete(
+    "/git/analysis-cache",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Invalidate analysis cache",
+        querystring: z.object({ repo: z.string().optional(), branch: z.string().optional() }),
+        response: { 200: z.object({ deleted: z.literal(true) }) },
+      },
+    },
+    async (request: any) => {
+      const query = request.query as { repo?: string; branch?: string };
+      let del = db.from("analysis_cache").delete();
+      if (query.repo) del = del.eq("repo", query.repo);
+      if (query.branch) del = del.eq("branch", query.branch);
+      await del;
+      return { deleted: true as const };
+    },
+  );
+
+  typed.post(
+    "/git/connections/:connectionId/issues",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Create Git issue",
+        params: z.object({ connectionId: z.string().uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          title: z.string().min(1),
+          body: z.string().default(""),
+          assignee: z.string().optional(),
+        }),
+        response: { 200: z.object({ issueId: z.string(), issueUrl: z.string(), issueNumber: z.number().int() }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      if (conn.provider === "github") {
+        const res = await fetch(`https://api.github.com/repos/${request.body.owner}/${request.body.repo}/issues`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${conn.personal_token}`,
+            Accept: "application/vnd.github+json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: request.body.title,
+            body: request.body.body,
+            ...(request.body.assignee ? { assignees: [request.body.assignee] } : {}),
+          }),
+        });
+        if (!res.ok) throw app.httpErrors.badRequest(`GitHub API error ${res.status}`);
+        const data = (await res.json()) as any;
+        return { issueId: String(data.id), issueUrl: data.html_url, issueNumber: data.number };
+      }
+      throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
+    },
+  );
+
+  typed.post(
+    "/git/connections/:connectionId/pull",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Fetch latest commits as pull preview",
+        params: z.object({ connectionId: z.string().uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branch: z.string().default("main"),
+          currentHash: z.string().optional(),
+        }),
+        response: { 200: z.object({ log: z.array(z.string()) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branch = request.body.branch || "main";
+      const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
+      if (conn.provider === "github") {
+        const baseUrl = conn.endpoint || "https://api.github.com";
+        const res = await fetch(`${baseUrl}/repos/${request.body.owner}/${request.body.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=10`, {
+          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+        });
+        if (!res.ok) throwProviderError(app, "GitHub", res.status, res.statusText);
+        const commits = (await res.json()) as any[];
+        if (commits.length === 0 || (request.body.currentHash && commits[0].sha === request.body.currentHash)) {
+          log.push("Already up to date.");
+        } else {
+          for (const commit of commits) log.push(`${commit.sha?.substring(0, 7)} ${commit.commit?.message?.split("\n")[0] ?? ""}`);
+        }
+      }
+      return { log };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/recent-commits",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get recent commits",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branch: z.string().optional(),
+          limit: z.coerce.number().int().positive().max(20).optional(),
+        }),
+        response: {
+          200: z.object({
+            commits: z.array(
+              z.object({
+                hash: z.string(),
+                shortHash: z.string(),
+                message: z.string(),
+                author: z.string(),
+                authorAvatar: z.string(),
+                date: z.string(),
+                url: z.string(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branch = request.query.branch || "main";
+      const limit = request.query.limit ?? 5;
+      if (conn.provider === "github") {
+        const baseUrl = conn.endpoint || "https://api.github.com";
+        const res = await fetch(`${baseUrl}/repos/${request.query.owner}/${request.query.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`, {
+          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+        });
+        if (!res.ok) throwProviderError(app, "GitHub", res.status, res.statusText);
+        const data = (await res.json()) as any[];
+        return {
+          commits: data.map((c) => ({
+            hash: c.sha ?? "",
+            shortHash: c.sha?.substring(0, 7) ?? "",
+            message: c.commit?.message?.split("\n")[0] ?? "",
+            author: c.commit?.author?.name ?? c.author?.login ?? "",
+            authorAvatar: c.author?.avatar_url ?? "",
+            date: c.commit?.committer?.date ?? "",
+            url: c.html_url ?? "",
+          })),
+        };
+      }
+      return { commits: [] };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/repo-tree",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get repository file tree",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
+        response: { 200: z.object({ files: z.array(z.object({ path: z.string(), type: z.enum(["file", "dir"]), size: z.number() })) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branch = request.query.branch || "main";
+      const tree = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
+      const files = tree.map((path) => ({ path, type: "file" as const, size: 0 }));
+      return { files };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/file-content",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get file content from repository",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string(), path: z.string() }),
+        response: { 200: z.object({ content: z.string() }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const content = await fetchRepoFile(conn, request.query, request.query.path);
+      if (content === null) throw app.httpErrors.notFound("File not found in repository");
+      return { content };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/repo-members",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "List repo members",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({ owner: z.string(), repo: z.string() }),
+        response: {
+          200: z.object({
+            members: z.array(
+              z.object({ id: z.string(), username: z.string(), name: z.string(), avatarUrl: z.string() }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      if (conn.provider === "github") {
+        const baseUrl = conn.endpoint || "https://api.github.com";
+        const res = await fetch(`${baseUrl}/repos/${request.query.owner}/${request.query.repo}/collaborators?per_page=100`, {
+          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
+        });
+        if (!res.ok) return { members: [] };
+        const data = (await res.json()) as Array<{ id: number; login: string; avatar_url: string }>;
+        return {
+          members: data.map((member) => ({
+            id: member.login,
+            username: member.login,
+            name: member.login,
+            avatarUrl: member.avatar_url,
+          })),
+        };
+      }
+      return { members: [] };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/repo-stats",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get repository stats",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branch: z.string().optional(),
+          refresh: z.coerce.boolean().optional(),
+          projectId: z.string().optional(),
+        }),
+        response: {
+          200: z.object({
+            stars: z.number(),
+            forks: z.number(),
+            openIssues: z.number(),
+            watchers: z.number(),
+            language: z.string(),
+            languages: z.record(z.string(), z.number()),
+            lastCommitDate: z.string(),
+            lastCommitMessage: z.string(),
+            lastCommitAuthor: z.string(),
+            lastCommitHash: z.string(),
+            totalCommits: z.number(),
+            contributors: z.number(),
+            topContributors: z.array(
+              z.object({ name: z.string(), avatarUrl: z.string(), commits: z.number(), profileUrl: z.string() }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+
+      const repoKey = `${request.query.owner}/${request.query.repo}`;
+      const branch = request.query.branch || "main";
+      if (!request.query.refresh) {
+        const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
+        if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+      }
+
+      const stats = {
+        stars: 0,
+        forks: 0,
+        openIssues: 0,
+        watchers: 0,
+        language: "",
+        languages: {} as Record<string, number>,
+        lastCommitDate: "",
+        lastCommitMessage: "",
+        lastCommitAuthor: "",
+        lastCommitHash: "",
+        totalCommits: 0,
+        contributors: 0,
+        topContributors: [] as Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>,
+      };
+
+      if (conn.provider === "github") {
+        const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
+        const baseUrl = conn.endpoint || "https://api.github.com";
+
+        const [repoRes, commitsRes, contributorsRes, languagesRes] = await Promise.all([
+          fetch(`${baseUrl}/repos/${repoKey}`, { headers }),
+          fetch(`${baseUrl}/repos/${repoKey}/commits?sha=${encodeURIComponent(branch)}&per_page=20`, { headers }),
+          fetch(`${baseUrl}/repos/${repoKey}/contributors?per_page=20`, { headers }),
+          fetch(`${baseUrl}/repos/${repoKey}/languages`, { headers }),
+        ]);
+
+        if (!repoRes.ok) throwProviderError(app, "GitHub", repoRes.status, repoRes.statusText);
+        const repoData = (await repoRes.json()) as any;
+        stats.stars = repoData.stargazers_count ?? 0;
+        stats.forks = repoData.forks_count ?? 0;
+        stats.openIssues = repoData.open_issues_count ?? 0;
+        stats.watchers = repoData.subscribers_count ?? 0;
+        stats.language = repoData.language ?? "";
+
+        if (languagesRes.ok) {
+          const languageData = (await languagesRes.json()) as Record<string, number>;
+          const total = Object.values(languageData).reduce((sum, value) => sum + value, 0);
+          if (total > 0) {
+            stats.languages = Object.fromEntries(
+              Object.entries(languageData).map(([key, value]) => [key, Math.round((value / total) * 1000) / 10]),
+            );
+          }
+        }
+
+        if (commitsRes.ok) {
+          const commits = (await commitsRes.json()) as any[];
+          if (commits.length > 0) {
+            const latest = commits[0];
+            stats.lastCommitDate = latest.commit?.committer?.date ?? "";
+            stats.lastCommitMessage = latest.commit?.message?.split("\n")[0] ?? "";
+            stats.lastCommitAuthor = latest.commit?.author?.name ?? latest.author?.login ?? "";
+            stats.lastCommitHash = latest.sha ?? "";
+            stats.totalCommits = commits.length;
+          }
+        }
+
+        if (contributorsRes.ok) {
+          const contributors = (await contributorsRes.json()) as any[];
+          stats.contributors = contributors.length;
+          stats.topContributors = contributors.slice(0, 20).map((contributor) => ({
+            name: contributor.login,
+            avatarUrl: contributor.avatar_url ?? "",
+            commits: contributor.contributions ?? 0,
+            profileUrl: contributor.html_url ?? "",
+          }));
+        }
+      }
+
+      await db.from("stats_cache").upsert(
+        {
+          repo: repoKey,
+          branch,
+          result: stats,
+          created_at: new Date().toISOString(),
+          project_id: request.query.projectId ?? "",
+        },
+        { onConflict: "repo,branch" },
+      );
+      return stats;
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/stack-analysis",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get stack analysis",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branch: z.string().optional(),
+          projectId: z.string().optional(),
+        }),
+        response: { 200: z.object({ stack: z.any().nullable(), cached: z.boolean() }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branch = request.query.branch || "main";
+      const repoKey = `${request.query.owner}/${request.query.repo}`;
+      const cached = await db.from("stack_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
+      if (cached.data?.result) {
+        return { stack: typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result, cached: true };
+      }
+
+      const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
+      const topDirs = new Map<string, number>();
+      for (const file of files) {
+        const top = file.split("/")[0];
+        topDirs.set(top, (topDirs.get(top) ?? 0) + 1);
+      }
+      const components = Array.from(topDirs.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([name, count], index) => ({
+          id: `${index + 1}`,
+          name,
+          path: [name],
+          tech: null,
+          techs: [],
+          languages: {},
+          dependencies: [],
+          edges: [],
+          childs: [],
+          fileCount: count,
+        }));
+      const stack = { components };
+      await db.from("stack_cache").upsert(
+        {
+          repo: repoKey,
+          branch,
+          result: stack,
+          created_at: new Date().toISOString(),
+          project_id: request.query.projectId ?? "",
+        },
+        { onConflict: "repo,branch" },
+      );
+      return { stack, cached: false };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/sensitive-data",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Scan repository for sensitive schema fields",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
+        response: { 200: z.object({ sensitiveData: z.array(z.any()) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branch = request.query.branch || "main";
+      const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
+      const schemaFiles = files.filter((file) => /migrations?.*\.sql$|schema\.sql$/i.test(file)).slice(0, 40);
+      let schemaText = "";
+      for (const file of schemaFiles) {
+        const content = await fetchRepoFile(conn, { owner: request.query.owner, repo: request.query.repo, branch }, file);
+        if (content) schemaText += `${content}\n`;
+      }
+      const analyzed = analyzeSensitiveDataFromText(schemaText);
+      return {
+        sensitiveData: analyzed.tables.flatMap((table) =>
+          table.columns.map((column: any) => ({
+            entity: table.name,
+            field: column.name,
+            sensitivity: column.category,
+            reason: column.reason,
+          })),
+        ),
+      };
+    },
+  );
+
+  typed.post(
+    "/git/analyze-sensitive-data",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Analyze SQL schema with AI",
+        body: z.object({ schema: z.string(), projectId: z.string().optional() }),
+        response: {
+          200: z.object({
+            tables: z.array(z.any()),
+            summary: z.object({
+              totalTables: z.number(),
+              highRiskTables: z.number(),
+              criticalFindings: z.array(z.string()),
+            }),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      if (request.body.projectId && !request.body.schema.trim()) {
+        const cached = await db.from("sensitive_cache").select("result").eq("project_id", request.body.projectId).maybeSingle();
+        if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+      }
+
+      const result = analyzeSensitiveDataFromText(request.body.schema);
+      if (request.body.projectId) {
+        await db.from("sensitive_cache").upsert(
+          {
+            project_id: request.body.projectId,
+            result,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: "project_id" },
+        );
+      }
+      return result;
+    },
+  );
+
+  typed.get(
+    "/git/repo-badges",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get technology badges",
+        querystring: z.object({ repo: z.string(), branch: z.string().optional(), connectionId: z.string().optional() }),
+        response: { 200: z.object({ badges: z.array(z.object({ name: z.string(), category: z.string(), confidence: z.number() })) }) },
+      },
+    },
+    async (request) => {
+      const branch = request.query.branch || "main";
+      const cached = await db.from("stack_cache").select("result").eq("repo", request.query.repo).eq("branch", branch).maybeSingle();
+      if (!cached.data?.result) return { badges: [] };
+      const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+      const techSet = new Set<string>();
+      for (const component of parsed.components ?? []) {
+        for (const tech of component.techs ?? []) techSet.add(tech);
+      }
+      return {
+        badges: Array.from(techSet).map((name) => ({ name, category: "framework", confidence: 90 })),
+      };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/repo-analyze",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Analyze repository stack and deploy options",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branch: z.string().optional(),
+          aiType: z.string().optional(),
+          projectId: z.string().optional(),
+        }),
+        response: { 200: z.any() },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      const branch = request.query.branch || "main";
+      const repoKey = `${request.query.owner}/${request.query.repo}`;
+      const cached = await db.from("analysis_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
+      if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+
+      const result = await runRepoAnalysis(conn, {
+        owner: request.query.owner,
+        repo: request.query.repo,
+        branch,
+      });
+
+      await db.from("analysis_cache").upsert(
+        {
+          id: uuidv4(),
+          repo: repoKey,
+          branch,
+          commit_sha: "",
+          result,
+          created_at: new Date().toISOString(),
+          app_id: auth.appId,
+          project_id: request.query.projectId ?? "",
+        },
+        { onConflict: "repo,branch" },
+      );
+      return result;
+    },
+  );
+
+  typed.post(
+    "/git/connections/:connectionId/create-mr",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Create fix MR/PR",
+        params: z.object({ connectionId: z.string().uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branch: z.string(),
+          filePath: z.string(),
+          startLine: z.number(),
+          endLine: z.number(),
+          ruleId: z.string(),
+          severity: z.string(),
+          message: z.string(),
+          snippet: z.string(),
+          aiType: z.string().optional(),
+          aiConfig: z.record(z.string(), z.string()).optional(),
+          assignee: z.string().optional(),
+          reviewer: z.string().optional(),
+        }),
+        response: { 200: z.object({ mrUrl: z.string(), mrId: z.string(), mrTitle: z.string() }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await getConnectionOrThrow(db, request.params.connectionId);
+      if (!conn) throw app.httpErrors.notFound("Connection not found");
+      if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
+      try {
+        return await createMergeRequest(conn, request.body);
+      } catch (error) {
+        throw app.httpErrors.badRequest((error as Error).message);
+      }
+    },
+  );
+
+  typed.post(
+    "/git/ai/summarize-finding",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Summarize security finding for issue title",
+        body: z.object({ severity: z.string(), message: z.string(), filePath: z.string(), snippet: z.string().optional() }),
+        response: { 200: z.object({ title: z.string(), estimateMinutes: z.number().int().nonnegative() }) },
+      },
+    },
+    async (request) => ({
+      title: summarizeFindingTitle({
+        severity: request.body.severity,
+        message: request.body.message,
+        filePath: request.body.filePath,
+      }),
+      estimateMinutes: estimateFixMinutes({
+        severity: request.body.severity,
+        snippet: request.body.snippet || "",
+        startLine: 1,
+        endLine: Math.max(1, (request.body.snippet || "").split("\n").length),
+      }),
+    }),
+  );
+}

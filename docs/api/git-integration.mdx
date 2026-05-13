@@ -1,0 +1,39 @@
+# Git Integration API
+
+## Endpoints
+
+- `POST /git/connections`
+- `GET /git/connections`
+- `DELETE /git/connections/:connectionId`
+- `PUT /git/connections/:connectionId`
+- `GET /git/connections/:connectionId/scan-auth`
+- `GET /git/connections/:connectionId/repos`
+- `GET /git/connections/:connectionId/repo-branches`
+- `GET /git/connections/:connectionId/branches`
+- `POST /git/connections/:connectionId/issues`
+- `POST /git/connections/:connectionId/pull`
+- `GET /git/connections/:connectionId/recent-commits`
+- `GET /git/connections/:connectionId/repo-tree`
+- `GET /git/connections/:connectionId/file-content`
+- `GET /git/connections/:connectionId/repo-members`
+- `GET /git/connections/:connectionId/repo-stats`
+- `GET /git/connections/:connectionId/stack-analysis`
+- `GET /git/connections/:connectionId/sensitive-data`
+- `GET /git/repo-badges`
+- `GET /git/connections/:connectionId/repo-analyze`
+- `POST /git/analyze-sensitive-data`
+- `POST /git/connections/:connectionId/create-mr`
+- `POST /git/ai/summarize-finding`
+- `DELETE /git/stats-cache`
+- `DELETE /git/stack-cache`
+- `DELETE /git/analysis-cache`
+
+## Notes
+
+- Core provider connectivity endpoints are migrated.
+- Restored domain logic now powers:
+  - provider adapters for repo/branch/tree/file operations
+  - repo analysis heuristics (tech stack, deploy options, service detection)
+  - stack cache generation from repository tree structure
+  - sensitive schema analysis (`GET /sensitive-data`, `POST /analyze-sensitive-data`)
+- AI-heavy remediation endpoints (`create-mr`, AI summarize/fix) are still best-effort placeholders.

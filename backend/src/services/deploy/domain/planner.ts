@@ -1,0 +1,174 @@
+import type { ServiceEntry } from "../types.js";
+
+export type RuntimePlan = {
+  name: string;
+  version: string;
+  buildCmd: string;
+  startCmd: string;
+  port: number;
+};
+
+export type GenerateTofuInput = {
+  provider: string;
+  region: string;
+  appName: string;
+  repo: string;
+  branch: string;
+  techStack: string[];
+  primaryLanguage: string;
+  hasDocker: boolean;
+  deployStrategy: "vps" | "managed" | "static";
+  services: ServiceEntry[];
+  aiAnalysis?: {
+    runtime?: string;
+    runtimeVersion?: string;
+    buildCommand?: string;
+    startCommand?: string;
+    port?: number;
+    summary?: string;
+    envVars?: string[];
+  };
+};
+
+const DEFAULT_REGIONS: Record<string, string> = {
+  aws: "us-east-1",
+  gcp: "us-central1",
+};
+
+export function getDefaultRegion(provider: string): string {
+  return DEFAULT_REGIONS[provider] ?? "us-east-1";
+}
+
+export function normalizeAppName(input: string): string {
+  const normalized = input.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  return normalized.replace(/-+/g, "-").replace(/^-|-$/g, "") || "app";
+}
+
+export function detectRuntime(primaryLanguage: string, techStack: string[], aiAnalysis?: GenerateTofuInput["aiAnalysis"]): RuntimePlan {
+  if (aiAnalysis?.runtime) {
+    return {
+      name: aiAnalysis.runtime,
+      version: aiAnalysis.runtimeVersion || "latest",
+      buildCmd: aiAnalysis.buildCommand || "echo no-build-command",
+      startCmd: aiAnalysis.startCommand || "echo no-start-command",
+      port: aiAnalysis.port || 3000,
+    };
+  }
+
+  const lower = primaryLanguage.toLowerCase();
+  const stack = techStack.map((item) => item.toLowerCase());
+
+  if (stack.includes("laravel") || lower === "php") {
+    return {
+      name: "php",
+      version: "8.3",
+      buildCmd: "composer install --no-dev --optimize-autoloader",
+      startCmd: "/usr/bin/supervisord -c /etc/supervisor/conf.d/app.conf",
+      port: 80,
+    };
+  }
+
+  if (stack.includes("next.js") || stack.includes("nuxt") || lower === "javascript" || lower === "typescript" || stack.includes("node.js")) {
+    return {
+      name: "node",
+      version: "20",
+      buildCmd: "npm ci && npm run build",
+      startCmd: "npm start",
+      port: 3000,
+    };
+  }
+
+  if (lower === "python" || stack.includes("django") || stack.includes("flask") || stack.includes("fastapi")) {
+    return {
+      name: "python",
+      version: "3.12",
+      buildCmd: "pip install -r requirements.txt",
+      startCmd: "gunicorn app:app --bind 0.0.0.0:8000",
+      port: 8000,
+    };
+  }
+
+  if (lower === "go" || lower === "golang") {
+    return {
+      name: "go",
+      version: "1.22",
+      buildCmd: "go build -o app .",
+      startCmd: "./app",
+      port: 8080,
+    };
+  }
+
+  return {
+    name: "node",
+    version: "20",
+    buildCmd: "npm ci && npm run build",
+    startCmd: "npm start",
+    port: 3000,
+  };
+}
+
+export function estimateResources(
+  provider: string,
+  runtime: RuntimePlan,
+  hasDocker: boolean,
+  services: ServiceEntry[],
+  deployStrategy: string,
+): string[] {
+  const managedServices = services.filter((service) => service.mode === "managed");
+  const resources: string[] = [];
+
+  if (provider === "aws") {
+    resources.push(deployStrategy === "vps" ? "aws_ec2_instance" : "aws_ecs_service");
+    if (managedServices.some((service) => service.type === "database")) resources.push("aws_rds_instance");
+    if (managedServices.some((service) => service.type === "cache")) resources.push("aws_elasticache_cluster");
+    if (managedServices.some((service) => service.type === "queue")) resources.push("aws_sqs_queue");
+    if (managedServices.some((service) => service.type === "storage")) resources.push("aws_s3_bucket");
+    if (hasDocker) resources.push("aws_ecr_repository");
+    resources.push("aws_iam_role");
+    return resources;
+  }
+
+  if (provider === "gcp") {
+    if (deployStrategy === "static") {
+      resources.push("gcp_storage_bucket", "gcp_compute_backend_bucket", "gcp_compute_global_forwarding_rule");
+    } else if (deployStrategy === "managed") {
+      resources.push("gcp_cloud_run_v2_service", "gcp_artifact_registry_repository");
+    } else {
+      resources.push("gcp_compute_instance", "gcp_compute_firewall", "gcp_compute_address");
+    }
+    if (managedServices.some((service) => service.type === "database")) resources.push("gcp_sql_database_instance");
+    if (managedServices.some((service) => service.type === "cache")) resources.push("gcp_redis_instance");
+    return resources;
+  }
+
+  return [`${provider}_server`, `${runtime.name}_runtime`];
+}
+
+export function generateTofuPreview(input: GenerateTofuInput): { script: string; estimatedResources: string[] } {
+  const runtime = detectRuntime(input.primaryLanguage, input.techStack, input.aiAnalysis);
+  const estimatedResources = estimateResources(input.provider, runtime, input.hasDocker, input.services, input.deployStrategy);
+  const envVars = input.aiAnalysis?.envVars ?? [];
+
+  const script = [
+    "# OpenTofu preview generated by Fastify deploy planner",
+    `provider="${input.provider}"`,
+    `region="${input.region}"`,
+    `app_name="${input.appName}"`,
+    `repo="${input.repo}"`,
+    `branch="${input.branch}"`,
+    `runtime="${runtime.name}@${runtime.version}"`,
+    `build_command="${runtime.buildCmd}"`,
+    `start_command="${runtime.startCmd}"`,
+    `port="${runtime.port}"`,
+    `deploy_strategy="${input.deployStrategy}"`,
+    `has_docker="${input.hasDocker}"`,
+    `estimated_resources="${estimatedResources.join(",")}"`,
+    `services="${input.services.map((service) => `${service.type}:${service.mode}`).join(",")}"`,
+    envVars.length > 0 ? `required_env_vars="${envVars.join(",")}"` : 'required_env_vars=""',
+    input.aiAnalysis?.summary ? `analysis_summary="${input.aiAnalysis.summary.replace(/"/g, "'")}"` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { script, estimatedResources };
+}

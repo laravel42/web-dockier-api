@@ -1,6 +1,45 @@
 import { request } from "./request";
 
+export type TenantRole = "admin" | "member";
+export type TenantMembership = {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  role: TenantRole;
+};
+
 export const authApi = {
+  startPasswordless: (data: { email: string; redirectTo?: string }) =>
+    request<{ success: true; message: string }>("/auth/passwordless/start", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  verifyPasswordless: (data: {
+    email: string;
+    token: string;
+    type?: "email" | "magiclink" | "signup";
+    tenantSlug?: string;
+    tenantName?: string;
+  }) =>
+    request<{
+      session: { token: string; userId: string; tenantId: string; role: TenantRole };
+      memberships: TenantMembership[];
+    }>("/auth/passwordless/verify", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: { Authorization: "" },
+    }),
+
+  listMemberships: () => request<{ memberships: TenantMembership[] }>("/auth/memberships"),
+
+  switchTenant: (tenantId: string) =>
+    request<{ token: string; userId: string; tenantId: string; role: TenantRole }>(
+      `/auth/tenants/${tenantId}/switch`,
+      { method: "POST" },
+    ),
+
   register: (data: { email: string; password: string; name: string }) =>
     request<{ token: string; userId: string }>("/auth/register", {
       method: "POST",
@@ -42,5 +81,14 @@ export const authApi = {
     }),
 
   getMe: () =>
-    request<{ userId: string; email: string; name: string; roleId: string; appId: string }>("/auth/me"),
+    request<{
+      userId: string;
+      email: string;
+      name: string;
+      tenantId: string;
+      role: TenantRole;
+      roleId: TenantRole;
+      appId: string;
+      memberships: TenantMembership[];
+    }>("/auth/me"),
 };

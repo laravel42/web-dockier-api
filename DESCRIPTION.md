@@ -4,7 +4,7 @@
 
 Dockier is a developer platform that gives engineering teams a single dashboard to connect source code repositories, scan for security vulnerabilities, understand projects through AI-powered analysis, and deploy to the cloud — replacing the patchwork of disconnected tools teams juggle today.
 
-Built as a microservices backend on [Encore.ts](https://encore.dev) with a React + Tailwind CSS frontend, Dockier targets small-to-mid-size teams (2–15 engineers) that lack a dedicated AppSec function but still need to ship secure code.
+Built with a Fastify + TypeScript backend and a React + Tailwind CSS frontend, Dockier targets small-to-mid-size teams (2–15 engineers) that lack a dedicated AppSec function but still need to ship secure code.
 
 **Project status:** In Progress  
 **Priority:** High  
@@ -51,15 +51,15 @@ Built as a microservices backend on [Encore.ts](https://encore.dev) with a React
 ### Architecture highlights
 
 | Layer | Stack |
-|-------|-------|
-| Backend | Encore.ts microservices (Auth, Users, Groups, Roles, Projects, Git Integration, Code Analysis, Notifications, Deploy, Image Builder, Integrations) |
+| ----- | ----- |
+| Backend | Fastify + TypeScript service modules (`backend/src/services/*`) |
 | Frontend | Vite + React 19 + Tailwind CSS v4, dark mode default |
 | AI | OpenAI API (gpt-5.4-mini), server-side key, JSON response format |
 | Scanning | Semgrep + SonarQube (optional) + custom regex engine |
 | Vulnerability DB | OSV.dev batch API (free, no key) |
 | Build | Auto-generated Dockerfiles (per-runtime: Node, PHP, Python, Go), Railpack, Nixpacks (available as alternatives) |
 | Infrastructure | Pulumi (GCP), CodeBuild + CloudFormation (AWS) — extensible to additional providers |
-| Data | PostgreSQL (managed by Encore) |
+| Data | Supabase Postgres |
 | Messaging | Pub/sub for deploys and notifications |
 
 ---
@@ -78,7 +78,7 @@ These are explicitly out of scope and require a deliberate decision to bring in:
 - **DAST, IAST, or container image scanning** — Static analysis (SAST) and dependency scanning (SCA) only.
 - **Multi-tenancy / org hierarchy** — Flat app_id model. No SSO/SAML, no cross-org sharing.
 - **Mobile apps** — Desktop-first SPA. No responsive mobile layout or push notifications.
-- **Self-hosted Dockier** — Runs as a hosted service on Encore.ts infrastructure. No Helm chart or Docker Compose for self-hosting.
+- **Self-hosted Dockier** — No Helm chart or Docker Compose distribution for self-hosting.
 - **AI model customization** — Fixed model (gpt-5.4-mini) via API. No fine-tuning, no local LLMs, no user model selection.
 - **Monorepo-aware scanning** — Single repo + branch per scan. No per-package scanning within monorepos.
 
@@ -87,27 +87,32 @@ These are explicitly out of scope and require a deliberate decision to bring in:
 ## Success Criteria
 
 ### Developer experience
+
 - A new user can go from sign-up to first security scan in under 5 minutes with zero configuration files.
 - AI-generated project analysis covers all eight sections and loads from cache on repeat visits (no redundant API calls).
 - A vulnerability finding can be turned into a merge request with an AI fix in 3 clicks or fewer.
 
 ### Security coverage
+
 - Semgrep community rules + 30+ custom regex rules cover the OWASP Top 10 vulnerability classes across PHP, JavaScript, TypeScript, Python, Go, Java, and Ruby.
 - Dependency scanning covers the four major ecosystems (npm, Composer, pip, Bundler) against the OSV.dev database.
 - Sensitive data detection works across SQL migrations, Prisma, Eloquent, TypeScript interfaces, and Python classes without consuming AI credits.
 
 ### Deployment
+
 - Developers can deploy without writing a Dockerfile — Dockier's repo analyzer detects the runtime and framework, then generates an optimized multi-stage Dockerfile automatically. Failed builds are auto-patched and retried.
 - Managed deployments succeed end-to-end on both AWS (CodeBuild → ECR → CloudFormation → ECS) and GCP (Docker build → Artifact Registry → Pulumi → Cloud Run) with status tracking from pending through success/failed.
 - One-click destroy cleanly tears down provisioned infrastructure (Pulumi state-based for GCP, CloudFormation stack deletion for AWS).
 - Adding a new cloud provider does not require changes to the build pipeline or project configuration — the repo analyzer and Dockerfile generation are provider-agnostic.
 
 ### Visibility and control
+
 - The dashboard surfaces KPIs (projects, deploys, scans, findings) and recent activity across all projects.
 - Role-based access control enforces nine permission types, with UI elements hidden for unauthorized actions.
 - Multi-channel notifications (email, Slack, webhook, in-app) fire on scan completions and deployment events.
 
 ### Reliability
+
 - Scans degrade gracefully when Semgrep or SonarQube are unavailable — custom regex rules still run.
 - AI features return fallback states (not crashes) when the OpenAI API key is missing or the API fails after retries.
 - Pub/sub delivery for deploys and notifications is at-least-once with idempotent processing.

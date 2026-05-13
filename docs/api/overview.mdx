@@ -1,0 +1,30 @@
+# API Overview
+
+All Fastify endpoints are strongly typed using Zod schemas and published via OpenAPI.
+
+## Services
+
+- `auth`: Supabase passwordless identity, tenant membership, and RBAC token issuance
+- `users`: user lifecycle and profile data
+- `projects`: project lifecycle and configuration
+- `roles`: role and permission management
+- `deploy`: provider credentials, deployments, IaC generation, webhooks
+- `notifications`: channels, send flow, and in-app inbox
+- `integrations`: PM provider lookup + issue creation
+- `code-analysis`: scans, findings, custom rules, rule overrides
+- `git-integration`: git connections, repo metadata, analysis, AI helper endpoints
+- `image-builder`: build orchestration, logs, image lookup, deployment status
+
+## Tenant security model
+
+- Tenants are represented by `organizations`.
+- Access is bound through `organization_memberships` with fixed roles: `admin`, `member`.
+- API requests use a tenant-scoped JWT; write operations for tenant resources require `admin`.
+- RLS policies enforce tenant boundaries for `organizations`, `organization_memberships`, `users`, and `projects`.
+
+## OpenAPI integration
+
+The OpenAPI document is generated at runtime from route schemas:
+
+- `GET /docs/json`
+- `GET /docs` (Swagger UI)

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Dockier API",
+  "theme": "mint",
+  "colors": {
+    "primary": "#00A3FF",
+    "light": "#33B8FF",
+    "dark": "#007FCC"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["index", "migration-plan"]
+          },
+          {
+            "group": "API",
+            "pages": [
+              "api/overview",
+              "api/auth",
+              "api/users",
+              "api/projects",
+              "api/roles",
+              "api/deploy",
+              "api/notifications",
+              "api/integrations",
+              "api/code-analysis",
+              "api/git-integration",
+              "api/image-builder",
+              "api/migration-status"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": ["operations/cloudflare", "operations/migrations"]
+          }
+        ]
+      }
+    ]
+  }
+}

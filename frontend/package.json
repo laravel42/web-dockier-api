@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:pages:dev": "wrangler pages dev dist",
+    "cf:pages:deploy": "wrangler pages deploy dist --project-name dockier-frontend"
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.3",
@@ -39,6 +41,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.58.2",
     "vite": "^7",
-    "vitest": "^1"
+    "vitest": "^1",
+    "wrangler": "^4.46.0"
   }
 }

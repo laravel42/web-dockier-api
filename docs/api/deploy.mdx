@@ -1,0 +1,27 @@
+# Deploy API
+
+## Endpoints
+
+- `POST /deploy/providers`
+- `GET /deploy/providers`
+- `PUT /deploy/providers/:providerId`
+- `DELETE /deploy/providers/:providerId`
+- `GET /deploy/providers/:providerId/credentials`
+- `GET /deploy/ssh-keys`
+- `POST /deploy/ssh-keys`
+- `DELETE /deploy/ssh-keys/:keyId`
+- `POST /deploy/deployments`
+- `GET /deploy/deployments`
+- `GET /deploy/deployments/:deploymentId`
+- `PUT /deploy/deployments/:deploymentId`
+- `POST /deploy/deployments/:deploymentId/destroy`
+- `POST /deploy/tofu/generate`
+- `POST /deploy/webhook/aws-pipeline`
+
+## Notes
+
+- `POST /deploy/tofu/generate` now uses restored domain planning logic for:
+  - runtime/build/start command inference
+  - normalized app naming and provider region defaults
+  - provider-aware resource estimation (AWS/GCP + managed services)
+- Runtime execution remains Fastify-native; Encore runtime wiring is not used.

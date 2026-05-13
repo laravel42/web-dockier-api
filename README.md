@@ -1,112 +1,105 @@
 # Dockier
 
-A full-stack application with EncoreJS backend and React + Tailwind frontend.
+Dockier is a full-stack developer platform with a Fastify + TypeScript backend in `backend/`, Supabase-backed persistence, and OpenAPI-first contracts.
 
-## Features
+## Backend Status
 
-- **Auth**: Register, login, JWT tokens, 2FA (TOTP), Google & GitHub social login
-- **Users**: CRUD, search, pagination
-- **Groups & Roles**: Group management, role-based permissions, membership
-- **Git Integration**: Connect GitHub/GitLab/Bitbucket via personal tokens, browse repos & branches
-- **Notifications**: Multi-channel (email, Slack, webhook, in-app), pub/sub processing
-- **Deploy**: Server provider management (AWS, GCP), automated deployments
+All active backend domains are implemented under `backend/src/services/*` and run via the Fastify runtime.
 
-## Architecture
+## Architecture Snapshot
 
-```
-backend (EncoreJS)
-├── auth/           → Authentication, 2FA, social login
-├── users/          → User management
-├── groups/         → Groups, roles, membership
-├── git-integration/→ Git provider connections
-├── notifications/  → Multi-channel notifications (pub/sub)
-└── deploy/         → Server providers & deployment automation
+```text
+backend/ (Fastify + TypeScript runtime)
+├── src/services/*           → service route modules
+├── src/shared/supabase      → typed Supabase client/types
+└── src/shared/openapi       → route schemas -> OpenAPI/Swagger
 
-frontend (React + Tailwind)
-├── src/context/    → Auth context
-├── src/services/   → API client layer
-├── src/components/ → Layout, shared components
-└── src/pages/      → All page views
+frontend/ (React 19 + Vite + Tailwind CSS)
+├── src/services             → API client layer
+└── wrangler.toml            → Cloudflare Pages config
+
+docs/                        → Mintlify docs
+migrations/                  → unified SQL migration source of truth
 ```
 
-## Getting Started
+## Developer Workflow
 
 ### Prerequisites
 
 - Node.js 18+
-- [Encore CLI](https://encore.dev/docs/install)
+- `pnpm` 10+
 
-### Backend
+### Install dependencies
 
 ```bash
-# Set required secrets
-encore secret set JwtSecret --type dev
-encore secret set GoogleClientId --type dev
-encore secret set GoogleClientSecret --type dev
-encore secret set GitHubClientId --type dev
-encore secret set GitHubClientSecret --type dev
-encore secret set SmtpHost --type dev
-encore secret set SmtpPort --type dev
-encore secret set SmtpUser --type dev
-encore secret set SmtpPass --type dev
-encore secret set SlackWebhookUrl --type dev
-
-# Run the backend
-encore run
+pnpm install
+cd frontend && pnpm install
 ```
 
-The backend runs on `http://localhost:4000` with Encore's dashboard at `http://localhost:9400`.
+### Run backend (Fastify)
 
-### Frontend
+From repo root:
+
+```bash
+pnpm backend:dev
+```
+
+Useful service-specific commands:
+
+```bash
+pnpm backend:start:gateway
+pnpm --filter @dockier/backend-fastify start:auth
+pnpm --filter @dockier/backend-fastify start:users
+pnpm --filter @dockier/backend-fastify start:projects
+pnpm backend:typecheck
+```
+
+### Run frontend (Vite)
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm dev
 ```
 
-The frontend runs on `http://localhost:5173` and proxies API calls to the backend.
+### API docs
 
-## API Endpoints
+When backend is running:
 
-| Service       | Method | Path                                          | Auth |
-|---------------|--------|-----------------------------------------------|------|
-| Auth          | POST   | /auth/register                                | No   |
-| Auth          | POST   | /auth/login                                   | No   |
-| Auth          | POST   | /auth/social                                  | No   |
-| Auth          | POST   | /auth/2fa/setup                               | Yes  |
-| Auth          | POST   | /auth/2fa/enable                              | Yes  |
-| Auth          | POST   | /auth/2fa/verify                              | No   |
-| Users         | GET    | /users                                        | Yes  |
-| Users         | GET    | /users/:userId                                | Yes  |
-| Users         | PUT    | /users/:userId                                | Yes  |
-| Users         | DELETE | /users/:userId                                | Yes  |
-| Groups        | GET    | /groups                                       | Yes  |
-| Groups        | POST   | /groups                                       | Yes  |
-| Groups        | GET    | /groups/:groupId                              | Yes  |
-| Groups        | PUT    | /groups/:groupId                              | Yes  |
-| Groups        | DELETE | /groups/:groupId                              | Yes  |
-| Groups        | POST   | /groups/:groupId/members                      | Yes  |
-| Groups        | GET    | /groups/:groupId/members                      | Yes  |
-| Groups        | DELETE | /groups/:groupId/members/:userId              | Yes  |
-| Roles         | GET    | /roles                                        | Yes  |
-| Roles         | POST   | /roles                                        | Yes  |
-| Roles         | DELETE | /roles/:roleId                                | Yes  |
-| Git           | GET    | /git/connections                              | Yes  |
-| Git           | POST   | /git/connections                              | Yes  |
-| Git           | DELETE | /git/connections/:connectionId                | Yes  |
-| Git           | GET    | /git/connections/:connectionId/repos          | Yes  |
-| Git           | GET    | /git/connections/:id/repos/:owner/:repo/branches | Yes |
-| Notifications | GET    | /notifications                                | Yes  |
-| Notifications | GET    | /notifications/channels                       | Yes  |
-| Notifications | POST   | /notifications/channels                       | Yes  |
-| Notifications | PUT    | /notifications/channels/:channelId/toggle     | Yes  |
-| Notifications | DELETE | /notifications/channels/:channelId            | Yes  |
-| Notifications | POST   | /notifications/send                           | Yes  |
-| Notifications | PUT    | /notifications/:notificationId/read           | Yes  |
-| Deploy        | GET    | /deploy/providers                             | Yes  |
-| Deploy        | POST   | /deploy/providers                             | Yes  |
-| Deploy        | DELETE | /deploy/providers/:providerId                 | Yes  |
-| Deploy        | GET    | /deploy/deployments                           | Yes  |
-| Deploy        | POST   | /deploy/deployments                           | Yes  |
-| Deploy        | GET    | /deploy/deployments/:deploymentId             | Yes  |
+- Swagger UI: `http://localhost:4000/docs`
+- OpenAPI JSON: `http://localhost:4000/docs/json`
+
+### Mintlify docs
+
+From repo root:
+
+```bash
+pnpm docs:dev
+pnpm docs:build
+```
+
+### Cloudflare Pages workflow (frontend)
+
+```bash
+cd frontend
+pnpm build
+pnpm cf:pages:dev
+pnpm cf:pages:deploy
+```
+
+## Environment Variables
+
+For the Fastify backend, copy `backend/.env.example` and set:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `JWT_SECRET`
+- `SERVICE_NAME`
+- `PORT`
+- `CORS_ORIGIN`
+
+Supabase Auth email OTP/magic-link must be enabled for passwordless sign-in flows.
+
+## Database and Migrations
+
+- Add and run SQL migrations from root `migrations/` only.
+- Historical lineage is documented in `migrations/legacy-index.md`.

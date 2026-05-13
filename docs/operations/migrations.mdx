@@ -1,0 +1,20 @@
+# Migration Operations
+
+## Source of truth
+
+Use root `migrations/` for all new SQL changes.
+
+## Existing migration lineage
+
+Historical service/prisma/supabase SQL is mapped to canonical root files in `migrations/legacy-index.md`.
+
+## Guardrails
+
+- Do not modify already-applied SQL files in place.
+- Add new root migration files with monotonic prefixes (`0002_...sql`, `0003_...sql`).
+- Keep tables in exposed Supabase schemas protected with RLS policies when exposed to client-side access patterns.
+
+## Runtime parity status
+
+- Fastify service routes should delegate non-trivial domain behavior to service-local modules (for example `backend/src/services/*/domain/*`) instead of inline placeholder logic.
+- Current high-value restored areas include deploy planning, git repository analysis helpers, and image-builder orchestration normalization.

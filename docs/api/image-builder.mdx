@@ -1,0 +1,21 @@
+# Image Builder API
+
+## Endpoints
+
+- `POST /image-builder/builds`
+- `GET /image-builder/builds/:buildId`
+- `GET /image-builder/builds/:buildId/logs`
+- `GET /image-builder/builds`
+- `POST /image-builder/builds/:buildId/cancel`
+- `GET /image-builder/images/:revision`
+- `GET /image-builder/builds/:buildId/deploy-status`
+- `POST /image-builder/webhook`
+
+## Notes
+
+- Build persistence and status APIs are migrated.
+- Build creation now runs through restored orchestration helpers for:
+  - image repo derivation + request normalization
+  - inferred runtime/container-port metadata
+  - structured status reasons for queue/deploy transitions
+- Cloud provider execution/log streaming remains best-effort in the Fastify migration stage.

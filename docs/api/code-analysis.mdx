@@ -1,0 +1,26 @@
+# Code Analysis API
+
+## Endpoints
+
+- `POST /code-analysis/scans`
+- `GET /code-analysis/scans`
+- `GET /code-analysis/scans/:scanId`
+- `GET /code-analysis/scans/:scanId/findings`
+- `DELETE /code-analysis/scans/:scanId`
+- `POST /code-analysis/scans/:scanId/run`
+- `GET /code-analysis/custom-rules`
+- `POST /code-analysis/custom-rules`
+- `PUT /code-analysis/custom-rules/:ruleDbId`
+- `DELETE /code-analysis/custom-rules/:ruleDbId`
+- `GET /code-analysis/semgrep-rules`
+- `GET /code-analysis/semgrep-rules/content`
+- `PUT /code-analysis/semgrep-rules/content`
+- `GET /code-analysis/sonar/profiles`
+- `GET /code-analysis/sonar/rules`
+- `POST /code-analysis/sonar/rules/toggle`
+- `GET /code-analysis/rule-overrides`
+- `POST /code-analysis/rule-overrides`
+
+## Notes
+
+- Scan orchestration endpoints are migrated; deep scanner workers remain best-effort where TODO-marked.

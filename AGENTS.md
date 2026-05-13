@@ -8,81 +8,45 @@ Dockier is a developer platform that connects source code repositories to securi
 
 ## Tech stack
 
-- **Backend:** Encore.ts (TypeScript) — microservices architecture
+- **Backend:** Fastify + TypeScript (modular service routes in `backend/src/services`)
 - **Frontend:** React 19 + Vite + Tailwind CSS v4 (in `frontend/`)
-- **Database:** PostgreSQL (Neon Serverless Postgres), one database per service
+- **Database:** Supabase Postgres (canonical schema via root `migrations/`)
 - **Package manager:** pnpm (v10) — do NOT use npm or yarn
 - **Language:** TypeScript (strict mode, ES2022 target, bundler module resolution)
 - **Testing:** Vitest — tests live in `__tests__/` directories, files named `*.test.ts`
-- **AI:** OpenAI API (gpt-5.4-mini) — server-side only, key stored as Encore secret
+- **AI:** OpenAI API (gpt-5.4-mini) — server-side only
 - **Infrastructure:** Pulumi (GCP), CloudFormation (AWS)
 - **Scanning:** Semgrep + custom regex rules engine
 
 ## Repository structure
 
-```
-├── auth/              → Authentication service (JWT, 2FA, social login)
-├── users/             → User management service
-├── roles/             → Roles and permissions service
-├── projects/          → Project management service
-├── git-integration/   → Git provider connections (GitHub, GitLab, Bitbucket)
-├── code-analysis/     → Security scanning (Semgrep, custom rules)
-├── deploy/            → Deployment automation (AWS, GCP)
-│   ├── endpoints/     → API route handlers
-│   ├── processor/     → Async deploy pipeline (pub/sub subscriber)
-│   ├── pulumi-templates/ → Infrastructure-as-code templates per provider
-│   ├── repo-analyzer/ → Framework detection + Dockerfile generation
-│   └── templates/     → Project template configs
-├── notifications/     → Multi-channel notifications (email, Slack, webhook, in-app)
-├── integrations/      → Third-party PM tool integrations (Jira, Linear, etc.)
-├── image-builder/     → Docker image build service
-├── lib/               → Shared utilities (database wrapper)
+```text
+├── backend/           → Fastify runtime and service route modules
+│   ├── src/services/  → Domain routes (auth, users, deploy, git, etc.)
+│   └── src/shared/    → Auth, config, OpenAPI, Supabase client/types
+├── code-analysis/     → Security rule assets (`rules/opengrep`)
 ├── infra/             → Infrastructure configuration
 ├── frontend/          → React SPA (separate package.json)
-└── prisma/            → Prisma schema (reference only)
+└── migrations/        → Canonical SQL migrations (root-only)
 ```
 
 ## Service conventions
 
-Each backend service follows this structure:
-
-```
-service-name/
-├── encore.service.ts          → Service registration: new Service("name")
-├── service-name.ts            → Main API endpoints (or split into endpoints/)
-├── shared.ts                  → DB connection, types, pub/sub topics, constants
-├── migrations/                → SQL migration files (numbered, .up.sql)
-└── __tests__/                 → Vitest test files
-```
+Fastify service route modules live under `backend/src/services/<domain>/routes.ts`.
 
 ### Key patterns
 
-- **Database access:** Services use `lib/db.ts`, a tagged-template SQL wrapper (`db.exec`, `db.queryRow`, `db.query`). Initialize with `initDb(DatabaseUrl())` in `shared.ts`. Use parameterized queries — never interpolate user input into SQL strings.
-- **Secrets:** Use `secret()` from `encore.dev/config`. Never hardcode secrets or commit them.
-- **Pub/sub:** Use `Topic` and `Subscription` from `encore.dev/pubsub` for async processing (deploys, notifications). Delivery is at-least-once — handlers must be idempotent.
-- **Auth:** JWT-based. Endpoints that require auth use Encore's auth middleware. The `auth/` service issues and validates tokens.
-- **Service-to-service calls:** Use Encore's generated clients: `import { service_name } from "~encore/clients"`.
+- **Database access:** Use Supabase via `backend/src/shared/supabase/client.ts` with typed payloads and explicit row-to-response mapping.
+- **Secrets:** Read from environment variables in backend shared config; never hardcode secrets.
+- **Auth:** JWT-based. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 
 ## Database
 
-- Each service has its own PostgreSQL database (see `infra/infra.config.json` for the list).
-- Migrations are plain SQL files in `service/migrations/`, numbered sequentially: `1_description.up.sql`, `2_description.up.sql`, etc.
+- The active runtime uses root migrations as the canonical schema source.
+- Migrations are plain SQL files in root `migrations/`, with monotonic numeric prefixes (`0001_*.sql`, `0002_*.sql`, etc.).
 - The database is Neon Serverless Postgres. Connection strings include SSL configuration automatically.
 - When writing migrations, always use `IF NOT EXISTS` for CREATE TABLE and `CREATE INDEX CONCURRENTLY` where possible.
-
-## Deploy service — adding a new provider
-
-The deploy service is designed to be extensible. To add a new cloud provider:
-
-1. Add its key to the `DeployProvider` type in `deploy/shared.ts`
-2. Add it to the `SUPPORTED_PROVIDERS` array in `deploy/shared.ts`
-3. Create a Pulumi template in `deploy/pulumi-templates/<provider>.ts`
-4. Register it in `deploy/pulumi-templates/index.ts` (providerBuilders map)
-5. Add default region in `deploy/endpoints/tofu.ts` (DEFAULT_REGIONS)
-6. Add resource estimation in `deploy/endpoints/tofu.ts` (RESOURCE_ESTIMATORS)
-7. Add URL pattern in `deploy/processor/helpers.ts` (URL_GENERATORS)
-8. Add frontend provider style in `frontend/src/data/providers.ts`
 
 ## Frontend conventions
 
@@ -99,8 +63,10 @@ The deploy service is designed to be extensible. To add a new cloud provider:
 
 ```bash
 # Backend
-encore run                    # Start the backend (localhost:4000, dashboard at localhost:9400)
-pnpm test                     # Run all backend tests (vitest --run)
+pnpm backend:dev              # Start backend
+pnpm backend:typecheck        # Type-check backend
+pnpm --filter @dockier/backend-fastify build
+pnpm test                     # Run root Vitest tests
 
 # Frontend
 cd frontend && pnpm install   # Install frontend dependencies
@@ -112,7 +78,7 @@ cd frontend && pnpm build     # Production build
 
 - Use `const` by default, `let` only when reassignment is needed. Never use `var`.
 - Prefer `async/await` over raw Promises.
-- Use tagged-template SQL queries (`db.exec\`...\``) — never string concatenation for SQL.
+- Keep DB payloads parameterized and validated; never interpolate untrusted user input.
 - Error messages should be user-facing and descriptive (e.g., "Email already registered", not "duplicate key").
 - Keep endpoint handlers thin — extract business logic into helper functions.
 - Use early returns to reduce nesting.
@@ -121,9 +87,9 @@ cd frontend && pnpm build     # Production build
 
 ## Things to avoid
 
-- Do NOT use Encore's built-in `SQLDatabase` — the project uses a custom `lib/db.ts` wrapper with `pg` for Neon compatibility.
+- Do NOT reintroduce Encore runtime files/config (`encore.service.ts`, `encore.app`, `encore.dev` imports).
 - Do NOT add new dependencies without checking if an existing one covers the use case.
 - Do NOT modify migration files that have already been applied — create new migration files instead.
-- Do NOT put secrets, API keys, or credentials in code or config files — use Encore secrets.
+- Do NOT put secrets, API keys, or credentials in code or config files — use environment variables.
 - Do NOT use `npm` or `yarn` — this project uses `pnpm`.
 - Do NOT import from `frontend/` in backend code or vice versa — they are separate packages.

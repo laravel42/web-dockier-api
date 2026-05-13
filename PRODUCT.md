@@ -24,7 +24,7 @@ Dockier brings together the tools developers need to ship secure code faster:
 
 - **Notifications** — Multi-channel alerting via email, Slack, webhooks, and in-app notifications for scan results, deployments, and other events.
 
-- **Authentication & Access Control** — User registration, JWT-based auth, two-factor authentication (TOTP), social login (GitHub, GitLab, Bitbucket), and role-based permissions with group management.
+- **Authentication & Access Control** — Supabase passwordless auth (email OTP/magic link), tenant-scoped API JWT sessions, and app-managed RBAC with fixed `admin` / `member` roles.
 
 ## Project Detail Page
 
@@ -40,15 +40,19 @@ Each project has a rich detail page featuring:
 
 ## Architecture
 
-Dockier is built as a set of microservices using [Encore.ts](https://encore.dev) on the backend and React with Tailwind CSS on the frontend.
+Dockier is built as microservices, with an active migration to a Fastify + TypeScript backend foundation while preserving existing domain boundaries.
 
-**Backend services:** Auth, Users, Groups, Roles, Projects, Git Integration (with AI analysis, sensitive data scanner, dependency scanner, tech stack detection), Code Analysis, Notifications, Deploy, Image Builder, and Integrations.
+**Backend foundation now:** `backend/` runs Fastify + TypeScript with OpenAPI-first route schemas (Zod), Swagger UI, and a typed Supabase storage adapter. In this migration pass, `auth`, `users`, and `projects` are implemented; other domains are scaffolded with migration-status endpoints and continue to be migrated incrementally.
 
-**Frontend:** Single-page React app (Vite + React 19 + Tailwind CSS v4) with dark mode default, portal-based dropdown selects, session-cached analysis, and shared badge components (SensitivityBadge, StatusBadge, TechBadge, ProviderBadge, SourceControlBadge).
+**Frontend:** Single-page React app (Vite + React 19 + Tailwind CSS v4) with dark mode default, portal-based dropdown selects, session-cached analysis, shared badge components (SensitivityBadge, StatusBadge, TechBadge, ProviderBadge, SourceControlBadge), and Cloudflare Pages deployment support.
 
-**AI Integration:** OpenAI API (gpt-5.4-mini) with server-side API key (`OpenAIApiKey` Encore secret). Used for project analysis (sections, deploy options) and security fix generation. Response format enforced as `json_object`. Results cached in PostgreSQL `analysis_cache` table keyed by repo + branch + commit SHA.
+**AI Integration:** OpenAI API (gpt-5.4-mini) with a server-side API key (`OpenAIApiKey`). Used for project analysis (sections, deploy options) and security fix generation. Response format enforced as `json_object`. Results cached in PostgreSQL `analysis_cache` table keyed by repo + branch + commit SHA.
 
 **Vulnerability Scanning:** Dependencies checked against [OSV.dev](https://osv.dev) batch API. Sensitive data detected via pattern matching on field names from migrations and models — no AI credits consumed.
+
+**Docs and contracts:** API contracts are exposed through runtime Swagger/OpenAPI endpoints and Mintlify documentation in `docs/`.
+
+**Migration and schema direction:** Root `migrations/` is the single SQL migration source of truth, with historical lineage captured in `migrations/legacy-index.md`.
 
 ## License
 

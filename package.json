@@ -8,7 +8,13 @@
   "scripts": {
     "test": "vitest --run",
     "test:watch": "vitest",
-    "postinstall": "pip3 install semgrep || pip install semgrep || true"
+    "db:migrate": "bash infra/setup-external-db.sh",
+    "postinstall": "python3 pipx install semgrep || pipx install semgrep || true",
+    "backend:dev": "pnpm --filter @dockier/backend-fastify dev",
+    "backend:typecheck": "pnpm --filter @dockier/backend-fastify typecheck",
+    "backend:start:gateway": "pnpm --filter @dockier/backend-fastify start:gateway",
+    "docs:dev": "cd docs && pnpm dlx mint dev",
+    "docs:build": "cd docs && pnpm dlx mint validate"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
   "devDependencies": {
@@ -34,7 +40,6 @@
     "adm-zip": "^0.5.17",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
-    "encore.dev": "^1.56.6",
     "jsonwebtoken": "^9.0.3",
     "otplib": "^13.4.0",
     "pg": "^8.20.0",

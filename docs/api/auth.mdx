@@ -1,0 +1,25 @@
+# Auth API
+
+## Endpoints
+
+- `POST /auth/passwordless/start`
+- `POST /auth/passwordless/verify`
+- `GET /auth/me`
+- `GET /auth/memberships`
+- `POST /auth/tenants`
+- `POST /auth/tenants/:tenantId/switch`
+- `GET /auth/tenants/:tenantId/memberships`
+- `POST /auth/tenants/:tenantId/memberships`
+
+## Auth model
+
+- Supabase Auth handles passwordless email OTP/magic-link verification.
+- Dockier issues a tenant-scoped API JWT after OTP verification.
+- Tenant role is app-managed in `organization_memberships` (`admin` or `member`).
+- Authorization does not rely on mutable `user_metadata`.
+
+## Typing conventions
+
+- Input validation uses Zod route schemas.
+- Response contracts are explicitly declared per status code.
+- Authenticated routes use a typed JWT context (`request.auth`).
