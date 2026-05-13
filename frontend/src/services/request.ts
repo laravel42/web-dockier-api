@@ -17,6 +17,11 @@ export async function request<T>(
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userId");
+      throw new Error("Your session is invalid or expired. Please sign in again.");
+    }
     const error = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(error.message || "Request failed");
   }

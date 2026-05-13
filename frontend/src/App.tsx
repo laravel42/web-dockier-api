@@ -4,6 +4,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { PermissionsProvider } from "./context/PermissionsContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
 import AuthCallback from "./pages/AuthCallback";
 import Dashboard from "./pages/Dashboard";
 import Notifications from "./pages/Notifications";
@@ -29,7 +30,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Navigate to="/login" replace />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/auth/callback/:provider" element={<AuthCallback />} />
           <Route
             element={

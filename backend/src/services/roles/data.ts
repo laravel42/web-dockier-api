@@ -1,4 +1,11 @@
-export const staticRoles = [
+export type RoleRecord = {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+};
+
+export const staticRoles: RoleRecord[] = [
   {
     id: "admin" as const,
     name: "Admin",
@@ -12,3 +19,5 @@ export const staticRoles = [
     permissions: ["project.read", "user.read"],
   },
 ];
+
+export const rolesStore: RoleRecord[] = [...staticRoles];

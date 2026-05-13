@@ -10,10 +10,40 @@ export type TenantMembership = {
 };
 
 export const authApi = {
+  demoLogin: () =>
+    request<{
+      session: { token: string; userId: string; tenantId: string; role: TenantRole };
+      memberships: TenantMembership[];
+    }>("/auth/demo-login", {
+      method: "POST",
+      headers: { Authorization: "" },
+    }),
+
+  startRegistration: (data: { email: string; displayName: string; tenantName?: string; redirectTo?: string }) =>
+    request<{ success: true; message: string }>("/auth/register/start", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: { Authorization: "" },
+    }),
+
+  verifyRegistration: (data: { email: string; token: string; tenantName?: string }) =>
+    request<{
+      session: { token: string; userId: string; tenantId: string; role: TenantRole };
+      memberships: TenantMembership[];
+    }>("/auth/passwordless/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        ...data,
+        type: "signup",
+      }),
+      headers: { Authorization: "" },
+    }),
+
   startPasswordless: (data: { email: string; redirectTo?: string }) =>
     request<{ success: true; message: string }>("/auth/passwordless/start", {
       method: "POST",
       body: JSON.stringify(data),
+      headers: { Authorization: "" },
     }),
 
   verifyPasswordless: (data: {
@@ -39,25 +69,6 @@ export const authApi = {
       `/auth/tenants/${tenantId}/switch`,
       { method: "POST" },
     ),
-
-  register: (data: { email: string; password: string; name: string }) =>
-    request<{ token: string; userId: string }>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  login: (data: { email: string; password: string }) =>
-    request<{ token: string; userId: string; requires2FA?: boolean }>(
-      "/auth/login",
-      { method: "POST", body: JSON.stringify(data) }
-    ),
-
-  verify2FA: (data: { userId: string; token: string }) =>
-    request<{ token: string; userId: string }>("/auth/2fa/verify", {
-      method: "POST",
-      body: JSON.stringify(data),
-      headers: { Authorization: "" },
-    }),
 
   setup2FA: () =>
     request<{ secret: string; qrCodeUrl: string }>("/auth/2fa/setup", {

@@ -13,6 +13,7 @@
     "backend:dev": "pnpm --filter @dockier/backend-fastify dev",
     "backend:typecheck": "pnpm --filter @dockier/backend-fastify typecheck",
     "backend:start:gateway": "pnpm --filter @dockier/backend-fastify start:gateway",
+    "backend:seed:admin": "pnpm --filter @dockier/backend-fastify seed:admin",
     "docs:dev": "cd docs && pnpm dlx mint dev",
     "docs:build": "cd docs && pnpm dlx mint validate"
   },

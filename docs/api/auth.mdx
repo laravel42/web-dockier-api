@@ -2,6 +2,7 @@
 
 ## Endpoints
 
+- `POST /auth/register/start`
 - `POST /auth/passwordless/start`
 - `POST /auth/passwordless/verify`
 - `GET /auth/me`
@@ -13,10 +14,18 @@
 
 ## Auth model
 
+- Registration is passwordless: call `POST /auth/register/start`, then verify OTP via `POST /auth/passwordless/verify` with `type=signup`.
 - Supabase Auth handles passwordless email OTP/magic-link verification.
 - Dockier issues a tenant-scoped API JWT after OTP verification.
 - Tenant role is app-managed in `organization_memberships` (`admin` or `member`).
+- New self-registered users default to `member` role unless explicitly provisioned as `admin` (for example via admin seeding).
 - Authorization does not rely on mutable `user_metadata`.
+
+## Supabase Auth settings
+
+- Enable **Email provider** with OTP/magic-link in Supabase Auth.
+- Keep **Enable email signups** turned on, or `POST /auth/register/start` will return a 403.
+- Ensure your redirect allow-list includes frontend callback URLs if you use magic-link redirects.
 
 ## Typing conventions
 

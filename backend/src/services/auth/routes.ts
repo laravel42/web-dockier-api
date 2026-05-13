@@ -2,10 +2,26 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { authMeSchema, authSessionSchema, membershipSchema } from "./schemas.js";
+import {
+  authMeSchema,
+  authSessionSchema,
+  membershipSchema,
+  registerStartBodySchema,
+  registerStartResponseSchema,
+} from "./schemas.js";
 import { env } from "../../shared/config.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { membershipRoleSchemaValues, type MembershipRole } from "../../shared/auth.js";
+
+function throwAuthStartError(app: FastifyInstance, message: string) {
+  if (/rate limit|over_email_send_rate_limit|security purposes/i.test(message)) {
+    throw app.httpErrors.tooManyRequests("Email rate limit exceeded. Please wait about 60 seconds before requesting another code.");
+  }
+  if (/signups?\s*(are)?\s*disabled|not allowed/i.test(message)) {
+    throw app.httpErrors.forbidden("Signups are disabled in Supabase Auth. Enable email signups to allow registration.");
+  }
+  throw app.httpErrors.badRequest(message);
+}
 
 function slugifyTenant(value: string): string {
   return value
@@ -52,8 +68,171 @@ async function listMembershipsForUser(userId: string) {
   }));
 }
 
+async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+  const lowerEmail = email.toLowerCase();
+  let page = 1;
+  while (page <= 20) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const matched = data.users.find((user) => (user.email ?? "").toLowerCase() === lowerEmail);
+    if (matched?.id) return matched.id;
+    if (data.users.length < 200) break;
+    page += 1;
+  }
+  return null;
+}
+
+async function resolveDemoAuthUser(email: string): Promise<string> {
+  const existing = await findAuthUserIdByEmail(email);
+  if (existing) return existing;
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: `Demo-${Date.now()}-Aa1!`,
+    email_confirm: true,
+    user_metadata: {
+      display_name: "Demo User",
+      demo_user: true,
+    },
+  });
+  if (error || !data.user?.id) {
+    throw error ?? new Error("Unable to create demo auth user");
+  }
+  return data.user.id;
+}
+
 export async function registerAuthRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  typed.post(
+    "/auth/demo-login",
+    {
+      schema: {
+        tags: ["auth"],
+        summary: "Development-only demo login",
+        response: {
+          200: z.object({
+            session: authSessionSchema,
+            memberships: z.array(membershipSchema),
+          }),
+        },
+      },
+    },
+    async () => {
+      if (env.NODE_ENV === "production") {
+        throw app.httpErrors.forbidden("Demo login is disabled in production.");
+      }
+
+      const demoTenantId = "00000000-0000-4000-8000-000000000010";
+      const demoEmail = "demo@dockier.local";
+      const demoName = "Demo User";
+      const demoTenantName = "Demo Workspace";
+      const demoTenantSlug = "demo-workspace";
+      const now = new Date().toISOString();
+      const demoUserId = await resolveDemoAuthUser(demoEmail);
+
+      const { error: userError } = await supabaseAdmin.from("users").upsert(
+        {
+          id: demoUserId,
+          email: demoEmail,
+          name: demoName,
+          app_id: "",
+          organization_id: null,
+          role: "admin",
+          created_at: now,
+        },
+        { onConflict: "id" },
+      );
+      if (userError) throw app.httpErrors.internalServerError(userError.message);
+
+      const { error: orgError } = await supabaseAdmin.from("organizations").upsert(
+        {
+          id: demoTenantId,
+          name: demoTenantName,
+          slug: demoTenantSlug,
+          created_by: demoUserId,
+        },
+        { onConflict: "id" },
+      );
+      if (orgError) throw app.httpErrors.internalServerError(orgError.message);
+
+      const { error: syncUserError } = await supabaseAdmin
+        .from("users")
+        .update({
+          app_id: demoTenantId,
+          organization_id: demoTenantId,
+          role: "admin",
+          updated_at: now,
+        })
+        .eq("id", demoUserId);
+      if (syncUserError) throw app.httpErrors.internalServerError(syncUserError.message);
+
+      const { error: membershipError } = await supabaseAdmin.from("organization_memberships").upsert(
+        {
+          organization_id: demoTenantId,
+          user_id: demoUserId,
+          role: "admin",
+        },
+        { onConflict: "organization_id,user_id" },
+      );
+      if (membershipError) throw app.httpErrors.internalServerError(membershipError.message);
+
+      return {
+        session: {
+          token: signTenantToken({
+            userId: demoUserId,
+            email: demoEmail,
+            tenantId: demoTenantId,
+            role: "admin",
+          }),
+          userId: demoUserId,
+          tenantId: demoTenantId,
+          role: "admin" as const,
+        },
+        memberships: [
+          {
+            id: "00000000-0000-4000-8000-000000000099",
+            tenantId: demoTenantId,
+            tenantName: demoTenantName,
+            tenantSlug: demoTenantSlug,
+            role: "admin" as const,
+          },
+        ],
+      };
+    },
+  );
+
+  typed.post(
+    "/auth/register/start",
+    {
+      schema: {
+        tags: ["auth"],
+        summary: "Start passwordless signup via Supabase OTP/magic link",
+        body: registerStartBodySchema,
+        response: {
+          200: registerStartResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const { error } = await supabaseAdmin.auth.signInWithOtp({
+        email: request.body.email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: request.body.redirectTo,
+          data: {
+            display_name: request.body.displayName,
+            tenant_name: request.body.tenantName,
+          },
+        },
+      });
+      if (error) throwAuthStartError(app, error.message);
+      return {
+        success: true as const,
+        message: "Signup started. Check your email for OTP or magic link.",
+      };
+    },
+  );
 
   typed.post(
     "/auth/passwordless/start",
@@ -77,11 +256,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const { error } = await supabaseAdmin.auth.signInWithOtp({
         email: request.body.email,
         options: {
-          shouldCreateUser: true,
+          shouldCreateUser: false,
           emailRedirectTo: request.body.redirectTo,
         },
       });
-      if (error) throw app.httpErrors.badRequest(error.message);
+      if (error) throwAuthStartError(app, error.message);
       return {
         success: true as const,
         message: "Passwordless sign-in started. Check your email for OTP or magic link.",
@@ -119,6 +298,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         (typeof data.user.user_metadata?.display_name === "string" && data.user.user_metadata.display_name) ||
         (typeof data.user.user_metadata?.name === "string" && data.user.user_metadata.name) ||
         email.split("@")[0];
+      const metadataTenantName =
+        typeof data.user.user_metadata?.tenant_name === "string" ? data.user.user_metadata.tenant_name : undefined;
 
       await supabaseAdmin.from("users").upsert({
         id: userId,
@@ -137,7 +318,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       }
 
       if (!selected) {
-        const tenantName = request.body.tenantName?.trim() || `${displayName}'s workspace`;
+        const tenantName = request.body.tenantName?.trim() || metadataTenantName || `${displayName}'s workspace`;
         const tenantSlugBase = slugifyTenant(tenantName) || "workspace";
         const tenantSlug = `${tenantSlugBase}-${userId.slice(0, 6)}`;
 
@@ -153,7 +334,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           .insert({
             organization_id: org.id,
             user_id: userId,
-            role: "admin",
+            role: "member",
           })
           .select("id,role,organization_id")
           .single();

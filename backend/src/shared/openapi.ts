@@ -18,6 +18,7 @@ export async function registerPlatformPlugins(app: FastifyInstance, serviceName:
   await app.register(cors, {
     origin: env.CORS_ORIGIN === "*" ? true : env.CORS_ORIGIN,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   await app.register(sensible);
   await app.register(swagger, {

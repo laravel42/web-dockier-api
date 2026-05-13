@@ -29,11 +29,15 @@ This package is the Encore replacement scaffold for Dockier's backend while pres
 
 ## Auth and tenancy model
 
-- Supabase Auth passwordless flow: `POST /auth/passwordless/start` then `POST /auth/passwordless/verify`.
+- Registration flow: `POST /auth/register/start` then `POST /auth/passwordless/verify` (`type=signup`).
+- Existing-user passwordless sign-in: `POST /auth/passwordless/start` then `POST /auth/passwordless/verify`.
 - Tenants live in `organizations`, and membership lives in `organization_memberships`.
 - Roles are fixed and app-managed: `admin` and `member`.
+- New self-registered users default to `member` unless explicitly provisioned as `admin` (seed/admin tooling).
 - The backend issues a tenant-scoped JWT for API access after OTP verification.
 - Authorization is enforced in API handlers and backed by RLS policies for tenant tables.
+
+Supabase Auth must have the Email provider (OTP/magic-link) and email signups enabled for registration to work.
 
 ## Microservice run modes
 
@@ -56,3 +60,20 @@ pnpm --filter @dockier/backend-fastify start:gateway
 ## Environment variables
 
 Copy `backend/.env.example` and provide values via your deployment platform or local env.
+
+## Admin seeder
+
+Use the admin seeder to create/link a Supabase auth user and synchronize tenant RBAC/app rows:
+
+```bash
+pnpm backend:seed:admin
+```
+
+It is safe to run multiple times. The seeder:
+
+- creates the auth identity if missing (or reuses existing),
+- ensures `organizations` + `organization_memberships` admin role,
+- ensures `user_roles` includes `admin`,
+- ensures app-side `users` and `profiles` rows are synchronized.
+
+Optional env overrides live in `backend/.env.example` (`ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_DISPLAY_NAME`, `ADMIN_SEED_ORG_NAME`, `ADMIN_SEED_ORG_SLUG`).
