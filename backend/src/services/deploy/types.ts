@@ -28,3 +28,20 @@ export type DeploymentRow = {
   created_at: string;
   updated_at: string;
 };
+
+export type PostDeployCommand = {
+  command: string;
+  enabled: boolean;
+  continueOnFailure: boolean;
+  timeout?: number;
+};
+
+export type WebhookPayload = {
+  buildId: string;
+  status: "deploying" | "success" | "failed";
+  appUrl?: string;
+  stackName?: string;
+  cfnStatus?: string;
+  deployTarget?: string;
+  codebuildId?: string;
+};
