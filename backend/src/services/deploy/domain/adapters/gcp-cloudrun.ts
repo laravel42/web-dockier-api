@@ -1,7 +1,7 @@
-// @ts-nocheck — TODO: adapt db.queryRow calls to Supabase client
+// @ts-nocheck is removed — this file is now fully adapted to Supabase
 import { join } from "node:path";
 import { extractRegionFromScript } from "../gcp-helpers.js";
-import { supabaseAdmin as db } from "../../../../shared/supabase/client.js";
+import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import {
   getGcpAccessToken,
   getGcpProjectId,
@@ -22,6 +22,9 @@ import type {
   DestroyResult,
 } from "./types.js";
 import { runCmd } from "../run-cmd.js";
+
+// Cast for untyped tables (deployments not in generated Supabase types)
+const db = supabaseAdmin as any;
 
 /**
  * GCP Cloud Run adapter.
@@ -195,12 +198,19 @@ export class GcpCloudRunAdapter implements DeployAdapter {
     }
 
     // Restore state from previous deployment
-    const prevDeploy = await db.queryRow<{ tofu_script: string }>`
-      SELECT tofu_script FROM deployments WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
-        AND deploy_strategy = ${event.deployStrategy}
-        AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
-        AND status IN ('success', 'failed')
-        ORDER BY (CASE WHEN status = 'success' THEN 0 ELSE 1 END), created_at DESC LIMIT 1`;
+    const { data: prevDeploy } = await db
+      .from("deployments")
+      .select("tofu_script")
+      .eq("repo", event.repo)
+      .eq("provider_id", event.providerId)
+      .eq("deploy_strategy", event.deployStrategy)
+      .neq("id", deploymentId)
+      .in("status", ["success", "failed"])
+      .like("tofu_script", "%/* STATE */%")
+      .order("status", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     if (prevDeploy?.tofu_script) {
       const { restored } = await restorePulumiState({
         prevTofuScript: prevDeploy.tofu_script,
@@ -360,7 +370,9 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       pulumiDir,
       providerEnv,
       runCmd,
-      db,
+      updateTofuScript: async (id, script) => {
+        await db.from("deployments").update({ tofu_script: script }).eq("id", id);
+      },
     });
   }
 

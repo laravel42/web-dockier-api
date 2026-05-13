@@ -23,6 +23,7 @@ export interface DeployEvent {
   registryUrl?: string;
   envVars?: Array<{ name: string; value: string }>;
   postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure?: boolean }>;
+  services?: Array<{ type: string; name: string; mode: string }>;
 }
 
 /**

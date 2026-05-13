@@ -1,7 +1,6 @@
-// @ts-nocheck — TODO: adapt db.queryRow calls to Supabase client
 import { join } from "node:path";
 import { extractRegionFromScript } from "../gcp-helpers.js";
-import { supabaseAdmin as db } from "../../../../shared/supabase/client.js";
+import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import {
   GcpClient,
   getGcpAccessToken,
@@ -24,6 +23,9 @@ import type {
   DestroyResult,
 } from "./types.js";
 import { runCmd } from "../run-cmd.js";
+
+// Cast for untyped tables (deployments, ssh_keys not in generated Supabase types)
+const db = supabaseAdmin as any;
 
 /**
  * GCP Compute Engine (VPS) adapter.
@@ -175,9 +177,13 @@ export class GcpComputeAdapter implements DeployAdapter {
 
     // Combine user SSH key + deploy key so both can access the server.
     // GCP ssh-keys metadata requires each line to be prefixed with "username:".
-    const sshKeyRow = await db.queryRow<{ public_key: string }>`
-      SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId}
-      ORDER BY created_at DESC LIMIT 1`;
+    const { data: sshKeyRow } = await db
+      .from("ssh_keys")
+      .select("public_key")
+      .eq("app_id", event.appId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     if (!sshKeyRow) {
       throw new Error(
         "No SSH key found. Go to Settings → SSH Keys and add your public key before deploying to a VPS.",
@@ -254,12 +260,18 @@ export class GcpComputeAdapter implements DeployAdapter {
     }
 
     // Restore state from previous successful deployment only
-    const prevDeploy = await db.queryRow<{ tofu_script: string }>`
-      SELECT tofu_script FROM deployments WHERE repo = ${event.repo} AND provider_id = ${event.providerId}
-        AND deploy_strategy = ${event.deployStrategy}
-        AND tofu_script LIKE '%/* STATE */%' AND id != ${deploymentId}
-        AND status = 'success'
-        ORDER BY created_at DESC LIMIT 1`;
+    const { data: prevDeploy } = await db
+      .from("deployments")
+      .select("tofu_script")
+      .eq("repo", event.repo)
+      .eq("provider_id", event.providerId)
+      .eq("deploy_strategy", event.deployStrategy)
+      .neq("id", deploymentId)
+      .eq("status", "success")
+      .like("tofu_script", "%/* STATE */%")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     if (prevDeploy?.tofu_script) {
       // Skip state restoration if it references a different region (stale state from region change)
       const stateSection = prevDeploy.tofu_script.slice(prevDeploy.tofu_script.indexOf("/* STATE */"));
@@ -339,9 +351,13 @@ export class GcpComputeAdapter implements DeployAdapter {
         { cwd: pulumiDir, env: providerEnv },
       );
       // Re-set SSH key config (each key needs "root:" prefix for GCP metadata)
-      const sshKeyRow2 = await db.queryRow<{ public_key: string }>`
-        SELECT public_key FROM ssh_keys WHERE app_id = ${event.appId}
-        ORDER BY created_at DESC LIMIT 1`;
+      const { data: sshKeyRow2 } = await db
+        .from("ssh_keys")
+        .select("public_key")
+        .eq("app_id", event.appId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (sshKeyRow2) {
         const combinedKeys2 = `${sshKeyRow2.public_key.trim()}\nroot:${deployPubKey}`;
         await runCmd(
@@ -1030,7 +1046,9 @@ export class GcpComputeAdapter implements DeployAdapter {
       pulumiDir,
       providerEnv,
       runCmd,
-      db,
+      updateTofuScript: async (id, script) => {
+        await db.from("deployments").update({ tofu_script: script }).eq("id", id);
+      },
     });
   }
 
