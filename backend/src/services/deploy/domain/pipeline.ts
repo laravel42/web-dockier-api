@@ -20,6 +20,7 @@ import { createStreamingRunCmd } from "./run-cmd.js";
 import { pollUntil } from "./poll-until.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
+import { buildViaCodeBuild } from "./codebuild-builder.js";
 
 // Cast for untyped tables
 const db = supabaseAdmin as any;
@@ -189,7 +190,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     // 3. Analyze and generate Dockerfile
     const { repoConfig, detectedPort } = await analyzeAndGenerate({ repoDir, logger });
 
-    // 4. Build Docker image locally (skip for static deploys)
+    // 4. Build Docker image (local or remote via CodeBuild)
     const isStaticDeploy = event.deployStrategy === "static";
     const imageName = `${repoName}:${shortId}`;
     let actualImage = imageName;
@@ -220,7 +221,28 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
         } catch { /* not cached locally */ }
       }
 
-      if (!skippedBuild) {
+      if (!skippedBuild && event.buildMethod === "codebuild") {
+        // Remote build via AWS CodeBuild
+        const result = await buildViaCodeBuild({
+          deploymentId,
+          repoName,
+          shortId,
+          region,
+          providerRow: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
+          repoDir,
+          workDir,
+          commitHash,
+          repoConfig,
+          deployStrategy: event.deployStrategy,
+          repo: event.repo,
+          branch: event.branch,
+          envVars: event.envVars,
+          techStack: event.techStack,
+          appendLog,
+        });
+        actualImage = result.remoteImageUri;
+        skippedBuild = true; // Don't try local build after CodeBuild
+      } else if (!skippedBuild) {
         await logger.section("Build Docker Image");
         const { readFile, writeFile } = await import("node:fs/promises");
         const { join } = await import("node:path");
