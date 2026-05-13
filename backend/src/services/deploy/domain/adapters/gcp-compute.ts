@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { extractRegionFromScript } from "../gcp-helpers.js";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import {
   GcpClient,
