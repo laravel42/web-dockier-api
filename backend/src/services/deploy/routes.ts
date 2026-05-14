@@ -10,6 +10,7 @@ import { destroyDeployment } from "./domain/destroy.js";
 import { applyDeploymentWebhookUpdate, createDeploymentRecord } from "./domain/processor.js";
 import { resolveDeployTemplate } from "./domain/templates.js";
 import { executePipeline } from "./domain/pipeline.js";
+import { enqueueDeployment } from "./domain/worker.js";
 
 function rowToProvider(row: ProviderRow) {
   return {
@@ -375,31 +376,27 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           },
         );
 
-        // Fire-and-forget: trigger the deploy pipeline asynchronously
+        // Enqueue the deploy pipeline for background processing
         if (!request.body.skipPipeline) {
-          setImmediate(() => {
-            executePipeline({
-              deploymentId: payload.id,
-              appId: auth.appId,
-              providerId: request.body.providerId,
-              gitConnectionId: request.body.gitConnectionId,
-              projectId: request.body.projectId,
-              repo: request.body.repo,
-              branch: request.body.branch,
-              tofuScript: payload.tofu_script || "",
-              techStack: request.body.techStack,
-              primaryLanguage: request.body.primaryLanguage,
-              hasDocker: request.body.buildMethod === "dockerfile",
-              deployStrategy: payload.deploy_strategy || "managed",
-              templateId: request.body.templateId,
-              buildMethod: request.body.buildMethod,
-              registryUrl: request.body.registryUrl,
-              envVars: request.body.envVars,
-              postDeployCommands: request.body.postDeployCommands,
-              services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
-            }).catch((err) => {
-              console.error(`[deploy] Pipeline failed for ${payload.id}:`, err);
-            });
+          await enqueueDeployment({
+            deploymentId: payload.id,
+            appId: auth.appId,
+            providerId: request.body.providerId,
+            gitConnectionId: request.body.gitConnectionId,
+            projectId: request.body.projectId,
+            repo: request.body.repo,
+            branch: request.body.branch,
+            tofuScript: payload.tofu_script || "",
+            techStack: request.body.techStack,
+            primaryLanguage: request.body.primaryLanguage,
+            hasDocker: request.body.buildMethod === "dockerfile",
+            deployStrategy: payload.deploy_strategy || "managed",
+            templateId: request.body.templateId,
+            buildMethod: request.body.buildMethod,
+            registryUrl: request.body.registryUrl,
+            envVars: request.body.envVars,
+            postDeployCommands: request.body.postDeployCommands,
+            services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
           });
         }
 
