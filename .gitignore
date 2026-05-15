@@ -5,3 +5,7 @@ node_modules
 *.tsbuildinfo
 .DS_Store
 backend/dist
+
+# Supabase
+supabase/.branches
+supabase/.temp
