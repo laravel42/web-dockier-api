@@ -7,6 +7,7 @@ import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
 import { membershipRoleSchemaValues } from "../../shared/auth.js";
+import { escapePostgrestFilter } from "../../shared/security.js";
 
 function rowToUser(row: {
   id: string;
@@ -146,7 +147,8 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         .order("created_at", { ascending: false });
 
       if (request.query.search) {
-        query = query.or(`name.ilike.%${request.query.search}%,email.ilike.%${request.query.search}%`);
+        const escaped = escapePostgrestFilter(request.query.search);
+        query = query.or(`name.ilike.%${escaped}%,email.ilike.%${escaped}%`);
       }
 
       const { data, count, error } = await query;

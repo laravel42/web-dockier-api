@@ -312,11 +312,45 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
                     formattedLogs.push(
                       `[${ts2}] ✓ CloudFormation stack: CREATE_COMPLETE`,
                       `[${ts2}] ✓ App URL: ${ds.appUrl}`,
-                      `[${ts2}]`,
-                      `[${ts2}] ── Complete ───────────────────────`,
-                      `[${ts2}] ✓ Docker image: ${appName}`,
-                      `[${ts2}] ✓ Infrastructure deployed via CloudFormation`,
-                      `[${ts2}] ✓ Application URL: ${ds.appUrl}`,
+                    );
+                    setState(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
+                    syncDeployRecord("deploying", formattedLogs);
+
+                    // Run post-deploy commands if configured
+                    const postCommands = state.postDeployCommands.filter(c => c.enabled);
+                    if (postCommands.length > 0) {
+                      const ts3 = new Date().toISOString().replace("T", " ").slice(0, 19);
+                      formattedLogs.push(
+                        `[${ts3}]`,
+                        `[${ts3}] ── Post-Deploy Commands ──────────`,
+                        `[${ts3}] ℹ Running ${postCommands.length} command(s)...`,
+                      );
+                      setState(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
+
+                      try {
+                        const pdResult = await imageBuilderApi.runPostDeploy(build.id, postCommands);
+                        const ts4 = new Date().toISOString().replace("T", " ").slice(0, 19);
+                        for (const line of pdResult.output.slice(0, 30)) {
+                          formattedLogs.push(`[${ts4}] ${line}`);
+                        }
+                        if (pdResult.success) {
+                          formattedLogs.push(`[${ts4}] ✓ Post-deploy commands completed`);
+                        } else {
+                          formattedLogs.push(`[${ts4}] ⚠ Post-deploy commands finished with errors`);
+                        }
+                      } catch (e: any) {
+                        const ts4 = new Date().toISOString().replace("T", " ").slice(0, 19);
+                        formattedLogs.push(`[${ts4}] ⚠ Post-deploy commands failed: ${e.message || "unknown error"}`);
+                      }
+                    }
+
+                    const tsFinal = new Date().toISOString().replace("T", " ").slice(0, 19);
+                    formattedLogs.push(
+                      `[${tsFinal}]`,
+                      `[${tsFinal}] ── Complete ───────────────────────`,
+                      `[${tsFinal}] ✓ Docker image: ${appName}`,
+                      `[${tsFinal}] ✓ Infrastructure deployed via CloudFormation`,
+                      `[${tsFinal}] ✓ Application URL: ${ds.appUrl}`,
                     );
                     setState(prev => ({
                       ...prev,

@@ -79,12 +79,17 @@ export function commonPostBuild(): string {
           echo "Build FAILED"
           if [ -n "$CALLBACK_URL" ] && [ -n "$BUILD_ID" ]; then
             python3 << 'PYEOF'
-        import json, os, urllib.request
+        import json, os, hmac, hashlib, urllib.request
         callback = os.environ.get('CALLBACK_URL', '')
         build_id = os.environ.get('BUILD_ID', '')
+        webhook_secret = os.environ.get('WEBHOOK_SECRET', '')
         if callback and build_id:
             data = json.dumps({'buildId': build_id, 'status': 'failed', 'statusReason': 'Docker build failed'}).encode()
-            req = urllib.request.Request(callback, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+            headers = {'Content-Type': 'application/json'}
+            if webhook_secret:
+                sig = hmac.new(webhook_secret.encode(), data, hashlib.sha256).hexdigest()
+                headers['x-webhook-signature'] = sig
+            req = urllib.request.Request(callback, data=data, headers=headers, method='POST')
             try: urllib.request.urlopen(req, timeout=10)
             except: pass
         PYEOF
@@ -97,14 +102,19 @@ export function commonPostBuild(): string {
 
         if [ -n "$CALLBACK_URL" ] && [ -n "$BUILD_ID" ]; then
           python3 << 'PYEOF'
-        import json, os, urllib.request
+        import json, os, hmac, hashlib, urllib.request
         callback = os.environ.get('CALLBACK_URL', '')
         build_id = os.environ.get('BUILD_ID', '')
         image_uri = os.environ.get('IMAGE_URI', '')
         short_tag = os.environ.get('SHORT_TAG', 'latest')
+        webhook_secret = os.environ.get('WEBHOOK_SECRET', '')
         if callback and build_id:
             data = json.dumps({'buildId': build_id, 'status': 'success', 'imageUri': f'{image_uri}:{short_tag}'}).encode()
-            req = urllib.request.Request(callback, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+            headers = {'Content-Type': 'application/json'}
+            if webhook_secret:
+                sig = hmac.new(webhook_secret.encode(), data, hashlib.sha256).hexdigest()
+                headers['x-webhook-signature'] = sig
+            req = urllib.request.Request(callback, data=data, headers=headers, method='POST')
             try: urllib.request.urlopen(req, timeout=10)
             except: pass
         PYEOF
@@ -193,12 +203,17 @@ export function staticPostBuild(): string {
           echo "Build FAILED"
           if [ -n "$CALLBACK_URL" ] && [ -n "$BUILD_ID" ]; then
             python3 << 'PYEOF'
-        import json, os, urllib.request
+        import json, os, hmac, hashlib, urllib.request
         callback = os.environ.get('CALLBACK_URL', '')
         build_id = os.environ.get('BUILD_ID', '')
+        webhook_secret = os.environ.get('WEBHOOK_SECRET', '')
         if callback and build_id:
             data = json.dumps({'buildId': build_id, 'status': 'failed', 'statusReason': 'Static build failed'}).encode()
-            req = urllib.request.Request(callback, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+            headers = {'Content-Type': 'application/json'}
+            if webhook_secret:
+                sig = hmac.new(webhook_secret.encode(), data, hashlib.sha256).hexdigest()
+                headers['x-webhook-signature'] = sig
+            req = urllib.request.Request(callback, data=data, headers=headers, method='POST')
             try: urllib.request.urlopen(req, timeout=10)
             except: pass
         PYEOF

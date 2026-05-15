@@ -131,4 +131,13 @@ export const imageBuilderApi = {
       appUrl: string;
       stackName: string;
     }>(`/image-builder/builds/${buildId}/deploy-status`),
+
+  runPostDeploy: (buildId: string, commands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean }>) =>
+    request<{
+      success: boolean;
+      output: string[];
+    }>(`/image-builder/builds/${buildId}/run-post-deploy`, {
+      method: "POST",
+      body: JSON.stringify({ commands }),
+    }),
 };

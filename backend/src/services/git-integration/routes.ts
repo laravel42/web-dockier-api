@@ -9,6 +9,7 @@ import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domai
 import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from "./domain/mr-generator.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
 import { env } from "../../shared/config.js";
+import { requireInternalToken } from "../../shared/security.js";
 
 function parseRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
   const normalized = repoUrl.replace(/\.git$/, "");
@@ -184,9 +185,10 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/scan-auth",
     {
+      preHandler: requireInternalToken,
       schema: {
         tags: ["git-integration"],
-        summary: "Get connection token for scanning",
+        summary: "Get connection token for scanning (internal)",
         params: connectionIdParamsSchema,
         response: { 200: z.object({ provider: z.string(), token: z.string(), endpoint: z.string() }) },
       },

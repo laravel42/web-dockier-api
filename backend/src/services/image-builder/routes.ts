@@ -7,6 +7,8 @@ import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } from "./domain/orchestrator.js";
 import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus, resolveAwsCredentials } from "./domain/aws-runtime.js";
 import { createBuildspecPreview } from "./domain/buildspec.js";
+import { bundleAndUploadSource } from "./domain/source-bundler.js";
+import { requireWebhookSignature, escapePostgrestFilter } from "../../shared/security.js";
 
 function rowToBuild(row: any) {
   return {
@@ -73,7 +75,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         image_repo: normalized.imageRepo,
         image_uri: "",
         cache_repo_uri: "",
-        status: "submitted",
+        status: "pending",
         status_reason: composeSubmittedReason(normalized.inferredRuntime),
         logs_url: "",
         tags: normalized.tags,
@@ -94,6 +96,111 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       };
       const { error } = await db.from("builds").insert(payload);
       if (error) throw app.httpErrors.badRequest(error.message);
+
+      // ── Trigger CodeBuild: bundle source and publish to SNS ──
+      // Fire-and-forget: the frontend polls for status updates.
+      const providerId = request.body.providerId ?? "";
+      const gitConnectionId = request.body.gitConnectionId ?? "";
+
+      setImmediate(async () => {
+        try {
+          // 1. Resolve AWS credentials from provider
+          const credentials = await resolveAwsCredentials(db, providerId);
+          if (!credentials) {
+            await db.from("builds").update({ status: "failed", status_reason: "AWS credentials not configured on provider", updated_at: new Date().toISOString() }).eq("id", id);
+            return;
+          }
+          const { accessKeyId, secretAccessKey, region } = credentials;
+
+          // 2. Get AWS account ID
+          const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+          const sts = new STSClient({ region, credentials: { accessKeyId, secretAccessKey } });
+          const identity = await sts.send(new GetCallerIdentityCommand({}));
+          const accountId = identity.Account || "";
+
+          // 3. Get git token for private repo access
+          let gitToken: string | undefined;
+          let gitProvider: string | undefined;
+          let gitEndpoint: string | undefined;
+          if (gitConnectionId) {
+            const { data: conn } = await db
+              .from("git_connections")
+              .select("provider,personal_token,endpoint")
+              .eq("id", gitConnectionId)
+              .maybeSingle();
+            if (conn?.personal_token) {
+              gitToken = conn.personal_token;
+              gitProvider = conn.provider;
+              gitEndpoint = conn.endpoint || "";
+            }
+          }
+
+          // 4. Bundle source (clone → analyze → zip → upload to S3)
+          const codebuildProject = process.env.IMAGE_BUILDER_CODEBUILD_PROJECT || "image-builder";
+          const bucketName = `${codebuildProject}-source-${accountId}`;
+          const { s3Key, detectedRuntime, detectedPort } = await bundleAndUploadSource(
+            request.body.sourceRepo,
+            normalized.sourceRef,
+            id,
+            accessKeyId,
+            secretAccessKey,
+            region,
+            bucketName,
+            gitToken,
+            gitProvider,
+            gitEndpoint,
+            request.body.deployTarget,
+          );
+
+          // 5. Publish to SNS to trigger CodeBuild via Lambda
+          const deployParams = { ...(request.body.deployParams ?? {}), containerPort: detectedPort };
+          const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
+          const webhookSecret = process.env.WEBHOOK_SECRET || "";
+
+          const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
+          const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
+          const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
+
+          await sns.send(new PublishCommand({
+            TopicArn: buildRequestTopicArn,
+            Subject: "build-request",
+            Message: JSON.stringify({
+              buildId: id,
+              sourceRepo: request.body.sourceRepo,
+              sourceRef: normalized.sourceRef,
+              commitSha: request.body.commitSha || "unknown",
+              imageRepoName: normalized.imageRepo,
+              cacheRepoName: `${normalized.imageRepo}-cache`,
+              s3Bucket: bucketName,
+              s3Key,
+              accountId,
+              region,
+              codebuildProject,
+              deployTarget: request.body.deployTarget || "",
+              deployParams,
+              callbackUrl,
+              webhookSecret,
+            }),
+          }));
+
+          // 6. Update status to submitted
+          await db.from("builds").update({
+            status: "submitted",
+            status_reason: `Build submitted to CodeBuild (${detectedRuntime} runtime, port ${detectedPort})`,
+            updated_at: new Date().toISOString(),
+          }).eq("id", id);
+
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          console.error(`[image-builder] Failed to trigger CodeBuild for ${id}:`, message);
+          await db.from("builds").update({
+            status: "failed",
+            status_reason: `Failed to queue build: ${message}`,
+            updated_at: new Date().toISOString(),
+          }).eq("id", id);
+        }
+      });
+
       return rowToBuild(payload);
     },
   );
@@ -264,7 +371,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         .eq("app_id", auth.appId)
         .eq("status", "succeeded")
         .neq("image_uri", "")
-        .or(`commit_sha.ilike.${request.params.revision}%,source_ref.eq.${request.params.revision}`)
+        .or(`commit_sha.ilike.${escapePostgrestFilter(request.params.revision)}%,source_ref.eq.${escapePostgrestFilter(request.params.revision)}`)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -297,6 +404,8 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       if (error || !data) throw app.httpErrors.notFound("Build not found");
       if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
       const build = rowToBuild(data);
+
+      // If we already have the appUrl cached, return immediately
       if (build.buildMetadata.appUrl) {
         return {
           status: "success",
@@ -305,14 +414,199 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         };
       }
       if (build.status === "failed") return { status: "failed", appUrl: "", stackName: "" };
-      if (build.status === "succeeded") return { status: "success", appUrl: "", stackName: "" };
-      return { status: "deploying", appUrl: "", stackName: "" };
+
+      // Derive the CloudFormation stack name from the source repo
+      const appName = build.sourceRepo.split("/").pop()?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || "";
+      const stackName = `image-builder-app-${appName}`;
+
+      // Poll CloudFormation directly for real-time status
+      const credentials = await resolveAwsCredentials(db, data.provider_id || "");
+      if (!credentials) {
+        if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
+        return { status: "deploying", appUrl: "", stackName };
+      }
+
+      try {
+        const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+        const cfn = new CloudFormationClient({
+          region: credentials.region,
+          credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
+        });
+        const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+        const stack = result.Stacks?.[0];
+        if (!stack) return { status: "deploying", appUrl: "", stackName };
+
+        const stackStatus = stack.StackStatus || "";
+        if (stackStatus === "CREATE_COMPLETE" || stackStatus === "UPDATE_COMPLETE") {
+          const outputs = Object.fromEntries((stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]));
+          const appUrl = outputs.AppUrl || "";
+          // Cache the result in the builds table so future polls are instant
+          await db.from("builds").update({
+            status: "succeeded",
+            build_metadata: { ...(typeof data.build_metadata === "object" ? data.build_metadata : {}), appUrl, stackName },
+            updated_at: new Date().toISOString(),
+          }).eq("id", request.params.buildId);
+          return { status: "success", appUrl, stackName };
+        }
+        if (stackStatus.includes("ROLLBACK") || stackStatus.includes("FAILED")) {
+          await db.from("builds").update({
+            status: "failed",
+            status_reason: `CloudFormation: ${stackStatus}`,
+            updated_at: new Date().toISOString(),
+          }).eq("id", request.params.buildId);
+          return { status: "failed", appUrl: "", stackName };
+        }
+        return { status: "deploying", appUrl: "", stackName };
+      } catch {
+        // Stack doesn't exist yet or API error — still deploying
+        if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
+        return { status: "deploying", appUrl: "", stackName };
+      }
+    },
+  );
+
+  typed.post(
+    "/image-builder/builds/:buildId/run-post-deploy",
+    {
+      preHandler: app.requireAuth,
+      schema: {
+        tags: ["image-builder"],
+        summary: "Run post-deploy commands on the deployed instance",
+        params: z.object({ buildId: z.string().uuid() }),
+        body: z.object({
+          commands: z.array(z.object({
+            command: z.string().min(1).max(500),
+            enabled: z.boolean(),
+            continueOnFailure: z.boolean(),
+          })).max(20),
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            output: z.array(z.string()),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
+      if (error || !data) throw app.httpErrors.notFound("Build not found");
+      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
+
+      const enabledCommands = request.body.commands.filter(c => c.enabled);
+      if (enabledCommands.length === 0) return { success: true, output: ["No commands to run"] };
+
+      // Resolve AWS credentials
+      const credentials = await resolveAwsCredentials(db, data.provider_id || "");
+      if (!credentials) throw app.httpErrors.preconditionFailed("AWS credentials not available");
+
+      // Find the EC2 instance from CloudFormation stack
+      const appName = (data.source_repo || "").split("/").pop()?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || "";
+      const stackName = `image-builder-app-${appName}`;
+
+      const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+      const cfn = new CloudFormationClient({
+        region: credentials.region,
+        credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
+      });
+
+      const stackResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+      const stack = stackResult.Stacks?.[0];
+      if (!stack) throw app.httpErrors.preconditionFailed("CloudFormation stack not found");
+
+      const outputs = Object.fromEntries((stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]));
+      const instanceId = outputs.InstanceId || "";
+      if (!instanceId) throw app.httpErrors.preconditionFailed("No EC2 instance found in stack outputs");
+
+      // Derive container name (matches what CloudFormation UserData uses)
+      const containerName = appName;
+
+      // Build the command chain
+      const cmdChain = enabledCommands
+        .map(cmd => {
+          const escaped = cmd.command.replace(/'/g, "'\\''");
+          const exec = `docker exec ${containerName} sh -c '${escaped}'`;
+          return cmd.continueOnFailure ? `(${exec} || true)` : exec;
+        })
+        .join(" && ");
+
+      // Laravel: copy .env into container before running commands
+      const techStack: string[] = typeof data.build_metadata === "object" && data.build_metadata?.techStack
+        ? data.build_metadata.techStack
+        : [];
+      const isLaravel = techStack.some((s: string) => s.toLowerCase() === "laravel") ||
+        (data.source_repo || "").toLowerCase().includes("laravel");
+
+      const envSetup = isLaravel
+        ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && `
+        : "";
+
+      const script = [
+        "#!/bin/bash",
+        "CONTAINER_READY=0",
+        "for i in $(seq 1 30); do",
+        `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
+        "  sleep 2",
+        "done",
+        `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 60s"; exit 1; fi`,
+        `${envSetup}${cmdChain}`,
+      ].join("\n");
+
+      // Execute via SSM SendCommand
+      const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
+      const ssm = new SSMClient({
+        region: credentials.region,
+        credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
+      });
+
+      const sendResult = await ssm.send(new SendCommandCommand({
+        InstanceIds: [instanceId],
+        DocumentName: "AWS-RunShellScript",
+        Parameters: { commands: [script] },
+        TimeoutSeconds: 120,
+      }));
+
+      const commandId = sendResult.Command?.CommandId;
+      if (!commandId) throw app.httpErrors.internalServerError("Failed to send SSM command");
+
+      // Poll for completion
+      const outputLines: string[] = [];
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const invocation = await ssm.send(new GetCommandInvocationCommand({
+            CommandId: commandId,
+            InstanceId: instanceId,
+          }));
+          const status = invocation.Status;
+          if (status === "Success") {
+            if (invocation.StandardOutputContent?.trim()) {
+              outputLines.push(...invocation.StandardOutputContent.trim().split("\n").slice(0, 50));
+            }
+            return { success: true, output: outputLines.length > 0 ? outputLines : ["Commands executed successfully"] };
+          } else if (status === "Failed" || status === "Cancelled" || status === "TimedOut") {
+            if (invocation.StandardErrorContent?.trim()) {
+              outputLines.push(...invocation.StandardErrorContent.trim().split("\n").slice(0, 20));
+            }
+            if (invocation.StandardOutputContent?.trim()) {
+              outputLines.push(...invocation.StandardOutputContent.trim().split("\n").slice(-20));
+            }
+            return { success: false, output: outputLines.length > 0 ? outputLines : [`Command ${status}`] };
+          }
+        } catch {
+          // InvocationDoesNotExist — agent hasn't picked it up yet
+        }
+      }
+
+      return { success: false, output: ["Command timed out — it may still be running on the instance"] };
     },
   );
 
   typed.post(
     "/image-builder/webhook",
     {
+      preHandler: requireWebhookSignature,
       schema: {
         tags: ["image-builder"],
         summary: "Build/deploy callback webhook",

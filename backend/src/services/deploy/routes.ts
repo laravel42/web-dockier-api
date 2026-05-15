@@ -11,6 +11,7 @@ import { applyDeploymentWebhookUpdate, createDeploymentRecord } from "./domain/p
 import { resolveDeployTemplate } from "./domain/templates.js";
 import { executePipeline } from "./domain/pipeline.js";
 import { enqueueDeployment } from "./domain/worker.js";
+import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 
 function rowToProvider(row: ProviderRow) {
   return {
@@ -172,6 +173,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.get(
     "/deploy/providers/:providerId/credentials",
     {
+      preHandler: requireInternalToken,
       schema: {
         tags: ["deploy"],
         summary: "Get provider credentials (service-to-service)",
@@ -451,9 +453,10 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.put(
     "/deploy/deployments/:deploymentId",
     {
+      preHandler: requireInternalToken,
       schema: {
         tags: ["deploy"],
-        summary: "Update deployment status/logs/url",
+        summary: "Update deployment status/logs/url (internal)",
         params: z.object({ deploymentId: z.string().uuid() }),
         body: z.object({
           status: deploymentStatusSchema.optional(),
@@ -584,6 +587,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/webhook/aws-pipeline",
     {
+      preHandler: requireWebhookSignature,
       schema: {
         tags: ["deploy"],
         summary: "Handle AWS deploy pipeline callback",

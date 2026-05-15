@@ -109,6 +109,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
 
   // Callback URL from environment (optional — used by Lambda to notify completion)
   const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
+  const webhookSecret = process.env.WEBHOOK_SECRET || "";
 
   const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
   const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
@@ -120,7 +121,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
     Message: JSON.stringify({
       buildId: deploymentId, sourceRepo: opts.repo, sourceRef: opts.branch, commitSha: commitHash,
       imageRepoName, cacheRepoName, s3Bucket: bucketName, s3Key, accountId, region,
-      codebuildProject: CODEBUILD_PROJECT, deployTarget, deployParams, callbackUrl,
+      codebuildProject: CODEBUILD_PROJECT, deployTarget, deployParams, callbackUrl, webhookSecret,
     }),
   }));
   await logFn(deploymentId, `[${ts()}] ✓ Build queued via SNS → CodeBuild`);
