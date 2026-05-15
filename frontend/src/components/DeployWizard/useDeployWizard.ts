@@ -6,6 +6,17 @@ import { getPlans } from "./plans";
 import { parseOwnerRepo } from "./utils";
 import { detectServiceModes } from "./envDetection";
 
+/**
+ * Normalize envVars from AI response — handles both array ["KEY=value"] and object {KEY: "value"} formats.
+ */
+function normalizeEnvVars(envVars: unknown): string[] {
+  if (Array.isArray(envVars)) return envVars.filter((v): v is string => typeof v === "string");
+  if (envVars && typeof envVars === "object" && !Array.isArray(envVars)) {
+    return Object.entries(envVars as Record<string, unknown>).map(([k, v]) => `${k}=${v ?? ""}`);
+  }
+  return [];
+}
+
 interface UseDeployWizardParams {
   open: boolean;
   project: { id: string; name: string; repository: string; branch: string; connectionId: string; sourceType?: string; template?: string };
@@ -52,7 +63,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
       setState(prev => {
         if (Object.keys(prev.servicesModes).length > 0) return prev;
         const envVars = prev.envVars.length > 0 ? prev.envVars
-          : (analysis.aiAnalysis?.envVars || []).map(entry => {
+          : normalizeEnvVars(analysis.aiAnalysis?.envVars).map(entry => {
               const eqIdx = entry.indexOf("=");
               return eqIdx >= 0
                 ? { name: entry.slice(0, eqIdx), value: entry.slice(eqIdx + 1) }
@@ -71,9 +82,11 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
         }
 
         // Pre-populate post-deploy commands from AI analysis only if no saved commands loaded
+        const rawCommands = analysis.aiAnalysis?.postDeployCommands;
+        const commandsList = Array.isArray(rawCommands) ? rawCommands.filter((c): c is string => typeof c === "string") : [];
         const postDeployCommands = prev.postDeployCommands.length > 0
           ? prev.postDeployCommands
-          : (analysis.aiAnalysis?.postDeployCommands || []).map(cmd => ({
+          : commandsList.map(cmd => ({
               command: cmd,
               enabled: true,
               continueOnFailure: false,

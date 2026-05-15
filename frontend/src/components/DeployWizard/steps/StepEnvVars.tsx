@@ -5,6 +5,17 @@ import EnvEditor from "../../EnvEditor";
 import LockIcon from "../../icons/outlined/LockIcon";
 
 /**
+ * Normalize envVars from AI response — handles both array ["KEY=value"] and object {KEY: "value"} formats.
+ */
+function normalizeEnvVars(envVars: unknown): string[] {
+  if (Array.isArray(envVars)) return envVars.filter((v): v is string => typeof v === "string");
+  if (envVars && typeof envVars === "object" && !Array.isArray(envVars)) {
+    return Object.entries(envVars as Record<string, unknown>).map(([k, v]) => `${k}=${v ?? ""}`);
+  }
+  return [];
+}
+
+/**
  * Build a .env.example string from the AI analysis envVars list.
  * Shows keys with empty/placeholder values so the user knows what's expected.
  */
@@ -32,7 +43,7 @@ export default function StepEnvVars({
   analysis: RepoAnalysis | null;
   onChange: (envVars: Array<{ name: string; value: string }>) => void;
 }) {
-  const aiEnvVars = analysis?.aiAnalysis?.envVars || [];
+  const aiEnvVars = normalizeEnvVars(analysis?.aiAnalysis?.envVars);
   const envExample = buildEnvExample(aiEnvVars);
 
   const [rawEnv, setRawEnv] = useState(() => formatEnvContent(state.envVars));

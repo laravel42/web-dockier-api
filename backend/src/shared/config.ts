@@ -26,6 +26,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   JWT_SECRET: z.string().min(16),
   CORS_ORIGIN: z.string().default("*"),
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

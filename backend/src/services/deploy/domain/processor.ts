@@ -103,24 +103,6 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
   const { error } = await db.from("deployments").insert(deploymentPayload);
   if (error) throw new Error(error.message);
 
-  if (!input.skipPipeline) {
-    const eventInsert = await db.from("deployment_events").insert({
-      id: uuidv4(),
-      deployment_id: id,
-      app_id: input.appId,
-      event_type: "queued",
-      payload: {
-        buildMethod: input.buildMethod ?? template.buildMethod,
-        templateId: template.id,
-        templateLabel: template.label,
-        registryUrl: input.registryUrl ?? "",
-        estimatedResources: preview.estimatedResources,
-      },
-      created_at: createdAt,
-    });
-    if (eventInsert.error) throw new Error(eventInsert.error.message);
-  }
-
   return deploymentPayload;
 }
 

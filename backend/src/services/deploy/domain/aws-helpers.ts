@@ -16,17 +16,17 @@ export interface PushToEcrResult {
 // ─── CloudFormation Template Reader ────────────────────────────────
 
 /**
- * Read a CloudFormation template from the deploy/cfn-templates directory.
+ * Read a CloudFormation template from the cfn-templates directory.
  *
- * Tries __dirname-relative path first (works in Encore build output),
+ * Tries __dirname-relative path first (co-located in domain/cfn-templates/),
  * then falls back to process.cwd()-relative path (works in local dev).
  */
 export function readCfnTemplate(templateName: string): string {
   try {
-    const templatePath = join(__dirname, "..", "..", "cfn-templates", templateName);
+    const templatePath = join(__dirname, "cfn-templates", templateName);
     return readFileSync(templatePath, "utf-8");
   } catch {
-    const templatePath = join(process.cwd(), "deploy", "cfn-templates", templateName);
+    const templatePath = join(process.cwd(), "src", "services", "deploy", "domain", "cfn-templates", templateName);
     return readFileSync(templatePath, "utf-8");
   }
 }

@@ -7,6 +7,8 @@ import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
 import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from "./domain/mr-generator.js";
+import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
+import { env } from "../../shared/config.js";
 
 function parseRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
   const normalized = repoUrl.replace(/\.git$/, "");
@@ -926,7 +928,34 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const cached = await db.from("analysis_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
-      if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+      if (cached.data?.result) {
+        const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+        // If AI analysis was requested but cache doesn't have it, run AI and update cache
+        if (request.query.aiType && env.OPENAI_API_KEY && !parsed.aiAnalysis) {
+          const ref = { owner: request.query.owner, repo: request.query.repo, branch };
+          const files = await getRepoFileTree(conn, ref);
+          const configContents: Record<string, string> = {};
+          for (const candidate of AI_CONFIG_FILES) {
+            const path = files.find((f) => f.toLowerCase().endsWith(candidate.toLowerCase()));
+            if (!path) continue;
+            const content = await fetchRepoFile(conn, ref, path);
+            if (content) configContents[path] = content;
+          }
+          const aiResult = await analyzeWithAI(
+            env.OPENAI_API_KEY,
+            files,
+            configContents,
+            parsed.techStack ?? [],
+            parsed.detectedServices ?? [],
+          );
+          if (aiResult) {
+            const updated = { ...parsed, aiAnalysis: aiResult };
+            await db.from("analysis_cache").update({ result: updated }).eq("repo", repoKey).eq("branch", branch);
+            return updated;
+          }
+        }
+        return parsed;
+      }
 
       const result = await runRepoAnalysis(conn, {
         owner: request.query.owner,
@@ -934,20 +963,46 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         branch,
       });
 
+      // Run AI analysis if requested and API key is available
+      let aiAnalysis: Record<string, unknown> | undefined;
+      if (request.query.aiType && env.OPENAI_API_KEY) {
+        const ref = { owner: request.query.owner, repo: request.query.repo, branch };
+        const files = await getRepoFileTree(conn, ref);
+        const configContents: Record<string, string> = {};
+        for (const candidate of AI_CONFIG_FILES) {
+          const path = files.find((f) => f.toLowerCase().endsWith(candidate.toLowerCase()));
+          if (!path) continue;
+          const content = await fetchRepoFile(conn, ref, path);
+          if (content) configContents[path] = content;
+        }
+        const aiResult = await analyzeWithAI(
+          env.OPENAI_API_KEY,
+          files,
+          configContents,
+          result.techStack,
+          result.detectedServices,
+        );
+        if (aiResult) {
+          aiAnalysis = aiResult as unknown as Record<string, unknown>;
+        }
+      }
+
+      const finalResult = aiAnalysis ? { ...result, aiAnalysis } : result;
+
       await db.from("analysis_cache").upsert(
         {
           id: uuidv4(),
           repo: repoKey,
           branch,
           commit_sha: "",
-          result,
+          result: finalResult,
           created_at: new Date().toISOString(),
           app_id: auth.appId,
           project_id: request.query.projectId ?? "",
         },
         { onConflict: "repo,branch" },
       );
-      return result;
+      return finalResult;
     },
   );
 
