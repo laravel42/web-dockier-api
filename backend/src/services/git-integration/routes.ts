@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
+import type { Database } from "../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
 import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from "./domain/mr-generator.js";
@@ -42,7 +43,7 @@ async function getConnectionOrThrow(db: any, connectionId: string) {
 
 export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin as any;
+  const db = supabaseAdmin;
 
   typed.post(
     "/git/connections",
@@ -167,7 +168,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await getConnectionOrThrow(db, request.params.connectionId);
       if (!conn) throw app.httpErrors.notFound("Connection not found");
       if (conn.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your connection");
-      const updates: Record<string, unknown> = { label: request.body.label, updated_at: new Date().toISOString() };
+      const updates: Database["public"]["Tables"]["git_connections"]["Update"] = { label: request.body.label };
       if (request.body.personalToken) updates.personal_token = request.body.personalToken;
       const { error } = await db.from("git_connections").update(updates).eq("id", request.params.connectionId);
       if (error) throw app.httpErrors.badRequest(error.message);
@@ -997,7 +998,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           repo: repoKey,
           branch,
           commit_sha: "",
-          result: finalResult,
+          result: finalResult as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
           created_at: new Date().toISOString(),
           app_id: auth.appId,
           project_id: request.query.projectId ?? "",

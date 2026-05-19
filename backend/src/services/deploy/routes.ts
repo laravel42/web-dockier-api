@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { deploymentSchema, deploymentStatusSchema, envVarSchema, postDeployCommandSchema, providerSchema, serviceEntrySchema } from "./schemas.js";
-import type { DeploymentRow, ProviderRow, ServiceEntry } from "./types.js";
+import type { DeploymentRow, ProviderRow, ServiceEntry, DeploymentStatus } from "./types.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domain/planner.js";
 import { destroyDeployment } from "./domain/destroy.js";
@@ -13,7 +13,7 @@ import { executePipeline } from "./domain/pipeline.js";
 import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 
-function rowToProvider(row: ProviderRow) {
+function rowToProvider(row: Pick<ProviderRow, "id" | "provider" | "label" | "region" | "created_at">) {
   return {
     id: row.id,
     provider: row.provider,
@@ -31,7 +31,7 @@ function rowToDeployment(row: DeploymentRow) {
     projectId: row.project_id ?? "",
     repo: row.repo,
     branch: row.branch,
-    status: row.status,
+    status: row.status as DeploymentStatus,
     logs: row.logs ?? "",
     appUrl: row.app_url ?? "",
     commitHash: row.commit_hash ?? "",
@@ -44,7 +44,7 @@ function rowToDeployment(row: DeploymentRow) {
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin as any;
+  const db = supabaseAdmin;
 
   typed.post(
     "/deploy/providers",
@@ -127,10 +127,9 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         .single();
       if (existingError || !existing) throw app.httpErrors.notFound("Provider not found");
       if (existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your provider");
-      const updates: Record<string, unknown> = {};
+      const updates: Partial<ProviderRow> = {};
       if (request.body.label !== undefined) updates.label = request.body.label;
       if (request.body.apiSecret !== undefined) updates.api_secret = request.body.apiSecret.trim();
-      updates.updated_at = new Date().toISOString();
       const { error } = await db.from("server_providers").update(updates).eq("id", request.params.providerId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return rowToProvider({
@@ -467,7 +466,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const updates: Partial<DeploymentRow> = { updated_at: new Date().toISOString() };
       if (request.body.status !== undefined) updates.status = request.body.status;
       if (request.body.logs !== undefined) updates.logs = request.body.logs;
       if (request.body.appUrl !== undefined) updates.app_url = request.body.appUrl;
