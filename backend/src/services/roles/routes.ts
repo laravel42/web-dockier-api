@@ -2,9 +2,17 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { rolesStore } from "./data.js";
 import { roleSchema } from "./schemas.js";
-import { membershipRoleSchemaValues } from "../../shared/auth.js";
+import { supabaseAdmin } from "../../shared/supabase/client.js";
+
+function rowToRole(row: { id: string; name: string; description: string; permissions: string[] }) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    permissions: row.permissions ?? [],
+  };
+}
 
 export async function registerRolesRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -19,7 +27,16 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         response: { 200: z.object({ roles: z.array(roleSchema) }) },
       },
     },
-    async () => ({ roles: rolesStore }),
+    async (request) => {
+      const auth = request.auth!;
+      const { data, error } = await supabaseAdmin
+        .from("roles")
+        .select("id,name,description,permissions")
+        .eq("app_id", auth.appId)
+        .order("created_at", { ascending: true });
+      if (error) throw app.httpErrors.internalServerError(error.message);
+      return { roles: (data ?? []).map(rowToRole) };
+    },
   );
 
   typed.get(
@@ -34,9 +51,16 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const role = rolesStore.find((item) => item.id === request.params.roleId);
-      if (!role) throw app.httpErrors.notFound("Role not found");
-      return role;
+      const auth = request.auth!;
+      const { data, error } = await supabaseAdmin
+        .from("roles")
+        .select("id,name,description,permissions")
+        .eq("id", request.params.roleId)
+        .eq("app_id", auth.appId)
+        .maybeSingle();
+      if (error) throw app.httpErrors.internalServerError(error.message);
+      if (!data) throw app.httpErrors.notFound("Role not found");
+      return rowToRole(data);
     },
   );
 
@@ -56,15 +80,19 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      const auth = request.auth!;
       const id = randomUUID();
-      const role = {
+      const payload = {
         id,
+        app_id: auth.appId,
         name: request.body.name.trim(),
         description: request.body.description?.trim() ?? "",
         permissions: [...new Set(request.body.permissions)],
+        created_at: new Date().toISOString(),
       };
-      rolesStore.push(role);
-      return role;
+      const { error } = await supabaseAdmin.from("roles").insert(payload);
+      if (error) throw app.httpErrors.badRequest(error.message);
+      return rowToRole(payload);
     },
   );
 
@@ -85,14 +113,35 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const role = rolesStore.find((item) => item.id === request.params.roleId);
-      if (!role) throw app.httpErrors.notFound("Role not found");
+      const auth = request.auth!;
+      const { data: existing } = await supabaseAdmin
+        .from("roles")
+        .select("id,app_id,name,description,permissions")
+        .eq("id", request.params.roleId)
+        .eq("app_id", auth.appId)
+        .maybeSingle();
+      if (!existing) throw app.httpErrors.notFound("Role not found");
 
-      if (request.body.name !== undefined) role.name = request.body.name.trim();
-      if (request.body.description !== undefined) role.description = request.body.description.trim();
-      if (request.body.permissions !== undefined) role.permissions = [...new Set(request.body.permissions)];
+      const updates: Partial<{ name: string; description: string; permissions: string[] }> = {};
+      if (request.body.name !== undefined) updates.name = request.body.name.trim();
+      if (request.body.description !== undefined) updates.description = request.body.description.trim();
+      if (request.body.permissions !== undefined) updates.permissions = [...new Set(request.body.permissions)];
 
-      return role;
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabaseAdmin
+          .from("roles")
+          .update(updates)
+          .eq("id", request.params.roleId)
+          .eq("app_id", auth.appId);
+        if (error) throw app.httpErrors.badRequest(error.message);
+      }
+
+      return rowToRole({
+        id: existing.id,
+        name: updates.name ?? existing.name,
+        description: updates.description ?? existing.description,
+        permissions: updates.permissions ?? existing.permissions,
+      });
     },
   );
 
@@ -108,12 +157,21 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      if ((membershipRoleSchemaValues as readonly string[]).includes(request.params.roleId)) {
-        throw app.httpErrors.badRequest("Built-in roles cannot be deleted");
-      }
-      const index = rolesStore.findIndex((item) => item.id === request.params.roleId);
-      if (index === -1) throw app.httpErrors.notFound("Role not found");
-      rolesStore.splice(index, 1);
+      const auth = request.auth!;
+      const { data: existing } = await supabaseAdmin
+        .from("roles")
+        .select("id,app_id")
+        .eq("id", request.params.roleId)
+        .eq("app_id", auth.appId)
+        .maybeSingle();
+      if (!existing) throw app.httpErrors.notFound("Role not found");
+
+      const { error } = await supabaseAdmin
+        .from("roles")
+        .delete()
+        .eq("id", request.params.roleId)
+        .eq("app_id", auth.appId);
+      if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },
   );

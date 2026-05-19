@@ -12,6 +12,7 @@ import {
 import { env } from "../../shared/config.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { membershipRoleSchemaValues, type MembershipRole } from "../../shared/auth.js";
+import { seedDefaultRoles } from "../roles/seed.js";
 
 function throwAuthStartError(app: FastifyInstance, message: string) {
   if (/rate limit|over_email_send_rate_limit|security purposes/i.test(message)) {
@@ -176,6 +177,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         { onConflict: "organization_id,user_id" },
       );
       if (membershipError) throw app.httpErrors.internalServerError(membershipError.message);
+
+      await seedDefaultRoles(demoTenantId);
 
       return {
         session: {
@@ -342,6 +345,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           throw app.httpErrors.internalServerError(membershipError?.message ?? "Failed to create membership");
         }
 
+        await seedDefaultRoles(org.id);
+
         selected = {
           id: createdMembership.id,
           tenantId: org.id,
@@ -412,6 +417,27 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
       const currentRole = (membership?.role ?? user.role) as MembershipRole;
 
+      // Look up the actual role record for this tenant to get the DB role ID.
+      // If no roles exist yet (tenant created before roles migration), seed them now.
+      const roleName = currentRole === "admin" ? "Admin" : "Member";
+      let { data: roleRecord } = await supabaseAdmin
+        .from("roles")
+        .select("id")
+        .eq("app_id", auth.tenantId)
+        .eq("name", roleName)
+        .maybeSingle();
+
+      if (!roleRecord) {
+        await seedDefaultRoles(auth.tenantId);
+        const { data: seeded } = await supabaseAdmin
+          .from("roles")
+          .select("id")
+          .eq("app_id", auth.tenantId)
+          .eq("name", roleName)
+          .maybeSingle();
+        roleRecord = seeded;
+      }
+
       const memberships = await listMembershipsForUser(auth.userId);
 
       return {
@@ -420,7 +446,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         name: user.name,
         tenantId: auth.tenantId,
         role: currentRole,
-        roleId: currentRole,
+        roleId: roleRecord?.id ?? "",
         appId: auth.tenantId,
         memberships,
       };
@@ -476,6 +502,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         role: "admin",
       });
       if (membershipError) throw app.httpErrors.badRequest(membershipError.message);
+
+      await seedDefaultRoles(org.id);
 
       return {
         tenantId: org.id,

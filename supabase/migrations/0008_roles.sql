@@ -1,3 +1,7 @@
+-- Roles table: stores per-tenant roles.
+-- Default roles (Admin, Member) are seeded per-tenant during organization creation
+-- via seedDefaultRoles() in backend/src/services/roles/seed.ts.
+
 CREATE TABLE IF NOT EXISTS roles (
     id TEXT PRIMARY KEY,
     app_id TEXT NOT NULL DEFAULT '',
