@@ -1,16 +1,11 @@
 import { BatchGetBuildsCommand, CodeBuildClient, ListBuildsForProjectCommand } from "@aws-sdk/client-codebuild";
 import { CloudWatchLogsClient, GetLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import type { FastifyInstance } from "fastify";
+import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 
 function imageBuilderProjectName(): string {
   return process.env.IMAGE_BUILDER_CODEBUILD_PROJECT || process.env.ImageBuilderCodeBuildProject || "image-builder";
-}
-
-export async function resolveAwsCredentials(db: any, providerId: string): Promise<{ accessKeyId: string; secretAccessKey: string; region: string } | null> {
-  if (!providerId) return null;
-  const { data } = await db.from("server_providers").select("api_key,api_secret,region").eq("id", providerId).maybeSingle();
-  if (!data?.api_key || !data?.api_secret) return null;
-  return { accessKeyId: data.api_key, secretAccessKey: data.api_secret, region: data.region || "us-east-1" };
 }
 
 export async function lookupCodeBuildId(credentials: { accessKeyId: string; secretAccessKey: string; region: string }, buildId: string): Promise<string | null> {
@@ -28,7 +23,7 @@ export async function lookupCodeBuildId(credentials: { accessKeyId: string; secr
 
 export async function refreshBuildStatus(db: any, row: any) {
   if (!row.codebuild_id || !row.provider_id) return row;
-  const credentials = await resolveAwsCredentials(db, row.provider_id);
+  const credentials = await resolveAwsCredentials(row.provider_id);
   if (!credentials) return row;
   const client = new CodeBuildClient({
     region: credentials.region,
@@ -47,7 +42,7 @@ export async function refreshBuildStatus(db: any, row: any) {
   };
   const status = statusMap[build.buildStatus || ""] ?? row.status;
   const statusReason = build.phases?.find((phase) => phase.phaseStatus === "FAILED")?.contexts?.[0]?.message || row.status_reason || "";
-  await db
+  await supabaseAdmin
     .from("builds")
     .update({
       status,
@@ -61,7 +56,7 @@ export async function refreshBuildStatus(db: any, row: any) {
 }
 
 export async function fetchBuildLogs(app: FastifyInstance, db: any, row: any, nextToken?: string) {
-  const credentials = await resolveAwsCredentials(db, row.provider_id || "");
+  const credentials = await resolveAwsCredentials(row.provider_id || "");
   if (!credentials || !row.codebuild_id) return { logs: ["Build not yet started in CodeBuild"], nextToken: undefined as string | undefined };
   try {
     const client = new CloudWatchLogsClient({

@@ -6,9 +6,11 @@ import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
 import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } from "./domain/orchestrator.js";
-import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus, resolveAwsCredentials } from "./domain/aws-runtime.js";
+import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus } from "./domain/aws-runtime.js";
 import { createBuildspecPreview } from "./domain/buildspec.js";
 import { bundleAndUploadSource } from "./domain/source-bundler.js";
+import { getAwsAccountId } from "../../lib/aws.js";
+import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature, escapePostgrestFilter } from "../../shared/security.js";
 
 function rowToBuild(row: any) {
@@ -107,7 +109,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       setImmediate(async () => {
         try {
           // 1. Resolve AWS credentials from provider
-          const credentials = await resolveAwsCredentials(db, providerId);
+          const credentials = await resolveAwsCredentials(providerId);
           if (!credentials) {
             await db.from("builds").update({ status: "failed", status_reason: "AWS credentials not configured on provider", updated_at: new Date().toISOString() }).eq("id", id);
             return;
@@ -115,10 +117,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           const { accessKeyId, secretAccessKey, region } = credentials;
 
           // 2. Get AWS account ID
-          const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-          const sts = new STSClient({ region, credentials: { accessKeyId, secretAccessKey } });
-          const identity = await sts.send(new GetCallerIdentityCommand({}));
-          const accountId = identity.Account || "";
+          const accountId = await getAwsAccountId(region, { accessKeyId, secretAccessKey });
 
           // 3. Get git token for private repo access
           let gitToken: string | undefined;
@@ -226,7 +225,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
 
       let row = data;
       if (!row.codebuild_id && row.provider_id) {
-        const credentials = await resolveAwsCredentials(db, row.provider_id);
+        const credentials = await resolveAwsCredentials(row.provider_id);
         if (credentials) {
           const codebuildId = await lookupCodeBuildId(credentials, request.params.buildId);
           if (codebuildId) {
@@ -267,7 +266,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
       let row = data;
       if (!row.codebuild_id && row.provider_id) {
-        const credentials = await resolveAwsCredentials(db, row.provider_id);
+        const credentials = await resolveAwsCredentials(row.provider_id);
         if (credentials) {
           const codebuildId = await lookupCodeBuildId(credentials, request.params.buildId);
           if (codebuildId) {
@@ -423,7 +422,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const stackName = `image-builder-app-${appName}`;
 
       // Poll CloudFormation directly for real-time status
-      const credentials = await resolveAwsCredentials(db, data.provider_id || "");
+      const credentials = await resolveAwsCredentials(data.provider_id || "");
       if (!credentials) {
         if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
         return { status: "deploying", appUrl: "", stackName };
@@ -454,10 +453,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
             // Derive image URI: if not cached, construct from account/region/repo
             let imageUri = build.buildMetadata.imageUri || data.image_uri || "";
             if (!imageUri && build.status === "succeeded") {
-              const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-              const sts = new STSClient({ region: credentials.region, credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey } });
-              const identity = await sts.send(new GetCallerIdentityCommand({}));
-              const accountId = identity.Account || "";
+              const accountId = await getAwsAccountId(credentials.region, { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey });
               const imageRepoName = appName; // same sanitization as appName
               const commitSha = build.commitSha || data.commit_sha || "";
               const shortTag = commitSha ? commitSha.slice(0, 12) : "latest";
@@ -491,11 +487,8 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
                   const { readFileSync } = await import("node:fs");
                   const { join } = await import("node:path");
                   const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-                  const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
 
-                  const sts = new STSClient({ region: credentials.region, credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey } });
-                  const identity = await sts.send(new GetCallerIdentityCommand({}));
-                  const accountId = identity.Account || "";
+                  const accountId = await getAwsAccountId(credentials.region, { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey });
                   const templateBucket = `image-builder-templates-${accountId}`;
 
                   let templateBody: string;
@@ -672,7 +665,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       if (enabledCommands.length === 0) return { success: true, output: ["No commands to run"] };
 
       // Resolve AWS credentials
-      const credentials = await resolveAwsCredentials(db, data.provider_id || "");
+      const credentials = await resolveAwsCredentials(data.provider_id || "");
       if (!credentials) throw app.httpErrors.preconditionFailed("AWS credentials not available");
 
       // Find the EC2 instance from CloudFormation stack
