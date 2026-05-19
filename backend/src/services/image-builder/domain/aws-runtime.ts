@@ -21,7 +21,7 @@ export async function lookupCodeBuildId(credentials: { accessKeyId: string; secr
   return match?.id ?? null;
 }
 
-export async function refreshBuildStatus(db: any, row: any) {
+export async function refreshBuildStatus(row: any) {
   if (!row.codebuild_id || !row.provider_id) return row;
   const credentials = await resolveAwsCredentials(row.provider_id);
   if (!credentials) return row;
@@ -55,7 +55,7 @@ export async function refreshBuildStatus(db: any, row: any) {
   return { ...row, status, status_reason: statusReason };
 }
 
-export async function fetchBuildLogs(app: FastifyInstance, db: any, row: any, nextToken?: string) {
+export async function fetchBuildLogs(app: FastifyInstance, row: any, nextToken?: string) {
   const credentials = await resolveAwsCredentials(row.provider_id || "");
   if (!credentials || !row.codebuild_id) return { logs: ["Build not yet started in CodeBuild"], nextToken: undefined as string | undefined };
   try {

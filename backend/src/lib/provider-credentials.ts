@@ -23,11 +23,16 @@ export interface ResolvedCredentials {
 export async function resolveAwsCredentials(providerId: string): Promise<ResolvedCredentials | null> {
   if (!providerId) return null;
 
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("server_providers")
     .select("api_key,api_secret,region")
     .eq("id", providerId)
     .maybeSingle();
+
+  if (error) {
+    console.warn(`Failed to fetch provider credentials for ${providerId}: ${error.message}`);
+    return null;
+  }
 
   if (!data?.api_key || !data?.api_secret) return null;
 

@@ -235,7 +235,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         }
       }
       if (row.codebuild_id && ["submitted", "in_progress", "pending"].includes(row.status)) {
-        row = await refreshBuildStatus(db, row);
+        row = await refreshBuildStatus(row);
       }
       return rowToBuild(row);
     },
@@ -275,7 +275,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           }
         }
       }
-      const cloudwatch = await fetchBuildLogs(app, db, row, request.query.nextToken);
+      const cloudwatch = await fetchBuildLogs(app, row, request.query.nextToken);
       return {
         buildId: request.params.buildId,
         logs: cloudwatch.logs.length > 0 ? cloudwatch.logs : [`[${row.updated_at}] status=${row.status}`, row.status_reason || "No logs available yet"],
