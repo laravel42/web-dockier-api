@@ -1,8 +1,7 @@
 import { join } from "node:path";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 
-// Cast for untyped tables (deployments not in generated Supabase types)
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 import {
   getGcpAccessToken,
   getGcpProjectId,

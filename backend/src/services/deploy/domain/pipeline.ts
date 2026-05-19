@@ -22,8 +22,7 @@ import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
 
-// Cast for untyped tables
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 
 // ─── Types ─────────────────────────────────────────────────────────
 

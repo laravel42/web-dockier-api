@@ -23,8 +23,7 @@ import type {
 } from "./types.js";
 import { runCmd } from "../run-cmd.js";
 
-// Cast for untyped tables (deployments, ssh_keys not in generated Supabase types)
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 
 /**
  * GCP Compute Engine (VPS) adapter.

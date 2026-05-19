@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { customRuleSchema, findingSchema, scanSchema, summarySchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
+import type { Database } from "../../shared/supabase/types.js";
 
 const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
 
@@ -55,7 +56,7 @@ function rowToScan(row: any) {
 
 export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin as any;
+  const db = supabaseAdmin;
 
   typed.post(
     "/code-analysis/scans",
@@ -374,7 +375,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
           throw app.httpErrors.badRequest("Invalid regex pattern");
         }
       }
-      const updates: Record<string, unknown> = {};
+      const updates: Database["public"]["Tables"]["custom_rules"]["Update"] = {};
       if (request.body.ruleId !== undefined) updates.rule_id = request.body.ruleId;
       if (request.body.severity !== undefined) updates.severity = request.body.severity;
       if (request.body.message !== undefined) updates.message = request.body.message;
@@ -382,7 +383,6 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       if (request.body.extensions !== undefined) updates.extensions = request.body.extensions;
       if (request.body.enabled !== undefined) updates.enabled = request.body.enabled;
       if (request.body.yamlContent !== undefined) updates.yaml_content = request.body.yamlContent;
-      updates.updated_at = new Date().toISOString();
       const { error } = await db.from("custom_rules").update(updates).eq("id", request.params.ruleDbId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };

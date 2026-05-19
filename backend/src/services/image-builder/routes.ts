@@ -5,6 +5,7 @@ import { z } from "zod";
 import { appendFileSync } from "node:fs";
 import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
+import type { Database } from "../../shared/supabase/types.js";
 import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } from "./domain/orchestrator.js";
 import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus, resolveAwsCredentials } from "./domain/aws-runtime.js";
 import { createBuildspecPreview } from "./domain/buildspec.js";
@@ -38,7 +39,7 @@ function rowToBuild(row: any) {
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin as any;
+  const db = supabaseAdmin;
 
   typed.post(
     "/image-builder/builds",
@@ -85,8 +86,8 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         status: "pending",
         status_reason: composeSubmittedReason(normalized.inferredRuntime),
         logs_url: "",
-        tags: normalized.tags,
-        build_metadata: {
+        tags: JSON.stringify(normalized.tags),
+        build_metadata: JSON.stringify({
           ...normalized.metadata,
           deployParams: JSON.stringify(request.body.deployParams ?? {}),
           buildspecPreview: createBuildspecPreview({
@@ -97,7 +98,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
             imageRepo: normalized.imageRepo,
             tags: normalized.tags,
           }),
-        },
+        }),
         provider_id: request.body.providerId ?? "",
         created_at: now,
         updated_at: now,
@@ -469,10 +470,14 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
               const shortTag = commitSha ? commitSha.slice(0, 12) : "latest";
               imageUri = `${accountId}.dkr.ecr.${credentials.region}.amazonaws.com/${imageRepoName}:${shortTag}`;
             }
-            const buildMetadata = typeof data.build_metadata === "object" ? data.build_metadata : {};
-            const containerPort = buildMetadata.containerPort || "3000";
-            const deployParams = buildMetadata.deployParams ? (typeof buildMetadata.deployParams === "string" ? JSON.parse(buildMetadata.deployParams) : buildMetadata.deployParams) : {};
-            debugLog(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${(deployParams.envVars || []).length}, raw deployParams field: ${buildMetadata.deployParams ? "present" : "MISSING"}`);
+            const buildMetadata: Record<string, unknown> = data.build_metadata
+              ? JSON.parse(data.build_metadata)
+              : {};
+            const containerPort = (buildMetadata.containerPort as string) || "3000";
+            const deployParams: Record<string, unknown> = buildMetadata.deployParams
+              ? JSON.parse(buildMetadata.deployParams as string)
+              : {};
+            debugLog(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${((deployParams.envVars as unknown[]) || []).length}, raw deployParams field: ${buildMetadata.deployParams ? "present" : "MISSING"}`);
 
             // Only attempt creation if the build finished (give Lambda a few seconds)
             const finishedAt = data.finished_at ? new Date(data.finished_at).getTime() : 0;
@@ -515,7 +520,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
                     { ParameterKey: "AppName", ParameterValue: appName },
                     { ParameterKey: "ImageUri", ParameterValue: imageUri },
                     { ParameterKey: "ContainerPort", ParameterValue: String(containerPort) },
-                    { ParameterKey: "InstanceType", ParameterValue: deployParams.instanceType || "t3.small" },
+                    { ParameterKey: "InstanceType", ParameterValue: (deployParams.instanceType as string) || "t3.small" },
                     { ParameterKey: "VpcId", ParameterValue: vpcId },
                     { ParameterKey: "SubnetId", ParameterValue: subnetId },
                     { ParameterKey: "BuildId", ParameterValue: request.params.buildId },
@@ -523,7 +528,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
 
                   // Add env vars if present — use S3 if too large for CloudFormation parameter (4096 char limit)
                   // envVars can be either [{name, value}] objects or ["KEY=value"] strings
-                  const rawEnvVars: any[] = deployParams.envVars || [];
+                  const rawEnvVars: any[] = (deployParams.envVars as any[]) || [];
                   const envVars: Array<{name: string; value: string}> = rawEnvVars.map((v: any) => {
                     if (typeof v === "string") {
                       const idx = v.indexOf("=");
@@ -548,12 +553,12 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
                     }
                   }
                   // Add self-hosted services
-                  const selfHostedServices = deployParams.selfHostedServices || [];
+                  const selfHostedServices = (deployParams.selfHostedServices as string[]) || [];
                   if (selfHostedServices.length > 0) {
                     params.push({ ParameterKey: "SelfHostedServices", ParameterValue: selfHostedServices.join(",") });
                   }
                   // Add tech stack
-                  const techStack = deployParams.techStack || [];
+                  const techStack = (deployParams.techStack as string[]) || [];
                   if (techStack.length > 0) {
                     params.push({ ParameterKey: "TechStack", ParameterValue: techStack.join(",") });
                   }
@@ -615,9 +620,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           const outputs = Object.fromEntries((stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]));
           const appUrl = outputs.AppUrl || "";
           // Cache the result in the builds table so future polls are instant
+          const existingMetadata: Record<string, unknown> = typeof data.build_metadata === "string" && data.build_metadata
+            ? JSON.parse(data.build_metadata) : {};
           await db.from("builds").update({
             status: "succeeded",
-            build_metadata: { ...(typeof data.build_metadata === "object" ? data.build_metadata : {}), appUrl, stackName },
+            build_metadata: JSON.stringify({ ...existingMetadata, appUrl, stackName }),
             updated_at: new Date().toISOString(),
           }).eq("id", request.params.buildId);
           return { status: "success", appUrl, stackName };
@@ -706,8 +713,10 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         .join(" && ");
 
       // Laravel: copy .env into container before running commands
-      const techStack: string[] = typeof data.build_metadata === "object" && data.build_metadata?.techStack
-        ? data.build_metadata.techStack
+      const parsedMetadata: Record<string, unknown> = typeof data.build_metadata === "string" && data.build_metadata
+        ? JSON.parse(data.build_metadata) : {};
+      const techStack: string[] = Array.isArray(parsedMetadata.techStack)
+        ? parsedMetadata.techStack as string[]
         : [];
       const isLaravel = techStack.some((s: string) => s.toLowerCase() === "laravel") ||
         (data.source_repo || "").toLowerCase().includes("laravel");
@@ -799,11 +808,13 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     async (request) => {
       const { data } = await db.from("builds").select("*").eq("id", request.body.buildId).maybeSingle();
       if (!data) return { ok: false };
-      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const updates: Database["public"]["Tables"]["builds"]["Update"] = { updated_at: new Date().toISOString() };
       if (request.body.codebuildId) updates.codebuild_id = request.body.codebuildId;
       if (request.body.status === "success") {
         updates.status = "succeeded";
-        updates.build_metadata = { ...(data.build_metadata ?? {}), appUrl: request.body.appUrl ?? "", stackName: request.body.stackName ?? "" };
+        const existingMeta: Record<string, unknown> = typeof data.build_metadata === "string" && data.build_metadata
+          ? JSON.parse(data.build_metadata) : {};
+        updates.build_metadata = JSON.stringify({ ...existingMeta, appUrl: request.body.appUrl ?? "", stackName: request.body.stackName ?? "" });
       } else if (request.body.status === "failed") {
         updates.status = "failed";
         updates.status_reason = `Deploy failed: ${request.body.cfnStatus ?? "unknown"}`;

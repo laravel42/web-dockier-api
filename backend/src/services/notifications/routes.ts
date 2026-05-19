@@ -7,7 +7,7 @@ import { supabaseAdmin } from "../../shared/supabase/client.js";
 
 export async function registerNotificationsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin as any;
+  const db = supabaseAdmin;
 
   typed.post(
     "/notifications/channels",
@@ -31,7 +31,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         id,
         app_id: auth.appId,
         type: request.body.type,
-        config: request.body.config,
+        config: JSON.stringify(request.body.config),
         enabled: true,
         created_at: now,
       };
@@ -93,7 +93,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { error } = await db
         .from("notification_channels")
-        .update({ enabled: request.body.enabled, updated_at: new Date().toISOString() })
+        .update({ enabled: request.body.enabled })
         .eq("id", request.params.channelId)
         .eq("app_id", auth.appId);
       if (error) throw app.httpErrors.badRequest(error.message);
@@ -146,7 +146,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
 
       let sent = 0;
       for (const channel of data ?? []) {
-        if (request.body.channels && !request.body.channels.includes(channel.type)) continue;
+        if (request.body.channels && !request.body.channels.includes(channel.type as typeof request.body.channels[number])) continue;
         const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
         if (channel.type === "slack" && config?.webhookUrl) {
           await fetch(config.webhookUrl, {
@@ -229,7 +229,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { error } = await db
         .from("notifications")
-        .update({ read: true, updated_at: new Date().toISOString() })
+        .update({ read: true })
         .eq("id", request.params.notificationId)
         .eq("app_id", auth.appId);
       if (error) throw app.httpErrors.badRequest(error.message);
