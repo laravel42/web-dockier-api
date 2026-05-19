@@ -10,6 +10,7 @@
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../lib/buildspec-generator/index.js";
+import { getAwsAccountId } from "../../../lib/aws.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -76,10 +77,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   await logFn(deploymentId, `[${ts()}] ── Build via CodeBuild ─────────────`);
 
   // 1. Get AWS account ID
-  const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-  const sts = new STSClient({ region, credentials: { accessKeyId, secretAccessKey } });
-  const identity = await sts.send(new GetCallerIdentityCommand({}));
-  const accountId = identity.Account || "";
+  const accountId = await getAwsAccountId(region, { accessKeyId, secretAccessKey });
 
   const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const cacheRepoName = `${imageRepoName}-cache`;

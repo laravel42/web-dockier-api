@@ -1,10 +1,12 @@
 /**
- * Unified provider credential resolution.
+ * Unified AWS credential resolution.
  *
- * Looks up cloud provider credentials by providerId via the deploy service's
- * internal API, with a fallback to environment variables. Used by both the
- * deploy service (directly from DB) and image-builder (via internal call).
+ * Single source of truth for fetching AWS credentials from the
+ * server_providers table. Used by deploy pipeline, image-builder,
+ * and codebuild-builder.
  */
+
+import { supabaseAdmin } from "../shared/supabase/client.js";
 
 export interface ResolvedCredentials {
   accessKeyId: string;
@@ -12,45 +14,31 @@ export interface ResolvedCredentials {
   region: string;
 }
 
-export interface CredentialFallback {
-  accessKeyId: string;
-  secretAccessKey: string;
-  region: string;
-}
-
 /**
- * Resolve AWS credentials for a given providerId.
+ * Resolve AWS credentials for a given providerId by querying the server_providers table.
  *
- * Strategy:
- * 1. If providerId is provided, fetch credentials from the deploy service
- * 2. Fall back to the supplied fallback values (typically from env vars)
- *
- * The `fetchCredentials` function is injected to avoid hard-coding the
- * lookup mechanism — each service provides its own implementation.
+ * Returns null if the providerId is empty, the provider is not found,
+ * or the credentials are incomplete.
  */
-export async function resolveAwsCredentials(opts: {
-  providerId: string;
-  fallback: CredentialFallback;
-  fetchCredentials: (providerId: string) => Promise<{ apiKey: string; apiSecret: string; region?: string } | null>;
-}): Promise<ResolvedCredentials> {
-  const { providerId, fallback, fetchCredentials } = opts;
+export async function resolveAwsCredentials(providerId: string): Promise<ResolvedCredentials | null> {
+  if (!providerId) return null;
 
-  if (providerId) {
-    try {
-      const creds = await fetchCredentials(providerId);
-      if (creds && creds.apiKey && creds.apiSecret) {
-        return {
-          accessKeyId: creds.apiKey,
-          secretAccessKey: creds.apiSecret,
-          region: creds.region || fallback.region,
-        };
-      }
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.warn(`Failed to fetch provider credentials for ${providerId}: ${message}`);
-    }
+  const { data, error } = await supabaseAdmin
+    .from("server_providers")
+    .select("api_key,api_secret,region")
+    .eq("id", providerId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`Failed to fetch provider credentials for ${providerId}: ${error.message}`);
+    return null;
   }
 
-  // Fall back to provided defaults
-  return fallback;
+  if (!data?.api_key || !data?.api_secret) return null;
+
+  return {
+    accessKeyId: data.api_key,
+    secretAccessKey: data.api_secret,
+    region: data.region || "us-east-1",
+  };
 }

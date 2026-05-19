@@ -12,6 +12,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createDeployLogger, BuildError } from "../../../lib/logging.js";
+import { getAwsAccountId } from "../../../lib/aws.js";
 import { patchDockerfile, toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { getAdapter } from "./adapters/index.js";
@@ -407,10 +408,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
 
             // Upload to S3
             const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-            const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
-            const sts = new STSClient({ region, credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret } });
-            const identity = await sts.send(new GetCallerIdentityCommand({}));
-            const accountId = identity.Account || "";
+            const accountId = await getAwsAccountId(region, { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret });
             const envBucket = `image-builder-templates-${accountId}`;
             const envKey = `env-files/${containerName}-postdeploy.env`;
             const s3 = new S3Client({ region, credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret } });
