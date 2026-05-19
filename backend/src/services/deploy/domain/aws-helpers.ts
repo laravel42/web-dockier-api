@@ -229,9 +229,7 @@ export async function waitForStackStable(
         return status;
       }
 
-      if (i % 4 === 0) {
-        await appendLog(`ℹ Waiting for stack: ${status}...`);
-      }
+      await appendLog(`ℹ Waiting for stack: ${status}...`);
     } catch {
       // Stack may have been deleted
       return "DELETE_COMPLETE";
@@ -300,8 +298,13 @@ export async function cleanupStuckStack(
         await waitForStackStable(cfn, stackName, appendLog);
       }
     }
-  } catch {
-    // Stack doesn't exist yet — that's fine
+  } catch (err: any) {
+    // Stack doesn't exist yet — that's fine (ValidationError with "does not exist")
+    // But log unexpected errors so they're not silently swallowed
+    const msg = err?.message || String(err);
+    if (!msg.includes("does not exist")) {
+      await appendLog(`⚠ Stack check error (non-fatal): ${msg.slice(0, 200)}`);
+    }
   }
 }
 
@@ -451,8 +454,8 @@ export async function pollStackStatus(opts: {
       const stackResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
       const stack = stackResult.Stacks?.[0];
       if (!stack) {
-        if (attempt % 4 === 0) {
-          await appendLog("ℹ Waiting for CloudFormation stack...");
+        if (attempt % 8 === 0) {
+          await appendLog("ℹ Waiting for CloudFormation stack to appear...");
         }
         continue;
       }
@@ -481,15 +484,13 @@ export async function pollStackStatus(opts: {
       }
 
       // Log progress periodically
-      if (attempt % 4 === 0) {
-        await appendLog(`ℹ CloudFormation: ${stackStatus}...`);
-      }
+      await appendLog(`ℹ CloudFormation: ${stackStatus}...`);
     } catch (pollErr: any) {
       if (pollErr.message?.includes("CloudFormation stack failed")) {
         throw pollErr;
       }
-      if (attempt % 4 === 0) {
-        await appendLog("ℹ Waiting for CloudFormation stack...");
+      if (attempt % 8 === 0) {
+        await appendLog("ℹ Waiting for CloudFormation stack to appear...");
       }
     }
   }

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { appendFileSync } from "node:fs";
 import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } from "./domain/orchestrator.js";
@@ -9,6 +10,12 @@ import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus, resolveAwsCreden
 import { createBuildspecPreview } from "./domain/buildspec.js";
 import { bundleAndUploadSource } from "./domain/source-bundler.js";
 import { requireWebhookSignature, escapePostgrestFilter } from "../../shared/security.js";
+
+const DEBUG_LOG = "/tmp/deploy-status-debug.log";
+function debugLog(msg: string) {
+  const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+  appendFileSync(DEBUG_LOG, `[${ts}] ${msg}\n`);
+}
 
 function rowToBuild(row: any) {
   return {
@@ -81,6 +88,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         tags: normalized.tags,
         build_metadata: {
           ...normalized.metadata,
+          deployParams: JSON.stringify(request.body.deployParams ?? {}),
           buildspecPreview: createBuildspecPreview({
             runtime: normalized.inferredRuntime,
             sourceRef: normalized.sourceRef,
@@ -399,10 +407,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      debugLog(` HIT — buildId=${request.params.buildId}`);
       const auth = request.auth!;
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
+      if (error || !data) { debugLog(` Build not found`); throw app.httpErrors.notFound("Build not found"); }
+      if (data.app_id !== auth.appId) { debugLog(` Forbidden`); throw app.httpErrors.forbidden("Not your build"); }
       const build = rowToBuild(data);
 
       // If we already have the appUrl cached, return immediately
@@ -427,14 +436,179 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       }
 
       try {
-        const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+        const { CloudFormationClient, DescribeStacksCommand, CreateStackCommand, UpdateStackCommand } = await import("@aws-sdk/client-cloudformation");
         const cfn = new CloudFormationClient({
           region: credentials.region,
           credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
         });
-        const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-        const stack = result.Stacks?.[0];
-        if (!stack) return { status: "deploying", appUrl: "", stackName };
+
+        let stack: any = null;
+        try {
+          const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+          stack = result.Stacks?.[0] || null;
+        } catch {
+          // Stack doesn't exist
+        }
+
+        if (!stack) {
+          // Stack doesn't exist — if CodeBuild succeeded and image is available, create it directly.
+          // This handles the case where the DeployLambda failed or SNS didn't fire.
+          // Note: if the frontend is polling deploy-status, CodeBuild has already succeeded
+          // even if the DB status hasn't been updated yet.
+          debugLog(` No stack found. build.status=${build.status}, image_uri=${data.image_uri || ""}, buildMetadata.imageUri=${build.buildMetadata.imageUri || ""}`);
+          if (build.buildMetadata.imageUri || data.image_uri || build.status === "succeeded" || build.status === "submitted" || build.status === "in_progress") {
+            // Derive image URI: if not cached, construct from account/region/repo
+            let imageUri = build.buildMetadata.imageUri || data.image_uri || "";
+            if (!imageUri && build.status === "succeeded") {
+              const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+              const sts = new STSClient({ region: credentials.region, credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey } });
+              const identity = await sts.send(new GetCallerIdentityCommand({}));
+              const accountId = identity.Account || "";
+              const imageRepoName = appName; // same sanitization as appName
+              const commitSha = build.commitSha || data.commit_sha || "";
+              const shortTag = commitSha ? commitSha.slice(0, 12) : "latest";
+              imageUri = `${accountId}.dkr.ecr.${credentials.region}.amazonaws.com/${imageRepoName}:${shortTag}`;
+            }
+            const buildMetadata = typeof data.build_metadata === "object" ? data.build_metadata : {};
+            const containerPort = buildMetadata.containerPort || "3000";
+            const deployParams = buildMetadata.deployParams ? (typeof buildMetadata.deployParams === "string" ? JSON.parse(buildMetadata.deployParams) : buildMetadata.deployParams) : {};
+            debugLog(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${(deployParams.envVars || []).length}, raw deployParams field: ${buildMetadata.deployParams ? "present" : "MISSING"}`);
+
+            // Only attempt creation if the build finished (give Lambda a few seconds)
+            const finishedAt = data.finished_at ? new Date(data.finished_at).getTime() : 0;
+            const elapsed = finishedAt > 0 ? Math.abs(Date.now() - finishedAt) : 999_999;
+            if (elapsed > 30_000 && imageUri) {
+              debugLog(` Fallback triggered — imageUri=${imageUri}, elapsed=${elapsed}ms`);
+              try {
+                // Get VPC and subnet
+                const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await import("@aws-sdk/client-ec2");
+                const ec2 = new EC2Client({ region: credentials.region, credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey } });
+                const vpcsResult = await ec2.send(new DescribeVpcsCommand({ Filters: [{ Name: "is-default", Values: ["true"] }] }));
+                const vpcId = vpcsResult.Vpcs?.[0]?.VpcId || "";
+                const subnetsResult = vpcId ? await ec2.send(new DescribeSubnetsCommand({ Filters: [{ Name: "vpc-id", Values: [vpcId] }] })) : { Subnets: [] };
+                const subnetId = (subnetsResult.Subnets || [])[0]?.SubnetId || "";
+
+                if (vpcId && subnetId) {
+                  // Read and upload template
+                  const { readFileSync } = await import("node:fs");
+                  const { join } = await import("node:path");
+                  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+                  const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+
+                  const sts = new STSClient({ region: credentials.region, credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey } });
+                  const identity = await sts.send(new GetCallerIdentityCommand({}));
+                  const accountId = identity.Account || "";
+                  const templateBucket = `image-builder-templates-${accountId}`;
+
+                  let templateBody: string;
+                  try {
+                    templateBody = readFileSync(join(__dirname, "../deploy/domain/cfn-templates/ec2.yml"), "utf-8");
+                  } catch {
+                    templateBody = readFileSync(join(process.cwd(), "src/services/deploy/domain/cfn-templates/ec2.yml"), "utf-8");
+                  }
+
+                  const s3 = new S3Client({ region: credentials.region, credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey } });
+                  await s3.send(new PutObjectCommand({ Bucket: templateBucket, Key: "ec2.yml", Body: templateBody, ContentType: "text/yaml" }));
+                  const templateUrl = `https://${templateBucket}.s3.amazonaws.com/ec2.yml`;
+
+                  const params = [
+                    { ParameterKey: "AppName", ParameterValue: appName },
+                    { ParameterKey: "ImageUri", ParameterValue: imageUri },
+                    { ParameterKey: "ContainerPort", ParameterValue: String(containerPort) },
+                    { ParameterKey: "InstanceType", ParameterValue: deployParams.instanceType || "t3.small" },
+                    { ParameterKey: "VpcId", ParameterValue: vpcId },
+                    { ParameterKey: "SubnetId", ParameterValue: subnetId },
+                    { ParameterKey: "BuildId", ParameterValue: request.params.buildId },
+                  ];
+
+                  // Add env vars if present — use S3 if too large for CloudFormation parameter (4096 char limit)
+                  // envVars can be either [{name, value}] objects or ["KEY=value"] strings
+                  const rawEnvVars: any[] = deployParams.envVars || [];
+                  const envVars: Array<{name: string; value: string}> = rawEnvVars.map((v: any) => {
+                    if (typeof v === "string") {
+                      const idx = v.indexOf("=");
+                      return idx > 0 ? { name: v.slice(0, idx), value: v.slice(idx + 1) } : { name: v, value: "" };
+                    }
+                    return v;
+                  });
+                  if (envVars.length > 0) {
+                    const envVarsJson = JSON.stringify(envVars);
+                    if (envVarsJson.length > 4000) {
+                      const envVarsKey = `env-vars/${stackName}/${request.params.buildId}.json`;
+                      await s3.send(new PutObjectCommand({
+                        Bucket: templateBucket,
+                        Key: envVarsKey,
+                        Body: envVarsJson,
+                        ContentType: "application/json",
+                      }));
+                      params.push({ ParameterKey: "EnvVarsS3Uri", ParameterValue: `s3://${templateBucket}/${envVarsKey}` });
+                      debugLog(`Env vars uploaded to S3 (${envVarsJson.length} chars)`);
+                    } else {
+                      params.push({ ParameterKey: "EnvVarsJson", ParameterValue: envVarsJson });
+                    }
+                  }
+                  // Add self-hosted services
+                  const selfHostedServices = deployParams.selfHostedServices || [];
+                  if (selfHostedServices.length > 0) {
+                    params.push({ ParameterKey: "SelfHostedServices", ParameterValue: selfHostedServices.join(",") });
+                  }
+                  // Add tech stack
+                  const techStack = deployParams.techStack || [];
+                  if (techStack.length > 0) {
+                    params.push({ ParameterKey: "TechStack", ParameterValue: techStack.join(",") });
+                  }
+
+                  try {
+                    await cfn.send(new CreateStackCommand({
+                      StackName: stackName,
+                      TemplateURL: templateUrl,
+                      Parameters: params,
+                      Capabilities: ["CAPABILITY_NAMED_IAM"],
+                      Tags: [
+                        { Key: "BuildId", Value: request.params.buildId },
+                        { Key: "ManagedBy", Value: "image-builder" },
+                      ],
+                      OnFailure: "ROLLBACK",
+                    }));
+                    debugLog(`Created CloudFormation stack ${stackName} as fallback`);
+                  } catch (createErr: any) {
+                    if (createErr.name?.includes("AlreadyExists") || createErr.message?.includes("already exists")) {
+                      // Stack exists — update it with new image and env vars
+                      try {
+                        const { UpdateStackCommand } = await import("@aws-sdk/client-cloudformation");
+                        await cfn.send(new UpdateStackCommand({
+                          StackName: stackName,
+                          TemplateURL: templateUrl,
+                          Parameters: params,
+                          Capabilities: ["CAPABILITY_NAMED_IAM"],
+                        }));
+                        debugLog(`Updated existing CloudFormation stack ${stackName}`);
+                      } catch (updateErr: any) {
+                        if (updateErr.message?.includes("No updates")) {
+                          debugLog(`Stack ${stackName} already up to date`);
+                        } else {
+                          debugLog(`Stack update failed: ${updateErr.message}`);
+                        }
+                      }
+                    } else {
+                      throw createErr;
+                    }
+                  }
+                }
+              } catch (createErr: any) {
+                // If AlreadyExists, the Lambda may have just created it — that's fine
+                if (!createErr.name?.includes("AlreadyExists") && !createErr.message?.includes("already exists")) {
+                  debugLog(` Fallback stack creation failed: ${createErr.message}`);
+                } else {
+                  debugLog(` Stack already exists (race with Lambda)`);
+                }
+              }
+            } else {
+              debugLog(` Fallback skipped — imageUri="${imageUri}", elapsed=${elapsed}ms`);
+            }
+          }
+          return { status: "deploying", appUrl: "", stackName };
+        }
 
         const stackStatus = stack.StackStatus || "";
         if (stackStatus === "CREATE_COMPLETE" || stackStatus === "UPDATE_COMPLETE") {
@@ -457,8 +631,8 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           return { status: "failed", appUrl: "", stackName };
         }
         return { status: "deploying", appUrl: "", stackName };
-      } catch {
-        // Stack doesn't exist yet or API error — still deploying
+      } catch (err: any) {
+        debugLog(` Error: ${err.message}`);
         if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
         return { status: "deploying", appUrl: "", stackName };
       }
@@ -545,11 +719,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const script = [
         "#!/bin/bash",
         "CONTAINER_READY=0",
-        "for i in $(seq 1 30); do",
+        "for i in $(seq 1 90); do",
         `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
         "  sleep 2",
         "done",
-        `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 60s"; exit 1; fi`,
+        `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
         `${envSetup}${cmdChain}`,
       ].join("\n");
 
@@ -564,7 +738,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         InstanceIds: [instanceId],
         DocumentName: "AWS-RunShellScript",
         Parameters: { commands: [script] },
-        TimeoutSeconds: 120,
+        TimeoutSeconds: 300,
       }));
 
       const commandId = sendResult.Command?.CommandId;

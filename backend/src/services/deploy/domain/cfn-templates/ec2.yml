@@ -376,7 +376,7 @@ Resources:
 
                 # Append user env vars (these override the defaults above)
                 # Strip inline comments (# ...) from values that look like .env comments
-                # Values are wrapped in double quotes to handle spaces (e.g. MAIL_FROM_NAME="Cofidis Italia")
+                # Docker --env-file format: KEY=value (no quotes — Docker handles spaces correctly)
                 cat /tmp/env-vars.json | python3 -c "
                 import sys, json, re
                 try:
@@ -384,9 +384,7 @@ Resources:
                     val = e['value']
                     # Strip inline comments: space(s) before # indicates a comment
                     val = re.sub(r'\s+#.*$', '', val)
-                    # Escape any double quotes inside the value
-                    val = val.replace('\"', '\\\\\"')
-                    print(e['name'] + '=\"' + val + '\"')
+                    print(e['name'] + '=' + val)
                 except: pass
                 " >> /tmp/${AppName}.env 2>/dev/null
 

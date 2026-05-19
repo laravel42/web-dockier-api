@@ -101,9 +101,9 @@ async function waitForAppReady(deploymentId: string, appUrl: string): Promise<bo
       return null;
     },
     intervalMs: 15_000,
-    timeoutMs: 300_000,
+    timeoutMs: 150_000,
     onTimeout: async () => {
-      await appendLog(deploymentId, `[${ts()}] ⚠ Health check timed out after 300s — the app may still need a moment`);
+      await appendLog(deploymentId, `[${ts()}] ⚠ Health check timed out after 150s — the app may still need a moment`);
     },
   });
 
@@ -123,7 +123,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
   const { data: current } = await db.from("deployments").select("status").eq("id", deploymentId).maybeSingle();
   if (current?.status === "building" || current?.status === "deploying") return;
 
-  const repoName = event.repo.split("/").pop() || "app";
+  const repoName = (event.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
   const shortId = deploymentId.slice(0, 8);
 
   // Fetch provider credentials
@@ -380,13 +380,48 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
           const selfHostedServices = (event.services || []).filter(s => s.mode === "vps").map(s => s.type);
           const envOverrides: string[] = [];
           if (selfHostedServices.includes("database")) {
-            // Replace DB_HOST if it exists, otherwise append it
             envOverrides.push(`docker exec ${containerName} sh -c 'grep -q "^DB_HOST=" /var/www/html/.env && sed -i "s/^DB_HOST=.*/DB_HOST=host.docker.internal/" /var/www/html/.env || echo "DB_HOST=host.docker.internal" >> /var/www/html/.env'`);
           }
           if (selfHostedServices.includes("cache") || selfHostedServices.includes("broadcasting")) {
             envOverrides.push(`docker exec ${containerName} sh -c 'grep -q "^REDIS_HOST=" /var/www/html/.env && sed -i "s/^REDIS_HOST=.*/REDIS_HOST=host.docker.internal/" /var/www/html/.env || echo "REDIS_HOST=host.docker.internal" >> /var/www/html/.env'`);
           }
           const envFixCmd = envOverrides.length > 0 ? envOverrides.join(" && ") + " && " : "";
+
+          // Build a fresh .env file from the current env vars and write it to the host.
+          // This ensures the container gets the latest env vars even on redeploy
+          // (cfn-hup may not have re-run yet after CloudFormation update).
+          // Instead of embedding env vars in the script (which breaks with special chars),
+          // we upload them to S3 and download on the instance.
+          const currentEnvVars = event.envVars || [];
+          let envS3DownloadCmd = "";
+          if (isLaravel && currentEnvVars.length > 0) {
+            // Build .env content (KEY=value format, quote only when needed)
+            const envContent = currentEnvVars
+              .map(v => {
+                const val = v.value;
+                const needsQuotes = /[\s#"'\\]/.test(val) || val === "";
+                return needsQuotes
+                  ? `${v.name}="${val.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+                  : `${v.name}=${val}`;
+              })
+              .join("\n");
+
+            // Upload to S3
+            const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+            const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+            const sts = new STSClient({ region, credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret } });
+            const identity = await sts.send(new GetCallerIdentityCommand({}));
+            const accountId = identity.Account || "";
+            const envBucket = `image-builder-templates-${accountId}`;
+            const envKey = `env-files/${containerName}-postdeploy.env`;
+            const s3 = new S3Client({ region, credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret } });
+            await s3.send(new PutObjectCommand({ Bucket: envBucket, Key: envKey, Body: envContent, ContentType: "text/plain" }));
+
+            envS3DownloadCmd = `aws s3 cp s3://${envBucket}/${envKey} /tmp/${containerName}.env --region ${region}`;
+          }
+
+          // On redeploy, the host .env file (/tmp/${containerName}.env) was written by cfn-init
+          // with defaults + user env vars. Just copy it into the container and apply overrides.
           const envSetup = isLaravel
             ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && ${envFixCmd}`
             : "";

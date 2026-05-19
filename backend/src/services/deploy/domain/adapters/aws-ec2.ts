@@ -66,6 +66,7 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     const templateBucket = `${codebuildProject}-templates-${accountId}`;
     const stackName = stackNameFor(repoName);
     const containerPort = ctx.detectedStack.port || 3000;
+    await appendLog(`ℹ Stack: ${stackName} | Port: ${containerPort}`);
 
     // 1. Read the ec2.yml template
     const templateBody = readCfnTemplate("ec2.yml");
@@ -93,6 +94,8 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     if (subnetIds.length === 0) {
       throw new Error("No subnets found in the default VPC for EC2 deployment.");
     }
+    await appendLog(`✓ VPC: ${vpcId} | Subnet: ${subnetIds[0]}`);
+
 
     // 4. Derive SelfHostedServices from event context
     const selfHostedServices: string[] = [];
@@ -164,6 +167,7 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
 
     await cleanupStuckStack(cfn, stackName, appendLog);
 
+    await appendLog("ℹ Creating/updating CloudFormation stack...");
     const { isUpdate, noUpdatesResult } = await createOrUpdateStack({
       cfn,
       stackName,

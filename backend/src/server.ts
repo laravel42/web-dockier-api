@@ -16,6 +16,8 @@ async function start() {
     host: "0.0.0.0",
   });
 
+  console.log(`\n🚀 Backend v2025-05-18-C — server running on port ${env.PORT} (service: ${serviceName})\n`);
+
   // Graceful shutdown
   const shutdown = async () => {
     await app.close();
