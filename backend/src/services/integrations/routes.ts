@@ -22,6 +22,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/teams",
     {
+      preHandler: app.requireAuth,
       schema: {
         tags: ["integrations"],
         summary: "List PM teams/containers",
@@ -41,6 +42,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/team-projects",
     {
+      preHandler: app.requireAuth,
       schema: {
         tags: ["integrations"],
         summary: "List projects within team",
@@ -59,6 +61,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/team-members",
     {
+      preHandler: app.requireAuth,
       schema: {
         tags: ["integrations"],
         summary: "List team members",
@@ -77,6 +80,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/issues",
     {
+      preHandler: app.requireAuth,
       schema: {
         tags: ["integrations"],
         summary: "Create PM issue/ticket",
