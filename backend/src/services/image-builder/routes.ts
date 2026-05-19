@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import { appendFileSync } from "node:fs";
 import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
@@ -11,12 +10,6 @@ import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus, resolveAwsCreden
 import { createBuildspecPreview } from "./domain/buildspec.js";
 import { bundleAndUploadSource } from "./domain/source-bundler.js";
 import { requireWebhookSignature, escapePostgrestFilter } from "../../shared/security.js";
-
-const DEBUG_LOG = "/tmp/deploy-status-debug.log";
-function debugLog(msg: string) {
-  const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
-  appendFileSync(DEBUG_LOG, `[${ts}] ${msg}\n`);
-}
 
 function rowToBuild(row: any) {
   return {
@@ -408,11 +401,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      debugLog(` HIT — buildId=${request.params.buildId}`);
+      app.log.debug(` HIT — buildId=${request.params.buildId}`);
       const auth = request.auth!;
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) { debugLog(` Build not found`); throw app.httpErrors.notFound("Build not found"); }
-      if (data.app_id !== auth.appId) { debugLog(` Forbidden`); throw app.httpErrors.forbidden("Not your build"); }
+      if (error || !data) { app.log.debug(` Build not found`); throw app.httpErrors.notFound("Build not found"); }
+      if (data.app_id !== auth.appId) { app.log.debug(` Forbidden`); throw app.httpErrors.forbidden("Not your build"); }
       const build = rowToBuild(data);
 
       // If we already have the appUrl cached, return immediately
@@ -456,7 +449,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           // This handles the case where the DeployLambda failed or SNS didn't fire.
           // Note: if the frontend is polling deploy-status, CodeBuild has already succeeded
           // even if the DB status hasn't been updated yet.
-          debugLog(` No stack found. build.status=${build.status}, image_uri=${data.image_uri || ""}, buildMetadata.imageUri=${build.buildMetadata.imageUri || ""}`);
+          app.log.debug(` No stack found. build.status=${build.status}, image_uri=${data.image_uri || ""}, buildMetadata.imageUri=${build.buildMetadata.imageUri || ""}`);
           if (build.buildMetadata.imageUri || data.image_uri || build.status === "succeeded" || build.status === "submitted" || build.status === "in_progress") {
             // Derive image URI: if not cached, construct from account/region/repo
             let imageUri = build.buildMetadata.imageUri || data.image_uri || "";
@@ -477,13 +470,13 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
             const deployParams: Record<string, unknown> = buildMetadata.deployParams
               ? JSON.parse(buildMetadata.deployParams as string)
               : {};
-            debugLog(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${((deployParams.envVars as unknown[]) || []).length}, raw deployParams field: ${buildMetadata.deployParams ? "present" : "MISSING"}`);
+            app.log.debug(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${((deployParams.envVars as unknown[]) || []).length}, raw deployParams field: ${buildMetadata.deployParams ? "present" : "MISSING"}`);
 
             // Only attempt creation if the build finished (give Lambda a few seconds)
             const finishedAt = data.finished_at ? new Date(data.finished_at).getTime() : 0;
             const elapsed = finishedAt > 0 ? Math.abs(Date.now() - finishedAt) : 999_999;
             if (elapsed > 30_000 && imageUri) {
-              debugLog(` Fallback triggered — imageUri=${imageUri}, elapsed=${elapsed}ms`);
+              app.log.debug(` Fallback triggered — imageUri=${imageUri}, elapsed=${elapsed}ms`);
               try {
                 // Get VPC and subnet
                 const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await import("@aws-sdk/client-ec2");
@@ -547,7 +540,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
                         ContentType: "application/json",
                       }));
                       params.push({ ParameterKey: "EnvVarsS3Uri", ParameterValue: `s3://${templateBucket}/${envVarsKey}` });
-                      debugLog(`Env vars uploaded to S3 (${envVarsJson.length} chars)`);
+                      app.log.debug(`Env vars uploaded to S3 (${envVarsJson.length} chars)`);
                     } else {
                       params.push({ ParameterKey: "EnvVarsJson", ParameterValue: envVarsJson });
                     }
@@ -575,7 +568,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
                       ],
                       OnFailure: "ROLLBACK",
                     }));
-                    debugLog(`Created CloudFormation stack ${stackName} as fallback`);
+                    app.log.debug(`Created CloudFormation stack ${stackName} as fallback`);
                   } catch (createErr: any) {
                     if (createErr.name?.includes("AlreadyExists") || createErr.message?.includes("already exists")) {
                       // Stack exists — update it with new image and env vars
@@ -587,12 +580,12 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
                           Parameters: params,
                           Capabilities: ["CAPABILITY_NAMED_IAM"],
                         }));
-                        debugLog(`Updated existing CloudFormation stack ${stackName}`);
+                        app.log.debug(`Updated existing CloudFormation stack ${stackName}`);
                       } catch (updateErr: any) {
                         if (updateErr.message?.includes("No updates")) {
-                          debugLog(`Stack ${stackName} already up to date`);
+                          app.log.debug(`Stack ${stackName} already up to date`);
                         } else {
-                          debugLog(`Stack update failed: ${updateErr.message}`);
+                          app.log.debug(`Stack update failed: ${updateErr.message}`);
                         }
                       }
                     } else {
@@ -603,13 +596,13 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
               } catch (createErr: any) {
                 // If AlreadyExists, the Lambda may have just created it — that's fine
                 if (!createErr.name?.includes("AlreadyExists") && !createErr.message?.includes("already exists")) {
-                  debugLog(` Fallback stack creation failed: ${createErr.message}`);
+                  app.log.debug(` Fallback stack creation failed: ${createErr.message}`);
                 } else {
-                  debugLog(` Stack already exists (race with Lambda)`);
+                  app.log.debug(` Stack already exists (race with Lambda)`);
                 }
               }
             } else {
-              debugLog(` Fallback skipped — imageUri="${imageUri}", elapsed=${elapsed}ms`);
+              app.log.debug(` Fallback skipped — imageUri="${imageUri}", elapsed=${elapsed}ms`);
             }
           }
           return { status: "deploying", appUrl: "", stackName };
@@ -639,7 +632,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         }
         return { status: "deploying", appUrl: "", stackName };
       } catch (err: any) {
-        debugLog(` Error: ${err.message}`);
+        app.log.debug(` Error: ${err.message}`);
         if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
         return { status: "deploying", appUrl: "", stackName };
       }
