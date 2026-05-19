@@ -12,3 +12,4 @@ CREATE TABLE IF NOT EXISTS roles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_roles_app ON roles(app_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_app_name ON roles(app_id, name);

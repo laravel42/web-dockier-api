@@ -88,7 +88,6 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         name: request.body.name.trim(),
         description: request.body.description?.trim() ?? "",
         permissions: [...new Set(request.body.permissions)],
-        created_at: new Date().toISOString(),
       };
       const { error } = await supabaseAdmin.from("roles").insert(payload);
       if (error) throw app.httpErrors.badRequest(error.message);
@@ -165,6 +164,15 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         .eq("app_id", auth.appId)
         .maybeSingle();
       if (!existing) throw app.httpErrors.notFound("Role not found");
+
+      // Prevent deleting a role that's still assigned to users
+      const { count } = await supabaseAdmin
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("role_id", request.params.roleId);
+      if (count && count > 0) {
+        throw app.httpErrors.conflict(`Cannot delete role — it is still assigned to ${count} user(s)`);
+      }
 
       const { error } = await supabaseAdmin
         .from("roles")

@@ -178,7 +178,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       );
       if (membershipError) throw app.httpErrors.internalServerError(membershipError.message);
 
-      await seedDefaultRoles(demoTenantId);
+      const { adminRoleId } = await seedDefaultRoles(demoTenantId);
+      await supabaseAdmin.from("users").update({ role_id: adminRoleId }).eq("id", demoUserId);
 
       return {
         session: {
@@ -345,7 +346,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           throw app.httpErrors.internalServerError(membershipError?.message ?? "Failed to create membership");
         }
 
-        await seedDefaultRoles(org.id);
+        const { memberRoleId } = await seedDefaultRoles(org.id);
+        await supabaseAdmin.from("users").update({ role_id: memberRoleId }).eq("id", userId);
 
         selected = {
           id: createdMembership.id,
@@ -400,7 +402,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: user, error: userError } = await supabaseAdmin
         .from("users")
-        .select("id,email,name,role")
+        .select("id,email,name,role,role_id")
         .eq("id", auth.userId)
         .maybeSingle();
       if (userError) throw app.httpErrors.internalServerError(userError.message);
@@ -417,25 +419,14 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
       const currentRole = (membership?.role ?? user.role) as MembershipRole;
 
-      // Look up the actual role record for this tenant to get the DB role ID.
-      // If no roles exist yet (tenant created before roles migration), seed them now.
-      const roleName = currentRole === "admin" ? "Admin" : "Member";
-      let { data: roleRecord } = await supabaseAdmin
-        .from("roles")
-        .select("id")
-        .eq("app_id", auth.tenantId)
-        .eq("name", roleName)
-        .maybeSingle();
+      // Look up the role directly from the user's role_id column.
+      // If not set yet (tenant created before roles migration), seed roles and assign.
+      let roleId = user.role_id ?? "";
 
-      if (!roleRecord) {
-        await seedDefaultRoles(auth.tenantId);
-        const { data: seeded } = await supabaseAdmin
-          .from("roles")
-          .select("id")
-          .eq("app_id", auth.tenantId)
-          .eq("name", roleName)
-          .maybeSingle();
-        roleRecord = seeded;
+      if (!roleId) {
+        const seeded = await seedDefaultRoles(auth.tenantId);
+        roleId = currentRole === "admin" ? seeded.adminRoleId : seeded.memberRoleId;
+        await supabaseAdmin.from("users").update({ role_id: roleId }).eq("id", auth.userId);
       }
 
       const memberships = await listMembershipsForUser(auth.userId);
@@ -446,7 +437,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         name: user.name,
         tenantId: auth.tenantId,
         role: currentRole,
-        roleId: roleRecord?.id ?? "",
+        roleId,
         appId: auth.tenantId,
         memberships,
       };
@@ -503,7 +494,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       });
       if (membershipError) throw app.httpErrors.badRequest(membershipError.message);
 
-      await seedDefaultRoles(org.id);
+      const { adminRoleId } = await seedDefaultRoles(org.id);
+      await supabaseAdmin.from("users").update({ role_id: adminRoleId }).eq("id", auth.userId);
 
       return {
         tenantId: org.id,

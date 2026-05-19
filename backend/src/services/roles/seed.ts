@@ -35,27 +35,44 @@ const DEFAULT_ROLES = [
   },
 ];
 
+export interface SeededRoles {
+  adminRoleId: string;
+  memberRoleId: string;
+}
+
 /**
- * Insert default roles for a tenant. Idempotent — skips if roles already exist.
+ * Ensure default roles exist for a tenant. Uses upsert on (app_id, name)
+ * so it's atomic, idempotent, and handles partial seeding (e.g., if only
+ * one default role exists).
+ *
+ * Returns the admin and member role IDs.
  */
-export async function seedDefaultRoles(appId: string): Promise<void> {
-  const { data: existing } = await supabaseAdmin
-    .from("roles")
-    .select("id")
-    .eq("app_id", appId)
-    .limit(1);
-
-  if (existing && existing.length > 0) return;
-
+export async function seedDefaultRoles(appId: string): Promise<SeededRoles> {
   const now = new Date().toISOString();
-  const rows = DEFAULT_ROLES.map((role) => ({
-    id: randomUUID(),
-    app_id: appId,
-    name: role.name,
-    description: role.description,
-    permissions: role.permissions,
-    created_at: now,
-  }));
+  const adminId = randomUUID();
+  const memberId = randomUUID();
 
-  await supabaseAdmin.from("roles").insert(rows);
+  const rows = [
+    { id: adminId, app_id: appId, name: DEFAULT_ROLES[0].name, description: DEFAULT_ROLES[0].description, permissions: DEFAULT_ROLES[0].permissions, created_at: now },
+    { id: memberId, app_id: appId, name: DEFAULT_ROLES[1].name, description: DEFAULT_ROLES[1].description, permissions: DEFAULT_ROLES[1].permissions, created_at: now },
+  ];
+
+  // Upsert on (app_id, name) — if the role already exists, don't overwrite it.
+  // ignoreDuplicates ensures existing rows keep their current id/permissions.
+  await supabaseAdmin.from("roles").upsert(rows, { onConflict: "app_id,name", ignoreDuplicates: true });
+
+  // Fetch the actual IDs (may differ from adminId/memberId if rows already existed)
+  const { data: seeded } = await supabaseAdmin
+    .from("roles")
+    .select("id,name")
+    .eq("app_id", appId)
+    .in("name", [DEFAULT_ROLES[0].name, DEFAULT_ROLES[1].name]);
+
+  const adminRole = seeded?.find((r) => r.name === DEFAULT_ROLES[0].name);
+  const memberRole = seeded?.find((r) => r.name === DEFAULT_ROLES[1].name);
+
+  return {
+    adminRoleId: adminRole?.id ?? "",
+    memberRoleId: memberRole?.id ?? adminRole?.id ?? "",
+  };
 }
