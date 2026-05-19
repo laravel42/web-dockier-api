@@ -470,11 +470,13 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
               const shortTag = commitSha ? commitSha.slice(0, 12) : "latest";
               imageUri = `${accountId}.dkr.ecr.${credentials.region}.amazonaws.com/${imageRepoName}:${shortTag}`;
             }
-            const buildMetadata: Record<string, unknown> = typeof data.build_metadata === "string" && data.build_metadata
+            const buildMetadata: Record<string, unknown> = data.build_metadata
               ? JSON.parse(data.build_metadata)
-              : (typeof data.build_metadata === "object" ? data.build_metadata as Record<string, unknown> : {});
+              : {};
             const containerPort = (buildMetadata.containerPort as string) || "3000";
-            const deployParams: Record<string, unknown> = buildMetadata.deployParams ? (typeof buildMetadata.deployParams === "string" ? JSON.parse(buildMetadata.deployParams as string) : buildMetadata.deployParams as Record<string, unknown>) : {};
+            const deployParams: Record<string, unknown> = buildMetadata.deployParams
+              ? JSON.parse(buildMetadata.deployParams as string)
+              : {};
             debugLog(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${((deployParams.envVars as unknown[]) || []).length}, raw deployParams field: ${buildMetadata.deployParams ? "present" : "MISSING"}`);
 
             // Only attempt creation if the build finished (give Lambda a few seconds)
