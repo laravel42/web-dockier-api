@@ -1,39 +1,16 @@
 /**
- * Seed default roles for a new tenant.
+ * Seed default roles for a tenant.
  *
  * Called during organization creation to give each tenant their own
- * copy of the admin/member roles that they can customize freely.
+ * copy of the role templates that they can customize freely.
+ *
+ * Also seeds the global `permissions` table if not already populated.
  */
 
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
-
-const DEFAULT_ROLES = [
-  {
-    name: "Admin",
-    description: "Can manage tenant settings, users, memberships, and projects.",
-    permissions: [
-      "tenant.manage",
-      "membership.manage",
-      "project.manage",
-      "user.manage",
-      "user:view",
-      "user:manage",
-      "deploy:view",
-      "deploy:create",
-      "project:delete",
-      "credential:manage",
-      "notification:manage",
-      "organization:manage",
-      "scan:manage",
-    ],
-  },
-  {
-    name: "Member",
-    description: "Can access tenant resources within assigned organization scope.",
-    permissions: ["project.read", "user.read", "user:view", "deploy:view"],
-  },
-];
+import { PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
+import { DEFAULT_ROLE_TEMPLATES, SYSTEM_ROLE_KEYS } from "../../shared/permissions/role-templates.js";
 
 export interface SeededRoles {
   adminRoleId: string;
@@ -41,38 +18,95 @@ export interface SeededRoles {
 }
 
 /**
- * Ensure default roles exist for a tenant. Uses upsert on (organization_id, name)
- * so it's atomic, idempotent, and handles partial seeding (e.g., if only
- * one default role exists).
+ * Ensure all permission definitions exist in the `permissions` table.
+ * Uses upsert so it's idempotent.
+ */
+export async function seedPermissions(): Promise<void> {
+  const rows = PERMISSION_DEFINITIONS.map((def) => ({
+    id: def.key, // Use the key as the ID for simplicity
+    key: def.key,
+    resource: def.resource,
+    action: def.action,
+    description: def.description,
+  }));
+
+  await supabaseAdmin.from("permissions").upsert(rows, { onConflict: "key", ignoreDuplicates: true });
+}
+
+/**
+ * Seed default roles for an organization.
  *
- * Returns the admin and member role IDs.
+ * Creates org-scoped role rows from the backend templates and assigns
+ * permissions via the `role_permissions` join table.
+ *
+ * Idempotent: if a role with the same system_key already exists for
+ * this org, it is not overwritten.
  */
 export async function seedDefaultRoles(organizationId: string): Promise<SeededRoles> {
-  const now = new Date().toISOString();
-  const adminId = randomUUID();
-  const memberId = randomUUID();
+  // Ensure permissions exist first
+  await seedPermissions();
 
-  const rows = [
-    { id: adminId, organization_id: organizationId, name: DEFAULT_ROLES[0].name, description: DEFAULT_ROLES[0].description, permissions: DEFAULT_ROLES[0].permissions, created_at: now },
-    { id: memberId, organization_id: organizationId, name: DEFAULT_ROLES[1].name, description: DEFAULT_ROLES[1].description, permissions: DEFAULT_ROLES[1].permissions, created_at: now },
-  ];
+  const roleIds: Record<string, string> = {};
 
-  // Upsert on (organization_id, name) — if the role already exists, don't overwrite it.
-  // ignoreDuplicates ensures existing rows keep their current id/permissions.
-  await supabaseAdmin.from("roles").upsert(rows, { onConflict: "organization_id,name", ignoreDuplicates: true });
+  for (const template of DEFAULT_ROLE_TEMPLATES) {
+    const roleId = randomUUID();
 
-  // Fetch the actual IDs (may differ from adminId/memberId if rows already existed)
-  const { data: seeded } = await supabaseAdmin
-    .from("roles")
-    .select("id,name")
-    .eq("organization_id", organizationId)
-    .in("name", [DEFAULT_ROLES[0].name, DEFAULT_ROLES[1].name]);
+    // Check if role already exists for this org+system_key
+    const { data: existing } = await supabaseAdmin
+      .from("roles")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("system_key", template.systemKey)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  const adminRole = seeded?.find((r) => r.name === DEFAULT_ROLES[0].name);
-  const memberRole = seeded?.find((r) => r.name === DEFAULT_ROLES[1].name);
+    let finalRoleId: string;
+
+    if (existing) {
+      finalRoleId = existing.id;
+    } else {
+      const { error } = await supabaseAdmin.from("roles").insert({
+        id: roleId,
+        organization_id: organizationId,
+        name: template.name,
+        description: template.description,
+        system_key: template.systemKey,
+        is_system: template.isSystem,
+        is_editable: template.isEditable,
+        is_deletable: template.isDeletable,
+      });
+      if (error) {
+        // Race condition: another request created it. Fetch the existing one.
+        const { data: raceExisting } = await supabaseAdmin
+          .from("roles")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("system_key", template.systemKey)
+          .is("deleted_at", null)
+          .maybeSingle();
+        finalRoleId = raceExisting?.id ?? roleId;
+      } else {
+        finalRoleId = roleId;
+      }
+
+      // Seed role_permissions for this role
+      const permRows = template.permissions.map((permKey) => ({
+        role_id: finalRoleId,
+        permission_id: permKey, // permission.id === permission.key
+      }));
+
+      if (permRows.length > 0) {
+        await supabaseAdmin
+          .from("role_permissions")
+          .upsert(permRows, { onConflict: "role_id,permission_id", ignoreDuplicates: true });
+      }
+    }
+
+    roleIds[template.systemKey] = finalRoleId;
+  }
 
   return {
-    adminRoleId: adminRole?.id ?? "",
-    memberRoleId: memberRole?.id ?? adminRole?.id ?? "",
+    adminRoleId: roleIds[SYSTEM_ROLE_KEYS.ADMIN] ?? "",
+    memberRoleId: roleIds[SYSTEM_ROLE_KEYS.MEMBER] ?? "",
   };
 }

@@ -8,6 +8,7 @@ import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domain/planner.js";
 import { destroyDeployment } from "./domain/destroy.js";
 import { applyDeploymentWebhookUpdate, createDeploymentRecord } from "./domain/processor.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveDeployTemplate } from "./domain/templates.js";
 import { executePipeline } from "./domain/pipeline.js";
 import { enqueueDeployment } from "./domain/worker.js";
@@ -49,7 +50,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/providers",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["deploy"],
         summary: "Add deployment provider credentials",
@@ -87,7 +88,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.get(
     "/deploy/providers",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["deploy"],
         summary: "List deployment providers",
@@ -109,7 +110,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.put(
     "/deploy/providers/:providerId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["deploy"],
         summary: "Update provider label or secret",
@@ -145,7 +146,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.delete(
     "/deploy/providers/:providerId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["deploy"],
         summary: "Delete provider and dependent deployments",
@@ -206,7 +207,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.get(
     "/deploy/ssh-keys",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["deploy"],
         summary: "List SSH keys",
@@ -248,7 +249,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/ssh-keys",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["deploy"],
         summary: "Add SSH key",
@@ -296,7 +297,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.delete(
     "/deploy/ssh-keys/:keyId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["deploy"],
         summary: "Delete SSH key",
@@ -315,7 +316,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/deployments",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
       schema: {
         tags: ["deploy"],
         summary: "Create deployment",
@@ -411,7 +412,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.get(
     "/deploy/deployments",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["deploy"],
         summary: "List deployments",
@@ -432,7 +433,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.get(
     "/deploy/deployments/:deploymentId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["deploy"],
         summary: "Get deployment",
@@ -479,7 +480,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/deployments/:deploymentId/destroy",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
       schema: {
         tags: ["deploy"],
         summary: "Destroy deployment",
@@ -506,7 +507,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/tofu/generate",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
       schema: {
         tags: ["deploy"],
         summary: "Generate IaC script preview",

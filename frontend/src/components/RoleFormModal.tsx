@@ -14,14 +14,6 @@ interface PermissionGroup {
 
 const PERMISSION_GROUPS: PermissionGroup[] = [
   {
-    name: "Organization",
-    permissions: [
-      { key: "organization:manage", label: "Allow members to manage the organization" },
-      { key: "organization:delete", label: "Allow members to delete the organization" },
-      { key: "organization:view", label: "Allow members to view the organization", locked: true },
-    ],
-  },
-  {
     name: "Credential",
     permissions: [
       { key: "credential:view", label: "Allow members to view credentials", locked: true },
@@ -77,6 +69,13 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "user:view", label: "Allow members to view users" },
       { key: "user:manage", label: "Allow members to manage users" },
       { key: "user:delete", label: "Allow members to delete users" },
+    ],
+  },
+  {
+    name: "Roles",
+    permissions: [
+      { key: "role:view", label: "Allow members to view roles and permissions", locked: true },
+      { key: "role:manage", label: "Allow members to create, edit, and delete roles" },
     ],
   },
   {

@@ -26,12 +26,12 @@ export default function Settings() {
     { key: "profile", label: "Profile", visible: true },
     { key: "security", label: "Security", visible: true },
     { key: "users", label: "Users", visible: has("user:view") || has("user:manage") },
-    { key: "roles", label: "Roles", visible: has("user:manage") },
-    { key: "providers", label: "Providers", visible: has("credential:manage") },
-    { key: "ssh-keys", label: "SSH Keys", visible: has("credential:manage") },
-    { key: "source-control", label: "Source Control", visible: has("credential:manage") },
-    { key: "channels", label: "Notification Channels", visible: has("notification:manage") },
-    { key: "integrations", label: "Integrations", visible: has("organization:manage") },
+    { key: "roles", label: "Roles", visible: has("role:view") || has("role:manage") },
+    { key: "providers", label: "Providers", visible: has("credential:view") || has("credential:manage") },
+    { key: "ssh-keys", label: "SSH Keys", visible: has("credential:view") || has("credential:manage") },
+    { key: "source-control", label: "Source Control", visible: has("credential:view") || has("credential:manage") },
+    { key: "channels", label: "Notification Channels", visible: has("notification:view") || has("notification:manage") },
+    { key: "integrations", label: "Integrations", visible: has("credential:view") || has("credential:manage") },
     { key: "security-rules", label: "Security Tools", visible: has("scan:manage") },
   ];
 

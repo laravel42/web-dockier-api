@@ -1,5 +1,4 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
-export type MembershipRole = "admin" | "member";
 
 export type Database = {
   public: {
@@ -15,8 +14,6 @@ export type Database = {
           country: string;
           language: string;
           timezone: string;
-          role: MembershipRole | null;
-          role_id: string | null;
           two_factor_enabled: boolean;
           two_factor_secret: string | null;
           created_at: string;
@@ -45,12 +42,55 @@ export type Database = {
           id: string;
           organization_id: string;
           user_id: string;
-          role: MembershipRole;
+          role_id: string | null;
+          is_owner: boolean;
+          status: string;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["organization_memberships"]["Row"]> &
-          Pick<Database["public"]["Tables"]["organization_memberships"]["Row"], "organization_id" | "user_id" | "role">;
+          Pick<Database["public"]["Tables"]["organization_memberships"]["Row"], "organization_id" | "user_id">;
         Update: Partial<Database["public"]["Tables"]["organization_memberships"]["Row"]>;
+        Relationships: [];
+      };
+      permissions: {
+        Row: {
+          id: string;
+          key: string;
+          resource: string;
+          action: string;
+          description: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["permissions"]["Row"]> &
+          Pick<Database["public"]["Tables"]["permissions"]["Row"], "id" | "key" | "resource" | "action">;
+        Update: Partial<Database["public"]["Tables"]["permissions"]["Row"]>;
+        Relationships: [];
+      };
+      role_permissions: {
+        Row: {
+          role_id: string;
+          permission_id: string;
+        };
+        Insert: Database["public"]["Tables"]["role_permissions"]["Row"];
+        Update: Partial<Database["public"]["Tables"]["role_permissions"]["Row"]>;
+        Relationships: [];
+      };
+      roles: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          description: string;
+          system_key: string | null;
+          is_system: boolean;
+          is_editable: boolean;
+          is_deletable: boolean;
+          deleted_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["roles"]["Row"]> &
+          Pick<Database["public"]["Tables"]["roles"]["Row"], "id" | "organization_id" | "name">;
+        Update: Partial<Database["public"]["Tables"]["roles"]["Row"]>;
         Relationships: [];
       };
       projects: {
@@ -71,20 +111,6 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["projects"]["Row"]> &
           Pick<Database["public"]["Tables"]["projects"]["Row"], "id" | "name" | "repository" | "branch" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["projects"]["Row"]>;
-        Relationships: [];
-      };
-      roles: {
-        Row: {
-          id: string;
-          organization_id: string;
-          name: string;
-          description: string;
-          permissions: string[];
-          created_at: string;
-        };
-        Insert: Partial<Database["public"]["Tables"]["roles"]["Row"]> &
-          Pick<Database["public"]["Tables"]["roles"]["Row"], "id" | "organization_id" | "name">;
-        Update: Partial<Database["public"]["Tables"]["roles"]["Row"]>;
         Relationships: [];
       };
       git_connections: {
@@ -392,9 +418,7 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
-    Enums: {
-      membership_role: MembershipRole;
-    };
+    Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 };

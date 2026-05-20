@@ -11,6 +11,7 @@ import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from ".
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 
 function parseRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
   const normalized = repoUrl.replace(/\.git$/, "");
@@ -48,7 +49,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["git-integration"],
         summary: "Add git connection",
@@ -101,7 +102,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "List git connections",
@@ -132,7 +133,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.delete(
     "/git/connections/:connectionId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["git-integration"],
         summary: "Delete git connection",
@@ -154,7 +155,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.put(
     "/git/connections/:connectionId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["git-integration"],
         summary: "Update git connection",
@@ -204,7 +205,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repos",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "List repos for connection",
@@ -263,7 +264,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-branches",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "List branches for owner/repo",
@@ -285,7 +286,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/branches",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "List branches for configured repo URL",
@@ -309,7 +310,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   app.delete(
     "/git/stats-cache",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Invalidate stats cache",
@@ -318,8 +319,9 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request: any) => {
+      const auth = request.auth!;
       const query = request.query as { repo: string; branch?: string };
-      let del = db.from("stats_cache").delete().eq("repo", query.repo);
+      let del = db.from("stats_cache").delete().eq("organization_id", auth.tenantId).eq("repo", query.repo);
       if (query.branch) del = del.eq("branch", query.branch);
       await del;
       return { done: true as const };
@@ -329,7 +331,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   app.delete(
     "/git/stack-cache",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Invalidate stack cache",
@@ -338,8 +340,9 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request: any) => {
+      const auth = request.auth!;
       const query = request.query as { repo: string; branch?: string };
-      let del = db.from("stack_cache").delete().eq("repo", query.repo);
+      let del = db.from("stack_cache").delete().eq("organization_id", auth.tenantId).eq("repo", query.repo);
       if (query.branch) del = del.eq("branch", query.branch);
       await del;
       return { done: true as const };
@@ -349,7 +352,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   app.delete(
     "/git/analysis-cache",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Invalidate analysis cache",
@@ -358,10 +361,10 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request: any) => {
-      const query = request.query as { repo?: string; branch?: string };
-      let del = db.from("analysis_cache").delete();
-      if (query.repo) del = del.eq("repo", query.repo);
-      if (query.branch) del = del.eq("branch", query.branch);
+      const auth = request.auth!;
+      let del = db.from("analysis_cache").delete().eq("organization_id", auth.tenantId);
+      if (request.query.repo) del = del.eq("repo", request.query.repo);
+      if (request.query.branch) del = del.eq("branch", request.query.branch);
       await del;
       return { deleted: true as const };
     },
@@ -370,7 +373,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/issues",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE),
       schema: {
         tags: ["git-integration"],
         summary: "Create Git issue",
@@ -415,7 +418,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/pull",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Fetch latest commits as pull preview",
@@ -456,7 +459,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/recent-commits",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Get recent commits",
@@ -517,7 +520,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-tree",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Get repository file tree",
@@ -541,7 +544,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/file-content",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Get file content from repository",
@@ -564,7 +567,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-members",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "List repo members",
@@ -607,7 +610,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-stats",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Get repository stats",
@@ -741,7 +744,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/stack-analysis",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Get stack analysis",
@@ -808,7 +811,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/sensitive-data",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Scan repository for sensitive schema fields",
@@ -847,7 +850,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/analyze-sensitive-data",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Analyze SQL schema with AI",
@@ -889,7 +892,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/repo-badges",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Get technology badges",
@@ -915,7 +918,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-analyze",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Analyze repository stack and deploy options",
@@ -1019,7 +1022,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/create-mr",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_CREATE_MR),
       schema: {
         tags: ["git-integration"],
         summary: "Create fix MR/PR",
@@ -1059,7 +1062,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/ai/summarize-finding",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
       schema: {
         tags: ["git-integration"],
         summary: "Summarize security finding for issue title",

@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 
 export async function registerNotificationsRoutes(app: FastifyInstance) {
@@ -12,7 +13,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.post(
     "/notifications/channels",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_MANAGE),
       schema: {
         tags: ["notifications"],
         summary: "Add notification channel",
@@ -50,7 +51,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.get(
     "/notifications/channels",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_VIEW),
       schema: {
         tags: ["notifications"],
         summary: "List notification channels",
@@ -80,7 +81,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.put(
     "/notifications/channels/:channelId/toggle",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_MANAGE),
       schema: {
         tags: ["notifications"],
         summary: "Enable or disable channel",
@@ -104,7 +105,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.delete(
     "/notifications/channels/:channelId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_MANAGE),
       schema: {
         tags: ["notifications"],
         summary: "Delete channel",
@@ -123,7 +124,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.post(
     "/notifications/send",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_SEND),
       schema: {
         tags: ["notifications"],
         summary: "Send notification to enabled channels",
@@ -182,7 +183,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.get(
     "/notifications",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_VIEW),
       schema: {
         tags: ["notifications"],
         summary: "List in-app notifications",
@@ -217,7 +218,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
   typed.put(
     "/notifications/:notificationId/read",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_VIEW),
       schema: {
         tags: ["notifications"],
         summary: "Mark notification as read",

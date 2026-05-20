@@ -8,6 +8,7 @@ import {
   pmItemSchema,
   teamMemberSchema,
 } from "./schemas.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { providers } from "./domain/providers/index.js";
 
 async function listTeams(type: string, config: Record<string, string>) {
@@ -22,7 +23,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/teams",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["integrations"],
         summary: "List PM teams/containers",
@@ -42,7 +43,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/team-projects",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["integrations"],
         summary: "List projects within team",
@@ -61,7 +62,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/team-members",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["integrations"],
         summary: "List team members",
@@ -80,7 +81,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/issues",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["integrations"],
         summary: "Create PM issue/ticket",

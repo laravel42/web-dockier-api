@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { membershipRoleSchemaValues } from "../../shared/auth.js";
 
 export const userSchema = z.object({
   id: z.string().uuid(),
@@ -9,9 +8,6 @@ export const userSchema = z.object({
   country: z.string(),
   language: z.string(),
   timezone: z.string(),
-  role: z.enum(membershipRoleSchemaValues),
-  roleId: z.enum(membershipRoleSchemaValues),
-  roleName: z.string(),
   tenantId: z.string().uuid().nullable(),
   createdAt: z.string(),
 });

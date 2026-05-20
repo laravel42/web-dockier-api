@@ -48,10 +48,10 @@ async function findAuthUserIdByEmail(
 ): Promise<string | null> {
   const lowerEmail = email.toLowerCase();
 
-  const { data: profileData } = await supabase.from("profiles").select("id,email").eq("email", email).maybeSingle();
+  const { data: profileData } = await supabase.from("profiles").select("id,email").eq("email", lowerEmail).maybeSingle();
   if (profileData?.id) return profileData.id;
 
-  const { data: appUserData } = await supabase.from("users").select("id,email").eq("email", email).maybeSingle();
+  const { data: appUserData } = await supabase.from("users").select("id,email").eq("email", lowerEmail).maybeSingle();
   if (appUserData?.id) return appUserData.id;
 
   let page = 1;
@@ -114,35 +114,65 @@ async function main() {
   });
 
   const { userId, wasCreated } = await resolveAuthUser(supabase, env);
-  const { data: seededState, error: seedError } = await supabase.rpc("seed_admin_state", {
-    _user_id: userId,
-    _email: env.ADMIN_SEED_EMAIL.toLowerCase(),
-    _display_name: env.ADMIN_SEED_DISPLAY_NAME,
-    _organization_name: env.ADMIN_SEED_ORG_NAME,
-    _organization_slug: env.ADMIN_SEED_ORG_SLUG,
-  });
-  if (seedError) throw seedError;
+  const email = env.ADMIN_SEED_EMAIL.toLowerCase();
+  const displayName = env.ADMIN_SEED_DISPLAY_NAME;
 
-  const firstSeedRow =
-    Array.isArray(seededState) && seededState.length > 0
-      ? (seededState[0] as { organization_id: string; organization_slug: string })
-      : null;
-  if (!firstSeedRow?.organization_id || !firstSeedRow.organization_slug) {
-    throw new Error("seed_admin_state did not return organization details");
-  }
+  // 1. Upsert organization
+  const { data: org, error: orgError } = await supabase
+    .from("organizations")
+    .upsert(
+      { name: env.ADMIN_SEED_ORG_NAME, slug: env.ADMIN_SEED_ORG_SLUG, created_by: userId },
+      { onConflict: "slug" },
+    )
+    .select("id, slug")
+    .single();
+  if (orgError || !org) throw orgError ?? new Error("Failed to create organization");
 
-  // Seed default roles for the organization and assign admin role to the user
-  const { adminRoleId } = await seedDefaultRoles(firstSeedRow.organization_id);
-  await supabase.from("users").update({ role_id: adminRoleId }).eq("id", userId);
+  // 2. Upsert membership (owner)
+  const { error: membershipError } = await supabase
+    .from("organization_memberships")
+    .upsert(
+      { organization_id: org.id, user_id: userId, is_owner: true, status: "active" },
+      { onConflict: "organization_id,user_id" },
+    );
+  if (membershipError) throw membershipError;
+
+  // 3. Upsert profile
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .upsert(
+      { id: userId, email, display_name: displayName, updated_at: new Date().toISOString() },
+      { onConflict: "id" },
+    );
+  if (profileError) throw profileError;
+
+  // 4. Upsert user record
+  const { error: userError } = await supabase
+    .from("users")
+    .upsert(
+      { id: userId, email, name: displayName, organization_id: org.id, created_at: new Date().toISOString() },
+      { onConflict: "id" },
+    );
+  if (userError) throw userError;
+
+  // 5. Seed default roles and assign admin role to membership
+  const { adminRoleId } = await seedDefaultRoles(org.id);
+
+  const { error: roleAssignError } = await supabase
+    .from("organization_memberships")
+    .update({ role_id: adminRoleId })
+    .eq("organization_id", org.id)
+    .eq("user_id", userId);
+  if (roleAssignError) throw roleAssignError;
 
   console.log("Admin seeder completed.");
   console.log(`Auth user: ${userId} (${wasCreated ? "created" : "existing"})`);
-  console.log(`Organization: ${firstSeedRow.organization_slug} (${firstSeedRow.organization_id})`);
-  console.log("Membership role: admin");
+  console.log(`Organization: ${org.slug} (${org.id})`);
+  console.log("Membership role: admin (owner)");
 }
 
 main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : JSON.stringify(error, null, 2);
   console.error(`Admin seeder failed: ${message}`);
   process.exit(1);
 });
