@@ -80,7 +80,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       const now = new Date().toISOString();
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         project_id: request.body.projectId,
         connection_id: request.body.connectionId,
         repo: request.body.repo,
@@ -109,7 +109,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let query = db.from("scans").select("*").eq("app_id", auth.appId).order("created_at", { ascending: false }).limit(50);
+      let query = db.from("scans").select("*").eq("organization_id", auth.tenantId).order("created_at", { ascending: false }).limit(50);
       if (request.query.projectId) query = query.eq("project_id", request.query.projectId);
       if (request.query.branch) query = query.eq("branch", request.query.branch);
       const { data, error } = await query;
@@ -133,7 +133,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("scans").select("*").eq("id", request.params.scanId).single();
       if (error || !data) throw app.httpErrors.notFound("Scan not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your scan");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
       return rowToScan(data);
     },
   );
@@ -191,9 +191,9 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db.from("scans").select("id,app_id").eq("id", request.params.scanId).single();
+      const { data: existing } = await db.from("scans").select("id,organization_id").eq("id", request.params.scanId).single();
       if (!existing) throw app.httpErrors.notFound("Scan not found");
-      if (existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your scan");
+      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
       await db.from("findings").delete().eq("scan_id", request.params.scanId);
       const { error } = await db.from("scans").delete().eq("id", request.params.scanId);
       if (error) throw app.httpErrors.badRequest(error.message);
@@ -223,7 +223,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("scans").select("*").eq("id", request.params.scanId).single();
       if (error || !data) throw app.httpErrors.notFound("Scan not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your scan");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
       await db
         .from("scans")
         .update({
@@ -256,8 +256,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       const type = request.query.type ?? "custom";
       const { data, error } = await db
         .from("custom_rules")
-        .select("id,app_id,rule_id,severity,message,pattern,extensions,enabled,type,yaml_content,created_at")
-        .or(`app_id.eq.,app_id.eq.${auth.appId}`)
+        .select("id,organization_id,rule_id,severity,message,pattern,extensions,enabled,type,yaml_content,created_at")
+        .or(`organization_id.eq.,organization_id.eq.${auth.tenantId}`)
         .eq("type", type)
         .order("rule_id", { ascending: true });
       if (error) throw app.httpErrors.internalServerError(error.message);
@@ -270,7 +270,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
           pattern: row.pattern ?? "",
           extensions: row.extensions ?? [],
           enabled: row.enabled,
-          isSystem: row.app_id === "",
+          isSystem: row.organization_id === "",
           type: row.type,
           yamlContent: row.yaml_content ?? "",
           createdAt: row.created_at,
@@ -311,7 +311,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       }
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         rule_id: request.body.ruleId,
         severity: request.body.severity,
         message: request.body.message,
@@ -362,10 +362,10 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db.from("custom_rules").select("app_id,type").eq("id", request.params.ruleDbId).single();
+      const { data: existing } = await db.from("custom_rules").select("organization_id,type").eq("id", request.params.ruleDbId).single();
       if (!existing) throw app.httpErrors.notFound("Rule not found");
-      if (existing.app_id !== "" && existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your rule");
-      if (existing.app_id === "" && request.body.enabled === undefined) {
+      if (existing.organization_id !== "" && existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your rule");
+      if (existing.organization_id === "" && request.body.enabled === undefined) {
         throw app.httpErrors.forbidden("System rules only support enable/disable");
       }
       if (request.body.pattern && existing.type === "custom") {
@@ -402,10 +402,10 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db.from("custom_rules").select("app_id").eq("id", request.params.ruleDbId).single();
+      const { data: existing } = await db.from("custom_rules").select("organization_id").eq("id", request.params.ruleDbId).single();
       if (!existing) throw app.httpErrors.notFound("Rule not found");
-      if (existing.app_id === "") throw app.httpErrors.forbidden("Cannot delete system rules");
-      if (existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your rule");
+      if (existing.organization_id === "") throw app.httpErrors.forbidden("Cannot delete system rules");
+      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your rule");
       const { error } = await db.from("custom_rules").delete().eq("id", request.params.ruleDbId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
@@ -591,7 +591,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       const table = request.body.tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
       const payload = {
         id: uuidv4(),
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         rule_id: request.body.ruleId,
         enabled: request.body.enabled,
       };

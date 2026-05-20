@@ -57,11 +57,6 @@ BEGIN
   DO UPDATE SET
     role = EXCLUDED.role;
 
-  INSERT INTO public.user_roles (user_id, role)
-  VALUES (_user_id, 'admin')
-  ON CONFLICT (user_id, role)
-  DO NOTHING;
-
   INSERT INTO public.profiles (id, email, display_name, updated_at)
   VALUES (_user_id, v_email, v_name, NOW())
   ON CONFLICT (id)
@@ -74,7 +69,6 @@ BEGIN
     id,
     email,
     name,
-    app_id,
     organization_id,
     role,
     created_at,
@@ -84,7 +78,6 @@ BEGIN
     _user_id::text,
     v_email,
     v_name,
-    v_org_id::text,
     v_org_id,
     'admin',
     NOW(),
@@ -94,7 +87,6 @@ BEGIN
   DO UPDATE SET
     email = EXCLUDED.email,
     name = EXCLUDED.name,
-    app_id = EXCLUDED.app_id,
     organization_id = EXCLUDED.organization_id,
     role = EXCLUDED.role,
     updated_at = NOW();

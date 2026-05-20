@@ -98,8 +98,7 @@ export const authApi = {
       name: string;
       tenantId: string;
       role: TenantRole;
-      roleId: TenantRole;
-      appId: string;
+      roleId: string;
       memberships: TenantMembership[];
     }>("/auth/me"),
 };

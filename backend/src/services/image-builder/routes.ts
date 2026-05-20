@@ -68,7 +68,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const normalized = normalizeBuildInput(request.body);
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         project_id: request.body.projectId ?? "",
         source_repo: request.body.sourceRepo,
         source_ref: normalized.sourceRef,
@@ -221,7 +221,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
       if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
 
       let row = data;
       if (!row.codebuild_id && row.provider_id) {
@@ -259,11 +259,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db
         .from("builds")
-        .select("id,app_id,provider_id,codebuild_id,status,status_reason,updated_at")
+        .select("id,organization_id,provider_id,codebuild_id,status,status_reason,updated_at")
         .eq("id", request.params.buildId)
         .single();
       if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
       let row = data;
       if (!row.codebuild_id && row.provider_id) {
         const credentials = await resolveAwsCredentials(row.provider_id);
@@ -302,7 +302,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const limit = request.query.limit ?? 50;
-      let query = db.from("builds").select("*").eq("app_id", auth.appId).order("created_at", { ascending: false }).limit(limit);
+      let query = db.from("builds").select("*").eq("organization_id", auth.tenantId).order("created_at", { ascending: false }).limit(limit);
       if (request.query.sourceRepo) query = query.eq("source_repo", request.query.sourceRepo);
       if (request.query.status) query = query.eq("status", request.query.status);
       const { data, error } = await query;
@@ -326,7 +326,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
       if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
       if (!["submitted", "in_progress", "pending"].includes(data.status)) {
         throw app.httpErrors.preconditionFailed(`Cannot cancel build in status: ${data.status}`);
       }
@@ -369,7 +369,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const { data, error } = await db
         .from("builds")
         .select("*")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .eq("status", "succeeded")
         .neq("image_uri", "")
         .or(`commit_sha.ilike.${escapePostgrestFilter(request.params.revision)}%,source_ref.eq.${escapePostgrestFilter(request.params.revision)}`)
@@ -404,7 +404,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
       if (error || !data) { app.log.debug(` Build not found`); throw app.httpErrors.notFound("Build not found"); }
-      if (data.app_id !== auth.appId) { app.log.debug(` Forbidden`); throw app.httpErrors.forbidden("Not your build"); }
+      if (data.organization_id !== auth.tenantId) { app.log.debug(` Forbidden`); throw app.httpErrors.forbidden("Not your build"); }
       const build = rowToBuild(data);
 
       // If we already have the appUrl cached, return immediately
@@ -659,7 +659,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
       if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your build");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
 
       const enabledCommands = request.body.commands.filter(c => c.enabled);
       if (enabledCommands.length === 0) return { success: true, output: ["No commands to run"] };

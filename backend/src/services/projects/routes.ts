@@ -61,7 +61,6 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       const now = new Date().toISOString();
       const payload = {
         id,
-        app_id: auth.tenantId,
         organization_id: auth.tenantId,
         name: request.body.name,
         repository: request.body.repository,

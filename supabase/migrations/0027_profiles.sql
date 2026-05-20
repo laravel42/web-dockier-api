@@ -28,10 +28,6 @@ CREATE POLICY "Users can update own profile"
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
 
-CREATE OR REPLACE TRIGGER profiles_set_updated_at
-BEFORE UPDATE ON profiles
-FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql

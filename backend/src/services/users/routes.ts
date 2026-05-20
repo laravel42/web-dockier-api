@@ -71,7 +71,6 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         id,
         email: request.body.email,
         name: request.body.name,
-        app_id: auth.appId,
         organization_id: auth.tenantId,
         password_hash: passwordHash,
         country: request.body.country ?? "",

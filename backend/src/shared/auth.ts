@@ -10,7 +10,6 @@ export type AuthContext = {
   userId: string;
   email: string;
   tenantId: string;
-  appId: string; // Backward-compatible alias for tenantId.
   role: MembershipRole;
 };
 
@@ -42,7 +41,6 @@ export const authPlugin = fp(async (app) => {
         userId: decoded.userId,
         email: decoded.email,
         tenantId: decoded.tenantId,
-        appId: decoded.appId ?? decoded.tenantId,
         role: decoded.role,
       };
     } catch {
