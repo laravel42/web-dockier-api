@@ -250,6 +250,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         {
           id: request.params.connectionId,
           connection_id: request.params.connectionId,
+          organization_id: auth.tenantId,
           repos,
           created_at: new Date().toISOString(),
         },
@@ -723,14 +724,15 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       await db.from("stats_cache").upsert(
         {
-          id: uuidv4(),
+          id: auth.tenantId + ":" + repoKey + ":" + branch,
           repo: repoKey,
           branch,
           result: stats,
           created_at: new Date().toISOString(),
+          organization_id: auth.tenantId,
           project_id: request.query.projectId ?? "",
         },
-        { onConflict: "repo,branch" },
+        { onConflict: "organization_id,repo,branch" },
       );
       return stats;
     },
@@ -789,14 +791,15 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const stack = { components };
       await db.from("stack_cache").upsert(
         {
-          id: uuidv4(),
+          id: auth.tenantId + ":" + repoKey + ":" + branch,
           repo: repoKey,
           branch,
           result: stack,
           created_at: new Date().toISOString(),
+          organization_id: auth.tenantId,
           project_id: request.query.projectId ?? "",
         },
-        { onConflict: "repo,branch" },
+        { onConflict: "organization_id,repo,branch" },
       );
       return { stack, cached: false };
     },
@@ -998,7 +1001,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       await db.from("analysis_cache").upsert(
         {
-          id: uuidv4(),
+          id: auth.tenantId + ":" + repoKey + ":" + branch,
           repo: repoKey,
           branch,
           commit_sha: "",
@@ -1007,7 +1010,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           organization_id: auth.tenantId,
           project_id: request.query.projectId ?? "",
         },
-        { onConflict: "repo,branch" },
+        { onConflict: "organization_id,repo,branch" },
       );
       return finalResult;
     },

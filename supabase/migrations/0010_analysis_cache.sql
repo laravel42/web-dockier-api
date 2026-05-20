@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS analysis_cache (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_analysis_cache_repo_branch ON analysis_cache(repo, branch);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analysis_cache_org_repo_branch ON analysis_cache(organization_id, repo, branch);
 CREATE INDEX IF NOT EXISTS idx_analysis_cache_created ON analysis_cache(created_at);
 CREATE INDEX IF NOT EXISTS idx_analysis_cache_org ON analysis_cache(organization_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_cache_project ON analysis_cache(project_id);

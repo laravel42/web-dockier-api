@@ -8,6 +8,6 @@ CREATE TABLE IF NOT EXISTS stack_cache (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_stack_cache_repo_branch ON stack_cache(repo, branch);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stack_cache_org_repo_branch ON stack_cache(organization_id, repo, branch);
 CREATE INDEX IF NOT EXISTS idx_stack_cache_org ON stack_cache(organization_id);
 CREATE INDEX IF NOT EXISTS idx_stack_cache_project ON stack_cache(project_id);
