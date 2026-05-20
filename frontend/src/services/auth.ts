@@ -1,18 +1,18 @@
 import { request } from "./request";
 
-export type TenantRole = "admin" | "member";
 export type TenantMembership = {
   id: string;
   tenantId: string;
   tenantName: string;
   tenantSlug: string;
-  role: TenantRole;
+  roleName: string;
+  isOwner: boolean;
 };
 
 export const authApi = {
   demoLogin: () =>
     request<{
-      session: { token: string; userId: string; tenantId: string; role: TenantRole };
+      session: { token: string; userId: string; tenantId: string };
       memberships: TenantMembership[];
     }>("/auth/demo-login", {
       method: "POST",
@@ -28,7 +28,7 @@ export const authApi = {
 
   verifyRegistration: (data: { email: string; token: string; tenantName?: string }) =>
     request<{
-      session: { token: string; userId: string; tenantId: string; role: TenantRole };
+      session: { token: string; userId: string; tenantId: string };
       memberships: TenantMembership[];
     }>("/auth/passwordless/verify", {
       method: "POST",
@@ -54,7 +54,7 @@ export const authApi = {
     tenantName?: string;
   }) =>
     request<{
-      session: { token: string; userId: string; tenantId: string; role: TenantRole };
+      session: { token: string; userId: string; tenantId: string };
       memberships: TenantMembership[];
     }>("/auth/passwordless/verify", {
       method: "POST",
@@ -65,7 +65,7 @@ export const authApi = {
   listMemberships: () => request<{ memberships: TenantMembership[] }>("/auth/memberships"),
 
   switchTenant: (tenantId: string) =>
-    request<{ token: string; userId: string; tenantId: string; role: TenantRole }>(
+    request<{ token: string; userId: string; tenantId: string }>(
       `/auth/tenants/${tenantId}/switch`,
       { method: "POST" },
     ),
@@ -97,8 +97,11 @@ export const authApi = {
       email: string;
       name: string;
       tenantId: string;
-      role: TenantRole;
       roleId: string;
+      roleName: string;
+      systemKey: string | null;
+      isOwner: boolean;
+      permissions: string[];
       memberships: TenantMembership[];
     }>("/auth/me"),
 };

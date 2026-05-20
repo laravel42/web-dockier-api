@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { customRuleSchema, findingSchema, scanSchema, summarySchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import type { Database } from "../../shared/supabase/types.js";
 
 const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
@@ -61,7 +62,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/scans",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_RUN),
       schema: {
         tags: ["code-analysis"],
         summary: "Create scan",
@@ -99,7 +100,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/scans",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List scans",
@@ -121,7 +122,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/scans/:scanId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "Get scan",
@@ -141,7 +142,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/scans/:scanId/findings",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List scan findings",
@@ -151,6 +152,12 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      const auth = request.auth!;
+      // Verify scan belongs to this tenant
+      const { data: scan } = await db.from("scans").select("organization_id").eq("id", request.params.scanId).maybeSingle();
+      if (!scan) throw app.httpErrors.notFound("Scan not found");
+      if (scan.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
+
       let query = db
         .from("findings")
         .select("id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,created_at")
@@ -181,7 +188,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.delete(
     "/code-analysis/scans/:scanId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Delete scan",
@@ -204,7 +211,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/scans/:scanId/run",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_RUN),
       schema: {
         tags: ["code-analysis"],
         summary: "Run scan asynchronously",
@@ -243,7 +250,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/custom-rules",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List custom rules",
@@ -282,7 +289,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/custom-rules",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Create custom rule",
@@ -343,7 +350,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.put(
     "/code-analysis/custom-rules/:ruleDbId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Update custom/system rule",
@@ -392,7 +399,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.delete(
     "/code-analysis/custom-rules/:ruleDbId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Delete custom rule",
@@ -415,7 +422,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/semgrep-rules",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List local semgrep rules",
@@ -467,7 +474,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/semgrep-rules/content",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "Get semgrep rule file content",
@@ -485,7 +492,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.put(
     "/code-analysis/semgrep-rules/content",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Update semgrep rule file content",
@@ -504,7 +511,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/sonar/profiles",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List SonarQube profiles (migration stub)",
@@ -517,7 +524,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/sonar/rules",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List SonarQube rules (migration stub)",
@@ -531,7 +538,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/sonar/rules/toggle",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Toggle SonarQube rule activation (migration stub)",
@@ -545,7 +552,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.get(
     "/code-analysis/rule-overrides",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
         summary: "List global rule overrides",
@@ -558,8 +565,9 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      const auth = request.auth!;
       const table = request.query.tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
-      const { data, error } = await db.from(table).select("id,rule_id,enabled").order("rule_id", { ascending: true });
+      const { data, error } = await db.from(table).select("id,rule_id,enabled").eq("organization_id", auth.tenantId).order("rule_id", { ascending: true });
       if (error) throw app.httpErrors.internalServerError(error.message);
       return {
         overrides: (data ?? []).map((row: any) => ({
@@ -574,7 +582,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/rule-overrides",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
         summary: "Upsert global rule override",

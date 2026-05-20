@@ -5,6 +5,7 @@ import { z } from "zod";
 import { projectConfigSchema, projectSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 
 function rowToProject(row: {
   id: string;
@@ -38,7 +39,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects",
     {
-      preHandler: app.requireTenantAdmin,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_CREATE),
       schema: {
         tags: ["projects"],
         summary: "Create project",
@@ -81,7 +82,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["projects"],
         summary: "Get project",
@@ -105,7 +106,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["projects"],
         summary: "List projects",
@@ -131,7 +132,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.put(
     "/projects/:projectId",
     {
-      preHandler: app.requireTenantAdmin,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["projects"],
         summary: "Update project",
@@ -194,7 +195,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId",
     {
-      preHandler: app.requireTenantAdmin,
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_DELETE),
       schema: {
         tags: ["projects"],
         summary: "Delete project",

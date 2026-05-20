@@ -8,6 +8,7 @@ import type { Database } from "../../shared/supabase/types.js";
 import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } from "./domain/orchestrator.js";
 import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus } from "./domain/aws-runtime.js";
 import { createBuildspecPreview } from "./domain/buildspec.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { bundleAndUploadSource } from "./domain/source-bundler.js";
 import { getAwsAccountId } from "../../lib/aws.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
@@ -39,7 +40,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.post(
     "/image-builder/builds",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
       schema: {
         tags: ["image-builder"],
         summary: "Start image build",
@@ -209,7 +210,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.get(
     "/image-builder/builds/:buildId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["image-builder"],
         summary: "Get build status",
@@ -244,7 +245,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.get(
     "/image-builder/builds/:buildId/logs",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["image-builder"],
         summary: "Get build logs",
@@ -287,7 +288,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.get(
     "/image-builder/builds",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["image-builder"],
         summary: "List builds",
@@ -314,7 +315,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.post(
     "/image-builder/builds/:buildId/cancel",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
       schema: {
         tags: ["image-builder"],
         summary: "Cancel build",
@@ -348,7 +349,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.get(
     "/image-builder/images/:revision",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["image-builder"],
         summary: "Resolve image by git revision",
@@ -391,7 +392,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.get(
     "/image-builder/builds/:buildId/deploy-status",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_VIEW),
       schema: {
         tags: ["image-builder"],
         summary: "Get deploy status for build",
@@ -635,7 +636,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.post(
     "/image-builder/builds/:buildId/run-post-deploy",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
       schema: {
         tags: ["image-builder"],
         summary: "Run post-deploy commands on the deployed instance",

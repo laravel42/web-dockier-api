@@ -6,7 +6,7 @@ import { z } from "zod";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
-import { membershipRoleSchemaValues } from "../../shared/auth.js";
+import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { escapePostgrestFilter } from "../../shared/security.js";
 
 function rowToUser(row: {
@@ -17,7 +17,6 @@ function rowToUser(row: {
   country: string | null;
   language: string | null;
   timezone: string | null;
-  role: "admin" | "member" | null;
   organization_id: string | null;
   created_at: string;
 }) {
@@ -29,9 +28,6 @@ function rowToUser(row: {
     country: row.country ?? "",
     language: row.language ?? "en",
     timezone: row.timezone ?? "UTC",
-    role: row.role ?? "member",
-    roleId: row.role ?? "member",
-    roleName: row.role === "admin" ? "Admin" : "Member",
     tenantId: row.organization_id,
     createdAt: row.created_at,
   };
@@ -43,7 +39,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
   typed.post(
     "/users",
     {
-      preHandler: app.requireTenantAdmin,
+      preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
       schema: {
         tags: ["users"],
         summary: "Create user",
@@ -54,8 +50,6 @@ export async function registerUsersRoutes(app: FastifyInstance) {
           country: z.string().optional(),
           language: z.string().optional(),
           timezone: z.string().optional(),
-          role: z.enum(membershipRoleSchemaValues).optional(),
-          roleId: z.enum(membershipRoleSchemaValues).optional(),
         }),
         response: { 200: userSchema },
       },
@@ -76,7 +70,6 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         country: request.body.country ?? "",
         language: request.body.language ?? "en",
         timezone: request.body.timezone ?? "UTC",
-        role: request.body.role ?? request.body.roleId ?? "member",
         two_factor_enabled: false,
         created_at: now,
       });
@@ -84,7 +77,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
 
       const { data: created, error: fetchError } = await supabaseAdmin
         .from("users")
-        .select("id,email,name,avatar_url,country,language,timezone,role,organization_id,created_at")
+        .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at")
         .eq("id", id)
         .single();
       if (fetchError) throw app.httpErrors.internalServerError(fetchError.message);
@@ -95,7 +88,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
   typed.get(
     "/users/:userId",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.USER_VIEW),
       schema: {
         tags: ["users"],
         summary: "Get user by ID",
@@ -106,7 +99,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     async (request) => {
       const { data, error } = await supabaseAdmin
         .from("users")
-        .select("id,email,name,avatar_url,country,language,timezone,role,organization_id,created_at")
+        .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at")
         .eq("id", request.params.userId)
         .eq("organization_id", request.auth!.tenantId)
         .single();
@@ -118,7 +111,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
   typed.get(
     "/users",
     {
-      preHandler: app.requireAuth,
+      preHandler: app.requirePermission(PERMISSIONS.USER_VIEW),
       schema: {
         tags: ["users"],
         summary: "List users",
@@ -138,7 +131,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
 
       let query = supabaseAdmin
         .from("users")
-        .select("id,email,name,avatar_url,country,language,timezone,role,organization_id,created_at", {
+        .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at", {
           count: "exact",
         })
         .eq("organization_id", auth.tenantId)
@@ -165,7 +158,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
   typed.put(
     "/users/:userId",
     {
-      preHandler: app.requireTenantAdmin,
+      preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
       schema: {
         tags: ["users"],
         summary: "Update user fields",
@@ -177,8 +170,6 @@ export async function registerUsersRoutes(app: FastifyInstance) {
             country: z.string().optional(),
             language: z.string().optional(),
             timezone: z.string().optional(),
-            role: z.enum(membershipRoleSchemaValues).optional(),
-            roleId: z.enum(membershipRoleSchemaValues).optional(),
           })
           .refine((value) => Object.keys(value).length > 0, "Provide at least one field"),
         response: { 200: userSchema },
@@ -191,8 +182,6 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       if (request.body.country !== undefined) updates.country = request.body.country;
       if (request.body.language !== undefined) updates.language = request.body.language;
       if (request.body.timezone !== undefined) updates.timezone = request.body.timezone;
-      if (request.body.role !== undefined) updates.role = request.body.role;
-      if (request.body.roleId !== undefined) updates.role = request.body.roleId;
 
       updates.updated_at = new Date().toISOString();
       const { error } = await supabaseAdmin
@@ -204,7 +193,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
 
       const { data, error: fetchError } = await supabaseAdmin
         .from("users")
-        .select("id,email,name,avatar_url,country,language,timezone,role,organization_id,created_at")
+        .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at")
         .eq("id", request.params.userId)
         .eq("organization_id", request.auth!.tenantId)
         .single();
@@ -216,7 +205,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
   typed.delete(
     "/users/:userId",
     {
-      preHandler: app.requireTenantAdmin,
+      preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
       schema: {
         tags: ["users"],
         summary: "Delete user",
@@ -225,11 +214,29 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      const auth = request.auth!;
+
+      // Cannot delete yourself
+      if (request.params.userId === auth.userId) {
+        throw app.httpErrors.forbidden("Cannot delete your own account");
+      }
+
+      // Prevent deleting the organization owner
+      const { data: targetMembership } = await supabaseAdmin
+        .from("organization_memberships")
+        .select("is_owner")
+        .eq("organization_id", auth.tenantId)
+        .eq("user_id", request.params.userId)
+        .maybeSingle();
+      if (targetMembership?.is_owner) {
+        throw app.httpErrors.forbidden("Cannot delete the organization owner");
+      }
+
       const { error } = await supabaseAdmin
         .from("users")
         .delete()
         .eq("id", request.params.userId)
-        .eq("organization_id", request.auth!.tenantId);
+        .eq("organization_id", auth.tenantId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },

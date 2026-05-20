@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { authPlugin } from "./shared/auth.js";
+import { authorizationPlugin } from "./shared/permissions/authorization.js";
 import { registerPlatformPlugins } from "./shared/openapi.js";
 import { registerAuthRoutes } from "./services/auth/routes.js";
 import { registerCodeAnalysisRoutes } from "./services/code-analysis/routes.js";
@@ -93,6 +94,7 @@ export async function buildApp(service: ServiceName) {
   });
 
   await app.register(authPlugin);
+  await app.register(authorizationPlugin);
   await registerPlatformPlugins(app, service);
 
   app.get("/healthz", async () => ({ status: "ok", service }));

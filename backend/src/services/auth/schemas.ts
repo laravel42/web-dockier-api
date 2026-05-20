@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { membershipRoleSchemaValues } from "../../shared/auth.js";
 
 export const registerStartBodySchema = z.object({
   email: z.email(),
@@ -17,7 +16,6 @@ export const authSessionSchema = z.object({
   token: z.string(),
   userId: z.string().uuid(),
   tenantId: z.string().uuid(),
-  role: z.enum(membershipRoleSchemaValues),
 });
 
 export const membershipSchema = z.object({
@@ -25,7 +23,8 @@ export const membershipSchema = z.object({
   tenantId: z.string().uuid(),
   tenantName: z.string(),
   tenantSlug: z.string(),
-  role: z.enum(membershipRoleSchemaValues),
+  roleName: z.string(),
+  isOwner: z.boolean(),
 });
 
 export const authMeSchema = z.object({
@@ -33,7 +32,10 @@ export const authMeSchema = z.object({
   email: z.email(),
   name: z.string(),
   tenantId: z.string().uuid(),
-  role: z.enum(membershipRoleSchemaValues),
   roleId: z.string(),
+  roleName: z.string(),
+  systemKey: z.string().nullable(),
+  isOwner: z.boolean(),
+  permissions: z.array(z.string()),
   memberships: z.array(membershipSchema),
 });
