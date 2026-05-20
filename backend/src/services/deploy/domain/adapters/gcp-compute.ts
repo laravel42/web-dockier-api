@@ -178,7 +178,7 @@ export class GcpComputeAdapter implements DeployAdapter {
     const { data: sshKeyRow } = await db
       .from("ssh_keys")
       .select("public_key")
-      .eq("app_id", event.appId)
+      .eq("organization_id", event.tenantId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -352,7 +352,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       const { data: sshKeyRow2 } = await db
         .from("ssh_keys")
         .select("public_key")
-        .eq("app_id", event.appId)
+        .eq("organization_id", event.tenantId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

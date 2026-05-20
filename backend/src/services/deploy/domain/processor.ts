@@ -4,7 +4,7 @@ import { resolveDeployTemplate } from "./templates.js";
 import type { ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
-  appId: string;
+  tenantId: string;
   providerId: string;
   gitConnectionId: string;
   projectId?: string;
@@ -86,7 +86,7 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
 
   const deploymentPayload = {
     id,
-    app_id: input.appId,
+    organization_id: input.tenantId,
     provider_id: input.providerId,
     git_connection_id: input.gitConnectionId,
     project_id: input.projectId ?? "",

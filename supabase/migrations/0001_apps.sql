@@ -1,7 +1,0 @@
-CREATE TABLE IF NOT EXISTS apps (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ
-);

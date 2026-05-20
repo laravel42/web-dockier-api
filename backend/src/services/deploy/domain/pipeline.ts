@@ -29,7 +29,7 @@ const db = supabaseAdmin;
 
 export interface PipelineInput {
   deploymentId: string;
-  appId: string;
+  tenantId: string;
   providerId: string;
   gitConnectionId: string;
   projectId?: string;
@@ -292,7 +292,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       providerCredentials: { apiKey: providerRow.api_key, apiSecret: providerRow.api_secret },
       event: {
         deploymentId,
-        appId: event.appId,
+        tenantId: event.tenantId,
         providerId: event.providerId,
         gitConnectionId: event.gitConnectionId,
         projectId: event.projectId,

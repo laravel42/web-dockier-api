@@ -29,7 +29,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const now = new Date().toISOString();
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         type: request.body.type,
         config: JSON.stringify(request.body.config),
         enabled: true,
@@ -62,7 +62,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const { data, error } = await db
         .from("notification_channels")
         .select("id,type,config,enabled,created_at")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .order("created_at", { ascending: false });
       if (error) throw app.httpErrors.internalServerError(error.message);
       return {
@@ -95,7 +95,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         .from("notification_channels")
         .update({ enabled: request.body.enabled })
         .eq("id", request.params.channelId)
-        .eq("app_id", auth.appId);
+        .eq("organization_id", auth.tenantId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },
@@ -114,7 +114,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { error } = await db.from("notification_channels").delete().eq("id", request.params.channelId).eq("app_id", auth.appId);
+      const { error } = await db.from("notification_channels").delete().eq("id", request.params.channelId).eq("organization_id", auth.tenantId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },
@@ -140,7 +140,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const { data, error } = await db
         .from("notification_channels")
         .select("id,type,config,enabled")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .eq("enabled", true);
       if (error) throw app.httpErrors.internalServerError(error.message);
 
@@ -159,7 +159,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
           await fetch(config.url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: request.body.title, message: request.body.message, appId: auth.appId }),
+            body: JSON.stringify({ title: request.body.title, message: request.body.message, tenantId: auth.tenantId }),
           }).catch(() => undefined);
         }
         sent++;
@@ -167,7 +167,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
 
       await db.from("notifications").insert({
         id: uuidv4(),
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         channel: "in_app",
         title: request.body.title,
         message: request.body.message,
@@ -195,7 +195,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       let query = db
         .from("notifications")
         .select("id,channel,title,message,read,created_at")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .order("created_at", { ascending: false })
         .limit(50);
       if (request.query.unreadOnly) query = query.eq("read", false);
@@ -231,7 +231,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         .from("notifications")
         .update({ read: true })
         .eq("id", request.params.notificationId)
-        .eq("app_id", auth.appId);
+        .eq("organization_id", auth.tenantId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },

@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS builds (
     id TEXT PRIMARY KEY,
-    app_id TEXT NOT NULL DEFAULT '',
+    organization_id TEXT NOT NULL DEFAULT '',
     provider_id TEXT NOT NULL DEFAULT '',
     codebuild_id TEXT NOT NULL DEFAULT '',
     project_id TEXT NOT NULL DEFAULT '',
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS builds (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_builds_app ON builds(app_id);
+CREATE INDEX IF NOT EXISTS idx_builds_app ON builds(organization_id);
 CREATE INDEX IF NOT EXISTS idx_builds_status ON builds(status);
 CREATE INDEX IF NOT EXISTS idx_builds_repo_ref ON builds(source_repo, source_ref);
 CREATE INDEX IF NOT EXISTS idx_builds_commit ON builds(commit_sha);

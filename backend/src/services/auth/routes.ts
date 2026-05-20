@@ -39,7 +39,6 @@ function signTenantToken(payload: { userId: string; email: string; tenantId: str
       userId: payload.userId,
       email: payload.email,
       tenantId: payload.tenantId,
-      appId: payload.tenantId,
       role: payload.role,
     },
     env.JWT_SECRET,
@@ -137,7 +136,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           id: demoUserId,
           email: demoEmail,
           name: demoName,
-          app_id: "",
           organization_id: null,
           role: "admin",
           created_at: now,
@@ -160,7 +158,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const { error: syncUserError } = await supabaseAdmin
         .from("users")
         .update({
-          app_id: demoTenantId,
           organization_id: demoTenantId,
           role: "admin",
           updated_at: now,
@@ -309,7 +306,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         id: userId,
         email,
         name: displayName,
-        app_id: "",
+        organization_id: null,
         created_at: new Date().toISOString(),
       });
 
@@ -363,7 +360,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const { error: syncError } = await supabaseAdmin
         .from("users")
         .update({
-          app_id: selected.tenantId,
           organization_id: selected.tenantId,
           role: selected.role,
           updated_at: new Date().toISOString(),
@@ -438,7 +434,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         tenantId: auth.tenantId,
         role: currentRole,
         roleId,
-        appId: auth.tenantId,
         memberships,
       };
     },

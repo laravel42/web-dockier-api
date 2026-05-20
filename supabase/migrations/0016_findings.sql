@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS findings (
     id TEXT PRIMARY KEY,
-    app_id TEXT NOT NULL DEFAULT '',
+    organization_id TEXT NOT NULL DEFAULT '',
     scan_id TEXT NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
     rule_id TEXT NOT NULL,
     severity TEXT NOT NULL,
@@ -13,4 +13,4 @@ CREATE TABLE IF NOT EXISTS findings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
-CREATE INDEX IF NOT EXISTS idx_findings_app ON findings(app_id);
+CREATE INDEX IF NOT EXISTS idx_findings_app ON findings(organization_id);

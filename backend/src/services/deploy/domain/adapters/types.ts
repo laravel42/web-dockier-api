@@ -7,7 +7,7 @@ import type { RunCmdFn } from "../run-cmd.js";
  */
 export interface DeployEvent {
   deploymentId: string;
-  appId: string;
+  tenantId: string;
   providerId: string;
   gitConnectionId: string;
   projectId?: string;

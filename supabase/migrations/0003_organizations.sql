@@ -9,5 +9,3 @@ CREATE TABLE IF NOT EXISTS organizations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);
-
-ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;

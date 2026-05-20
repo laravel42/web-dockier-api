@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { seedDefaultRoles } from "../services/roles/seed.js";
 
 const thisFile = fileURLToPath(import.meta.url);
 const scriptsDir = dirname(thisFile);
@@ -129,6 +130,10 @@ async function main() {
   if (!firstSeedRow?.organization_id || !firstSeedRow.organization_slug) {
     throw new Error("seed_admin_state did not return organization details");
   }
+
+  // Seed default roles for the organization and assign admin role to the user
+  const { adminRoleId } = await seedDefaultRoles(firstSeedRow.organization_id);
+  await supabase.from("users").update({ role_id: adminRoleId }).eq("id", userId);
 
   console.log("Admin seeder completed.");
   console.log(`Auth user: ${userId} (${wasCreated ? "created" : "existing"})`);

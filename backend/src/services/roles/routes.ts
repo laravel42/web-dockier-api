@@ -32,7 +32,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       const { data, error } = await supabaseAdmin
         .from("roles")
         .select("id,name,description,permissions")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .order("created_at", { ascending: true });
       if (error) throw app.httpErrors.internalServerError(error.message);
       return { roles: (data ?? []).map(rowToRole) };
@@ -56,7 +56,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         .from("roles")
         .select("id,name,description,permissions")
         .eq("id", request.params.roleId)
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .maybeSingle();
       if (error) throw app.httpErrors.internalServerError(error.message);
       if (!data) throw app.httpErrors.notFound("Role not found");
@@ -84,7 +84,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       const id = randomUUID();
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         name: request.body.name.trim(),
         description: request.body.description?.trim() ?? "",
         permissions: [...new Set(request.body.permissions)],
@@ -115,9 +115,9 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: existing } = await supabaseAdmin
         .from("roles")
-        .select("id,app_id,name,description,permissions")
+        .select("id,organization_id,name,description,permissions")
         .eq("id", request.params.roleId)
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .maybeSingle();
       if (!existing) throw app.httpErrors.notFound("Role not found");
 
@@ -131,7 +131,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
           .from("roles")
           .update(updates)
           .eq("id", request.params.roleId)
-          .eq("app_id", auth.appId);
+          .eq("organization_id", auth.tenantId);
         if (error) throw app.httpErrors.badRequest(error.message);
       }
 
@@ -159,9 +159,9 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: existing } = await supabaseAdmin
         .from("roles")
-        .select("id,app_id")
+        .select("id,organization_id")
         .eq("id", request.params.roleId)
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .maybeSingle();
       if (!existing) throw app.httpErrors.notFound("Role not found");
 
@@ -178,7 +178,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         .from("roles")
         .delete()
         .eq("id", request.params.roleId)
-        .eq("app_id", auth.appId);
+        .eq("organization_id", auth.tenantId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },

@@ -35,6 +35,5 @@ export const authMeSchema = z.object({
   tenantId: z.string().uuid(),
   role: z.enum(membershipRoleSchemaValues),
   roleId: z.string(),
-  appId: z.string().uuid(),
   memberships: z.array(membershipSchema),
 });

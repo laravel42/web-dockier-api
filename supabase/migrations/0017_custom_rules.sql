@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS custom_rules (
     id TEXT PRIMARY KEY,
-    app_id TEXT NOT NULL DEFAULT '',
+    organization_id TEXT NOT NULL DEFAULT '',
     rule_id TEXT NOT NULL,
     severity TEXT NOT NULL DEFAULT 'warning',
     message TEXT NOT NULL,
@@ -12,5 +12,5 @@ CREATE TABLE IF NOT EXISTS custom_rules (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_custom_rules_app ON custom_rules(app_id);
+CREATE INDEX IF NOT EXISTS idx_custom_rules_org ON custom_rules(organization_id);
 CREATE INDEX IF NOT EXISTS idx_custom_rules_type ON custom_rules(type);

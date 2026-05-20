@@ -69,7 +69,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const now = new Date().toISOString();
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         provider: request.body.provider,
         label: request.body.label,
         api_key: request.body.apiKey,
@@ -99,7 +99,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const { data, error } = await db
         .from("server_providers")
         .select("id,provider,label,region,created_at")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .order("created_at", { ascending: false });
       if (error) throw app.httpErrors.internalServerError(error.message);
       return { providers: (data ?? []).map(rowToProvider) };
@@ -122,11 +122,11 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: existing, error: existingError } = await db
         .from("server_providers")
-        .select("id,provider,label,region,created_at,app_id")
+        .select("id,provider,label,region,created_at,organization_id")
         .eq("id", request.params.providerId)
         .single();
       if (existingError || !existing) throw app.httpErrors.notFound("Provider not found");
-      if (existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your provider");
+      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your provider");
       const updates: Partial<ProviderRow> = {};
       if (request.body.label !== undefined) updates.label = request.body.label;
       if (request.body.apiSecret !== undefined) updates.api_secret = request.body.apiSecret.trim();
@@ -157,11 +157,11 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: existing } = await db
         .from("server_providers")
-        .select("id,app_id")
+        .select("id,organization_id")
         .eq("id", request.params.providerId)
         .single();
       if (!existing) throw app.httpErrors.notFound("Provider not found");
-      if (existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your provider");
+      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your provider");
       await db.from("deployments").delete().eq("provider_id", request.params.providerId);
       const { error } = await db.from("server_providers").delete().eq("id", request.params.providerId);
       if (error) throw app.httpErrors.badRequest(error.message);
@@ -230,7 +230,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const { data, error } = await db
         .from("ssh_keys")
         .select("id,label,public_key,fingerprint,created_at")
-        .eq("app_id", auth.appId)
+        .eq("organization_id", auth.tenantId)
         .order("created_at", { ascending: false });
       if (error) throw app.httpErrors.internalServerError(error.message);
       return {
@@ -275,7 +275,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const fingerprint = parts.length >= 2 ? `SHA256:${parts[1].slice(0, 16)}...` : "";
       const payload = {
         id,
-        app_id: auth.appId,
+        organization_id: auth.tenantId,
         label: request.body.label,
         public_key: publicKey,
         fingerprint,
@@ -306,7 +306,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { error } = await db.from("ssh_keys").delete().eq("id", request.params.keyId).eq("app_id", auth.appId);
+      const { error } = await db.from("ssh_keys").delete().eq("id", request.params.keyId).eq("organization_id", auth.tenantId);
       if (error) throw app.httpErrors.badRequest(error.message);
       return { success: true as const };
     },
@@ -344,17 +344,17 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: providerRow, error: providerError } = await db
         .from("server_providers")
-        .select("id,app_id,provider,region")
+        .select("id,organization_id,provider,region")
         .eq("id", request.body.providerId)
         .single();
       if (providerError || !providerRow) throw app.httpErrors.notFound("Provider not found");
-      if (providerRow.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your provider");
+      if (providerRow.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your provider");
 
       try {
         const payload = await createDeploymentRecord(
           db,
           {
-            appId: auth.appId,
+            tenantId: auth.tenantId,
             providerId: request.body.providerId,
             gitConnectionId: request.body.gitConnectionId,
             projectId: request.body.projectId,
@@ -381,7 +381,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         if (!request.body.skipPipeline) {
           await enqueueDeployment({
             deploymentId: payload.id,
-            appId: auth.appId,
+            tenantId: auth.tenantId,
             providerId: request.body.providerId,
             gitConnectionId: request.body.gitConnectionId,
             projectId: request.body.projectId,
@@ -421,7 +421,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let query = db.from("deployments").select("*").eq("app_id", auth.appId).order("created_at", { ascending: false }).limit(50);
+      let query = db.from("deployments").select("*").eq("organization_id", auth.tenantId).order("created_at", { ascending: false }).limit(50);
       if (request.query.providerId) query = query.eq("provider_id", request.query.providerId);
       const { data, error } = await query;
       if (error) throw app.httpErrors.internalServerError(error.message);
@@ -444,7 +444,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data, error } = await db.from("deployments").select("*").eq("id", request.params.deploymentId).single();
       if (error || !data) throw app.httpErrors.notFound("Deployment not found");
-      if (data.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your deployment");
+      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your deployment");
       return rowToDeployment(data);
     },
   );
@@ -491,11 +491,11 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const { data: existing, error: existingError } = await db
         .from("deployments")
-        .select("id,app_id")
+        .select("id,organization_id")
         .eq("id", request.params.deploymentId)
         .single();
       if (existingError || !existing) throw app.httpErrors.notFound("Deployment not found");
-      if (existing.app_id !== auth.appId) throw app.httpErrors.forbidden("Not your deployment");
+      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your deployment");
 
       const result = await destroyDeployment(db, request.params.deploymentId);
       if (!result.success) throw app.httpErrors.badRequest(result.message);
