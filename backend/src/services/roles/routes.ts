@@ -237,15 +237,12 @@ export async function registerRolesRoutes(app: FastifyInstance) {
           throw app.httpErrors.forbidden("Cannot assign critical permissions you do not possess");
         }
 
-        // Replace all permissions for this role
-        await supabaseAdmin.from("role_permissions").delete().eq("role_id", request.params.roleId);
-        const permRows = request.body.permissions.map((permKey) => ({
-          role_id: request.params.roleId,
-          permission_id: permKey,
-        }));
-        if (permRows.length > 0) {
-          await supabaseAdmin.from("role_permissions").insert(permRows);
-        }
+        // Atomically replace all permissions for this role via RPC
+        const { error: rpcError } = await (supabaseAdmin.rpc as any)("replace_role_permissions", {
+          _role_id: request.params.roleId,
+          _permission_ids: request.body.permissions,
+        });
+        if (rpcError) throw app.httpErrors.internalServerError(rpcError.message);
         finalPermissions = request.body.permissions;
       } else {
         const { data: perms } = await supabaseAdmin

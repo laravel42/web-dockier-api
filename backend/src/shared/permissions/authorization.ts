@@ -59,7 +59,7 @@ export function clearPermissionCache(): void {
  * Resolve the full auth context for a user in a tenant.
  * Fetches membership, role, and permissions from the database.
  */
-async function resolvePermissions(userId: string, tenantId: string): Promise<ResolvedAuth | null> {
+async function resolvePermissions(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
   const cacheKey = getCacheKey(userId, tenantId);
   const cached = permissionCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -101,16 +101,9 @@ async function resolvePermissions(userId: string, tenantId: string): Promise<Res
 
   const permissions = (rolePermissions ?? []).map((rp) => rp.permission_id as PermissionKey);
 
-  // Fetch user email for the resolved context
-  const { data: user } = await supabaseAdmin
-    .from("users")
-    .select("email")
-    .eq("id", userId)
-    .maybeSingle();
-
   const resolved: ResolvedAuth = {
     userId,
-    email: user?.email ?? "",
+    email,
     tenantId,
     roleId: role.id,
     systemKey: role.system_key ?? null,
@@ -163,7 +156,7 @@ export const authorizationPlugin = fp(async (app: FastifyInstance) => {
       if (reply.sent) return;
 
       const auth = request.auth!;
-      const resolved = await resolvePermissions(auth.userId, auth.tenantId);
+      const resolved = await resolvePermissions(auth.userId, auth.tenantId, auth.email);
 
       if (!resolved) {
         return reply.forbidden("No active membership in this organization");
@@ -186,7 +179,7 @@ export const authorizationPlugin = fp(async (app: FastifyInstance) => {
     if (reply.sent) return;
 
     const auth = request.auth!;
-    const resolved = await resolvePermissions(auth.userId, auth.tenantId);
+    const resolved = await resolvePermissions(auth.userId, auth.tenantId, auth.email);
 
     if (!resolved) {
       return reply.forbidden("No active membership in this organization");

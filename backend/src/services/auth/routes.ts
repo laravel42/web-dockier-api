@@ -585,11 +585,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         .maybeSingle();
       if (!targetRole) throw app.httpErrors.badRequest("Role not found in this organization");
 
-      // Escalation check: cannot assign a role at or above your own level
+      // Escalation check: cannot assign a role more powerful than your own
       const resolved = request.resolvedAuth!;
       const targetLevel = getHierarchyLevel(targetRole.system_key);
-      if (targetLevel <= resolved.hierarchyLevel) {
-        throw app.httpErrors.forbidden("Cannot assign a role at or above your own level");
+      if (targetLevel < resolved.hierarchyLevel) {
+        throw app.httpErrors.forbidden("Cannot assign a role more powerful than your own");
       }
 
       const { data: targetUser, error: userError } = await supabaseAdmin
@@ -697,19 +697,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (!targetMembership) throw app.httpErrors.notFound("Target user is not a member of this organization");
       if (targetMembership.status !== "active") throw app.httpErrors.badRequest("Target member is not active");
 
-      // Remove owner flag from current owner
-      await supabaseAdmin
-        .from("organization_memberships")
-        .update({ is_owner: false })
-        .eq("organization_id", request.params.tenantId)
-        .eq("user_id", auth.userId);
-
-      // Set owner flag on target
-      await supabaseAdmin
-        .from("organization_memberships")
-        .update({ is_owner: true })
-        .eq("organization_id", request.params.tenantId)
-        .eq("user_id", request.body.targetUserId);
+      // Atomic ownership transfer via RPC
+      const { error: rpcError } = await (supabaseAdmin.rpc as any)("transfer_ownership", {
+        _organization_id: request.params.tenantId,
+        _current_owner_id: auth.userId,
+        _new_owner_id: request.body.targetUserId,
+      });
+      if (rpcError) throw app.httpErrors.internalServerError(rpcError.message);
 
       invalidatePermissionCache(auth.userId, request.params.tenantId);
       invalidatePermissionCache(request.body.targetUserId, request.params.tenantId);

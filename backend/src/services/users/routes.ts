@@ -208,7 +208,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
       schema: {
         tags: ["users"],
-        summary: "Delete user",
+        summary: "Remove user from organization",
         params: z.object({ userId: z.string().uuid() }),
         response: { 200: z.object({ success: z.literal(true) }) },
       },
@@ -216,28 +216,31 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
 
-      // Cannot delete yourself
+      // Cannot remove yourself
       if (request.params.userId === auth.userId) {
-        throw app.httpErrors.forbidden("Cannot delete your own account");
+        throw app.httpErrors.forbidden("Cannot remove yourself from the organization");
       }
 
-      // Prevent deleting the organization owner
+      // Prevent removing the organization owner
       const { data: targetMembership } = await supabaseAdmin
         .from("organization_memberships")
         .select("is_owner")
         .eq("organization_id", auth.tenantId)
         .eq("user_id", request.params.userId)
         .maybeSingle();
-      if (targetMembership?.is_owner) {
-        throw app.httpErrors.forbidden("Cannot delete the organization owner");
+      if (!targetMembership) throw app.httpErrors.notFound("User is not a member of this organization");
+      if (targetMembership.is_owner) {
+        throw app.httpErrors.forbidden("Cannot remove the organization owner");
       }
 
+      // Remove membership (not the global user record)
       const { error } = await supabaseAdmin
-        .from("users")
+        .from("organization_memberships")
         .delete()
-        .eq("id", request.params.userId)
-        .eq("organization_id", auth.tenantId);
+        .eq("organization_id", auth.tenantId)
+        .eq("user_id", request.params.userId);
       if (error) throw app.httpErrors.badRequest(error.message);
+
       return { success: true as const };
     },
   );
