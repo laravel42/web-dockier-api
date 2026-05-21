@@ -235,11 +235,18 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const userId = data.user.id;
       const email = data.user.email ?? request.body.email;
 
-      // Ensure public.users record exists
-      await supabaseAdmin.from("users").upsert(
-        { id: userId, email, name: email.split("@")[0], organization_id: null, created_at: new Date().toISOString() },
-        { onConflict: "id" },
-      );
+      // Ensure public.users record exists (non-destructive — only insert if missing)
+      const { data: existingUser } = await supabaseAdmin.from("users").select("id").eq("id", userId).maybeSingle();
+      if (!existingUser) {
+        const displayName = data.user.user_metadata?.display_name || data.user.user_metadata?.name || email.split("@")[0];
+        await supabaseAdmin.from("users").insert({
+          id: userId,
+          email,
+          name: displayName as string,
+          organization_id: null,
+          created_at: new Date().toISOString(),
+        });
+      }
 
       const memberships = await listMembershipsForUser(userId);
       const selected = memberships[0];
