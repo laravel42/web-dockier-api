@@ -22,7 +22,7 @@ export default function ScanSidebar({
   hasConnectionId, onRunScan, onSelectScan,
 }: Props) {
   const { has } = usePermissions();
-  const canScan = has("scan:create");
+  const canScan = has("scan:run");
 
   return (
     <div className="w-80 shrink-0">
