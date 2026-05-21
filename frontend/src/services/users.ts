@@ -15,6 +15,7 @@ export const usersApi = {
         avatarUrl?: string;
         roleId: string;
         roleName: string;
+        isOwner: boolean;
         createdAt: string;
       }>;
       total: number;
@@ -41,7 +42,7 @@ export const usersApi = {
   update: (userId: string, data: { name?: string; avatarUrl?: string; country?: string; language?: string; timezone?: string; roleId?: string }) =>
     request(`/users/${userId}`, {
       method: "PUT",
-      body: JSON.stringify({ userId, ...data }),
+      body: JSON.stringify(data),
     }),
 
   delete: (userId: string) =>

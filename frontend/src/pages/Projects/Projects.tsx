@@ -2,6 +2,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import Spinner from "../../components/Spinner";
 import { useProjects } from "./useProjects";
 import { btnPrimary } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
@@ -10,6 +11,9 @@ import Bars3Icon from "../../components/icons/outlined/Bars3Icon";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 
 export default function Projects() {
+  const { has } = usePermissions();
+  const canCreate = has("project:create");
+  const canDelete = has("project:delete");
   const {
     navigate,
     projects, loading,
@@ -51,10 +55,12 @@ export default function Projects() {
               <Bars3Icon />
             </button>
           </div>
-          <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <PlusIcon />
-            New Project
-          </button>
+          {canCreate && (
+            <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
+              <PlusIcon />
+              New Project
+            </button>
+          )}
         </div>
       </div>
 
@@ -122,12 +128,14 @@ export default function Projects() {
         </div>
       )}
 
-      <ConfirmModal
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
-        message="Are you sure you want to delete this project?"
-      />
+      {canDelete && (
+        <ConfirmModal
+          open={!!deleteId}
+          onClose={() => setDeleteId(null)}
+          onConfirm={confirmDelete}
+          message="Are you sure you want to delete this project?"
+        />
+      )}
     </div>
   );
 }

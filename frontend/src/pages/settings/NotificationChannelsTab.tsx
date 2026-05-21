@@ -4,9 +4,12 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
 import Spinner from "../../components/Spinner";
 
 export default function NotificationChannelsTab() {
+  const { has } = usePermissions();
+  const canManage = has("notification:manage");
   const [channels, setChannels] = useState<Array<{ id: string; type: string; config: Record<string, string>; enabled: boolean }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ type: "email", configValue: "" });
@@ -63,10 +66,12 @@ export default function NotificationChannelsTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-text">Notification Channels</h2>
-        <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add Channel
-        </button>
+        {canManage && (
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add Channel
+          </button>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Channel" compact>

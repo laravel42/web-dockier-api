@@ -1,5 +1,6 @@
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
+import { usePermissions } from "../../../context/PermissionsContext";
 import type { Scan, ScanProgress } from "../../../types";
 import Spinner from "../../../components/Spinner";
 
@@ -20,29 +21,34 @@ export default function ScanSidebar({
   scanRunning, scanProgress, scanError,
   hasConnectionId, onRunScan, onSelectScan,
 }: Props) {
+  const { has } = usePermissions();
+  const canScan = has("scan:create");
+
   return (
     <div className="w-80 shrink-0">
       <div className="sticky top-6 space-y-3">
-        <button
-          type="button"
-          onClick={onRunScan}
-          disabled={scanRunning || !hasConnectionId}
-          className="w-full h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
-        >
-          {scanRunning ? (
-            <>
-              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Scanning…
-            </>
-          ) : (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-              </svg>
-              Run new scan
-            </>
-          )}
-        </button>
+        {canScan && (
+          <button
+            type="button"
+            onClick={onRunScan}
+            disabled={scanRunning || !hasConnectionId}
+            className="w-full h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+          >
+            {scanRunning ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Scanning…
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                </svg>
+                Run new scan
+              </>
+            )}
+          </button>
+        )}
 
         {/* Progress bar */}
         {scanRunning && scanProgress && (() => {

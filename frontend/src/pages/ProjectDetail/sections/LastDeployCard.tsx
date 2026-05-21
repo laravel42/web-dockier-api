@@ -1,5 +1,6 @@
 import type { Deployment as DeployInfo, Provider as ProviderInfo } from "../../../types";
 import { cardCls } from "../../../utils/styles";
+import { usePermissions } from "../../../context/PermissionsContext";
 import ProviderBadge from "../../../components/ProviderBadge";
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export default function LastDeployCard({ lastDeploy, allProviders, destroying, onDestroy, onViewDetails }: Props) {
+  const { has } = usePermissions();
+  const canDestroy = has("deploy:delete");
   const prov = allProviders.find(p => p.id === lastDeploy.providerId);
   const provKey = prov?.provider || "";
   const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate" };
@@ -58,7 +61,7 @@ export default function LastDeployCard({ lastDeploy, allProviders, destroying, o
             </div>
           )}
           <div className="flex items-end gap-3 sm:col-start-[-1] justify-end">
-            {lastDeploy.status === "success" && (
+            {canDestroy && lastDeploy.status === "success" && (
               <button
                 disabled={destroying}
                 onClick={onDestroy}

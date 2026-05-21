@@ -2,6 +2,7 @@ import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon"
 import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
+import { usePermissions } from "../../../context/PermissionsContext";
 import type { Finding, PMIntegration } from "../../../types";
 import Spinner from "../../../components/Spinner";
 
@@ -154,6 +155,9 @@ interface FindingRowProps {
 }
 
 function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, mrCreating, onCreateIssue, onCreateMR }: FindingRowProps) {
+  const { has } = usePermissions();
+  const canManageScans = has("scan:manage");
+
   return (
     <div className="px-3 py-3 pl-9 space-y-1.5">
       {/* Top row: severity badge + buttons */}
@@ -161,7 +165,7 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
         <SeverityBadge severity={f.severity as "error" | "warning" | "info"} label={f.severity} />
         <span className="text-[10px] text-text-muted font-mono">L{f.startLine}</span>
         <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
-        {(pmIntegrations.length > 0 || hasConnectionId) && (
+        {canManageScans && (pmIntegrations.length > 0 || hasConnectionId) && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
             <button
               type="button"

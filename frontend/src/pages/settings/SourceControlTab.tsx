@@ -4,9 +4,12 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
 import Spinner from "../../components/Spinner";
 
 export default function SourceControlTab() {
+  const { has } = usePermissions();
+  const canManage = has("credential:manage");
   const [connections, setConnections] = useState<Array<{ id: string; provider: string; label: string; endpoint?: string; personalToken?: string }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingConn, setEditingConn] = useState<{ id: string; provider: string; label: string; endpoint?: string; createdAt?: string } | null>(null);
@@ -53,10 +56,12 @@ export default function SourceControlTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-text">Source Control Connections</h2>
-        <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add Connection
-        </button>
+        {canManage && (
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add Connection
+          </button>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Connection">
