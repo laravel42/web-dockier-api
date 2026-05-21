@@ -104,6 +104,22 @@ export function hasLegacyNativeNodeDeps(appDir: string): boolean {
   return false;
 }
 
+/**
+ * Resolve the PHP version from composer.json and composer.lock.
+ *
+ * The project's `composer.json` declares the intended PHP version, but the
+ * `composer.lock` may contain packages that require a higher minimum (e.g.,
+ * the lock was generated on PHP 8.1 while composer.json says "^8.0").
+ *
+ * Strategy:
+ * 1. Start with the version from composer.json as the baseline.
+ * 2. Scan composer.lock for the highest *lower-bound* PHP requirement across
+ *    all locked packages. This tells us the true minimum PHP version needed
+ *    to install the lock file.
+ * 3. Use whichever is higher — the project's declared version or the lock
+ *    file's effective minimum.
+ * 4. Cap at the highest officially released PHP Docker image version.
+ */
 function resolvePhpVersion(appDir: string, fallback: string): string {
   let phpVer = fallback;
 
@@ -116,31 +132,55 @@ function resolvePhpVersion(appDir: string, fallback: string): string {
     }
   } catch {}
 
+  // Scan composer.lock for the effective minimum PHP version required by locked packages.
+  // A package with "^8.1" means it needs at least 8.1. We find the highest such lower bound.
   try {
     const lockPath = join(appDir, "composer.lock");
     if (existsSync(lockPath)) {
       const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
       let highest = parseMajorMinor(phpVer);
+
       for (const pkg of [...(lock.packages || []), ...(lock["packages-dev"] || [])]) {
         const phpReq = pkg?.require?.["php"];
         if (typeof phpReq !== "string") continue;
-        let pkgMin: [number, number] | null = null;
+
+        // Extract the effective lower bound from the constraint.
+        // For "^8.1" → 8.1, for ">=8.1" → 8.1, for ">=8.1 <8.4" → 8.1
+        // For "^8.0|^8.1" or "8.0|8.1" → 8.0 (OR means any of them works, so min is lowest)
+        // For "~8.1.0" → 8.1
+        const isOrConstraint = phpReq.includes("|") || phpReq.includes(" || ");
+
+        let pkgLowerBound: [number, number] | null = null;
         const bounds = phpReq.matchAll(/(\d+)\.(\d+)/g);
         for (const m of bounds) {
           const maj = parseInt(m[1], 10);
           const min = parseInt(m[2], 10);
           if (isNaN(maj) || isNaN(min)) continue;
+          // Skip versions that appear after < or != operators (upper bounds / exclusions)
           const prefix = phpReq.slice(0, m.index).trim();
           if (prefix.endsWith("<") || prefix.endsWith("!") || prefix.endsWith("!=")) continue;
-          if (!pkgMin || maj < pkgMin[0] || (maj === pkgMin[0] && min < pkgMin[1])) {
-            pkgMin = [maj, min];
+
+          if (isOrConstraint) {
+            // OR constraint: the effective minimum is the LOWEST alternative
+            if (!pkgLowerBound || maj < pkgLowerBound[0] || (maj === pkgLowerBound[0] && min < pkgLowerBound[1])) {
+              pkgLowerBound = [maj, min];
+            }
+          } else {
+            // AND constraint or single constraint: take the first (lowest) lower bound found
+            if (!pkgLowerBound) {
+              pkgLowerBound = [maj, min];
+            }
           }
         }
-        if (pkgMin && (!highest || pkgMin[0] > highest[0] || (pkgMin[0] === highest[0] && pkgMin[1] > highest[1]))) {
-          highest = pkgMin;
+
+        // If this package's lower bound is higher than our current highest, bump up
+        if (pkgLowerBound && (!highest || pkgLowerBound[0] > highest[0] || (pkgLowerBound[0] === highest[0] && pkgLowerBound[1] > highest[1]))) {
+          highest = pkgLowerBound;
         }
       }
+
       if (highest) {
+        // Cap at the highest released PHP Docker image version
         const maxReleased: [number, number] = [8, 4];
         if (highest[0] > maxReleased[0] || (highest[0] === maxReleased[0] && highest[1] > maxReleased[1])) {
           highest = maxReleased;

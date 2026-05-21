@@ -410,6 +410,9 @@ Resources:
                 server {
                     listen 80 default_server;
                     server_name _;
+                    client_max_body_size 100M;
+                    large_client_header_buffers 4 32k;
+                    client_header_buffer_size 16k;
                     location / {
                         proxy_pass http://127.0.0.1:8080;
                         proxy_set_header Host $host;
@@ -542,7 +545,15 @@ Resources:
           systemctl enable cfn-hup
           systemctl start cfn-hup
 
+          # Signal CloudFormation that cfn-init completed successfully.
+          # This unblocks the CreationPolicy so the stack only reports
+          # CREATE_COMPLETE once the container is running.
+          cfn-signal -e $? --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
+
           echo "── Done ──"
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
 
   ElasticIp:
     Type: AWS::EC2::EIP

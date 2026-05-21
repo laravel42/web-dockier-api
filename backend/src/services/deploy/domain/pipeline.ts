@@ -426,11 +426,11 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
           const script = [
             "#!/bin/bash",
             "CONTAINER_READY=0",
-            "for i in $(seq 1 60); do",
+            "for i in $(seq 1 90); do",
             `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
             "  sleep 2",
             "done",
-            `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 120s"; exit 1; fi`,
+            `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
             `${envSetup}${cmdChain}`,
           ].join("\n");
 
@@ -441,13 +441,13 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
               InstanceIds: [instanceId],
               DocumentName: "AWS-RunShellScript",
               Parameters: { commands: [script] },
-              TimeoutSeconds: 120,
+              TimeoutSeconds: 300,
             }));
 
             const commandId = sendResult.Command?.CommandId;
             if (commandId) {
               let done = false;
-              for (let i = 0; i < 30; i++) {
+              for (let i = 0; i < 65; i++) {
                 await new Promise(r => setTimeout(r, 5000));
                 try {
                   const invocation = await ssm.send(new GetCommandInvocationCommand({
