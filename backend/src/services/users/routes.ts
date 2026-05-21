@@ -81,25 +81,27 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       if (request.body.roleId) {
         // Validate role exists in same org and actor can assign it
         const resolved = request.resolvedAuth!;
-        const { data: targetRole } = await supabaseAdmin
+        const { data: targetRole, error: roleLookupError } = await supabaseAdmin
           .from("roles")
           .select("id,system_key")
           .eq("id", request.body.roleId)
           .eq("organization_id", auth.tenantId)
           .is("deleted_at", null)
           .maybeSingle();
+        if (roleLookupError) throw app.httpErrors.internalServerError(roleLookupError.message);
         if (!targetRole) throw app.httpErrors.badRequest("Role not found");
         if (!canManageRole(resolved, targetRole.system_key)) {
           throw app.httpErrors.forbidden("Cannot assign a role at or above your own level");
         }
 
-        await supabaseAdmin.from("organization_memberships").insert({
+        const { error: membershipError } = await supabaseAdmin.from("organization_memberships").insert({
           organization_id: auth.tenantId,
           user_id: id,
           role_id: request.body.roleId,
           is_owner: false,
           status: "active",
         });
+        if (membershipError) throw app.httpErrors.badRequest(membershipError.message);
       }
 
       const { data: created, error: fetchError } = await supabaseAdmin
@@ -175,12 +177,13 @@ export async function registerUsersRoutes(app: FastifyInstance) {
 
       // Fetch membership + role info for all returned users
       const userIds = (data ?? []).map((u) => u.id);
-      const { data: memberships } = await supabaseAdmin
+      const { data: memberships, error: membershipsError } = await supabaseAdmin
         .from("organization_memberships")
         .select("user_id,role_id,is_owner,roles!left(name)")
         .eq("organization_id", auth.tenantId)
         .in("user_id", userIds)
         .eq("status", "active");
+      if (membershipsError) throw app.httpErrors.internalServerError(membershipsError.message);
 
       type MembershipRow = { user_id: string; role_id: string | null; is_owner: boolean; roles: { name: string } | null };
       const membershipByUser = new Map<string, MembershipRow>();
@@ -249,39 +252,42 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         const resolved = request.resolvedAuth!;
 
         // Prevent changing role of the organization owner
-        const { data: targetMembership } = await supabaseAdmin
+        const { data: targetMembership, error: membershipLookupError } = await supabaseAdmin
           .from("organization_memberships")
           .select("is_owner,role_id,roles!left(system_key)")
           .eq("organization_id", auth.tenantId)
           .eq("user_id", request.params.userId)
           .eq("status", "active")
           .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: unknown };
+        if (membershipLookupError) throw app.httpErrors.internalServerError((membershipLookupError as Error).message);
         if (targetMembership?.is_owner) {
           throw app.httpErrors.forbidden("Cannot change the role of the organization owner");
         }
         // Prevent changing role of users at or above actor's level
         const targetCurrentSystemKey = targetMembership?.roles?.system_key ?? null;
-        if (targetCurrentSystemKey && !canManageRole(resolved, targetCurrentSystemKey)) {
+        if (!canManageRole(resolved, targetCurrentSystemKey)) {
           throw app.httpErrors.forbidden("Cannot change the role of a user at or above your own level");
         }
 
-        const { data: targetRole } = await supabaseAdmin
+        const { data: targetRole, error: roleLookupErr } = await supabaseAdmin
           .from("roles")
           .select("id,system_key")
           .eq("id", request.body.roleId)
           .eq("organization_id", auth.tenantId)
           .is("deleted_at", null)
           .maybeSingle();
+        if (roleLookupErr) throw app.httpErrors.internalServerError(roleLookupErr.message);
         if (!targetRole) throw app.httpErrors.badRequest("Role not found");
         if (!canManageRole(resolved, targetRole.system_key)) {
           throw app.httpErrors.forbidden("Cannot assign a role at or above your own level");
         }
 
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from("organization_memberships")
           .update({ role_id: request.body.roleId })
           .eq("organization_id", auth.tenantId)
           .eq("user_id", request.params.userId);
+        if (updateError) throw app.httpErrors.badRequest(updateError.message);
       }
 
       const { data, error: fetchError } = await supabaseAdmin
@@ -315,12 +321,13 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       }
 
       // Prevent removing the organization owner
-      const { data: targetMembership } = await supabaseAdmin
+      const { data: targetMembership, error: membershipErr } = await supabaseAdmin
         .from("organization_memberships")
         .select("is_owner")
         .eq("organization_id", auth.tenantId)
         .eq("user_id", request.params.userId)
         .maybeSingle();
+      if (membershipErr) throw app.httpErrors.internalServerError(membershipErr.message);
       if (!targetMembership) throw app.httpErrors.notFound("User is not a member of this organization");
       if (targetMembership.is_owner) {
         throw app.httpErrors.forbidden("Cannot remove the organization owner");
