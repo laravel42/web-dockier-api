@@ -168,7 +168,7 @@ async function main() {
   console.log("Admin seeder completed.");
   console.log(`Auth user: ${userId} (${wasCreated ? "created" : "existing"})`);
   console.log(`Organization: ${org.slug} (${org.id})`);
-  console.log("Membership role: admin (owner)");
+  console.log("Membership role: admin");
 }
 
 main().catch((error) => {

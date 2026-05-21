@@ -5,6 +5,7 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
 
 interface Integration {
   id: string;
@@ -15,6 +16,8 @@ interface Integration {
 }
 
 export default function IntegrationsTab() {
+  const { has } = usePermissions();
+  const canManage = has("credential:manage");
   const [integrations, setIntegrations] = useState<Integration[]>(() => {
     try {
       const stored = localStorage.getItem("integrations");
@@ -88,10 +91,12 @@ export default function IntegrationsTab() {
           <h2 className="text-base font-semibold text-text">Integrations</h2>
           <p className="text-sm text-text-secondary mt-0.5">Connect external services like databases, caches, storage, and more.</p>
         </div>
-        <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add Integration
-        </button>
+        {canManage && (
+          <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add Integration
+          </button>
+        )}
       </div>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Integration" size="xl">

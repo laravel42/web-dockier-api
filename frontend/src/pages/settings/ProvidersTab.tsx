@@ -5,9 +5,12 @@ import ConfirmModal from "../../components/ConfirmModal";
 import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
 import Spinner from "../../components/Spinner";
 
 export default function ProvidersTab() {
+  const { has } = usePermissions();
+  const canManage = has("credential:manage");
   const [providers, setProviders] = useState<Array<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingProvider, setEditingProvider] = useState<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string } | null>(null);
@@ -59,10 +62,12 @@ export default function ProvidersTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-text">Server Providers</h2>
-        <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add Provider
-        </button>
+        {canManage && (
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add Provider
+          </button>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Provider">

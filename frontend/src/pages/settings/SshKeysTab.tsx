@@ -3,9 +3,12 @@ import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
 import Spinner from "../../components/Spinner";
 
 export default function SshKeysTab() {
+  const { has } = usePermissions();
+  const canManage = has("credential:manage");
   const [keys, setKeys] = useState<Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ label: "", publicKey: "" });
@@ -53,10 +56,12 @@ export default function SshKeysTab() {
           <h2 className="text-base font-semibold text-text">SSH Keys</h2>
           <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
         </div>
-        <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add SSH Key
-        </button>
+        {canManage && (
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add SSH Key
+          </button>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setError(""); }} title="Add SSH Key">
