@@ -636,7 +636,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.post(
     "/image-builder/builds/:buildId/run-post-deploy",
     {
-      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
       schema: {
         tags: ["image-builder"],
         summary: "Run post-deploy commands on the deployed instance",

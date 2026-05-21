@@ -1,7 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
@@ -58,17 +56,26 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
       const now = new Date().toISOString();
 
-      const passwordHash = request.body.password ? await bcrypt.hash(request.body.password, 12) : null;
+      // Create user in Supabase Auth first (this creates the auth.users row)
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: request.body.email,
+        password: request.body.password || undefined,
+        email_confirm: true,
+        user_metadata: { display_name: request.body.name },
+      });
+      if (authError) throw app.httpErrors.badRequest(authError.message);
 
+      const id = authUser.user.id;
+
+      // Create the public.users record with the same ID
       const { error } = await supabaseAdmin.from("users").insert({
         id,
         email: request.body.email,
         name: request.body.name,
         organization_id: auth.tenantId,
-        password_hash: passwordHash,
+        password_hash: null,
         country: request.body.country ?? "",
         language: request.body.language ?? "en",
         timezone: request.body.timezone ?? "UTC",

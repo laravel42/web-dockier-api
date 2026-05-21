@@ -201,6 +201,75 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   );
 
   typed.post(
+    "/auth/password/login",
+    {
+      schema: {
+        tags: ["auth"],
+        summary: "Password-based login (development)",
+        body: z.object({
+          email: z.email(),
+          password: z.string().min(1),
+        }),
+        response: {
+          200: z.object({ session: authSessionSchema, memberships: z.array(membershipSchema) }),
+        },
+      },
+    },
+    async (request) => {
+      if (env.NODE_ENV === "production") {
+        throw app.httpErrors.forbidden("Password login is disabled in production.");
+      }
+
+      // Use a disposable client to avoid tainting the shared supabaseAdmin session
+      const { createClient } = await import("@supabase/supabase-js");
+      const authClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const { data, error } = await authClient.auth.signInWithPassword({
+        email: request.body.email,
+        password: request.body.password,
+      });
+      if (error || !data.user) throw app.httpErrors.unauthorized(error?.message ?? "Invalid email or password");
+
+      const userId = data.user.id;
+      const email = data.user.email ?? request.body.email;
+
+      // Ensure public.users record exists (non-destructive — only insert if missing)
+      const { data: existingUser } = await supabaseAdmin.from("users").select("id").eq("id", userId).maybeSingle();
+      if (!existingUser) {
+        const displayName = data.user.user_metadata?.display_name || data.user.user_metadata?.name || email.split("@")[0];
+        await supabaseAdmin.from("users").insert({
+          id: userId,
+          email,
+          name: displayName as string,
+          organization_id: null,
+          created_at: new Date().toISOString(),
+        });
+      }
+
+      const memberships = await listMembershipsForUser(userId);
+      const selected = memberships[0];
+      if (!selected) throw app.httpErrors.forbidden("No organization membership found. Contact your admin.");
+
+      // Sync user's active org
+      await supabaseAdmin
+        .from("users")
+        .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
+        .eq("id", userId);
+
+      return {
+        session: {
+          token: signTenantToken({ userId, email, tenantId: selected.tenantId }),
+          userId,
+          tenantId: selected.tenantId,
+        },
+        memberships,
+      };
+    },
+  );
+
+  typed.post(
     "/auth/register/start",
     {
       schema: {

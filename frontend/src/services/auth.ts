@@ -19,6 +19,16 @@ export const authApi = {
       headers: { Authorization: "" },
     }),
 
+  passwordLogin: (data: { email: string; password: string }) =>
+    request<{
+      session: { token: string; userId: string; tenantId: string };
+      memberships: TenantMembership[];
+    }>("/auth/password/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: { Authorization: "" },
+    }),
+
   startRegistration: (data: { email: string; displayName: string; tenantName?: string; redirectTo?: string }) =>
     request<{ success: true; message: string }>("/auth/register/start", {
       method: "POST",

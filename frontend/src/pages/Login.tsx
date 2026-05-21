@@ -6,8 +6,10 @@ import { usePermissions } from "../context/PermissionsContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [otpToken, setOtpToken] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [loginMode, setLoginMode] = useState<"otp" | "password">("otp");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,7 +32,12 @@ export default function Login() {
     setNotice("");
     setLoading(true);
     try {
-      if (!otpSent) {
+      if (loginMode === "password") {
+        const res = await authApi.passwordLogin({ email, password });
+        login(res.session.token, res.session.userId);
+        await refreshPermissions();
+        navigate("/dashboard");
+      } else if (!otpSent) {
         if (cooldownSeconds > 0) {
           throw new Error(`Please wait ${cooldownSeconds}s before requesting another code.`);
         }
@@ -62,6 +69,7 @@ export default function Login() {
   const resetFlow = () => {
     setOtpSent(false);
     setOtpToken("");
+    setPassword("");
     setError("");
     setNotice("");
   };
@@ -93,7 +101,11 @@ export default function Login() {
         </div>
         <h1 className="text-xl font-display font-semibold text-text text-center mb-1">Welcome back</h1>
         <p className="text-sm text-text-secondary text-center mb-6">
-          {otpSent ? "Enter the code sent to your email" : "Sign in with a secure email code"}
+          {loginMode === "password"
+            ? "Sign in with your email and password"
+            : otpSent
+              ? "Enter the code sent to your email"
+              : "Sign in with a secure email code"}
         </p>
 
         {error && <div className="mb-4 p-3 rounded-(--radius-btn) bg-danger-50 text-danger-500 text-sm" role="alert">{error}</div>}
@@ -105,10 +117,24 @@ export default function Login() {
             <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
               className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
               required
-              disabled={otpSent}
+              disabled={otpSent && loginMode === "otp"}
             />
           </div>
-          {otpSent && (
+          {loginMode === "password" && (
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-1.5">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+          )}
+          {loginMode === "otp" && otpSent && (
             <div>
               <label htmlFor="otp-token" className="block text-sm font-medium text-text-secondary mb-1.5">Email code</label>
               <input
@@ -124,17 +150,19 @@ export default function Login() {
               />
             </div>
           )}
-          <button type="submit" disabled={loading || (!otpSent && cooldownSeconds > 0)}
+          <button type="submit" disabled={loading || (loginMode === "otp" && !otpSent && cooldownSeconds > 0)}
             className="w-full h-11 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
             {loading
               ? "Please wait..."
-              : otpSent
-                ? "Verify and sign in"
-                : cooldownSeconds > 0
-                  ? `Retry in ${cooldownSeconds}s`
-                  : "Send sign-in code"}
+              : loginMode === "password"
+                ? "Sign in"
+                : otpSent
+                  ? "Verify and sign in"
+                  : cooldownSeconds > 0
+                    ? `Retry in ${cooldownSeconds}s`
+                    : "Send sign-in code"}
           </button>
-          {otpSent && (
+          {loginMode === "otp" && otpSent && (
             <button
               type="button"
               onClick={resetFlow}
@@ -144,6 +172,16 @@ export default function Login() {
             </button>
           )}
         </form>
+
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            type="button"
+            onClick={() => { setLoginMode(loginMode === "otp" ? "password" : "otp"); resetFlow(); }}
+            className="text-sm text-primary-500 font-medium hover:underline"
+          >
+            {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
+          </button>
+        </div>
         <button
           type="button"
           onClick={handleDemoLogin}
