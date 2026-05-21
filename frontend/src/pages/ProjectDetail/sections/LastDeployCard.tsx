@@ -13,7 +13,7 @@ interface Props {
 
 export default function LastDeployCard({ lastDeploy, allProviders, destroying, onDestroy, onViewDetails }: Props) {
   const { has } = usePermissions();
-  const canDestroy = has("deploy:delete");
+  const canDestroy = has("deploy:manage");
   const prov = allProviders.find(p => p.id === lastDeploy.providerId);
   const provKey = prov?.provider || "";
   const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate" };

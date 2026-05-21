@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { usePermissions } from "../context/PermissionsContext";
 import type { ReactNode } from "react";
 import DashboardIcon from "./icons/outlined/DashboardIcon";
 import FolderIcon from "./icons/outlined/FolderIcon";
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
 
 export default function Sidebar() {
   const { logout, userProfile } = useAuth();
+  const { roleName } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -70,7 +72,7 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-text truncate">{userProfile?.name || "User"}</p>
-            <p className="text-xs text-text-muted">Admin</p>
+            <p className="text-xs text-text-muted">{roleName || "Member"}</p>
           </div>
           <button
             onClick={handleLogout}
