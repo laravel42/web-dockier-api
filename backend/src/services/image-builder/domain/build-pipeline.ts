@@ -10,6 +10,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { bundleAndUploadSource } from "./source-bundler.js";
 import { getAwsAccountId } from "../../../lib/aws.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 
 const db = supabaseAdmin;
 
@@ -90,7 +91,6 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
     const webhookSecret = process.env.WEBHOOK_SECRET || "";
 
-    const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
     const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
     const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
 
@@ -131,5 +131,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
       status_reason: `Failed to queue build: ${message}`,
       updated_at: new Date().toISOString(),
     }).eq("id", buildId);
+    // Rethrow so pg-boss marks the job as failed and retries it
+    throw e;
   }
 }

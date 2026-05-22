@@ -11,6 +11,7 @@
 
 import { getQueue, IMAGE_BUILD_QUEUE } from "../../../shared/queue.js";
 import { executeBuild, type BuildJobInput } from "./build-pipeline.js";
+import type { Job } from "pg-boss";
 
 let workerRegistered = false;
 
@@ -25,8 +26,8 @@ export async function registerImageBuildWorker(): Promise<void> {
 
   await queue.createQueue(IMAGE_BUILD_QUEUE);
 
-  await queue.work(IMAGE_BUILD_QUEUE, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]: any[]) => {
-    const input = job.data as BuildJobInput;
+  await queue.work(IMAGE_BUILD_QUEUE, { batchSize: 1, pollingIntervalSeconds: 5 }, async ([job]: Job<BuildJobInput>[]) => {
+    const input = job.data;
     console.log(`[image-build-worker] Processing build ${input.buildId}`);
     await executeBuild(input);
     console.log(`[image-build-worker] Completed build ${input.buildId}`);
