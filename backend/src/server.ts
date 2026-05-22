@@ -2,6 +2,7 @@ import { buildApp, type ServiceName } from "./app.js";
 import { env } from "./shared/config.js";
 import { startQueue, stopQueue } from "./shared/queue.js";
 import { registerDeployWorker } from "./services/deploy/domain/worker.js";
+import { registerImageBuildWorker } from "./services/image-builder/domain/worker.js";
 
 async function start() {
   const serviceName = env.SERVICE_NAME as ServiceName;
@@ -10,6 +11,7 @@ async function start() {
   // Start the job queue and register workers
   await startQueue();
   await registerDeployWorker();
+  await registerImageBuildWorker();
 
   await app.listen({
     port: env.PORT,

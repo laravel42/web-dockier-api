@@ -68,3 +68,4 @@ export async function stopQueue(): Promise<void> {
 // ─── Queue Names ───────────────────────────────────────────────────
 
 export const DEPLOY_QUEUE = "deploy-pipeline";
+export const IMAGE_BUILD_QUEUE = "image-build";
