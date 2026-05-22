@@ -9,10 +9,10 @@ import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } f
 import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus } from "./domain/aws-runtime.js";
 import { createBuildspecPreview } from "./domain/buildspec.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { bundleAndUploadSource } from "./domain/source-bundler.js";
 import { getAwsAccountId } from "../../lib/aws.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature, escapePostgrestFilter } from "../../shared/security.js";
+import { enqueueBuild } from "./domain/worker.js";
 
 function rowToBuild(row: any) {
   return {
@@ -102,105 +102,22 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const { error } = await db.from("builds").insert(payload);
       if (error) throw app.httpErrors.badRequest(error.message);
 
-      // ── Trigger CodeBuild: bundle source and publish to SNS ──
-      // Fire-and-forget: the frontend polls for status updates.
-      const providerId = request.body.providerId ?? "";
-      const gitConnectionId = request.body.gitConnectionId ?? "";
-
-      setImmediate(async () => {
-        try {
-          // 1. Resolve AWS credentials from provider
-          const credentials = await resolveAwsCredentials(providerId);
-          if (!credentials) {
-            await db.from("builds").update({ status: "failed", status_reason: "AWS credentials not configured on provider", updated_at: new Date().toISOString() }).eq("id", id);
-            return;
-          }
-          const { accessKeyId, secretAccessKey, region } = credentials;
-
-          // 2. Get AWS account ID
-          const accountId = await getAwsAccountId(region, { accessKeyId, secretAccessKey });
-
-          // 3. Get git token for private repo access
-          let gitToken: string | undefined;
-          let gitProvider: string | undefined;
-          let gitEndpoint: string | undefined;
-          if (gitConnectionId) {
-            const { data: conn } = await db
-              .from("git_connections")
-              .select("provider,personal_token,endpoint")
-              .eq("id", gitConnectionId)
-              .maybeSingle();
-            if (conn?.personal_token) {
-              gitToken = conn.personal_token;
-              gitProvider = conn.provider;
-              gitEndpoint = conn.endpoint || "";
-            }
-          }
-
-          // 4. Bundle source (clone → analyze → zip → upload to S3)
-          const codebuildProject = process.env.IMAGE_BUILDER_CODEBUILD_PROJECT || "image-builder";
-          const bucketName = `${codebuildProject}-source-${accountId}`;
-          const { s3Key, detectedRuntime, detectedPort } = await bundleAndUploadSource(
-            request.body.sourceRepo,
-            normalized.sourceRef,
-            id,
-            accessKeyId,
-            secretAccessKey,
-            region,
-            bucketName,
-            gitToken,
-            gitProvider,
-            gitEndpoint,
-            request.body.deployTarget,
-          );
-
-          // 5. Publish to SNS to trigger CodeBuild via Lambda
-          const deployParams = { ...(request.body.deployParams ?? {}), containerPort: detectedPort };
-          const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
-          const webhookSecret = process.env.WEBHOOK_SECRET || "";
-
-          const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
-          const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
-          const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
-
-          await sns.send(new PublishCommand({
-            TopicArn: buildRequestTopicArn,
-            Subject: "build-request",
-            Message: JSON.stringify({
-              buildId: id,
-              sourceRepo: request.body.sourceRepo,
-              sourceRef: normalized.sourceRef,
-              commitSha: request.body.commitSha || "unknown",
-              imageRepoName: normalized.imageRepo,
-              cacheRepoName: `${normalized.imageRepo}-cache`,
-              s3Bucket: bucketName,
-              s3Key,
-              accountId,
-              region,
-              codebuildProject,
-              deployTarget: request.body.deployTarget || "",
-              deployParams,
-              callbackUrl,
-              webhookSecret,
-            }),
-          }));
-
-          // 6. Update status to submitted
-          await db.from("builds").update({
-            status: "submitted",
-            status_reason: `Build submitted to CodeBuild (${detectedRuntime} runtime, port ${detectedPort})`,
-            updated_at: new Date().toISOString(),
-          }).eq("id", id);
-
-        } catch (e: unknown) {
-          const message = e instanceof Error ? e.message : String(e);
-          console.error(`[image-builder] Failed to trigger CodeBuild for ${id}:`, message);
-          await db.from("builds").update({
-            status: "failed",
-            status_reason: `Failed to queue build: ${message}`,
-            updated_at: new Date().toISOString(),
-          }).eq("id", id);
-        }
+      // ── Enqueue build job for background processing ──
+      // pg-boss provides crash recovery, retries, and visibility into stuck jobs.
+      // Falls back to setImmediate if DATABASE_URL is not configured.
+      await enqueueBuild({
+        buildId: id,
+        sourceRepo: request.body.sourceRepo,
+        sourceRef: normalized.sourceRef,
+        commitSha: request.body.commitSha ?? "",
+        imageRepo: normalized.imageRepo,
+        dockerfilePath: normalized.dockerfilePath,
+        buildContext: normalized.buildContext,
+        tags: normalized.tags,
+        providerId: request.body.providerId ?? "",
+        gitConnectionId: request.body.gitConnectionId ?? "",
+        deployTarget: request.body.deployTarget ?? "",
+        deployParams: request.body.deployParams ?? {},
       });
 
       return rowToBuild(payload);
