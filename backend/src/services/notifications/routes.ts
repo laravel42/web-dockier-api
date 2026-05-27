@@ -1,14 +1,45 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { supabaseAdmin } from "../../shared/supabase/client.js";
+import {
+  NotificationsError,
+  createChannel,
+  listChannels,
+  toggleChannel,
+  deleteChannel,
+  sendNotification,
+  listNotifications,
+  markNotificationRead,
+} from "./domain/notifications.js";
+
+/**
+ * Map domain error codes to Fastify HTTP errors.
+ */
+function throwDomainError(app: FastifyInstance, error: NotificationsError): never {
+  const msg = error.message;
+  if (error.code === "internal") {
+    app.log.error(error.cause || error, "Internal notifications error: " + msg);
+  } else {
+    app.log.warn(error, "Notifications domain warning: " + msg);
+  }
+  switch (error.code) {
+    case "not_found":
+      throw app.httpErrors.notFound(msg);
+    case "forbidden":
+      throw app.httpErrors.forbidden(msg);
+    case "bad_request":
+      throw app.httpErrors.badRequest(msg);
+    case "internal":
+      throw app.httpErrors.internalServerError("An internal server error occurred");
+    default:
+      throw app.httpErrors.internalServerError("An unexpected error occurred");
+  }
+}
 
 export async function registerNotificationsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin;
 
   typed.post(
     "/notifications/channels",
@@ -26,25 +57,16 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
-      const now = new Date().toISOString();
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        type: request.body.type,
-        config: JSON.stringify(request.body.config),
-        enabled: true,
-        created_at: now,
-      };
-      const { error } = await db.from("notification_channels").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return {
-        id,
-        type: request.body.type,
-        config: request.body.config,
-        enabled: true,
-        createdAt: now,
-      };
+      try {
+        return await createChannel({
+          tenantId: auth.tenantId,
+          type: request.body.type,
+          config: request.body.config,
+        });
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -60,21 +82,13 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db
-        .from("notification_channels")
-        .select("id,type,config,enabled,created_at")
-        .eq("organization_id", auth.tenantId)
-        .order("created_at", { ascending: false });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        channels: (data ?? []).map((row: any) => ({
-          id: row.id,
-          type: row.type,
-          config: typeof row.config === "string" ? JSON.parse(row.config) : row.config,
-          enabled: row.enabled,
-          createdAt: row.created_at,
-        })),
-      };
+      try {
+        const channels = await listChannels(auth.tenantId);
+        return { channels };
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -92,13 +106,13 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { error } = await db
-        .from("notification_channels")
-        .update({ enabled: request.body.enabled })
-        .eq("id", request.params.channelId)
-        .eq("organization_id", auth.tenantId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await toggleChannel(request.params.channelId, auth.tenantId, request.body.enabled);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -115,9 +129,13 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { error } = await db.from("notification_channels").delete().eq("id", request.params.channelId).eq("organization_id", auth.tenantId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await deleteChannel(request.params.channelId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -138,45 +156,17 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db
-        .from("notification_channels")
-        .select("id,type,config,enabled")
-        .eq("organization_id", auth.tenantId)
-        .eq("enabled", true);
-      if (error) throw app.httpErrors.internalServerError(error.message);
-
-      let sent = 0;
-      for (const channel of data ?? []) {
-        if (request.body.channels && !request.body.channels.includes(channel.type as typeof request.body.channels[number])) continue;
-        const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
-        if (channel.type === "slack" && config?.webhookUrl) {
-          await fetch(config.webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: `*${request.body.title}*\n${request.body.message}` }),
-          }).catch(() => undefined);
-        }
-        if (channel.type === "webhook" && config?.url) {
-          await fetch(config.url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: request.body.title, message: request.body.message, tenantId: auth.tenantId }),
-          }).catch(() => undefined);
-        }
-        sent++;
+      try {
+        return await sendNotification({
+          tenantId: auth.tenantId,
+          title: request.body.title,
+          message: request.body.message,
+          channels: request.body.channels,
+        });
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
       }
-
-      await db.from("notifications").insert({
-        id: uuidv4(),
-        organization_id: auth.tenantId,
-        channel: "in_app",
-        title: request.body.title,
-        message: request.body.message,
-        read: false,
-        created_at: new Date().toISOString(),
-      });
-
-      return { sent };
     },
   );
 
@@ -193,25 +183,13 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let query = db
-        .from("notifications")
-        .select("id,channel,title,message,read,created_at")
-        .eq("organization_id", auth.tenantId)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (request.query.unreadOnly) query = query.eq("read", false);
-      const { data, error } = await query;
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        notifications: (data ?? []).map((row: any) => ({
-          id: row.id,
-          channel: row.channel,
-          title: row.title,
-          message: row.message,
-          read: row.read,
-          createdAt: row.created_at,
-        })),
-      };
+      try {
+        const notifications = await listNotifications(auth.tenantId, request.query.unreadOnly);
+        return { notifications };
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -228,13 +206,13 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { error } = await db
-        .from("notifications")
-        .update({ read: true })
-        .eq("id", request.params.notificationId)
-        .eq("organization_id", auth.tenantId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await markNotificationRead(request.params.notificationId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof NotificationsError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 }
