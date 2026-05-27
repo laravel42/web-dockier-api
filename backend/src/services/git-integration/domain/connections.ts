@@ -90,7 +90,12 @@ export async function createConnection(params: CreateConnectionParams) {
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("git_connections").insert(payload);
-  if (error) throw new GitIntegrationError(error.message, "bad_request");
+  if (error) {
+    if (error.code === "23505") {
+      throw new GitIntegrationError(`A ${provider} connection with label "${label}" already exists`, "conflict");
+    }
+    throw new GitIntegrationError("Failed to create connection", "internal");
+  }
 
   return {
     id,
@@ -110,7 +115,7 @@ export async function listConnections(tenantId: string) {
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   if (error) throw new GitIntegrationError(error.message, "internal");
-  return (data ?? []).map((row: any) => ({
+  return (data ?? []).map((row) => ({
     id: row.id,
     provider: row.provider,
     label: row.label,
@@ -123,7 +128,7 @@ export async function listConnections(tenantId: string) {
 export async function deleteConnection(connectionId: string, tenantId: string) {
   const conn = await getConnectionForTenant(connectionId, tenantId);
   const { error } = await supabaseAdmin.from("git_connections").delete().eq("id", conn.id);
-  if (error) throw new GitIntegrationError(error.message, "bad_request");
+  if (error) throw new GitIntegrationError("Failed to delete connection", "internal");
 }
 
 export interface UpdateConnectionParams {
@@ -141,7 +146,12 @@ export async function updateConnection(params: UpdateConnectionParams) {
   if (personalToken) updates.personal_token = personalToken;
 
   const { error } = await supabaseAdmin.from("git_connections").update(updates).eq("id", connectionId);
-  if (error) throw new GitIntegrationError(error.message, "bad_request");
+  if (error) {
+    if (error.code === "23505") {
+      throw new GitIntegrationError(`A ${conn.provider} connection with label "${label}" already exists`, "conflict");
+    }
+    throw new GitIntegrationError("Failed to update connection", "internal");
+  }
 
   return {
     id: conn.id,
