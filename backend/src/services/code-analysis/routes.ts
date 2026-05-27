@@ -1,63 +1,39 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
-import { customRuleSchema, findingSchema, scanSchema, summarySchema } from "./schemas.js";
-import { supabaseAdmin } from "../../shared/supabase/client.js";
+import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import type { Database } from "../../shared/supabase/types.js";
 
-const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
+// Domain modules
+import { CodeAnalysisError, createScan, listScans, getScan, deleteScan, runScan } from "./domain/scans.js";
+import { listFindings } from "./domain/findings.js";
+import { listCustomRules, createCustomRule, updateCustomRule, deleteCustomRule } from "./domain/custom-rules.js";
+import { listSemgrepRules, getSemgrepRuleContent, updateSemgrepRuleContent } from "./domain/semgrep-rules.js";
+import { listRuleOverrides, upsertRuleOverride } from "./domain/rule-overrides.js";
 
-function defaultSummary() {
-  return {
-    totalFindings: 0,
-    errors: 0,
-    warnings: 0,
-    infos: 0,
-    filesScanned: 0,
-    filesInRepo: 0,
-  };
-}
-
-function parseSummary(raw: unknown) {
-  if (typeof raw === "string") {
-    try {
-      return summarySchema.parse(JSON.parse(raw));
-    } catch {
-      return defaultSummary();
-    }
+/**
+ * Map domain error codes to Fastify HTTP errors.
+ */
+function throwDomainError(app: FastifyInstance, error: CodeAnalysisError): never {
+  const msg = error.message;
+  switch (error.code) {
+    case "not_found":
+      throw app.httpErrors.notFound(msg);
+    case "forbidden":
+      throw app.httpErrors.forbidden(msg);
+    case "bad_request":
+      throw app.httpErrors.badRequest(msg);
+    case "internal":
+      throw app.httpErrors.internalServerError(msg);
+    default:
+      throw app.httpErrors.internalServerError(msg);
   }
-  try {
-    return summarySchema.parse(raw);
-  } catch {
-    return defaultSummary();
-  }
-}
-
-function rowToScan(row: any) {
-  return {
-    id: row.id,
-    projectId: row.project_id ?? "",
-    connectionId: row.connection_id ?? "",
-    repo: row.repo ?? "",
-    branch: row.branch ?? "",
-    status: row.status,
-    summary: parseSummary(row.summary),
-    commitSha: row.commit_sha ?? "",
-    commitMessage: row.commit_message ?? "",
-    commitAuthor: row.commit_author ?? "",
-    commitDate: row.commit_date ?? "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
 }
 
 export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin;
+
+  // ─── Scans ─────────────────────────────────────────────────────────────────
 
   typed.post(
     "/code-analysis/scans",
@@ -77,23 +53,18 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
-      const now = new Date().toISOString();
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        project_id: request.body.projectId,
-        connection_id: request.body.connectionId,
-        repo: request.body.repo,
-        branch: request.body.branch,
-        status: "pending",
-        summary: defaultSummary(),
-        created_at: now,
-        updated_at: now,
-      };
-      const { error } = await db.from("scans").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return rowToScan(payload);
+      try {
+        return await createScan({
+          tenantId: auth.tenantId,
+          projectId: request.body.projectId,
+          connectionId: request.body.connectionId,
+          repo: request.body.repo,
+          branch: request.body.branch,
+        });
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -110,12 +81,17 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let query = db.from("scans").select("*").eq("organization_id", auth.tenantId).order("created_at", { ascending: false }).limit(50);
-      if (request.query.projectId) query = query.eq("project_id", request.query.projectId);
-      if (request.query.branch) query = query.eq("branch", request.query.branch);
-      const { data, error } = await query;
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return { scans: (data ?? []).map(rowToScan) };
+      try {
+        const scans = await listScans({
+          tenantId: auth.tenantId,
+          projectId: request.query.projectId,
+          branch: request.query.branch,
+        });
+        return { scans };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -132,56 +108,12 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db.from("scans").select("*").eq("id", request.params.scanId).single();
-      if (error || !data) throw app.httpErrors.notFound("Scan not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
-      return rowToScan(data);
-    },
-  );
-
-  typed.get(
-    "/code-analysis/scans/:scanId/findings",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
-      schema: {
-        tags: ["code-analysis"],
-        summary: "List scan findings",
-        params: z.object({ scanId: z.string().uuid() }),
-        querystring: z.object({ severity: z.string().optional() }),
-        response: { 200: z.object({ findings: z.array(findingSchema) }) },
-      },
-    },
-    async (request) => {
-      const auth = request.auth!;
-      // Verify scan belongs to this tenant
-      const { data: scan } = await db.from("scans").select("organization_id").eq("id", request.params.scanId).maybeSingle();
-      if (!scan) throw app.httpErrors.notFound("Scan not found");
-      if (scan.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
-
-      let query = db
-        .from("findings")
-        .select("id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,created_at")
-        .eq("scan_id", request.params.scanId)
-        .order("severity", { ascending: true })
-        .order("file_path", { ascending: true })
-        .order("start_line", { ascending: true });
-      if (request.query.severity) query = query.eq("severity", request.query.severity);
-      const { data, error } = await query;
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        findings: (data ?? []).map((row: any) => ({
-          id: row.id,
-          scanId: row.scan_id,
-          ruleId: row.rule_id,
-          severity: row.severity,
-          message: row.message,
-          filePath: row.file_path,
-          startLine: row.start_line,
-          endLine: row.end_line,
-          snippet: row.snippet,
-          createdAt: row.created_at,
-        })),
-      };
+      try {
+        return await getScan(request.params.scanId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -198,13 +130,13 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db.from("scans").select("id,organization_id").eq("id", request.params.scanId).single();
-      if (!existing) throw app.httpErrors.notFound("Scan not found");
-      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
-      await db.from("findings").delete().eq("scan_id", request.params.scanId);
-      const { error } = await db.from("scans").delete().eq("id", request.params.scanId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await deleteScan(request.params.scanId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -228,24 +160,46 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db.from("scans").select("*").eq("id", request.params.scanId).single();
-      if (error || !data) throw app.httpErrors.notFound("Scan not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your scan");
-      await db
-        .from("scans")
-        .update({
-          status: "running",
-          summary: {
-            ...defaultSummary(),
-            note: "Scan queued; external semgrep/sonarqube workers will populate findings asynchronously.",
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", request.params.scanId);
-      const { data: updated } = await db.from("scans").select("*").eq("id", request.params.scanId).single();
-      return rowToScan(updated ?? data);
+      try {
+        return await runScan(request.params.scanId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
+
+  // ─── Findings ──────────────────────────────────────────────────────────────
+
+  typed.get(
+    "/code-analysis/scans/:scanId/findings",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
+      schema: {
+        tags: ["code-analysis"],
+        summary: "List scan findings",
+        params: z.object({ scanId: z.string().uuid() }),
+        querystring: z.object({ severity: z.string().optional() }),
+        response: { 200: z.object({ findings: z.array(findingSchema) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      try {
+        const findings = await listFindings({
+          scanId: request.params.scanId,
+          tenantId: auth.tenantId,
+          severity: request.query.severity,
+        });
+        return { findings };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
+    },
+  );
+
+  // ─── Custom Rules ──────────────────────────────────────────────────────────
 
   typed.get(
     "/code-analysis/custom-rules",
@@ -260,29 +214,13 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const type = request.query.type ?? "custom";
-      const { data, error } = await db
-        .from("custom_rules")
-        .select("id,organization_id,rule_id,severity,message,pattern,extensions,enabled,type,yaml_content,created_at")
-        .or(`organization_id.eq.,organization_id.eq.${auth.tenantId}`)
-        .eq("type", type)
-        .order("rule_id", { ascending: true });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        rules: (data ?? []).map((row: any) => ({
-          id: row.id,
-          ruleId: row.rule_id,
-          severity: row.severity,
-          message: row.message,
-          pattern: row.pattern ?? "",
-          extensions: row.extensions ?? [],
-          enabled: row.enabled,
-          isSystem: row.organization_id === "",
-          type: row.type,
-          yamlContent: row.yaml_content ?? "",
-          createdAt: row.created_at,
-        })),
-      };
+      try {
+        const rules = await listCustomRules({ tenantId: auth.tenantId, type: request.query.type });
+        return { rules };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -307,43 +245,21 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
-      const ruleType = request.body.type ?? "custom";
-      if (ruleType === "custom" && request.body.pattern) {
-        try {
-          new RegExp(request.body.pattern);
-        } catch {
-          throw app.httpErrors.badRequest("Invalid regex pattern");
-        }
+      try {
+        return await createCustomRule({
+          tenantId: auth.tenantId,
+          ruleId: request.body.ruleId,
+          severity: request.body.severity,
+          message: request.body.message,
+          pattern: request.body.pattern,
+          extensions: request.body.extensions,
+          type: request.body.type,
+          yamlContent: request.body.yamlContent,
+        });
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
       }
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        rule_id: request.body.ruleId,
-        severity: request.body.severity,
-        message: request.body.message,
-        pattern: request.body.pattern,
-        extensions: request.body.extensions,
-        type: ruleType,
-        yaml_content: request.body.yamlContent ?? "",
-        enabled: true,
-        created_at: new Date().toISOString(),
-      };
-      const { error } = await db.from("custom_rules").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return {
-        id: payload.id,
-        ruleId: payload.rule_id,
-        severity: payload.severity,
-        message: payload.message,
-        pattern: payload.pattern,
-        extensions: payload.extensions,
-        enabled: true,
-        isSystem: false,
-        type: payload.type,
-        yamlContent: payload.yaml_content,
-        createdAt: payload.created_at,
-      };
     },
   );
 
@@ -369,30 +285,23 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db.from("custom_rules").select("organization_id,type").eq("id", request.params.ruleDbId).single();
-      if (!existing) throw app.httpErrors.notFound("Rule not found");
-      if (existing.organization_id !== "" && existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your rule");
-      if (existing.organization_id === "" && request.body.enabled === undefined) {
-        throw app.httpErrors.forbidden("System rules only support enable/disable");
+      try {
+        await updateCustomRule({
+          ruleDbId: request.params.ruleDbId,
+          tenantId: auth.tenantId,
+          ruleId: request.body.ruleId,
+          severity: request.body.severity,
+          message: request.body.message,
+          pattern: request.body.pattern,
+          extensions: request.body.extensions,
+          enabled: request.body.enabled,
+          yamlContent: request.body.yamlContent,
+        });
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
       }
-      if (request.body.pattern && existing.type === "custom") {
-        try {
-          new RegExp(request.body.pattern);
-        } catch {
-          throw app.httpErrors.badRequest("Invalid regex pattern");
-        }
-      }
-      const updates: Database["public"]["Tables"]["custom_rules"]["Update"] = {};
-      if (request.body.ruleId !== undefined) updates.rule_id = request.body.ruleId;
-      if (request.body.severity !== undefined) updates.severity = request.body.severity;
-      if (request.body.message !== undefined) updates.message = request.body.message;
-      if (request.body.pattern !== undefined) updates.pattern = request.body.pattern;
-      if (request.body.extensions !== undefined) updates.extensions = request.body.extensions;
-      if (request.body.enabled !== undefined) updates.enabled = request.body.enabled;
-      if (request.body.yamlContent !== undefined) updates.yaml_content = request.body.yamlContent;
-      const { error } = await db.from("custom_rules").update(updates).eq("id", request.params.ruleDbId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
     },
   );
 
@@ -409,15 +318,17 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db.from("custom_rules").select("organization_id").eq("id", request.params.ruleDbId).single();
-      if (!existing) throw app.httpErrors.notFound("Rule not found");
-      if (existing.organization_id === "") throw app.httpErrors.forbidden("Cannot delete system rules");
-      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your rule");
-      const { error } = await db.from("custom_rules").delete().eq("id", request.params.ruleDbId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await deleteCustomRule(request.params.ruleDbId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
+
+  // ─── Semgrep Rules (filesystem) ────────────────────────────────────────────
 
   typed.get(
     "/code-analysis/semgrep-rules",
@@ -444,31 +355,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         },
       },
     },
-    async () => {
-      if (!existsSync(RULES_DIR)) return { rules: [], languages: [] };
-      const rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }> = [];
-      const walk = (dir: string, base: string) => {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
-          const rel = base ? `${base}/${entry.name}` : entry.name;
-          if (entry.isDirectory() && !entry.name.startsWith(".")) walk(join(dir, entry.name), rel);
-          if (entry.isFile() && entry.name.endsWith(".yaml") && !entry.name.startsWith(".")) {
-            const lang = rel.split("/")[0];
-            rules.push({
-              id: rel.replace(/\.yaml$/, "").replace(/\//g, "."),
-              name: entry.name.replace(/\.yaml$/, "").replace(/-/g, " "),
-              lang,
-              path: rel,
-              severity: "info",
-              category: rel.split("/")[1] ?? "general",
-              message: "",
-            });
-          }
-        }
-      };
-      walk(RULES_DIR, "");
-      const languages = [...new Set(rules.map((rule) => rule.lang))].sort();
-      return { rules, languages };
-    },
+    async () => listSemgrepRules(),
   );
 
   typed.get(
@@ -483,9 +370,13 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const filePath = join(RULES_DIR, request.query.path);
-      if (!filePath.startsWith(RULES_DIR) || !existsSync(filePath)) throw app.httpErrors.notFound("Rule file not found");
-      return { content: readFileSync(filePath, "utf-8") };
+      try {
+        const content = getSemgrepRuleContent(request.query.path);
+        return { content };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -501,12 +392,17 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const filePath = join(RULES_DIR, request.body.path);
-      if (!filePath.startsWith(RULES_DIR)) throw app.httpErrors.badRequest("Invalid path");
-      writeFileSync(filePath, request.body.content, "utf-8");
-      return { success: true as const };
+      try {
+        updateSemgrepRuleContent(request.body.path, request.body.content);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
+
+  // ─── SonarQube Stubs ───────────────────────────────────────────────────────
 
   typed.get(
     "/code-analysis/sonar/profiles",
@@ -549,6 +445,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     async () => ({ success: true as const }),
   );
 
+  // ─── Rule Overrides ────────────────────────────────────────────────────────
+
   typed.get(
     "/code-analysis/rule-overrides",
     {
@@ -566,16 +464,13 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const table = request.query.tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
-      const { data, error } = await db.from(table).select("id,rule_id,enabled").eq("organization_id", auth.tenantId).order("rule_id", { ascending: true });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        overrides: (data ?? []).map((row: any) => ({
-          id: row.id,
-          ruleId: row.rule_id,
-          enabled: row.enabled,
-        })),
-      };
+      try {
+        const overrides = await listRuleOverrides(auth.tenantId, request.query.tool);
+        return { overrides };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -596,16 +491,18 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const table = request.body.tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
-      const payload = {
-        id: uuidv4(),
-        organization_id: auth.tenantId,
-        rule_id: request.body.ruleId,
-        enabled: request.body.enabled,
-      };
-      const { error } = await db.from(table).upsert(payload, { onConflict: "rule_id" });
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await upsertRuleOverride({
+          tenantId: auth.tenantId,
+          tool: request.body.tool,
+          ruleId: request.body.ruleId,
+          enabled: request.body.enabled,
+        });
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 }
