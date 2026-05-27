@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
@@ -12,39 +11,60 @@ import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domai
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-
-function parseRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
-  const normalized = repoUrl.replace(/\.git$/, "");
-  const sshMatch = normalized.match(/^git@[^:]+:([^/]+)\/(.+)$/);
-  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
-  try {
-    const url = new URL(normalized);
-    const parts = url.pathname.replace(/^\/+/, "").split("/");
-    if (parts.length >= 2) return { owner: parts[0], repo: parts[1] };
-    return null;
-  } catch {
-    const parts = normalized.split("/");
-    if (parts.length >= 2) return { owner: parts[parts.length - 2], repo: parts[parts.length - 1] };
-    return null;
-  }
-}
+import {
+  GitIntegrationError,
+  getConnection,
+  getConnectionForTenant,
+  createConnection,
+  listConnections,
+  deleteConnection,
+  updateConnection,
+  parseRepoUrl,
+} from "./domain/connections.js";
 
 function throwProviderError(app: FastifyInstance, provider: string, status: number, statusText: string): never {
   throw app.httpErrors.badRequest(`${provider} API error ${status}: ${statusText}`);
 }
 
-async function getConnectionOrThrow(db: any, connectionId: string) {
-  const { data } = await db
-    .from("git_connections")
-    .select("id,organization_id,provider,personal_token,label,repo_url,endpoint,created_at")
-    .eq("id", connectionId)
-    .single();
-  return data;
+/**
+ * Map domain error codes to Fastify HTTP errors.
+ */
+function throwDomainError(app: FastifyInstance, error: GitIntegrationError): never {
+  const msg = error.message;
+  app.log.error(error);
+  switch (error.code) {
+    case "not_found":
+      throw app.httpErrors.notFound(msg);
+    case "forbidden":
+      throw app.httpErrors.forbidden(msg);
+    case "bad_request":
+      throw app.httpErrors.badRequest(msg);
+    case "conflict":
+      throw app.httpErrors.conflict(msg);
+    case "precondition_failed":
+      throw app.httpErrors.preconditionFailed(msg);
+    case "internal":
+      throw app.httpErrors.internalServerError("An internal server error occurred");
+    default:
+      throw app.httpErrors.internalServerError("An unexpected error occurred");
+  }
 }
 
 export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   const db = supabaseAdmin;
+
+  /**
+   * Get connection for tenant, mapping domain errors to HTTP errors.
+   */
+  async function requireConnection(connectionId: string, tenantId: string) {
+    try {
+      return await getConnectionForTenant(connectionId, tenantId);
+    } catch (err) {
+      if (err instanceof GitIntegrationError) throwDomainError(app, err);
+      throw err;
+    }
+  }
 
   typed.post(
     "/git/connections",
@@ -65,37 +85,19 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const existing = await db
-        .from("git_connections")
-        .select("id")
-        .eq("organization_id", auth.tenantId)
-        .eq("provider", request.body.provider)
-        .eq("label", request.body.label)
-        .maybeSingle();
-      if (existing.data) throw app.httpErrors.conflict(`A ${request.body.provider} connection with label "${request.body.label}" already exists`);
-
-      const id = uuidv4();
-      const now = new Date().toISOString();
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        provider: request.body.provider,
-        personal_token: request.body.personalToken,
-        label: request.body.label,
-        repo_url: request.body.repoUrl,
-        endpoint: request.body.endpoint,
-        created_at: now,
-      };
-      const { error } = await db.from("git_connections").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return {
-        id,
-        provider: payload.provider,
-        label: payload.label,
-        repoUrl: payload.repo_url,
-        endpoint: payload.endpoint,
-        createdAt: now,
-      };
+      try {
+        return await createConnection({
+          tenantId: auth.tenantId,
+          provider: request.body.provider,
+          personalToken: request.body.personalToken,
+          label: request.body.label,
+          repoUrl: request.body.repoUrl,
+          endpoint: request.body.endpoint,
+        });
+      } catch (err) {
+        if (err instanceof GitIntegrationError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -111,22 +113,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db
-        .from("git_connections")
-        .select("id,provider,label,repo_url,endpoint,created_at")
-        .eq("organization_id", auth.tenantId)
-        .order("created_at", { ascending: false });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        connections: (data ?? []).map((row: any) => ({
-          id: row.id,
-          provider: row.provider,
-          label: row.label,
-          repoUrl: row.repo_url ?? "",
-          endpoint: row.endpoint ?? "",
-          createdAt: row.created_at,
-        })),
-      };
+      try {
+        const connections = await listConnections(auth.tenantId);
+        return { connections };
+      } catch (err) {
+        if (err instanceof GitIntegrationError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -143,12 +136,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
-      const { error } = await db.from("git_connections").delete().eq("id", request.params.connectionId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await deleteConnection(request.params.connectionId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof GitIntegrationError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -166,21 +160,17 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
-      const updates: Database["public"]["Tables"]["git_connections"]["Update"] = { label: request.body.label };
-      if (request.body.personalToken) updates.personal_token = request.body.personalToken;
-      const { error } = await db.from("git_connections").update(updates).eq("id", request.params.connectionId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return {
-        id: conn.id,
-        provider: conn.provider,
-        label: request.body.label,
-        repoUrl: conn.repo_url ?? "",
-        endpoint: conn.endpoint ?? "",
-        createdAt: conn.created_at,
-      };
+      try {
+        return await updateConnection({
+          connectionId: request.params.connectionId,
+          tenantId: auth.tenantId,
+          label: request.body.label,
+          personalToken: request.body.personalToken,
+        });
+      } catch (err) {
+        if (err instanceof GitIntegrationError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -196,9 +186,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint ?? "" };
+      try {
+        const conn = await getConnection(request.params.connectionId);
+        return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint ?? "" };
+      } catch (err) {
+        if (err instanceof GitIntegrationError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -229,9 +223,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
       if (!request.query.refresh) {
         const cached = await db.from("repo_cache").select("repos").eq("connection_id", request.params.connectionId).maybeSingle();
@@ -275,9 +267,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branches = await listBranches(conn, { owner: request.query.owner, repo: request.query.repo, branch: "main" });
       return { branches };
     },
@@ -296,9 +286,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       if (!conn.repo_url) throw app.httpErrors.preconditionFailed("No repo URL configured");
       const parsed = parseRepoUrl(conn.repo_url);
       if (!parsed) throw app.httpErrors.badRequest("Could not parse owner/repo from URL");
@@ -390,9 +378,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       if (conn.provider === "github") {
         const res = await fetch(`https://api.github.com/repos/${request.body.owner}/${request.body.repo}/issues`, {
           method: "POST",
@@ -434,9 +420,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.body.branch || "main";
       const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
       if (conn.provider === "github") {
@@ -489,9 +473,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
       if (conn.provider === "github") {
@@ -531,9 +513,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const tree = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
       const files = tree.map((path) => ({ path, type: "file" as const, size: 0 }));
@@ -555,9 +535,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const content = await fetchRepoFile(conn, request.query, request.query.path);
       if (content === null) throw app.httpErrors.notFound("File not found in repository");
       return { content };
@@ -584,9 +562,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       if (conn.provider === "github") {
         const baseUrl = conn.endpoint || "https://api.github.com";
         const res = await fetch(`${baseUrl}/repos/${request.query.owner}/${request.query.repo}/collaborators?per_page=100`, {
@@ -645,9 +621,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const branch = request.query.branch || "main";
@@ -760,9 +734,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const cached = await db.from("stack_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
@@ -822,9 +794,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
       const schemaFiles = files.filter((file) => /migrations?.*\.sql$|schema\.sql$/i.test(file)).slice(0, 40);
@@ -935,9 +905,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const cached = await db.from("analysis_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
@@ -1048,9 +1016,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const conn = await getConnectionOrThrow(db, request.params.connectionId);
-      if (!conn) throw app.httpErrors.notFound("Connection not found");
-      if (conn.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your connection");
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       try {
         return await createMergeRequest(conn, request.body);
       } catch (error) {
