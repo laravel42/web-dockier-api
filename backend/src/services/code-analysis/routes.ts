@@ -16,6 +16,7 @@ import { listRuleOverrides, upsertRuleOverride } from "./domain/rule-overrides.j
  */
 function throwDomainError(app: FastifyInstance, error: CodeAnalysisError): never {
   const msg = error.message;
+  app.log.error(error);
   switch (error.code) {
     case "not_found":
       throw app.httpErrors.notFound(msg);
@@ -24,9 +25,9 @@ function throwDomainError(app: FastifyInstance, error: CodeAnalysisError): never
     case "bad_request":
       throw app.httpErrors.badRequest(msg);
     case "internal":
-      throw app.httpErrors.internalServerError(msg);
+      throw app.httpErrors.internalServerError("An internal server error occurred");
     default:
-      throw app.httpErrors.internalServerError(msg);
+      throw app.httpErrors.internalServerError("An unexpected error occurred");
   }
 }
 

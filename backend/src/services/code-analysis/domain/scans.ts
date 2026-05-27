@@ -93,7 +93,7 @@ export async function runScan(scanId: string, tenantId: string) {
   if (error || !data) throw new CodeAnalysisError("Scan not found", "not_found");
   if (data.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
 
-  const { error: updateError } = await supabaseAdmin
+  const { data: updated, error: updateError } = await supabaseAdmin
     .from("scans")
     .update({
       status: "running",
@@ -103,9 +103,10 @@ export async function runScan(scanId: string, tenantId: string) {
       },
       updated_at: new Date().toISOString(),
     })
-    .eq("id", scanId);
+    .eq("id", scanId)
+    .select()
+    .single();
   if (updateError) throw new CodeAnalysisError(updateError.message, "internal");
 
-  const { data: updated } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   return rowToScan(updated ?? data);
 }

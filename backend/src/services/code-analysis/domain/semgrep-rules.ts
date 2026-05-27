@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, isAbsolute } from "node:path";
 import { CodeAnalysisError } from "./scans.js";
 
 const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
@@ -50,7 +50,8 @@ export function listSemgrepRules(): { rules: SemgrepRule[]; languages: string[] 
  */
 export function getSemgrepRuleContent(relativePath: string): string {
   const filePath = join(RULES_DIR, relativePath);
-  if (!filePath.startsWith(RULES_DIR + "/") || !existsSync(filePath)) {
+  const rel = relative(RULES_DIR, filePath);
+  if (rel.startsWith("..") || isAbsolute(rel) || !existsSync(filePath)) {
     throw new CodeAnalysisError("Rule file not found", "not_found");
   }
   return readFileSync(filePath, "utf-8");
@@ -61,7 +62,8 @@ export function getSemgrepRuleContent(relativePath: string): string {
  */
 export function updateSemgrepRuleContent(relativePath: string, content: string): void {
   const filePath = join(RULES_DIR, relativePath);
-  if (!filePath.startsWith(RULES_DIR + "/")) {
+  const rel = relative(RULES_DIR, filePath);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
     throw new CodeAnalysisError("Invalid path", "bad_request");
   }
   writeFileSync(filePath, content, "utf-8");

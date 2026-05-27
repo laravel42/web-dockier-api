@@ -41,6 +41,6 @@ export async function upsertRuleOverride(params: UpsertRuleOverrideParams): Prom
     rule_id: ruleId,
     enabled,
   };
-  const { error } = await supabaseAdmin.from(table).upsert(payload, { onConflict: "rule_id" });
+  const { error } = await supabaseAdmin.from(table).upsert(payload, { onConflict: "organization_id,rule_id" });
   if (error) throw new CodeAnalysisError(error.message, "bad_request");
 }

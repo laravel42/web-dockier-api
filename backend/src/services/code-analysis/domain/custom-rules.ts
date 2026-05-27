@@ -35,6 +35,9 @@ export interface CreateCustomRuleParams {
 
 export async function createCustomRule(params: CreateCustomRuleParams) {
   const { tenantId, ruleId, severity, message, pattern, extensions } = params;
+  if (!tenantId) {
+    throw new CodeAnalysisError("Tenant ID is required", "bad_request");
+  }
   const ruleType = params.type ?? "custom";
 
   if (ruleType === "custom" && pattern) {
@@ -101,8 +104,20 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
   if (existing.organization_id !== "" && existing.organization_id !== tenantId) {
     throw new CodeAnalysisError("Not your rule", "forbidden");
   }
-  if (existing.organization_id === "" && params.enabled === undefined) {
-    throw new CodeAnalysisError("System rules only support enable/disable", "forbidden");
+  if (existing.organization_id === "") {
+    if (params.enabled === undefined) {
+      throw new CodeAnalysisError("System rules only support enable/disable", "forbidden");
+    }
+    if (
+      params.ruleId !== undefined ||
+      params.severity !== undefined ||
+      params.message !== undefined ||
+      params.pattern !== undefined ||
+      params.extensions !== undefined ||
+      params.yamlContent !== undefined
+    ) {
+      throw new CodeAnalysisError("System rules only support enable/disable", "forbidden");
+    }
   }
   if (params.pattern && existing.type === "custom") {
     try {
@@ -120,6 +135,10 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
   if (params.extensions !== undefined) updates.extensions = params.extensions;
   if (params.enabled !== undefined) updates.enabled = params.enabled;
   if (params.yamlContent !== undefined) updates.yaml_content = params.yamlContent;
+
+  if (Object.keys(updates).length === 0) {
+    return;
+  }
 
   const { error } = await supabaseAdmin.from("custom_rules").update(updates).eq("id", ruleDbId);
   if (error) throw new CodeAnalysisError(error.message, "bad_request");
