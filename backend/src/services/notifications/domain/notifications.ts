@@ -98,35 +98,7 @@ export async function sendNotification(params: SendNotificationParams): Promise<
   const { tenantId, title, message, channels: filterChannels } = params;
   if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
 
-  const { data, error } = await supabaseAdmin
-    .from("notification_channels")
-    .select("id,type,config,enabled")
-    .eq("organization_id", tenantId)
-    .eq("enabled", true);
-  if (error) throw new NotificationsError("Failed to fetch channels", "internal", error);
-
-  let sent = 0;
-  for (const channel of data ?? []) {
-    if (filterChannels && !filterChannels.includes(channel.type)) continue;
-    const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
-    if (channel.type === "slack" && config?.webhookUrl) {
-      await fetch(config.webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `*${title}*\n${message}` }),
-      }).catch(() => undefined);
-      sent++;
-    } else if (channel.type === "webhook" && config?.url) {
-      await fetch(config.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, message, tenantId }),
-      }).catch(() => undefined);
-      sent++;
-    }
-  }
-
-  // Store in-app notification
+  // 1. Store in-app notification first to ensure consistency before performing external side-effects
   const { error: insertError } = await supabaseAdmin.from("notifications").insert({
     id: uuidv4(),
     organization_id: tenantId,
@@ -137,6 +109,50 @@ export async function sendNotification(params: SendNotificationParams): Promise<
     created_at: new Date().toISOString(),
   });
   if (insertError) throw new NotificationsError("Failed to store notification", "internal", insertError);
+
+  // 2. Fetch enabled channels
+  const { data, error } = await supabaseAdmin
+    .from("notification_channels")
+    .select("id,type,config,enabled")
+    .eq("organization_id", tenantId)
+    .eq("enabled", true);
+  if (error) throw new NotificationsError("Failed to fetch channels", "internal", error);
+
+  // 3. Dispatch external notifications concurrently with timeouts
+  const sendPromises = (data ?? []).map(async (channel) => {
+    if (filterChannels && !filterChannels.includes(channel.type)) return false;
+    const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      if (channel.type === "slack" && config?.webhookUrl) {
+        await fetch(config.webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: `*${title}*\n${message}` }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        return true;
+      } else if (channel.type === "webhook" && config?.url) {
+        await fetch(config.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, message, tenantId }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        return true;
+      }
+      clearTimeout(timeoutId);
+    } catch {
+      // Ignore failures to allow other channels to succeed
+    }
+    return false;
+  });
+
+  const results = await Promise.all(sendPromises);
+  const sent = results.filter(Boolean).length;
 
   return { sent };
 }
