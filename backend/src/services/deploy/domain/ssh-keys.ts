@@ -35,7 +35,10 @@ export async function createSshKey(params: CreateSshKeyParams) {
   }
 
   const parts = publicKey.split(/\s+/);
-  const fingerprint = parts.length >= 2 ? `SHA256:${parts[1].slice(0, 16)}...` : "";
+  if (parts.length < 2 || parts[1].length < 20) {
+    throw new DeployError("Invalid SSH public key format: missing key data", "bad_request");
+  }
+  const fingerprint = `SHA256:${parts[1].slice(0, 16)}...`;
   const id = uuidv4();
   const payload = {
     id,

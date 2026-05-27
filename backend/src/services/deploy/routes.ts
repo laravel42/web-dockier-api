@@ -29,7 +29,11 @@ import { listDeployments, getDeployment, getDeploymentForDestroy, updateDeployme
  */
 function throwDomainError(app: FastifyInstance, error: DeployError): never {
   const msg = error.message;
-  app.log.error(error);
+  if (error.code === "internal") {
+    app.log.error(error);
+  } else {
+    app.log.warn(error, "Deploy domain warning: " + msg);
+  }
   switch (error.code) {
     case "not_found":
       throw app.httpErrors.notFound(msg);
@@ -580,6 +584,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     async (request) => {
       const { data: row, error: fetchError } = await db.from("deployments").select("id").eq("id", request.body.buildId).single();
       if (fetchError) {
+        if (fetchError.code === "PGRST116") return { ok: false };
         app.log.error(fetchError);
         throw app.httpErrors.internalServerError("Database error fetching deployment");
       }

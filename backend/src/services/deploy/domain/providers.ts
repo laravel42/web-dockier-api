@@ -92,18 +92,18 @@ export async function updateProvider(params: UpdateProviderParams) {
 
   if (Object.keys(updates).length === 0) return rowToProvider(existing);
 
-  const { error } = await supabaseAdmin.from("server_providers").update(updates).eq("id", providerId);
+  const { data, error } = await supabaseAdmin
+    .from("server_providers")
+    .update(updates)
+    .eq("id", providerId)
+    .select("id,provider,label,region,created_at")
+    .single();
   if (error) {
-    if (error.code === "23505") throw new DeployError(`A provider with that label already exists`, "bad_request");
+    if (error.code === "23505") throw new DeployError("A provider with that label already exists", "bad_request");
     throw new DeployError("Failed to update provider", "internal");
   }
-  return rowToProvider({
-    id: existing.id,
-    provider: existing.provider,
-    label: label ?? existing.label,
-    region: existing.region,
-    created_at: existing.created_at,
-  });
+  if (!data) throw new DeployError("Failed to update provider", "internal");
+  return rowToProvider(data);
 }
 
 export async function deleteProvider(providerId: string, tenantId: string) {
