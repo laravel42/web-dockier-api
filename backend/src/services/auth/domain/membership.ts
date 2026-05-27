@@ -53,9 +53,10 @@ export async function listMembershipsForUser(userId: string): Promise<Membership
 
 /**
  * Resolve permissions for a user in a tenant (role → role_permissions).
+ * Throws on database errors to avoid silently masking failures as "no permissions".
  */
 export async function resolveUserPermissions(userId: string, tenantId: string): Promise<ResolvedPermissions> {
-  const { data: membership } = await supabaseAdmin
+  const { data: membership, error: membershipError } = await supabaseAdmin
     .from("organization_memberships")
     .select("role_id, is_owner")
     .eq("organization_id", tenantId)
@@ -63,25 +64,31 @@ export async function resolveUserPermissions(userId: string, tenantId: string): 
     .eq("status", "active")
     .maybeSingle();
 
+  if (membershipError) throw membershipError;
+
   if (!membership?.role_id) {
     return { permissions: [], roleId: "", roleName: "", systemKey: null, isOwner: false };
   }
 
-  const { data: role } = await supabaseAdmin
+  const { data: role, error: roleError } = await supabaseAdmin
     .from("roles")
     .select("id, name, system_key")
     .eq("id", membership.role_id)
     .is("deleted_at", null)
     .maybeSingle();
 
+  if (roleError) throw roleError;
+
   if (!role) {
     return { permissions: [], roleId: "", roleName: "", systemKey: null, isOwner: membership.is_owner ?? false };
   }
 
-  const { data: rolePerms } = await supabaseAdmin
+  const { data: rolePerms, error: permsError } = await supabaseAdmin
     .from("role_permissions")
     .select("permission_id")
     .eq("role_id", role.id);
+
+  if (permsError) throw permsError;
 
   return {
     permissions: (rolePerms ?? []).map((rp) => rp.permission_id),
@@ -100,11 +107,12 @@ export async function resolvePermissionsWithMigration(userId: string, tenantId: 
 
   if (!resolved.roleId) {
     const seeded = await seedDefaultRoles(tenantId);
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("organization_memberships")
       .update({ role_id: seeded.memberRoleId })
       .eq("organization_id", tenantId)
       .eq("user_id", userId);
+    if (error) throw error;
     invalidatePermissionCache(userId, tenantId);
     resolved = await resolveUserPermissions(userId, tenantId);
   }
@@ -127,13 +135,14 @@ export async function addMemberToTenant(params: AddMemberParams): Promise<void> 
   const { tenantId, email, roleId, actorHierarchyLevel } = params;
 
   // Validate the role exists in this org
-  const { data: targetRole } = await supabaseAdmin
+  const { data: targetRole, error: roleError } = await supabaseAdmin
     .from("roles")
     .select("id, system_key")
     .eq("id", roleId)
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
+  if (roleError) throw new MembershipError(roleError.message, "internal");
   if (!targetRole) throw new MembershipError("Role not found in this organization", "not_found");
 
   // Escalation check: cannot assign a role more powerful than your own
@@ -181,12 +190,13 @@ export async function removeMemberFromTenant(params: RemoveMemberParams): Promis
     throw new MembershipError("Cannot remove yourself from the organization", "forbidden");
   }
 
-  const { data: targetMembership } = await supabaseAdmin
+  const { data: targetMembership, error: membershipError } = await supabaseAdmin
     .from("organization_memberships")
     .select("is_owner")
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId)
     .maybeSingle();
+  if (membershipError) throw new MembershipError(membershipError.message, "internal");
   if (!targetMembership) throw new MembershipError("Membership not found", "not_found");
   if (targetMembership.is_owner) {
     throw new MembershipError("Cannot remove the organization owner", "forbidden");

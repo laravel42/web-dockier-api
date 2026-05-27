@@ -137,16 +137,18 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
   const email = data.user.email ?? params.email;
 
   // Ensure public.users record exists
-  const { data: existingUser } = await supabaseAdmin.from("users").select("id").eq("id", userId).maybeSingle();
+  const { data: existingUser, error: userQueryError } = await supabaseAdmin.from("users").select("id").eq("id", userId).maybeSingle();
+  if (userQueryError) throw new RegistrationError(userQueryError.message, "internal");
   if (!existingUser) {
     const displayName = data.user.user_metadata?.display_name || data.user.user_metadata?.name || email.split("@")[0];
-    await supabaseAdmin.from("users").insert({
+    const { error: insertError } = await supabaseAdmin.from("users").insert({
       id: userId,
       email,
       name: displayName as string,
       organization_id: null,
       created_at: new Date().toISOString(),
     });
+    if (insertError) throw new RegistrationError(insertError.message, "internal");
   }
 
   const memberships = await listMembershipsForUser(userId);
@@ -154,10 +156,11 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
   if (!selected) throw new RegistrationError("No organization membership found. Contact your admin.", "forbidden");
 
   // Sync user's active org
-  await supabaseAdmin
+  const { error: syncError } = await supabaseAdmin
     .from("users")
     .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
     .eq("id", userId);
+  if (syncError) throw new RegistrationError(syncError.message, "internal");
 
   return {
     session: {
@@ -198,10 +201,11 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
     typeof data.user.user_metadata?.tenant_name === "string" ? data.user.user_metadata.tenant_name : undefined;
 
   // Upsert user record
-  await supabaseAdmin.from("users").upsert(
+  const { error: userError } = await supabaseAdmin.from("users").upsert(
     { id: userId, email, name: displayName, organization_id: null, created_at: new Date().toISOString() },
     { onConflict: "id" },
   );
+  if (userError) throw new RegistrationError(userError.message, "internal");
 
   let memberships = await listMembershipsForUser(userId);
   let selected: Membership | undefined = memberships[0];
@@ -254,10 +258,11 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
   if (!selected) throw new RegistrationError("Unable to resolve tenant membership", "internal");
 
   // Sync user's active org
-  await supabaseAdmin
+  const { error: syncError } = await supabaseAdmin
     .from("users")
     .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
     .eq("id", userId);
+  if (syncError) throw new RegistrationError(syncError.message, "internal");
 
   return {
     session: {

@@ -32,13 +32,14 @@ export async function createTenant(params: CreateTenantParams): Promise<CreateTe
 
   const { adminRoleId } = await seedDefaultRoles(org.id);
 
-  await supabaseAdmin.from("organization_memberships").insert({
+  const { error: membershipError } = await supabaseAdmin.from("organization_memberships").insert({
     organization_id: org.id,
     user_id: userId,
     role_id: adminRoleId,
     is_owner: true,
     status: "active",
   });
+  if (membershipError) throw new TenantError(membershipError.message, "internal");
 
   return {
     tenantId: org.id,
@@ -97,12 +98,13 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
   }
 
   // Verify target is an active member
-  const { data: targetMembership } = await supabaseAdmin
+  const { data: targetMembership, error: membershipError } = await supabaseAdmin
     .from("organization_memberships")
     .select("id, status")
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId)
     .maybeSingle();
+  if (membershipError) throw new TenantError(membershipError.message, "internal");
   if (!targetMembership) throw new TenantError("Target user is not a member of this organization", "not_found");
   if (targetMembership.status !== "active") throw new TenantError("Target member is not active", "bad_request");
 
