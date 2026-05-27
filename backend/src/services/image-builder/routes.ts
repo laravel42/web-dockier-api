@@ -668,7 +668,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const { data, error: fetchError } = await db.from("builds").select("*").eq("id", request.body.buildId).maybeSingle();
       if (fetchError) {
         app.log.error(fetchError);
-        return { ok: false };
+        throw app.httpErrors.internalServerError("Database error fetching build");
       }
       if (!data) return { ok: false };
       const updates: Database["public"]["Tables"]["builds"]["Update"] = { updated_at: new Date().toISOString() };
@@ -688,7 +688,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       const { error: updateError } = await db.from("builds").update(updates).eq("id", request.body.buildId);
       if (updateError) {
         app.log.error(updateError);
-        return { ok: false };
+        throw app.httpErrors.internalServerError("Database error updating build");
       }
       return { ok: true };
     },

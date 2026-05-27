@@ -77,20 +77,29 @@ export async function createBuild(params: CreateBuildParams) {
   const { error } = await supabaseAdmin.from("builds").insert(payload);
   if (error) throw new ImageBuilderError(error.message, "bad_request");
 
-  await enqueueBuild({
-    buildId: id,
-    sourceRepo: params.sourceRepo,
-    sourceRef: normalized.sourceRef,
-    commitSha: params.commitSha ?? "",
-    imageRepo: normalized.imageRepo,
-    dockerfilePath: normalized.dockerfilePath,
-    buildContext: normalized.buildContext,
-    tags: normalized.tags,
-    providerId: params.providerId ?? "",
-    gitConnectionId: params.gitConnectionId ?? "",
-    deployTarget: params.deployTarget ?? "",
-    deployParams: params.deployParams ?? {},
-  });
+  try {
+    await enqueueBuild({
+      buildId: id,
+      sourceRepo: params.sourceRepo,
+      sourceRef: normalized.sourceRef,
+      commitSha: params.commitSha ?? "",
+      imageRepo: normalized.imageRepo,
+      dockerfilePath: normalized.dockerfilePath,
+      buildContext: normalized.buildContext,
+      tags: normalized.tags,
+      providerId: params.providerId ?? "",
+      gitConnectionId: params.gitConnectionId ?? "",
+      deployTarget: params.deployTarget ?? "",
+      deployParams: params.deployParams ?? {},
+    });
+  } catch (enqueueError: any) {
+    await supabaseAdmin.from("builds").update({
+      status: "failed",
+      status_reason: `Failed to enqueue build job: ${enqueueError.message}`,
+      updated_at: new Date().toISOString(),
+    }).eq("id", id);
+    throw new ImageBuilderError(`Failed to start build pipeline: ${enqueueError.message}`, "internal");
+  }
 
   return rowToBuild(payload);
 }
@@ -115,6 +124,9 @@ export interface ListBuildsParams {
 
 export async function listBuilds(params: ListBuildsParams) {
   const { tenantId, sourceRepo, status } = params;
+  if (!tenantId) {
+    throw new ImageBuilderError("Tenant ID is required", "bad_request");
+  }
   const limit = params.limit ?? 50;
   let query = supabaseAdmin
     .from("builds")
@@ -151,6 +163,7 @@ export async function cancelBuild(buildId: string, tenantId: string) {
     .select("*")
     .single();
   if (updateError) throw new ImageBuilderError(updateError.message, "bad_request");
+  if (!updated) throw new ImageBuilderError("Build not found or could not be updated", "not_found");
   return rowToBuild(updated);
 }
 
