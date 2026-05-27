@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import jwt from "jsonwebtoken";
 import { z } from "zod";
 import {
   authMeSchema,
@@ -11,133 +10,56 @@ import {
 } from "./schemas.js";
 import { env } from "../../shared/config.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
-import { seedDefaultRoles } from "../roles/seed.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { getHierarchyLevel } from "../../shared/permissions/role-templates.js";
-import { invalidatePermissionCache } from "../../shared/permissions/authorization.js";
 
-function throwAuthStartError(app: FastifyInstance, message: string) {
-  if (/rate limit|over_email_send_rate_limit|security purposes/i.test(message)) {
-    throw app.httpErrors.tooManyRequests("Email rate limit exceeded. Please wait about 60 seconds before requesting another code.");
-  }
-  if (/signups?\s*(are)?\s*disabled|not allowed/i.test(message)) {
-    throw app.httpErrors.forbidden("Signups are disabled in Supabase Auth. Enable email signups to allow registration.");
-  }
-  throw app.httpErrors.badRequest(message);
-}
-
-function slugifyTenant(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 50);
-}
-
-function signTenantToken(payload: { userId: string; email: string; tenantId: string }) {
-  return jwt.sign(
-    { userId: payload.userId, email: payload.email, tenantId: payload.tenantId },
-    env.JWT_SECRET,
-    { expiresIn: "7d" },
-  );
-}
-
-async function listMembershipsForUser(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("organization_memberships")
-    .select("id,role_id,is_owner,organization_id,organizations!inner(id,name,slug),roles!left(name)")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  const rows = (data ?? []) as Array<{
-    id: string;
-    role_id: string | null;
-    is_owner: boolean;
-    organization_id: string;
-    organizations: { id: string; name: string; slug: string };
-    roles: { name: string } | null;
-  }>;
-  return rows.map((row) => ({
-    id: row.id,
-    tenantId: row.organization_id,
-    tenantName: row.organizations.name,
-    tenantSlug: row.organizations.slug,
-    roleName: row.roles?.name ?? "Member",
-    isOwner: row.is_owner,
-  }));
-}
-
-async function findAuthUserIdByEmail(email: string): Promise<string | null> {
-  const lowerEmail = email.toLowerCase();
-  let page = 1;
-  while (page <= 20) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw error;
-    const matched = data.users.find((user) => (user.email ?? "").toLowerCase() === lowerEmail);
-    if (matched?.id) return matched.id;
-    if (data.users.length < 200) break;
-    page += 1;
-  }
-  return null;
-}
-
-async function resolveDemoAuthUser(email: string): Promise<string> {
-  const existing = await findAuthUserIdByEmail(email);
-  if (existing) return existing;
-
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password: `Demo-${Date.now()}-Aa1!`,
-    email_confirm: true,
-    user_metadata: { display_name: "Demo User", demo_user: true },
-  });
-  if (error || !data.user?.id) {
-    throw error ?? new Error("Unable to create demo auth user");
-  }
-  return data.user.id;
-}
+// Domain modules
+import {
+  listMembershipsForUser,
+  resolvePermissionsWithMigration,
+  addMemberToTenant,
+  removeMemberFromTenant,
+  listTenantMemberships,
+  MembershipError,
+} from "./domain/membership.js";
+import {
+  classifyAuthError,
+  performDemoLogin,
+  performPasswordLogin,
+  verifyOtpAndProvision,
+  RegistrationError,
+} from "./domain/registration.js";
+import {
+  createTenant,
+  switchTenant,
+  transferOwnership,
+  TenantError,
+} from "./domain/tenant.js";
 
 /**
- * Resolve permissions for a user in a tenant (used by /auth/me).
+ * Map domain error codes to Fastify HTTP errors.
  */
-async function resolveUserPermissions(userId: string, tenantId: string) {
-  const { data: membership } = await supabaseAdmin
-    .from("organization_memberships")
-    .select("role_id, is_owner")
-    .eq("organization_id", tenantId)
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (!membership?.role_id) return { permissions: [] as string[], roleId: "", roleName: "", systemKey: null as string | null, isOwner: false };
-
-  const { data: role } = await supabaseAdmin
-    .from("roles")
-    .select("id, name, system_key")
-    .eq("id", membership.role_id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (!role) return { permissions: [] as string[], roleId: "", roleName: "", systemKey: null as string | null, isOwner: membership.is_owner ?? false };
-
-  const { data: rolePerms } = await supabaseAdmin
-    .from("role_permissions")
-    .select("permission_id")
-    .eq("role_id", role.id);
-
-  return {
-    permissions: (rolePerms ?? []).map((rp) => rp.permission_id),
-    roleId: role.id,
-    roleName: role.name,
-    systemKey: role.system_key ?? null,
-    isOwner: membership.is_owner ?? false,
-  };
+function throwDomainError(app: FastifyInstance, error: MembershipError | RegistrationError | TenantError): never {
+  const msg = error.message;
+  switch (error.code) {
+    case "unauthorized":
+      throw app.httpErrors.unauthorized(msg);
+    case "forbidden":
+      throw app.httpErrors.forbidden(msg);
+    case "not_found":
+      throw app.httpErrors.notFound(msg);
+    case "bad_request":
+      throw app.httpErrors.badRequest(msg);
+    case "internal":
+      throw app.httpErrors.internalServerError(msg);
+    default:
+      throw app.httpErrors.internalServerError(msg);
+  }
 }
 
 export async function registerAuthRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  // ─── Demo Login ────────────────────────────────────────────────────────────
 
   typed.post(
     "/auth/demo-login",
@@ -154,51 +76,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (env.NODE_ENV === "production") {
         throw app.httpErrors.forbidden("Demo login is disabled in production.");
       }
-
-      const demoTenantId = "00000000-0000-4000-8000-000000000010";
-      const demoEmail = "demo@dockier.local";
-      const demoName = "Demo User";
-      const demoTenantName = "Demo Workspace";
-      const demoTenantSlug = "demo-workspace";
-      const now = new Date().toISOString();
-      const demoUserId = await resolveDemoAuthUser(demoEmail);
-
-      // Upsert user
-      await supabaseAdmin.from("users").upsert(
-        { id: demoUserId, email: demoEmail, name: demoName, organization_id: null, created_at: now },
-        { onConflict: "id" },
-      );
-
-      // Upsert org
-      await supabaseAdmin.from("organizations").upsert(
-        { id: demoTenantId, name: demoTenantName, slug: demoTenantSlug, created_by: demoUserId },
-        { onConflict: "id" },
-      );
-
-      // Sync user org
-      await supabaseAdmin.from("users").update({ organization_id: demoTenantId, updated_at: now }).eq("id", demoUserId);
-
-      // Seed roles
-      const { adminRoleId } = await seedDefaultRoles(demoTenantId);
-
-      // Upsert membership as owner
-      await supabaseAdmin.from("organization_memberships").upsert(
-        { organization_id: demoTenantId, user_id: demoUserId, role_id: adminRoleId, is_owner: true, status: "active" },
-        { onConflict: "organization_id,user_id" },
-      );
-
-      return {
-        session: {
-          token: signTenantToken({ userId: demoUserId, email: demoEmail, tenantId: demoTenantId }),
-          userId: demoUserId,
-          tenantId: demoTenantId,
-        },
-        memberships: [
-          { id: "00000000-0000-4000-8000-000000000099", tenantId: demoTenantId, tenantName: demoTenantName, tenantSlug: demoTenantSlug, roleName: "Admin", isOwner: true },
-        ],
-      };
+      return performDemoLogin();
     },
   );
+
+  // ─── Password Login ────────────────────────────────────────────────────────
 
   typed.post(
     "/auth/password/login",
@@ -219,55 +101,21 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (env.NODE_ENV === "production") {
         throw app.httpErrors.forbidden("Password login is disabled in production.");
       }
-
-      // Use a disposable client to avoid tainting the shared supabaseAdmin session
-      const { createClient } = await import("@supabase/supabase-js");
-      const authClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-
-      const { data, error } = await authClient.auth.signInWithPassword({
-        email: request.body.email,
-        password: request.body.password,
-      });
-      if (error || !data.user) throw app.httpErrors.unauthorized(error?.message ?? "Invalid email or password");
-
-      const userId = data.user.id;
-      const email = data.user.email ?? request.body.email;
-
-      // Ensure public.users record exists (non-destructive — only insert if missing)
-      const { data: existingUser } = await supabaseAdmin.from("users").select("id").eq("id", userId).maybeSingle();
-      if (!existingUser) {
-        const displayName = data.user.user_metadata?.display_name || data.user.user_metadata?.name || email.split("@")[0];
-        await supabaseAdmin.from("users").insert({
-          id: userId,
-          email,
-          name: displayName as string,
-          organization_id: null,
-          created_at: new Date().toISOString(),
+      try {
+        return await performPasswordLogin({
+          email: request.body.email,
+          password: request.body.password,
+          supabaseUrl: env.SUPABASE_URL,
+          supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
         });
+      } catch (err) {
+        if (err instanceof RegistrationError) throwDomainError(app, err);
+        throw err;
       }
-
-      const memberships = await listMembershipsForUser(userId);
-      const selected = memberships[0];
-      if (!selected) throw app.httpErrors.forbidden("No organization membership found. Contact your admin.");
-
-      // Sync user's active org
-      await supabaseAdmin
-        .from("users")
-        .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-
-      return {
-        session: {
-          token: signTenantToken({ userId, email, tenantId: selected.tenantId }),
-          userId,
-          tenantId: selected.tenantId,
-        },
-        memberships,
-      };
     },
   );
+
+  // ─── Register Start (OTP) ─────────────────────────────────────────────────
 
   typed.post(
     "/auth/register/start",
@@ -288,10 +136,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           data: { display_name: request.body.displayName, tenant_name: request.body.tenantName },
         },
       });
-      if (error) throwAuthStartError(app, error.message);
+      if (error) {
+        const classified = classifyAuthError(error.message);
+        if (classified.status === "rate_limit") throw app.httpErrors.tooManyRequests(classified.userMessage);
+        if (classified.status === "forbidden") throw app.httpErrors.forbidden(classified.userMessage);
+        throw app.httpErrors.badRequest(classified.userMessage);
+      }
       return { success: true as const, message: "Signup started. Check your email for OTP or magic link." };
     },
   );
+
+  // ─── Passwordless Start ────────────────────────────────────────────────────
 
   typed.post(
     "/auth/passwordless/start",
@@ -308,10 +163,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         email: request.body.email,
         options: { shouldCreateUser: false, emailRedirectTo: request.body.redirectTo },
       });
-      if (error) throwAuthStartError(app, error.message);
+      if (error) {
+        const classified = classifyAuthError(error.message);
+        if (classified.status === "rate_limit") throw app.httpErrors.tooManyRequests(classified.userMessage);
+        if (classified.status === "forbidden") throw app.httpErrors.forbidden(classified.userMessage);
+        throw app.httpErrors.badRequest(classified.userMessage);
+      }
       return { success: true as const, message: "Passwordless sign-in started. Check your email for OTP or magic link." };
     },
   );
+
+  // ─── Passwordless Verify ───────────────────────────────────────────────────
 
   typed.post(
     "/auth/passwordless/verify",
@@ -330,96 +192,22 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data, error } = await supabaseAdmin.auth.verifyOtp({
-        email: request.body.email,
-        token: request.body.token,
-        type: request.body.type,
-      });
-      if (error || !data.user) throw app.httpErrors.unauthorized(error?.message ?? "Invalid OTP token");
-
-      const userId = data.user.id;
-      const email = data.user.email ?? request.body.email;
-      const displayName =
-        (typeof data.user.user_metadata?.display_name === "string" && data.user.user_metadata.display_name) ||
-        (typeof data.user.user_metadata?.name === "string" && data.user.user_metadata.name) ||
-        email.split("@")[0];
-      const metadataTenantName =
-        typeof data.user.user_metadata?.tenant_name === "string" ? data.user.user_metadata.tenant_name : undefined;
-
-      // Upsert user record
-      await supabaseAdmin.from("users").upsert(
-        { id: userId, email, name: displayName, organization_id: null, created_at: new Date().toISOString() },
-        { onConflict: "id" },
-      );
-
-      let memberships = await listMembershipsForUser(userId);
-      let selected: (typeof memberships)[number] | undefined = memberships[0];
-
-      if (request.body.tenantSlug) {
-        selected = memberships.find((m) => m.tenantSlug === request.body.tenantSlug);
-        if (!selected) throw app.httpErrors.forbidden("No membership in requested tenant");
+      try {
+        return await verifyOtpAndProvision({
+          email: request.body.email,
+          token: request.body.token,
+          type: request.body.type,
+          tenantSlug: request.body.tenantSlug,
+          tenantName: request.body.tenantName,
+        });
+      } catch (err) {
+        if (err instanceof RegistrationError) throwDomainError(app, err);
+        throw err;
       }
-
-      // No existing membership — create a new org and make user Primary Owner
-      if (!selected) {
-        const tenantName = request.body.tenantName?.trim() || metadataTenantName || `${displayName}'s workspace`;
-        const tenantSlugBase = slugifyTenant(tenantName) || "workspace";
-        const tenantSlug = `${tenantSlugBase}-${userId.slice(0, 6)}`;
-
-        const { data: org, error: orgError } = await supabaseAdmin
-          .from("organizations")
-          .insert({ name: tenantName, slug: tenantSlug, created_by: userId })
-          .select("id,name,slug")
-          .single();
-        if (orgError || !org) throw app.httpErrors.internalServerError(orgError?.message ?? "Failed to create tenant");
-
-        // Seed roles for the new org
-        const { adminRoleId } = await seedDefaultRoles(org.id);
-
-        // Create membership as Owner
-        const { data: createdMembership, error: membershipError } = await supabaseAdmin
-          .from("organization_memberships")
-          .insert({
-            organization_id: org.id,
-            user_id: userId,
-            role_id: adminRoleId,
-            is_owner: true,
-            status: "active",
-          })
-          .select("id,organization_id,is_owner")
-          .single();
-        if (membershipError || !createdMembership) {
-          throw app.httpErrors.internalServerError(membershipError?.message ?? "Failed to create membership");
-        }
-
-        selected = {
-          id: createdMembership.id,
-          tenantId: org.id,
-          tenantName: org.name,
-          tenantSlug: org.slug,
-          roleName: "Admin",
-          isOwner: true,
-        };
-        memberships = [selected];
-      }
-      if (!selected) throw app.httpErrors.internalServerError("Unable to resolve tenant membership");
-
-      // Sync user's active org
-      await supabaseAdmin
-        .from("users")
-        .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-
-      return {
-        session: {
-          token: signTenantToken({ userId, email, tenantId: selected.tenantId }),
-          userId,
-          tenantId: selected.tenantId,
-        },
-        memberships,
-      };
     },
   );
+
+  // ─── Auth Me ───────────────────────────────────────────────────────────────
 
   typed.get(
     "/auth/me",
@@ -441,22 +229,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (userError) throw app.httpErrors.internalServerError(userError.message);
       if (!user) throw app.httpErrors.notFound("User not found");
 
-      // Resolve permissions from membership → role → role_permissions
-      let resolved = await resolveUserPermissions(auth.userId, auth.tenantId);
-
-      // Lazy migration: if no role_id on membership, seed roles and assign
-      if (!resolved.roleId) {
-        const seeded = await seedDefaultRoles(auth.tenantId);
-        const fallbackRoleId = seeded.memberRoleId;
-        await supabaseAdmin
-          .from("organization_memberships")
-          .update({ role_id: fallbackRoleId })
-          .eq("organization_id", auth.tenantId)
-          .eq("user_id", auth.userId);
-        invalidatePermissionCache(auth.userId, auth.tenantId);
-        resolved = await resolveUserPermissions(auth.userId, auth.tenantId);
-      }
-
+      const resolved = await resolvePermissionsWithMigration(auth.userId, auth.tenantId);
       const memberships = await listMembershipsForUser(auth.userId);
 
       return {
@@ -474,6 +247,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
   );
 
+  // ─── List My Memberships ───────────────────────────────────────────────────
+
   typed.get(
     "/auth/memberships",
     {
@@ -490,6 +265,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
   );
 
+  // ─── Create Tenant ─────────────────────────────────────────────────────────
+
   typed.post(
     "/auth/tenants",
     {
@@ -503,35 +280,16 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const slug = `${slugifyTenant(request.body.name) || "workspace"}-${auth.userId.slice(0, 6)}`;
-      const { data: org, error: orgError } = await supabaseAdmin
-        .from("organizations")
-        .insert({ name: request.body.name, slug, created_by: auth.userId })
-        .select("id,slug")
-        .single();
-      if (orgError || !org) throw app.httpErrors.badRequest(orgError?.message ?? "Unable to create tenant");
-
-      const { adminRoleId } = await seedDefaultRoles(org.id);
-
-      await supabaseAdmin.from("organization_memberships").insert({
-        organization_id: org.id,
-        user_id: auth.userId,
-        role_id: adminRoleId,
-        is_owner: true,
-        status: "active",
-      });
-
-      return {
-        tenantId: org.id,
-        slug: org.slug,
-        session: {
-          token: signTenantToken({ userId: auth.userId, email: auth.email, tenantId: org.id }),
-          userId: auth.userId,
-          tenantId: org.id,
-        },
-      };
+      try {
+        return await createTenant({ name: request.body.name, userId: auth.userId, email: auth.email });
+      } catch (err) {
+        if (err instanceof TenantError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
+
+  // ─── Switch Tenant ─────────────────────────────────────────────────────────
 
   typed.post(
     "/auth/tenants/:tenantId/switch",
@@ -546,23 +304,16 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await supabaseAdmin
-        .from("organization_memberships")
-        .select("status")
-        .eq("organization_id", request.params.tenantId)
-        .eq("user_id", auth.userId)
-        .maybeSingle();
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      if (!data) throw app.httpErrors.forbidden("No membership in requested tenant");
-      if (data.status !== "active") throw app.httpErrors.forbidden("Membership is not active");
-
-      return {
-        token: signTenantToken({ userId: auth.userId, email: auth.email, tenantId: request.params.tenantId }),
-        userId: auth.userId,
-        tenantId: request.params.tenantId,
-      };
+      try {
+        return await switchTenant({ tenantId: request.params.tenantId, userId: auth.userId, email: auth.email });
+      } catch (err) {
+        if (err instanceof TenantError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
+
+  // ─── List Tenant Memberships (Admin) ───────────────────────────────────────
 
   typed.get(
     "/auth/tenants/:tenantId/memberships",
@@ -593,35 +344,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant to view its memberships");
       }
-
-      const { data, error } = await supabaseAdmin
-        .from("organization_memberships")
-        .select("id,role_id,is_owner,user_id,users!inner(email,name),roles!left(name)")
-        .eq("organization_id", request.params.tenantId)
-        .eq("status", "active")
-        .order("created_at", { ascending: true });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      const rows = (data ?? []) as Array<{
-        id: string;
-        role_id: string | null;
-        is_owner: boolean;
-        user_id: string;
-        users: { email: string; name: string };
-        roles: { name: string } | null;
-      }>;
-
-      return {
-        memberships: rows.map((item) => ({
-          id: item.id,
-          userId: item.user_id,
-          email: item.users.email,
-          name: item.users.name,
-          roleName: item.roles?.name ?? "Member",
-          isOwner: item.is_owner,
-        })),
-      };
+      try {
+        const memberships = await listTenantMemberships(request.params.tenantId);
+        return { memberships };
+      } catch (err) {
+        if (err instanceof MembershipError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
+
+  // ─── Add Member to Tenant ──────────────────────────────────────────────────
 
   typed.post(
     "/auth/tenants/:tenantId/memberships",
@@ -643,50 +376,23 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
       }
-
-      // Validate the role exists in this org
-      const { data: targetRole } = await supabaseAdmin
-        .from("roles")
-        .select("id, system_key")
-        .eq("id", request.body.roleId)
-        .eq("organization_id", auth.tenantId)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (!targetRole) throw app.httpErrors.badRequest("Role not found in this organization");
-
-      // Escalation check: cannot assign a role more powerful than your own
-      const resolved = request.resolvedAuth!;
-      const targetLevel = getHierarchyLevel(targetRole.system_key);
-      if (targetLevel < resolved.hierarchyLevel) {
-        throw app.httpErrors.forbidden("Cannot assign a role more powerful than your own");
+      try {
+        await addMemberToTenant({
+          tenantId: auth.tenantId,
+          email: request.body.email,
+          roleId: request.body.roleId,
+          actorHierarchyLevel: request.resolvedAuth!.hierarchyLevel,
+        });
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof MembershipError) throwDomainError(app, err);
+        throw err;
       }
-
-      const { data: targetUser, error: userError } = await supabaseAdmin
-        .from("users")
-        .select("id")
-        .eq("email", request.body.email)
-        .maybeSingle();
-      if (userError) throw app.httpErrors.internalServerError(userError.message);
-      if (!targetUser) throw app.httpErrors.notFound("User must sign in first before being added");
-
-      const { error } = await supabaseAdmin.from("organization_memberships").upsert(
-        {
-          organization_id: request.params.tenantId,
-          user_id: targetUser.id,
-          role_id: targetRole.id,
-          is_owner: false,
-          status: "active",
-        },
-        { onConflict: "organization_id,user_id" },
-      );
-      if (error) throw app.httpErrors.badRequest(error.message);
-
-      invalidatePermissionCache(targetUser.id, request.params.tenantId);
-      return { success: true as const };
     },
   );
 
-  // Remove member from tenant
+  // ─── Remove Member from Tenant ─────────────────────────────────────────────
+
   typed.delete(
     "/auth/tenants/:tenantId/memberships/:userId",
     {
@@ -703,37 +409,22 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
       }
-
-      // Cannot remove yourself
-      if (request.params.userId === auth.userId) {
-        throw app.httpErrors.forbidden("Cannot remove yourself from the organization");
+      try {
+        await removeMemberFromTenant({
+          tenantId: request.params.tenantId,
+          targetUserId: request.params.userId,
+          actorUserId: auth.userId,
+        });
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof MembershipError) throwDomainError(app, err);
+        throw err;
       }
-
-      // Cannot remove the owner
-      const { data: targetMembership } = await supabaseAdmin
-        .from("organization_memberships")
-        .select("is_owner")
-        .eq("organization_id", request.params.tenantId)
-        .eq("user_id", request.params.userId)
-        .maybeSingle();
-      if (!targetMembership) throw app.httpErrors.notFound("Membership not found");
-      if (targetMembership.is_owner) {
-        throw app.httpErrors.forbidden("Cannot remove the organization owner");
-      }
-
-      const { error } = await supabaseAdmin
-        .from("organization_memberships")
-        .delete()
-        .eq("organization_id", request.params.tenantId)
-        .eq("user_id", request.params.userId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-
-      invalidatePermissionCache(request.params.userId, request.params.tenantId);
-      return { success: true as const };
     },
   );
 
-  // Transfer ownership
+  // ─── Transfer Ownership ────────────────────────────────────────────────────
+
   typed.post(
     "/auth/tenants/:tenantId/transfer-ownership",
     {
@@ -751,32 +442,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before transferring ownership");
       }
-
-      if (request.body.targetUserId === auth.userId) {
-        throw app.httpErrors.badRequest("You are already the owner");
+      try {
+        await transferOwnership({
+          tenantId: request.params.tenantId,
+          currentOwnerId: auth.userId,
+          targetUserId: request.body.targetUserId,
+        });
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof TenantError) throwDomainError(app, err);
+        throw err;
       }
-
-      // Verify target is an active member
-      const { data: targetMembership } = await supabaseAdmin
-        .from("organization_memberships")
-        .select("id, status")
-        .eq("organization_id", request.params.tenantId)
-        .eq("user_id", request.body.targetUserId)
-        .maybeSingle();
-      if (!targetMembership) throw app.httpErrors.notFound("Target user is not a member of this organization");
-      if (targetMembership.status !== "active") throw app.httpErrors.badRequest("Target member is not active");
-
-      // Atomic ownership transfer via RPC
-      const { error: rpcError } = await (supabaseAdmin.rpc as any)("transfer_ownership", {
-        _organization_id: request.params.tenantId,
-        _current_owner_id: auth.userId,
-        _new_owner_id: request.body.targetUserId,
-      });
-      if (rpcError) throw app.httpErrors.internalServerError(rpcError.message);
-
-      invalidatePermissionCache(auth.userId, request.params.tenantId);
-      invalidatePermissionCache(request.body.targetUserId, request.params.tenantId);
-      return { success: true as const };
     },
   );
 }
