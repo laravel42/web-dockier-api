@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { canAssignPermissions, canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
+import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 
 export type RolesErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal";
 
@@ -9,6 +9,7 @@ export class RolesError extends Error {
   constructor(
     message: string,
     public readonly code: RolesErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "RolesError";
@@ -35,7 +36,7 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
-  if (error) throw new RolesError("Failed to list roles", "internal");
+  if (error) throw new RolesError("Failed to list roles", "internal", error);
 
   const roleIds = (roles ?? []).map((r) => r.id);
   if (roleIds.length === 0) return { roles: [] };
@@ -44,7 +45,7 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
     .from("role_permissions")
     .select("role_id,permission_id")
     .in("role_id", roleIds);
-  if (permsError) throw new RolesError("Failed to fetch role permissions", "internal");
+  if (permsError) throw new RolesError("Failed to fetch role permissions", "internal", permsError);
 
   const permsByRole = new Map<string, string[]>();
   for (const rp of allPerms ?? []) {
@@ -75,14 +76,14 @@ export async function getRole(roleId: string, tenantId: string): Promise<RoleRes
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (error) throw new RolesError("Failed to fetch role", "internal");
+  if (error) throw new RolesError("Failed to fetch role", "internal", error);
   if (!role) throw new RolesError("Role not found", "not_found");
 
   const { data: perms, error: permsError } = await supabaseAdmin
     .from("role_permissions")
     .select("permission_id")
     .eq("role_id", role.id);
-  if (permsError) throw new RolesError("Failed to fetch role permissions", "internal");
+  if (permsError) throw new RolesError("Failed to fetch role permissions", "internal", permsError);
 
   return {
     id: role.id,
@@ -108,6 +109,14 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
   const { tenantId, name, description, permissions, resolvedAuth } = params;
   if (!tenantId) throw new RolesError("Tenant ID is required", "bad_request");
 
+  const trimmedName = name.trim();
+  if (trimmedName.length < 2 || trimmedName.length > 80) {
+    throw new RolesError("Role name must be between 2 and 80 characters", "bad_request");
+  }
+  if (description && description.trim().length > 300) {
+    throw new RolesError("Role description must be at most 300 characters", "bad_request");
+  }
+
   // Validate permission keys
   const invalidPerms = permissions.filter((p) => !ALL_PERMISSIONS.includes(p as any));
   if (invalidPerms.length > 0) {
@@ -115,15 +124,16 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
   }
 
   // Escalation check: cannot assign permissions you don't have
-  if (!canAssignPermissions(resolvedAuth, permissions as any)) {
-    throw new RolesError("Cannot assign critical permissions you do not possess", "forbidden");
+  const hasAllPerms = resolvedAuth.isOwner || permissions.every((p) => resolvedAuth.permissions.includes(p as any));
+  if (!hasAllPerms) {
+    throw new RolesError("Cannot assign permissions you do not possess", "forbidden");
   }
 
   const id = randomUUID();
   const { error } = await supabaseAdmin.from("roles").insert({
     id,
     organization_id: tenantId,
-    name: name.trim(),
+    name: trimmedName,
     description: description?.trim() ?? "",
     system_key: null,
     is_system: false,
@@ -132,7 +142,7 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
   });
   if (error) {
     if (error.code === "23505") throw new RolesError("A role with this name already exists", "bad_request");
-    throw new RolesError("Failed to create role", "internal");
+    throw new RolesError("Failed to create role", "internal", error);
   }
 
   // Insert permissions
@@ -141,14 +151,17 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
     const { error: permError } = await supabaseAdmin.from("role_permissions").insert(permRows);
     if (permError) {
       // Clean up the orphaned role
-      await supabaseAdmin.from("roles").delete().eq("id", id);
-      throw new RolesError("Failed to assign permissions", "internal");
+      const { error: cleanupError } = await supabaseAdmin.from("roles").delete().eq("id", id);
+      if (cleanupError) {
+        console.error(`Failed to clean up orphaned role ${id}:`, cleanupError);
+      }
+      throw new RolesError("Failed to assign permissions", "internal", permError);
     }
   }
 
   return {
     id,
-    name: name.trim(),
+    name: trimmedName,
     description: description?.trim() ?? "",
     systemKey: null,
     isSystem: false,
@@ -177,7 +190,7 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (fetchError) throw new RolesError("Failed to fetch role", "internal");
+  if (fetchError) throw new RolesError("Failed to fetch role", "internal", fetchError);
   if (!existing) throw new RolesError("Role not found", "not_found");
   if (!existing.is_editable) throw new RolesError("This role cannot be edited", "forbidden");
 
@@ -188,8 +201,20 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
 
   // Update role metadata
   const updates: Partial<{ name: string; description: string }> = {};
-  if (params.name !== undefined) updates.name = params.name.trim();
-  if (params.description !== undefined) updates.description = params.description.trim();
+  if (params.name !== undefined) {
+    const trimmedName = params.name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 80) {
+      throw new RolesError("Role name must be between 2 and 80 characters", "bad_request");
+    }
+    updates.name = trimmedName;
+  }
+  if (params.description !== undefined) {
+    const trimmedDesc = params.description.trim();
+    if (trimmedDesc.length > 300) {
+      throw new RolesError("Role description must be at most 300 characters", "bad_request");
+    }
+    updates.description = trimmedDesc;
+  }
 
   if (Object.keys(updates).length > 0) {
     const { error } = await supabaseAdmin
@@ -199,7 +224,7 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
       .eq("organization_id", tenantId);
     if (error) {
       if (error.code === "23505") throw new RolesError("A role with this name already exists", "bad_request");
-      throw new RolesError("Failed to update role", "internal");
+      throw new RolesError("Failed to update role", "internal", error);
     }
   }
 
@@ -210,22 +235,24 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     if (invalidPerms.length > 0) {
       throw new RolesError(`Invalid permissions: ${invalidPerms.join(", ")}`, "bad_request");
     }
-    if (!canAssignPermissions(resolvedAuth, params.permissions as any)) {
-      throw new RolesError("Cannot assign critical permissions you do not possess", "forbidden");
+    // Escalation check: cannot assign permissions you don't have
+    const hasAllPerms = resolvedAuth.isOwner || params.permissions.every((p) => resolvedAuth.permissions.includes(p as any));
+    if (!hasAllPerms) {
+      throw new RolesError("Cannot assign permissions you do not possess", "forbidden");
     }
 
     const { error: rpcError } = await (supabaseAdmin.rpc as any)("replace_role_permissions", {
       _role_id: roleId,
       _permission_ids: params.permissions,
     });
-    if (rpcError) throw new RolesError("Failed to update permissions", "internal");
+    if (rpcError) throw new RolesError("Failed to update permissions", "internal", rpcError);
     finalPermissions = params.permissions;
   } else {
     const { data: perms, error: permsError } = await supabaseAdmin
       .from("role_permissions")
       .select("permission_id")
       .eq("role_id", roleId);
-    if (permsError) throw new RolesError("Failed to fetch permissions", "internal");
+    if (permsError) throw new RolesError("Failed to fetch permissions", "internal", permsError);
     finalPermissions = (perms ?? []).map((p) => p.permission_id);
   }
 
@@ -249,7 +276,7 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (fetchError) throw new RolesError("Failed to fetch role", "internal");
+  if (fetchError) throw new RolesError("Failed to fetch role", "internal", fetchError);
   if (!existing) throw new RolesError("Role not found", "not_found");
   if (!existing.is_deletable) throw new RolesError("This role cannot be deleted", "forbidden");
 
@@ -263,8 +290,8 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .from("organization_memberships")
     .select("id", { count: "exact", head: true })
     .eq("role_id", roleId)
-    .eq("status", "active");
-  if (countError) throw new RolesError("Failed to check role usage", "internal");
+    .in("status", ["active", "pending"]);
+  if (countError) throw new RolesError("Failed to check role usage", "internal", countError);
   if (count && count > 0) {
     throw new RolesError(`Cannot delete role — it is still assigned to ${count} member(s). Reassign them first.`, "conflict");
   }
@@ -275,5 +302,5 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", roleId)
     .eq("organization_id", tenantId);
-  if (error) throw new RolesError("Failed to delete role", "internal");
+  if (error) throw new RolesError("Failed to delete role", "internal", error);
 }

@@ -28,7 +28,7 @@ const roleResponseSchema = z.object({
 function throwDomainError(app: FastifyInstance, error: RolesError): never {
   const msg = error.message;
   if (error.code === "internal") {
-    app.log.error(error);
+    app.log.error(error.cause || error, "Internal roles error: " + msg);
   } else {
     app.log.warn(error, "Roles domain warning: " + msg);
   }
