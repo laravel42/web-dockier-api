@@ -1,36 +1,45 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
-import { composeDeployingReason, composeSubmittedReason, normalizeBuildInput } from "./domain/orchestrator.js";
+import { composeDeployingReason } from "./domain/orchestrator.js";
 import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus } from "./domain/aws-runtime.js";
-import { createBuildspecPreview } from "./domain/buildspec.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { getAwsAccountId } from "../../lib/aws.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
-import { requireWebhookSignature, escapePostgrestFilter } from "../../shared/security.js";
-import { enqueueBuild } from "./domain/worker.js";
+import { requireWebhookSignature } from "../../shared/security.js";
+import { rowToBuild } from "./domain/mappers.js";
+import {
+  ImageBuilderError,
+  createBuild,
+  getBuild,
+  listBuilds,
+  cancelBuild,
+  resolveImageByRevision,
+} from "./domain/builds.js";
 
-function rowToBuild(row: any) {
-  return {
-    id: row.id,
-    codebuildId: row.codebuild_id ?? "",
-    sourceRepo: row.source_repo ?? "",
-    sourceRef: row.source_ref ?? "",
-    commitSha: row.commit_sha ?? "",
-    imageUri: row.image_uri ?? "",
-    status: row.status,
-    statusReason: row.status_reason ?? "",
-    logsUrl: row.logs_url ?? "",
-    tags: typeof row.tags === "string" ? JSON.parse(row.tags) : row.tags ?? [],
-    buildMetadata: typeof row.build_metadata === "string" ? JSON.parse(row.build_metadata) : row.build_metadata ?? {},
-    startedAt: row.started_at ?? "",
-    finishedAt: row.finished_at ?? "",
-    createdAt: row.created_at,
-  };
+/**
+ * Map domain error codes to Fastify HTTP errors.
+ */
+function throwDomainError(app: FastifyInstance, error: ImageBuilderError): never {
+  const msg = error.message;
+  app.log.error(error);
+  switch (error.code) {
+    case "not_found":
+      throw app.httpErrors.notFound(msg);
+    case "forbidden":
+      throw app.httpErrors.forbidden(msg);
+    case "bad_request":
+      throw app.httpErrors.badRequest(msg);
+    case "precondition_failed":
+      throw app.httpErrors.preconditionFailed(msg);
+    case "internal":
+      throw app.httpErrors.internalServerError("An internal server error occurred");
+    default:
+      throw app.httpErrors.internalServerError("An unexpected error occurred");
+  }
 }
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
@@ -64,63 +73,26 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
-      const now = new Date().toISOString();
-      const normalized = normalizeBuildInput(request.body);
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        project_id: request.body.projectId ?? "",
-        source_repo: request.body.sourceRepo,
-        source_ref: normalized.sourceRef,
-        commit_sha: request.body.commitSha ?? "",
-        dockerfile_path: normalized.dockerfilePath,
-        build_context: normalized.buildContext,
-        image_repo: normalized.imageRepo,
-        image_uri: "",
-        cache_repo_uri: "",
-        status: "pending",
-        status_reason: composeSubmittedReason(normalized.inferredRuntime),
-        logs_url: "",
-        tags: JSON.stringify(normalized.tags),
-        build_metadata: JSON.stringify({
-          ...normalized.metadata,
-          deployParams: JSON.stringify(request.body.deployParams ?? {}),
-          buildspecPreview: createBuildspecPreview({
-            runtime: normalized.inferredRuntime,
-            sourceRef: normalized.sourceRef,
-            dockerfilePath: normalized.dockerfilePath,
-            buildContext: normalized.buildContext,
-            imageRepo: normalized.imageRepo,
-            tags: normalized.tags,
-          }),
-        }),
-        provider_id: request.body.providerId ?? "",
-        created_at: now,
-        updated_at: now,
-      };
-      const { error } = await db.from("builds").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-
-      // ── Enqueue build job for background processing ──
-      // pg-boss provides crash recovery, retries, and visibility into stuck jobs.
-      // Falls back to setImmediate if DATABASE_URL is not configured.
-      await enqueueBuild({
-        buildId: id,
-        sourceRepo: request.body.sourceRepo,
-        sourceRef: normalized.sourceRef,
-        commitSha: request.body.commitSha ?? "",
-        imageRepo: normalized.imageRepo,
-        dockerfilePath: normalized.dockerfilePath,
-        buildContext: normalized.buildContext,
-        tags: normalized.tags,
-        providerId: request.body.providerId ?? "",
-        gitConnectionId: request.body.gitConnectionId ?? "",
-        deployTarget: request.body.deployTarget ?? "",
-        deployParams: request.body.deployParams ?? {},
-      });
-
-      return rowToBuild(payload);
+      try {
+        return await createBuild({
+          tenantId: auth.tenantId,
+          sourceRepo: request.body.sourceRepo,
+          sourceRef: request.body.sourceRef,
+          commitSha: request.body.commitSha,
+          imageRepo: request.body.imageRepo,
+          dockerfilePath: request.body.dockerfilePath,
+          buildContext: request.body.buildContext,
+          tags: request.body.tags,
+          projectId: request.body.projectId,
+          gitConnectionId: request.body.gitConnectionId,
+          deployTarget: request.body.deployTarget,
+          providerId: request.body.providerId,
+          deployParams: request.body.deployParams,
+        });
+      } catch (err) {
+        if (err instanceof ImageBuilderError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -137,11 +109,14 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
+      let row: any;
+      try {
+        row = await getBuild(request.params.buildId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof ImageBuilderError) throwDomainError(app, err);
+        throw err;
+      }
 
-      let row = data;
       if (!row.codebuild_id && row.provider_id) {
         const credentials = await resolveAwsCredentials(row.provider_id);
         if (credentials) {
@@ -219,13 +194,18 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const limit = request.query.limit ?? 50;
-      let query = db.from("builds").select("*").eq("organization_id", auth.tenantId).order("created_at", { ascending: false }).limit(limit);
-      if (request.query.sourceRepo) query = query.eq("source_repo", request.query.sourceRepo);
-      if (request.query.status) query = query.eq("status", request.query.status);
-      const { data, error } = await query;
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return { builds: (data ?? []).map(rowToBuild) };
+      try {
+        const builds = await listBuilds({
+          tenantId: auth.tenantId,
+          sourceRepo: request.query.sourceRepo,
+          status: request.query.status,
+          limit: request.query.limit,
+        });
+        return { builds };
+      } catch (err) {
+        if (err instanceof ImageBuilderError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -242,24 +222,12 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
-      if (!["submitted", "in_progress", "pending"].includes(data.status)) {
-        throw app.httpErrors.preconditionFailed(`Cannot cancel build in status: ${data.status}`);
+      try {
+        return await cancelBuild(request.params.buildId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof ImageBuilderError) throwDomainError(app, err);
+        throw err;
       }
-      const { data: updated, error: updateError } = await db
-        .from("builds")
-        .update({
-          status: "stopped",
-          status_reason: "Cancelled by user",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", request.params.buildId)
-        .select("*")
-        .single();
-      if (updateError) throw app.httpErrors.badRequest(updateError.message);
-      return rowToBuild(updated);
     },
   );
 
@@ -284,25 +252,12 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db
-        .from("builds")
-        .select("*")
-        .eq("organization_id", auth.tenantId)
-        .eq("status", "succeeded")
-        .neq("image_uri", "")
-        .or(`commit_sha.ilike.${escapePostgrestFilter(request.params.revision)}%,source_ref.eq.${escapePostgrestFilter(request.params.revision)}`)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error || !data) throw app.httpErrors.notFound(`No successful build found for revision: ${request.params.revision}`);
-      const build = rowToBuild(data);
-      return {
-        imageUri: build.imageUri,
-        buildId: build.id,
-        commitSha: build.commitSha,
-        status: build.status,
-        createdAt: build.createdAt,
-      };
+      try {
+        return await resolveImageByRevision(request.params.revision, auth.tenantId);
+      } catch (err) {
+        if (err instanceof ImageBuilderError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -710,7 +665,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data } = await db.from("builds").select("*").eq("id", request.body.buildId).maybeSingle();
+      const { data, error: fetchError } = await db.from("builds").select("*").eq("id", request.body.buildId).maybeSingle();
+      if (fetchError) {
+        app.log.error(fetchError);
+        return { ok: false };
+      }
       if (!data) return { ok: false };
       const updates: Database["public"]["Tables"]["builds"]["Update"] = { updated_at: new Date().toISOString() };
       if (request.body.codebuildId) updates.codebuild_id = request.body.codebuildId;
@@ -726,7 +685,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         updates.status = "in_progress";
         updates.status_reason = composeDeployingReason(request.body.deployTarget);
       }
-      await db.from("builds").update(updates).eq("id", request.body.buildId);
+      const { error: updateError } = await db.from("builds").update(updates).eq("id", request.body.buildId);
+      if (updateError) {
+        app.log.error(updateError);
+        return { ok: false };
+      }
       return { ok: true };
     },
   );
