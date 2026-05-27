@@ -152,49 +152,33 @@ export async function updateProject(params: UpdateProjectParams) {
     updates.config = { ...(typeof existing.config === "object" ? (existing.config as object) : {}), ...params.config } as unknown as Json;
   }
 
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("projects")
     .update(updates)
     .eq("id", projectId)
-    .eq("organization_id", tenantId);
+    .eq("organization_id", tenantId)
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
+    .single();
   if (error) {
+    if (error.code === "PGRST116") throw new ProjectsError("Project not found", "not_found");
     if (error.code === "23505") throw new ProjectsError("A project with this name already exists", "bad_request");
     throw new ProjectsError("Failed to update project", "internal", error);
-  }
-
-  // Fetch updated record
-  const { data, error: fetchError } = await supabaseAdmin
-    .from("projects")
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
-    .eq("id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-  if (fetchError) {
-    if (fetchError.code === "PGRST116") throw new ProjectsError("Project not found", "not_found");
-    throw new ProjectsError("Failed to fetch updated project", "internal", fetchError);
   }
   if (!data) throw new ProjectsError("Project not found", "not_found");
   return rowToProject(data);
 }
 
 export async function deleteProject(projectId: string, tenantId: string) {
-  // Verify project exists and belongs to tenant
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-  if (existingError) {
-    if (existingError.code === "PGRST116") throw new ProjectsError("Project not found", "not_found");
-    throw new ProjectsError("Failed to fetch project", "internal", existingError);
-  }
-  if (!existing) throw new ProjectsError("Project not found", "not_found");
-
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("projects")
     .delete()
     .eq("id", projectId)
-    .eq("organization_id", tenantId);
-  if (error) throw new ProjectsError("Failed to delete project", "internal", error);
+    .eq("organization_id", tenantId)
+    .select("id");
+  if (error) {
+    throw new ProjectsError("Failed to delete project", "internal", error);
+  }
+  if (!data || data.length === 0) {
+    throw new ProjectsError("Project not found", "not_found");
+  }
 }
