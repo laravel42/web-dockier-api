@@ -192,6 +192,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
           userId: request.params.userId,
           tenantId: auth.tenantId,
           actorUserId: auth.userId,
+          resolvedAuth: request.resolvedAuth!,
         });
         return { success: true as const };
       } catch (err) {

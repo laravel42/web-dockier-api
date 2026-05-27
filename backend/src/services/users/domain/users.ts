@@ -55,6 +55,22 @@ export async function createUser(params: CreateUserParams) {
   const { tenantId, email, name, password, country, language, timezone, roleId, resolvedAuth } = params;
   if (!tenantId) throw new UsersError("Tenant ID is required", "bad_request");
 
+  // Validate role upfront if provided to prevent orphaned auth/user records on failure
+  if (roleId) {
+    const { data: targetRole, error: roleLookupError } = await supabaseAdmin
+      .from("roles")
+      .select("id,system_key")
+      .eq("id", roleId)
+      .eq("organization_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (roleLookupError) throw new UsersError("Failed to look up role", "internal");
+    if (!targetRole) throw new UsersError("Role not found", "bad_request");
+    if (!canManageRole(resolvedAuth, targetRole.system_key)) {
+      throw new UsersError("Cannot assign a role at or above your own level", "forbidden");
+    }
+  }
+
   // Create user in Supabase Auth
   const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email,
@@ -81,13 +97,22 @@ export async function createUser(params: CreateUserParams) {
     created_at: now,
   });
   if (error) {
+    // Clean up the created auth user to prevent orphaned auth accounts
+    await supabaseAdmin.auth.admin.deleteUser(id).catch(() => {});
     if (error.code === "23505") throw new UsersError("A user with this email already exists", "bad_request");
     throw new UsersError("Failed to create user record", "internal");
   }
 
   // Create organization membership with role
   if (roleId) {
-    await assignRoleToUser(id, tenantId, roleId, resolvedAuth);
+    try {
+      await assignRoleToUser(id, tenantId, roleId, resolvedAuth);
+    } catch (assignError) {
+      // Clean up both the auth user and the public.users record on membership failure
+      await supabaseAdmin.from("users").delete().eq("id", id);
+      await supabaseAdmin.auth.admin.deleteUser(id).catch(() => {});
+      throw assignError;
+    }
   }
 
   const { data: created, error: fetchError } = await supabaseAdmin
@@ -229,10 +254,11 @@ export interface RemoveUserParams {
   userId: string;
   tenantId: string;
   actorUserId: string;
+  resolvedAuth: ResolvedAuth;
 }
 
 export async function removeUser(params: RemoveUserParams) {
-  const { userId, tenantId, actorUserId } = params;
+  const { userId, tenantId, actorUserId, resolvedAuth } = params;
 
   if (userId === actorUserId) {
     throw new UsersError("Cannot remove yourself from the organization", "forbidden");
@@ -240,14 +266,20 @@ export async function removeUser(params: RemoveUserParams) {
 
   const { data: targetMembership, error: membershipErr } = await supabaseAdmin
     .from("organization_memberships")
-    .select("is_owner")
+    .select("is_owner, roles!left(system_key)")
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
-    .maybeSingle();
+    .maybeSingle() as { data: { is_owner: boolean; roles: { system_key: string | null } | null } | null; error: unknown };
   if (membershipErr) throw new UsersError("Failed to check membership", "internal");
   if (!targetMembership) throw new UsersError("User is not a member of this organization", "not_found");
   if (targetMembership.is_owner) {
     throw new UsersError("Cannot remove the organization owner", "forbidden");
+  }
+
+  // Prevent removing users at or above actor's level
+  const targetSystemKey = targetMembership.roles?.system_key ?? null;
+  if (!canManageRole(resolvedAuth, targetSystemKey)) {
+    throw new UsersError("Cannot remove a user at or above your own level", "forbidden");
   }
 
   const { error } = await supabaseAdmin
@@ -307,7 +339,10 @@ async function updateUserRole(
     .eq("status", "active")
     .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: unknown };
   if (membershipLookupError) throw new UsersError("Failed to look up membership", "internal");
-  if (targetMembership?.is_owner) {
+  if (!targetMembership) {
+    throw new UsersError("User is not an active member of this organization", "not_found");
+  }
+  if (targetMembership.is_owner) {
     throw new UsersError("Cannot change the role of the organization owner", "forbidden");
   }
 
