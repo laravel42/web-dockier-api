@@ -1,46 +1,47 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { deploymentSchema, deploymentStatusSchema, envVarSchema, postDeployCommandSchema, providerSchema, serviceEntrySchema } from "./schemas.js";
-import type { DeploymentRow, ProviderRow, ServiceEntry, DeploymentStatus } from "./types.js";
+import type { ServiceEntry } from "./types.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domain/planner.js";
 import { destroyDeployment } from "./domain/destroy.js";
 import { applyDeploymentWebhookUpdate, createDeploymentRecord } from "./domain/processor.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveDeployTemplate } from "./domain/templates.js";
-import { executePipeline } from "./domain/pipeline.js";
 import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
+import { rowToDeployment } from "./domain/mappers.js";
+import {
+  DeployError,
+  createProvider,
+  listProviders,
+  getProviderForTenant,
+  updateProvider,
+  deleteProvider,
+  getProviderCredentials,
+} from "./domain/providers.js";
+import { listSshKeys, createSshKey, deleteSshKey } from "./domain/ssh-keys.js";
+import { listDeployments, getDeployment, getDeploymentForDestroy, updateDeploymentStatus } from "./domain/deployments.js";
 
-function rowToProvider(row: Pick<ProviderRow, "id" | "provider" | "label" | "region" | "created_at">) {
-  return {
-    id: row.id,
-    provider: row.provider,
-    label: row.label,
-    region: row.region ?? "",
-    createdAt: row.created_at,
-  };
-}
-
-function rowToDeployment(row: DeploymentRow) {
-  return {
-    id: row.id,
-    providerId: row.provider_id ?? "",
-    gitConnectionId: row.git_connection_id ?? "",
-    projectId: row.project_id ?? "",
-    repo: row.repo,
-    branch: row.branch,
-    status: row.status as DeploymentStatus,
-    logs: row.logs ?? "",
-    appUrl: row.app_url ?? "",
-    commitHash: row.commit_hash ?? "",
-    dockerImage: row.docker_image ?? "",
-    deployStrategy: row.deploy_strategy ?? "managed",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+/**
+ * Map domain error codes to Fastify HTTP errors.
+ */
+function throwDomainError(app: FastifyInstance, error: DeployError): never {
+  const msg = error.message;
+  app.log.error(error);
+  switch (error.code) {
+    case "not_found":
+      throw app.httpErrors.notFound(msg);
+    case "forbidden":
+      throw app.httpErrors.forbidden(msg);
+    case "bad_request":
+      throw app.httpErrors.badRequest(msg);
+    case "internal":
+      throw app.httpErrors.internalServerError("An internal server error occurred");
+    default:
+      throw app.httpErrors.internalServerError("An unexpected error occurred");
+  }
 }
 
 export async function registerDeployRoutes(app: FastifyInstance) {
@@ -66,22 +67,19 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
-      const now = new Date().toISOString();
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        provider: request.body.provider,
-        label: request.body.label,
-        api_key: request.body.apiKey,
-        api_secret: request.body.apiSecret,
-        region: request.body.region ?? "",
-        app_runner_connection_arn: "",
-        created_at: now,
-      };
-      const { error } = await db.from("server_providers").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return rowToProvider(payload);
+      try {
+        return await createProvider({
+          tenantId: auth.tenantId,
+          provider: request.body.provider,
+          label: request.body.label,
+          apiKey: request.body.apiKey,
+          apiSecret: request.body.apiSecret,
+          region: request.body.region,
+        });
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -97,13 +95,13 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db
-        .from("server_providers")
-        .select("id,provider,label,region,created_at")
-        .eq("organization_id", auth.tenantId)
-        .order("created_at", { ascending: false });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return { providers: (data ?? []).map(rowToProvider) };
+      try {
+        const providers = await listProviders(auth.tenantId);
+        return { providers };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -121,25 +119,17 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing, error: existingError } = await db
-        .from("server_providers")
-        .select("id,provider,label,region,created_at,organization_id")
-        .eq("id", request.params.providerId)
-        .single();
-      if (existingError || !existing) throw app.httpErrors.notFound("Provider not found");
-      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your provider");
-      const updates: Partial<ProviderRow> = {};
-      if (request.body.label !== undefined) updates.label = request.body.label;
-      if (request.body.apiSecret !== undefined) updates.api_secret = request.body.apiSecret.trim();
-      const { error } = await db.from("server_providers").update(updates).eq("id", request.params.providerId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return rowToProvider({
-        id: existing.id,
-        provider: existing.provider,
-        label: request.body.label ?? existing.label,
-        region: existing.region,
-        created_at: existing.created_at,
-      });
+      try {
+        return await updateProvider({
+          providerId: request.params.providerId,
+          tenantId: auth.tenantId,
+          label: request.body.label,
+          apiSecret: request.body.apiSecret,
+        });
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -156,17 +146,13 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing } = await db
-        .from("server_providers")
-        .select("id,organization_id")
-        .eq("id", request.params.providerId)
-        .single();
-      if (!existing) throw app.httpErrors.notFound("Provider not found");
-      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your provider");
-      await db.from("deployments").delete().eq("provider_id", request.params.providerId);
-      const { error } = await db.from("server_providers").delete().eq("id", request.params.providerId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await deleteProvider(request.params.providerId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -189,18 +175,12 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data, error } = await db
-        .from("server_providers")
-        .select("provider,region,api_key,api_secret")
-        .eq("id", request.params.providerId)
-        .single();
-      if (error || !data) throw app.httpErrors.notFound("Provider not found");
-      return {
-        provider: data.provider,
-        region: data.region ?? "",
-        apiKey: data.api_key,
-        apiSecret: data.api_secret,
-      };
+      try {
+        return await getProviderCredentials(request.params.providerId);
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -228,21 +208,13 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db
-        .from("ssh_keys")
-        .select("id,label,public_key,fingerprint,created_at")
-        .eq("organization_id", auth.tenantId)
-        .order("created_at", { ascending: false });
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return {
-        keys: (data ?? []).map((row: any) => ({
-          id: row.id,
-          label: row.label,
-          publicKey: row.public_key,
-          fingerprint: row.fingerprint ?? "",
-          createdAt: row.created_at,
-        })),
-      };
+      try {
+        const keys = await listSshKeys(auth.tenantId);
+        return { keys };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -267,30 +239,16 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const id = uuidv4();
-      const publicKey = request.body.publicKey.trim();
-      if (!publicKey.startsWith("ssh-") && !publicKey.startsWith("ecdsa-")) {
-        throw app.httpErrors.badRequest("Invalid SSH public key format");
+      try {
+        return await createSshKey({
+          tenantId: auth.tenantId,
+          label: request.body.label,
+          publicKey: request.body.publicKey,
+        });
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
       }
-      const parts = publicKey.split(/\s+/);
-      const fingerprint = parts.length >= 2 ? `SHA256:${parts[1].slice(0, 16)}...` : "";
-      const payload = {
-        id,
-        organization_id: auth.tenantId,
-        label: request.body.label,
-        public_key: publicKey,
-        fingerprint,
-        created_at: new Date().toISOString(),
-      };
-      const { error } = await db.from("ssh_keys").insert(payload);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return {
-        id,
-        label: payload.label,
-        publicKey,
-        fingerprint,
-        createdAt: payload.created_at,
-      };
     },
   );
 
@@ -307,9 +265,13 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { error } = await db.from("ssh_keys").delete().eq("id", request.params.keyId).eq("organization_id", auth.tenantId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { success: true as const };
+      try {
+        await deleteSshKey(request.params.keyId, auth.tenantId);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -343,13 +305,14 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: providerRow, error: providerError } = await db
-        .from("server_providers")
-        .select("id,organization_id,provider,region")
-        .eq("id", request.body.providerId)
-        .single();
-      if (providerError || !providerRow) throw app.httpErrors.notFound("Provider not found");
-      if (providerRow.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your provider");
+      let providerRow: { id: string; organization_id: string; provider: string; region: string | null };
+      try {
+        const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
+        providerRow = { id: full.id, organization_id: full.organization_id, provider: full.provider, region: full.region };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
 
       try {
         const payload = await createDeploymentRecord(
@@ -404,7 +367,9 @@ export async function registerDeployRoutes(app: FastifyInstance) {
 
         return rowToDeployment(payload as any);
       } catch (error) {
-        throw app.httpErrors.badRequest((error as Error).message);
+        if (error instanceof DeployError) throwDomainError(app, error);
+        app.log.error(error);
+        throw app.httpErrors.internalServerError("Failed to create deployment");
       }
     },
   );
@@ -422,11 +387,13 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let query = db.from("deployments").select("*").eq("organization_id", auth.tenantId).order("created_at", { ascending: false }).limit(50);
-      if (request.query.providerId) query = query.eq("provider_id", request.query.providerId);
-      const { data, error } = await query;
-      if (error) throw app.httpErrors.internalServerError(error.message);
-      return { deployments: (data ?? []).map(rowToDeployment) };
+      try {
+        const deployments = await listDeployments(auth.tenantId, request.query.providerId);
+        return { deployments };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -443,10 +410,12 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data, error } = await db.from("deployments").select("*").eq("id", request.params.deploymentId).single();
-      if (error || !data) throw app.httpErrors.notFound("Deployment not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your deployment");
-      return rowToDeployment(data);
+      try {
+        return await getDeployment(request.params.deploymentId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -467,13 +436,17 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const updates: Partial<DeploymentRow> = { updated_at: new Date().toISOString() };
-      if (request.body.status !== undefined) updates.status = request.body.status;
-      if (request.body.logs !== undefined) updates.logs = request.body.logs;
-      if (request.body.appUrl !== undefined) updates.app_url = request.body.appUrl;
-      const { error } = await db.from("deployments").update(updates).eq("id", request.params.deploymentId);
-      if (error) throw app.httpErrors.badRequest(error.message);
-      return { ok: true as const };
+      try {
+        await updateDeploymentStatus(request.params.deploymentId, {
+          status: request.body.status,
+          logs: request.body.logs,
+          appUrl: request.body.appUrl,
+        });
+        return { ok: true as const };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -490,14 +463,12 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: existing, error: existingError } = await db
-        .from("deployments")
-        .select("id,organization_id")
-        .eq("id", request.params.deploymentId)
-        .single();
-      if (existingError || !existing) throw app.httpErrors.notFound("Deployment not found");
-      if (existing.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your deployment");
-
+      try {
+        await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
       const result = await destroyDeployment(db, request.params.deploymentId);
       if (!result.success) throw app.httpErrors.badRequest(result.message);
       return { success: true, message: result.message };
@@ -540,12 +511,15 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data: providerRow, error } = await db
-        .from("server_providers")
-        .select("provider,region,label")
-        .eq("id", request.body.providerId)
-        .single();
-      if (error || !providerRow) throw app.httpErrors.notFound("Provider not found");
+      const auth = request.auth!;
+      let providerRow: { provider: string; region: string | null; label: string };
+      try {
+        const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
+        providerRow = { provider: full.provider, region: full.region, label: full.label };
+      } catch (err) {
+        if (err instanceof DeployError) throwDomainError(app, err);
+        throw err;
+      }
 
       const provider = providerRow.provider;
       const region = request.body.region || providerRow.region || getDefaultRegion(provider);
@@ -604,7 +578,11 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data: row } = await db.from("deployments").select("id").eq("id", request.body.buildId).single();
+      const { data: row, error: fetchError } = await db.from("deployments").select("id").eq("id", request.body.buildId).single();
+      if (fetchError) {
+        app.log.error(fetchError);
+        throw app.httpErrors.internalServerError("Database error fetching deployment");
+      }
       if (!row) return { ok: false };
       await applyDeploymentWebhookUpdate(db, request.body.buildId, request.body);
       return { ok: true };
