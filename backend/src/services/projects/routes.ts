@@ -3,10 +3,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { projectConfigSchema, projectSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
-  ProjectsError,
   createProject,
   getProject,
   listProjects,
@@ -39,22 +37,17 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createProject({
-          tenantId: auth.tenantId,
-          name: request.body.name,
-          repository: request.body.repository,
-          branch: request.body.branch,
-          connectionId: request.body.connectionId,
-          platform: request.body.platform,
-          sourceType: request.body.sourceType,
-          template: request.body.template,
-          config: request.body.config,
-        });
-      } catch (err) {
-        if (err instanceof ProjectsError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createProject({
+        tenantId: auth.tenantId,
+        name: request.body.name,
+        repository: request.body.repository,
+        branch: request.body.branch,
+        connectionId: request.body.connectionId,
+        platform: request.body.platform,
+        sourceType: request.body.sourceType,
+        template: request.body.template,
+        config: request.body.config,
+      });
     },
   );
 
@@ -71,12 +64,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await getProject(request.params.projectId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof ProjectsError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getProject(request.params.projectId, auth.tenantId);
     },
   );
 
@@ -92,13 +80,8 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const projects = await listProjects(auth.tenantId);
-        return { projects };
-      } catch (err) {
-        if (err instanceof ProjectsError) throwDomainError(app, err);
-        throw err;
-      }
+      const projects = await listProjects(auth.tenantId);
+      return { projects };
     },
   );
 
@@ -125,23 +108,18 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await updateProject({
-          projectId: request.params.projectId,
-          tenantId: auth.tenantId,
-          name: request.body.name,
-          repository: request.body.repository,
-          branch: request.body.branch,
-          connectionId: request.body.connectionId,
-          platform: request.body.platform,
-          sourceType: request.body.sourceType,
-          template: request.body.template,
-          config: request.body.config,
-        });
-      } catch (err) {
-        if (err instanceof ProjectsError) throwDomainError(app, err);
-        throw err;
-      }
+      return await updateProject({
+        projectId: request.params.projectId,
+        tenantId: auth.tenantId,
+        name: request.body.name,
+        repository: request.body.repository,
+        branch: request.body.branch,
+        connectionId: request.body.connectionId,
+        platform: request.body.platform,
+        sourceType: request.body.sourceType,
+        template: request.body.template,
+        config: request.body.config,
+      });
     },
   );
 
@@ -158,13 +136,8 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteProject(request.params.projectId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof ProjectsError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteProject(request.params.projectId, auth.tenantId);
+      return { success: true as const };
     },
   );
 }

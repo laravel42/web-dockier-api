@@ -11,9 +11,7 @@ import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domai
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import {
-  GitIntegrationError,
   getConnection,
   getConnectionForTenant,
   createConnection,
@@ -32,15 +30,10 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   const db = supabaseAdmin;
 
   /**
-   * Get connection for tenant, mapping domain errors to HTTP errors.
+   * Get connection for tenant, letting domain errors propagate to the global handler.
    */
   async function requireConnection(connectionId: string, tenantId: string) {
-    try {
-      return await getConnectionForTenant(connectionId, tenantId);
-    } catch (err) {
-      if (err instanceof GitIntegrationError) throwDomainError(app, err);
-      throw err;
-    }
+    return await getConnectionForTenant(connectionId, tenantId);
   }
 
   typed.post(
@@ -62,19 +55,14 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createConnection({
-          tenantId: auth.tenantId,
-          provider: request.body.provider,
-          personalToken: request.body.personalToken,
-          label: request.body.label,
-          repoUrl: request.body.repoUrl,
-          endpoint: request.body.endpoint,
-        });
-      } catch (err) {
-        if (err instanceof GitIntegrationError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createConnection({
+        tenantId: auth.tenantId,
+        provider: request.body.provider,
+        personalToken: request.body.personalToken,
+        label: request.body.label,
+        repoUrl: request.body.repoUrl,
+        endpoint: request.body.endpoint,
+      });
     },
   );
 
@@ -90,13 +78,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const connections = await listConnections(auth.tenantId);
-        return { connections };
-      } catch (err) {
-        if (err instanceof GitIntegrationError) throwDomainError(app, err);
-        throw err;
-      }
+      const connections = await listConnections(auth.tenantId);
+      return { connections };
     },
   );
 
@@ -113,13 +96,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteConnection(request.params.connectionId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof GitIntegrationError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteConnection(request.params.connectionId, auth.tenantId);
+      return { success: true as const };
     },
   );
 
@@ -137,17 +115,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await updateConnection({
-          connectionId: request.params.connectionId,
-          tenantId: auth.tenantId,
-          label: request.body.label,
-          personalToken: request.body.personalToken,
-        });
-      } catch (err) {
-        if (err instanceof GitIntegrationError) throwDomainError(app, err);
-        throw err;
-      }
+      return await updateConnection({
+        connectionId: request.params.connectionId,
+        tenantId: auth.tenantId,
+        label: request.body.label,
+        personalToken: request.body.personalToken,
+      });
     },
   );
 
@@ -163,13 +136,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        const conn = await getConnection(request.params.connectionId);
-        return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint ?? "" };
-      } catch (err) {
-        if (err instanceof GitIntegrationError) throwDomainError(app, err);
-        throw err;
-      }
+      const conn = await getConnection(request.params.connectionId);
+      return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint ?? "" };
     },
   );
 

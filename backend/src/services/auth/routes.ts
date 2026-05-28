@@ -11,8 +11,6 @@ import {
 import { env } from "../../shared/config.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
-import { DomainError } from "../../shared/supabase/errors.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 
 // Domain modules
@@ -80,17 +78,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (env.NODE_ENV === "production") {
         throw app.httpErrors.forbidden("Password login is disabled in production.");
       }
-      try {
-        return await performPasswordLogin({
-          email: request.body.email,
-          password: request.body.password,
-          supabaseUrl: env.SUPABASE_URL,
-          supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
-        });
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      return await performPasswordLogin({
+        email: request.body.email,
+        password: request.body.password,
+        supabaseUrl: env.SUPABASE_URL,
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      });
     },
   );
 
@@ -171,18 +164,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        return await verifyOtpAndProvision({
-          email: request.body.email,
-          token: request.body.token,
-          type: request.body.type,
-          tenantSlug: request.body.tenantSlug,
-          tenantName: request.body.tenantName,
-        });
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      return await verifyOtpAndProvision({
+        email: request.body.email,
+        token: request.body.token,
+        type: request.body.type,
+        tenantSlug: request.body.tenantSlug,
+        tenantName: request.body.tenantName,
+      });
     },
   );
 
@@ -200,12 +188,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await getAuthenticatedUser(auth.userId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getAuthenticatedUser(auth.userId, auth.tenantId);
     },
   );
 
@@ -242,12 +225,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createTenant({ name: request.body.name, userId: auth.userId, email: auth.email });
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createTenant({ name: request.body.name, userId: auth.userId, email: auth.email });
     },
   );
 
@@ -266,12 +244,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await switchTenant({ tenantId: request.params.tenantId, userId: auth.userId, email: auth.email });
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      return await switchTenant({ tenantId: request.params.tenantId, userId: auth.userId, email: auth.email });
     },
   );
 
@@ -306,13 +279,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant to view its memberships");
       }
-      try {
-        const memberships = await listTenantMemberships(request.params.tenantId);
-        return { memberships };
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      return { memberships: await listTenantMemberships(request.params.tenantId) };
     },
   );
 
@@ -338,18 +305,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
       }
-      try {
-        await addMemberToTenant({
-          tenantId: auth.tenantId,
-          email: request.body.email,
-          roleId: request.body.roleId,
-          actorHierarchyLevel: request.resolvedAuth!.hierarchyLevel,
-        });
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      await addMemberToTenant({
+        tenantId: auth.tenantId,
+        email: request.body.email,
+        roleId: request.body.roleId,
+        actorHierarchyLevel: request.resolvedAuth!.hierarchyLevel,
+      });
+      return { success: true as const };
     },
   );
 
@@ -371,17 +333,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
       }
-      try {
-        await removeMemberFromTenant({
-          tenantId: request.params.tenantId,
-          targetUserId: request.params.userId,
-          actorUserId: auth.userId,
-        });
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      await removeMemberFromTenant({
+        tenantId: request.params.tenantId,
+        targetUserId: request.params.userId,
+        actorUserId: auth.userId,
+      });
+      return { success: true as const };
     },
   );
 
@@ -404,17 +361,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before transferring ownership");
       }
-      try {
-        await transferOwnership({
-          tenantId: request.params.tenantId,
-          currentOwnerId: auth.userId,
-          targetUserId: request.body.targetUserId,
-        });
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof DomainError) throwDomainError(app, err);
-        throw err;
-      }
+      await transferOwnership({
+        tenantId: request.params.tenantId,
+        currentOwnerId: auth.userId,
+        targetUserId: request.body.targetUserId,
+      });
+      return { success: true as const };
     },
   );
 }

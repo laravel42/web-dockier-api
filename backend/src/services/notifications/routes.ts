@@ -3,10 +3,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
-  NotificationsError,
   createChannel,
   listChannels,
   toggleChannel,
@@ -35,16 +33,11 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createChannel({
-          tenantId: auth.tenantId,
-          type: request.body.type,
-          config: request.body.config,
-        });
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createChannel({
+        tenantId: auth.tenantId,
+        type: request.body.type,
+        config: request.body.config,
+      });
     },
   );
 
@@ -60,13 +53,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const channels = await listChannels(auth.tenantId);
-        return { channels };
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      const channels = await listChannels(auth.tenantId);
+      return { channels };
     },
   );
 
@@ -84,13 +72,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await toggleChannel(request.params.channelId, auth.tenantId, request.body.enabled);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      await toggleChannel(request.params.channelId, auth.tenantId, request.body.enabled);
+      return { success: true as const };
     },
   );
 
@@ -107,13 +90,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteChannel(request.params.channelId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteChannel(request.params.channelId, auth.tenantId);
+      return { success: true as const };
     },
   );
 
@@ -134,17 +112,12 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await sendNotification({
-          tenantId: auth.tenantId,
-          title: request.body.title,
-          message: request.body.message,
-          channels: request.body.channels,
-        });
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      return await sendNotification({
+        tenantId: auth.tenantId,
+        title: request.body.title,
+        message: request.body.message,
+        channels: request.body.channels,
+      });
     },
   );
 
@@ -161,13 +134,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const notifications = await listNotifications(auth.tenantId, request.query.unreadOnly);
-        return { notifications };
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      const notifications = await listNotifications(auth.tenantId, request.query.unreadOnly);
+      return { notifications };
     },
   );
 
@@ -184,13 +152,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await markNotificationRead(request.params.notificationId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof NotificationsError) throwDomainError(app, err);
-        throw err;
-      }
+      await markNotificationRead(request.params.notificationId, auth.tenantId);
+      return { success: true as const };
     },
   );
 }

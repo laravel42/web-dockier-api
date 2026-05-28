@@ -3,11 +3,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 
 // Domain modules
-import { CodeAnalysisError, createScan, listScans, getScan, deleteScan, runScan } from "./domain/scans.js";
+import { createScan, listScans, getScan, deleteScan, runScan } from "./domain/scans.js";
 import { listFindings } from "./domain/findings.js";
 import { listCustomRules, createCustomRule, updateCustomRule, deleteCustomRule } from "./domain/custom-rules.js";
 import { listSemgrepRules, getSemgrepRuleContent, updateSemgrepRuleContent } from "./domain/semgrep-rules.js";
@@ -36,18 +35,13 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createScan({
-          tenantId: auth.tenantId,
-          projectId: request.body.projectId,
-          connectionId: request.body.connectionId,
-          repo: request.body.repo,
-          branch: request.body.branch,
-        });
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createScan({
+        tenantId: auth.tenantId,
+        projectId: request.body.projectId,
+        connectionId: request.body.connectionId,
+        repo: request.body.repo,
+        branch: request.body.branch,
+      });
     },
   );
 
@@ -64,17 +58,12 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const scans = await listScans({
-          tenantId: auth.tenantId,
-          projectId: request.query.projectId,
-          branch: request.query.branch,
-        });
-        return { scans };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      const scans = await listScans({
+        tenantId: auth.tenantId,
+        projectId: request.query.projectId,
+        branch: request.query.branch,
+      });
+      return { scans };
     },
   );
 
@@ -91,12 +80,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await getScan(request.params.scanId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getScan(request.params.scanId, auth.tenantId);
     },
   );
 
@@ -113,13 +97,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteScan(request.params.scanId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteScan(request.params.scanId, auth.tenantId);
+      return { success: true as const };
     },
   );
 
@@ -143,12 +122,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await runScan(request.params.scanId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      return await runScan(request.params.scanId, auth.tenantId);
     },
   );
 
@@ -168,17 +142,12 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const findings = await listFindings({
-          scanId: request.params.scanId,
-          tenantId: auth.tenantId,
-          severity: request.query.severity,
-        });
-        return { findings };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      const findings = await listFindings({
+        scanId: request.params.scanId,
+        tenantId: auth.tenantId,
+        severity: request.query.severity,
+      });
+      return { findings };
     },
   );
 
@@ -197,13 +166,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const rules = await listCustomRules({ tenantId: auth.tenantId, type: request.query.type });
-        return { rules };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      const rules = await listCustomRules({ tenantId: auth.tenantId, type: request.query.type });
+      return { rules };
     },
   );
 
@@ -228,21 +192,16 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createCustomRule({
-          tenantId: auth.tenantId,
-          ruleId: request.body.ruleId,
-          severity: request.body.severity,
-          message: request.body.message,
-          pattern: request.body.pattern,
-          extensions: request.body.extensions,
-          type: request.body.type,
-          yamlContent: request.body.yamlContent,
-        });
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createCustomRule({
+        tenantId: auth.tenantId,
+        ruleId: request.body.ruleId,
+        severity: request.body.severity,
+        message: request.body.message,
+        pattern: request.body.pattern,
+        extensions: request.body.extensions,
+        type: request.body.type,
+        yamlContent: request.body.yamlContent,
+      });
     },
   );
 
@@ -268,23 +227,18 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await updateCustomRule({
-          ruleDbId: request.params.ruleDbId,
-          tenantId: auth.tenantId,
-          ruleId: request.body.ruleId,
-          severity: request.body.severity,
-          message: request.body.message,
-          pattern: request.body.pattern,
-          extensions: request.body.extensions,
-          enabled: request.body.enabled,
-          yamlContent: request.body.yamlContent,
-        });
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      await updateCustomRule({
+        ruleDbId: request.params.ruleDbId,
+        tenantId: auth.tenantId,
+        ruleId: request.body.ruleId,
+        severity: request.body.severity,
+        message: request.body.message,
+        pattern: request.body.pattern,
+        extensions: request.body.extensions,
+        enabled: request.body.enabled,
+        yamlContent: request.body.yamlContent,
+      });
+      return { success: true as const };
     },
   );
 
@@ -301,13 +255,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteCustomRule(request.params.ruleDbId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteCustomRule(request.params.ruleDbId, auth.tenantId);
+      return { success: true as const };
     },
   );
 
@@ -353,13 +302,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        const content = getSemgrepRuleContent(request.query.path);
-        return { content };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      const content = getSemgrepRuleContent(request.query.path);
+      return { content };
     },
   );
 
@@ -375,13 +319,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        updateSemgrepRuleContent(request.body.path, request.body.content);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      updateSemgrepRuleContent(request.body.path, request.body.content);
+      return { success: true as const };
     },
   );
 
@@ -447,13 +386,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const overrides = await listRuleOverrides(auth.tenantId, request.query.tool);
-        return { overrides };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      const overrides = await listRuleOverrides(auth.tenantId, request.query.tool);
+      return { overrides };
     },
   );
 
@@ -474,18 +408,13 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await upsertRuleOverride({
-          tenantId: auth.tenantId,
-          tool: request.body.tool,
-          ruleId: request.body.ruleId,
-          enabled: request.body.enabled,
-        });
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof CodeAnalysisError) throwDomainError(app, err);
-        throw err;
-      }
+      await upsertRuleOverride({
+        tenantId: auth.tenantId,
+        tool: request.body.tool,
+        ruleId: request.body.ruleId,
+        enabled: request.body.enabled,
+      });
+      return { success: true as const };
     },
   );
 }

@@ -11,9 +11,7 @@ import { getAwsAccountId } from "../../lib/aws.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature } from "../../shared/security.js";
 import { rowToBuild } from "./domain/mappers.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import {
-  ImageBuilderError,
   createBuild,
   getBuild,
   listBuilds,
@@ -52,26 +50,21 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createBuild({
-          tenantId: auth.tenantId,
-          sourceRepo: request.body.sourceRepo,
-          sourceRef: request.body.sourceRef,
-          commitSha: request.body.commitSha,
-          imageRepo: request.body.imageRepo,
-          dockerfilePath: request.body.dockerfilePath,
-          buildContext: request.body.buildContext,
-          tags: request.body.tags,
-          projectId: request.body.projectId,
-          gitConnectionId: request.body.gitConnectionId,
-          deployTarget: request.body.deployTarget,
-          providerId: request.body.providerId,
-          deployParams: request.body.deployParams,
-        });
-      } catch (err) {
-        if (err instanceof ImageBuilderError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createBuild({
+        tenantId: auth.tenantId,
+        sourceRepo: request.body.sourceRepo,
+        sourceRef: request.body.sourceRef,
+        commitSha: request.body.commitSha,
+        imageRepo: request.body.imageRepo,
+        dockerfilePath: request.body.dockerfilePath,
+        buildContext: request.body.buildContext,
+        tags: request.body.tags,
+        projectId: request.body.projectId,
+        gitConnectionId: request.body.gitConnectionId,
+        deployTarget: request.body.deployTarget,
+        providerId: request.body.providerId,
+        deployParams: request.body.deployParams,
+      });
     },
   );
 
@@ -89,12 +82,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       let row: any;
-      try {
-        row = await getBuild(request.params.buildId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof ImageBuilderError) throwDomainError(app, err);
-        throw err;
-      }
+      row = await getBuild(request.params.buildId, auth.tenantId);
 
       if (!row.codebuild_id && row.provider_id) {
         const credentials = await resolveAwsCredentials(row.provider_id);
@@ -173,18 +161,13 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const builds = await listBuilds({
-          tenantId: auth.tenantId,
-          sourceRepo: request.query.sourceRepo,
-          status: request.query.status,
-          limit: request.query.limit,
-        });
-        return { builds };
-      } catch (err) {
-        if (err instanceof ImageBuilderError) throwDomainError(app, err);
-        throw err;
-      }
+      const builds = await listBuilds({
+        tenantId: auth.tenantId,
+        sourceRepo: request.query.sourceRepo,
+        status: request.query.status,
+        limit: request.query.limit,
+      });
+      return { builds };
     },
   );
 
@@ -201,12 +184,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await cancelBuild(request.params.buildId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof ImageBuilderError) throwDomainError(app, err);
-        throw err;
-      }
+      return await cancelBuild(request.params.buildId, auth.tenantId);
     },
   );
 
@@ -231,12 +209,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await resolveImageByRevision(request.params.revision, auth.tenantId);
-      } catch (err) {
-        if (err instanceof ImageBuilderError) throwDomainError(app, err);
-        throw err;
-      }
+      return await resolveImageByRevision(request.params.revision, auth.tenantId);
     },
   );
 
