@@ -71,9 +71,28 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     // 1. Read the ec2.yml template
     const templateBody = readCfnTemplate("ec2.yml");
 
-    // 2. Upload template to S3
-    const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+    // 2. Upload template to S3 (ensure bucket exists first)
+    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } = await import("@aws-sdk/client-s3");
     const s3 = new S3Client({ region, credentials });
+
+    try {
+      await s3.send(new HeadBucketCommand({ Bucket: templateBucket }));
+    } catch {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const createParams: any = { Bucket: templateBucket };
+      if (region !== "us-east-1") {
+        createParams.CreateBucketConfiguration = { LocationConstraint: region };
+      }
+      try {
+        await s3.send(new CreateBucketCommand(createParams));
+        await appendLog(`✓ Created S3 bucket: ${templateBucket}`);
+      } catch (bucketErr: any) {
+        if (!bucketErr.name?.includes("BucketAlreadyOwnedByYou")) {
+          throw new Error(`Failed to create S3 bucket: ${bucketErr.message}`);
+        }
+      }
+    }
+
     const templateKey = "ec2.yml";
     await s3.send(
       new PutObjectCommand({
