@@ -4,6 +4,7 @@ import { z } from "zod";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { throwDomainError } from "../../shared/error-handler.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
   UsersError,
   createUser,
@@ -159,7 +160,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         tags: ["users"],
         summary: "Remove user from organization",
         params: z.object({ userId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {

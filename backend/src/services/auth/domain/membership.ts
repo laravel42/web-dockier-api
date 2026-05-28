@@ -259,3 +259,36 @@ export async function listTenantMemberships(tenantId: string) {
     isOwner: item.is_owner,
   }));
 }
+
+/**
+ * Get the authenticated user's profile, permissions, and memberships.
+ * Used by the /auth/me endpoint.
+ */
+export async function getAuthenticatedUser(userId: string, tenantId: string) {
+  const { data: user, error: userError } = await supabaseAdmin
+    .from("users")
+    .select("id,email,name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (userError) throw new MembershipError("Failed to fetch user", "internal", userError);
+  if (!user) throw new MembershipError("User not found", "not_found");
+
+  const [resolved, memberships] = await Promise.all([
+    resolvePermissionsWithMigration(userId, tenantId),
+    listMembershipsForUser(userId),
+  ]);
+
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    tenantId,
+    roleId: resolved.roleId,
+    roleName: resolved.roleName,
+    systemKey: resolved.systemKey,
+    isOwner: resolved.isOwner,
+    permissions: resolved.permissions,
+    memberships,
+  };
+}

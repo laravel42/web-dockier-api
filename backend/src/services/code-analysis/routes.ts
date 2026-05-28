@@ -4,6 +4,7 @@ import { z } from "zod";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { throwDomainError } from "../../shared/error-handler.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 
 // Domain modules
 import { CodeAnalysisError, createScan, listScans, getScan, deleteScan, runScan } from "./domain/scans.js";
@@ -107,7 +108,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "Delete scan",
         params: z.object({ scanId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -262,7 +263,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
           enabled: z.boolean().optional(),
           yamlContent: z.string().optional(),
         }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -295,7 +296,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "Delete custom rule",
         params: z.object({ ruleDbId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -370,7 +371,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "Update semgrep rule file content",
         body: z.object({ path: z.string().min(1), content: z.string() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -421,7 +422,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "Toggle SonarQube rule activation (migration stub)",
         body: z.object({ profileKey: z.string(), ruleKey: z.string(), activate: z.boolean() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async () => ({ success: true as const }),
@@ -468,7 +469,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
           ruleId: z.string().min(1),
           enabled: z.boolean(),
         }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {

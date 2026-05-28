@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
@@ -82,7 +82,7 @@ export function buildDeploymentPreview(input: CreateDeploymentInput, provider: P
 
 export async function createDeploymentRecord(db: any, input: CreateDeploymentInput, provider: ProviderSummary) {
   const createdAt = nowIso();
-  const id = uuidv4();
+  const id = randomUUID();
   const { template, preview } = buildDeploymentPreview(input, provider);
 
   const deploymentPayload = {

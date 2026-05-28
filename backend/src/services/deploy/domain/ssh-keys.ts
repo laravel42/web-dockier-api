@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { DeployError } from "./providers.js";
@@ -40,7 +40,7 @@ export async function createSshKey(params: CreateSshKeyParams) {
     throw new DeployError("Invalid SSH public key format: missing key data", "bad_request");
   }
   const fingerprint = `SHA256:${parts[1].slice(0, 16)}...`;
-  const id = uuidv4();
+  const id = randomUUID();
   const payload = {
     id,
     organization_id: tenantId,

@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { CodeAnalysisError } from "./scans.js";
@@ -37,7 +37,7 @@ export async function upsertRuleOverride(params: UpsertRuleOverrideParams): Prom
   const { tenantId, tool, ruleId, enabled } = params;
   const table = tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
   const payload = {
-    id: uuidv4(),
+    id: randomUUID(),
     organization_id: tenantId,
     rule_id: ruleId,
     enabled,

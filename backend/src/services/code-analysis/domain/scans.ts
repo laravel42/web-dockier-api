@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
@@ -28,7 +28,7 @@ export interface CreateScanParams {
 
 export async function createScan(params: CreateScanParams) {
   const { tenantId, projectId, connectionId, repo, branch } = params;
-  const id = uuidv4();
+  const id = randomUUID();
   const now = new Date().toISOString();
   const payload = {
     id,

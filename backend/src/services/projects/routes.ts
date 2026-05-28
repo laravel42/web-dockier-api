@@ -4,6 +4,7 @@ import { z } from "zod";
 import { projectConfigSchema, projectSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { throwDomainError } from "../../shared/error-handler.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
   ProjectsError,
   createProject,
@@ -152,7 +153,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         tags: ["projects"],
         summary: "Delete project",
         params: z.object({ projectId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {

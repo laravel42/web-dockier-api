@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
 import { throwDomainError } from "../../shared/error-handler.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
   RolesError,
   listRoles,
@@ -143,7 +144,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         tags: ["roles"],
         summary: "Delete role (soft delete)",
         params: z.object({ roleId: z.string().min(1) }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {

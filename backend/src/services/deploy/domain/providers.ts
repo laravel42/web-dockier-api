@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
@@ -31,7 +31,7 @@ export async function createProvider(params: CreateProviderParams) {
   const { tenantId, provider, label, apiKey, apiSecret, region } = params;
   if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
 
-  const id = uuidv4();
+  const id = randomUUID();
   const now = new Date().toISOString();
   const payload = {
     id,
