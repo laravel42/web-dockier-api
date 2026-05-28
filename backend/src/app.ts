@@ -31,28 +31,30 @@ export type ServiceName =
 
 type RegisterFn = (app: FastifyInstance) => Promise<void>;
 
-const serviceRegistry = new Map<ServiceName, RegisterFn>([
-  ["auth", registerAuthRoutes],
-  ["users", registerUsersRoutes],
-  ["projects", registerProjectsRoutes],
-  ["roles", registerRolesRoutes],
-  ["deploy", registerDeployRoutes],
-  ["notifications", registerNotificationsRoutes],
-  ["integrations", registerIntegrationsRoutes],
-  ["code-analysis", registerCodeAnalysisRoutes],
-  ["git-integration", registerGitIntegrationRoutes],
-  ["image-builder", registerImageBuilderRoutes],
-]);
+type MigratedServiceName = Exclude<ServiceName, "gateway" | (typeof remainingServices)[number]>;
+
+const serviceRegistry: Record<MigratedServiceName, RegisterFn> = {
+  auth: registerAuthRoutes,
+  users: registerUsersRoutes,
+  projects: registerProjectsRoutes,
+  roles: registerRolesRoutes,
+  deploy: registerDeployRoutes,
+  notifications: registerNotificationsRoutes,
+  integrations: registerIntegrationsRoutes,
+  "code-analysis": registerCodeAnalysisRoutes,
+  "git-integration": registerGitIntegrationRoutes,
+  "image-builder": registerImageBuilderRoutes,
+};
 
 async function registerCoreRoutesByService(app: FastifyInstance, service: ServiceName) {
   if (service === "gateway") {
-    for (const registerFn of serviceRegistry.values()) {
+    for (const registerFn of Object.values(serviceRegistry)) {
       await registerFn(app);
     }
     return;
   }
 
-  const registerFn = serviceRegistry.get(service);
+  const registerFn = serviceRegistry[service as MigratedServiceName];
   if (registerFn) {
     await registerFn(app);
     return;
