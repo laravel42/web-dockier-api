@@ -274,8 +274,10 @@ export async function getAuthenticatedUser(userId: string, tenantId: string) {
   if (userError) throw new MembershipError("Failed to fetch user", "internal", userError);
   if (!user) throw new MembershipError("User not found", "not_found");
 
-  const resolved = await resolvePermissionsWithMigration(userId, tenantId);
-  const memberships = await listMembershipsForUser(userId);
+  const [resolved, memberships] = await Promise.all([
+    resolvePermissionsWithMigration(userId, tenantId),
+    listMembershipsForUser(userId),
+  ]);
 
   return {
     userId: user.id,
