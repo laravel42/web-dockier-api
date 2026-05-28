@@ -28,7 +28,6 @@ export interface CreateChannelParams {
 
 export async function createChannel(params: CreateChannelParams) {
   const { tenantId, type, config } = params;
-  if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
 
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -49,7 +48,6 @@ export async function createChannel(params: CreateChannelParams) {
 }
 
 export async function listChannels(tenantId: string) {
-  if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
   const { data, error } = await supabaseAdmin
     .from("notification_channels")
     .select("id,type,config,enabled,created_at")
@@ -162,7 +160,6 @@ export async function sendNotification(params: SendNotificationParams): Promise<
 // ─── In-App Notifications ────────────────────────────────────────────────────
 
 export async function listNotifications(tenantId: string, unreadOnly?: boolean) {
-  if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
   let query = supabaseAdmin
     .from("notifications")
     .select("id,channel,title,message,read,created_at")

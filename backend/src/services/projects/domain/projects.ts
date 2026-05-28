@@ -59,7 +59,6 @@ export interface CreateProjectParams {
 
 export async function createProject(params: CreateProjectParams) {
   const { tenantId, name, repository, branch } = params;
-  if (!tenantId) throw new ProjectsError("Tenant ID is required", "bad_request");
   if (!name.trim()) throw new ProjectsError("Project name is required", "bad_request");
 
   const id = randomUUID();
@@ -100,7 +99,6 @@ export async function getProject(projectId: string, tenantId: string) {
 }
 
 export async function listProjects(tenantId: string) {
-  if (!tenantId) throw new ProjectsError("Tenant ID is required", "bad_request");
   const { data, error } = await supabaseAdmin
     .from("projects")
     .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")

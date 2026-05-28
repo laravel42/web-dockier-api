@@ -4,7 +4,6 @@ import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { DeployError } from "./providers.js";
 
 export async function listSshKeys(tenantId: string) {
-  if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
   const { data, error } = await supabaseAdmin
     .from("ssh_keys")
     .select("id,label,public_key,fingerprint,created_at")
@@ -28,7 +27,6 @@ export interface CreateSshKeyParams {
 
 export async function createSshKey(params: CreateSshKeyParams) {
   const { tenantId, label, publicKey: rawKey } = params;
-  if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
 
   const publicKey = rawKey.trim();
   if (!publicKey.startsWith("ssh-") && !publicKey.startsWith("ecdsa-")) {
@@ -64,7 +62,6 @@ export async function createSshKey(params: CreateSshKeyParams) {
 }
 
 export async function deleteSshKey(keyId: string, tenantId: string) {
-  if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
   const { error } = await supabaseAdmin
     .from("ssh_keys")
     .delete()

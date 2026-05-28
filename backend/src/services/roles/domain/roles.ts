@@ -30,7 +30,6 @@ export interface RoleResponse {
 }
 
 export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse[] }> {
-  if (!tenantId) throw new RolesError("Tenant ID is required", "bad_request");
 
   const { data: roles, error } = await supabaseAdmin
     .from("roles")
@@ -111,7 +110,6 @@ export interface CreateRoleParams {
 
 export async function createRole(params: CreateRoleParams): Promise<RoleResponse> {
   const { tenantId, name, description, permissions, resolvedAuth } = params;
-  if (!tenantId) throw new RolesError("Tenant ID is required", "bad_request");
 
   const trimmedName = name.trim();
   if (trimmedName.length < 2 || trimmedName.length > 80) {

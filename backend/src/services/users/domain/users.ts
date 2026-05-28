@@ -151,7 +151,6 @@ export interface ListUsersParams {
 
 export async function listUsers(params: ListUsersParams) {
   const { tenantId, page, limit, search } = params;
-  if (!tenantId) throw new UsersError("Tenant ID is required", "bad_request");
 
   const offset = (page - 1) * limit;
   let query = supabaseAdmin

@@ -5,7 +5,6 @@ import { rowToDeployment } from "./mappers.js";
 import { DeployError } from "./providers.js";
 
 export async function listDeployments(tenantId: string, providerId?: string) {
-  if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
   let query = supabaseAdmin
     .from("deployments")
     .select("*")

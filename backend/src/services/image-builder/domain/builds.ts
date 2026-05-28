@@ -39,9 +39,6 @@ export interface CreateBuildParams {
 
 export async function createBuild(params: CreateBuildParams) {
   const { tenantId } = params;
-  if (!tenantId) {
-    throw new ImageBuilderError("Tenant ID is required", "bad_request");
-  }
   const id = randomUUID();
   const now = new Date().toISOString();
   const normalized = normalizeBuildInput(params);
@@ -126,9 +123,6 @@ export interface ListBuildsParams {
 
 export async function listBuilds(params: ListBuildsParams) {
   const { tenantId, sourceRepo, status } = params;
-  if (!tenantId) {
-    throw new ImageBuilderError("Tenant ID is required", "bad_request");
-  }
   const limit = params.limit ?? 50;
   let query = supabaseAdmin
     .from("builds")

@@ -29,7 +29,6 @@ export interface CreateProviderParams {
 
 export async function createProvider(params: CreateProviderParams) {
   const { tenantId, provider, label, apiKey, apiSecret, region } = params;
-  if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
 
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -53,7 +52,6 @@ export async function createProvider(params: CreateProviderParams) {
 }
 
 export async function listProviders(tenantId: string) {
-  if (!tenantId) throw new DeployError("Tenant ID is required", "bad_request");
   const { data, error } = await supabaseAdmin
     .from("server_providers")
     .select("id,provider,label,region,created_at")
