@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, assertFound, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 
@@ -77,8 +77,10 @@ export async function getRole(roleId: string, tenantId: string): Promise<RoleRes
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  throwOnError(error, RolesError, { internalMsg: "Failed to fetch role" });
-  const found = assertFound(role, RolesError, "Role not found");
+  const found = unwrapQuery(role, error, RolesError, {
+    notFoundMsg: "Role not found",
+    internalMsg: "Failed to fetch role",
+  });
 
   const { data: perms, error: permsError } = await supabaseAdmin
     .from("role_permissions")
@@ -191,8 +193,10 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  throwOnError(fetchError, RolesError, { internalMsg: "Failed to fetch role" });
-  const role = assertFound(existing, RolesError, "Role not found");
+  const role = unwrapQuery(existing, fetchError, RolesError, {
+    notFoundMsg: "Role not found",
+    internalMsg: "Failed to fetch role",
+  });
   if (!role.is_editable) throw new RolesError("This role cannot be edited", "forbidden");
 
   // Escalation check: cannot edit roles at or above your level
@@ -277,8 +281,10 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  throwOnError(fetchError, RolesError, { internalMsg: "Failed to fetch role" });
-  const role = assertFound(existing, RolesError, "Role not found");
+  const role = unwrapQuery(existing, fetchError, RolesError, {
+    notFoundMsg: "Role not found",
+    internalMsg: "Failed to fetch role",
+  });
   if (!role.is_deletable) throw new RolesError("This role cannot be deleted", "forbidden");
 
   // Escalation check

@@ -99,12 +99,11 @@ export async function updateProvider(params: UpdateProviderParams) {
     .eq("id", providerId)
     .select("id,provider,label,region,created_at")
     .single();
-  if (error) {
-    if (error.code === "23505") throw new DeployError("A provider with that label already exists", "bad_request", error);
-    throw new DeployError("Failed to update provider", "internal", error);
-  }
-  if (!data) throw new DeployError("Failed to update provider", "internal");
-  return rowToProvider(data);
+  const provider = unwrapQuery(data, error, DeployError, {
+    internalMsg: "Failed to update provider",
+    duplicateMsg: "A provider with that label already exists",
+  });
+  return rowToProvider(provider);
 }
 
 export async function deleteProvider(providerId: string, tenantId: string) {
