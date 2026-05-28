@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
@@ -11,7 +11,7 @@ export type ProjectsErrorCode = "not_found" | "forbidden" | "bad_request" | "int
 export class ProjectsError extends DomainError {
   constructor(
     message: string,
-    public readonly code: ProjectsErrorCode & BaseDomainErrorCode,
+    public readonly code: ProjectsErrorCode,
     cause?: unknown,
   ) {
     super(message, code, cause);

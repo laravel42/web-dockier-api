@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
@@ -13,7 +13,7 @@ export type ImageBuilderErrorCode = "not_found" | "forbidden" | "bad_request" | 
 export class ImageBuilderError extends DomainError {
   constructor(
     message: string,
-    public readonly code: ImageBuilderErrorCode & BaseDomainErrorCode,
+    public readonly code: ImageBuilderErrorCode,
     cause?: unknown,
   ) {
     super(message, code, cause);

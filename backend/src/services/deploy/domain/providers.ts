@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
@@ -10,7 +10,7 @@ export type DeployErrorCode = "not_found" | "forbidden" | "bad_request" | "inter
 export class DeployError extends DomainError {
   constructor(
     message: string,
-    public readonly code: DeployErrorCode & BaseDomainErrorCode,
+    public readonly code: DeployErrorCode,
     cause?: unknown,
   ) {
     super(message, code, cause);

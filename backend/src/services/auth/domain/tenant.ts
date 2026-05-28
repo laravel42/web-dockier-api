@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { signTenantToken } from "./session.js";
@@ -126,7 +126,7 @@ export type TenantErrorCode = "not_found" | "forbidden" | "bad_request" | "inter
 export class TenantError extends DomainError {
   constructor(
     message: string,
-    public readonly code: TenantErrorCode & BaseDomainErrorCode,
+    public readonly code: TenantErrorCode,
     cause?: unknown,
   ) {
     super(message, code, cause);

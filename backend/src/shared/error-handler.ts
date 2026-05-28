@@ -22,9 +22,9 @@ export function throwDomainError(app: FastifyInstance, error: DomainError): neve
   const msg = error.message;
 
   if (error.code === "internal") {
-    app.log.error(error.cause || error, `Domain error: ${msg}`);
+    app.log.error({ err: error, cause: error.cause }, `Domain error: ${msg}`);
   } else {
-    app.log.warn(error, `Domain warning: ${msg}`);
+    app.log.warn({ err: error, cause: error.cause }, `Domain warning: ${msg}`);
   }
 
   switch (error.code) {

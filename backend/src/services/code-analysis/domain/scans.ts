@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
@@ -10,7 +10,7 @@ export type CodeAnalysisErrorCode = "not_found" | "forbidden" | "bad_request" | 
 export class CodeAnalysisError extends DomainError {
   constructor(
     message: string,
-    public readonly code: CodeAnalysisErrorCode & BaseDomainErrorCode,
+    public readonly code: CodeAnalysisErrorCode,
     cause?: unknown,
   ) {
     super(message, code, cause);

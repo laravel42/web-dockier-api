@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { getHierarchyLevel } from "../../../shared/permissions/role-templates.js";
@@ -220,7 +220,7 @@ export type MembershipErrorCode = "not_found" | "forbidden" | "bad_request" | "i
 export class MembershipError extends DomainError {
   constructor(
     message: string,
-    public readonly code: MembershipErrorCode & BaseDomainErrorCode,
+    public readonly code: MembershipErrorCode,
     cause?: unknown,
   ) {
     super(message, code, cause);
