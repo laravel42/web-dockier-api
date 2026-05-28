@@ -4,6 +4,7 @@ import { z } from "zod";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { throwDomainError } from "../../shared/error-handler.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
   NotificationsError,
   createChannel,
@@ -78,7 +79,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         summary: "Enable or disable channel",
         params: z.object({ channelId: z.string().uuid() }),
         body: z.object({ enabled: z.boolean() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -101,7 +102,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         tags: ["notifications"],
         summary: "Delete channel",
         params: z.object({ channelId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -178,7 +179,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         tags: ["notifications"],
         summary: "Mark notification as read",
         params: z.object({ notificationId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {

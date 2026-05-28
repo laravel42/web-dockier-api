@@ -13,6 +13,7 @@ import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 import { rowToDeployment } from "./domain/mappers.js";
 import { throwDomainError } from "../../shared/error-handler.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
   DeployError,
   createProvider,
@@ -122,7 +123,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         tags: ["deploy"],
         summary: "Delete provider and dependent deployments",
         params: z.object({ providerId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -241,7 +242,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         tags: ["deploy"],
         summary: "Delete SSH key",
         params: z.object({ keyId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {

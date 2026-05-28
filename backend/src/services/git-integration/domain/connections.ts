@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
@@ -78,7 +78,7 @@ export async function createConnection(params: CreateConnectionParams) {
   throwOnError(checkError, GitIntegrationError, { internalMsg: "Failed to check for duplicate connection" });
   if (existing) throw new GitIntegrationError(`A ${provider} connection with label "${label}" already exists`, "conflict");
 
-  const id = uuidv4();
+  const id = randomUUID();
   const now = new Date().toISOString();
   const payload = {
     id,

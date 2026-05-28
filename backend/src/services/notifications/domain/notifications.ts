@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
@@ -30,7 +30,7 @@ export async function createChannel(params: CreateChannelParams) {
   const { tenantId, type, config } = params;
   if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
 
-  const id = uuidv4();
+  const id = randomUUID();
   const now = new Date().toISOString();
   const payload = {
     id,
@@ -102,7 +102,7 @@ export async function sendNotification(params: SendNotificationParams): Promise<
 
   // 1. Store in-app notification first to ensure consistency before performing external side-effects
   const { error: insertError } = await supabaseAdmin.from("notifications").insert({
-    id: uuidv4(),
+    id: randomUUID(),
     organization_id: tenantId,
     channel: "in_app",
     title,

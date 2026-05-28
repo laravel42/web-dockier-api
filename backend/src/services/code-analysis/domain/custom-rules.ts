@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
@@ -49,7 +49,7 @@ export async function createCustomRule(params: CreateCustomRuleParams) {
     }
   }
 
-  const id = uuidv4();
+  const id = randomUUID();
   const payload = {
     id,
     organization_id: tenantId,

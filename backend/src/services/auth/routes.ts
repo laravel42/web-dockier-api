@@ -13,11 +13,12 @@ import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { throwDomainError } from "../../shared/error-handler.js";
 import { DomainError } from "../../shared/supabase/errors.js";
+import { successResponseSchema } from "../../shared/schemas/responses.js";
 
 // Domain modules
 import {
   listMembershipsForUser,
-  resolvePermissionsWithMigration,
+  getAuthenticatedUser,
   addMemberToTenant,
   removeMemberFromTenant,
   listTenantMemberships,
@@ -199,29 +200,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      const { data: user, error: userError } = await supabaseAdmin
-        .from("users")
-        .select("id,email,name")
-        .eq("id", auth.userId)
-        .maybeSingle();
-      if (userError) throw app.httpErrors.internalServerError(userError.message);
-      if (!user) throw app.httpErrors.notFound("User not found");
-
-      const resolved = await resolvePermissionsWithMigration(auth.userId, auth.tenantId);
-      const memberships = await listMembershipsForUser(auth.userId);
-
-      return {
-        userId: user.id,
-        email: user.email,
-        name: user.name,
-        tenantId: auth.tenantId,
-        roleId: resolved.roleId,
-        roleName: resolved.roleName,
-        systemKey: resolved.systemKey,
-        isOwner: resolved.isOwner,
-        permissions: resolved.permissions,
-        memberships,
-      };
+      try {
+        return await getAuthenticatedUser(auth.userId, auth.tenantId);
+      } catch (err) {
+        if (err instanceof DomainError) throwDomainError(app, err);
+        throw err;
+      }
     },
   );
 
@@ -346,7 +330,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           email: z.email(),
           roleId: z.string().min(1),
         }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -379,7 +363,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         tags: ["auth"],
         summary: "Remove a member from the tenant",
         params: z.object({ tenantId: z.string().uuid(), userId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
@@ -412,7 +396,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         summary: "Transfer organization ownership to another member",
         params: z.object({ tenantId: z.string().uuid() }),
         body: z.object({ targetUserId: z.string().uuid() }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
