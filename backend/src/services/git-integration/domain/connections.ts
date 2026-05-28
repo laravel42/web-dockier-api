@@ -65,7 +65,6 @@ export interface CreateConnectionParams {
 
 export async function createConnection(params: CreateConnectionParams) {
   const { tenantId, provider, personalToken, label, repoUrl, endpoint } = params;
-  if (!tenantId) throw new GitIntegrationError("Tenant ID is required", "bad_request");
 
   // Check for duplicate
   const { data: existing, error: checkError } = await supabaseAdmin
@@ -107,7 +106,6 @@ export async function createConnection(params: CreateConnectionParams) {
 }
 
 export async function listConnections(tenantId: string) {
-  if (!tenantId) throw new GitIntegrationError("Tenant ID is required", "bad_request");
   const { data, error } = await supabaseAdmin
     .from("git_connections")
     .select("id,provider,label,repo_url,endpoint,created_at")
