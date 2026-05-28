@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
+import { DeployError } from "./providers.js";
 import type { ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
@@ -101,7 +102,7 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
   };
 
   const { error } = await db.from("deployments").insert(deploymentPayload);
-  if (error) throw new Error(error.message);
+  if (error) throw new DeployError("Failed to create deployment", "internal", error);
 
   return deploymentPayload;
 }

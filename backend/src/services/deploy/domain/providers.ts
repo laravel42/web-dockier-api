@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 
@@ -9,6 +10,7 @@ export class DeployError extends Error {
   constructor(
     message: string,
     public readonly code: DeployErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "DeployError";
@@ -42,10 +44,10 @@ export async function createProvider(params: CreateProviderParams) {
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("server_providers").insert(payload);
-  if (error) {
-    if (error.code === "23505") throw new DeployError(`A provider with label "${label}" already exists`, "bad_request");
-    throw new DeployError("Failed to create provider", "internal");
-  }
+  throwOnError(error, DeployError, {
+    internalMsg: "Failed to create provider",
+    duplicateMsg: `A provider with label "${label}" already exists`,
+  });
   return rowToProvider(payload);
 }
 
@@ -56,8 +58,8 @@ export async function listProviders(tenantId: string) {
     .select("id,provider,label,region,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
-  if (error) throw new DeployError("Failed to list providers", "internal");
-  return (data ?? []).map(rowToProvider);
+  const rows = unwrapList(data, error, DeployError, { internalMsg: "Failed to list providers" });
+  return rows.map(rowToProvider);
 }
 
 export async function getProviderForTenant(providerId: string, tenantId: string) {
@@ -66,13 +68,12 @@ export async function getProviderForTenant(providerId: string, tenantId: string)
     .select("id,provider,label,region,created_at,organization_id")
     .eq("id", providerId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new DeployError("Provider not found", "not_found");
-    throw new DeployError("Failed to fetch provider", "internal");
-  }
-  if (!data) throw new DeployError("Provider not found", "not_found");
-  if (data.organization_id !== tenantId) throw new DeployError("Not your provider", "forbidden");
-  return data;
+  const provider = unwrapQuery(data, error, DeployError, {
+    notFoundMsg: "Provider not found",
+    internalMsg: "Failed to fetch provider",
+  });
+  if (provider.organization_id !== tenantId) throw new DeployError("Not your provider", "forbidden");
+  return provider;
 }
 
 export interface UpdateProviderParams {
@@ -98,22 +99,21 @@ export async function updateProvider(params: UpdateProviderParams) {
     .eq("id", providerId)
     .select("id,provider,label,region,created_at")
     .single();
-  if (error) {
-    if (error.code === "23505") throw new DeployError("A provider with that label already exists", "bad_request");
-    throw new DeployError("Failed to update provider", "internal");
-  }
-  if (!data) throw new DeployError("Failed to update provider", "internal");
-  return rowToProvider(data);
+  const provider = unwrapQuery(data, error, DeployError, {
+    internalMsg: "Failed to update provider",
+    duplicateMsg: "A provider with that label already exists",
+  });
+  return rowToProvider(provider);
 }
 
 export async function deleteProvider(providerId: string, tenantId: string) {
   await getProviderForTenant(providerId, tenantId);
 
   const { error: deploymentsError } = await supabaseAdmin.from("deployments").delete().eq("provider_id", providerId);
-  if (deploymentsError) throw new DeployError("Failed to delete associated deployments", "internal");
+  throwOnError(deploymentsError, DeployError, { internalMsg: "Failed to delete associated deployments" });
 
   const { error } = await supabaseAdmin.from("server_providers").delete().eq("id", providerId);
-  if (error) throw new DeployError("Failed to delete provider", "internal");
+  throwOnError(error, DeployError, { internalMsg: "Failed to delete provider" });
 }
 
 export async function getProviderCredentials(providerId: string) {
@@ -122,15 +122,14 @@ export async function getProviderCredentials(providerId: string) {
     .select("provider,region,api_key,api_secret")
     .eq("id", providerId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new DeployError("Provider not found", "not_found");
-    throw new DeployError("Failed to fetch provider credentials", "internal");
-  }
-  if (!data) throw new DeployError("Provider not found", "not_found");
+  const creds = unwrapQuery(data, error, DeployError, {
+    notFoundMsg: "Provider not found",
+    internalMsg: "Failed to fetch provider credentials",
+  });
   return {
-    provider: data.provider,
-    region: data.region ?? "",
-    apiKey: data.api_key,
-    apiSecret: data.api_secret,
+    provider: creds.provider,
+    region: creds.region ?? "",
+    apiKey: creds.api_key,
+    apiSecret: creds.api_secret,
   };
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 
@@ -36,26 +37,26 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
-  if (error) throw new RolesError("Failed to list roles", "internal", error);
+  const roleRows = unwrapList(roles, error, RolesError, { internalMsg: "Failed to list roles" });
 
-  const roleIds = (roles ?? []).map((r) => r.id);
+  const roleIds = roleRows.map((r) => r.id);
   if (roleIds.length === 0) return { roles: [] };
 
   const { data: allPerms, error: permsError } = await supabaseAdmin
     .from("role_permissions")
     .select("role_id,permission_id")
     .in("role_id", roleIds);
-  if (permsError) throw new RolesError("Failed to fetch role permissions", "internal", permsError);
+  const permRows = unwrapList(allPerms, permsError, RolesError, { internalMsg: "Failed to fetch role permissions" });
 
   const permsByRole = new Map<string, string[]>();
-  for (const rp of allPerms ?? []) {
+  for (const rp of permRows) {
     const existing = permsByRole.get(rp.role_id) ?? [];
     existing.push(rp.permission_id);
     permsByRole.set(rp.role_id, existing);
   }
 
   return {
-    roles: (roles ?? []).map((r) => ({
+    roles: roleRows.map((r) => ({
       id: r.id,
       name: r.name,
       description: r.description,
@@ -76,24 +77,26 @@ export async function getRole(roleId: string, tenantId: string): Promise<RoleRes
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (error) throw new RolesError("Failed to fetch role", "internal", error);
-  if (!role) throw new RolesError("Role not found", "not_found");
+  const found = unwrapQuery(role, error, RolesError, {
+    notFoundMsg: "Role not found",
+    internalMsg: "Failed to fetch role",
+  });
 
   const { data: perms, error: permsError } = await supabaseAdmin
     .from("role_permissions")
     .select("permission_id")
-    .eq("role_id", role.id);
-  if (permsError) throw new RolesError("Failed to fetch role permissions", "internal", permsError);
+    .eq("role_id", found.id);
+  const permRows = unwrapList(perms, permsError, RolesError, { internalMsg: "Failed to fetch role permissions" });
 
   return {
-    id: role.id,
-    name: role.name,
-    description: role.description,
-    systemKey: role.system_key ?? null,
-    isSystem: role.is_system,
-    isEditable: role.is_editable,
-    isDeletable: role.is_deletable,
-    permissions: (perms ?? []).map((p) => p.permission_id),
+    id: found.id,
+    name: found.name,
+    description: found.description,
+    systemKey: found.system_key ?? null,
+    isSystem: found.is_system,
+    isEditable: found.is_editable,
+    isDeletable: found.is_deletable,
+    permissions: permRows.map((p) => p.permission_id),
   };
 }
 
@@ -140,10 +143,10 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
     is_editable: true,
     is_deletable: true,
   });
-  if (error) {
-    if (error.code === "23505") throw new RolesError("A role with this name already exists", "bad_request");
-    throw new RolesError("Failed to create role", "internal", error);
-  }
+  throwOnError(error, RolesError, {
+    internalMsg: "Failed to create role",
+    duplicateMsg: "A role with this name already exists",
+  });
 
   // Insert permissions
   if (permissions.length > 0) {
@@ -190,12 +193,14 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (fetchError) throw new RolesError("Failed to fetch role", "internal", fetchError);
-  if (!existing) throw new RolesError("Role not found", "not_found");
-  if (!existing.is_editable) throw new RolesError("This role cannot be edited", "forbidden");
+  const role = unwrapQuery(existing, fetchError, RolesError, {
+    notFoundMsg: "Role not found",
+    internalMsg: "Failed to fetch role",
+  });
+  if (!role.is_editable) throw new RolesError("This role cannot be edited", "forbidden");
 
   // Escalation check: cannot edit roles at or above your level
-  if (!canManageRole(resolvedAuth, existing.system_key)) {
+  if (!canManageRole(resolvedAuth, role.system_key)) {
     throw new RolesError("Cannot edit a role at or above your own level", "forbidden");
   }
 
@@ -222,10 +227,10 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
       .update(updates)
       .eq("id", roleId)
       .eq("organization_id", tenantId);
-    if (error) {
-      if (error.code === "23505") throw new RolesError("A role with this name already exists", "bad_request");
-      throw new RolesError("Failed to update role", "internal", error);
-    }
+    throwOnError(error, RolesError, {
+      internalMsg: "Failed to update role",
+      duplicateMsg: "A role with this name already exists",
+    });
   }
 
   // Update permissions if provided
@@ -245,25 +250,25 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
       _role_id: roleId,
       _permission_ids: params.permissions,
     });
-    if (rpcError) throw new RolesError("Failed to update permissions", "internal", rpcError);
+    throwOnError(rpcError, RolesError, { internalMsg: "Failed to update permissions" });
     finalPermissions = params.permissions;
   } else {
     const { data: perms, error: permsError } = await supabaseAdmin
       .from("role_permissions")
       .select("permission_id")
       .eq("role_id", roleId);
-    if (permsError) throw new RolesError("Failed to fetch permissions", "internal", permsError);
-    finalPermissions = (perms ?? []).map((p) => p.permission_id);
+    const permRows = unwrapList(perms, permsError, RolesError, { internalMsg: "Failed to fetch permissions" });
+    finalPermissions = permRows.map((p) => p.permission_id);
   }
 
   return {
-    id: existing.id,
-    name: updates.name ?? existing.name,
-    description: updates.description ?? existing.description,
-    systemKey: existing.system_key ?? null,
-    isSystem: existing.is_system,
-    isEditable: existing.is_editable,
-    isDeletable: existing.is_deletable,
+    id: role.id,
+    name: updates.name ?? role.name,
+    description: updates.description ?? role.description,
+    systemKey: role.system_key ?? null,
+    isSystem: role.is_system,
+    isEditable: role.is_editable,
+    isDeletable: role.is_deletable,
     permissions: finalPermissions,
   };
 }
@@ -276,12 +281,14 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (fetchError) throw new RolesError("Failed to fetch role", "internal", fetchError);
-  if (!existing) throw new RolesError("Role not found", "not_found");
-  if (!existing.is_deletable) throw new RolesError("This role cannot be deleted", "forbidden");
+  const role = unwrapQuery(existing, fetchError, RolesError, {
+    notFoundMsg: "Role not found",
+    internalMsg: "Failed to fetch role",
+  });
+  if (!role.is_deletable) throw new RolesError("This role cannot be deleted", "forbidden");
 
   // Escalation check
-  if (!canManageRole(resolvedAuth, existing.system_key)) {
+  if (!canManageRole(resolvedAuth, role.system_key)) {
     throw new RolesError("Cannot delete a role at or above your own level", "forbidden");
   }
 
@@ -291,7 +298,7 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .select("id", { count: "exact", head: true })
     .eq("role_id", roleId)
     .in("status", ["active", "pending"]);
-  if (countError) throw new RolesError("Failed to check role usage", "internal", countError);
+  throwOnError(countError, RolesError, { internalMsg: "Failed to check role usage" });
   if (count && count > 0) {
     throw new RolesError(`Cannot delete role — it is still assigned to ${count} member(s). Reassign them first.`, "conflict");
   }
@@ -302,5 +309,5 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", roleId)
     .eq("organization_id", tenantId);
-  if (error) throw new RolesError("Failed to delete role", "internal", error);
+  throwOnError(error, RolesError, { internalMsg: "Failed to delete role" });
 }

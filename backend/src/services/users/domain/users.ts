@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/security.js";
@@ -9,6 +10,7 @@ export class UsersError extends Error {
   constructor(
     message: string,
     public readonly code: UsersErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "UsersError";
@@ -78,7 +80,7 @@ export async function createUser(params: CreateUserParams) {
     email_confirm: true,
     user_metadata: { display_name: name },
   });
-  if (authError) throw new UsersError(authError.message, "bad_request");
+  if (authError) throw new UsersError("Failed to create auth user", "bad_request", authError);
 
   const id = authUser.user.id;
   const now = new Date().toISOString();
@@ -132,12 +134,11 @@ export async function getUser(userId: string, tenantId: string) {
     .eq("id", userId)
     .eq("organization_id", tenantId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new UsersError("User not found", "not_found");
-    throw new UsersError("Failed to fetch user", "internal");
-  }
-  if (!data) throw new UsersError("User not found", "not_found");
-  return rowToUser(data);
+  const user = unwrapQuery(data, error, UsersError, {
+    notFoundMsg: "User not found",
+    internalMsg: "Failed to fetch user",
+  });
+  return rowToUser(user);
 }
 
 export interface ListUsersParams {
@@ -165,7 +166,7 @@ export async function listUsers(params: ListUsersParams) {
   }
 
   const { data, count, error } = await query;
-  if (error) throw new UsersError("Failed to list users", "internal");
+  throwOnError(error, UsersError, { internalMsg: "Failed to list users" });
 
   // Fetch membership + role info
   const userIds = (data ?? []).map((u) => u.id);
@@ -177,7 +178,7 @@ export async function listUsers(params: ListUsersParams) {
     .eq("organization_id", tenantId)
     .in("user_id", userIds)
     .eq("status", "active");
-  if (membershipsError) throw new UsersError("Failed to fetch memberships", "internal");
+  throwOnError(membershipsError, UsersError, { internalMsg: "Failed to fetch memberships" });
 
   type MembershipRow = { user_id: string; role_id: string | null; is_owner: boolean; roles: { name: string } | null };
   const membershipByUser = new Map<string, MembershipRow>();
@@ -229,7 +230,7 @@ export async function updateUser(params: UpdateUserParams) {
     .update(updates)
     .eq("id", userId)
     .eq("organization_id", tenantId);
-  if (error) throw new UsersError("Failed to update user", "internal");
+  throwOnError(error, UsersError, { internalMsg: "Failed to update user" });
 
   // Update role assignment if provided
   if (roleId !== undefined) {
@@ -242,12 +243,11 @@ export async function updateUser(params: UpdateUserParams) {
     .eq("id", userId)
     .eq("organization_id", tenantId)
     .single();
-  if (fetchError) {
-    if (fetchError.code === "PGRST116") throw new UsersError("User not found", "not_found");
-    throw new UsersError("Failed to fetch user", "internal");
-  }
-  if (!data) throw new UsersError("User not found", "not_found");
-  return rowToUser(data);
+  const updated = unwrapQuery(data, fetchError, UsersError, {
+    notFoundMsg: "User not found",
+    internalMsg: "Failed to fetch user",
+  });
+  return rowToUser(updated);
 }
 
 export interface RemoveUserParams {
@@ -287,7 +287,7 @@ export async function removeUser(params: RemoveUserParams) {
     .delete()
     .eq("organization_id", tenantId)
     .eq("user_id", userId);
-  if (error) throw new UsersError("Failed to remove user", "internal");
+  throwOnError(error, UsersError, { internalMsg: "Failed to remove user" });
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────

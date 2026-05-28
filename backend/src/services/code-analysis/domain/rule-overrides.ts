@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { CodeAnalysisError } from "./scans.js";
 
 export type OverrideTool = "semgrep" | "sonarqube";
@@ -17,8 +18,8 @@ export async function listRuleOverrides(tenantId: string, tool: OverrideTool): P
     .select("id,rule_id,enabled")
     .eq("organization_id", tenantId)
     .order("rule_id", { ascending: true });
-  if (error) throw new CodeAnalysisError(error.message, "internal");
-  return (data ?? []).map((row: any) => ({
+  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list rule overrides" });
+  return rows.map((row: any) => ({
     id: row.id,
     ruleId: row.rule_id,
     enabled: row.enabled,
@@ -42,5 +43,5 @@ export async function upsertRuleOverride(params: UpsertRuleOverrideParams): Prom
     enabled,
   };
   const { error } = await supabaseAdmin.from(table).upsert(payload, { onConflict: "organization_id,rule_id" });
-  if (error) throw new CodeAnalysisError(error.message, "bad_request");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to upsert rule override" });
 }

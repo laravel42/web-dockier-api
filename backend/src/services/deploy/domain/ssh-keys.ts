@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { DeployError } from "./providers.js";
 
 export async function listSshKeys(tenantId: string) {
@@ -9,8 +10,8 @@ export async function listSshKeys(tenantId: string) {
     .select("id,label,public_key,fingerprint,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
-  if (error) throw new DeployError("Failed to list SSH keys", "internal");
-  return (data ?? []).map((row) => ({
+  const rows = unwrapList(data, error, DeployError, { internalMsg: "Failed to list SSH keys" });
+  return rows.map((row) => ({
     id: row.id,
     label: row.label,
     publicKey: row.public_key,
@@ -49,10 +50,10 @@ export async function createSshKey(params: CreateSshKeyParams) {
     created_at: new Date().toISOString(),
   };
   const { error } = await supabaseAdmin.from("ssh_keys").insert(payload);
-  if (error) {
-    if (error.code === "23505") throw new DeployError(`An SSH key with label "${label}" already exists`, "bad_request");
-    throw new DeployError("Failed to create SSH key", "internal");
-  }
+  throwOnError(error, DeployError, {
+    internalMsg: "Failed to create SSH key",
+    duplicateMsg: `An SSH key with label "${label}" already exists`,
+  });
   return {
     id,
     label: payload.label,
@@ -69,5 +70,5 @@ export async function deleteSshKey(keyId: string, tenantId: string) {
     .delete()
     .eq("id", keyId)
     .eq("organization_id", tenantId);
-  if (error) throw new DeployError("Failed to delete SSH key", "internal");
+  throwOnError(error, DeployError, { internalMsg: "Failed to delete SSH key" });
 }

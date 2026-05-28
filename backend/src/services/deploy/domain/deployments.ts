@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { DeploymentRow } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError } from "./providers.js";
@@ -13,8 +14,8 @@ export async function listDeployments(tenantId: string, providerId?: string) {
     .limit(50);
   if (providerId) query = query.eq("provider_id", providerId);
   const { data, error } = await query;
-  if (error) throw new DeployError("Failed to list deployments", "internal");
-  return (data ?? []).map(rowToDeployment);
+  const rows = unwrapList(data, error, DeployError, { internalMsg: "Failed to list deployments" });
+  return rows.map(rowToDeployment);
 }
 
 export async function getDeployment(deploymentId: string, tenantId: string) {
@@ -23,13 +24,12 @@ export async function getDeployment(deploymentId: string, tenantId: string) {
     .select("*")
     .eq("id", deploymentId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new DeployError("Deployment not found", "not_found");
-    throw new DeployError("Failed to fetch deployment", "internal");
-  }
-  if (!data) throw new DeployError("Deployment not found", "not_found");
-  if (data.organization_id !== tenantId) throw new DeployError("Not your deployment", "forbidden");
-  return rowToDeployment(data);
+  const deployment = unwrapQuery(data, error, DeployError, {
+    notFoundMsg: "Deployment not found",
+    internalMsg: "Failed to fetch deployment",
+  });
+  if (deployment.organization_id !== tenantId) throw new DeployError("Not your deployment", "forbidden");
+  return rowToDeployment(deployment);
 }
 
 export async function getDeploymentForDestroy(deploymentId: string, tenantId: string) {
@@ -38,13 +38,12 @@ export async function getDeploymentForDestroy(deploymentId: string, tenantId: st
     .select("id,organization_id")
     .eq("id", deploymentId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new DeployError("Deployment not found", "not_found");
-    throw new DeployError("Failed to fetch deployment", "internal");
-  }
-  if (!data) throw new DeployError("Deployment not found", "not_found");
-  if (data.organization_id !== tenantId) throw new DeployError("Not your deployment", "forbidden");
-  return data;
+  const deployment = unwrapQuery(data, error, DeployError, {
+    notFoundMsg: "Deployment not found",
+    internalMsg: "Failed to fetch deployment",
+  });
+  if (deployment.organization_id !== tenantId) throw new DeployError("Not your deployment", "forbidden");
+  return deployment;
 }
 
 export async function updateDeploymentStatus(deploymentId: string, updates: { status?: string; logs?: string; appUrl?: string }) {
@@ -53,5 +52,5 @@ export async function updateDeploymentStatus(deploymentId: string, updates: { st
   if (updates.logs !== undefined) payload.logs = updates.logs;
   if (updates.appUrl !== undefined) payload.app_url = updates.appUrl;
   const { error } = await supabaseAdmin.from("deployments").update(payload).eq("id", deploymentId);
-  if (error) throw new DeployError("Failed to update deployment", "internal");
+  throwOnError(error, DeployError, { internalMsg: "Failed to update deployment" });
 }

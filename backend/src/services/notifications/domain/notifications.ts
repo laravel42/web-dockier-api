@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 
 export type NotificationsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
@@ -39,10 +40,10 @@ export async function createChannel(params: CreateChannelParams) {
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("notification_channels").insert(payload);
-  if (error) {
-    if (error.code === "23505") throw new NotificationsError("A channel of this type already exists", "bad_request");
-    throw new NotificationsError("Failed to create channel", "internal", error);
-  }
+  throwOnError(error, NotificationsError, {
+    internalMsg: "Failed to create channel",
+    duplicateMsg: "A channel of this type already exists",
+  });
   return { id, type, config, enabled: true, createdAt: now };
 }
 
@@ -53,8 +54,8 @@ export async function listChannels(tenantId: string) {
     .select("id,type,config,enabled,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
-  if (error) throw new NotificationsError("Failed to list channels", "internal", error);
-  return (data ?? []).map((row: any) => ({
+  const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list channels" });
+  return rows.map((row: any) => ({
     id: row.id,
     type: row.type,
     config: typeof row.config === "string" ? JSON.parse(row.config) : row.config,
@@ -70,7 +71,7 @@ export async function toggleChannel(channelId: string, tenantId: string, enabled
     .eq("id", channelId)
     .eq("organization_id", tenantId)
     .select("id");
-  if (error) throw new NotificationsError("Failed to toggle channel", "internal", error);
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to toggle channel" });
   if (!data || data.length === 0) throw new NotificationsError("Channel not found", "not_found");
 }
 
@@ -81,7 +82,7 @@ export async function deleteChannel(channelId: string, tenantId: string) {
     .eq("id", channelId)
     .eq("organization_id", tenantId)
     .select("id");
-  if (error) throw new NotificationsError("Failed to delete channel", "internal", error);
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to delete channel" });
   if (!data || data.length === 0) throw new NotificationsError("Channel not found", "not_found");
 }
 
@@ -108,7 +109,7 @@ export async function sendNotification(params: SendNotificationParams): Promise<
     read: false,
     created_at: new Date().toISOString(),
   });
-  if (insertError) throw new NotificationsError("Failed to store notification", "internal", insertError);
+  throwOnError(insertError, NotificationsError, { internalMsg: "Failed to store notification" });
 
   // 2. Fetch enabled channels
   const { data, error } = await supabaseAdmin
@@ -116,10 +117,10 @@ export async function sendNotification(params: SendNotificationParams): Promise<
     .select("id,type,config,enabled")
     .eq("organization_id", tenantId)
     .eq("enabled", true);
-  if (error) throw new NotificationsError("Failed to fetch channels", "internal", error);
+  const channels = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to fetch channels" });
 
   // 3. Dispatch external notifications concurrently with timeouts
-  const sendPromises = (data ?? []).map(async (channel) => {
+  const sendPromises = channels.map(async (channel) => {
     if (filterChannels && !filterChannels.includes(channel.type)) return false;
     const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
     try {
@@ -169,8 +170,8 @@ export async function listNotifications(tenantId: string, unreadOnly?: boolean) 
     .limit(50);
   if (unreadOnly) query = query.eq("read", false);
   const { data, error } = await query;
-  if (error) throw new NotificationsError("Failed to list notifications", "internal", error);
-  return (data ?? []).map((row: any) => ({
+  const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
+  return rows.map((row: any) => ({
     id: row.id,
     channel: row.channel,
     title: row.title,
@@ -187,6 +188,6 @@ export async function markNotificationRead(notificationId: string, tenantId: str
     .eq("id", notificationId)
     .eq("organization_id", tenantId)
     .select("id");
-  if (error) throw new NotificationsError("Failed to mark notification as read", "internal", error);
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to mark notification as read" });
   if (!data || data.length === 0) throw new NotificationsError("Notification not found", "not_found");
 }
