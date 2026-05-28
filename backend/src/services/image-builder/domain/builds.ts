@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
 import { enqueueBuild } from "./worker.js";
@@ -12,6 +13,7 @@ export class ImageBuilderError extends Error {
   constructor(
     message: string,
     public readonly code: ImageBuilderErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "ImageBuilderError";
@@ -75,7 +77,7 @@ export async function createBuild(params: CreateBuildParams) {
     updated_at: now,
   };
   const { error } = await supabaseAdmin.from("builds").insert(payload);
-  if (error) throw new ImageBuilderError(error.message, "bad_request");
+  throwOnError(error, ImageBuilderError, { internalMsg: "Failed to create build" });
 
   try {
     await enqueueBuild({
@@ -106,13 +108,12 @@ export async function createBuild(params: CreateBuildParams) {
 
 export async function getBuild(buildId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin.from("builds").select("*").eq("id", buildId).single();
-  if (error) {
-    if (error.code === "PGRST116") throw new ImageBuilderError("Build not found", "not_found");
-    throw new ImageBuilderError(error.message, "internal");
-  }
-  if (!data) throw new ImageBuilderError("Build not found", "not_found");
-  if (data.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
-  return data;
+  const build = unwrapQuery(data, error, ImageBuilderError, {
+    notFoundMsg: "Build not found",
+    internalMsg: "Failed to fetch build",
+  });
+  if (build.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+  return build;
 }
 
 export interface ListBuildsParams {
@@ -137,20 +138,19 @@ export async function listBuilds(params: ListBuildsParams) {
   if (sourceRepo) query = query.eq("source_repo", sourceRepo);
   if (status) query = query.eq("status", status);
   const { data, error } = await query;
-  if (error) throw new ImageBuilderError(error.message, "internal");
-  return (data ?? []).map(rowToBuild);
+  const rows = unwrapList(data, error, ImageBuilderError, { internalMsg: "Failed to list builds" });
+  return rows.map(rowToBuild);
 }
 
 export async function cancelBuild(buildId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin.from("builds").select("*").eq("id", buildId).single();
-  if (error) {
-    if (error.code === "PGRST116") throw new ImageBuilderError("Build not found", "not_found");
-    throw new ImageBuilderError(error.message, "internal");
-  }
-  if (!data) throw new ImageBuilderError("Build not found", "not_found");
-  if (data.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
-  if (!["submitted", "in_progress", "pending"].includes(data.status)) {
-    throw new ImageBuilderError(`Cannot cancel build in status: ${data.status}`, "precondition_failed");
+  const build = unwrapQuery(data, error, ImageBuilderError, {
+    notFoundMsg: "Build not found",
+    internalMsg: "Failed to fetch build",
+  });
+  if (build.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+  if (!["submitted", "in_progress", "pending"].includes(build.status)) {
+    throw new ImageBuilderError(`Cannot cancel build in status: ${build.status}`, "precondition_failed");
   }
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("builds")
@@ -162,9 +162,11 @@ export async function cancelBuild(buildId: string, tenantId: string) {
     .eq("id", buildId)
     .select("*")
     .single();
-  if (updateError) throw new ImageBuilderError(updateError.message, "bad_request");
-  if (!updated) throw new ImageBuilderError("Build not found or could not be updated", "not_found");
-  return rowToBuild(updated);
+  const cancelled = unwrapQuery(updated, updateError, ImageBuilderError, {
+    notFoundMsg: "Build not found or could not be updated",
+    internalMsg: "Failed to cancel build",
+  });
+  return rowToBuild(cancelled);
 }
 
 export async function resolveImageByRevision(revision: string, tenantId: string) {
@@ -178,7 +180,7 @@ export async function resolveImageByRevision(revision: string, tenantId: string)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) throw new ImageBuilderError(error.message, "internal");
+  throwOnError(error, ImageBuilderError, { internalMsg: "Failed to resolve image by revision" });
   if (!data) throw new ImageBuilderError(`No successful build found for revision: ${revision}`, "not_found");
   const build = rowToBuild(data);
   return {

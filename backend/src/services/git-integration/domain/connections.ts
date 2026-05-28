@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 
 export type GitIntegrationErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "precondition_failed";
@@ -8,6 +9,7 @@ export class GitIntegrationError extends Error {
   constructor(
     message: string,
     public readonly code: GitIntegrationErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "GitIntegrationError";
@@ -34,12 +36,10 @@ export async function getConnection(connectionId: string): Promise<ConnectionRow
     .select("id,organization_id,provider,personal_token,label,repo_url,endpoint,created_at")
     .eq("id", connectionId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new GitIntegrationError("Connection not found", "not_found");
-    throw new GitIntegrationError(error.message, "internal");
-  }
-  if (!data) throw new GitIntegrationError("Connection not found", "not_found");
-  return data as ConnectionRow;
+  return unwrapQuery(data, error, GitIntegrationError, {
+    notFoundMsg: "Connection not found",
+    internalMsg: "Failed to fetch connection",
+  }) as ConnectionRow;
 }
 
 /**
@@ -74,7 +74,7 @@ export async function createConnection(params: CreateConnectionParams) {
     .eq("provider", provider)
     .eq("label", label)
     .maybeSingle();
-  if (checkError) throw new GitIntegrationError(checkError.message, "internal");
+  throwOnError(checkError, GitIntegrationError, { internalMsg: "Failed to check for duplicate connection" });
   if (existing) throw new GitIntegrationError(`A ${provider} connection with label "${label}" already exists`, "conflict");
 
   const id = uuidv4();
@@ -90,12 +90,10 @@ export async function createConnection(params: CreateConnectionParams) {
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("git_connections").insert(payload);
-  if (error) {
-    if (error.code === "23505") {
-      throw new GitIntegrationError(`A ${provider} connection with label "${label}" already exists`, "conflict");
-    }
-    throw new GitIntegrationError("Failed to create connection", "internal");
-  }
+  throwOnError(error, GitIntegrationError, {
+    internalMsg: "Failed to create connection",
+    duplicateMsg: `A ${provider} connection with label "${label}" already exists`,
+  });
 
   return {
     id,
@@ -114,8 +112,8 @@ export async function listConnections(tenantId: string) {
     .select("id,provider,label,repo_url,endpoint,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
-  if (error) throw new GitIntegrationError(error.message, "internal");
-  return (data ?? []).map((row) => ({
+  const rows = unwrapList(data, error, GitIntegrationError, { internalMsg: "Failed to list connections" });
+  return rows.map((row) => ({
     id: row.id,
     provider: row.provider,
     label: row.label,
@@ -128,7 +126,7 @@ export async function listConnections(tenantId: string) {
 export async function deleteConnection(connectionId: string, tenantId: string) {
   const conn = await getConnectionForTenant(connectionId, tenantId);
   const { error } = await supabaseAdmin.from("git_connections").delete().eq("id", conn.id);
-  if (error) throw new GitIntegrationError("Failed to delete connection", "internal");
+  throwOnError(error, GitIntegrationError, { internalMsg: "Failed to delete connection" });
 }
 
 export interface UpdateConnectionParams {
@@ -146,12 +144,10 @@ export async function updateConnection(params: UpdateConnectionParams) {
   if (personalToken) updates.personal_token = personalToken;
 
   const { error } = await supabaseAdmin.from("git_connections").update(updates).eq("id", connectionId);
-  if (error) {
-    if (error.code === "23505") {
-      throw new GitIntegrationError(`A ${conn.provider} connection with label "${label}" already exists`, "conflict");
-    }
-    throw new GitIntegrationError("Failed to update connection", "internal");
-  }
+  throwOnError(error, GitIntegrationError, {
+    internalMsg: "Failed to update connection",
+    duplicateMsg: `A ${conn.provider} connection with label "${label}" already exists`,
+  });
 
   return {
     id: conn.id,

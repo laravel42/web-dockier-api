@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { rowToFinding } from "./mappers.js";
 import { CodeAnalysisError } from "./scans.js";
 
@@ -17,7 +18,7 @@ export async function listFindings(params: ListFindingsParams) {
     .select("organization_id")
     .eq("id", scanId)
     .maybeSingle();
-  if (scanError) throw new CodeAnalysisError(scanError.message, "internal");
+  throwOnError(scanError, CodeAnalysisError, { internalMsg: "Failed to verify scan ownership" });
   if (!scan) throw new CodeAnalysisError("Scan not found", "not_found");
   if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
 
@@ -31,6 +32,6 @@ export async function listFindings(params: ListFindingsParams) {
   if (severity) query = query.eq("severity", severity);
 
   const { data, error } = await query;
-  if (error) throw new CodeAnalysisError(error.message, "internal");
-  return (data ?? []).map(rowToFinding);
+  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list findings" });
+  return rows.map(rowToFinding);
 }

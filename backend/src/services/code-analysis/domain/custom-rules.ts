@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { rowToCustomRule } from "./mappers.js";
 import { CodeAnalysisError } from "./scans.js";
@@ -18,8 +19,8 @@ export async function listCustomRules(params: ListCustomRulesParams) {
     .or(`organization_id.eq.,organization_id.eq.${tenantId}`)
     .eq("type", type)
     .order("rule_id", { ascending: true });
-  if (error) throw new CodeAnalysisError(error.message, "internal");
-  return (data ?? []).map(rowToCustomRule);
+  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list custom rules" });
+  return rows.map(rowToCustomRule);
 }
 
 export interface CreateCustomRuleParams {
@@ -63,7 +64,7 @@ export async function createCustomRule(params: CreateCustomRuleParams) {
     created_at: new Date().toISOString(),
   };
   const { error } = await supabaseAdmin.from("custom_rules").insert(payload);
-  if (error) throw new CodeAnalysisError(error.message, "bad_request");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to create custom rule" });
 
   return {
     id: payload.id,
@@ -100,11 +101,11 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
     .select("organization_id,type")
     .eq("id", ruleDbId)
     .single();
-  if (fetchError || !existing) throw new CodeAnalysisError("Rule not found", "not_found");
-  if (existing.organization_id !== "" && existing.organization_id !== tenantId) {
+  const rule = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Rule not found" });
+  if (rule.organization_id !== "" && rule.organization_id !== tenantId) {
     throw new CodeAnalysisError("Not your rule", "forbidden");
   }
-  if (existing.organization_id === "") {
+  if (rule.organization_id === "") {
     if (params.enabled === undefined) {
       throw new CodeAnalysisError("System rules only support enable/disable", "forbidden");
     }
@@ -119,7 +120,7 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
       throw new CodeAnalysisError("System rules only support enable/disable", "forbidden");
     }
   }
-  if (params.pattern && existing.type === "custom") {
+  if (params.pattern && rule.type === "custom") {
     try {
       new RegExp(params.pattern);
     } catch {
@@ -141,7 +142,7 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
   }
 
   const { error } = await supabaseAdmin.from("custom_rules").update(updates).eq("id", ruleDbId);
-  if (error) throw new CodeAnalysisError(error.message, "bad_request");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to update custom rule" });
 }
 
 export async function deleteCustomRule(ruleDbId: string, tenantId: string) {
@@ -150,10 +151,10 @@ export async function deleteCustomRule(ruleDbId: string, tenantId: string) {
     .select("organization_id")
     .eq("id", ruleDbId)
     .single();
-  if (fetchError || !existing) throw new CodeAnalysisError("Rule not found", "not_found");
-  if (existing.organization_id === "") throw new CodeAnalysisError("Cannot delete system rules", "forbidden");
-  if (existing.organization_id !== tenantId) throw new CodeAnalysisError("Not your rule", "forbidden");
+  const rule = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Rule not found" });
+  if (rule.organization_id === "") throw new CodeAnalysisError("Cannot delete system rules", "forbidden");
+  if (rule.organization_id !== tenantId) throw new CodeAnalysisError("Not your rule", "forbidden");
 
   const { error } = await supabaseAdmin.from("custom_rules").delete().eq("id", ruleDbId);
-  if (error) throw new CodeAnalysisError(error.message, "bad_request");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete custom rule" });
 }

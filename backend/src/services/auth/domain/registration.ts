@@ -3,6 +3,19 @@ import { seedDefaultRoles } from "../../roles/seed.js";
 import { listMembershipsForUser, type Membership } from "./membership.js";
 import { signTenantToken } from "./session.js";
 
+export type RegistrationErrorCode = "unauthorized" | "forbidden" | "bad_request" | "internal";
+
+export class RegistrationError extends Error {
+  constructor(
+    message: string,
+    public readonly code: RegistrationErrorCode,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "RegistrationError";
+  }
+}
+
 /**
  * Classify Supabase auth errors into user-friendly messages.
  */
@@ -24,7 +37,7 @@ export async function findAuthUserIdByEmail(email: string): Promise<string | nul
   let page = 1;
   while (page <= 20) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw error;
+    if (error) throw new RegistrationError("Failed to search auth users", "internal", error);
     const matched = data.users.find((user) => (user.email ?? "").toLowerCase() === lowerEmail);
     if (matched?.id) return matched.id;
     if (data.users.length < 200) break;
@@ -47,7 +60,7 @@ export async function resolveDemoAuthUser(email: string): Promise<string> {
     user_metadata: { display_name: "Demo User", demo_user: true },
   });
   if (error || !data.user?.id) {
-    throw error ?? new Error("Unable to create demo auth user");
+    throw new RegistrationError("Unable to create demo auth user", "internal", error);
   }
   return data.user.id;
 }
@@ -138,7 +151,7 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
 
   // Ensure public.users record exists
   const { data: existingUser, error: userQueryError } = await supabaseAdmin.from("users").select("id").eq("id", userId).maybeSingle();
-  if (userQueryError) throw new RegistrationError(userQueryError.message, "internal");
+  if (userQueryError) throw new RegistrationError("Failed to look up user", "internal", userQueryError);
   if (!existingUser) {
     const displayName = data.user.user_metadata?.display_name || data.user.user_metadata?.name || email.split("@")[0];
     const { error: insertError } = await supabaseAdmin.from("users").insert({
@@ -148,7 +161,7 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
       organization_id: null,
       created_at: new Date().toISOString(),
     });
-    if (insertError) throw new RegistrationError(insertError.message, "internal");
+    if (insertError) throw new RegistrationError("Failed to create user record", "internal", insertError);
   }
 
   const memberships = await listMembershipsForUser(userId);
@@ -160,7 +173,7 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
     .from("users")
     .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
     .eq("id", userId);
-  if (syncError) throw new RegistrationError(syncError.message, "internal");
+  if (syncError) throw new RegistrationError("Failed to sync active organization", "internal", syncError);
 
   return {
     session: {
@@ -205,7 +218,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
     { id: userId, email, name: displayName, organization_id: null, created_at: new Date().toISOString() },
     { onConflict: "id" },
   );
-  if (userError) throw new RegistrationError(userError.message, "internal");
+  if (userError) throw new RegistrationError("Failed to upsert user record", "internal", userError);
 
   let memberships = await listMembershipsForUser(userId);
   let selected: Membership | undefined = memberships[0];
@@ -226,7 +239,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
       .insert({ name: tenantName, slug: tenantSlug, created_by: userId })
       .select("id,name,slug")
       .single();
-    if (orgError || !org) throw new RegistrationError(orgError?.message ?? "Failed to create tenant", "internal");
+    if (orgError || !org) throw new RegistrationError("Failed to create tenant", "internal", orgError);
 
     const { adminRoleId } = await seedDefaultRoles(org.id);
 
@@ -242,7 +255,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
       .select("id,organization_id,is_owner")
       .single();
     if (membershipError || !createdMembership) {
-      throw new RegistrationError(membershipError?.message ?? "Failed to create membership", "internal");
+      throw new RegistrationError("Failed to create membership", "internal", membershipError);
     }
 
     selected = {
@@ -262,7 +275,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
     .from("users")
     .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
     .eq("id", userId);
-  if (syncError) throw new RegistrationError(syncError.message, "internal");
+  if (syncError) throw new RegistrationError("Failed to sync active organization", "internal", syncError);
 
   return {
     session: {
@@ -272,18 +285,6 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
     },
     memberships,
   };
-}
-
-export type RegistrationErrorCode = "unauthorized" | "forbidden" | "bad_request" | "internal";
-
-export class RegistrationError extends Error {
-  constructor(
-    message: string,
-    public readonly code: RegistrationErrorCode,
-  ) {
-    super(message);
-    this.name = "RegistrationError";
-  }
 }
 
 /**

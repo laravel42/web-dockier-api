@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { projectConfigSchema } from "../schemas.js";
@@ -76,10 +77,10 @@ export async function createProject(params: CreateProjectParams) {
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("projects").insert(payload);
-  if (error) {
-    if (error.code === "23505") throw new ProjectsError("A project with this name already exists", "bad_request");
-    throw new ProjectsError("Failed to create project", "internal", error);
-  }
+  throwOnError(error, ProjectsError, {
+    internalMsg: "Failed to create project",
+    duplicateMsg: "A project with this name already exists",
+  });
   return rowToProject(payload);
 }
 
@@ -90,12 +91,11 @@ export async function getProject(projectId: string, tenantId: string) {
     .eq("id", projectId)
     .eq("organization_id", tenantId)
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new ProjectsError("Project not found", "not_found");
-    throw new ProjectsError("Failed to fetch project", "internal", error);
-  }
-  if (!data) throw new ProjectsError("Project not found", "not_found");
-  return rowToProject(data);
+  const project = unwrapQuery(data, error, ProjectsError, {
+    notFoundMsg: "Project not found",
+    internalMsg: "Failed to fetch project",
+  });
+  return rowToProject(project);
 }
 
 export async function listProjects(tenantId: string) {
@@ -105,8 +105,8 @@ export async function listProjects(tenantId: string) {
     .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
-  if (error) throw new ProjectsError("Failed to list projects", "internal", error);
-  return (data ?? []).map(rowToProject);
+  const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
+  return rows.map(rowToProject);
 }
 
 export interface UpdateProjectParams {
@@ -132,11 +132,10 @@ export async function updateProject(params: UpdateProjectParams) {
     .eq("id", projectId)
     .eq("organization_id", tenantId)
     .single();
-  if (existingError) {
-    if (existingError.code === "PGRST116") throw new ProjectsError("Project not found", "not_found");
-    throw new ProjectsError("Failed to fetch project", "internal", existingError);
-  }
-  if (!existing) throw new ProjectsError("Project not found", "not_found");
+  const verified = unwrapQuery(existing, existingError, ProjectsError, {
+    notFoundMsg: "Project not found",
+    internalMsg: "Failed to fetch project",
+  });
 
   const updates: Database["public"]["Tables"]["projects"]["Update"] = {
     updated_at: new Date().toISOString(),
@@ -149,7 +148,7 @@ export async function updateProject(params: UpdateProjectParams) {
   if (params.sourceType !== undefined) updates.source_type = params.sourceType;
   if (params.template !== undefined) updates.template = params.template;
   if (params.config !== undefined) {
-    updates.config = { ...(typeof existing.config === "object" ? (existing.config as object) : {}), ...params.config } as unknown as Json;
+    updates.config = { ...(typeof verified.config === "object" ? (verified.config as object) : {}), ...params.config } as unknown as Json;
   }
 
   const { data, error } = await supabaseAdmin
@@ -160,8 +159,8 @@ export async function updateProject(params: UpdateProjectParams) {
     .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
     .single();
   if (error) {
-    if (error.code === "PGRST116") throw new ProjectsError("Project not found", "not_found");
-    if (error.code === "23505") throw new ProjectsError("A project with this name already exists", "bad_request");
+    if (error.code === "PGRST116") throw new ProjectsError("Project not found", "not_found", error);
+    if (error.code === "23505") throw new ProjectsError("A project with this name already exists", "bad_request", error);
     throw new ProjectsError("Failed to update project", "internal", error);
   }
   if (!data) throw new ProjectsError("Project not found", "not_found");
@@ -175,9 +174,7 @@ export async function deleteProject(projectId: string, tenantId: string) {
     .eq("id", projectId)
     .eq("organization_id", tenantId)
     .select("id");
-  if (error) {
-    throw new ProjectsError("Failed to delete project", "internal", error);
-  }
+  throwOnError(error, ProjectsError, { internalMsg: "Failed to delete project" });
   if (!data || data.length === 0) {
     throw new ProjectsError("Project not found", "not_found");
   }

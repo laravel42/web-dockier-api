@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
 
@@ -9,6 +10,7 @@ export class CodeAnalysisError extends Error {
   constructor(
     message: string,
     public readonly code: CodeAnalysisErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "CodeAnalysisError";
@@ -40,7 +42,7 @@ export async function createScan(params: CreateScanParams) {
     updated_at: now,
   };
   const { error } = await supabaseAdmin.from("scans").insert(payload);
-  if (error) throw new CodeAnalysisError(error.message, "bad_request");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to create scan" });
   return rowToScan(payload);
 }
 
@@ -61,15 +63,18 @@ export async function listScans(params: ListScansParams) {
   if (projectId) query = query.eq("project_id", projectId);
   if (branch) query = query.eq("branch", branch);
   const { data, error } = await query;
-  if (error) throw new CodeAnalysisError(error.message, "internal");
-  return (data ?? []).map(rowToScan);
+  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list scans" });
+  return rows.map(rowToScan);
 }
 
 export async function getScan(scanId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
-  if (error || !data) throw new CodeAnalysisError("Scan not found", "not_found");
-  if (data.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
-  return rowToScan(data);
+  const scan = unwrapQuery(data, error, CodeAnalysisError, {
+    notFoundMsg: "Scan not found",
+    internalMsg: "Failed to fetch scan",
+  });
+  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  return rowToScan(scan);
 }
 
 export async function deleteScan(scanId: string, tenantId: string) {
@@ -78,20 +83,20 @@ export async function deleteScan(scanId: string, tenantId: string) {
     .select("id,organization_id")
     .eq("id", scanId)
     .single();
-  if (fetchError || !existing) throw new CodeAnalysisError("Scan not found", "not_found");
-  if (existing.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  const scan = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Scan not found" });
+  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
 
   const { error: findingsError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
-  if (findingsError) throw new CodeAnalysisError(findingsError.message, "internal");
+  throwOnError(findingsError, CodeAnalysisError, { internalMsg: "Failed to delete scan findings" });
 
   const { error } = await supabaseAdmin.from("scans").delete().eq("id", scanId);
-  if (error) throw new CodeAnalysisError(error.message, "bad_request");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete scan" });
 }
 
 export async function runScan(scanId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
-  if (error || !data) throw new CodeAnalysisError("Scan not found", "not_found");
-  if (data.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
+  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("scans")
@@ -106,7 +111,7 @@ export async function runScan(scanId: string, tenantId: string) {
     .eq("id", scanId)
     .select()
     .single();
-  if (updateError) throw new CodeAnalysisError(updateError.message, "internal");
+  throwOnError(updateError, CodeAnalysisError, { internalMsg: "Failed to update scan status" });
 
   return rowToScan(updated ?? data);
 }

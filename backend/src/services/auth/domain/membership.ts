@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { getHierarchyLevel } from "../../../shared/permissions/role-templates.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
@@ -30,7 +31,7 @@ export async function listMembershipsForUser(userId: string): Promise<Membership
     .eq("user_id", userId)
     .eq("status", "active")
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  throwOnError(error, MembershipError, { internalMsg: "Failed to list memberships" });
 
   const rows = (data ?? []) as Array<{
     id: string;
@@ -64,7 +65,7 @@ export async function resolveUserPermissions(userId: string, tenantId: string): 
     .eq("status", "active")
     .maybeSingle();
 
-  if (membershipError) throw membershipError;
+  throwOnError(membershipError, MembershipError, { internalMsg: "Failed to resolve membership" });
 
   if (!membership?.role_id) {
     return { permissions: [], roleId: "", roleName: "", systemKey: null, isOwner: false };
@@ -77,7 +78,7 @@ export async function resolveUserPermissions(userId: string, tenantId: string): 
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (roleError) throw roleError;
+  throwOnError(roleError, MembershipError, { internalMsg: "Failed to resolve role" });
 
   if (!role) {
     return { permissions: [], roleId: "", roleName: "", systemKey: null, isOwner: membership.is_owner ?? false };
@@ -88,7 +89,7 @@ export async function resolveUserPermissions(userId: string, tenantId: string): 
     .select("permission_id")
     .eq("role_id", role.id);
 
-  if (permsError) throw permsError;
+  throwOnError(permsError, MembershipError, { internalMsg: "Failed to resolve permissions" });
 
   return {
     permissions: (rolePerms ?? []).map((rp) => rp.permission_id),
@@ -112,7 +113,7 @@ export async function resolvePermissionsWithMigration(userId: string, tenantId: 
       .update({ role_id: seeded.memberRoleId })
       .eq("organization_id", tenantId)
       .eq("user_id", userId);
-    if (error) throw error;
+    throwOnError(error, MembershipError, { internalMsg: "Failed to assign default role" });
     invalidatePermissionCache(userId, tenantId);
     resolved = await resolveUserPermissions(userId, tenantId);
   }
@@ -142,7 +143,7 @@ export async function addMemberToTenant(params: AddMemberParams): Promise<void> 
     .eq("organization_id", tenantId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (roleError) throw new MembershipError(roleError.message, "internal");
+  if (roleError) throw new MembershipError("Role not found in this organization", "internal", roleError);
   if (!targetRole) throw new MembershipError("Role not found in this organization", "not_found");
 
   // Escalation check: cannot assign a role more powerful than your own
@@ -156,7 +157,7 @@ export async function addMemberToTenant(params: AddMemberParams): Promise<void> 
     .select("id")
     .eq("email", email)
     .maybeSingle();
-  if (userError) throw new MembershipError(userError.message, "internal");
+  if (userError) throw new MembershipError("Failed to look up user", "internal", userError);
   if (!targetUser) throw new MembershipError("User must sign in first before being added", "not_found");
 
   const { error } = await supabaseAdmin.from("organization_memberships").upsert(
@@ -169,7 +170,7 @@ export async function addMemberToTenant(params: AddMemberParams): Promise<void> 
     },
     { onConflict: "organization_id,user_id" },
   );
-  if (error) throw new MembershipError(error.message, "bad_request");
+  if (error) throw new MembershipError("Failed to add member", "bad_request", error);
 
   invalidatePermissionCache(targetUser.id, tenantId);
 }
@@ -196,7 +197,7 @@ export async function removeMemberFromTenant(params: RemoveMemberParams): Promis
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId)
     .maybeSingle();
-  if (membershipError) throw new MembershipError(membershipError.message, "internal");
+  if (membershipError) throw new MembershipError("Failed to fetch membership", "internal", membershipError);
   if (!targetMembership) throw new MembershipError("Membership not found", "not_found");
   if (targetMembership.is_owner) {
     throw new MembershipError("Cannot remove the organization owner", "forbidden");
@@ -207,7 +208,7 @@ export async function removeMemberFromTenant(params: RemoveMemberParams): Promis
     .delete()
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId);
-  if (error) throw new MembershipError(error.message, "bad_request");
+  if (error) throw new MembershipError("Failed to remove member", "internal", error);
 
   invalidatePermissionCache(targetUserId, tenantId);
 }
@@ -218,6 +219,7 @@ export class MembershipError extends Error {
   constructor(
     message: string,
     public readonly code: MembershipErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "MembershipError";
@@ -234,7 +236,7 @@ export async function listTenantMemberships(tenantId: string) {
     .eq("organization_id", tenantId)
     .eq("status", "active")
     .order("created_at", { ascending: true });
-  if (error) throw new MembershipError(error.message, "internal");
+  if (error) throw new MembershipError("Failed to list tenant memberships", "internal", error);
 
   const rows = (data ?? []) as Array<{
     id: string;

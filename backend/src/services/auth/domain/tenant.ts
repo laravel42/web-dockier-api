@@ -28,7 +28,7 @@ export async function createTenant(params: CreateTenantParams): Promise<CreateTe
     .insert({ name, slug, created_by: userId })
     .select("id,slug")
     .single();
-  if (orgError || !org) throw new TenantError(orgError?.message ?? "Unable to create tenant", "bad_request");
+  if (orgError || !org) throw new TenantError("Unable to create tenant", "bad_request", orgError);
 
   const { adminRoleId } = await seedDefaultRoles(org.id);
 
@@ -39,7 +39,7 @@ export async function createTenant(params: CreateTenantParams): Promise<CreateTe
     is_owner: true,
     status: "active",
   });
-  if (membershipError) throw new TenantError(membershipError.message, "internal");
+  if (membershipError) throw new TenantError("Failed to create owner membership", "internal", membershipError);
 
   return {
     tenantId: org.id,
@@ -70,7 +70,7 @@ export async function switchTenant(params: SwitchTenantParams): Promise<{ token:
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw new TenantError(error.message, "internal");
+  if (error) throw new TenantError("Failed to verify membership", "internal", error);
   if (!data) throw new TenantError("No membership in requested tenant", "forbidden");
   if (data.status !== "active") throw new TenantError("Membership is not active", "forbidden");
 
@@ -104,7 +104,7 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId)
     .maybeSingle();
-  if (membershipError) throw new TenantError(membershipError.message, "internal");
+  if (membershipError) throw new TenantError("Failed to verify target membership", "internal", membershipError);
   if (!targetMembership) throw new TenantError("Target user is not a member of this organization", "not_found");
   if (targetMembership.status !== "active") throw new TenantError("Target member is not active", "bad_request");
 
@@ -114,7 +114,7 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
     _current_owner_id: currentOwnerId,
     _new_owner_id: targetUserId,
   });
-  if (rpcError) throw new TenantError(rpcError.message, "internal");
+  if (rpcError) throw new TenantError("Failed to transfer ownership", "internal", rpcError);
 
   invalidatePermissionCache(currentOwnerId, tenantId);
   invalidatePermissionCache(targetUserId, tenantId);
@@ -126,6 +126,7 @@ export class TenantError extends Error {
   constructor(
     message: string,
     public readonly code: TenantErrorCode,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = "TenantError";
