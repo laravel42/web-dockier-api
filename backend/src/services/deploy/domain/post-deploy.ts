@@ -164,8 +164,9 @@ async function executeViaSSM(
   const envOverrides = buildEnvOverrides(containerName, services);
 
   // Upload .env to S3 for Laravel projects
+  let envDownloadCmd = "";
   if (isLaravel && envVars.length > 0) {
-    await uploadEnvToS3(ctx, containerName);
+    envDownloadCmd = await uploadEnvToS3(ctx, containerName);
   }
 
   const envSetup = isLaravel
@@ -180,8 +181,9 @@ async function executeViaSSM(
     "  sleep 2",
     "done",
     `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
+    envDownloadCmd,
     `${envSetup}${cmdChain}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   await logger.info("Executing via AWS SSM SendCommand...");
 
