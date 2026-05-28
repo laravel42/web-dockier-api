@@ -111,7 +111,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         });
       } catch (error) {
         app.log.error(error);
-        throw app.httpErrors.badRequest("Failed to create issue in external provider");
+        throw app.httpErrors.badGateway("Failed to create issue in external provider");
       }
     },
   );
