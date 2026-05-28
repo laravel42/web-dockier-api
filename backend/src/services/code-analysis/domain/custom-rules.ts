@@ -36,6 +36,9 @@ export interface CreateCustomRuleParams {
 
 export async function createCustomRule(params: CreateCustomRuleParams) {
   const { tenantId, ruleId, severity, message, pattern, extensions } = params;
+  if (!tenantId) {
+    throw new CodeAnalysisError("Tenant ID is required", "bad_request");
+  }
   const ruleType = params.type ?? "custom";
 
   if (ruleType === "custom" && pattern) {

@@ -56,6 +56,7 @@ export interface CreateUserParams {
 
 export async function createUser(params: CreateUserParams) {
   const { tenantId, email, name, password, country, language, timezone, roleId, resolvedAuth } = params;
+  if (!tenantId) throw new UsersError("Tenant ID is required", "bad_request");
 
   // Validate role upfront if provided to prevent orphaned auth/user records on failure
   if (roleId) {

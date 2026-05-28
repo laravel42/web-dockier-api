@@ -96,6 +96,7 @@ export interface SendNotificationParams {
 
 export async function sendNotification(params: SendNotificationParams): Promise<{ sent: number }> {
   const { tenantId, title, message, channels: filterChannels } = params;
+  if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
 
   // 1. Store in-app notification first to ensure consistency before performing external side-effects
   const { error: insertError } = await supabaseAdmin.from("notifications").insert({
