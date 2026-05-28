@@ -12,9 +12,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createDeployLogger, BuildError } from "../../../lib/logging.js";
-import { getAwsAccountId } from "../../../lib/aws.js";
 import { patchDockerfile, toDetectedStack } from "../../../lib/repo-analyzer/index.js";
-import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { getAdapter } from "./adapters/index.js";
 import type { AdapterContext } from "./adapters/types.js";
 import { createStreamingRunCmd } from "./run-cmd.js";
@@ -22,6 +20,7 @@ import { pollUntil } from "./poll-until.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
+import { executePostDeployCommands } from "./post-deploy.js";
 
 const db = supabaseAdmin;
 
@@ -188,7 +187,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await db.from("deployments").update({ commit_hash: commitHash }).eq("id", deploymentId);
 
     // 3. Analyze and generate Dockerfile
-    const { repoConfig, detectedPort } = await analyzeAndGenerate({ repoDir, logger });
+    const { repoConfig } = await analyzeAndGenerate({ repoDir, logger });
 
     // 4. Build Docker image (local or remote via CodeBuild)
     const isStaticDeploy = event.deployStrategy === "static";
@@ -342,216 +341,30 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await adapter.runPostDeploy(adapterCtx, provision);
 
     // Execute user-defined post-deploy commands
-    const commands = (event.postDeployCommands || []).filter(c => c.enabled);
-    if (commands.length > 0 && deployStrategy !== "static") {
-      if (deployStrategy === "managed") {
-        await logger.section("Post-Deploy Commands");
-        await logger.warn(`Post-deploy commands are not yet supported for managed deploys (${adapter.id})`);
-        await logger.info("Commands configured: " + commands.map(c => c.command).join(", "));
-        await logger.info("These will be supported via ECS RunTask / Cloud Run Jobs in a future update");
-      } else if (deployStrategy === "vps") {
-        await logger.section("Post-Deploy Commands");
-        await logger.info(`Running ${commands.length} command(s)...`);
+    if (deployStrategy !== "static") {
+      const containerName = provider === "aws"
+        ? repoName
+        : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 
-        const containerName = provider === "aws"
-          ? repoName
-          : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-        const serverIp = provision.serverIp || "";
-        const deployKeyPath = adapterCtx.state.deployKeyPath || "";
-        const instanceId = provision.outputs.InstanceId || "";
-
-        // AWS EC2: use SSM SendCommand
-        if (instanceId && provider === "aws") {
-          const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
-          const ssm = new SSMClient({
-            region,
-            credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret },
-          });
-
-          const cmdChain = commands
-            .map(cmd => {
-              const escaped = cmd.command.replace(/'/g, "'\\''");
-              const exec = `docker exec ${containerName} sh -c '${escaped}'`;
-              return cmd.continueOnFailure ? `(${exec} || true)` : exec;
-            })
-            .join(" && ");
-
-          const isLaravel = (event.techStack || []).some(s => s.toLowerCase() === "laravel");
-          const selfHostedServices = (event.services || []).filter(s => s.mode === "vps").map(s => s.type);
-          const envOverrides: string[] = [];
-          if (selfHostedServices.includes("database")) {
-            envOverrides.push(`docker exec ${containerName} sh -c 'grep -q "^DB_HOST=" /var/www/html/.env && sed -i "s/^DB_HOST=.*/DB_HOST=host.docker.internal/" /var/www/html/.env || echo "DB_HOST=host.docker.internal" >> /var/www/html/.env'`);
-          }
-          if (selfHostedServices.includes("cache") || selfHostedServices.includes("broadcasting")) {
-            envOverrides.push(`docker exec ${containerName} sh -c 'grep -q "^REDIS_HOST=" /var/www/html/.env && sed -i "s/^REDIS_HOST=.*/REDIS_HOST=host.docker.internal/" /var/www/html/.env || echo "REDIS_HOST=host.docker.internal" >> /var/www/html/.env'`);
-          }
-          const envFixCmd = envOverrides.length > 0 ? envOverrides.join(" && ") + " && " : "";
-
-          // Build a fresh .env file from the current env vars and write it to the host.
-          // This ensures the container gets the latest env vars even on redeploy
-          // (cfn-hup may not have re-run yet after CloudFormation update).
-          // Instead of embedding env vars in the script (which breaks with special chars),
-          // we upload them to S3 and download on the instance.
-          const currentEnvVars = event.envVars || [];
-          let envS3DownloadCmd = "";
-          if (isLaravel && currentEnvVars.length > 0) {
-            // Build .env content (KEY=value format, quote only when needed)
-            const envContent = currentEnvVars
-              .map(v => {
-                const val = v.value;
-                const needsQuotes = /[\s#"'\\]/.test(val) || val === "";
-                return needsQuotes
-                  ? `${v.name}="${val.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
-                  : `${v.name}=${val}`;
-              })
-              .join("\n");
-
-            // Upload to S3
-            const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-            const accountId = await getAwsAccountId(region, { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret });
-            const envBucket = `image-builder-templates-${accountId}`;
-            const envKey = `env-files/${containerName}-postdeploy.env`;
-            const s3 = new S3Client({ region, credentials: { accessKeyId: adapterCtx.providerCredentials.apiKey, secretAccessKey: adapterCtx.providerCredentials.apiSecret } });
-            await s3.send(new PutObjectCommand({ Bucket: envBucket, Key: envKey, Body: envContent, ContentType: "text/plain" }));
-
-            envS3DownloadCmd = `aws s3 cp s3://${envBucket}/${envKey} /tmp/${containerName}.env --region ${region}`;
-          }
-
-          // On redeploy, the host .env file (/tmp/${containerName}.env) was written by cfn-init
-          // with defaults + user env vars. Just copy it into the container and apply overrides.
-          const envSetup = isLaravel
-            ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && ${envFixCmd}`
-            : "";
-
-          const script = [
-            "#!/bin/bash",
-            "CONTAINER_READY=0",
-            "for i in $(seq 1 90); do",
-            `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
-            "  sleep 2",
-            "done",
-            `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
-            `${envSetup}${cmdChain}`,
-          ].join("\n");
-
-          await logger.info("Executing via AWS SSM SendCommand...");
-
-          try {
-            const sendResult = await ssm.send(new SendCommandCommand({
-              InstanceIds: [instanceId],
-              DocumentName: "AWS-RunShellScript",
-              Parameters: { commands: [script] },
-              TimeoutSeconds: 300,
-            }));
-
-            const commandId = sendResult.Command?.CommandId;
-            if (commandId) {
-              let done = false;
-              for (let i = 0; i < 65; i++) {
-                await new Promise(r => setTimeout(r, 5000));
-                try {
-                  const invocation = await ssm.send(new GetCommandInvocationCommand({
-                    CommandId: commandId,
-                    InstanceId: instanceId,
-                  }));
-                  const status = invocation.Status;
-                  if (status === "Success") {
-                    await logger.success("All post-deploy commands executed successfully");
-                    if (invocation.StandardOutputContent?.trim()) {
-                      const lines = invocation.StandardOutputContent.trim().split("\n").slice(0, 20);
-                      for (const line of lines) await logger.info(line);
-                    }
-                    done = true;
-                    break;
-                  } else if (status === "Failed" || status === "Cancelled" || status === "TimedOut") {
-                    await logger.warn(`SSM command ${status}`);
-                    if (invocation.StandardErrorContent?.trim()) {
-                      await logger.info(invocation.StandardErrorContent.trim().slice(0, 500));
-                    }
-                    if (invocation.StandardOutputContent?.trim()) {
-                      const lines = invocation.StandardOutputContent.trim().split("\n").slice(-20);
-                      for (const line of lines) await logger.info(line);
-                    }
-                    done = true;
-                    break;
-                  }
-                } catch {
-                  // InvocationDoesNotExist — agent hasn't picked it up yet
-                }
-              }
-              if (!done) {
-                await logger.warn("SSM command still running after timeout — commands may complete in background");
-              }
-            }
-          } catch (err: unknown) {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            await logger.warn(`SSM SendCommand failed: ${errMsg}`);
-            await logger.info("The instance may not have SSM agent ready yet — commands will run via cfn-init instead");
-          }
-
-        // GCP / other VPS: use SSH
-        } else if (serverIp && deployKeyPath) {
-          const sshOpts = [
-            "-i", deployKeyPath,
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "ConnectTimeout=30",
-            "-o", "LogLevel=ERROR",
-          ];
-
-          const cmdChain = commands
-            .map(cmd => {
-              const escaped = cmd.command.replace(/'/g, "'\\''");
-              const exec = `docker exec ${containerName} sh -c '${escaped}'`;
-              return cmd.continueOnFailure ? `(${exec} || true)` : exec;
-            })
-            .join(" && ");
-
-          const isLaravelSsh = (event.techStack || []).some(s => s.toLowerCase() === "laravel");
-          const selfHostedSvcsSsh = (event.services || []).filter(s => s.mode === "vps").map(s => s.type);
-          const envOverridesSsh: string[] = [];
-          if (selfHostedSvcsSsh.includes("database")) {
-            envOverridesSsh.push(`docker exec ${containerName} sh -c 'grep -q "^DB_HOST=" /var/www/html/.env && sed -i "s/^DB_HOST=.*/DB_HOST=host.docker.internal/" /var/www/html/.env || echo "DB_HOST=host.docker.internal" >> /var/www/html/.env'`);
-          }
-          if (selfHostedSvcsSsh.includes("cache") || selfHostedSvcsSsh.includes("broadcasting")) {
-            envOverridesSsh.push(`docker exec ${containerName} sh -c 'grep -q "^REDIS_HOST=" /var/www/html/.env && sed -i "s/^REDIS_HOST=.*/REDIS_HOST=host.docker.internal/" /var/www/html/.env || echo "REDIS_HOST=host.docker.internal" >> /var/www/html/.env'`);
-          }
-          const envFixCmdSsh = envOverridesSsh.length > 0 ? envOverridesSsh.join(" && ") + " && " : "";
-          const envSetupSsh = isLaravelSsh
-            ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && ${envFixCmdSsh}`
-            : "";
-
-          const remoteCmd = [
-            "CONTAINER_READY=0;",
-            "for i in $(seq 1 60); do",
-            `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi;`,
-            "  sleep 2;",
-            "done;",
-            `[ "$CONTAINER_READY" = "1" ]`,
-            `&& ${envSetupSsh}${cmdChain}`,
-            "&& echo POST_DEPLOY_DONE",
-          ].join(" ");
-
-          await logger.info("Commands will execute once container is ready...");
-          const result = await runCmd("ssh", [...sshOpts, `root@${serverIp}`, remoteCmd], { cwd: workDir });
-
-          if (result.output.includes("POST_DEPLOY_DONE")) {
-            await logger.success("All post-deploy commands executed successfully");
-            const outputLines = result.output.split("\n").filter(l =>
-              l.trim() && !l.includes("POST_DEPLOY_DONE") && !l.includes("Warning:")
-            );
-            for (const line of outputLines.slice(0, 20)) {
-              await logger.info(line.trim());
-            }
-          } else {
-            await logger.warn("Post-deploy commands may not have completed successfully");
-            const output = result.output.trim().replace(/Warning:.*\n?/g, "").slice(0, 500);
-            if (output) await logger.info(output);
-          }
-        } else {
-          await logger.warn("Cannot execute post-deploy commands — no SSH key or SSM instance available");
-        }
-      }
+      await executePostDeployCommands(
+        {
+          containerName,
+          region,
+          provider,
+          techStack: event.techStack || [],
+          services: event.services || [],
+          envVars: event.envVars || [],
+          credentials: { apiKey: adapterCtx.providerCredentials.apiKey, apiSecret: adapterCtx.providerCredentials.apiSecret },
+          instanceId: provision.outputs.InstanceId || "",
+          serverIp: provision.serverIp || "",
+          deployKeyPath: adapterCtx.state.deployKeyPath || "",
+          workDir,
+        },
+        event.postDeployCommands || [],
+        logger,
+        runCmd,
+        deployStrategy,
+      );
     }
 
     // Health check and finalize
