@@ -29,59 +29,34 @@ export type ServiceName =
   | "image-builder"
   | (typeof remainingServices)[number];
 
+type RegisterFn = (app: FastifyInstance) => Promise<void>;
+
+type MigratedServiceName = Exclude<ServiceName, "gateway" | (typeof remainingServices)[number]>;
+
+const serviceRegistry: Record<MigratedServiceName, RegisterFn> = {
+  auth: registerAuthRoutes,
+  users: registerUsersRoutes,
+  projects: registerProjectsRoutes,
+  roles: registerRolesRoutes,
+  deploy: registerDeployRoutes,
+  notifications: registerNotificationsRoutes,
+  integrations: registerIntegrationsRoutes,
+  "code-analysis": registerCodeAnalysisRoutes,
+  "git-integration": registerGitIntegrationRoutes,
+  "image-builder": registerImageBuilderRoutes,
+};
+
 async function registerCoreRoutesByService(app: FastifyInstance, service: ServiceName) {
   if (service === "gateway") {
-    await registerAuthRoutes(app);
-    await registerUsersRoutes(app);
-    await registerProjectsRoutes(app);
-    await registerRolesRoutes(app);
-    await registerDeployRoutes(app);
-    await registerNotificationsRoutes(app);
-    await registerIntegrationsRoutes(app);
-    await registerCodeAnalysisRoutes(app);
-    await registerGitIntegrationRoutes(app);
-    await registerImageBuilderRoutes(app);
+    for (const registerFn of Object.values(serviceRegistry)) {
+      await registerFn(app);
+    }
     return;
   }
 
-  if (service === "auth") {
-    await registerAuthRoutes(app);
-    return;
-  }
-  if (service === "users") {
-    await registerUsersRoutes(app);
-    return;
-  }
-  if (service === "projects") {
-    await registerProjectsRoutes(app);
-    return;
-  }
-  if (service === "roles") {
-    await registerRolesRoutes(app);
-    return;
-  }
-  if (service === "deploy") {
-    await registerDeployRoutes(app);
-    return;
-  }
-  if (service === "notifications") {
-    await registerNotificationsRoutes(app);
-    return;
-  }
-  if (service === "integrations") {
-    await registerIntegrationsRoutes(app);
-    return;
-  }
-  if (service === "code-analysis") {
-    await registerCodeAnalysisRoutes(app);
-    return;
-  }
-  if (service === "git-integration") {
-    await registerGitIntegrationRoutes(app);
-    return;
-  }
-  if (service === "image-builder") {
-    await registerImageBuilderRoutes(app);
+  const registerFn = serviceRegistry[service as MigratedServiceName];
+  if (registerFn) {
+    await registerFn(app);
     return;
   }
 
