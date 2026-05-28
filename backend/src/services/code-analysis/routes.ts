@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 
 // Domain modules
 import { CodeAnalysisError, createScan, listScans, getScan, deleteScan, runScan } from "./domain/scans.js";
@@ -10,26 +11,6 @@ import { listFindings } from "./domain/findings.js";
 import { listCustomRules, createCustomRule, updateCustomRule, deleteCustomRule } from "./domain/custom-rules.js";
 import { listSemgrepRules, getSemgrepRuleContent, updateSemgrepRuleContent } from "./domain/semgrep-rules.js";
 import { listRuleOverrides, upsertRuleOverride } from "./domain/rule-overrides.js";
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: CodeAnalysisError): never {
-  const msg = error.message;
-  app.log.error(error);
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
-}
 
 export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

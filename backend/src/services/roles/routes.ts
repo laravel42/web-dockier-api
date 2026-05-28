@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 import {
   RolesError,
   listRoles,
@@ -21,32 +22,6 @@ const roleResponseSchema = z.object({
   isDeletable: z.boolean(),
   permissions: z.array(z.string()),
 });
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: RolesError): never {
-  const msg = error.message;
-  if (error.code === "internal") {
-    app.log.error(error.cause || error, "Internal roles error: " + msg);
-  } else {
-    app.log.warn(error, "Roles domain warning: " + msg);
-  }
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "conflict":
-      throw app.httpErrors.conflict(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
-}
 
 export async function registerRolesRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

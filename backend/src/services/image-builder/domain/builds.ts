@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
@@ -9,13 +10,13 @@ import { rowToBuild } from "./mappers.js";
 
 export type ImageBuilderErrorCode = "not_found" | "forbidden" | "bad_request" | "internal" | "precondition_failed";
 
-export class ImageBuilderError extends Error {
+export class ImageBuilderError extends DomainError {
   constructor(
     message: string,
     public readonly code: ImageBuilderErrorCode,
-    public readonly cause?: unknown,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "ImageBuilderError";
   }
 }

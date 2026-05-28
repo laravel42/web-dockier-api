@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { getHierarchyLevel } from "../../../shared/permissions/role-templates.js";
@@ -216,13 +217,13 @@ export async function removeMemberFromTenant(params: RemoveMemberParams): Promis
 
 export type MembershipErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
-export class MembershipError extends Error {
+export class MembershipError extends DomainError {
   constructor(
     message: string,
     public readonly code: MembershipErrorCode,
-    public readonly cause?: unknown,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "MembershipError";
   }
 }

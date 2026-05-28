@@ -11,6 +11,8 @@ import {
 import { env } from "../../shared/config.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { throwDomainError } from "../../shared/error-handler.js";
+import { DomainError } from "../../shared/supabase/errors.js";
 
 // Domain modules
 import {
@@ -19,42 +21,18 @@ import {
   addMemberToTenant,
   removeMemberFromTenant,
   listTenantMemberships,
-  MembershipError,
 } from "./domain/membership.js";
 import {
   classifyAuthError,
   performDemoLogin,
   performPasswordLogin,
   verifyOtpAndProvision,
-  RegistrationError,
 } from "./domain/registration.js";
 import {
   createTenant,
   switchTenant,
   transferOwnership,
-  TenantError,
 } from "./domain/tenant.js";
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: MembershipError | RegistrationError | TenantError): never {
-  const msg = error.message;
-  switch (error.code) {
-    case "unauthorized":
-      throw app.httpErrors.unauthorized(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError(msg);
-    default:
-      throw app.httpErrors.internalServerError(msg);
-  }
-}
 
 export async function registerAuthRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -109,7 +87,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
         });
       } catch (err) {
-        if (err instanceof RegistrationError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -201,7 +179,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           tenantName: request.body.tenantName,
         });
       } catch (err) {
-        if (err instanceof RegistrationError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -283,7 +261,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       try {
         return await createTenant({ name: request.body.name, userId: auth.userId, email: auth.email });
       } catch (err) {
-        if (err instanceof TenantError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -307,7 +285,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       try {
         return await switchTenant({ tenantId: request.params.tenantId, userId: auth.userId, email: auth.email });
       } catch (err) {
-        if (err instanceof TenantError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -348,7 +326,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         const memberships = await listTenantMemberships(request.params.tenantId);
         return { memberships };
       } catch (err) {
-        if (err instanceof MembershipError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -385,7 +363,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         });
         return { success: true as const };
       } catch (err) {
-        if (err instanceof MembershipError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -417,7 +395,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         });
         return { success: true as const };
       } catch (err) {
-        if (err instanceof MembershipError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
@@ -450,7 +428,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         });
         return { success: true as const };
       } catch (err) {
-        if (err instanceof TenantError) throwDomainError(app, err);
+        if (err instanceof DomainError) throwDomainError(app, err);
         throw err;
       }
     },
