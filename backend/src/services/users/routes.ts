@@ -3,10 +3,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
-  UsersError,
   createUser,
   getUser,
   listUsers,
@@ -38,22 +36,17 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createUser({
-          tenantId: auth.tenantId,
-          email: request.body.email,
-          name: request.body.name,
-          password: request.body.password,
-          country: request.body.country,
-          language: request.body.language,
-          timezone: request.body.timezone,
-          roleId: request.body.roleId,
-          resolvedAuth: request.resolvedAuth!,
-        });
-      } catch (err) {
-        if (err instanceof UsersError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createUser({
+        tenantId: auth.tenantId,
+        email: request.body.email,
+        name: request.body.name,
+        password: request.body.password,
+        country: request.body.country,
+        language: request.body.language,
+        timezone: request.body.timezone,
+        roleId: request.body.roleId,
+        resolvedAuth: request.resolvedAuth!,
+      });
     },
   );
 
@@ -70,12 +63,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await getUser(request.params.userId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof UsersError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getUser(request.params.userId, auth.tenantId);
     },
   );
 
@@ -96,17 +84,12 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await listUsers({
-          tenantId: auth.tenantId,
-          page: request.query.page,
-          limit: request.query.limit,
-          search: request.query.search,
-        });
-      } catch (err) {
-        if (err instanceof UsersError) throwDomainError(app, err);
-        throw err;
-      }
+      return await listUsers({
+        tenantId: auth.tenantId,
+        page: request.query.page,
+        limit: request.query.limit,
+        search: request.query.search,
+      });
     },
   );
 
@@ -133,22 +116,17 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await updateUser({
-          userId: request.params.userId,
-          tenantId: auth.tenantId,
-          name: request.body.name,
-          avatarUrl: request.body.avatarUrl,
-          country: request.body.country,
-          language: request.body.language,
-          timezone: request.body.timezone,
-          roleId: request.body.roleId,
-          resolvedAuth: request.resolvedAuth!,
-        });
-      } catch (err) {
-        if (err instanceof UsersError) throwDomainError(app, err);
-        throw err;
-      }
+      return await updateUser({
+        userId: request.params.userId,
+        tenantId: auth.tenantId,
+        name: request.body.name,
+        avatarUrl: request.body.avatarUrl,
+        country: request.body.country,
+        language: request.body.language,
+        timezone: request.body.timezone,
+        roleId: request.body.roleId,
+        resolvedAuth: request.resolvedAuth!,
+      });
     },
   );
 
@@ -165,18 +143,13 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await removeUser({
-          userId: request.params.userId,
-          tenantId: auth.tenantId,
-          actorUserId: auth.userId,
-          resolvedAuth: request.resolvedAuth!,
-        });
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof UsersError) throwDomainError(app, err);
-        throw err;
-      }
+      await removeUser({
+        userId: request.params.userId,
+        tenantId: auth.tenantId,
+        actorUserId: auth.userId,
+        resolvedAuth: request.resolvedAuth!,
+      });
+      return { success: true as const };
     },
   );
 }

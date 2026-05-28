@@ -2,10 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
-  RolesError,
   listRoles,
   getRole,
   createRole,
@@ -39,12 +37,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await listRoles(auth.tenantId);
-      } catch (err) {
-        if (err instanceof RolesError) throwDomainError(app, err);
-        throw err;
-      }
+      return await listRoles(auth.tenantId);
     },
   );
 
@@ -61,12 +54,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await getRole(request.params.roleId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof RolesError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getRole(request.params.roleId, auth.tenantId);
     },
   );
 
@@ -87,18 +75,13 @@ export async function registerRolesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createRole({
-          tenantId: auth.tenantId,
-          name: request.body.name,
-          description: request.body.description,
-          permissions: request.body.permissions,
-          resolvedAuth: request.resolvedAuth!,
-        });
-      } catch (err) {
-        if (err instanceof RolesError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createRole({
+        tenantId: auth.tenantId,
+        name: request.body.name,
+        description: request.body.description,
+        permissions: request.body.permissions,
+        resolvedAuth: request.resolvedAuth!,
+      });
     },
   );
 
@@ -120,19 +103,14 @@ export async function registerRolesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await updateRole({
-          roleId: request.params.roleId,
-          tenantId: auth.tenantId,
-          name: request.body.name,
-          description: request.body.description,
-          permissions: request.body.permissions,
-          resolvedAuth: request.resolvedAuth!,
-        });
-      } catch (err) {
-        if (err instanceof RolesError) throwDomainError(app, err);
-        throw err;
-      }
+      return await updateRole({
+        roleId: request.params.roleId,
+        tenantId: auth.tenantId,
+        name: request.body.name,
+        description: request.body.description,
+        permissions: request.body.permissions,
+        resolvedAuth: request.resolvedAuth!,
+      });
     },
   );
 
@@ -149,13 +127,8 @@ export async function registerRolesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteRole(request.params.roleId, auth.tenantId, request.resolvedAuth!);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof RolesError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteRole(request.params.roleId, auth.tenantId, request.resolvedAuth!);
+      return { success: true as const };
     },
   );
 

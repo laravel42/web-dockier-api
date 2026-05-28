@@ -12,10 +12,8 @@ import { resolveDeployTemplate } from "./domain/templates.js";
 import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 import { rowToDeployment } from "./domain/mappers.js";
-import { throwDomainError } from "../../shared/error-handler.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
-  DeployError,
   createProvider,
   listProviders,
   getProviderForTenant,
@@ -49,19 +47,14 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createProvider({
-          tenantId: auth.tenantId,
-          provider: request.body.provider,
-          label: request.body.label,
-          apiKey: request.body.apiKey,
-          apiSecret: request.body.apiSecret,
-          region: request.body.region,
-        });
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createProvider({
+        tenantId: auth.tenantId,
+        provider: request.body.provider,
+        label: request.body.label,
+        apiKey: request.body.apiKey,
+        apiSecret: request.body.apiSecret,
+        region: request.body.region,
+      });
     },
   );
 
@@ -77,13 +70,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const providers = await listProviders(auth.tenantId);
-        return { providers };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      const providers = await listProviders(auth.tenantId);
+      return { providers };
     },
   );
 
@@ -101,17 +89,12 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await updateProvider({
-          providerId: request.params.providerId,
-          tenantId: auth.tenantId,
-          label: request.body.label,
-          apiSecret: request.body.apiSecret,
-        });
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      return await updateProvider({
+        providerId: request.params.providerId,
+        tenantId: auth.tenantId,
+        label: request.body.label,
+        apiSecret: request.body.apiSecret,
+      });
     },
   );
 
@@ -128,13 +111,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteProvider(request.params.providerId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteProvider(request.params.providerId, auth.tenantId);
+      return { success: true as const };
     },
   );
 
@@ -157,12 +135,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        return await getProviderCredentials(request.params.providerId);
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getProviderCredentials(request.params.providerId);
     },
   );
 
@@ -190,13 +163,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const keys = await listSshKeys(auth.tenantId);
-        return { keys };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      const keys = await listSshKeys(auth.tenantId);
+      return { keys };
     },
   );
 
@@ -221,16 +189,11 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await createSshKey({
-          tenantId: auth.tenantId,
-          label: request.body.label,
-          publicKey: request.body.publicKey,
-        });
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      return await createSshKey({
+        tenantId: auth.tenantId,
+        label: request.body.label,
+        publicKey: request.body.publicKey,
+      });
     },
   );
 
@@ -247,13 +210,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await deleteSshKey(request.params.keyId, auth.tenantId);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      await deleteSshKey(request.params.keyId, auth.tenantId);
+      return { success: true as const };
     },
   );
 
@@ -287,72 +245,60 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let providerRow: { id: string; organization_id: string; provider: string; region: string | null };
-      try {
-        const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
-        providerRow = { id: full.id, organization_id: full.organization_id, provider: full.provider, region: full.region };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
+      const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
+      const providerRow = { id: full.id, organization_id: full.organization_id, provider: full.provider, region: full.region };
+
+      const payload = await createDeploymentRecord(
+        db,
+        {
+          tenantId: auth.tenantId,
+          providerId: request.body.providerId,
+          gitConnectionId: request.body.gitConnectionId,
+          projectId: request.body.projectId,
+          repo: request.body.repo,
+          branch: request.body.branch,
+          tofuScript: request.body.tofuScript,
+          techStack: request.body.techStack,
+          primaryLanguage: request.body.primaryLanguage,
+          hasDocker: request.body.buildMethod === "dockerfile",
+          deployStrategy: (request.body.deployStrategy as "vps" | "managed" | "static" | undefined) ?? "managed",
+          templateId: request.body.templateId,
+          buildMethod: request.body.buildMethod,
+          registryUrl: request.body.registryUrl,
+          skipPipeline: request.body.skipPipeline,
+          services: request.body.services as ServiceEntry[] | undefined,
+        },
+        {
+          provider: providerRow.provider,
+          region: providerRow.region ?? null,
+        },
+      );
+
+      // Enqueue the deploy pipeline for background processing
+      if (!request.body.skipPipeline) {
+        await enqueueDeployment({
+          deploymentId: payload.id,
+          tenantId: auth.tenantId,
+          providerId: request.body.providerId,
+          gitConnectionId: request.body.gitConnectionId,
+          projectId: request.body.projectId,
+          repo: request.body.repo,
+          branch: request.body.branch,
+          tofuScript: payload.tofu_script || "",
+          techStack: request.body.techStack,
+          primaryLanguage: request.body.primaryLanguage,
+          hasDocker: request.body.buildMethod === "dockerfile",
+          deployStrategy: payload.deploy_strategy || "managed",
+          templateId: request.body.templateId,
+          buildMethod: request.body.buildMethod,
+          registryUrl: request.body.registryUrl,
+          envVars: request.body.envVars,
+          postDeployCommands: request.body.postDeployCommands,
+          services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
+        });
       }
 
-      try {
-        const payload = await createDeploymentRecord(
-          db,
-          {
-            tenantId: auth.tenantId,
-            providerId: request.body.providerId,
-            gitConnectionId: request.body.gitConnectionId,
-            projectId: request.body.projectId,
-            repo: request.body.repo,
-            branch: request.body.branch,
-            tofuScript: request.body.tofuScript,
-            techStack: request.body.techStack,
-            primaryLanguage: request.body.primaryLanguage,
-            hasDocker: request.body.buildMethod === "dockerfile",
-            deployStrategy: (request.body.deployStrategy as "vps" | "managed" | "static" | undefined) ?? "managed",
-            templateId: request.body.templateId,
-            buildMethod: request.body.buildMethod,
-            registryUrl: request.body.registryUrl,
-            skipPipeline: request.body.skipPipeline,
-            services: request.body.services as ServiceEntry[] | undefined,
-          },
-          {
-            provider: providerRow.provider,
-            region: providerRow.region ?? null,
-          },
-        );
-
-        // Enqueue the deploy pipeline for background processing
-        if (!request.body.skipPipeline) {
-          await enqueueDeployment({
-            deploymentId: payload.id,
-            tenantId: auth.tenantId,
-            providerId: request.body.providerId,
-            gitConnectionId: request.body.gitConnectionId,
-            projectId: request.body.projectId,
-            repo: request.body.repo,
-            branch: request.body.branch,
-            tofuScript: payload.tofu_script || "",
-            techStack: request.body.techStack,
-            primaryLanguage: request.body.primaryLanguage,
-            hasDocker: request.body.buildMethod === "dockerfile",
-            deployStrategy: payload.deploy_strategy || "managed",
-            templateId: request.body.templateId,
-            buildMethod: request.body.buildMethod,
-            registryUrl: request.body.registryUrl,
-            envVars: request.body.envVars,
-            postDeployCommands: request.body.postDeployCommands,
-            services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
-          });
-        }
-
-        return rowToDeployment(payload as any);
-      } catch (error) {
-        if (error instanceof DeployError) throwDomainError(app, error);
-        app.log.error(error);
-        throw app.httpErrors.internalServerError("Failed to create deployment");
-      }
+      return rowToDeployment(payload as any);
     },
   );
 
@@ -369,13 +315,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        const deployments = await listDeployments(auth.tenantId, request.query.providerId);
-        return { deployments };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      const deployments = await listDeployments(auth.tenantId, request.query.providerId);
+      return { deployments };
     },
   );
 
@@ -392,12 +333,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        return await getDeployment(request.params.deploymentId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      return await getDeployment(request.params.deploymentId, auth.tenantId);
     },
   );
 
@@ -418,17 +354,12 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        await updateDeploymentStatus(request.params.deploymentId, {
-          status: request.body.status,
-          logs: request.body.logs,
-          appUrl: request.body.appUrl,
-        });
-        return { ok: true as const };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      await updateDeploymentStatus(request.params.deploymentId, {
+        status: request.body.status,
+        logs: request.body.logs,
+        appUrl: request.body.appUrl,
+      });
+      return { ok: true as const };
     },
   );
 
@@ -445,12 +376,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      try {
-        await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
       const result = await destroyDeployment(db, request.params.deploymentId);
       if (!result.success) throw app.httpErrors.badRequest(result.message);
       return { success: true, message: result.message };
@@ -494,14 +420,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      let providerRow: { provider: string; region: string | null; label: string };
-      try {
-        const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
-        providerRow = { provider: full.provider, region: full.region, label: full.label };
-      } catch (err) {
-        if (err instanceof DeployError) throwDomainError(app, err);
-        throw err;
-      }
+      const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
+      const providerRow = { provider: full.provider, region: full.region, label: full.label };
 
       const provider = providerRow.provider;
       const region = request.body.region || providerRow.region || getDefaultRegion(provider);
