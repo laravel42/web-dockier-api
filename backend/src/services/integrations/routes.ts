@@ -11,12 +11,6 @@ import {
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { providers } from "./domain/providers/index.js";
 
-async function listTeams(type: string, config: Record<string, string>) {
-  const provider = providers[type];
-  if (!provider) return { teams: [], teamLabel: "Team", projectLabel: "Project" };
-  return provider.listTeams(config);
-}
-
 export async function registerIntegrationsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
@@ -37,7 +31,11 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         },
       },
     },
-    async (request) => listTeams(request.body.type, request.body.config),
+    async (request) => {
+      const provider = providers[request.body.type];
+      if (!provider) return { teams: [], teamLabel: "Team", projectLabel: "Project" };
+      return provider.listTeams(request.body.config);
+    },
   );
 
   typed.post(
@@ -112,7 +110,8 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
           assigneeId,
         });
       } catch (error) {
-        throw app.httpErrors.badRequest((error as Error).message);
+        app.log.error(error);
+        throw app.httpErrors.badGateway("Failed to create issue in external provider");
       }
     },
   );
