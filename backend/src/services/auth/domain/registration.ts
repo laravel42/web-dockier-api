@@ -1,17 +1,18 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { listMembershipsForUser, type Membership } from "./membership.js";
 import { signTenantToken } from "./session.js";
 
 export type RegistrationErrorCode = "unauthorized" | "forbidden" | "bad_request" | "internal";
 
-export class RegistrationError extends Error {
+export class RegistrationError extends DomainError {
   constructor(
     message: string,
-    public readonly code: RegistrationErrorCode,
-    public readonly cause?: unknown,
+    public readonly code: RegistrationErrorCode & BaseDomainErrorCode,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "RegistrationError";
   }
 }

@@ -1,16 +1,17 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 
 export type NotificationsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
-export class NotificationsError extends Error {
+export class NotificationsError extends DomainError {
   constructor(
     message: string,
-    public readonly code: NotificationsErrorCode,
-    public readonly cause?: unknown,
+    public readonly code: NotificationsErrorCode & BaseDomainErrorCode,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "NotificationsError";
   }
 }

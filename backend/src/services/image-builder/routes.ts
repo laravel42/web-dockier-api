@@ -11,6 +11,7 @@ import { getAwsAccountId } from "../../lib/aws.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature } from "../../shared/security.js";
 import { rowToBuild } from "./domain/mappers.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 import {
   ImageBuilderError,
   createBuild,
@@ -19,28 +20,6 @@ import {
   cancelBuild,
   resolveImageByRevision,
 } from "./domain/builds.js";
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: ImageBuilderError): never {
-  const msg = error.message;
-  app.log.error(error);
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "precondition_failed":
-      throw app.httpErrors.preconditionFailed(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
-}
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

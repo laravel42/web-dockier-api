@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { projectConfigSchema, projectSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 import {
   ProjectsError,
   createProject,
@@ -11,30 +12,6 @@ import {
   updateProject,
   deleteProject,
 } from "./domain/projects.js";
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: ProjectsError): never {
-  const msg = error.message;
-  if (error.code === "internal") {
-    app.log.error(error.cause || error, "Internal projects error: " + msg);
-  } else {
-    app.log.warn(error, "Projects domain warning: " + msg);
-  }
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
-}
 
 export async function registerProjectsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

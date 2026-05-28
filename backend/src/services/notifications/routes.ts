@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 import {
   NotificationsError,
   createChannel,
@@ -13,30 +14,6 @@ import {
   listNotifications,
   markNotificationRead,
 } from "./domain/notifications.js";
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: NotificationsError): never {
-  const msg = error.message;
-  if (error.code === "internal") {
-    app.log.error(error.cause || error, "Internal notifications error: " + msg);
-  } else {
-    app.log.warn(error, "Notifications domain warning: " + msg);
-  }
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
-}
 
 export async function registerNotificationsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

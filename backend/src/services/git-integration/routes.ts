@@ -11,6 +11,7 @@ import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domai
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 import {
   GitIntegrationError,
   getConnection,
@@ -24,30 +25,6 @@ import {
 
 function throwProviderError(app: FastifyInstance, provider: string, status: number, statusText: string): never {
   throw app.httpErrors.badRequest(`${provider} API error ${status}: ${statusText}`);
-}
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: GitIntegrationError): never {
-  const msg = error.message;
-  app.log.error(error);
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "conflict":
-      throw app.httpErrors.conflict(msg);
-    case "precondition_failed":
-      throw app.httpErrors.preconditionFailed(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
 }
 
 export async function registerGitIntegrationRoutes(app: FastifyInstance) {

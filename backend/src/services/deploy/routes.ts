@@ -12,6 +12,7 @@ import { resolveDeployTemplate } from "./domain/templates.js";
 import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 import { rowToDeployment } from "./domain/mappers.js";
+import { throwDomainError } from "../../shared/error-handler.js";
 import {
   DeployError,
   createProvider,
@@ -23,30 +24,6 @@ import {
 } from "./domain/providers.js";
 import { listSshKeys, createSshKey, deleteSshKey } from "./domain/ssh-keys.js";
 import { listDeployments, getDeployment, getDeploymentForDestroy, updateDeploymentStatus } from "./domain/deployments.js";
-
-/**
- * Map domain error codes to Fastify HTTP errors.
- */
-function throwDomainError(app: FastifyInstance, error: DeployError): never {
-  const msg = error.message;
-  if (error.code === "internal") {
-    app.log.error(error);
-  } else {
-    app.log.warn(error, "Deploy domain warning: " + msg);
-  }
-  switch (error.code) {
-    case "not_found":
-      throw app.httpErrors.notFound(msg);
-    case "forbidden":
-      throw app.httpErrors.forbidden(msg);
-    case "bad_request":
-      throw app.httpErrors.badRequest(msg);
-    case "internal":
-      throw app.httpErrors.internalServerError("An internal server error occurred");
-    default:
-      throw app.httpErrors.internalServerError("An unexpected error occurred");
-  }
-}
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

@@ -1,17 +1,18 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 
 export type GitIntegrationErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "precondition_failed";
 
-export class GitIntegrationError extends Error {
+export class GitIntegrationError extends DomainError {
   constructor(
     message: string,
-    public readonly code: GitIntegrationErrorCode,
-    public readonly cause?: unknown,
+    public readonly code: GitIntegrationErrorCode & BaseDomainErrorCode,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "GitIntegrationError";
   }
 }

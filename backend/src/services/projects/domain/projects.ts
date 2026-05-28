@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
@@ -7,13 +8,13 @@ import { projectConfigSchema } from "../schemas.js";
 
 export type ProjectsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
-export class ProjectsError extends Error {
+export class ProjectsError extends DomainError {
   constructor(
     message: string,
-    public readonly code: ProjectsErrorCode,
-    public readonly cause?: unknown,
+    public readonly code: ProjectsErrorCode & BaseDomainErrorCode,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "ProjectsError";
   }
 }
@@ -158,13 +159,12 @@ export async function updateProject(params: UpdateProjectParams) {
     .eq("organization_id", tenantId)
     .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
     .single();
-  if (error) {
-    if (error.code === "PGRST116") throw new ProjectsError("Project not found", "not_found", error);
-    if (error.code === "23505") throw new ProjectsError("A project with this name already exists", "bad_request", error);
-    throw new ProjectsError("Failed to update project", "internal", error);
-  }
-  if (!data) throw new ProjectsError("Project not found", "not_found");
-  return rowToProject(data);
+  const updated = unwrapQuery(data, error, ProjectsError, {
+    notFoundMsg: "Project not found",
+    internalMsg: "Failed to update project",
+    duplicateMsg: "A project with this name already exists",
+  });
+  return rowToProject(updated);
 }
 
 export async function deleteProject(projectId: string, tenantId: string) {

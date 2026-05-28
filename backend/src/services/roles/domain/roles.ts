@@ -1,18 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { DomainError, type BaseDomainErrorCode } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 
 export type RolesErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal";
 
-export class RolesError extends Error {
+export class RolesError extends DomainError {
   constructor(
     message: string,
-    public readonly code: RolesErrorCode,
-    public readonly cause?: unknown,
+    public readonly code: RolesErrorCode & BaseDomainErrorCode,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, code, cause);
     this.name = "RolesError";
   }
 }
