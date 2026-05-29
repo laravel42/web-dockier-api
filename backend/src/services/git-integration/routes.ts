@@ -20,9 +20,21 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "./domain/connections.js";
+import {
+  GitHubApiError,
+  listCommits as ghListCommits,
+  getRepoInfo as ghGetRepoInfo,
+  getLanguages as ghGetLanguages,
+  getContributors as ghGetContributors,
+  getCollaborators as ghGetCollaborators,
+  createIssue as ghCreateIssue,
+} from "./domain/github-client.js";
 
-function throwProviderError(app: FastifyInstance, provider: string, status: number, statusText: string): never {
-  throw app.httpErrors.badRequest(`${provider} API error ${status}: ${statusText}`);
+function throwProviderError(app: FastifyInstance, error: unknown): never {
+  if (error instanceof GitHubApiError) {
+    throw app.httpErrors.badRequest(`GitHub API error ${error.status}: ${error.statusText}`);
+  }
+  throw app.httpErrors.badRequest((error as Error).message);
 }
 
 export async function registerGitIntegrationRoutes(app: FastifyInstance) {
@@ -325,22 +337,17 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       if (conn.provider === "github") {
-        const res = await fetch(`https://api.github.com/repos/${request.body.owner}/${request.body.repo}/issues`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${conn.personal_token}`,
-            Accept: "application/vnd.github+json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        try {
+          return await ghCreateIssue(conn, {
+            owner: request.body.owner,
+            repo: request.body.repo,
             title: request.body.title,
             body: request.body.body,
-            ...(request.body.assignee ? { assignees: [request.body.assignee] } : {}),
-          }),
-        });
-        if (!res.ok) throw app.httpErrors.badRequest(`GitHub API error ${res.status}`);
-        const data = (await res.json()) as any;
-        return { issueId: String(data.id), issueUrl: data.html_url, issueNumber: data.number };
+            assignee: request.body.assignee,
+          });
+        } catch (error) {
+          throwProviderError(app, error);
+        }
       }
       throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
     },
@@ -369,16 +376,15 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.body.branch || "main";
       const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
       if (conn.provider === "github") {
-        const baseUrl = conn.endpoint || "https://api.github.com";
-        const res = await fetch(`${baseUrl}/repos/${request.body.owner}/${request.body.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=10`, {
-          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
-        });
-        if (!res.ok) throwProviderError(app, "GitHub", res.status, res.statusText);
-        const commits = (await res.json()) as any[];
-        if (commits.length === 0 || (request.body.currentHash && commits[0].sha === request.body.currentHash)) {
-          log.push("Already up to date.");
-        } else {
-          for (const commit of commits) log.push(`${commit.sha?.substring(0, 7)} ${commit.commit?.message?.split("\n")[0] ?? ""}`);
+        try {
+          const commits = await ghListCommits(conn, { owner: request.body.owner, repo: request.body.repo, branch, limit: 10 });
+          if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
+            log.push("Already up to date.");
+          } else {
+            for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
+          }
+        } catch (error) {
+          throwProviderError(app, error);
         }
       }
       return { log };
@@ -422,23 +428,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
       if (conn.provider === "github") {
-        const baseUrl = conn.endpoint || "https://api.github.com";
-        const res = await fetch(`${baseUrl}/repos/${request.query.owner}/${request.query.repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`, {
-          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
-        });
-        if (!res.ok) throwProviderError(app, "GitHub", res.status, res.statusText);
-        const data = (await res.json()) as any[];
-        return {
-          commits: data.map((c) => ({
-            hash: c.sha ?? "",
-            shortHash: c.sha?.substring(0, 7) ?? "",
-            message: c.commit?.message?.split("\n")[0] ?? "",
-            author: c.commit?.author?.name ?? c.author?.login ?? "",
-            authorAvatar: c.author?.avatar_url ?? "",
-            date: c.commit?.committer?.date ?? "",
-            url: c.html_url ?? "",
-          })),
-        };
+        try {
+          const commits = await ghListCommits(conn, { owner: request.query.owner, repo: request.query.repo, branch, limit });
+          return { commits };
+        } catch (error) {
+          throwProviderError(app, error);
+        }
       }
       return { commits: [] };
     },
@@ -509,20 +504,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       if (conn.provider === "github") {
-        const baseUrl = conn.endpoint || "https://api.github.com";
-        const res = await fetch(`${baseUrl}/repos/${request.query.owner}/${request.query.repo}/collaborators?per_page=100`, {
-          headers: { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" },
-        });
-        if (!res.ok) return { members: [] };
-        const data = (await res.json()) as Array<{ id: number; login: string; avatar_url: string }>;
-        return {
-          members: data.map((member) => ({
-            id: member.login,
-            username: member.login,
-            name: member.login,
-            avatarUrl: member.avatar_url,
-          })),
-        };
+        const members = await ghGetCollaborators(conn, { owner: request.query.owner, repo: request.query.repo });
+        return { members };
       }
       return { members: [] };
     },
@@ -592,56 +575,32 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       };
 
       if (conn.provider === "github") {
-        const headers = { Authorization: `Bearer ${conn.personal_token}`, Accept: "application/vnd.github.v3+json" };
-        const baseUrl = conn.endpoint || "https://api.github.com";
-
-        const [repoRes, commitsRes, contributorsRes, languagesRes] = await Promise.all([
-          fetch(`${baseUrl}/repos/${repoKey}`, { headers }),
-          fetch(`${baseUrl}/repos/${repoKey}/commits?sha=${encodeURIComponent(branch)}&per_page=20`, { headers }),
-          fetch(`${baseUrl}/repos/${repoKey}/contributors?per_page=20`, { headers }),
-          fetch(`${baseUrl}/repos/${repoKey}/languages`, { headers }),
+        const [owner, repo] = repoKey.split("/");
+        const [repoInfo, commits, contributors, languages] = await Promise.all([
+          ghGetRepoInfo(conn, { owner, repo }),
+          ghListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => [] as any[]),
+          ghGetContributors(conn, { owner, repo, limit: 20 }),
+          ghGetLanguages(conn, { owner, repo }),
         ]);
 
-        if (!repoRes.ok) throwProviderError(app, "GitHub", repoRes.status, repoRes.statusText);
-        const repoData = (await repoRes.json()) as any;
-        stats.stars = repoData.stargazers_count ?? 0;
-        stats.forks = repoData.forks_count ?? 0;
-        stats.openIssues = repoData.open_issues_count ?? 0;
-        stats.watchers = repoData.subscribers_count ?? 0;
-        stats.language = repoData.language ?? "";
+        stats.stars = repoInfo.stars;
+        stats.forks = repoInfo.forks;
+        stats.openIssues = repoInfo.openIssues;
+        stats.watchers = repoInfo.watchers;
+        stats.language = repoInfo.language;
+        stats.languages = languages;
 
-        if (languagesRes.ok) {
-          const languageData = (await languagesRes.json()) as Record<string, number>;
-          const total = Object.values(languageData).reduce((sum, value) => sum + value, 0);
-          if (total > 0) {
-            stats.languages = Object.fromEntries(
-              Object.entries(languageData).map(([key, value]) => [key, Math.round((value / total) * 1000) / 10]),
-            );
-          }
+        if (commits.length > 0) {
+          const latest = commits[0];
+          stats.lastCommitDate = latest.date;
+          stats.lastCommitMessage = latest.message;
+          stats.lastCommitAuthor = latest.author;
+          stats.lastCommitHash = latest.hash;
+          stats.totalCommits = commits.length;
         }
 
-        if (commitsRes.ok) {
-          const commits = (await commitsRes.json()) as any[];
-          if (commits.length > 0) {
-            const latest = commits[0];
-            stats.lastCommitDate = latest.commit?.committer?.date ?? "";
-            stats.lastCommitMessage = latest.commit?.message?.split("\n")[0] ?? "";
-            stats.lastCommitAuthor = latest.commit?.author?.name ?? latest.author?.login ?? "";
-            stats.lastCommitHash = latest.sha ?? "";
-            stats.totalCommits = commits.length;
-          }
-        }
-
-        if (contributorsRes.ok) {
-          const contributors = (await contributorsRes.json()) as any[];
-          stats.contributors = contributors.length;
-          stats.topContributors = contributors.slice(0, 20).map((contributor) => ({
-            name: contributor.login,
-            avatarUrl: contributor.avatar_url ?? "",
-            commits: contributor.contributions ?? 0,
-            profileUrl: contributor.html_url ?? "",
-          }));
-        }
+        stats.contributors = contributors.length;
+        stats.topContributors = contributors;
       }
 
       await db.from("stats_cache").upsert(
