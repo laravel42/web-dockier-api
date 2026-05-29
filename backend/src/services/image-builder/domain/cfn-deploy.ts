@@ -80,7 +80,8 @@ function parseDeployParams(metadata: Record<string, unknown>): Record<string, un
   return raw as Record<string, unknown>;
 }
 
-function normalizeEnvVars(rawEnvVars: any[]): Array<{ name: string; value: string }> {
+function normalizeEnvVars(rawEnvVars: any): Array<{ name: string; value: string }> {
+  if (!Array.isArray(rawEnvVars)) return [];
   return rawEnvVars
     .map((v: any) => {
       if (typeof v === "string") {
@@ -168,16 +169,19 @@ export async function checkDeployStatus(params: CheckStackStatusParams): Promise
     const appUrl = outputs.AppUrl || "";
 
     // Cache the result so future polls are instant
-    await cacheDeployResult(buildId, buildRow.build_metadata, { appUrl, stackName });
+    await cacheDeployResult(buildId, buildRow.build_metadata, { appUrl, stackName }, logger);
     return { status: "success", appUrl, stackName };
   }
 
   if (stackStatus.includes("ROLLBACK") || stackStatus.includes("FAILED")) {
-    await supabaseAdmin.from("builds").update({
+    const { error } = await supabaseAdmin.from("builds").update({
       status: "failed",
       status_reason: `CloudFormation: ${stackStatus}`,
       updated_at: new Date().toISOString(),
     }).eq("id", buildId);
+    if (error) {
+      logger.debug(`Failed to update build status to failed in DB: ${error.message}`);
+    }
     return { status: "failed", appUrl: "", stackName };
   }
 
@@ -292,7 +296,10 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
     : { Subnets: [] };
   const subnetId = (subnetsResult.Subnets || [])[0]?.SubnetId || "";
 
-  if (!vpcId || !subnetId) return;
+  if (!vpcId || !subnetId) {
+    logger.debug(`Fallback stack creation aborted: Default VPC or Subnet not found. vpcId=${vpcId}, subnetId=${subnetId}`);
+    return;
+  }
 
   // Upload CFN template to S3
   const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
@@ -441,11 +448,15 @@ async function cacheDeployResult(
   buildId: string,
   rawMetadata: string | null | undefined,
   result: { appUrl: string; stackName: string },
+  logger: Logger,
 ): Promise<void> {
   const existingMetadata = parseBuildMetadata(rawMetadata);
-  await supabaseAdmin.from("builds").update({
+  const { error } = await supabaseAdmin.from("builds").update({
     status: "succeeded",
     build_metadata: JSON.stringify({ ...existingMetadata, ...result }),
     updated_at: new Date().toISOString(),
   }).eq("id", buildId);
+  if (error) {
+    logger.debug(`Failed to cache deploy result in DB: ${error.message}`);
+  }
 }

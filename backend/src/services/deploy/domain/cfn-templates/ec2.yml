@@ -540,7 +540,7 @@ Resources:
           set -x
 
           apt-get update -y || true
-          apt-get install -y python3-pip python3-venv || true
+          apt-get install -y python3-pip python3-venv
 
           # Install cfn-bootstrap in a virtual environment to avoid PEP 668 issues on Ubuntu 24.04
           python3 -m venv /opt/aws-cfn-bootstrap
