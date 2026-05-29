@@ -33,7 +33,7 @@ function getHeaders(connection: ConnectionLike): Record<string, string> {
   };
 }
 
-async function assertOk(response: Response, context: string): Promise<void> {
+function assertOk(response: Response, context: string): void {
   if (!response.ok) {
     throw new GitHubApiError(
       `GitHub API error ${response.status}: ${response.statusText} (${context})`,
@@ -126,7 +126,7 @@ export async function getRepoInfo(
   const { owner, repo } = params;
 
   const res = await fetch(`${baseUrl}/repos/${owner}/${repo}`, { headers });
-  await assertOk(res, `getRepoInfo ${owner}/${repo}`);
+  assertOk(res, `getRepoInfo ${owner}/${repo}`);
 
   const data = (await res.json()) as any;
   return {
@@ -173,7 +173,7 @@ export async function getContributors(
   const { owner, repo, limit = 20 } = params;
 
   const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/contributors?per_page=${limit}`, { headers });
-  if (!res.ok) return [];
+  if (!res.ok || res.status === 204) return [];
 
   const data = (await res.json()) as any[];
   return data.map((contributor) => ({
@@ -227,7 +227,7 @@ export async function createIssue(
       ...(assignee ? { assignees: [assignee] } : {}),
     }),
   });
-  await assertOk(res, `createIssue ${owner}/${repo}`);
+  assertOk(res, `createIssue ${owner}/${repo}`);
 
   const data = (await res.json()) as any;
   return {

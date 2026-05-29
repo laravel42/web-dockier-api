@@ -575,32 +575,36 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       };
 
       if (conn.provider === "github") {
-        const [owner, repo] = repoKey.split("/");
-        const [repoInfo, commits, contributors, languages] = await Promise.all([
-          ghGetRepoInfo(conn, { owner, repo }),
-          ghListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => [] as any[]),
-          ghGetContributors(conn, { owner, repo, limit: 20 }),
-          ghGetLanguages(conn, { owner, repo }),
-        ]);
+        try {
+          const { owner, repo } = request.query;
+          const [repoInfo, commits, contributors, languages] = await Promise.all([
+            ghGetRepoInfo(conn, { owner, repo }),
+            ghListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => [] as any[]),
+            ghGetContributors(conn, { owner, repo, limit: 20 }),
+            ghGetLanguages(conn, { owner, repo }),
+          ]);
 
-        stats.stars = repoInfo.stars;
-        stats.forks = repoInfo.forks;
-        stats.openIssues = repoInfo.openIssues;
-        stats.watchers = repoInfo.watchers;
-        stats.language = repoInfo.language;
-        stats.languages = languages;
+          stats.stars = repoInfo.stars;
+          stats.forks = repoInfo.forks;
+          stats.openIssues = repoInfo.openIssues;
+          stats.watchers = repoInfo.watchers;
+          stats.language = repoInfo.language;
+          stats.languages = languages;
 
-        if (commits.length > 0) {
-          const latest = commits[0];
-          stats.lastCommitDate = latest.date;
-          stats.lastCommitMessage = latest.message;
-          stats.lastCommitAuthor = latest.author;
-          stats.lastCommitHash = latest.hash;
-          stats.totalCommits = commits.length;
+          if (commits.length > 0) {
+            const latest = commits[0];
+            stats.lastCommitDate = latest.date;
+            stats.lastCommitMessage = latest.message;
+            stats.lastCommitAuthor = latest.author;
+            stats.lastCommitHash = latest.hash;
+            stats.totalCommits = commits.length;
+          }
+
+          stats.contributors = contributors.length;
+          stats.topContributors = contributors;
+        } catch (error) {
+          throwProviderError(app, error);
         }
-
-        stats.contributors = contributors.length;
-        stats.topContributors = contributors;
       }
 
       await db.from("stats_cache").upsert(
