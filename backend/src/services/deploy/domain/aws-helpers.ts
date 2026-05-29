@@ -434,7 +434,11 @@ export async function destroyCfnStack(
 
 /**
  * Poll a CloudFormation stack until it reaches a success or failure state.
- * Polls every 15 seconds for up to 15 minutes.
+ * Polls every 15 seconds for up to 25 minutes.
+ *
+ * The timeout here must exceed the CFN CreationPolicy timeout (PT20M)
+ * so the pipeline waits for CloudFormation to report success/failure
+ * rather than giving up prematurely.
  */
 export async function pollStackStatus(opts: {
   cfn: any;
@@ -447,7 +451,7 @@ export async function pollStackStatus(opts: {
 
   const successStatuses = isUpdate ? ["UPDATE_COMPLETE"] : ["CREATE_COMPLETE"];
 
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < 100; attempt++) {
     await new Promise((r) => setTimeout(r, 15_000));
 
     try {
@@ -495,5 +499,5 @@ export async function pollStackStatus(opts: {
     }
   }
 
-  throw new Error("CloudFormation stack did not complete within timeout (15 minutes)");
+  throw new Error("CloudFormation stack did not complete within timeout (25 minutes)");
 }

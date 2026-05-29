@@ -161,7 +161,11 @@ Resources:
             03_install_cfn_helpers:
               command: |
                 if ! command -v cfn-signal >/dev/null 2>&1; then
-                  pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+                  python3 -m venv /opt/aws-cfn-bootstrap
+                  /opt/aws-cfn-bootstrap/bin/pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+                  ln -sf /opt/aws-cfn-bootstrap/bin/cfn-init /usr/local/bin/cfn-init
+                  ln -sf /opt/aws-cfn-bootstrap/bin/cfn-signal /usr/local/bin/cfn-signal
+                  ln -sf /opt/aws-cfn-bootstrap/bin/cfn-hup /usr/local/bin/cfn-hup
                 fi
         app:
           commands:
@@ -532,23 +536,30 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          set -euo pipefail
           exec > /var/log/user-data.log 2>&1
+          set -x
 
-          apt-get update -y
-          apt-get install -y python3-pip
-          pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          apt-get update -y || true
+          apt-get install -y python3-pip python3-venv || true
+
+          # Install cfn-bootstrap in a virtual environment to avoid PEP 668 issues on Ubuntu 24.04
+          python3 -m venv /opt/aws-cfn-bootstrap
+          /opt/aws-cfn-bootstrap/bin/pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          ln -sf /opt/aws-cfn-bootstrap/bin/cfn-init /usr/local/bin/cfn-init
+          ln -sf /opt/aws-cfn-bootstrap/bin/cfn-signal /usr/local/bin/cfn-signal
+          ln -sf /opt/aws-cfn-bootstrap/bin/cfn-hup /usr/local/bin/cfn-hup
 
           cfn-init -v --stack ${AWS::StackName} --resource Instance --configsets deploy --region ${AWS::Region}
+          CFN_INIT_STATUS=$?
 
           systemctl daemon-reload
-          systemctl enable cfn-hup
-          systemctl start cfn-hup
+          systemctl enable cfn-hup || true
+          systemctl start cfn-hup || true
 
           # Signal CloudFormation that cfn-init completed successfully.
           # This unblocks the CreationPolicy so the stack only reports
           # CREATE_COMPLETE once the container is running.
-          cfn-signal -e $? --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
+          cfn-signal -e $CFN_INIT_STATUS --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
 
           echo "── Done ──"
     CreationPolicy:
