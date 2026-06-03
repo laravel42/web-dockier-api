@@ -69,3 +69,101 @@ export async function stopQueue(): Promise<void> {
 
 export const DEPLOY_QUEUE = "deploy-pipeline";
 export const IMAGE_BUILD_QUEUE = "image-build";
+
+// ─── Generic Worker Factory ────────────────────────────────────────
+
+export interface WorkerOptions {
+  /** Number of retries on failure (default: 2) */
+  retryLimit?: number;
+  /** Max seconds a job can run before expiring (default: 1200) */
+  expireInSeconds?: number;
+  /** Batch size for work polling (default: 1) */
+  batchSize?: number;
+  /** Polling interval in seconds (default: 5) */
+  pollingIntervalSeconds?: number;
+}
+
+export interface WorkerInstance<T> {
+  register: () => Promise<void>;
+  enqueue: (input: T, singletonKey?: string) => Promise<void>;
+}
+
+/**
+ * Create a typed worker for a pg-boss queue.
+ *
+ * Returns { register, enqueue } — call register() once at startup,
+ * then enqueue() whenever a job needs processing.
+ *
+ * Falls back to in-process execution via setImmediate when pg-boss
+ * is unavailable (DATABASE_URL not set).
+ */
+export function createWorker<T>(
+  queueName: string,
+  handler: (input: T) => Promise<void>,
+  options: WorkerOptions = {},
+): WorkerInstance<T> {
+  const {
+    retryLimit = 2,
+    expireInSeconds = 1200,
+    batchSize = 1,
+    pollingIntervalSeconds = 5,
+  } = options;
+
+  let registered = false;
+
+  async function register(): Promise<void> {
+    const queue = getQueue();
+    if (!queue || registered) return;
+
+    // Set flag synchronously to prevent concurrent duplicate registrations
+    registered = true;
+
+    try {
+      await queue.createQueue(queueName);
+
+      await queue.work(queueName, { batchSize, pollingIntervalSeconds }, async (jobs: any[]) => {
+        if (!jobs || jobs.length === 0) return;
+
+        for (const job of jobs) {
+          if (!job) continue;
+          const input = job.data as T;
+          const jobId = job.id as string;
+          console.log(`[${queueName}] Processing job ${jobId}`);
+          try {
+            await handler(input);
+            console.log(`[${queueName}] Completed job ${jobId}`);
+          } catch (err) {
+            console.error(`[${queueName}] Failed job ${jobId}:`, err);
+            throw err; // re-throw so pg-boss marks it failed and retries
+          }
+        }
+      });
+
+      console.log(`[${queueName}] Worker registered`);
+    } catch (err) {
+      registered = false;
+      throw err;
+    }
+  }
+
+  async function enqueue(input: T, singletonKey?: string): Promise<void> {
+    const queue = getQueue();
+
+    if (queue) {
+      await queue.send(queueName, input as unknown as Record<string, unknown>, {
+        retryLimit,
+        expireInSeconds,
+        ...(singletonKey ? { singletonKey } : {}),
+      });
+      console.log(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+    } else {
+      setImmediate(() => {
+        handler(input).catch((err) => {
+          console.error(`[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}:`, err);
+        });
+      });
+    }
+  }
+
+  return { register, enqueue };
+}
