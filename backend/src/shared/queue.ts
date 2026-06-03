@@ -85,7 +85,7 @@ export interface WorkerOptions {
 
 export interface WorkerInstance<T> {
   register: () => Promise<void>;
-  enqueue: (input: T, singletonKey: string) => Promise<void>;
+  enqueue: (input: T, singletonKey?: string) => Promise<void>;
 }
 
 /**
@@ -115,39 +115,51 @@ export function createWorker<T>(
     const queue = getQueue();
     if (!queue || registered) return;
 
-    await queue.createQueue(queueName);
-
-    await queue.work(queueName, { batchSize, pollingIntervalSeconds }, async ([job]: any[]) => {
-      const input = job.data as T;
-      const jobId = job.id as string;
-      console.log(`[${queueName}] Processing job ${jobId}`);
-      try {
-        await handler(input);
-        console.log(`[${queueName}] Completed job ${jobId}`);
-      } catch (err) {
-        console.error(`[${queueName}] Failed job ${jobId}:`, err);
-        throw err; // re-throw so pg-boss marks it failed and retries
-      }
-    });
-
+    // Set flag synchronously to prevent concurrent duplicate registrations
     registered = true;
-    console.log(`[${queueName}] Worker registered`);
+
+    try {
+      await queue.createQueue(queueName);
+
+      await queue.work(queueName, { batchSize, pollingIntervalSeconds }, async (jobs: any[]) => {
+        if (!jobs || jobs.length === 0) return;
+
+        for (const job of jobs) {
+          if (!job) continue;
+          const input = job.data as T;
+          const jobId = job.id as string;
+          console.log(`[${queueName}] Processing job ${jobId}`);
+          try {
+            await handler(input);
+            console.log(`[${queueName}] Completed job ${jobId}`);
+          } catch (err) {
+            console.error(`[${queueName}] Failed job ${jobId}:`, err);
+            throw err; // re-throw so pg-boss marks it failed and retries
+          }
+        }
+      });
+
+      console.log(`[${queueName}] Worker registered`);
+    } catch (err) {
+      registered = false;
+      throw err;
+    }
   }
 
-  async function enqueue(input: T, singletonKey: string): Promise<void> {
+  async function enqueue(input: T, singletonKey?: string): Promise<void> {
     const queue = getQueue();
 
     if (queue) {
       await queue.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
         expireInSeconds,
-        singletonKey,
+        ...(singletonKey ? { singletonKey } : {}),
       });
-      console.log(`[${queueName}] Enqueued job (key: ${singletonKey})`);
+      console.log(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
     } else {
       setImmediate(() => {
         handler(input).catch((err) => {
-          console.error(`[${queueName}] Job failed (key: ${singletonKey}):`, err);
+          console.error(`[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}:`, err);
         });
       });
     }
