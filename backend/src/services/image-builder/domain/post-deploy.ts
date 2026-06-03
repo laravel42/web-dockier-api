@@ -48,11 +48,9 @@ function parseBuildMetadata(raw: string | null | undefined): Record<string, unkn
 }
 
 function isLaravelProject(metadata: Record<string, unknown>, sourceRepo: string): boolean {
-  const techStack: string[] = Array.isArray(metadata.techStack)
-    ? (metadata.techStack as string[])
-    : [];
+  const techStack = Array.isArray(metadata.techStack) ? metadata.techStack : [];
   return (
-    techStack.some((s: string) => s.toLowerCase() === "laravel") ||
+    techStack.some((s) => typeof s === "string" && s.toLowerCase() === "laravel") ||
     sourceRepo.toLowerCase().includes("laravel")
   );
 }
@@ -125,7 +123,7 @@ async function resolveInstanceId(
 // ─── SSM Execution ───────────────────────────────────────────────────────────
 
 const SSM_POLL_INTERVAL_MS = 5000;
-const SSM_POLL_MAX_ATTEMPTS = 30;
+const SSM_POLL_MAX_ATTEMPTS = 70;
 
 async function executeSsmCommand(
   instanceId: string,
@@ -199,8 +197,10 @@ async function executeSsmCommand(
           output: outputLines.length > 0 ? outputLines : [`Command ${status}`],
         };
       }
-    } catch {
-      // InvocationDoesNotExist — agent hasn't picked it up yet
+    } catch (err: any) {
+      if (err.name !== "InvocationDoesNotExist") {
+        throw err;
+      }
     }
   }
 
