@@ -18,6 +18,7 @@ import {
   cancelBuild,
   resolveImageByRevision,
 } from "./domain/builds.js";
+import { runPostDeployCommands } from "./domain/post-deploy.js";
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -314,114 +315,22 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       if (error || !data) throw app.httpErrors.notFound("Build not found");
       if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
 
-      const enabledCommands = request.body.commands.filter(c => c.enabled);
-      if (enabledCommands.length === 0) return { success: true, output: ["No commands to run"] };
-
-      // Resolve AWS credentials
       const credentials = await resolveAwsCredentials(data.provider_id || "");
       if (!credentials) throw app.httpErrors.preconditionFailed("AWS credentials not available");
 
-      // Find the EC2 instance from CloudFormation stack
-      const appName = deriveAppName(data.source_repo || "");
-      const stackName = deriveStackName(appName);
-
-      const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-      const cfn = new CloudFormationClient({
-        region: credentials.region,
-        credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
-      });
-
-      const stackResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-      const stack = stackResult.Stacks?.[0];
-      if (!stack) throw app.httpErrors.preconditionFailed("CloudFormation stack not found");
-
-      const outputs = Object.fromEntries((stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]));
-      const instanceId = outputs.InstanceId || "";
-      if (!instanceId) throw app.httpErrors.preconditionFailed("No EC2 instance found in stack outputs");
-
-      // Derive container name (matches what CloudFormation UserData uses)
-      const containerName = appName;
-
-      // Build the command chain
-      const cmdChain = enabledCommands
-        .map(cmd => {
-          const escaped = cmd.command.replace(/'/g, "'\\''");
-          const exec = `docker exec ${containerName} sh -c '${escaped}'`;
-          return cmd.continueOnFailure ? `(${exec} || true)` : exec;
-        })
-        .join(" && ");
-
-      // Laravel: copy .env into container before running commands
-      const parsedMetadata: Record<string, unknown> = typeof data.build_metadata === "string" && data.build_metadata
-        ? JSON.parse(data.build_metadata) : {};
-      const techStack: string[] = Array.isArray(parsedMetadata.techStack)
-        ? parsedMetadata.techStack as string[]
-        : [];
-      const isLaravel = techStack.some((s: string) => s.toLowerCase() === "laravel") ||
-        (data.source_repo || "").toLowerCase().includes("laravel");
-
-      const envSetup = isLaravel
-        ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && `
-        : "";
-
-      const script = [
-        "#!/bin/bash",
-        "CONTAINER_READY=0",
-        "for i in $(seq 1 90); do",
-        `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
-        "  sleep 2",
-        "done",
-        `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
-        `${envSetup}${cmdChain}`,
-      ].join("\n");
-
-      // Execute via SSM SendCommand
-      const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
-      const ssm = new SSMClient({
-        region: credentials.region,
-        credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
-      });
-
-      const sendResult = await ssm.send(new SendCommandCommand({
-        InstanceIds: [instanceId],
-        DocumentName: "AWS-RunShellScript",
-        Parameters: { commands: [script] },
-        TimeoutSeconds: 300,
-      }));
-
-      const commandId = sendResult.Command?.CommandId;
-      if (!commandId) throw app.httpErrors.internalServerError("Failed to send SSM command");
-
-      // Poll for completion
-      const outputLines: string[] = [];
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 5000));
-        try {
-          const invocation = await ssm.send(new GetCommandInvocationCommand({
-            CommandId: commandId,
-            InstanceId: instanceId,
-          }));
-          const status = invocation.Status;
-          if (status === "Success") {
-            if (invocation.StandardOutputContent?.trim()) {
-              outputLines.push(...invocation.StandardOutputContent.trim().split("\n").slice(0, 50));
-            }
-            return { success: true, output: outputLines.length > 0 ? outputLines : ["Commands executed successfully"] };
-          } else if (status === "Failed" || status === "Cancelled" || status === "TimedOut") {
-            if (invocation.StandardErrorContent?.trim()) {
-              outputLines.push(...invocation.StandardErrorContent.trim().split("\n").slice(0, 20));
-            }
-            if (invocation.StandardOutputContent?.trim()) {
-              outputLines.push(...invocation.StandardOutputContent.trim().split("\n").slice(-20));
-            }
-            return { success: false, output: outputLines.length > 0 ? outputLines : [`Command ${status}`] };
-          }
-        } catch {
-          // InvocationDoesNotExist — agent hasn't picked it up yet
-        }
+      try {
+        return await runPostDeployCommands({
+          buildRow: {
+            source_repo: data.source_repo || "",
+            build_metadata: data.build_metadata as string | null,
+            provider_id: data.provider_id,
+          },
+          commands: request.body.commands,
+          credentials,
+        });
+      } catch (err: any) {
+        throw app.httpErrors.preconditionFailed(err.message);
       }
-
-      return { success: false, output: ["Command timed out — it may still be running on the instance"] };
     },
   );
 
