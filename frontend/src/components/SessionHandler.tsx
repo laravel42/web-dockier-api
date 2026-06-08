@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useToast } from "../context/ToastContext";
+import { useToast } from "../context/useToast";
 import { onSessionExpired } from "../services/session";
 
 /** Redirects to login and clears auth when the API returns 401. */

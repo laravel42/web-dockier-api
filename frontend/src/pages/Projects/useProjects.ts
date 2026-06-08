@@ -4,7 +4,7 @@ import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
-import { useToast } from "../../context/ToastContext";
+import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project, ProjectSourceType } from "../../types";
 import { PROJECT_TEMPLATES } from "./templates";
 

@@ -1,31 +1,20 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-
-export type ToastVariant = "error" | "success" | "info";
+import {
+  ToastContext,
+  type ToastApi,
+  type ToastVariant,
+} from "./toast-context";
 
 interface ToastItem {
   id: string;
   variant: ToastVariant;
   message: string;
 }
-
-interface ToastApi {
-  error: (message: string) => void;
-  success: (message: string) => void;
-  info: (message: string) => void;
-}
-
-interface ToastContextValue {
-  toast: ToastApi;
-}
-
-const ToastContext = createContext<ToastContextValue | null>(null);
 
 const variantStyles: Record<ToastVariant, string> = {
   error: "border-danger-500/30 bg-danger-50 text-danger-700",
@@ -51,7 +40,7 @@ function ToastContainer({
         <div
           key={t.id}
           role={t.variant === "error" ? "alert" : "status"}
-          className={`pointer-events-auto rounded-[var(--radius-btn)] border px-4 py-3 text-sm shadow-[var(--shadow-card-hover)] ${variantStyles[t.variant]}`}
+          className={`pointer-events-auto rounded-(--radius-btn)er px-4 py-3 text-sm shadow-(--shadow-card-hover) ${variantStyles[t.variant]}`}
         >
           <div className="flex items-start justify-between gap-3">
             <p className="leading-snug">{t.message}</p>
@@ -100,25 +89,5 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </ToastContext.Provider>
-  );
-}
-
-export function useToast(): ToastApi {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    throw new Error("useToast must be used within ToastProvider");
-  }
-  return ctx.toast;
-}
-
-/** Safe toast access for modules outside React (e.g. hooks) — no-op if provider missing. */
-export function useToastOptional(): ToastApi {
-  const ctx = useContext(ToastContext);
-  return (
-    ctx?.toast ?? {
-      error: () => {},
-      success: () => {},
-      info: () => {},
-    }
   );
 }

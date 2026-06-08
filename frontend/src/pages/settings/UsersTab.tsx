@@ -8,7 +8,7 @@ import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import Alert from "../../components/ui/Alert";
 import { getErrorMessage } from "../../utils/errors";
-import { useToast } from "../../context/ToastContext";
+import { useToast } from "../../context/useToast";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../context/PermissionsContext";
 

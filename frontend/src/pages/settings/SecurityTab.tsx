@@ -30,7 +30,7 @@ export default function SecurityTab() {
   };
 
   return (
-    <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 max-w-lg">
+    <div className="bg-card rounded-card shadow-(--shadow-card) p-6 max-w-lg">
       <h2 className="text-base font-semibold text-text mb-1">Two-Factor Authentication</h2>
       <p className="text-sm text-text-secondary mb-5">Add an extra layer of security with an authenticator app.</p>
       {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}
@@ -50,7 +50,7 @@ export default function SecurityTab() {
               <input id="verify-token" type="text" value={verifyToken} onChange={(e) => setVerifyToken(e.target.value)} className={inputCls} placeholder="Enter 6-digit code" required />
             </div>
             <div className="flex justify-end">
-              <button type="submit" disabled={loading} className="h-9 px-4 bg-success-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-success-700 disabled:opacity-50 transition-colors">
+              <button type="submit" disabled={loading} className="h-9 px-4 bg-success-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-success-700 disabled:opacity-50 transition-colors">
                 {loading ? "Verifying..." : "Enable 2FA"}
               </button>
             </div>

@@ -63,7 +63,7 @@ export default function ProfileTab() {
   ];
 
   return (
-    <div className="bg-card rounded-(--radius-card) shadow-(--shadow-card) p-6 max-w-lg">
+    <div className="bg-card rounded-card shadow-(--shadow-card) p-6 max-w-lg">
       <h2 className="text-base font-semibold text-text mb-1">Profile</h2>
       <p className="text-sm text-text-secondary mb-5">Manage your personal information.</p>
       {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}

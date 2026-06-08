@@ -13,6 +13,12 @@ interface CRule {
   pattern: string; extensions: string[]; enabled: boolean; isSystem: boolean;
 }
 
+const toolKeyForSource: Record<string, string> = {
+  custom: "customRules",
+  sonarqube: "sonarqube",
+  semgrep: "semgrep",
+};
+
 export default function SecurityRulesTab() {
   const [ruleSource, setRuleSource] = useState<"custom" | "sonarqube" | "semgrep">("semgrep");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
@@ -33,7 +39,6 @@ export default function SecurityRulesTab() {
   };
 
   // Auto-switch rule source when current engine is disabled
-  const toolKeyForSource: Record<string, string> = { custom: "customRules", sonarqube: "sonarqube", semgrep: "semgrep" };
   useEffect(() => {
     if (!scanTools[toolKeyForSource[ruleSource]]) {
       const sources = [
@@ -118,7 +123,7 @@ export default function SecurityRulesTab() {
   return (
     <div>
       {/* Scan Engine Toggles */}
-      <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-4 mb-4">
+      <div className="bg-card rounded-card shadow-(--shadow-card) p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-semibold text-text">Security Tools</p>
@@ -135,7 +140,7 @@ export default function SecurityRulesTab() {
               className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
               <span className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${scanTools[key] ? "bg-primary-500" : "bg-secondary-200"}`}>
-                <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-[14px]" : "left-[1px]"}`} />
+                <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-[14px]" : "left-px"}`} />
               </span>
             </button>
           ))}
@@ -302,7 +307,7 @@ export default function SecurityRulesTab() {
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
                 <button type="button" onClick={() => handleToggle(r)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-[1px]"}`} />
+                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
                 </button>
               </div>
               <p className="text-sm text-text leading-relaxed">{r.message}</p>
@@ -480,7 +485,7 @@ function SonarQubeRulesPanel() {
                 </div>
                 <button type="button" onClick={() => handleToggle(r.key)}
                   className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${!disabledSqRules.has(r.key) ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-[1px]"}`} />
+                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-px"}`} />
                 </button>
               </div>
               <p className="text-sm text-text leading-relaxed">{r.name}</p>
@@ -645,7 +650,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
       setNewRuleId("custom.my-rule");
       setNewRuleError("");
     }
-  }, [adding]);
+  }, [SEMGREP_TEMPLATE, adding]);
 
   // Load disabled overrides for built-in rules
   useEffect(() => {
@@ -802,7 +807,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
                 {!r.isBuiltin && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600 shrink-0">User</span>}
                 <button type="button" onClick={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)}
                   className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-[1px] w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-[1px]"}`} />
+                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
                 </button>
               </div>
               <p className="text-sm text-text leading-relaxed">{r.name}</p>

@@ -128,7 +128,7 @@ export default function NotificationChannelsTab() {
               </div>
               <div className="ml-auto">
                 <button id="edit-ch-enabled" type="button" onClick={() => setEditEnabled(!editEnabled)}
-                  className={`px-4 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
+                  className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
                   {editEnabled ? "Disable" : "Enable"}
                 </button>
               </div>
@@ -177,7 +177,7 @@ export default function NotificationChannelsTab() {
               in_app: <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>,
             };
             return (
-            <div key={ch.id} onClick={() => openEditChannel(ch)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
+            <div key={ch.id} onClick={() => openEditChannel(ch)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0 text-text-secondary">
                   {channelIcons[ch.type] || channelIcons.in_app}

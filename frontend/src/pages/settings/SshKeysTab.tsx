@@ -89,7 +89,7 @@ export default function SshKeysTab() {
       ) : (
         <div className="space-y-3">
           {keyList.map((k) => (
-            <div key={k.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-shadow">
+            <div key={k.id} className="bg-card rounded-card shadow-(--shadow-card) p-5 flex items-center justify-between hover:shadow-(--shadow-card-hover) transition-shadow">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

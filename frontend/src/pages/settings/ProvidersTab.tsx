@@ -151,7 +151,7 @@ export default function ProvidersTab() {
                 </div>
                 <div className="ml-auto">
                   <button id="edit-provider-enabled" type="button" onClick={() => setEditEnabled(!editEnabled)}
-                    className={`px-4 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
+                    className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
                     {editEnabled ? "Disable" : "Enable"}
                   </button>
                 </div>
@@ -189,7 +189,7 @@ export default function ProvidersTab() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {providerList.map((p) => (
-            <div key={p.id} onClick={() => openEdit(p)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
+            <div key={p.id} onClick={() => openEdit(p)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0">
                   <ProviderBadge provider={p.provider} showName={false} iconSize="w-7 h-7" />
