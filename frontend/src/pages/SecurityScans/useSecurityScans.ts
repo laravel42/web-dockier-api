@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
@@ -21,6 +22,9 @@ async function fetchSecurityScansData(): Promise<SecurityScansData> {
 
 export function useSecurityScans() {
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<"cards" | "table">(
+    () => (localStorage.getItem("security-scans-view") as "cards" | "table") || "cards",
+  );
   const { data, loading, error, reload } = useAsyncData(fetchSecurityScansData, []);
 
   const scans = data?.scans ?? [];
@@ -44,6 +48,11 @@ export function useSecurityScans() {
     return (projects[a]?.name || "").localeCompare(projects[b]?.name || "");
   });
 
+  const changeViewMode = (mode: "cards" | "table") => {
+    setViewMode(mode);
+    localStorage.setItem("security-scans-view", mode);
+  };
+
   return {
     navigate,
     loading,
@@ -53,5 +62,7 @@ export function useSecurityScans() {
     grouped,
     projectLangs,
     sortedProjectIds,
+    viewMode,
+    changeViewMode,
   };
 }
