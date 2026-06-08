@@ -59,6 +59,34 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 - Shared components in `frontend/src/components/`, page components in `frontend/src/pages/`.
 - Use TypeScript types from `frontend/src/types/`.
 
+### List pages (Projects, Deployments, Security Scans)
+
+- **Card/table toggle** in the page header (`GridIcon` / `Bars3Icon`), same UX on all three list pages.
+- View preference persisted in `localStorage`:
+  - `projects-view`
+  - `deployments-view`
+  - `security-scans-view`
+- Table components live under each page’s `sections/` folder (`ProjectTable`, `DeployTable`, `ScanProjectTable`).
+- Page hooks expose `viewMode` and `changeViewMode` (see `useProjects`, `useDeploy`, `useSecurityScans`).
+
+### Tech badges on list pages
+
+- Shared hook: `frontend/src/hooks/useProjectBadges.ts`
+- Cache utilities: `frontend/src/utils/projectBadgeCache.ts`
+  - `localStorage` cache per project (invalidated when repo, branch, or connection changes)
+  - `selectProjectBadges()` returns top **4** items sorted by `confidence` (no whitelist filter)
+- Data source: `GET /git/repo-badges` (see git-integration docs for resolution order)
+- Cards and tables show up to 4 badges; tables may show 3 in the Tech column for layout
+- `PlatformBadge` fallback when no tech badges are available
+
+### Linting and Tailwind
+
+- ESLint flat config: `frontend/eslint.config.js`
+- Tailwind canonical classes: `eslint-plugin-better-tailwindcss` rule `better-tailwindcss/enforce-canonical-classes` (auto-fixable; entry point `src/index.css`)
+- Commands: `cd frontend && pnpm lint` / `pnpm lint:fix`
+- VS Code (`.vscode/settings.json`): ESLint fix-all on save; Tailwind IntelliSense canonical hints disabled to avoid duplicate warnings
+- Prefer canonical theme tokens in class names (e.g. `rounded-card`, `shadow-(--shadow-card)`) over arbitrary `var(...)` forms
+
 ## Commands
 
 ```bash
@@ -72,6 +100,8 @@ pnpm test                     # Run root Vitest tests
 cd frontend && pnpm install   # Install frontend dependencies
 cd frontend && pnpm dev       # Start frontend dev server (localhost:5173)
 cd frontend && pnpm build     # Production build
+cd frontend && pnpm lint      # ESLint (includes Tailwind canonical-class checks)
+cd frontend && pnpm lint:fix  # ESLint with auto-fix (canonical Tailwind classes, etc.)
 ```
 
 ## Code style rules

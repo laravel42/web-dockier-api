@@ -59,7 +59,11 @@ pnpm backend:typecheck
 ```bash
 cd frontend
 pnpm dev
+pnpm lint       # ESLint (Tailwind canonical-class checks)
+pnpm lint:fix   # auto-fix canonical Tailwind classes
 ```
+
+See `frontend/README.md` for list-page UX, tech badge caching, and linting details.
 
 ### API docs
 

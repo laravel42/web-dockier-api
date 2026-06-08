@@ -1,73 +1,67 @@
-# React + TypeScript + Vite
+# Dockier Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 SPA (Vite + Tailwind CSS v4) for the Dockier dashboard.
 
-Currently, two official plugins are available:
+## Commands
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install    # install dependencies
+pnpm dev        # dev server (http://localhost:5173)
+pnpm build      # production build
+pnpm lint       # ESLint
+pnpm lint:fix   # ESLint with auto-fix
+pnpm preview    # preview production build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Structure
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```text
+src/
+├── components/     # shared UI
+├── context/        # React context (auth, permissions, toast, theme)
+├── hooks/          # shared hooks (e.g. useProjectBadges)
+├── pages/          # route-level pages and sections/
+├── services/       # API client modules
+├── types/          # shared TypeScript types
+└── utils/          # helpers (e.g. projectBadgeCache)
 ```
+
+## List pages
+
+**Projects**, **Deployments**, and **Security Scans** share a card/table view toggle in the page header. Preference is stored in `localStorage`:
+
+| Page            | Key                   |
+| --------------- | --------------------- |
+| Projects        | `projects-view`       |
+| Deployments     | `deployments-view`    |
+| Security Scans  | `security-scans-view` |
+
+Table components: `ProjectTable`, `DeployTable`, `ScanProjectTable`.
+
+## Tech badges
+
+- Hook: `src/hooks/useProjectBadges.ts`
+- Cache: `src/utils/projectBadgeCache.ts` (`localStorage`, per project)
+- Displays top **4** technologies by `confidence` from `GET /git/repo-badges`
+- Used on project/deploy/security scan cards and list tables; `PlatformBadge` when none detected
+
+## Linting
+
+ESLint flat config (`eslint.config.js`) includes:
+
+- TypeScript, React Hooks, React Refresh (Vite)
+- **`eslint-plugin-better-tailwindcss`** — `enforce-canonical-classes` (warn, auto-fix)
+
+Tailwind entry point for the plugin: `src/index.css` (`@theme` tokens).
+
+Examples of auto-fixes:
+
+- `rounded-[var(--radius-card)]` → `rounded-card`
+- `shadow-[var(--shadow-card)]` → `shadow-(--shadow-card)`
+- `w-2.5 h-2.5` → `size-2.5`
+
+VS Code: `.vscode/settings.json` enables ESLint fix-on-save and disables duplicate Tailwind IntelliSense canonical hints.
+
+## Environment
+
+Copy `frontend/.env.example` if present, or set `VITE_API_BASE` to point at the backend (empty uses same-origin / dev proxy).

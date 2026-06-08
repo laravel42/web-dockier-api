@@ -6,7 +6,7 @@ Dockier is a developer platform that connects your source code repositories to a
 
 Dockier brings together the tools developers need to ship secure code faster:
 
-- **Project Management** — Connect GitHub, GitLab, or Bitbucket repositories and organize them as projects with branch tracking, tech stack detection, recent commits, recent deploys, and deployment status at a glance.
+- **Project Management** — Connect GitHub, GitLab, or Bitbucket repositories and organize them as projects with branch tracking, tech stack detection, recent commits, recent deploys, and deployment status at a glance. List pages for **Projects**, **Deployments**, and **Security Scans** support card and table views with a shared toggle UX; view preference is remembered per page.
 
 - **AI-Powered Project Analysis** — Automatically generates a comprehensive project overview using OpenAI (gpt-5.4-mini), including architecture documentation, tech stack breakdown, deployment guides, security considerations, and code quality insights — organized in a tabbed Notion-style interface with 8 sections (Overview, How It Works, Tech Stack, Architecture, Data & Storage, Code Quality, Security, Deployment). Analysis is cached per commit and refreshable on demand.
 
@@ -30,7 +30,7 @@ Dockier brings together the tools developers need to ship secure code faster:
 
 Each project has a rich detail page featuring:
 
-- **Repository info** with branch, last commit (hash, author, time ago), and tech stack badges (filtered to frameworks/CMS/UI kits via an editable whitelist)
+- **Repository info** with branch, last commit (hash, author, time ago), and tech stack badges (top 4 detected technologies by confidence — frameworks, languages, runtimes, tools)
 - **Project Overview** — Tabbed AI-generated documentation with 8 sections plus Sensitive Data and Dependencies tabs
 - **KPI Dashboard** — Stars, forks, open issues, watchers, commits, contributors, and language breakdown with percentage bars
 - **Contributors Grid** — Top contributors with avatars and commit counts
@@ -44,7 +44,7 @@ Dockier is built as microservices, with an active migration to a Fastify + TypeS
 
 **Backend foundation now:** `backend/` runs Fastify + TypeScript with OpenAPI-first route schemas (Zod), Swagger UI, and a typed Supabase storage adapter. In this migration pass, `auth`, `users`, and `projects` are implemented; other domains are scaffolded with migration-status endpoints and continue to be migrated incrementally.
 
-**Frontend:** Single-page React app (Vite + React 19 + Tailwind CSS v4) with dark mode default, portal-based dropdown selects, session-cached analysis, shared badge components (SensitivityBadge, StatusBadge, TechBadge, ProviderBadge, SourceControlBadge), and Cloudflare Pages deployment support.
+**Frontend:** Single-page React app (Vite + React 19 + Tailwind CSS v4) with dark mode default, portal-based dropdown selects, session-cached analysis, `localStorage`-cached project tech badges, card/table list views on Projects/Deployments/Security Scans, ESLint enforcement of canonical Tailwind classes (`eslint-plugin-better-tailwindcss`), shared badge components (SensitivityBadge, StatusBadge, TechBadge, ProviderBadge, SourceControlBadge), and Cloudflare Pages deployment support.
 
 **AI Integration:** OpenAI API (gpt-5.4-mini) with a server-side API key (`OpenAIApiKey`). Used for project analysis (sections, deploy options) and security fix generation. Response format enforced as `json_object`. Results cached in PostgreSQL `analysis_cache` table keyed by repo + branch + commit SHA.
 
