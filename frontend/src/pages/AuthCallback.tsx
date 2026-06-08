@@ -34,7 +34,7 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface">
       <div className="flex flex-col items-center gap-3">
-        <Spinner className="w-8 h-8" />
+        <Spinner className="size-8 " />
         <p className="text-text-secondary text-sm">Authenticating...</p>
       </div>
     </div>

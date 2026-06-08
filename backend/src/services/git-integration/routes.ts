@@ -779,17 +779,70 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      const auth = request.auth!;
       const branch = request.query.branch || "main";
-      const cached = await db.from("stack_cache").select("result").eq("repo", request.query.repo).eq("branch", branch).maybeSingle();
-      if (!cached.data?.result) return { badges: [] };
-      const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
-      const techSet = new Set<string>();
-      for (const component of parsed.components ?? []) {
-        for (const tech of component.techs ?? []) techSet.add(tech);
+      const repo = request.query.repo;
+
+      const stackCached = await db.from("stack_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      if (stackCached.data?.result) {
+        const parsed = typeof stackCached.data.result === "string" ? JSON.parse(stackCached.data.result) : stackCached.data.result;
+        const techSet = new Set<string>();
+        for (const component of parsed.components ?? []) {
+          for (const tech of component.techs ?? []) techSet.add(tech);
+        }
+        if (techSet.size > 0) {
+          return {
+            badges: Array.from(techSet).map((name) => ({ name, category: "framework", confidence: 90 })),
+          };
+        }
       }
-      return {
-        badges: Array.from(techSet).map((name) => ({ name, category: "framework", confidence: 90 })),
-      };
+
+      const analysisCached = await db.from("analysis_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      if (analysisCached.data?.result) {
+        const parsed = typeof analysisCached.data.result === "string" ? JSON.parse(analysisCached.data.result) : analysisCached.data.result;
+        const techStack: Array<{ name: string; category: string; confidence: number }> = parsed.techStack ?? [];
+        const hasFramework = techStack.some((item) => item.category === "framework");
+        if (techStack.length > 0 && (hasFramework || !request.query.connectionId)) {
+          return {
+            badges: techStack.map((item) => ({
+              name: item.name,
+              category: item.category,
+              confidence: item.confidence,
+            })),
+          };
+        }
+      }
+
+      if (request.query.connectionId) {
+        const parts = repo.split("/").filter(Boolean);
+        if (parts.length >= 2) {
+          const owner = parts.slice(0, -1).join("/");
+          const repoName = parts[parts.length - 1]!;
+          const conn = await requireConnection(request.query.connectionId, auth.tenantId);
+          const result = await runRepoAnalysis(conn, { owner, repo: repoName, branch });
+          await db.from("analysis_cache").upsert(
+            {
+              id: auth.tenantId + ":" + repo + ":" + branch,
+              repo,
+              branch,
+              commit_sha: "",
+              result: result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
+              created_at: new Date().toISOString(),
+              organization_id: auth.tenantId,
+            },
+            { onConflict: "organization_id,repo,branch" },
+          );
+          return {
+            badges: result.techStack.map((item) => ({
+              name: item.name,
+              category: item.category,
+              confidence: item.confidence,
+            })),
+          };
+        }
+      }
+
+      return { badges: [] };
     },
   );
 

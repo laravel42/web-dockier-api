@@ -37,7 +37,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   if (!analysis) {
     return (
       <div className="flex flex-col items-center py-8 gap-3 text-center">
-        <WarningIcon className="w-10 h-10 text-warning-500" />
+        <WarningIcon className="size-10  text-warning-500" />
         {analysisError ? (
           <p className="text-sm text-danger-500">{analysisError}</p>
         ) : (

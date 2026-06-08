@@ -19,6 +19,7 @@ export default function SecurityScans() {
     projects,
     grouped,
     sortedProjectIds,
+    projectLangs,
     viewMode,
     changeViewMode,
   } = useSecurityScans();
@@ -65,7 +66,7 @@ export default function SecurityScans() {
       <div>
         <PageHeader title="Security Scans" />
         <EmptyState
-          icon={<ShieldCheckIcon className="w-12 h-12" />}
+          icon={<ShieldCheckIcon className="size-12 " />}
           description="No projects yet. Create a project first to run security scans."
           action={{ label: "Go to Projects", onClick: () => navigate("/projects") }}
         />
@@ -81,6 +82,7 @@ export default function SecurityScans() {
           sortedProjectIds={sortedProjectIds}
           grouped={grouped}
           projects={projects}
+          projectLangs={projectLangs}
           onSelectScan={(scanId) => navigate(`/security/${scanId}`)}
           onSelectEmpty={(projectId) => navigate(`/security/project/${projectId}`)}
         />
@@ -94,6 +96,7 @@ export default function SecurityScans() {
                   key={projectId}
                   project={projects[projectId]}
                   projectId={projectId}
+                  badges={projectLangs[projectId]}
                   onSelect={() => navigate(`/security/project/${projectId}`)}
                 />
               );
@@ -104,6 +107,7 @@ export default function SecurityScans() {
                 project={projects[projectId]}
                 projectId={projectId}
                 scans={projectScans}
+                badges={projectLangs[projectId]}
                 onSelect={(scanId) => navigate(`/security/${scanId}`)}
               />
             );

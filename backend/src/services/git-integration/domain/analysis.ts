@@ -80,6 +80,52 @@ export type SensitiveField = {
   reason: string;
 };
 
+const DEPENDENCY_FRAMEWORKS: Record<string, TechStackItem> = {
+  react: { name: "React", category: "framework", confidence: 95 },
+  vue: { name: "Vue", category: "framework", confidence: 95 },
+  "@angular/core": { name: "Angular", category: "framework", confidence: 95 },
+  svelte: { name: "Svelte", category: "framework", confidence: 95 },
+  next: { name: "Next.js", category: "framework", confidence: 95 },
+  nuxt: { name: "Nuxt", category: "framework", confidence: 95 },
+  "@remix-run/react": { name: "Remix", category: "framework", confidence: 95 },
+  astro: { name: "Astro", category: "framework", confidence: 95 },
+  express: { name: "Express", category: "framework", confidence: 90 },
+  fastify: { name: "Fastify", category: "framework", confidence: 90 },
+  "@nestjs/core": { name: "NestJS", category: "framework", confidence: 90 },
+  hono: { name: "Hono", category: "framework", confidence: 90 },
+  "laravel/framework": { name: "Laravel", category: "framework", confidence: 95 },
+  "symfony/symfony": { name: "Symfony", category: "framework", confidence: 95 },
+  "@inertiajs/react": { name: "Inertia.js", category: "framework", confidence: 90 },
+  "@inertiajs/vue3": { name: "Inertia.js", category: "framework", confidence: 90 },
+  livewire: { name: "Livewire", category: "framework", confidence: 90 },
+  "filament/filament": { name: "Filament", category: "framework", confidence: 90 },
+  django: { name: "Django", category: "framework", confidence: 90 },
+  flask: { name: "Flask", category: "framework", confidence: 90 },
+  fastapi: { name: "FastAPI", category: "framework", confidence: 90 },
+  "rails": { name: "Rails", category: "framework", confidence: 90 },
+  "@prisma/client": { name: "Prisma", category: "database", confidence: 90 },
+  drizzle: { name: "Drizzle ORM", category: "database", confidence: 90 },
+  "tailwindcss": { name: "Tailwind CSS", category: "tool", confidence: 90 },
+  "@mui/material": { name: "Material UI", category: "tool", confidence: 85 },
+  "@chakra-ui/react": { name: "Chakra UI", category: "tool", confidence: 85 },
+  antd: { name: "Ant Design", category: "tool", confidence: 85 },
+  "react-native": { name: "React Native", category: "framework", confidence: 90 },
+};
+
+function enrichTechStackFromDependencies(
+  techStack: TechStackItem[],
+  dependencies: Dependency[],
+): TechStackItem[] {
+  const merged = new Map(techStack.map((item) => [item.name, item]));
+  for (const dep of dependencies) {
+    const framework = DEPENDENCY_FRAMEWORKS[dep.name];
+    if (framework && !merged.has(framework.name)) {
+      merged.set(framework.name, framework);
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => b.confidence - a.confidence);
+}
+
 const CONFIG_FILES_TO_FETCH = [
   "package.json",
   "composer.json",
@@ -107,17 +153,18 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
   }
 
   const dependencies = await scanDependencies(configFiles);
+  const mergedTechStack = enrichTechStackFromDependencies(techStack, dependencies);
 
   return {
-    techStack,
-    deployOptions: suggestDeployOptions(techStack, hasDocker, files.length).map((option) => ({
+    techStack: mergedTechStack,
+    deployOptions: suggestDeployOptions(mergedTechStack, hasDocker, files.length).map((option) => ({
       provider: option.provider,
       type: option.type,
       description: option.description,
     })),
     detectedServices,
     repoSize: files.length,
-    primaryLanguage: techStack.find((item) => item.category === "language" || item.category === "runtime")?.name ?? "",
+    primaryLanguage: mergedTechStack.find((item) => item.category === "language" || item.category === "runtime")?.name ?? "",
     hasDocker,
     hasCi,
     dependencies: dependencies.length > 0 ? dependencies : undefined,

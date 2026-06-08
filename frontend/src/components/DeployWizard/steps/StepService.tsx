@@ -56,7 +56,7 @@ export default function StepService({ state, templateId, onChange }: {
                 </p>
               </div>
               {selected && !disabled && (
-                <CheckCircleIcon className="w-5 h-5 text-primary-500 shrink-0 mt-1" />
+                <CheckCircleIcon className="size-5  text-primary-500 shrink-0 mt-1" />
               )}
             </button>
           );

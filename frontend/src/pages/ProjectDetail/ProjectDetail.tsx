@@ -54,7 +54,7 @@ export default function ProjectDetail() {
   return (
     <div>
       <button onClick={() => navigate("/projects")} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
-        <ChevronLeftIcon className="w-4 h-4" />
+        <ChevronLeftIcon className="size-4 " />
         Back to Projects
       </button>
 

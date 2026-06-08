@@ -2,7 +2,12 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { parseOwnerRepo, getRepoKey } from "../../utils/parseOwnerRepo";
-import { BADGE_WHITELIST } from "../../data/badgeWhitelist";
+import {
+  clearProjectBadgeCache,
+  getProjectBadgeCache,
+  setProjectBadgeCache,
+  selectProjectBadges,
+} from "../../utils/projectBadgeCache";
 import { getErrorMessage } from "../../utils/errors";
 import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo } from "../../types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
@@ -158,11 +163,17 @@ export function useProjectDetail() {
             // Fetch badges (same source as card list)
             const repoKey = getRepoKey(p.repository);
             if (repoKey) {
-              gitApi.getRepoBadges(repoKey, p.branch || undefined, p.connectionId)
+              const branch = p.branch || "main";
+              const cached = getProjectBadgeCache(p.id, repoKey, branch, p.connectionId || "");
+              if (cached) {
+                setBadges(cached);
+              }
+              gitApi.getRepoBadges(repoKey, branch, p.connectionId)
                 .then((res) => {
                   const all = res.badges || [];
-                  const filtered = all.filter(b => BADGE_WHITELIST.has(b.name)).slice(0, 4);
-                  setBadges(filtered);
+                  const selected = selectProjectBadges(all);
+                  setProjectBadgeCache(p.id, repoKey, branch, p.connectionId || "", selected);
+                  setBadges(selected);
                   setAllBadges(all);
                 })
                 .catch(() => {});
@@ -318,6 +329,7 @@ export function useProjectDetail() {
       const cacheKey = `${repoKey}:${project.branch || "main"}`;
       // Clear all caches
       try { sessionStorage.removeItem(`analysis:v${CACHE_VERSION}:${cacheKey}`); } catch { /* ignore */ }
+      clearProjectBadgeCache(project.id);
       await Promise.all([
         gitApi.invalidateAnalysisCache(repoKey, project.branch || "main").catch(() => {}),
         gitApi.invalidateStackCache(repoKey, project.branch || "main").catch(() => {}),

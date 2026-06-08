@@ -44,7 +44,7 @@ export default function StepProvider({ state, providers, onChange }: {
                     : "border-border/50 bg-secondary-50/50 opacity-50 cursor-not-allowed"
               }`}
             >
-              <div className={`w-10 h-10 rounded-lg ${meta.color} flex items-center justify-center text-white text-xs font-bold`}>
+              <div className={`size-10  rounded-lg ${meta.color} flex items-center justify-center text-white text-xs font-bold`}>
                 {meta.name.slice(0, 2).toUpperCase()}
               </div>
               <span className="text-xs font-medium text-text">{meta.name}</span>
@@ -59,7 +59,7 @@ export default function StepProvider({ state, providers, onChange }: {
               )}
               {selected && (
                 <div className="absolute top-1.5 right-1.5">
-                  <CheckCircleIcon className="w-4 h-4 text-primary-500" />
+                  <CheckCircleIcon className="size-4  text-primary-500" />
                 </div>
               )}
             </button>
@@ -85,12 +85,12 @@ export default function StepProvider({ state, providers, onChange }: {
                       : "border-border bg-card hover:border-primary-300 hover:bg-secondary-50"
                   }`}
                 >
-                  <div className={`w-2 h-2 rounded-full ${isActive ? "bg-primary-500" : "bg-border"}`} />
+                  <div className={`size-2  rounded-full ${isActive ? "bg-primary-500" : "bg-border"}`} />
                   <div className="min-w-0 flex-1">
                     <span className="text-sm font-medium text-text">{p.label}</span>
                     <span className="text-xs text-text-muted ml-2">({p.id.slice(0, 8)}…)</span>
                   </div>
-                  {isActive && <CheckCircleIcon className="w-4 h-4 text-primary-500 shrink-0" />}
+                  {isActive && <CheckCircleIcon className="size-4  text-primary-500 shrink-0" />}
                 </button>
               );
             })}

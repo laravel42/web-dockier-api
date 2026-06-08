@@ -1,4 +1,5 @@
 import TechBadge from "../../../components/TechBadge";
+import PlatformBadge from "../../../components/PlatformBadge";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
 import { statusDotColors as statusColors } from "../../../utils/styles";
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
@@ -12,7 +13,7 @@ interface Props {
 
 export default function DeployTable({ grouped, projectById, projectLangs, onSelect }: Props) {
   return (
-    <div className="bg-card border border-border rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">
+    <div className="bg-card border border-border rounded-card overflow-hidden shadow-(--shadow-card)">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-text-muted text-xs uppercase tracking-wider">
@@ -55,13 +56,15 @@ export default function DeployTable({ grouped, projectById, projectLangs, onSele
                         <TechBadge key={b.name} name={b.name} />
                       ))}
                     </div>
+                  ) : proj?.platform ? (
+                    <PlatformBadge slug={proj.platform} />
                   ) : (
                     <span className="text-xs text-text-muted">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${statusColors[latest.status] || "bg-text-muted"}`} />
+                    <span className={`size-2  rounded-full shrink-0 ${statusColors[latest.status] || "bg-text-muted"}`} />
                     <span className="text-xs text-text-muted">
                       {new Date(latest.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                     </span>

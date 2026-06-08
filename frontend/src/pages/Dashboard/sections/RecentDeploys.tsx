@@ -33,7 +33,7 @@ export default function RecentDeploys({ deploys, providers, projectMap, onViewAl
                 onClick={() => onViewDeploy(d.id)}
                 className="w-full px-5 py-3 flex items-center gap-3 hover:bg-secondary-50/50 transition-colors text-left"
               >
-                <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot}`} />
+                <span className={`size-2  rounded-full shrink-0 ${statusDot}`} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-text truncate">{projectName}</p>
                   <p className="text-xs text-text-muted">{d.branch} · {new Date(d.createdAt).toLocaleDateString()}</p>

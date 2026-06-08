@@ -60,8 +60,8 @@ export default function CreateIssueModal({
     <Modal open={open} onClose={onClose} title="Create Issue from Finding">
       {issueSuccess ? (
         <div className="flex flex-col items-center py-6 gap-4">
-          <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
-            <CheckCircleIcon className="w-7 h-7 text-success-500" />
+          <div className="size-12  rounded-full bg-success-500/10 flex items-center justify-center">
+            <CheckCircleIcon className="size-7  text-success-500" />
           </div>
           <p className="text-sm font-medium text-success-500">{issueSuccess}</p>
           {issueSuccessUrl && (
@@ -71,7 +71,7 @@ export default function CreateIssueModal({
               rel="noopener noreferrer"
               className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors"
             >
-              <ExternalLinkIcon className="w-4 h-4" />
+              <ExternalLinkIcon className="size-4 " />
               Open Issue
             </a>
           )}
@@ -104,8 +104,8 @@ export default function CreateIssueModal({
               {pmProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
             </label>
             {pmProjectsLoading ? (
-              <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
-                <Spinner className="w-4 h-4" />
+              <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50">
+                <Spinner className="size-4 " />
                 <span className="text-sm text-text-muted">Fetching {pmTeamLabel.toLowerCase()}s…</span>
               </div>
             ) : pmProjects.length > 0 ? (
@@ -113,7 +113,7 @@ export default function CreateIssueModal({
                 {pmProjects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>)}
               </select>
             ) : (
-              <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50 text-sm text-text-muted">
+              <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50 text-sm text-text-muted">
                 No {pmTeamLabel.toLowerCase()}s found
               </div>
             )}
@@ -125,8 +125,8 @@ export default function CreateIssueModal({
                 {pmSubProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
               </label>
               {pmSubProjectsLoading ? (
-                <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
-                  <Spinner className="w-4 h-4" />
+                <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50">
+                  <Spinner className="size-4 " />
                   <span className="text-sm text-text-muted">Fetching {pmProjectLabel.toLowerCase()}s…</span>
                 </div>
               ) : pmSubProjects.length > 0 ? (
@@ -148,7 +148,7 @@ export default function CreateIssueModal({
           <div>
             <label htmlFor="issue-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
             <textarea id="issue-desc" value={issueDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={8}
-              className="w-full px-3 py-2 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
+              className="w-full px-3 py-2 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
           </div>
           {pmMembers.length > 0 && (
             <div>
@@ -176,7 +176,7 @@ export default function CreateIssueModal({
           )}
           <div className="flex justify-end">
             <button type="submit" disabled={issueCreating || (pmIntegrations.length > 0 && (!issueIntegration || (!selectedPmProject && pmProjects.length > 0)))}
-              className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 transition-colors">
+              className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 disabled:opacity-50 transition-colors">
               {issueCreating ? "Creating..." : "Create Issue"}
             </button>
           </div>

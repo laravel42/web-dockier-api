@@ -12,8 +12,8 @@ export default function DeployHeader({ deploy, project, onNavigateProject }: Pro
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
-          <RocketIcon className="w-6 h-6" />
+        <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
+          <RocketIcon className="size-6 " />
         </div>
         <div>
           <div className="flex items-center gap-2">

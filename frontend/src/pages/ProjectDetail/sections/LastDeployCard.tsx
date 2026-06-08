@@ -60,7 +60,7 @@ export default function LastDeployCard({ lastDeploy, allProviders, destroying, o
               <p className="text-sm text-text font-mono mt-0.5 truncate" title={lastDeploy.dockerImage}>{lastDeploy.dockerImage.split("/").pop()?.split(":")[0] || lastDeploy.dockerImage}</p>
             </div>
           )}
-          <div className="flex items-end gap-3 sm:col-start-[-1] justify-end">
+          <div className="flex items-end gap-3 sm:-col-start-1 justify-end">
             {canDestroy && lastDeploy.status === "success" && (
               <button
                 disabled={destroying}

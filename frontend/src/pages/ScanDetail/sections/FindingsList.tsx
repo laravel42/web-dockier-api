@@ -38,7 +38,7 @@ export default function FindingsList({
   if (findings.length === 0 && scanCompleted) {
     return (
       <div className={`${cardCls} p-8 text-center`}>
-        <CheckCircleIcon className="w-10 h-10 mx-auto text-success-500 mb-3" />
+        <CheckCircleIcon className="size-10  mx-auto text-success-500 mb-3" />
         <p className="text-sm text-text-muted">No findings{severityFilter ? ` with severity "${severityFilter}"` : ""} — looking clean.</p>
       </div>
     );
@@ -106,7 +106,7 @@ export default function FindingsList({
           {grouped.map(([filePath, fileFindings]) => (
             <details key={filePath} className={`${cardCls} group`}>
               <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
-                <ChevronRightIcon className="w-3.5 h-3.5 text-text-muted shrink-0 transition-transform group-open:rotate-90" />
+                <ChevronRightIcon className="size-3.5  text-text-muted shrink-0 transition-transform group-open:rotate-90" />
                 <span className="text-xs font-mono text-text truncate">{filePath}</span>
                 <div className="flex items-center gap-1 ml-auto shrink-0">
                   {fileFindings.filter(f => f.severity === "error").length > 0 && (
@@ -159,7 +159,7 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
   const canManageScans = has("scan:manage");
 
   return (
-    <div className="px-3 py-3 pl-9 space-y-1.5">
+    <div className="p-3  pl-9 space-y-1.5">
       {/* Top row: severity badge + buttons */}
       <div className="flex items-center gap-2">
         <SeverityBadge severity={f.severity as "error" | "warning" | "info"} label={f.severity} />
@@ -172,7 +172,7 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
               onClick={() => onCreateIssue(f)}
               className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
               </svg>
               Create issue
@@ -184,7 +184,7 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
                 disabled={mrCreating === f.id}
                 className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
                 </svg>
                 {mrCreating === f.id ? "Fixing…" : "Fix with AI"}
@@ -194,7 +194,7 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
         )}
       </div>
       {/* Message */}
-      <p className="text-xs text-text leading-snug">{f.message}</p>
+      <p className="text-xs/snug text-text ">{f.message}</p>
       {/* Code preview */}
       <CodePreview finding={f} fileContent={fileContent} />
     </div>
@@ -231,8 +231,8 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
           const lineNum = start + i + 1;
           const isVulnerable = lineNum >= f.startLine && lineNum <= f.endLine;
           return (
-            <div key={lineNum} className={`flex ${isVulnerable ? "bg-danger-500/15" : "hover:bg-white/[0.03]"}`}>
-              <span className={`shrink-0 select-none text-right pr-3 pl-3 ${isVulnerable ? "text-danger-400 bg-danger-500/10" : "text-gray-600"}`} style={{ width: `${gutterWidth + 3}ch` }}>
+            <div key={lineNum} className={`flex ${isVulnerable ? "bg-danger-500/15" : "hover:bg-white/3"}`}>
+              <span className={`shrink-0 select-none text-right px-3  ${isVulnerable ? "text-danger-400 bg-danger-500/10" : "text-gray-600"}`} style={{ width: `${gutterWidth + 3}ch` }}>
                 {lineNum}
               </span>
               <code className={`flex-1 pr-3 ${isVulnerable ? "text-gray-200" : "text-gray-400"}`}>

@@ -140,7 +140,7 @@ export default function SecurityRulesTab() {
               className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
               <span className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${scanTools[key] ? "bg-primary-500" : "bg-secondary-200"}`}>
-                <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-[14px]" : "left-px"}`} />
+                <span className={`absolute top-px size-4  rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-[14px]" : "left-px"}`} />
               </span>
             </button>
           ))}
@@ -173,7 +173,7 @@ export default function SecurityRulesTab() {
               <div className="ml-auto flex items-center gap-2">
                 <input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
                 <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2 shrink-0`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                   Add Rule
                 </button>
               </div>
@@ -182,7 +182,7 @@ export default function SecurityRulesTab() {
               <div className="ml-auto flex items-center gap-2">
                 <input type="text" value={semgrepFilter} onChange={e => setSemgrepFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
                 <button onClick={() => setSemgrepAdding(true)} className={`${btnPrimary} inline-flex items-center gap-2 shrink-0`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                   Add Rule
                 </button>
               </div>
@@ -303,14 +303,14 @@ export default function SecurityRulesTab() {
           {filtered.map(r => (
             <div key={r.id} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
+                <span className="size-2.5  rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
                 <button type="button" onClick={() => handleToggle(r)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
+                  <span className={`absolute top-px size-4  rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
                 </button>
               </div>
-              <p className="text-sm text-text leading-relaxed">{r.message}</p>
+              <p className="text-sm/relaxed text-text ">{r.message}</p>
               <code className="text-xs text-text-muted font-mono bg-secondary-50 px-2 py-1 rounded truncate">{r.pattern}</code>
               <div className="flex items-end gap-2">
                 <div className="flex flex-wrap gap-1 flex-1">
@@ -320,11 +320,11 @@ export default function SecurityRulesTab() {
                 </div>
                 {!r.isSystem && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => openEdit(r)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                    <button onClick={() => openEdit(r)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
                     </button>
-                    <button onClick={() => setDeleteId(r.id)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                    <button onClick={() => setDeleteId(r.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                     </button>
                   </div>
                 )}
@@ -447,7 +447,7 @@ function SonarQubeRulesPanel() {
         <div className="flex-1 min-w-0">
 
       {rulesLoading ? (
-        <div className="flex justify-center py-12"><Spinner className="w-5 h-5" /></div>
+        <div className="flex justify-center py-12"><Spinner className="size-5 " /></div>
       ) : (() => {
         const sqFiltered = rules.filter(r => (!sevFilter || r.severity === sevFilter));
         const sqShown = sqFiltered.slice(0, sqVisible);
@@ -476,7 +476,7 @@ function SonarQubeRulesPanel() {
             return (
             <div key={r.key} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${disabledSqRules.has(r.key) ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0`} style={{ backgroundColor: { BLOCKER: "#ef4444", CRITICAL: "#f97316", MAJOR: "#eab308", MINOR: "#3b82f6", INFO: "#94a3b8" }[r.severity] || "#94a3b8" }} />
+                <span className={`size-2.5  rounded-full shrink-0`} style={{ backgroundColor: { BLOCKER: "#ef4444", CRITICAL: "#f97316", MAJOR: "#eab308", MINOR: "#3b82f6", INFO: "#94a3b8" }[r.severity] || "#94a3b8" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.key}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {exts.slice(0, 1).map(e => (
@@ -485,10 +485,10 @@ function SonarQubeRulesPanel() {
                 </div>
                 <button type="button" onClick={() => handleToggle(r.key)}
                   className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${!disabledSqRules.has(r.key) ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-px"}`} />
+                  <span className={`absolute top-px size-4  rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-px"}`} />
                 </button>
               </div>
-              <p className="text-sm text-text leading-relaxed">{r.name}</p>
+              <p className="text-sm/relaxed text-text ">{r.name}</p>
               {/* Impacts */}
               <div className="flex flex-wrap gap-1.5">
                 {r.impacts.map(i => {
@@ -505,11 +505,11 @@ function SonarQubeRulesPanel() {
                     <span key={i.softwareQuality} className={`inline-flex items-center rounded-lg text-xs overflow-hidden`}>
                       <span className={`font-medium px-2.5 py-1 ${s.labelBg} ${s.labelText}`}>{i.softwareQuality.charAt(0) + i.softwareQuality.slice(1).toLowerCase()}</span>
                       <span className={`inline-flex items-center gap-1 font-semibold px-2 py-1 ${s.statusBg} ${s.icon}`}>
-                        <span className={`w-4 h-4 rounded-full flex items-center justify-center ${s.iconBg}`}>
+                        <span className={`size-4  rounded-full flex items-center justify-center ${s.iconBg}`}>
                           {i.severity === "INFO" ? (
                             <span className="text-[10px] font-bold text-white leading-none">i</span>
                           ) : (
-                            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <svg className="size-2.5  text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                               <path strokeLinecap="round" strokeLinejoin="round" d={isUp ? "M4.5 15.75l7.5-7.5 7.5 7.5" : "M19.5 8.25l-7.5 7.5-7.5-7.5"} />
                             </svg>
                           )}
@@ -553,7 +553,7 @@ function RulesFilterSidebar({ severities, activeSeverity, onSeverityChange, lang
   const [techOpen, setTechOpen] = useState(true);
 
   const chevron = (open: boolean) => (
-    <svg className={`w-3.5 h-3.5 text-text-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className={`size-3.5  text-text-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
     </svg>
   );
@@ -802,27 +802,27 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
           {shown.map(r => (
             <div key={r.id} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" || r.severity === "ERROR" || r.severity === "HIGH" ? "#ef4444" : r.severity === "warning" || r.severity === "WARNING" || r.severity === "MEDIUM" ? "#eab308" : "#3b82f6" }} />
+                <span className="size-2.5  rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" || r.severity === "ERROR" || r.severity === "HIGH" ? "#ef4444" : r.severity === "warning" || r.severity === "WARNING" || r.severity === "MEDIUM" ? "#eab308" : "#3b82f6" }} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {!r.isBuiltin && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600 shrink-0">User</span>}
                 <button type="button" onClick={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)}
                   className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-px w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
+                  <span className={`absolute top-px size-4  rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
                 </button>
               </div>
-              <p className="text-sm text-text leading-relaxed">{r.name}</p>
-              <p className="text-xs text-text-muted bg-secondary-50 px-2 py-1 rounded line-clamp-2 leading-relaxed">{r.message}</p>
+              <p className="text-sm/relaxed text-text ">{r.name}</p>
+              <p className="text-xs/relaxed text-text-muted bg-secondary-50 px-2 py-1 rounded line-clamp-2 ">{r.message}</p>
               <div className="flex items-end gap-2">
                 <div className="flex flex-wrap gap-1 flex-1">
                   <TechBadge name={r.lang} icon={langIcon[r.lang]} label={r.lang} />
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEditModal({ id: r.id, ruleId: r.ruleId, isBuiltin: r.isBuiltin, path: r.path, yamlContent: r.yamlContent })} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                  <button onClick={() => openEditModal({ id: r.id, ruleId: r.ruleId, isBuiltin: r.isBuiltin, path: r.path, yamlContent: r.yamlContent })} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
                   </button>
                   {!r.isBuiltin && (
-                    <button onClick={() => setDeleteId(r.id)} className="w-7 h-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                    <button onClick={() => setDeleteId(r.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                     </button>
                   )}
                 </div>
@@ -845,7 +845,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
       {/* Edit YAML Modal */}
       <Modal open={!!editRule} onClose={() => setEditRule(null)} title={editRule?.ruleId || "Edit Rule"} size="xl">
         {editLoading ? (
-          <div className="flex justify-center py-12"><Spinner className="w-5 h-5" /></div>
+          <div className="flex justify-center py-12"><Spinner className="size-5 " /></div>
         ) : (
           <div className="space-y-4">
             <p className="text-xs text-text-muted font-mono">{editRule?.isBuiltin ? editRule.path : `DB rule: ${editRule?.ruleId}`}</p>

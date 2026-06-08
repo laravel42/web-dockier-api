@@ -31,7 +31,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${statusColors[state.deployStatus] || "bg-secondary-100 text-text-muted"}`}>
           {state.deployStatus || "waiting"}
         </span>
-        {isRunning && <Spinner className="w-3.5 h-3.5" />}
+        {isRunning && <Spinner className="size-3.5 " />}
       </div>
 
       {/* Timeline steps */}
@@ -43,13 +43,13 @@ export default function StepDeploy({ state }: { state: WizardState }) {
           const active = currentIdx === i;
           return (
             <div key={step} className="flex items-center gap-1.5 flex-1">
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+              <div className={`size-5  rounded-full flex items-center justify-center shrink-0 ${
                 done ? "bg-success-500 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
               }`}>
                 {done ? (
-                  <CheckIcon className="w-3 h-3" />
+                  <CheckIcon className="size-3 " />
                 ) : active ? (
-                  <div className="w-2 h-2 border border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="size-2  border border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <span className="text-[9px]">{i + 1}</span>
                 )}
@@ -63,7 +63,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
 
       {/* Logs */}
       {state.deployLogs.length > 0 && (
-        <div ref={logsRef} className="rounded-lg bg-gray-900 p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs leading-relaxed">
+        <div ref={logsRef} className="rounded-lg bg-gray-900 p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed ">
           {state.deployLogs.map((line, i) => (
             <div key={i} className={
               line.includes("✓") ? "text-green-400" :
@@ -82,7 +82,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
 
       {state.deployLogs.length === 0 && isRunning && (
         <div className="rounded-lg bg-gray-900 p-6 flex items-center justify-center gap-2">
-          <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="size-4  border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-gray-400">Waiting for logs…</span>
         </div>
       )}
@@ -92,7 +92,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <div className="rounded-lg bg-orange-500/10 border border-orange-500/20 p-3">
           <p className="text-xs text-orange-600 font-semibold uppercase tracking-wide mb-1">CodeBuild Logs</p>
           <a href={state.codebuildLogsUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
-            <ExternalLinkIcon className="w-4 h-4 shrink-0" />
+            <ExternalLinkIcon className="size-4  shrink-0" />
             View in CloudWatch
           </a>
         </div>
@@ -111,7 +111,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <div className="rounded-lg bg-success-500/10 border border-success-500/20 p-3">
           <p className="text-xs text-success-500 font-semibold uppercase tracking-wide mb-1">Application URL</p>
           <a href={state.deployAppUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
-            <ExternalLinkIcon className="w-4 h-4 shrink-0" />
+            <ExternalLinkIcon className="size-4  shrink-0" />
             {state.deployAppUrl}
           </a>
         </div>
@@ -121,7 +121,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
       {state.deployAppUrl && state.deployStatus === "success" && state.deployStrategy === "vps" && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
           <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
-          <p className="text-xs text-text-muted leading-relaxed">
+          <p className="text-xs/relaxed text-text-muted ">
             If you see an nginx welcome page, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes as the container starts and configures itself.
           </p>
         </div>

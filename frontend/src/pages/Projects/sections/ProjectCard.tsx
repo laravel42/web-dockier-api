@@ -33,7 +33,7 @@ export default function ProjectCard({ project: p, deployments, badges, onSelect 
   return (
     <div
       onClick={() => onSelect(p.id)}
-      className="bg-card border border-border rounded-[var(--radius-card)] p-3 flex flex-col gap-3 hover:border-primary-500/30 transition-all overflow-hidden shadow-[var(--shadow-card)] cursor-pointer"
+      className="bg-card border border-border rounded-card p-3 flex flex-col gap-3 hover:border-primary-500/30 transition-all overflow-hidden shadow-(--shadow-card) cursor-pointer"
     >
       {/* Header: icon, slug */}
       <div className="flex items-center gap-3 min-w-0">
@@ -62,7 +62,7 @@ export default function ProjectCard({ project: p, deployments, badges, onSelect 
         <div className="flex items-center gap-2">
           {lastDeploy ? (
             <>
-              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
+              <span className={`size-2.5  rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
               <span className="text-xs text-text-muted">
                 Last deploy: {new Date(lastDeploy.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
               </span>
@@ -72,7 +72,7 @@ export default function ProjectCard({ project: p, deployments, badges, onSelect 
           )}
         </div>
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0">
-          <LinkIcon className="w-3 h-3" strokeWidth={2} />
+          <LinkIcon className="size-3 " strokeWidth={2} />
           {p.branch || "main"}
         </span>
       </div>

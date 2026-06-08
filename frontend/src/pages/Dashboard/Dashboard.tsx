@@ -51,7 +51,7 @@ export default function Dashboard() {
             onClick={() => navigate("/projects", { state: { openCreate: true } })}
             className={`${btnPrimary} inline-flex items-center gap-2`}
           >
-            <PlusIcon className="w-4 h-4" />
+            <PlusIcon className="size-4 " />
             New Project
           </button>
         }

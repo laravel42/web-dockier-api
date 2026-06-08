@@ -21,7 +21,7 @@ interface Props {
 
 export default function ProjectTable({ projects, deployments, projectLangs, onSelect }: Props) {
   return (
-    <div className="bg-card border border-border rounded-[var(--radius-card)] overflow-hidden shadow-[var(--shadow-card)]">
+    <div className="bg-card border border-border rounded-card overflow-hidden shadow-(--shadow-card)">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-text-muted text-xs uppercase tracking-wider">
@@ -70,7 +70,7 @@ export default function ProjectTable({ projects, deployments, projectLangs, onSe
                 <td className="px-4 py-3">
                   {lastDeploy ? (
                     <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
+                      <span className={`size-2  rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
                       <span className="text-xs text-text-muted">
                         {new Date(lastDeploy.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                       </span>

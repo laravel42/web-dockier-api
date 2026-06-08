@@ -149,7 +149,7 @@ function parseSqlSchema(sql: string): SensitiveField[] {
 function TabSpinner({ label }: { label?: string }) {
   return (
     <div className="flex items-center gap-3 py-8 justify-center">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <div className="size-5  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       <span className="text-sm text-text-muted">{label || "Loading…"}</span>
     </div>
   );
@@ -271,7 +271,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
       </div>
       {aiLoading && (
         <div className="flex items-center gap-2 mt-3 justify-center">
-          <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
           <span className="text-xs text-text-muted">AI is analyzing your schema…</span>
         </div>
       )}
@@ -489,17 +489,17 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${vs.bg} ${vs.text}`}>{vuln.severity}</span>
                 <span className="text-[11px] font-mono text-text-muted">{vuln.id}</span>
               </div>
-              <h3 className="text-sm font-semibold text-text leading-snug">{vuln.title}</h3>
+              <h3 className="text-sm/snug font-semibold text-text ">{vuln.title}</h3>
               <p className="text-[11px] text-text-muted mt-0.5">Package: {vuln.pkg}</p>
             </div>
             <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors shrink-0">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <svg className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
           <div className="px-5 py-4 overflow-y-auto flex-1 scrollbar-hide">
             {loading ? (
               <div className="flex items-center gap-2 py-4">
-                <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs text-text-muted">Loading details…</span>
               </div>
             ) : (
@@ -811,7 +811,7 @@ export default function ProjectDescription({ analysis, analysisLoading, onRefres
           <h2 className="text-lg font-semibold text-text">Project Overview</h2>
           {onRefresh && (
             <button onClick={onRefresh} className="ml-auto p-1.5 rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" title="Re-analyze project">
-              <svg className={`w-4 h-4 ${analysisLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className={`size-4  ${analysisLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
               </svg>
             </button>

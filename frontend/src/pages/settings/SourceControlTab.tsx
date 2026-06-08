@@ -59,7 +59,7 @@ export default function SourceControlTab() {
         <h2 className="text-base font-semibold text-text">Source Control Connections</h2>
         {canManage && (
           <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             Add Connection
           </button>
         )}
@@ -106,7 +106,7 @@ export default function SourceControlTab() {
           <form onSubmit={handleEditSave} className="space-y-5">
             {/* Hero header */}
             <div className="flex items-center gap-5">
-              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0">
+              <div className="size-14  rounded-xl flex items-center justify-center shrink-0">
                 <SourceControlBadge provider={editingConn.provider} showName={false} iconSize="w-10 h-10" />
               </div>
               <div className="min-w-0">
@@ -136,7 +136,7 @@ export default function SourceControlTab() {
             {/* Overview */}
             <div>
               <h3 className="text-sm font-semibold text-text mb-1">Overview</h3>
-              <p className="text-sm text-text-secondary leading-relaxed">{getSourceControl(editingConn.provider).description}</p>
+              <p className="text-sm/relaxed text-text-secondary ">{getSourceControl(editingConn.provider).description}</p>
             </div>
 
             {/* Configuration */}
@@ -180,7 +180,7 @@ export default function SourceControlTab() {
           {connectionList.map((conn) => (
             <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                <div className="size-8  flex items-center justify-center shrink-0">
                   <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
                 </div>
                 <div className="min-w-0">

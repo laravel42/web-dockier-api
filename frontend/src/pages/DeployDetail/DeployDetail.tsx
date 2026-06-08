@@ -41,7 +41,7 @@ export default function DeployDetail() {
           onClick={() => navigate("/deploy")}
           className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6"
         >
-          <ChevronLeftIcon className="w-4 h-4" />
+          <ChevronLeftIcon className="size-4 " />
           Back to Deployments
         </button>
 
@@ -57,7 +57,7 @@ export default function DeployDetail() {
         {deploy.status === "success" && deploy.deployStrategy === "vps" && deploy.appUrl && (
           <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 mb-6">
             <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
-            <p className="text-xs text-text-muted leading-relaxed">
+            <p className="text-xs/relaxed text-text-muted ">
               If you see an nginx welcome page when visiting the URL, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes.
             </p>
           </div>

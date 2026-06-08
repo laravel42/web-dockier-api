@@ -214,7 +214,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
           {/* Search */}
           <div className="relative mb-3">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none"
+              className="absolute left-3 top-1/2 -translate-y-1/2 size-4  text-text-muted pointer-events-none"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -244,7 +244,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
                   >
                     {/* Group checkbox indicator */}
                     <span
-                      className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                      className={`size-5  rounded flex items-center justify-center shrink-0 border transition-colors ${
                         checkState === "all"
                           ? "bg-primary-500 border-primary-500"
                           : checkState === "partial"
@@ -253,19 +253,19 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
                       }`}
                     >
                       {checkState === "all" && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <svg className="size-3  text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       )}
                       {checkState === "partial" && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <svg className="size-3  text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
                         </svg>
                       )}
                     </span>
                     <span className="text-sm font-semibold text-text flex-1 text-left">{group.name}</span>
                     <svg
-                      className={`w-4 h-4 text-text-muted transition-transform ${isCollapsed ? "" : "rotate-180"}`}
+                      className={`size-4  text-text-muted transition-transform ${isCollapsed ? "" : "rotate-180"}`}
                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -284,14 +284,14 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
                         >
                           <span
                             onClick={(e) => { e.preventDefault(); toggle(perm.key, perm.locked); }}
-                            className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                            className={`mt-0.5 size-5  rounded flex items-center justify-center shrink-0 border transition-colors ${
                               selected.has(perm.key)
                                 ? "bg-primary-500 border-primary-500"
                                 : "border-border"
                             } ${perm.locked ? "cursor-not-allowed" : "cursor-pointer"}`}
                           >
                             {selected.has(perm.key) && (
-                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <svg className="size-3  text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                               </svg>
                             )}
@@ -300,7 +300,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
                             <div className="flex items-center gap-1.5">
                               <span className="text-sm font-medium text-text">{perm.key}</span>
                               {perm.locked && (
-                                <svg className="w-3.5 h-3.5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <svg className="size-3.5  text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                                 </svg>
                               )}

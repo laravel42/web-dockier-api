@@ -29,8 +29,8 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
-          <FolderIcon className="w-6 h-6" />
+        <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
+          <FolderIcon className="size-6 " />
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -47,7 +47,7 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
       <div className="relative flex items-center gap-4">
         {canDeploy && (
           <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
-            <RocketIcon className="w-4 h-4" />
+            <RocketIcon className="size-4 " />
             Deploy
           </button>
         )}
@@ -57,7 +57,7 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
           className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-secondary-50 hover:bg-secondary-100 transition-colors text-sm font-medium text-text"
         >
           Actions
-          <ChevronDownIcon className={`w-4 h-4 transition-transform ${headerMenuOpen ? "rotate-180" : ""}`} />
+          <ChevronDownIcon className={`size-4  transition-transform ${headerMenuOpen ? "rotate-180" : ""}`} />
         </button>
         {headerMenuOpen && (
           <>
@@ -70,7 +70,7 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
                     onClick={() => { onCloseMenu(); onPull(); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-secondary-50 transition-colors"
                   >
-                    <DownloadIcon className="w-4 h-4 text-text-muted" />
+                    <DownloadIcon className="size-4  text-text-muted" />
                     Pull from origin
                   </button>
                   <button
@@ -78,7 +78,7 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
                     onClick={() => { onCloseMenu(); onSwitchBranch(); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-secondary-50 transition-colors"
                   >
-                    <ShareIcon className="w-4 h-4 text-text-muted" />
+                    <ShareIcon className="size-4  text-text-muted" />
                     Switch branch
                   </button>
                 </>
@@ -91,7 +91,7 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
                     onClick={() => { onCloseMenu(); onDelete(); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger-500 hover:bg-danger-500/5 transition-colors"
                   >
-                    <TrashIcon className="w-4 h-4" />
+                    <TrashIcon className="size-4 " />
                     Delete project
                   </button>
                 </>

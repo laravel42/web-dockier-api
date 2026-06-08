@@ -13,7 +13,7 @@ export default function Toolbar() {
     <header className="h-[72px] bg-card/80 backdrop-blur-sm border-b border-border/80 flex items-center justify-between px-8 shrink-0">
       {/* Search */}
       <div className="relative w-80">
-        <SearchIcon className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+        <SearchIcon className="size-4  absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
         <input
           type="text"
           value={search}

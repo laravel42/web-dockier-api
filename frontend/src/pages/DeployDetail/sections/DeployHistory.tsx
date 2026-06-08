@@ -21,7 +21,7 @@ export default function DeployHistory({ deploys, providers, activeDeployId, load
           </div>
           {loading ? (
             <div className="flex justify-center py-6">
-              <Spinner className="w-4 h-4" />
+              <Spinner className="size-4 " />
             </div>
           ) : deploys.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-4">No deploys yet</p>
@@ -40,7 +40,7 @@ export default function DeployHistory({ deploys, providers, activeDeployId, load
                     className={`w-full text-left px-3 py-2.5 transition-colors ${isActive ? "bg-primary-50" : "hover:bg-secondary-50"}`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot}`} />
+                      <span className={`size-2  rounded-full shrink-0 ${statusDot}`} />
                       <span className={`text-xs font-medium truncate ${isActive ? "text-primary-600" : "text-text"}`}>
                         {new Date(d.createdAt).toLocaleDateString()} {new Date(d.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>

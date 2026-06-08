@@ -24,8 +24,8 @@ export default function RecentDeploys({ deploys, allProviders, navigate }: Props
       <div className={`${cardCls} divide-y divide-border`}>
         {deploys.map((d) => (
           <div key={d.id} className="px-4 py-3 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 shrink-0 mt-0.5">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className="size-8  rounded-full bg-primary-100 flex items-center justify-center text-primary-600 shrink-0 mt-0.5">
+              <svg className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
             </div>
@@ -52,7 +52,7 @@ export default function RecentDeploys({ deploys, allProviders, navigate }: Props
                 <div className="flex items-center gap-2 mt-1">
                   {d.appUrl && (
                     <>
-                      <LinkIcon className="w-4 h-4 text-text-muted shrink-0" />
+                      <LinkIcon className="size-4  text-text-muted shrink-0" />
                       <a
                         href={d.appUrl}
                         target="_blank"

@@ -19,7 +19,7 @@ export default function Alert({ variant, children, className = "" }: AlertProps)
   return (
     <div
       role={variant === "error" ? "alert" : "status"}
-      className={`p-3 rounded-[var(--radius-btn)] border text-sm ${variantStyles[variant]} ${className}`}
+      className={`p-3 rounded-(--radius-btn) border text-sm ${variantStyles[variant]} ${className}`}
     >
       {children}
     </div>

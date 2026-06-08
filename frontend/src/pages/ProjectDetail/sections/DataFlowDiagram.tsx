@@ -32,8 +32,8 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
       <div className="px-5 py-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md bg-amber-100 flex items-center justify-center">
-              <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div className="size-7  rounded-md bg-amber-100 flex items-center justify-center">
+              <svg className="size-4  text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75" />
               </svg>
             </div>
@@ -73,7 +73,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
                       <span className="text-[10px] text-text-muted">{entity.fields?.length || 0} fields</span>
                     </div>
                   </div>
-                  <svg className={`w-3.5 h-3.5 text-text-muted shrink-0 ml-3 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className={`size-3.5  text-text-muted shrink-0 ml-3 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </button>

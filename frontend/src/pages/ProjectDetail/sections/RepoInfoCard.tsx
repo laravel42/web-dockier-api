@@ -27,13 +27,13 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
         <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Template</h2>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <LinkIcon className="w-5 h-5 text-text-muted shrink-0" />
+            <LinkIcon className="size-5  text-text-muted shrink-0" />
             <a href={project.repository} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors truncate">
               {project.repository}
             </a>
           </div>
           <div className="flex items-center gap-2">
-            <GitBranchIcon className="w-5 h-5 text-text-muted shrink-0" />
+            <GitBranchIcon className="size-5  text-text-muted shrink-0" />
             <span className="text-sm text-text-secondary">{project.branch}</span>
           </div>
           {project.template && templateDescriptions[project.template] && (
@@ -51,7 +51,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
       <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Repository</h2>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <LinkIcon className="w-5 h-5 text-text-muted shrink-0" />
+          <LinkIcon className="size-5  text-text-muted shrink-0" />
           {project.repository ? (
             <a href={project.repository} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors truncate">{project.repository}</a>
           ) : (
@@ -59,7 +59,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
           )}
         </div>                
         <div className="flex items-center gap-2">
-          <GitBranchIcon className="w-5 h-5 text-text-muted shrink-0" />
+          <GitBranchIcon className="size-5  text-text-muted shrink-0" />
           {project.branch && project.repository ? (
             <a href={`${project.repository}/-/tree/${project.branch}`} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors">{project.branch}</a>
           ) : project.branch ? (
@@ -70,7 +70,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
         </div>
         {stats?.lastCommitHash && (
           <div className="flex items-start gap-2">
-            <GitCommitIcon className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+            <GitCommitIcon className="size-5  text-text-muted shrink-0 mt-0.5" />
             <div className="min-w-0">
               {stats.lastCommitMessage && (
                 <a

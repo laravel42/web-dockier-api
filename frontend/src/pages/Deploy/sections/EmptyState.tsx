@@ -8,7 +8,7 @@ interface Props {
 export default function DeployEmptyState({ onGoToProjects }: Props) {
   return (
     <EmptyState
-      icon={<RocketIcon className="w-12 h-12" />}
+      icon={<RocketIcon className="size-12 " />}
       description="No deployments yet. Deploy from a project page to get started."
       action={{ label: "Go to Projects", onClick: onGoToProjects }}
     />

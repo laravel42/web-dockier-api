@@ -27,7 +27,7 @@ export default function BranchModal({ open, onClose, branchList, branchLoading, 
       />
       {branchLoading ? (
         <div className="flex justify-center py-8">
-          <Spinner className="w-5 h-5" />
+          <Spinner className="size-5 " />
         </div>
       ) : (
         <div className="max-h-64 overflow-y-auto space-y-1">
@@ -42,7 +42,7 @@ export default function BranchModal({ open, onClose, branchList, branchLoading, 
                   : "text-text hover:bg-secondary-50"
               }`}
             >
-              <ShareIcon className="w-4 h-4 text-text-muted shrink-0" />
+              <ShareIcon className="size-4  text-text-muted shrink-0" />
               {b}
               {b === currentBranch && <span className="ml-auto text-xs text-primary-500">current</span>}
             </button>

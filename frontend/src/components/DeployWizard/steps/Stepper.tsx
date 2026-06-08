@@ -9,7 +9,7 @@ export default function Stepper({ current, steps }: { current: number; steps: ty
         const active = i === current;
         return (
           <div key={i} className="flex items-center gap-1 flex-1">
-            <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold shrink-0 transition-colors ${
+            <div className={`flex items-center justify-center size-7  rounded-full text-xs font-semibold shrink-0 transition-colors ${
               done ? "bg-success-500 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
             }`}>
               {done ? (

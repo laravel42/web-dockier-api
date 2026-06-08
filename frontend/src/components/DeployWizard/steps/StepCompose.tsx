@@ -22,7 +22,7 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       {!isTemplate && state.deployStrategy !== "static" && (
       <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface">
         <div className="flex items-center gap-2">
-          <DockerIcon className="w-5 h-5 text-blue-500" />
+          <DockerIcon className="size-5  text-blue-500" />
           <div>
             <span className="text-sm font-medium text-text">Docker Build</span>
             <p className="text-xs text-text-muted">Build and deploy as a container image</p>
@@ -35,7 +35,7 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
           role="switch"
           aria-checked={state.useDocker}
         >
-          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${state.useDocker ? "translate-x-6" : "translate-x-1"}`} />
+          <span className={`inline-block size-4  transform rounded-full bg-white transition-transform ${state.useDocker ? "translate-x-6" : "translate-x-1"}`} />
         </button>
       </div>
       )}
@@ -44,10 +44,10 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (() => {
         const isAws = state.selectedProvider === "aws";
         const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
-          { id: "dockerfile", label: "Dockerfile", desc: "Auto-generated Dockerfile with auto-fix on failure", icon: <DockerfileIcon className="w-4 h-4 text-blue-500" /> },
-          { id: "railpack", label: "Railpack", desc: "Zero-config builder by Railway, falls back to Dockerfile", icon: <RailpackIcon className="w-4 h-4 text-purple-500" /> },
-          { id: "nixpacks", label: "Nixpacks", desc: "Nix-based builder by Railway, falls back to Dockerfile", icon: <NixpacksIcon className="w-4 h-4 text-cyan-500" /> },
-          { id: "codebuild", label: "CodeBuild", desc: "AWS CodeBuild with BuildKit + ECR cache, no local Docker needed", icon: <CodeBuildIcon className="w-4 h-4 text-orange-500" />, awsOnly: true },
+          { id: "dockerfile", label: "Dockerfile", desc: "Auto-generated Dockerfile with auto-fix on failure", icon: <DockerfileIcon className="size-4  text-blue-500" /> },
+          { id: "railpack", label: "Railpack", desc: "Zero-config builder by Railway, falls back to Dockerfile", icon: <RailpackIcon className="size-4  text-purple-500" /> },
+          { id: "nixpacks", label: "Nixpacks", desc: "Nix-based builder by Railway, falls back to Dockerfile", icon: <NixpacksIcon className="size-4  text-cyan-500" /> },
+          { id: "codebuild", label: "CodeBuild", desc: "AWS CodeBuild with BuildKit + ECR cache, no local Docker needed", icon: <CodeBuildIcon className="size-4  text-orange-500" />, awsOnly: true },
         ];
         const filtered = methods.filter(m => !m.awsOnly || isAws);
         return (
@@ -94,7 +94,7 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
             }`}
           >
             <div className="flex items-center gap-2 mb-1">
-              <CodeBuildIcon className="w-4 h-4 text-orange-500" />
+              <CodeBuildIcon className="size-4  text-orange-500" />
               <span className="text-sm font-medium text-text">CodeBuild</span>
               {state.buildMethod === "codebuild" && (
                 <span className="ml-auto text-xs text-primary-500 font-medium">Active</span>
@@ -128,7 +128,7 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       {/* Loading */}
       {loading && (
         <div className="flex items-center gap-2 py-6 justify-center">
-          <Spinner className="w-4 h-4" />
+          <Spinner className="size-4 " />
           <span className="text-sm text-text-muted">Preparing deployment…</span>
         </div>
       )}

@@ -50,7 +50,7 @@ export default function UserFormModal({ open, onClose, onSubmit }: Props) {
     <Modal open={open} onClose={handleClose} title="New user">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-[var(--radius-input)] bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
+          <div className="rounded-(--radius-input) bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
             {error}
           </div>
         )}
@@ -86,10 +86,10 @@ export default function UserFormModal({ open, onClose, onSubmit }: Props) {
         </div>
 
         <div className="flex items-center gap-3 pt-2">
-          <button type="submit" disabled={!form.name.trim() || !form.email.trim()} className="h-9 px-5 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <button type="submit" disabled={!form.name.trim() || !form.email.trim()} className="h-9 px-5 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             Create user
           </button>
-          <button type="button" onClick={handleClose} className="h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-[var(--radius-btn)] hover:bg-secondary-100 transition-colors">
+          <button type="button" onClick={handleClose} className="h-9 px-4 bg-secondary-50 text-text text-sm font-medium rounded-(--radius-btn) hover:bg-secondary-100 transition-colors">
             Cancel
           </button>
         </div>

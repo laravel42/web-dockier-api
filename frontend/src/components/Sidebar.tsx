@@ -40,7 +40,7 @@ export default function Sidebar() {
     <aside className="w-[260px] bg-sidebar border-r border-border/80 flex flex-col shrink-0">
       <div className="h-[72px] flex items-center px-6 border-b border-border/80">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Dockier logo" className="w-9 h-9 rounded-xl shadow-sm" />
+          <img src="/logo.png" alt="Dockier logo" className="size-9  rounded-xl shadow-sm" />
           <span className="text-2xl font-display font-semibold text-text tracking-tight">Dockier</span>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function Sidebar() {
 
       <div className="p-3 border-t border-border/80">
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary-50/50">
-          <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center">
+          <div className="size-9  rounded-xl bg-primary-100 flex items-center justify-center">
             <span className="text-primary-600 text-sm font-semibold">{(userProfile?.name || "U")[0].toUpperCase()}</span>
           </div>
           <div className="flex-1 min-w-0">

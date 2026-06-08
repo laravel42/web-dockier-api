@@ -30,7 +30,7 @@ export default function PlatformBadge({ slug }: Props) {
 
   return (
     <span className="inline-flex items-center gap-1.5 px-1 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
-      <DevIcon src={icon} className="w-4 h-4" />
+      <DevIcon src={icon} className="size-4 " />
       {label}
     </span>
   );

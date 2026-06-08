@@ -15,9 +15,9 @@ export default function ContributorsGrid({ stats }: Props) {
         {stats.topContributors.map((c) => (
           <div key={c.name} className={`${cardCls} p-4 flex items-center gap-3`}>
             {c.avatarUrl ? (
-              <img src={c.avatarUrl} alt={c.name} className="w-10 h-10 rounded-full shrink-0" />
+              <img src={c.avatarUrl} alt={c.name} className="size-10  rounded-full shrink-0" />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm shrink-0">
+              <div className="size-10  rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm shrink-0">
                 {c.name.charAt(0).toUpperCase()}
               </div>
             )}

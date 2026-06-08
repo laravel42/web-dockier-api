@@ -72,8 +72,8 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-surface">
       <div className="w-full max-w-[420px] bg-card rounded-card shadow-(--shadow-card-hover) p-8 border border-border/50">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-            <img src="/logo.png" alt="Dockier logo" className="w-full h-full object-contain" />
+          <div className="size-10  rounded-xl flex items-center justify-center shadow-sm">
+            <img src="/logo.png" alt="Dockier logo" className="size-full  object-contain" />
           </div>
           <span className="text-lg font-display font-semibold text-text tracking-tight">Dockier</span>
         </div>

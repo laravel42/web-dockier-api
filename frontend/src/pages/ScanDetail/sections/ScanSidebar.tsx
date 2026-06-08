@@ -36,12 +36,12 @@ export default function ScanSidebar({
           >
             {scanRunning ? (
               <>
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="size-3.5  border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Scanning…
               </>
             ) : (
               <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                 </svg>
                 Run new scan
@@ -91,7 +91,7 @@ export default function ScanSidebar({
           </div>
           {allScansLoading ? (
             <div className="flex justify-center py-6">
-              <Spinner className="w-4 h-4" />
+              <Spinner className="size-4 " />
             </div>
           ) : allScans.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-4">No scans yet</p>
@@ -105,23 +105,23 @@ export default function ScanSidebar({
                     key={s.id}
                     type="button"
                     onClick={() => onSelectScan(s.id)}
-                    className={`w-full text-left px-3 py-3 transition-colors ${isActive ? "bg-primary-50" : "hover:bg-secondary-50"}`}
+                    className={`w-full text-left p-3  transition-colors ${isActive ? "bg-primary-50" : "hover:bg-secondary-50"}`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDot}`} />
+                      <span className={`size-2.5  rounded-full shrink-0 ${statusDot}`} />
                       <span className={`text-sm font-medium truncate ${isActive ? "text-primary-600" : "text-text"}`}>
                         {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 ml-4.5">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5  text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
                       </svg>
                       <span className="text-xs text-text font-semibold font-mono truncate">{s.branch}</span>
                     </div>
                     {s.commitSha && (
                       <div className="flex items-center gap-2 mt-1 ml-4.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5  text-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
                         </svg>
                         <span className="text-xs text-text font-semibold font-mono">{s.commitSha.slice(0, 7)}</span>

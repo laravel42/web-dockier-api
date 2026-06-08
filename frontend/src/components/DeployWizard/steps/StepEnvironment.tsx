@@ -83,7 +83,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 <div className="flex items-center justify-between mb-3">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${plan.badgeColor}`}>{plan.badge}</span>
                   {selected && (
-                    <CheckCircleIcon className="w-4 h-4 text-primary-500" />
+                    <CheckCircleIcon className="size-4  text-primary-500" />
                   )}
                 </div>
                 <p className="text-sm font-semibold text-text mb-2">{plan.label}</p>

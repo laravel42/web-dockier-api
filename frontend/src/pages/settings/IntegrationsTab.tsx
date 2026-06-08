@@ -93,7 +93,7 @@ export default function IntegrationsTab() {
         </div>
         {canManage && (
           <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             Add Integration
           </button>
         )}
@@ -110,7 +110,7 @@ export default function IntegrationsTab() {
                   type="checkbox"
                   checked={categoryFilter.length === 0}
                   onChange={() => setCategoryFilter([])}
-                  className="w-3.5 h-3.5 rounded border-border text-primary-500 focus:ring-primary-500/20 cursor-pointer"
+                  className="size-3.5  rounded border-border text-primary-500 focus:ring-primary-500/20 cursor-pointer"
                 />
                 <span className={`text-sm ${categoryFilter.length === 0 ? "font-medium text-text" : "text-text-secondary group-hover:text-text"}`}>All</span>
               </label>
@@ -122,7 +122,7 @@ export default function IntegrationsTab() {
                       type="checkbox"
                       checked={checked}
                       onChange={() => setCategoryFilter(checked ? categoryFilter.filter(f => f !== c) : [...categoryFilter, c])}
-                      className="w-3.5 h-3.5 rounded border-border text-primary-500 focus:ring-primary-500/20 cursor-pointer"
+                      className="size-3.5  rounded border-border text-primary-500 focus:ring-primary-500/20 cursor-pointer"
                     />
                     <span className={`text-sm ${checked ? "font-medium text-text" : "text-text-secondary group-hover:text-text"}`}>{c}</span>
                   </label>
@@ -152,8 +152,8 @@ export default function IntegrationsTab() {
                     onClick={() => { setSelectedType(cat.type); setFormConfig({}); }}
                     className={`flex items-center gap-3 p-3 rounded-lg border border-border text-left transition-colors ${alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-secondary-50 hover:border-primary-300"}`}
                   >
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                    <div className="size-9  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
+                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="size-5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -171,8 +171,8 @@ export default function IntegrationsTab() {
         ) : catalog ? (
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="flex items-center gap-3 pb-3 border-b border-border">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+              <div className="size-9  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
+                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="size-5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
               </div>
               <div>
                 <p className="text-sm font-semibold text-text">{catalog.name}</p>
@@ -231,7 +231,7 @@ export default function IntegrationsTab() {
             <form onSubmit={handleEditSave} className="space-y-5">
               {/* Hero header: large icon + name + short description */}
               <div className="flex items-center gap-5">
-                <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0">
+                <div className="size-14  rounded-xl flex items-center justify-center shrink-0">
                   {INTEGRATION_ICONS[editCat.type] ? <TechBadge name={editCat.type} icon={INTEGRATION_ICONS[editCat.type]} iconOnly iconSize="w-10 h-10" /> : null}
                 </div>
                 <div className="min-w-0">
@@ -258,7 +258,7 @@ export default function IntegrationsTab() {
                 </div>
                 <div className="ml-auto">
                   <button id="edit-intg-enabled" type="button" onClick={() => setEditEnabled(!editEnabled)}
-                    className={`px-4 py-1.5 rounded-[var(--radius-btn)] text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
+                    className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
                     {editEnabled ? "Disable" : "Enable"}
                   </button>
                 </div>
@@ -267,7 +267,7 @@ export default function IntegrationsTab() {
               {/* Overview */}
               <div>
                 <h3 className="text-sm font-semibold text-text mb-1">Overview</h3>
-                <p className="text-sm text-text-secondary leading-relaxed">{editCat.description}</p>
+                <p className="text-sm/relaxed text-text-secondary ">{editCat.description}</p>
               </div>
 
               {/* Configuration fields */}
@@ -325,9 +325,9 @@ export default function IntegrationsTab() {
           {integrations.map((intg) => {
             const cat = INTEGRATION_CATALOG.find(c => c.type === intg.type);
             return (
-              <div key={intg.id} onClick={() => openEdit(intg)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
+              <div key={intg.id} onClick={() => openEdit(intg)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                  <div className="size-8  flex items-center justify-center shrink-0">
                     {(cat && INTEGRATION_ICONS[cat.type]) ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-7 h-7" /> : null}
                   </div>
                   <p className="text-sm font-bold text-text">{intg.name}</p>
@@ -341,8 +341,8 @@ export default function IntegrationsTab() {
           })}
         </div>
       ) : (
-        <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-12 text-center">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 mx-auto text-text-muted mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+        <div className="bg-card rounded-card shadow-(--shadow-card) p-12 text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="size-10  mx-auto text-text-muted mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
           </svg>
           <p className="text-sm text-text-muted">No integrations configured yet. Add one to connect external services like databases, caches, or storage.</p>

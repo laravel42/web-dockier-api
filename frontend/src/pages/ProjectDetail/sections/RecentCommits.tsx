@@ -16,7 +16,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
         <div className={`${cardCls} p-6 flex justify-center`}>
-          <Spinner className="w-5 h-5" />
+          <Spinner className="size-5 " />
         </div>
       </div>
     );
@@ -42,9 +42,9 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
         {commits.map((c) => (
           <div key={c.hash} className="px-4 py-3 flex items-start gap-3">
             {c.authorAvatar ? (
-              <img src={c.authorAvatar} alt={c.author} className="w-8 h-8 rounded-full shrink-0 mt-0.5" />
+              <img src={c.authorAvatar} alt={c.author} className="size-8  rounded-full shrink-0 mt-0.5" />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-xs shrink-0 mt-0.5">
+              <div className="size-8  rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-xs shrink-0 mt-0.5">
                 {c.author.charAt(0).toUpperCase()}
               </div>
             )}

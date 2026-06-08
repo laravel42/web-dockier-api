@@ -38,8 +38,8 @@ export default function FixWithAIModal({
     <Modal open={open} onClose={onClose} title="Fix with AI">
       {fixResult ? (
         <div className="flex flex-col items-center py-8 gap-4">
-          <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="size-12  rounded-full bg-success-500/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="size-7  text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
           </div>
@@ -47,7 +47,7 @@ export default function FixWithAIModal({
           {fixResult.mrUrl && (
             <a href={fixResult.mrUrl} target="_blank" rel="noopener noreferrer"
               className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
               </svg>
               Open Merge Request
@@ -57,8 +57,8 @@ export default function FixWithAIModal({
       ) : fixLoading ? (
         <div className="flex flex-col items-center py-10 gap-4">
           <div className="relative">
-            <div className="w-12 h-12 border-[3px] border-violet-200 rounded-full" />
-            <div className="absolute inset-0 w-12 h-12 border-[3px] border-violet-500 border-t-transparent rounded-full animate-spin" />
+            <div className="size-12  border-[3px] border-violet-200 rounded-full" />
+            <div className="absolute inset-0 size-12  border-[3px] border-violet-500 border-t-transparent rounded-full animate-spin" />
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-text">AI is analyzing the vulnerability…</p>
@@ -99,7 +99,7 @@ export default function FixWithAIModal({
           )}
           <div className="flex justify-end">
             <button type="button" onClick={onSubmit} disabled={fixLoading || !mrTitle}
-              className="h-9 px-4 bg-violet-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-violet-600 disabled:opacity-50 transition-colors">
+              className="h-9 px-4 bg-violet-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-violet-600 disabled:opacity-50 transition-colors">
               Create Merge Request
             </button>
           </div>
