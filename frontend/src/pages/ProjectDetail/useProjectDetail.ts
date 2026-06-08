@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { parseOwnerRepo, getRepoKey } from "../../utils/parseOwnerRepo";
 import { BADGE_WHITELIST } from "../../data/badgeWhitelist";
+import { getErrorMessage } from "../../utils/errors";
 import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo } from "../../types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
@@ -151,7 +152,7 @@ export function useProjectDetail() {
             setStatsError("");
             gitApi.getRepoStats(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, p.id)
               .then(setStats)
-              .catch((err: unknown) => setStatsError((err as Error).message || "Failed to load stats"))
+              .catch((err: unknown) => setStatsError(getErrorMessage(err, "Failed to load stats")))
               .finally(() => setStatsLoading(false));
 
             // Fetch badges (same source as card list)
@@ -171,7 +172,7 @@ export function useProjectDetail() {
             setCommitsError("");
             gitApi.getRecentCommits(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, 5)
               .then((res) => setRecentCommits(res.commits))
-              .catch((err: unknown) => setCommitsError((err as Error).message || "Failed to load commits"))
+              .catch((err: unknown) => setCommitsError(getErrorMessage(err, "Failed to load commits")))
               .finally(() => setCommitsLoading(false));
 
             setAnalysisLoading(true);
@@ -184,14 +185,14 @@ export function useProjectDetail() {
             } else {
               gitApi.analyzeRepo(p.connectionId, parsed.owner, parsed.repo, p.branch || undefined, "openai", p.id)
                 .then((res) => { setCachedAnalysis(cacheKey, res); setAnalysis(res); })
-                .catch((err: unknown) => setAnalysisError((err as Error).message || "Failed to analyze repo"))
+                .catch((err: unknown) => setAnalysisError(getErrorMessage(err, "Failed to analyze repo")))
                 .finally(() => setAnalysisLoading(false));
             }
 
           }
         }
       })
-      .catch((err: unknown) => setError((err as Error).message || "Failed to load project"))
+      .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load project")))
       .finally(() => setLoading(false));
   }, [projectId]);
 

@@ -40,3 +40,11 @@ export const strategyLabels: Record<string, string> = {
   vps: "VPS",
   managed: "ECS Fargate",
 };
+
+export function getStatusBadgeClass(status: string): string {
+  return statusBadgeColors[status] || statusBadgeColors.pending;
+}
+
+export function getStatusDotClass(status: string): string {
+  return statusDotColors[status] || statusDotColors.pending;
+}

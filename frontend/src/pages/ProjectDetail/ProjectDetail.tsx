@@ -14,7 +14,8 @@ import ProjectDescription from "./sections/ProjectDescription";
 import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 
 export default function ProjectDetail() {
   const {
@@ -34,18 +35,18 @@ export default function ProjectDetail() {
   } = useProjectDetail();
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (error || !project) {
     return (
-      <div className="text-center py-16">
-        <p className="text-danger-500 text-sm mb-4">{error || "Project not found"}</p>
-        <button onClick={() => navigate("/projects")} className={btnSecondary}>Back to Projects</button>
+      <div>
+        <PageError message={error || "Project not found"} />
+        <div className="text-center mt-4">
+          <button type="button" onClick={() => navigate("/projects")} className={btnSecondary}>
+            Back to Projects
+          </button>
+        </div>
       </div>
     );
   }

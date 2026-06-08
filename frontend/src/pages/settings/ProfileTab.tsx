@@ -3,7 +3,9 @@ import { usersApi } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { countries } from "../../data/countries";
 import { inputCls, btnPrimary } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import Alert from "../../components/ui/Alert";
+import { getErrorMessage } from "../../utils/errors";
 
 export default function ProfileTab() {
   const { userId, email: authEmail, userProfile, setUserProfile } = useAuth();
@@ -15,14 +17,17 @@ export default function ProfileTab() {
   const [loading, setLoading] = useState(!userProfile);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageVariant, setMessageVariant] = useState<"error" | "success">("success");
 
   useEffect(() => {
     if (!userId || userProfile) { setLoading(false); return; }
     usersApi.get(userId).then((u) => {
       setName(u.name); setEmail(u.email); setCountry(u.country || ""); setLanguage(u.language || "en"); setTimezone(u.timezone || "UTC");
       setUserProfile({ name: u.name, country: u.country || "", language: u.language || "en", timezone: u.timezone || "UTC" });
-    }).catch(() => {
+    }).catch((err) => {
       setEmail(authEmail || "");
+      setMessage(getErrorMessage(err, "Failed to load profile"));
+      setMessageVariant("error");
     }).finally(() => setLoading(false));
   }, [userId, authEmail, userProfile, setUserProfile]);
 
@@ -34,11 +39,15 @@ export default function ProfileTab() {
       await usersApi.update(userId, { name, country, language, timezone });
       setUserProfile({ name, country, language, timezone });
       setMessage("Profile updated successfully");
-    } catch (err: unknown) { setMessage((err as Error).message); }
+      setMessageVariant("success");
+    } catch (err: unknown) {
+      setMessage(getErrorMessage(err, "Failed to update profile"));
+      setMessageVariant("error");
+    }
     finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const languages = [
     ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["pt", "Portuguese"],
@@ -57,7 +66,7 @@ export default function ProfileTab() {
     <div className="bg-card rounded-(--radius-card) shadow-(--shadow-card) p-6 max-w-lg">
       <h2 className="text-base font-semibold text-text mb-1">Profile</h2>
       <p className="text-sm text-text-secondary mb-5">Manage your personal information.</p>
-      {message && <div className="mb-4 p-3 rounded-(--radius-btn) bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
+      {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}
       <form onSubmit={handleSave} className="space-y-4">
         <div>
           <label htmlFor="profile-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>

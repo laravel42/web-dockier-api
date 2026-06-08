@@ -1,14 +1,18 @@
-import { btnSecondary, cardCls } from "../../utils/styles";
 import { useSecurityScans } from "./useSecurityScans";
 import ScanProjectCard from "./sections/ScanProjectCard";
 import EmptyProjectCard from "./sections/EmptyProjectCard";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
+import EmptyState from "../../components/ui/EmptyState";
 import ShieldCheckIcon from "../../components/icons/outlined/ShieldCheckIcon";
-import Spinner from "../../components/Spinner";
 
 export default function SecurityScans() {
   const {
     navigate,
     loading,
+    error,
+    reload,
     projects,
     grouped,
     sortedProjectIds,
@@ -17,12 +21,17 @@ export default function SecurityScans() {
   if (loading) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
-        </div>
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+        <PageHeader title="Security Scans" />
+        <PageLoading />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Security Scans" />
+        <PageError message={error} onRetry={reload} />
       </div>
     );
   }
@@ -30,23 +39,19 @@ export default function SecurityScans() {
   if (sortedProjectIds.length === 0) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
-        </div>
-        <div className={`${cardCls} p-12 text-center`}>
-          <ShieldCheckIcon className="w-12 h-12 mx-auto text-text-muted mb-4" />
-          <p className="text-sm text-text-muted mb-4">No projects yet. Create a project first to run security scans.</p>
-          <button onClick={() => navigate("/projects")} className={btnSecondary}>Go to Projects</button>
-        </div>
+        <PageHeader title="Security Scans" />
+        <EmptyState
+          icon={<ShieldCheckIcon className="w-12 h-12" />}
+          description="No projects yet. Create a project first to run security scans."
+          action={{ label: "Go to Projects", onClick: () => navigate("/projects") }}
+        />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
-      </div>
+      <PageHeader title="Security Scans" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {sortedProjectIds.map((projectId) => {
           const projectScans = grouped[projectId];

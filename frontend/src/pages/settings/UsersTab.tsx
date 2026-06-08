@@ -4,6 +4,11 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import ComboBox from "../../components/ComboBox";
 import { inputCls, btnPrimary } from "../../utils/styles";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
+import Alert from "../../components/ui/Alert";
+import { getErrorMessage } from "../../utils/errors";
+import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../context/PermissionsContext";
 
@@ -30,11 +35,13 @@ interface RoleItem {
 
 export default function UsersTab() {
   const { userId } = useAuth();
+  const toast = useToast();
   const { has, refresh: refreshPermissions } = usePermissions();
   const canManage = has("user:manage");
   const [users, setUsers] = useState<UserItem[]>([]);
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
@@ -51,6 +58,7 @@ export default function UsersTab() {
 
   const fetchData = async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const [usersRes, rolesRes] = await Promise.all([
         usersApi.list({ search: search || undefined }),
@@ -58,8 +66,9 @@ export default function UsersTab() {
       ]);
       setUsers(usersRes.users);
       setRoles(rolesRes.roles);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setLoadError(getErrorMessage(err, "Failed to load users"));
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -134,7 +143,7 @@ export default function UsersTab() {
       setShowPassword(false);
       fetchData();
     } catch (err: unknown) {
-      setInviteError((err as Error).message || "Failed to create user");
+      setInviteError(getErrorMessage(err, "Failed to create user"));
     } finally { setInviting(false); }
   };
 
@@ -153,15 +162,21 @@ export default function UsersTab() {
       if (editUser.id === userId) refreshPermissions();
       setEditUser(null);
       fetchData();
-    } catch { /* ignore */ }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update user"));
+    }
     finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    try { await usersApi.delete(deleteId); } catch { /* ignore */ }
+    try {
+      await usersApi.delete(deleteId);
+      fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to remove user"));
+    }
     setDeleteId(null);
-    fetchData();
   };
 
   const openEdit = async (u: UserItem) => {
@@ -211,7 +226,9 @@ export default function UsersTab() {
 
       {/* Users table */}
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <PageLoading />
+      ) : loadError ? (
+        <PageError message={loadError} onRetry={fetchData} />
       ) : (
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
@@ -357,7 +374,7 @@ export default function UsersTab() {
               <p className="text-xs text-text-muted mt-1">Country: {tzToCountry[inviteForm.timezone]}</p>
             )}
           </div>
-          {inviteError && <p className="text-sm text-danger-500">{inviteError}</p>}
+          {inviteError && <Alert variant="error">{inviteError}</Alert>}
           <div className="flex justify-end">
             <button type="submit" disabled={inviting || !inviteForm.roleId || !inviteForm.timezone || (!!inviteForm.password && !passwordValid)} className={`${btnPrimary} disabled:opacity-50`}>{inviting ? "Creating…" : "Add User"}</button>
           </div>

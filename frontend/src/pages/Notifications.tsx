@@ -1,46 +1,59 @@
-import { useState, useEffect } from "react";
 import { notificationsApi } from "../services/api";
-import Spinner from "../components/Spinner";
+import { useAsyncData } from "../hooks/useAsyncData";
+import PageHeader from "../components/ui/PageHeader";
+import PageLoading from "../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../components/ui/PageError";
+import { cardCls } from "../utils/styles";
+import type { Notification } from "../services/notifications";
+
+async function fetchNotifications(): Promise<Notification[]> {
+  const res = await notificationsApi.list();
+  return res.notifications;
+}
 
 export default function Notifications() {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: notifications, loading, error, reload } = useAsyncData(fetchNotifications, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const res = await notificationsApi.list();
-      setNotifications(res.notifications);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+  const markRead = async (id: string) => {
+    await notificationsApi.markRead(id);
+    reload();
   };
-
-  useEffect(() => { fetchData(); }, []);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Notifications</h1>
-      </div>
+      <PageHeader title="Notifications" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : error ? (
+        <PageError message={error} onRetry={reload} />
+      ) : !notifications?.length ? (
+        <EmptyMessage>No notifications</EmptyMessage>
       ) : (
         <div className="space-y-2">
           {notifications.map((n) => (
-            <div key={n.id} className={`bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-4 flex items-start justify-between border border-border/50 ${!n.read ? "border-l-4 border-l-primary-500" : ""}`}>
+            <div
+              key={n.id}
+              className={`${cardCls} p-4 flex items-start justify-between border border-border/50 ${!n.read ? "border-l-4 border-l-primary-500" : ""}`}
+            >
               <div>
-                <h3 className={`text-sm font-medium ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
+                <h3 className={`text-sm font-medium ${!n.read ? "text-text" : "text-text-muted"}`}>
+                  {n.title}
+                </h3>
                 <p className="text-sm text-text-secondary mt-0.5">{n.message}</p>
                 <p className="text-xs text-text-muted mt-1">{new Date(n.createdAt).toLocaleString()}</p>
               </div>
               {!n.read && (
-                <button onClick={() => notificationsApi.markRead(n.id).then(fetchData)}
-                  className="text-xs text-primary-500 hover:text-primary-700 font-medium whitespace-nowrap transition-colors">Mark read</button>
+                <button
+                  type="button"
+                  onClick={() => markRead(n.id)}
+                  className="text-xs text-primary-500 hover:text-primary-700 font-medium whitespace-nowrap transition-colors"
+                >
+                  Mark read
+                </button>
               )}
             </div>
           ))}
-          {notifications.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No notifications</p>}
         </div>
       )}
     </div>

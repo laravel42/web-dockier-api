@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Toolbar from "./Toolbar";
+import ErrorBoundary from "./ErrorBoundary";
 
 export default function Layout() {
   return (
@@ -11,7 +12,9 @@ export default function Layout() {
         <Toolbar />
 
         <main className="flex-1 p-8 overflow-auto">
-          <Outlet />
+          <ErrorBoundary title="This page encountered an error">
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

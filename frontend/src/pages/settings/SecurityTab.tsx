@@ -1,25 +1,31 @@
 import { useState } from "react";
 import { authApi } from "../../services/api";
 import { inputCls, btnPrimary } from "../../utils/styles";
+import Alert from "../../components/ui/Alert";
+import { getErrorMessage } from "../../utils/errors";
 
 export default function SecurityTab() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [verifyToken, setVerifyToken] = useState("");
   const [message, setMessage] = useState("");
+  const [messageVariant, setMessageVariant] = useState<"error" | "success" | "info">("info");
   const [loading, setLoading] = useState(false);
 
   const handleSetup2FA = async () => {
     setLoading(true);
     try { const res = await authApi.setup2FA(); setQrCode(res.qrCodeUrl); setSecret(res.secret); }
-    catch (err: unknown) { setMessage((err as Error).message); }
+    catch (err: unknown) {
+      setMessage(getErrorMessage(err, "Failed to set up 2FA"));
+      setMessageVariant("error");
+    }
     finally { setLoading(false); }
   };
 
   const handleEnable2FA = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
-    try { await authApi.enable2FA(verifyToken); setMessage("2FA enabled successfully"); setQrCode(null); setSecret(null); setVerifyToken(""); }
-    catch (err: unknown) { setMessage((err as Error).message); }
+    try { await authApi.enable2FA(verifyToken); setMessage("2FA enabled successfully"); setMessageVariant("success"); setQrCode(null); setSecret(null); setVerifyToken(""); }
+    catch (err: unknown) { setMessage(getErrorMessage(err, "Failed to enable 2FA")); setMessageVariant("error"); }
     finally { setLoading(false); }
   };
 
@@ -27,7 +33,7 @@ export default function SecurityTab() {
     <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 max-w-lg">
       <h2 className="text-base font-semibold text-text mb-1">Two-Factor Authentication</h2>
       <p className="text-sm text-text-secondary mb-5">Add an extra layer of security with an authenticator app.</p>
-      {message && <div className="mb-4 p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
+      {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}
       {!qrCode ? (
         <button onClick={handleSetup2FA} disabled={loading} className={`${btnPrimary} disabled:opacity-50`}>
           {loading ? "Setting up..." : "Setup 2FA"}

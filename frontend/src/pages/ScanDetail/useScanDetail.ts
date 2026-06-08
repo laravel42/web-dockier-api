@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, gitApi } from "../../services/api";
+import { getErrorMessage } from "../../utils/errors";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import type { Scan, Finding, Project, ScanProgress } from "../../types";
 
@@ -37,7 +38,9 @@ export function useScanDetail() {
     try {
       const res = await codeAnalysisApi.listFindings(id, severity || undefined);
       setFindings(res.findings);
-    } catch {}
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to load findings"));
+    }
     finally { setFindingsLoading(false); }
   };
 
@@ -58,7 +61,7 @@ export function useScanDetail() {
           } catch {}
           return s;
         })
-        .catch((err: any) => setError(err.message || "Failed to load scan"))
+        .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load scan")))
         .finally(() => setLoading(false));
       fetchFindings(scanId);
     } else if (routeProjectId) {
@@ -78,7 +81,7 @@ export function useScanDetail() {
             .catch(() => {})
             .finally(() => setAllScansLoading(false));
         })
-        .catch((err: any) => setError(err.message || "Failed to load project"))
+        .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load project")))
         .finally(() => setLoading(false));
     }
   }, [scanId, routeProjectId]);
@@ -134,7 +137,7 @@ export function useScanDetail() {
             setScanRunning(false);
             setScanProgress(null);
             if (s.status === "failed") {
-              setScanError((s.summary as any)?.error || "Scan failed");
+              setScanError(getErrorMessage((s.summary as { error?: string })?.error, "Scan failed"));
             } else {
               setScan(s);
               fetchFindings(newScan.id, severityFilter || undefined);
@@ -149,8 +152,8 @@ export function useScanDetail() {
         }
       };
       setTimeout(poll, 500);
-    } catch (err: any) {
-      setScanError(err.message || "Scan failed");
+    } catch (err: unknown) {
+      setScanError(getErrorMessage(err, "Scan failed"));
       setScanRunning(false);
     }
   };

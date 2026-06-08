@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
+import Alert from "../components/ui/Alert";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -79,8 +80,8 @@ export default function Register() {
         <h1 className="text-xl font-display font-semibold text-text text-center mb-1">Create Account</h1>
         <p className="text-sm text-text-secondary text-center mb-6">Sign up with secure email OTP verification</p>
 
-        {error && <div className="mb-4 p-3 rounded-(--radius-btn) bg-danger-50 text-danger-500 text-sm" role="alert">{error}</div>}
-        {notice && <div className="mb-4 p-3 rounded-(--radius-btn) bg-primary-50 text-primary-700 text-sm" role="status">{notice}</div>}
+        {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+        {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>

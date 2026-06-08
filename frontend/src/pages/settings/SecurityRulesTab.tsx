@@ -5,6 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
 import { inputCls, btnPrimary } from "../../utils/styles";
+import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
 
 interface CRule {
@@ -291,7 +292,7 @@ export default function SecurityRulesTab() {
       <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} message="Are you sure you want to delete this custom rule?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {filtered.map(r => (
@@ -409,7 +410,7 @@ function SonarQubeRulesPanel() {
     }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (error && profiles.length === 0) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p><p className="text-xs text-text-muted mt-2">Check that SonarQubeUrl and SonarQubeToken secrets are configured correctly.</p></div>;
 
   return (
@@ -772,7 +773,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
 
   const shown = rules.slice(0, visible);
 
-  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (error) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p></div>;
 
   return (

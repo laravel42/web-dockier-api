@@ -2,16 +2,20 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi, deployApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
+import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
+import { useToast } from "../../context/ToastContext";
 import type { Connection, Repo, Project, ProjectSourceType } from "../../types";
 import { PROJECT_TEMPLATES } from "./templates";
 
 export function useProjects() {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Pick<Project, "id" | "name" | "repository" | "branch" | "connectionId"> | null>(null);
   const [form, setForm] = useState({ name: "", repository: "", branch: "" });
@@ -42,19 +46,20 @@ export function useProjects() {
 
   // ── Data fetching ──────────────────────────────────────────────
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const res = await projectsApi.list();
       setProjects(res.projects);
     } catch (err) {
-      console.error(err);
+      setLoadError(getErrorMessage(err, "Failed to load projects"));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchProjects(); }, []);
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   useEffect(() => {
     deployApi
@@ -71,7 +76,7 @@ export function useProjects() {
       const res = await gitApi.listConnections();
       setConnections(res.connections);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err, "Failed to load source control connections"));
     } finally {
       setLoadingConnections(false);
     }
@@ -232,7 +237,7 @@ export function useProjects() {
 
   return {
     navigate,
-    projects, loading,
+    projects, loading, loadError, reload: fetchProjects,
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,

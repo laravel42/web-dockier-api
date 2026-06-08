@@ -1,5 +1,6 @@
 import type { Deployment as DeployInfo, Provider as ProviderInfo } from "../../../types";
-import { cardCls } from "../../../utils/styles";
+import { cardCls, strategyLabels } from "../../../utils/styles";
+import { timeAgo } from "../../../utils/timeAgo";
 import ProviderBadge from "../../../components/ProviderBadge";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 import StatusBadge from "../../../components/badges/StatusBadge";
@@ -10,23 +11,6 @@ interface Props {
   navigate: (path: string) => void;
 }
 
-function timeAgo(dateStr: string): string {
-  if (!dateStr) return "";
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = Math.max(0, now - then);
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
-
-const strategyLabels: Record<string, string> = { vps: "VPS", managed: "ECS Fargate" };
 
 export default function RecentDeploys({ deploys, allProviders, navigate }: Props) {
   if (!deploys.length) return null;

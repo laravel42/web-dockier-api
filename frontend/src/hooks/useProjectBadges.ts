@@ -31,12 +31,11 @@ export function useProjectBadges(
         .getRepoBadges(key, p.branch || undefined, p.connectionId || undefined)
         .then((res) => {
           const filtered = (res.badges || []).filter(b => BADGE_WHITELIST.has(b.name)).slice(0, 4);
-          console.log(`[badges] ${key}: ${res.badges?.length || 0} total, ${filtered.length} filtered`, filtered.map(b => b.name));
           if (filtered.length > 0) {
             setProjectLangs((prev) => ({ ...prev, [p.id]: filtered }));
           }
         })
-        .catch((err) => { console.error(`[badges] ${key} failed:`, err.message); });
+        .catch(() => {});
     }
   }, [projects]);
 

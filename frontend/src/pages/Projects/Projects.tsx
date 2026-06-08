@@ -1,5 +1,7 @@
 import ConfirmModal from "../../components/ConfirmModal";
-import Spinner from "../../components/Spinner";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useProjects } from "./useProjects";
 import { btnPrimary } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -16,7 +18,7 @@ export default function Projects() {
   const canDelete = has("project:delete");
   const {
     navigate,
-    projects, loading,
+    projects, loading, loadError, reload,
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,
@@ -35,34 +37,35 @@ export default function Projects() {
 
   return (
     <div>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Projects</h1>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-secondary-50 border border-border rounded-lg p-0.5 h-10">
-            <button
-              onClick={() => changeViewMode("cards")}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
-              title="Card view"
-            >
-              <GridIcon />
-            </button>
-            <button
-              onClick={() => changeViewMode("table")}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
-              title="Table view"
-            >
-              <Bars3Icon />
-            </button>
+      <PageHeader
+        title="Projects"
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-secondary-50 border border-border rounded-lg p-0.5 h-10">
+              <button
+                onClick={() => changeViewMode("cards")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
+                title="Card view"
+              >
+                <GridIcon />
+              </button>
+              <button
+                onClick={() => changeViewMode("table")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
+                title="Table view"
+              >
+                <Bars3Icon />
+              </button>
+            </div>
+            {canCreate && (
+              <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
+                <PlusIcon />
+                New Project
+              </button>
+            )}
           </div>
-          {canCreate && (
-            <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
-              <PlusIcon />
-              New Project
-            </button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* Create / Edit modal */}
       <ProjectFormModal
@@ -102,11 +105,11 @@ export default function Projects() {
 
       {/* Content */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+        <PageLoading />
+      ) : loadError ? (
+        <PageError message={loadError} onRetry={reload} />
       ) : projects.length === 0 ? (
-        <p className="text-text-muted text-center py-12 text-sm">No projects yet. Create one to get started.</p>
+        <EmptyMessage>No projects yet. Create one to get started.</EmptyMessage>
       ) : viewMode === "table" ? (
         <ProjectTable
           projects={projects}

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { usePermissions } from "../context/PermissionsContext";
+import PageHeader from "../components/ui/PageHeader";
+import PageLoading from "../components/ui/PageLoading";
 import ProfileTab from "./settings/ProfileTab";
 import SecurityTab from "./settings/SecurityTab";
 import UsersTab from "./settings/UsersTab";
@@ -10,7 +12,6 @@ import SourceControlTab from "./settings/SourceControlTab";
 import NotificationChannelsTab from "./settings/NotificationChannelsTab";
 import IntegrationsTab from "./settings/IntegrationsTab";
 import SecurityRulesTab from "./settings/SecurityRulesTab";
-import Spinner from "../components/Spinner";
 
 type Tab = "profile" | "security" | "users" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
 
@@ -18,9 +19,19 @@ export default function Settings() {
   const { has, loading } = usePermissions();
   const [tab, setTab] = useState<Tab>("profile");
 
-  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Settings" />
+        <PageLoading />
+      </div>
+    );
+  }
 
-  const tabCls = (active: boolean) => `h-9 px-4 text-sm font-medium rounded-[var(--radius-btn)] transition-colors ${active ? "bg-primary-500 text-white" : "text-text-secondary hover:bg-secondary-50"}`;
+  const tabCls = (active: boolean) =>
+    `h-9 px-4 text-sm font-medium rounded-[var(--radius-btn)] transition-colors ${
+      active ? "bg-primary-500 text-white" : "text-text-secondary hover:bg-secondary-50"
+    }`;
 
   const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
     { key: "profile", label: "Profile", visible: true },
@@ -37,10 +48,18 @@ export default function Settings() {
 
   return (
     <div>
-      <h1 className="text-2xl font-display font-semibold text-text mb-8 tracking-tight">Settings</h1>
-      <div className="flex gap-2 mb-6" role="tablist">
-        {tabs.filter(t => t.visible).map(({ key, label }) => (
-          <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={tabCls(tab === key)}>{label}</button>
+      <PageHeader title="Settings" />
+      <div className="flex flex-wrap gap-2 mb-6" role="tablist">
+        {tabs.filter((t) => t.visible).map(({ key, label }) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={tabCls(tab === key)}
+          >
+            {label}
+          </button>
         ))}
       </div>
       {tab === "profile" && <ProfileTab />}

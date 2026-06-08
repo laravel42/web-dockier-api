@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../../services/api";
 import { getProviderStyle } from "../../data/providers";
+import { getErrorMessage } from "../../utils/errors";
 import { getRepoKey } from "../../utils/parseOwnerRepo";
 import type { Deployment, Provider, Project } from "../../types";
 
@@ -51,7 +52,7 @@ export function useDeployDetail() {
           .catch(() => {})
           .finally(() => { if (!cancelled) setAllDeploysLoading(false); });
       })
-      .catch((err: any) => { if (!cancelled) setError(err.message || "Failed to load deployment"); })
+      .catch((err: unknown) => { if (!cancelled) setError(getErrorMessage(err, "Failed to load deployment")); })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };

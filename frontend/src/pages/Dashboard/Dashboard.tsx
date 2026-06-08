@@ -1,5 +1,7 @@
 import { btnPrimary } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 import { useDashboard } from "./useDashboard";
 import { usePermissions } from "../../context/PermissionsContext";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
@@ -10,35 +12,50 @@ import RecentScans from "./sections/RecentScans";
 export default function Dashboard() {
   const {
     navigate,
-    projects, deploys, scans, providers,
+    projects,
+    deploys,
+    scans,
+    providers,
     loading,
-    successDeploys, failedDeploys, totalFindings,
-    recentDeploys, recentScans,
+    error,
+    reload,
+    successDeploys,
+    failedDeploys,
+    totalFindings,
+    recentDeploys,
+    recentScans,
     projectMap,
   } = useDashboard();
   const { has, loading: permLoading } = usePermissions();
   const canViewDeploys = has("deploy:view");
 
   if (loading || permLoading) {
+    return <PageLoading />;
+  }
+
+  if (error) {
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
+      <div>
+        <PageHeader title="Dashboard" />
+        <PageError message={error} onRetry={reload} />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Dashboard</h1>
-        <button
-          onClick={() => navigate("/projects", { state: { openCreate: true } })}
-          className={`${btnPrimary} inline-flex items-center gap-2`}
-        >
-          <PlusIcon className="w-4 h-4" />
-          New Project
-        </button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        actions={
+          <button
+            onClick={() => navigate("/projects", { state: { openCreate: true } })}
+            className={`${btnPrimary} inline-flex items-center gap-2`}
+          >
+            <PlusIcon className="w-4 h-4" />
+            New Project
+          </button>
+        }
+      />
 
       <KpiGrid
         projects={projects.length}

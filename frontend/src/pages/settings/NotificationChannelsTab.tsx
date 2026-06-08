@@ -1,32 +1,30 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { notificationsApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
+import { useTabList } from "../../hooks/useTabList";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
   const canManage = has("notification:manage");
-  const [channels, setChannels] = useState<Array<{ id: string; type: string; config: Record<string, string>; enabled: boolean }>>([]);
+  const { data: channels, loading, error, reload } = useTabList(
+    () => notificationsApi.listChannels().then((res) => res.channels),
+    [],
+  );
+  const channelList = channels ?? [];
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ type: "email", configValue: "" });
-  const [loading, setLoading] = useState(true);
   const [editingChannel, setEditingChannel] = useState<{ id: string; type: string; config: Record<string, string>; enabled: boolean } | null>(null);
   const [editEnabled, setEditEnabled] = useState(true);
   const [editConfigValue, setEditConfigValue] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const fetch_ = async () => {
-    setLoading(true);
-    try { const res = await notificationsApi.listChannels(); setChannels(res.channels); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetch_(); }, []);
+  const fetch_ = reload;
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +36,7 @@ export default function NotificationChannelsTab() {
     setShowForm(false); setFormData({ type: "email", configValue: "" }); fetch_();
   };
 
-  const openEditChannel = (ch: typeof channels[number]) => {
+  const openEditChannel = (ch: (typeof channelList)[number]) => {
     setEditingChannel(ch);
     setEditEnabled(ch.enabled);
     setEditConfigValue(ch.type === "email" ? ch.config.email || "" : ch.type === "slack" ? ch.config.webhookUrl || "" : ch.type === "webhook" ? ch.config.url || "" : "");
@@ -165,10 +163,12 @@ export default function NotificationChannelsTab() {
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingChannel) notificationsApi.deleteChannel(editingChannel.id).then(fetch_); setEditingChannel(null); setConfirmRemove(false); }} message="Are you sure you want to remove this channel?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : error ? (
+        <PageError message={error} onRetry={reload} />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {channels.map((ch) => {
+          {channelList.map((ch) => {
             const channelNames: Record<string, string> = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" };
             const channelIcons: Record<string, React.ReactNode> = {
               email: <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>,
@@ -191,7 +191,11 @@ export default function NotificationChannelsTab() {
             </div>
             );
           })}
-          {channels.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No notification channels configured</p>}
+          {channelList.length === 0 && (
+            <div className="col-span-full">
+              <EmptyMessage>No notification channels configured</EmptyMessage>
+            </div>
+          )}
         </div>
       )}
     </div>

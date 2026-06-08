@@ -9,7 +9,8 @@ import ScanSidebar from "./sections/ScanSidebar";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 
 export default function ScanDetail() {
   const core = useScanDetail();
@@ -17,23 +18,22 @@ export default function ScanDetail() {
   const fix = useFixModal(core.project);
 
   if (core.loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (core.error || (!core.scan && !core.project)) {
     return (
-      <div className="text-center py-16">
-        <p className="text-danger-500 text-sm mb-4">{core.error || "Scan not found"}</p>
-        <button onClick={() => core.navigate("/security")} className={btnSecondary}>Back to Security Scans</button>
+      <div>
+        <PageError message={core.error || "Scan not found"} />
+        <div className="text-center mt-4">
+          <button type="button" onClick={() => core.navigate("/security")} className={btnSecondary}>
+            Back to Security Scans
+          </button>
+        </div>
       </div>
     );
   }
 
-  // Project loaded but no scan selected
   if (!core.scan && core.project) {
     return (
       <EmptyScanState
@@ -52,16 +52,11 @@ export default function ScanDetail() {
   }
 
   if (!core.scan) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
     <div className="flex gap-6">
-      {/* Main content */}
       <div className="flex-1 min-w-0">
         <ScanHeader
           scan={core.scan}
@@ -151,7 +146,6 @@ export default function ScanDetail() {
         />
       </div>
 
-      {/* Sidebar */}
       <ScanSidebar
         scanId={core.scanId}
         allScans={core.allScans}

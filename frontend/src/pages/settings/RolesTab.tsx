@@ -1,39 +1,47 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { rolesApi } from "../../services/api";
 import RoleFormModal from "../../components/RoleFormModal";
 import ConfirmModal from "../../components/ConfirmModal";
 import { btnPrimary } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
+import { useTabList } from "../../hooks/useTabList";
 import { usePermissions } from "../../context/PermissionsContext";
+
+type RoleItem = {
+  id: string;
+  name: string;
+  description: string;
+  systemKey: string | null;
+  isSystem: boolean;
+  isEditable: boolean;
+  isDeletable: boolean;
+  permissions: string[];
+};
 
 export default function RolesTab() {
   const { has, roleId: currentRoleId, refresh: refreshPermissions } = usePermissions();
   const canManage = has("role:manage");
-  const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string; systemKey: string | null; isSystem: boolean; isEditable: boolean; isDeletable: boolean; permissions: string[] }>>([]);
+  const { data: roles, loading, error, reload } = useTabList(
+    () => rolesApi.list().then((res) => res.roles.filter((r) => r && r.name) as RoleItem[]),
+    [],
+  );
+  const roleList = roles ?? [];
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [editingRole, setEditingRole] = useState<{ id: string; name: string; description: string; systemKey: string | null; isSystem: boolean; isEditable: boolean; isDeletable: boolean; permissions: string[] } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [editingRole, setEditingRole] = useState<RoleItem | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
-
-  const fetch_ = async () => {
-    setLoading(true);
-    try { const res = await rolesApi.list(); setRoles(res.roles.filter((r) => r && r.name)); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetch_(); }, []);
 
   const handleCreateRole = async (data: { name: string; description: string; permissions: string[] }) => {
     await rolesApi.create(data);
-    setShowRoleModal(false); fetch_();
+    setShowRoleModal(false);
+    reload();
   };
 
   const handleEditRole = async (data: { name: string; description: string; permissions: string[] }) => {
     if (!editingRole) return;
     await rolesApi.update(editingRole.id, data);
-    setEditingRole(null); fetch_();
-    // If the edited role is the current user's role, refresh permissions
+    setEditingRole(null);
+    reload();
     if (editingRole.id === currentRoleId) refreshPermissions();
   };
 
@@ -58,7 +66,6 @@ export default function RolesTab() {
 
       <RoleFormModal open={showRoleModal} onClose={() => setShowRoleModal(false)} onSubmit={handleCreateRole} />
 
-      {/* Edit modal */}
       <RoleFormModal
         open={!!editingRole}
         onClose={() => setEditingRole(null)}
@@ -69,10 +76,12 @@ export default function RolesTab() {
       />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : error ? (
+        <PageError message={error} onRetry={reload} />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {roles.map((r) => (
+          {roleList.map((r) => (
             <div key={r.id} onClick={() => r.isEditable ? setEditingRole(r) : undefined} className={`bg-card border border-border rounded-(--radius-card) p-4 transition-all shadow-(--shadow-card) ${r.isEditable ? "hover:border-primary-500/30 cursor-pointer" : "opacity-75"}`}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0 text-primary-500">
@@ -99,10 +108,14 @@ export default function RolesTab() {
               )}
             </div>
           ))}
-          {roles.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No roles configured yet</p>}
+          {roleList.length === 0 && (
+            <div className="col-span-full">
+              <EmptyMessage>No roles configured yet</EmptyMessage>
+            </div>
+          )}
         </div>
       )}
-      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingRole && editingRole.isDeletable) rolesApi.delete(editingRole.id).then(fetch_); setEditingRole(null); setConfirmRemove(false); }} message="Are you sure you want to remove this role?" />
+      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingRole && editingRole.isDeletable) rolesApi.delete(editingRole.id).then(reload); setEditingRole(null); setConfirmRemove(false); }} message="Are you sure you want to remove this role?" />
     </div>
   );
 }

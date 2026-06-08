@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
@@ -6,29 +6,27 @@ import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
+import { useTabList } from "../../hooks/useTabList";
 
 export default function ProvidersTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
-  const [providers, setProviders] = useState<Array<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string }>>([]);
+  const { data: providers, loading, error, reload } = useTabList(
+    () => deployApi.listProviders().then((res) => res.providers),
+    [],
+  );
+  const providerList = providers ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editingProvider, setEditingProvider] = useState<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string } | null>(null);
   const [editForm, setEditForm] = useState({ label: "", apiKey: "", apiSecret: "" });
   const [editEnabled, setEditEnabled] = useState(true);
   const [form, setForm] = useState({ provider: "aws", label: "", apiKey: "", apiSecret: "" });
   const [showSecret, setShowSecret] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const fetch_ = async () => {
-    setLoading(true);
-    try { const res = await deployApi.listProviders(); setProviders(res.providers); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetch_(); }, []);
+  const fetch_ = reload;
 
   const apiKeyOnlyProviders: string[] = [];
   const needsSecret = !apiKeyOnlyProviders.includes(form.provider);
@@ -45,10 +43,16 @@ export default function ProvidersTab() {
     setShowForm(false); setForm({ provider: "aws", label: "", apiKey: "", apiSecret: "" }); fetch_();
   };
 
-  const openEdit = (p: typeof providers[number]) => {
-    setEditingProvider(p);
-    setEditForm({ label: p.label, apiKey: p.apiKey || "", apiSecret: p.apiSecret || "" });
-    setEditEnabled(p.enabled !== false);
+  const openEdit = (p: (typeof providerList)[number]) => {
+    setEditingProvider({
+      id: p.id,
+      provider: p.provider,
+      label: p.label,
+      enabled: true,
+      createdAt: p.createdAt,
+    });
+    setEditForm({ label: p.label, apiKey: "", apiSecret: "" });
+    setEditEnabled(true);
   };
 
   const handleEditSave = async (e: React.FormEvent) => {
@@ -179,10 +183,12 @@ export default function ProvidersTab() {
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingProvider) deployApi.deleteProvider(editingProvider.id).then(fetch_); setEditingProvider(null); setConfirmRemove(false); }} message="Are you sure you want to remove this provider?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : error ? (
+        <PageError message={error} onRetry={reload} />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {providers.map((p) => (
+          {providerList.map((p) => (
             <div key={p.id} onClick={() => openEdit(p)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-8 h-8 flex items-center justify-center shrink-0">
@@ -193,11 +199,15 @@ export default function ProvidersTab() {
                   <p className="text-xs text-text-muted truncate">{p.label}</p>
                 </div>
               </div>
-              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${p.enabled !== false ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>{p.enabled !== false ? "Connected" : "Disabled"}</span>
+              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-success-50 text-success-500`}>Connected</span>
               <p className="text-xs text-text-muted mt-2">{getProviderStyle(p.provider).description}</p>
             </div>
           ))}
-          {providers.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No server providers configured</p>}
+          {providerList.length === 0 && (
+            <div className="col-span-full">
+              <EmptyMessage>No server providers configured</EmptyMessage>
+            </div>
+          )}
         </div>
       )}
     </div>

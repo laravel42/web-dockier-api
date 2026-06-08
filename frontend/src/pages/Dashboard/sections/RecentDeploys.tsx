@@ -1,5 +1,5 @@
 import type { Deployment as Deploy, Provider, Project } from "../../../types";
-import { cardCls } from "../../../utils/styles";
+import { cardCls, getStatusDotClass } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
 
 interface Props {
@@ -25,7 +25,7 @@ export default function RecentDeploys({ deploys, providers, projectMap, onViewAl
             const prov = providers.find(p => p.id === d.providerId);
             const pk = prov?.provider || "";
             const projectName = projectMap[d.projectId]?.name || d.repo;
-            const statusDot = d.status === "success" ? "bg-success-500" : d.status === "failed" ? "bg-danger-500" : d.status === "building" || d.status === "deploying" ? "bg-primary-500" : "bg-secondary-300";
+            const statusDot = getStatusDotClass(d.status);
             return (
               <button
                 key={d.id}

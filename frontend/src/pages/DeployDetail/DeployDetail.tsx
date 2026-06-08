@@ -5,7 +5,8 @@ import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 
 export default function DeployDetail() {
   const {
@@ -17,23 +18,18 @@ export default function DeployDetail() {
   } = useDeployDetail();
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (error || !deploy) {
     return (
-      <div className="text-center py-16">
-        <p className="text-danger-500 text-sm mb-4">{error || "Deployment not found"}</p>
-        <button
-          onClick={() => navigate("/deploy")}
-          className={btnSecondary}
-        >
-          Back to Deployments
-        </button>
+      <div>
+        <PageError message={error || "Deployment not found"} />
+        <div className="text-center mt-4">
+          <button type="button" onClick={() => navigate("/deploy")} className={btnSecondary}>
+            Back to Deployments
+          </button>
+        </div>
       </div>
     );
   }

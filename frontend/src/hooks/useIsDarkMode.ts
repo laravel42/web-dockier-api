@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 
 /** Returns true when data-theme="dark" is set on <html>. Reactive. */
-export function useTheme(): boolean {
+export function useIsDarkMode(): boolean {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-theme") === "dark"
+    () => document.documentElement.getAttribute("data-theme") === "dark",
   );
 
   useEffect(() => {
