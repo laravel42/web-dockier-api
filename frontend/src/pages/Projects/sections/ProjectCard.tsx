@@ -1,8 +1,7 @@
-import TechBadge from "../../../components/TechBadge";
-import PlatformBadge from "../../../components/PlatformBadge";
+import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import SourceControlBadge from "../../../components/SourceControlBadge";
 import { getRepoSlug, getRepoKey } from "../../../utils/parseOwnerRepo";
-import { statusDotColors as statusColors } from "../../../utils/styles";
+import { cardInteractiveCls, chipCls, statusDotColors as statusColors, typeCardTitle } from "../../../utils/styles";
 import type { Project, TechBadgeInfo } from "../../../types";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
@@ -18,10 +17,11 @@ interface Props {
   project: Project;
   deployments: Deploy[];
   badges: TechBadgeInfo[] | undefined;
+  badgeLoading?: boolean;
   onSelect: (id: string) => void;
 }
 
-export default function ProjectCard({ project: p, deployments, badges, onSelect }: Props) {
+export default function ProjectCard({ project: p, deployments, badges, badgeLoading, onSelect }: Props) {
   const repoKey = p.repository ? getRepoKey(p.repository) : null;
   const lastDeploy = repoKey
     ? deployments
@@ -33,28 +33,24 @@ export default function ProjectCard({ project: p, deployments, badges, onSelect 
   return (
     <div
       onClick={() => onSelect(p.id)}
-      className="bg-card border border-border rounded-card p-3 flex flex-col gap-3 hover:border-primary-500/30 transition-all overflow-hidden shadow-(--shadow-card) cursor-pointer"
+      className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}
     >
       {/* Header: icon, slug */}
       <div className="flex items-center gap-3 min-w-0">
         <SourceControlBadge provider={scProvider} showName={false} iconSize="w-6 h-6" />
-        <span className="text-sm text-text-secondary truncate lowercase">{p.repository ? getRepoSlug(p.repository) : "—"}</span>
+        <span className="text-sm text-text-muted truncate lowercase">{p.repository ? getRepoSlug(p.repository) : "—"}</span>
       </div>
 
       {/* Title & tech badges */}
       <div className="min-w-0">
-        <h3 className="text-lg font-bold text-text truncate">{p.name}</h3>
-        {badges && badges.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {badges.slice(0, 4).map((b) => (
-              <TechBadge key={b.name} name={b.name} />
-            ))}
-          </div>
-        ) : p.platform ? (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <PlatformBadge slug={p.platform} />
-          </div>
-        ) : null}
+        <h3 className={`${typeCardTitle} truncate`}>{p.name}</h3>
+        <ProjectTechBadges
+          badges={badges}
+          loading={badgeLoading}
+          platform={p.platform}
+          limit={4}
+          className="mt-1.5"
+        />
       </div>
 
       {/* Last deploy + branch */}
@@ -71,8 +67,8 @@ export default function ProjectCard({ project: p, deployments, badges, onSelect 
             <span className="text-xs text-text-muted">No deployments yet</span>
           )}
         </div>
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0">
-          <LinkIcon className="size-3 " strokeWidth={2} />
+        <span className={chipCls}>
+          <LinkIcon className="size-3" strokeWidth={2} />
           {p.branch || "main"}
         </span>
       </div>

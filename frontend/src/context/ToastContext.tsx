@@ -40,7 +40,7 @@ function ToastContainer({
         <div
           key={t.id}
           role={t.variant === "error" ? "alert" : "status"}
-          className={`pointer-events-auto rounded-(--radius-btn)er px-4 py-3 text-sm shadow-(--shadow-card-hover) ${variantStyles[t.variant]}`}
+          className={`pointer-events-auto rounded-(--radius-btn) px-4 py-3 text-sm shadow-(--shadow-card-hover) ${variantStyles[t.variant]}`}
         >
           <div className="flex items-start justify-between gap-3">
             <p className="leading-snug">{t.message}</p>

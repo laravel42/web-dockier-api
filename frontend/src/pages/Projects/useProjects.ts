@@ -233,7 +233,7 @@ export function useProjects() {
     if (deleteId) projectsApi.delete(deleteId).then(fetchProjects);
   };
 
-  const projectLangs = useProjectBadges(projects);
+  const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projects);
 
   return {
     navigate,
@@ -254,6 +254,6 @@ export function useProjects() {
     openCreate, closeForm, handleSubmit,
     confirmDelete,
     // derived
-    deployments, projectLangs,
+    deployments, projectLangs, projectBadgeLoading,
   };
 }

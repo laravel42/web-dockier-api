@@ -6,6 +6,31 @@ import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
+import { integrationsApi } from "../../services/api";
+import { useTabList } from "../../hooks/useTabList";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
+
+const PM_TYPES = new Set(["linear", "jira"]);
+
+function isPMType(type: string) {
+  return PM_TYPES.has(type);
+}
+
+function loadLocalIntegrations(): Integration[] {
+  try {
+    const stored = localStorage.getItem("integrations");
+    if (stored) {
+      const all: Integration[] = JSON.parse(stored);
+      return all.filter((i) => !isPMType(i.type));
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+function persistLocalIntegrations(items: Integration[]) {
+  localStorage.setItem("integrations", JSON.stringify(items));
+}
 
 interface Integration {
   id: string;
@@ -18,13 +43,19 @@ interface Integration {
 export default function IntegrationsTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
-  const [integrations, setIntegrations] = useState<Integration[]>(() => {
-    try {
-      const stored = localStorage.getItem("integrations");
-      if (stored) return JSON.parse(stored);
-    } catch { /* ignore */ }
-    return [];
-  });
+  const { data: pmData, loading, error, reload } = useTabList(
+    () => integrationsApi.listPMIntegrations().then((res) => res.integrations),
+    [],
+  );
+  const [localIntegrations, setLocalIntegrations] = useState<Integration[]>(loadLocalIntegrations);
+  const pmIntegrations: Integration[] = (pmData ?? []).map((i) => ({
+    id: i.id,
+    type: i.type,
+    name: i.name,
+    config: i.config ?? {},
+    enabled: i.enabled,
+  }));
+  const integrations = [...pmIntegrations, ...localIntegrations];
   const [showAdd, setShowAdd] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [formConfig, setFormConfig] = useState<Record<string, string>>({});
@@ -37,29 +68,39 @@ export default function IntegrationsTab() {
   const [editEnabled, setEditEnabled] = useState(true);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const persist = (items: Integration[]) => {
-    setIntegrations(items);
-    localStorage.setItem("integrations", JSON.stringify(items));
-  };
-
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedType) return;
     const catalog = INTEGRATION_CATALOG.find(c => c.type === selectedType);
     if (!catalog) return;
     setSaving(true);
-    const newItem: Integration = {
-      id: crypto.randomUUID(),
-      type: selectedType,
-      name: catalog.name,
-      config: { ...formConfig },
-      enabled: true,
-    };
-    persist([...integrations, newItem]);
-    setSaving(false);
-    setShowAdd(false);
-    setSelectedType(null);
-    setFormConfig({});
+    try {
+      if (isPMType(selectedType)) {
+        await integrationsApi.createPMIntegration({
+          provider: selectedType,
+          name: catalog.name,
+          config: { ...formConfig },
+          enabled: true,
+        });
+        await reload();
+      } else {
+        const newItem: Integration = {
+          id: crypto.randomUUID(),
+          type: selectedType,
+          name: catalog.name,
+          config: { ...formConfig },
+          enabled: true,
+        };
+        const next = [...localIntegrations, newItem];
+        setLocalIntegrations(next);
+        persistLocalIntegrations(next);
+      }
+      setShowAdd(false);
+      setSelectedType(null);
+      setFormConfig({});
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openEdit = (intg: Integration) => {
@@ -68,12 +109,39 @@ export default function IntegrationsTab() {
     setEditEnabled(intg.enabled);
   };
 
-  const handleEditSave = (e: React.FormEvent) => {
+  const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingIntg) return;
-    persist(integrations.map(i => i.id === editingIntg.id ? { ...i, config: { ...editConfig }, enabled: editEnabled } : i));
+    if (isPMType(editingIntg.type)) {
+      const hasConfig = Object.values(editConfig).some((v) => v.trim() !== "");
+      await integrationsApi.updatePMIntegration(editingIntg.id, {
+        config: hasConfig ? { ...editConfig } : undefined,
+        enabled: editEnabled,
+      });
+      await reload();
+    } else {
+      const next = localIntegrations.map(i =>
+        i.id === editingIntg.id ? { ...i, config: { ...editConfig }, enabled: editEnabled } : i,
+      );
+      setLocalIntegrations(next);
+      persistLocalIntegrations(next);
+    }
     setEditingIntg(null);
     setEditConfig({});
+  };
+
+  const handleRemove = async () => {
+    if (!editingIntg) return;
+    if (isPMType(editingIntg.type)) {
+      await integrationsApi.deletePMIntegration(editingIntg.id);
+      await reload();
+    } else {
+      const next = localIntegrations.filter(i => i.id !== editingIntg.id);
+      setLocalIntegrations(next);
+      persistLocalIntegrations(next);
+    }
+    setEditingIntg(null);
+    setConfirmRemove(false);
   };
 
   const openAdd = () => {
@@ -83,6 +151,9 @@ export default function IntegrationsTab() {
   };
 
   const catalog = selectedType ? INTEGRATION_CATALOG.find(c => c.type === selectedType) : null;
+
+  if (loading) return <PageLoading />;
+  if (error) return <PageError message={error} onRetry={reload} />;
 
   return (
     <div>
@@ -301,8 +372,8 @@ export default function IntegrationsTab() {
                         value={editConfig[f.key] || ""}
                         onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
                         className={inputCls}
-                        placeholder={f.placeholder}
-                        required
+                        placeholder={isPMType(editingIntg.type) ? `${f.placeholder} (leave blank to keep)` : f.placeholder}
+                        required={!isPMType(editingIntg.type)}
                       />
                     )}
                   </div>
@@ -318,7 +389,7 @@ export default function IntegrationsTab() {
           );
         })()}
       </Modal>
-      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingIntg) persist(integrations.filter(i => i.id !== editingIntg.id)); setEditingIntg(null); setConfirmRemove(false); }} message="Are you sure you want to remove this integration?" />
+      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={handleRemove} message="Are you sure you want to remove this integration?" />
 
       {integrations.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -330,7 +401,7 @@ export default function IntegrationsTab() {
                   <div className="size-8  flex items-center justify-center shrink-0">
                     {(cat && INTEGRATION_ICONS[cat.type]) ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-7 h-7" /> : null}
                   </div>
-                  <p className="text-sm font-bold text-text">{intg.name}</p>
+                  <p className="text-sm font-semibold text-text">{intg.name}</p>
                 </div>
                 <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${intg.enabled ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>
                   {intg.enabled ? "Enabled" : "Disabled"}

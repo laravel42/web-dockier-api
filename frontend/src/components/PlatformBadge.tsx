@@ -1,4 +1,5 @@
 import DevIcon from "./DevIcon";
+import { chipCls } from "../utils/styles";
 
 const PLATFORM_NAMES: Record<string, string> = {
   react: "React", nextjs: "Next.js", vue: "Vue", nuxt: "Nuxt", angular: "Angular", svelte: "Svelte",
@@ -29,7 +30,7 @@ export default function PlatformBadge({ slug }: Props) {
   const icon = PLATFORM_ICONS[slug] || slug;
 
   return (
-    <span className="inline-flex items-center gap-1.5 px-1 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
+    <span className={`${chipCls} whitespace-nowrap`}>
       <DevIcon src={icon} className="size-4 " />
       {label}
     </span>

@@ -24,7 +24,7 @@ export default function ProjectDetailsCard({ project, lastCommitDate }: Props) {
 
   return (
     <div className={`${cardCls} p-5`}>
-      <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Details</h2>
+      <h2 className="text-sm font-semibold text-text mb-4">Details</h2>
       <div className="space-y-3">
         <div>
           <p className="text-xs">Project ID</p>

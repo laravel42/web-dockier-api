@@ -47,8 +47,15 @@ export default function FindingsList({
   if (findings.length === 0) return null;
 
   // Provider filter pills
+  const providerForFinding = (ruleId: string) => {
+    if (ruleId.startsWith("sonar.")) return "sonar";
+    if (ruleId.startsWith("custom.")) return "custom";
+    if (ruleId.startsWith("sensitive-data.")) return "sensitive-data";
+    return "semgrep";
+  };
+
   const counts = findings.reduce<Record<string, number>>((acc, f) => {
-    const p = f.ruleId.startsWith("sonar.") ? "sonar" : f.ruleId.startsWith("custom.") ? "custom" : "semgrep";
+    const p = providerForFinding(f.ruleId);
     acc[p] = (acc[p] || 0) + 1;
     return acc;
   }, {});
@@ -58,15 +65,14 @@ export default function FindingsList({
     { key: "semgrep", label: "Semgrep", count: counts["semgrep"] || 0 },
     { key: "sonar", label: "SonarQube", count: counts["sonar"] || 0 },
     { key: "custom", label: "Custom Rules", count: counts["custom"] || 0 },
+    { key: "sensitive-data", label: "Sensitive Data", count: counts["sensitive-data"] || 0 },
   ].filter(p => p.key === "" || p.count > 0);
 
   const filtered = findings
     .filter((f) => !severityFilter || f.severity === severityFilter)
     .filter((f) => {
       if (!providerFilter) return true;
-      if (providerFilter === "sonar") return f.ruleId.startsWith("sonar.");
-      if (providerFilter === "custom") return f.ruleId.startsWith("custom.");
-      return !f.ruleId.startsWith("sonar.") && !f.ruleId.startsWith("custom.");
+      return providerForFinding(f.ruleId) === providerFilter;
     });
 
   const grouped = Object.entries(

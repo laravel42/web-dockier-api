@@ -4,6 +4,9 @@ import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
+import { executeScan, type RunScanOptions } from "./scan-worker.js";
+
+export type { RunScanOptions };
 
 export type CodeAnalysisErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
@@ -94,7 +97,7 @@ export async function deleteScan(scanId: string, tenantId: string) {
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete scan" });
 }
 
-export async function runScan(scanId: string, tenantId: string) {
+export async function runScan(scanId: string, tenantId: string, options: RunScanOptions = {}) {
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
   if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
@@ -103,16 +106,17 @@ export async function runScan(scanId: string, tenantId: string) {
     .from("scans")
     .update({
       status: "running",
-      summary: {
-        ...defaultSummary(),
-        note: "Scan queued; external semgrep/sonarqube workers will populate findings asynchronously.",
-      },
+      summary: defaultSummary() as unknown as Json,
       updated_at: new Date().toISOString(),
     })
     .eq("id", scanId)
     .select()
     .single();
   throwOnError(updateError, CodeAnalysisError, { internalMsg: "Failed to update scan status" });
+
+  void executeScan(scanId, tenantId, options).catch((err) => {
+    console.error(`[scan] Background scan ${scanId} failed:`, err);
+  });
 
   return rowToScan(updated ?? data);
 }

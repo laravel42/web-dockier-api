@@ -1,5 +1,5 @@
 import type { Project } from "../../../types";
-import { btnPrimary } from "../../../utils/styles";
+import { btnPrimary, typePageDesc, typePageTitle } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
@@ -34,14 +34,14 @@ export default function ProjectHeader({ project, headerMenuOpen, onToggleMenu, o
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold text-text">{project.name}</h1>
+            <h1 className={typePageTitle}>{project.name}</h1>
             {isTemplate && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-50 text-primary-600 text-xs font-medium">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-600 text-xs font-medium">
                 Template
               </span>
             )}
           </div>
-          <p className="text-sm text-text-muted">Created {new Date(project.createdAt).toLocaleDateString()}</p>
+          <p className={typePageDesc}>Created {new Date(project.createdAt).toLocaleDateString()}</p>
         </div>
       </div>
       <div className="relative flex items-center gap-4">

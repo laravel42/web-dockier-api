@@ -4,6 +4,8 @@ import { authApi } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
 import Alert from "../components/ui/Alert";
+import AuthLayout from "../components/AuthLayout";
+import { btnPrimaryAuth, btnSecondaryAuth, btnLink, inputCls, labelCls } from "../utils/styles";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -92,110 +94,117 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface">
-      <div className="w-full max-w-105 bg-card rounded-card shadow-(--shadow-card-hover) p-8 border border-border/50">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="size-10  rounded-xl flex items-center justify-center shadow-sm">
-            <img src="/logo.png" alt="Dockier logo" className="size-full  object-contain" />
-          </div>
-          <span className="text-lg font-display font-semibold text-text tracking-tight">Dockier</span>
+    <AuthLayout>
+      <h1 className="font-display text-2xl font-semibold text-foreground">Welcome back</h1>
+      <p className="mt-1 mb-6 text-sm text-muted-foreground">
+        {loginMode === "password"
+          ? "Sign in with your email and password"
+          : otpSent
+            ? "Enter the code sent to your email"
+            : "Sign in with a secure email code"}
+      </p>
+
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label htmlFor="email" className={labelCls}>
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputCls}
+            required
+            disabled={otpSent && loginMode === "otp"}
+          />
         </div>
-        <h1 className="text-xl font-display font-semibold text-text text-center mb-1">Welcome back</h1>
-        <p className="text-sm text-text-secondary text-center mb-6">
-          {loginMode === "password"
-            ? "Sign in with your email and password"
-            : otpSent
-              ? "Enter the code sent to your email"
-              : "Sign in with a secure email code"}
-        </p>
-
-        {error && <Alert variant="error" className="mb-4">{error}</Alert>}
-        {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {loginMode === "password" && (
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-1.5">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
+            <label htmlFor="password" className={labelCls}>
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={inputCls}
               required
-              disabled={otpSent && loginMode === "otp"}
+              autoComplete="current-password"
             />
           </div>
-          {loginMode === "password" && (
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-1.5">Password</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-          )}
-          {loginMode === "otp" && otpSent && (
-            <div>
-              <label htmlFor="otp-token" className="block text-sm font-medium text-text-secondary mb-1.5">Email code</label>
-              <input
-                id="otp-token"
-                type="text"
-                value={otpToken}
-                onChange={(e) => setOtpToken(e.target.value)}
-                className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
-                placeholder="Enter code"
-                minLength={4}
-                required
-                autoComplete="one-time-code"
-              />
-            </div>
-          )}
-          <button type="submit" disabled={loading || (loginMode === "otp" && !otpSent && cooldownSeconds > 0)}
-            className="w-full h-11 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
-            {loading
-              ? "Please wait..."
-              : loginMode === "password"
-                ? "Sign in"
-                : otpSent
-                  ? "Verify and sign in"
-                  : cooldownSeconds > 0
-                    ? `Retry in ${cooldownSeconds}s`
-                    : "Send sign-in code"}
+        )}
+        {loginMode === "otp" && otpSent && (
+          <div>
+            <label htmlFor="otp-token" className={labelCls}>
+              Email code
+            </label>
+            <input
+              id="otp-token"
+              type="text"
+              value={otpToken}
+              onChange={(e) => setOtpToken(e.target.value)}
+              className={inputCls}
+              placeholder="Enter code"
+              minLength={4}
+              required
+              autoComplete="one-time-code"
+            />
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={loading || (loginMode === "otp" && !otpSent && cooldownSeconds > 0)}
+          className={btnPrimaryAuth}
+        >
+          {loading
+            ? "Please wait..."
+            : loginMode === "password"
+              ? "Sign in"
+              : otpSent
+                ? "Verify and sign in"
+                : cooldownSeconds > 0
+                  ? `Retry in ${cooldownSeconds}s`
+                  : "Send sign-in code"}
+        </button>
+        {loginMode === "otp" && otpSent && (
+          <button type="button" onClick={resetFlow} className={btnSecondaryAuth}>
+            Use a different email
           </button>
-          {loginMode === "otp" && otpSent && (
-            <button
-              type="button"
-              onClick={resetFlow}
-              className="w-full h-11 border border-border text-text text-sm font-medium rounded-(--radius-btn) hover:bg-surface transition-colors"
-            >
-              Use a different email
-            </button>
-          )}
-        </form>
+        )}
+      </form>
 
-        <div className="flex items-center gap-3 mt-4">
-          <button
-            type="button"
-            onClick={() => { setLoginMode(loginMode === "otp" ? "password" : "otp"); resetFlow(); }}
-            className="text-sm text-primary-500 font-medium hover:underline"
-          >
-            {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
-          </button>
-        </div>
+      <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
-          onClick={handleDemoLogin}
-          disabled={loading}
-          className="w-full h-11 mt-3 border border-primary-400 text-primary-600 text-sm font-medium rounded-(--radius-btn) hover:bg-primary-50 disabled:opacity-50 transition-colors"
+          onClick={() => {
+            setLoginMode(loginMode === "otp" ? "password" : "otp");
+            resetFlow();
+          }}
+          className={btnLink}
         >
-          Continue in demo mode
+          {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
         </button>
-
-        <p className="text-center text-sm text-text-secondary mt-6">
-          Need an account? <Link to="/register" className="text-primary-500 font-medium hover:underline">Sign up</Link>
-        </p>
       </div>
-    </div>
+      <button
+        type="button"
+        onClick={handleDemoLogin}
+        disabled={loading}
+        className={`${btnSecondaryAuth} mt-3`}
+      >
+        Continue in demo mode
+      </button>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        Need an account?{" "}
+        <Link to="/register" className={btnLink}>
+          Sign up
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

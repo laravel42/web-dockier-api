@@ -4,7 +4,7 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
-import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { inputCls, btnPrimary, btnDanger, cardInteractiveCls } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -189,13 +189,13 @@ export default function ProvidersTab() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {providerList.map((p) => (
-            <div key={p.id} onClick={() => openEdit(p)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
+            <div key={p.id} onClick={() => openEdit(p)} className={`${cardInteractiveCls} p-4`}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="size-8  flex items-center justify-center shrink-0">
                   <ProviderBadge provider={p.provider} showName={false} iconSize="w-7 h-7" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-text truncate">{getProviderStyle(p.provider).name || p.provider}</p>
+                  <p className="text-sm font-semibold text-text truncate">{getProviderStyle(p.provider).name || p.provider}</p>
                   <p className="text-xs text-text-muted truncate">{p.label}</p>
                 </div>
               </div>

@@ -21,6 +21,7 @@ import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
 import { executePostDeployCommands } from "./post-deploy.js";
+import { sendNotification } from "../../notifications/domain/notifications.js";
 
 const db = supabaseAdmin;
 
@@ -385,6 +386,17 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       await logger.warn("Could not determine app URL — check cloud console");
       await updateStatus(deploymentId, "success");
     }
+
+    const deployMessage = finalUrl
+      ? `Deployment of ${event.repo} (${event.branch}) succeeded. App URL: ${finalUrl}`
+      : `Deployment of ${event.repo} (${event.branch}) succeeded.`;
+    void sendNotification({
+      tenantId: event.tenantId,
+      title: "Deployment succeeded",
+      message: deployMessage,
+    }).catch((err) => {
+      console.error(`[deploy] Failed to send deploy complete notification for ${deploymentId}:`, err);
+    });
 
     // Cleanup work directory
     try { await rm(workDir, { recursive: true, force: true }); } catch {}

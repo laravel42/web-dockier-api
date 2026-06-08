@@ -1,4 +1,5 @@
 import DevIcon from "./DevIcon";
+import { chipCls } from "../utils/styles";
 
 const ICON_MAP: Record<string, string> = {
   JavaScript: "javascript", TypeScript: "typescript", Python: "python", PHP: "php",
@@ -38,7 +39,7 @@ export default function TechBadge({ name, icon, label, iconSize = "w-4 h-4", ico
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 px-1 py-0.5 rounded border border-border bg-secondary-50 text-[11px] text-text-muted shrink-0 whitespace-nowrap">
+    <span className={`${chipCls} whitespace-nowrap`}>
       <DevIcon src={resolvedIcon} className={iconSize} />
       {label ?? LABEL_MAP[name] ?? name}
     </span>

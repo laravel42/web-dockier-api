@@ -182,7 +182,7 @@ export default function NotificationChannelsTab() {
                 <div className="size-8  flex items-center justify-center shrink-0 text-text-secondary">
                   {channelIcons[ch.type] || channelIcons.in_app}
                 </div>
-                <p className="text-sm font-bold text-text">{channelNames[ch.type] || ch.type}</p>
+                <p className="text-sm font-semibold text-text">{channelNames[ch.type] || ch.type}</p>
               </div>
               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${ch.enabled ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>
                 {ch.enabled ? "Enabled" : "Disabled"}

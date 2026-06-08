@@ -31,7 +31,7 @@ Dockier brings together the tools developers need to ship secure code faster:
 Each project has a rich detail page featuring:
 
 - **Repository info** with branch, last commit (hash, author, time ago), and tech stack badges (top 4 detected technologies by confidence — frameworks, languages, runtimes, tools)
-- **Project Overview** — Tabbed AI-generated documentation with 8 sections plus Sensitive Data and Dependencies tabs
+- **Project Overview** — Tabbed AI-generated documentation with 8 sections, plus pattern-based Sensitive Data and Dependencies tabs
 - **KPI Dashboard** — Stars, forks, open issues, watchers, commits, contributors, and language breakdown with percentage bars
 - **Contributors Grid** — Top contributors with avatars and commit counts
 - **Recent Commits** — Last 5 commits with author, message, hash, and relative time

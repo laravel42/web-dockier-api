@@ -11,6 +11,12 @@ import { listFindings } from "./domain/findings.js";
 import { listCustomRules, createCustomRule, updateCustomRule, deleteCustomRule } from "./domain/custom-rules.js";
 import { listSemgrepRules, getSemgrepRuleContent, updateSemgrepRuleContent } from "./domain/semgrep-rules.js";
 import { listRuleOverrides, upsertRuleOverride } from "./domain/rule-overrides.js";
+import {
+  listSonarProfiles,
+  listSonarRules,
+  SonarNotConfiguredError,
+  toggleSonarRule,
+} from "./domain/sonarqube.js";
 
 export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -113,8 +119,10 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         body: z
           .object({
             enableSemgrep: z.boolean().optional(),
+            enableOpengrep: z.boolean().optional(),
             enableSonarqube: z.boolean().optional(),
             enableCustomRules: z.boolean().optional(),
+            enableSensitiveData: z.boolean().optional(),
           })
           .optional(),
         response: { 200: scanSchema },
@@ -122,7 +130,12 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      return await runScan(request.params.scanId, auth.tenantId);
+      const body = request.body ?? {};
+      const enableSemgrep = body.enableOpengrep ?? body.enableSemgrep;
+      return await runScan(request.params.scanId, auth.tenantId, {
+        ...body,
+        enableSemgrep,
+      });
     },
   );
 
@@ -324,7 +337,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
   );
 
-  // ─── SonarQube Stubs ───────────────────────────────────────────────────────
+  // ─── SonarQube ─────────────────────────────────────────────────────────────
 
   typed.get(
     "/code-analysis/sonar/profiles",
@@ -332,11 +345,21 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
-        summary: "List SonarQube profiles (migration stub)",
+        summary: "List SonarQube quality profiles",
         response: { 200: z.object({ profiles: z.array(z.any()) }) },
       },
     },
-    async () => ({ profiles: [] }),
+    async () => {
+      try {
+        const profiles = await listSonarProfiles();
+        return { profiles };
+      } catch (err) {
+        if (err instanceof SonarNotConfiguredError) {
+          throw app.httpErrors.serviceUnavailable(err.message);
+        }
+        throw err;
+      }
+    },
   );
 
   typed.get(
@@ -345,12 +368,21 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
-        summary: "List SonarQube rules (migration stub)",
+        summary: "List SonarQube rules for a quality profile",
         querystring: z.object({ profileKey: z.string(), page: z.coerce.number().optional(), query: z.string().optional() }),
         response: { 200: z.object({ rules: z.array(z.any()), total: z.number().int().nonnegative() }) },
       },
     },
-    async () => ({ rules: [], total: 0 }),
+    async (request) => {
+      try {
+        return await listSonarRules(request.query);
+      } catch (err) {
+        if (err instanceof SonarNotConfiguredError) {
+          throw app.httpErrors.serviceUnavailable(err.message);
+        }
+        throw err;
+      }
+    },
   );
 
   typed.post(
@@ -359,12 +391,22 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
-        summary: "Toggle SonarQube rule activation (migration stub)",
+        summary: "Toggle SonarQube rule activation in a quality profile",
         body: z.object({ profileKey: z.string(), ruleKey: z.string(), activate: z.boolean() }),
         response: { 200: successResponseSchema },
       },
     },
-    async () => ({ success: true as const }),
+    async (request) => {
+      try {
+        await toggleSonarRule(request.body);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof SonarNotConfiguredError) {
+          throw app.httpErrors.serviceUnavailable(err.message);
+        }
+        throw err;
+      }
+    },
   );
 
   // ─── Rule Overrides ────────────────────────────────────────────────────────

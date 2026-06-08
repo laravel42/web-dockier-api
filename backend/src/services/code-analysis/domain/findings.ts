@@ -9,6 +9,56 @@ export interface ListFindingsParams {
   severity?: string;
 }
 
+export interface FindingWithScanContext {
+  id: string;
+  scanId: string;
+  ruleId: string;
+  severity: string;
+  message: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  snippet: string;
+  connectionId: string;
+  repo: string;
+  branch: string;
+}
+
+export async function getFindingById(findingId: string, tenantId: string): Promise<FindingWithScanContext> {
+  const { data: findingRow, error: findingError } = await supabaseAdmin
+    .from("findings")
+    .select("id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,organization_id")
+    .eq("id", findingId)
+    .maybeSingle();
+  throwOnError(findingError, CodeAnalysisError, { internalMsg: "Failed to load finding" });
+  if (!findingRow) throw new CodeAnalysisError("Finding not found", "not_found");
+  if (findingRow.organization_id !== tenantId) throw new CodeAnalysisError("Not your finding", "forbidden");
+
+  const { data: scanRow, error: scanError } = await supabaseAdmin
+    .from("scans")
+    .select("connection_id,repo,branch,organization_id")
+    .eq("id", findingRow.scan_id)
+    .maybeSingle();
+  throwOnError(scanError, CodeAnalysisError, { internalMsg: "Failed to load scan for finding" });
+  if (!scanRow) throw new CodeAnalysisError("Scan not found for finding", "not_found");
+  if (scanRow.organization_id !== tenantId) throw new CodeAnalysisError("Not your finding", "forbidden");
+
+  return {
+    id: findingRow.id,
+    scanId: findingRow.scan_id,
+    ruleId: findingRow.rule_id,
+    severity: findingRow.severity,
+    message: findingRow.message,
+    filePath: findingRow.file_path,
+    startLine: findingRow.start_line,
+    endLine: findingRow.end_line,
+    snippet: findingRow.snippet ?? "",
+    connectionId: scanRow.connection_id,
+    repo: scanRow.repo,
+    branch: scanRow.branch,
+  };
+}
+
 export async function listFindings(params: ListFindingsParams) {
   const { scanId, tenantId, severity } = params;
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { sendEmailNotification } from "./email-dispatch.js";
 
 export type NotificationsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
@@ -134,6 +135,15 @@ export async function sendNotification(params: SendNotificationParams): Promise<
         });
         clearTimeout(timeoutId);
         return true;
+      } else if (channel.type === "email" && config?.email) {
+        const sent = await sendEmailNotification({
+          to: config.email,
+          title,
+          message,
+          idempotencyKey: `notification/${tenantId}/${channel.id}/${title}`,
+        });
+        clearTimeout(timeoutId);
+        return sent;
       } else if (channel.type === "webhook" && config?.url) {
         await fetch(config.url, {
           method: "POST",

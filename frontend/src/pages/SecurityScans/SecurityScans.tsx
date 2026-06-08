@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useSecurityScans } from "./useSecurityScans";
 import ScanProjectCard from "./sections/ScanProjectCard";
 import ScanProjectTable from "./sections/ScanProjectTable";
@@ -6,11 +7,12 @@ import PageHeader from "../../components/ui/PageHeader";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import EmptyState from "../../components/ui/EmptyState";
+import ListToolbar from "../../components/ui/ListToolbar";
+import { EmptyMessage } from "../../components/ui/PageError";
 import ShieldCheckIcon from "../../components/icons/outlined/ShieldCheckIcon";
-import GridIcon from "../../components/icons/outlined/GridIcon";
-import Bars3Icon from "../../components/icons/outlined/Bars3Icon";
 
 export default function SecurityScans() {
+  const [search, setSearch] = useState("");
   const {
     navigate,
     loading,
@@ -20,28 +22,19 @@ export default function SecurityScans() {
     grouped,
     sortedProjectIds,
     projectLangs,
+    projectBadgeLoading,
     viewMode,
     changeViewMode,
   } = useSecurityScans();
 
-  const viewToggle = (
-    <div className="flex items-center bg-secondary-50 border border-border rounded-lg p-0.5 h-10">
-      <button
-        onClick={() => changeViewMode("cards")}
-        className={`p-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
-        title="Card view"
-      >
-        <GridIcon />
-      </button>
-      <button
-        onClick={() => changeViewMode("table")}
-        className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
-        title="Table view"
-      >
-        <Bars3Icon />
-      </button>
-    </div>
-  );
+  const filteredProjectIds = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sortedProjectIds;
+    return sortedProjectIds.filter((id) => {
+      const name = (projects[id]?.name || id).toLowerCase();
+      return name.includes(q);
+    });
+  }, [sortedProjectIds, projects, search]);
 
   if (loading) {
     return (
@@ -66,7 +59,7 @@ export default function SecurityScans() {
       <div>
         <PageHeader title="Security Scans" />
         <EmptyState
-          icon={<ShieldCheckIcon className="size-12 " />}
+          icon={<ShieldCheckIcon className="size-12" />}
           description="No projects yet. Create a project first to run security scans."
           action={{ label: "Go to Projects", onClick: () => navigate("/projects") }}
         />
@@ -76,19 +69,34 @@ export default function SecurityScans() {
 
   return (
     <div>
-      <PageHeader title="Security Scans" actions={viewToggle} />
-      {viewMode === "table" ? (
+      <PageHeader
+        title="Security Scans"
+        description={`${sortedProjectIds.length} ${sortedProjectIds.length === 1 ? "project" : "projects"}`}
+      />
+
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by project name"
+        viewMode={viewMode}
+        onViewModeChange={changeViewMode}
+      />
+
+      {filteredProjectIds.length === 0 ? (
+        <EmptyMessage>No projects match your search.</EmptyMessage>
+      ) : viewMode === "table" ? (
         <ScanProjectTable
-          sortedProjectIds={sortedProjectIds}
+          sortedProjectIds={filteredProjectIds}
           grouped={grouped}
           projects={projects}
           projectLangs={projectLangs}
+          projectBadgeLoading={projectBadgeLoading}
           onSelectScan={(scanId) => navigate(`/security/${scanId}`)}
           onSelectEmpty={(projectId) => navigate(`/security/project/${projectId}`)}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {sortedProjectIds.map((projectId) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredProjectIds.map((projectId) => {
             const projectScans = grouped[projectId];
             if (!projectScans || projectScans.length === 0) {
               return (
@@ -97,6 +105,7 @@ export default function SecurityScans() {
                   project={projects[projectId]}
                   projectId={projectId}
                   badges={projectLangs[projectId]}
+                  badgeLoading={projectBadgeLoading.has(projectId)}
                   onSelect={() => navigate(`/security/project/${projectId}`)}
                 />
               );
@@ -108,6 +117,7 @@ export default function SecurityScans() {
                 projectId={projectId}
                 scans={projectScans}
                 badges={projectLangs[projectId]}
+                badgeLoading={projectBadgeLoading.has(projectId)}
                 onSelect={(scanId) => navigate(`/security/${scanId}`)}
               />
             );

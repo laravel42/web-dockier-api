@@ -35,7 +35,7 @@ export function useSecurityScans() {
     return acc;
   }, {});
 
-  const projectLangs = useProjectBadges(Object.values(projects));
+  const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(Object.values(projects));
 
   const sortedProjectIds = Object.keys(projects).sort((a, b) => {
     const aScans = grouped[a];
@@ -61,6 +61,7 @@ export function useSecurityScans() {
     projects,
     grouped,
     projectLangs,
+    projectBadgeLoading,
     sortedProjectIds,
     viewMode,
     changeViewMode,

@@ -28,7 +28,7 @@ export default function LastDeployCard({ lastDeploy, allProviders, destroying, o
 
   return (
     <div className="mb-6">
-      <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Last Deploy</h2>
+      <h2 className="text-sm font-semibold text-text mb-4">Last Deploy</h2>
       <div className={`${cardCls} p-5`}>
         <div className="flex items-center gap-3 mb-4">
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[lastDeploy.status] || "bg-secondary-100 text-text-muted"}`}>{lastDeploy.status}</span>

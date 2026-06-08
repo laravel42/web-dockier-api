@@ -1,5 +1,5 @@
 import type { Deployment, Project } from "../../../types";
-import { statusBadgeColors as statusColors } from "../../../utils/styles";
+import { statusBadgeColors as statusColors, typeCaption, typePageTitle } from "../../../utils/styles";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 
 interface Props {
@@ -17,7 +17,7 @@ export default function DeployHeader({ deploy, project, onNavigateProject }: Pro
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold text-text">Deployment</h1>
+            <h1 className={typePageTitle}>Deployment</h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[deploy.status] || "bg-secondary-100 text-text-muted"}`}>
               {deploy.status}
             </span>
@@ -31,9 +31,9 @@ export default function DeployHeader({ deploy, project, onNavigateProject }: Pro
                 {project.name}
               </button>
             )}
-            <span className="text-sm text-text-muted font-mono">{deploy.repo}</span>
-            <span className="text-xs text-text-muted">{deploy.branch}</span>
-            <span className="text-xs text-text-muted">{new Date(deploy.createdAt).toLocaleString()}</span>
+            <span className={`${typeCaption} font-mono`}>{deploy.repo}</span>
+            <span className={typeCaption}>{deploy.branch}</span>
+            <span className={typeCaption}>{new Date(deploy.createdAt).toLocaleString()}</span>
           </div>
         </div>
       </div>

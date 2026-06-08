@@ -6,6 +6,12 @@ node_modules
 .DS_Store
 backend/dist
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/
+
 # Supabase
 supabase/.branches
 supabase/.temp

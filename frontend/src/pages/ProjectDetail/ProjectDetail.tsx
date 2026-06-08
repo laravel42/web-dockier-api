@@ -74,7 +74,13 @@ export default function ProjectDetail() {
         <ProjectDetailsCard project={project} lastCommitDate={stats?.lastCommitDate} />
       </div>
 
-      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} onRefresh={refreshAnalysis} projectId={project.id} />
+      <ProjectDescription
+        analysis={analysis}
+        analysisLoading={analysisLoading}
+        onRefresh={refreshAnalysis}
+        projectId={project.id}
+        project={project}
+      />
 
       {/* UserJourneyTree hidden for now */}
 

@@ -8,6 +8,8 @@
   "scripts": {
     "test": "vitest --run",
     "test:watch": "vitest",
+    "test:e2e": "pnpm --filter frontend test:e2e",
+    "test:e2e:install": "pnpm --filter frontend test:e2e:install",
     "db:migrate": "bash infra/setup-external-db.sh",
     "postinstall": "python3 pipx install semgrep || pipx install semgrep || true",
     "backend:dev": "pnpm --filter @dockier/backend-fastify dev",

@@ -245,7 +245,7 @@ export default function UsersTab() {
                 <tr key={u.id} className="hover:bg-secondary-50/30 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="size-8  rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0">
+                      <div className="size-8  rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-semibold shrink-0">
                         {(u.name || u.email).charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">

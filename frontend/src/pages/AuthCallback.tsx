@@ -22,7 +22,7 @@ export default function AuthCallback() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-danger-500 mb-4" role="alert">{error}</p>
           <a href="/login" className="text-primary-500 font-medium hover:underline text-sm">Back to login</a>
@@ -32,7 +32,7 @@ export default function AuthCallback() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <Spinner className="size-8 " />
         <p className="text-text-secondary text-sm">Authenticating...</p>

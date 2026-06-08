@@ -27,7 +27,12 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16),
   CORS_ORIGIN: z.string().default("*"),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   WEBHOOK_SECRET: z.string().optional(),
+  SONARQUBE_URL: z.string().url().optional(),
+  SONARQUBE_TOKEN: z.string().min(1).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_FROM_EMAIL: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

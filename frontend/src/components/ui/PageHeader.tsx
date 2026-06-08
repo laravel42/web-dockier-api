@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { typePageDesc, typePageTitle } from "../../utils/styles";
 
 interface PageHeaderProps {
   title: string;
@@ -14,14 +15,10 @@ export default function PageHeader({
   className = "",
 }: PageHeaderProps) {
   return (
-    <div className={`flex items-center justify-between gap-4 mb-6 ${className}`}>
+    <div className={`flex flex-wrap items-end justify-between gap-3 mb-8 ${className}`}>
       <div className="min-w-0">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">
-          {title}
-        </h1>
-        {description && (
-          <p className="text-sm text-text-secondary mt-1">{description}</p>
-        )}
+        <h1 className={typePageTitle}>{title}</h1>
+        {description && <p className={`${typePageDesc} mt-1`}>{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </div>

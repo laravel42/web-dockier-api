@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cardCls } from "../../../utils/styles";
+import { statCardCls, typeStatDelta, typeStatLabel, typeStatValue } from "../../../utils/styles";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
@@ -10,9 +10,8 @@ import WarningIcon from "../../../components/icons/outlined/WarningIcon";
 interface KpiItem {
   label: string;
   value: number;
+  delta: string;
   icon: ReactNode;
-  color: string;
-  onClick: () => void;
 }
 
 interface Props {
@@ -22,36 +21,49 @@ interface Props {
   failedDeploys: number;
   scans: number;
   totalFindings: number;
-  onNavigate: (path: string) => void;
   showDeploys?: boolean;
 }
 
-export default function KpiGrid({ projects, deploys, successDeploys, failedDeploys, scans, totalFindings, onNavigate, showDeploys = true }: Props) {
-  const iconCls = "w-5 h-5";
+export default function KpiGrid({
+  projects,
+  deploys,
+  successDeploys,
+  failedDeploys,
+  scans,
+  totalFindings,
+  showDeploys = true,
+}: Props) {
+  const iconCls = "size-4 text-primary-500";
+
   const kpis: KpiItem[] = [
-    { label: "Projects", value: projects, icon: <FolderIcon className={iconCls} />, color: "text-primary-500", onClick: () => onNavigate("/projects") },
-    ...(showDeploys ? [
-      { label: "Deployments", value: deploys, icon: <RocketIcon className={iconCls} />, color: "text-primary-500", onClick: () => onNavigate("/deploy") },
-      { label: "Successful", value: successDeploys, icon: <CheckCircleIcon className={iconCls} />, color: "text-success-500", onClick: () => onNavigate("/deploy") },
-      { label: "Failed", value: failedDeploys, icon: <AlertCircleIcon className={iconCls} />, color: "text-danger-500", onClick: () => onNavigate("/deploy") },
-    ] : []),
-    { label: "Scans", value: scans, icon: <ShieldCheckIcon className={iconCls} />, color: "text-success-500", onClick: () => onNavigate("/security") },
-    { label: "Findings", value: totalFindings, icon: <WarningIcon className={iconCls} />, color: totalFindings > 0 ? "text-warning-500" : "text-text-muted", onClick: () => onNavigate("/security") },
+    { label: "Projects", value: projects, delta: "Connected repositories", icon: <FolderIcon className={iconCls} /> },
+    ...(showDeploys
+      ? [
+          { label: "Deployments", value: deploys, delta: "All time", icon: <RocketIcon className={iconCls} /> },
+          { label: "Successful", value: successDeploys, delta: "Completed deploys", icon: <CheckCircleIcon className={iconCls} /> },
+          { label: "Failed", value: failedDeploys, delta: "Needs attention", icon: <AlertCircleIcon className={iconCls} /> },
+        ]
+      : []),
+    { label: "Scans", value: scans, delta: "Security runs", icon: <ShieldCheckIcon className={iconCls} /> },
+    {
+      label: "Findings",
+      value: totalFindings,
+      delta: totalFindings > 0 ? "Across all scans" : "No issues detected",
+      icon: <WarningIcon className={iconCls} />,
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-8">
       {kpis.map((kpi) => (
-        <button
-          key={kpi.label}
-          type="button"
-          onClick={kpi.onClick}
-          className={`${cardCls} p-4 text-center hover:shadow-md transition-all`}
-        >
-          <div className={`mx-auto mb-2 ${kpi.color} flex justify-center`}>{kpi.icon}</div>
-          <p className="text-xl font-bold text-text">{kpi.value}</p>
-          <p className="text-xs text-text-muted mt-1">{kpi.label}</p>
-        </button>
+        <div key={kpi.label} className={statCardCls}>
+          <div className="flex items-center justify-between">
+            <span className={typeStatLabel}>{kpi.label}</span>
+            {kpi.icon}
+          </div>
+          <div className={`mt-3 ${typeStatValue}`}>{kpi.value}</div>
+          <div className={`mt-1 ${typeStatDelta}`}>{kpi.delta}</div>
+        </div>
       ))}
     </div>
   );

@@ -3,13 +3,18 @@ import type { RepoAnalysis, SensitiveField, Dependency } from "../../../componen
 import MDEditor from "@uiw/react-md-editor";
 import { cardCls } from "../../../utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "../../../components/badges/SensitivityBadge";
+import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import TechBadge from "../../../components/TechBadge";
+import { useProjectBadges } from "../../../hooks/useProjectBadges";
 import { gitApi } from "../../../services/api";
+import type { Project, TechBadgeInfo } from "../../../types";
 
 interface Props {
   analysis: RepoAnalysis | null;
   analysisLoading: boolean;
   onRefresh?: () => void;
   projectId?: string;
+  project?: Pick<Project, "id" | "repository" | "branch" | "connectionId" | "platform">;
 }
 
 const SECTION_TABS = [
@@ -22,7 +27,7 @@ const SECTION_TABS = [
   { key: "deployment",   label: "Deployment" },
 ] as const;
 
-type TabKey = typeof SECTION_TABS[number]["key"] | "sensitiveData" | "dependencies";
+type TabKey = typeof SECTION_TABS[number]["key"] | "sensitiveData" | "dependencies" | "techStack";
 
 // ─── SQL Schema Parser ───
 
@@ -223,7 +228,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
           if (staticResults.length > 0) {
             onParsed(staticResults);
           } else {
-            setError("AI analysis failed and no sensitive fields detected statically.");
+            setError("Scan failed and no sensitive fields were detected in the schema.");
           }
         })
         .finally(() => setAiLoading(false));
@@ -260,7 +265,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
         <div className="text-3xl mb-3">📄</div>
         <p className="text-sm font-medium text-text mb-1">Drop your schema.sql here</p>
         <p className="text-xs text-text-muted mb-3">or click to browse</p>
-        <p className="text-[11px] text-text-muted">Accepts .sql files</p>
+        <p className="text-[11px] text-text-muted">Accepts .sql files · pattern-based scanner</p>
         <input
           ref={inputRef}
           type="file"
@@ -272,7 +277,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
       {aiLoading && (
         <div className="flex items-center gap-2 mt-3 justify-center">
           <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-text-muted">AI is analyzing your schema…</span>
+          <span className="text-xs text-text-muted">Pattern-based scanner is analyzing your schema…</span>
         </div>
       )}
       {error && (
@@ -640,10 +645,81 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
   );
 }
 
+// ─── Tech Stack Tab ───
+
+function TechStackTab({
+  techStack,
+  repoBadges,
+  badgesLoading,
+  platform,
+  analysisLoading,
+}: {
+  techStack: Array<{ name: string; category: string; confidence: number }> | undefined;
+  repoBadges: TechBadgeInfo[] | undefined;
+  badgesLoading: boolean;
+  platform?: string;
+  analysisLoading: boolean;
+}) {
+  const hasTechStack = (techStack?.length ?? 0) > 0;
+  const hasRepoBadges = (repoBadges?.length ?? 0) > 0;
+
+  if (!hasTechStack && !hasRepoBadges && (badgesLoading || analysisLoading)) {
+    return <TabSpinner label="Detecting tech stack…" />;
+  }
+
+  if (!hasTechStack && !hasRepoBadges) {
+    return <p className="text-sm text-text-muted py-6 text-center">No tech stack detected yet.</p>;
+  }
+
+  return (
+    <div className="space-y-5">
+      {(hasRepoBadges || badgesLoading || platform) && (
+        <div>
+          <p className="text-xs font-semibold text-dusk-400 dark:text-dusk-300 uppercase tracking-wide mb-2.5">
+            Repository Detection
+          </p>
+          <ProjectTechBadges
+            badges={repoBadges}
+            loading={badgesLoading}
+            platform={platform}
+            limit={12}
+          />
+        </div>
+      )}
+      {hasTechStack && (
+        <div>
+          <p className="text-xs font-semibold text-dusk-400 dark:text-dusk-300 uppercase tracking-wide mb-2.5">
+            AI Analysis
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {techStack!.map((t) => (
+              <div
+                key={t.name}
+                className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-dusk-200 dark:border-dusk-600 bg-dusk-50 dark:bg-dusk-800/40"
+              >
+                <TechBadge name={t.name} />
+                <span className="text-[11px] text-dusk-400 dark:text-dusk-300 shrink-0">{t.category}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───
 
-export default function ProjectDescription({ analysis, analysisLoading, onRefresh, projectId }: Props) {
+export default function ProjectDescription({ analysis, analysisLoading, onRefresh, projectId, project }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+
+  const badgeProjects = useMemo(
+    () => (project?.repository ? [project] : []),
+    [project],
+  );
+  const { badges: badgeMap, loadingIds } = useProjectBadges(badgeProjects);
+  const repoBadges = projectId ? badgeMap[projectId] : undefined;
+  const badgesLoading = projectId ? loadingIds.has(projectId) : false;
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
 
@@ -739,14 +815,29 @@ export default function ProjectDescription({ analysis, analysisLoading, onRefres
   }, [rawSections, description]);
 
   // Always build the full tab list
+  const techStackCount = analysis?.techStack?.length ?? 0;
+
   const allTabs: Array<{ key: TabKey; label: string }> = [
     ...SECTION_TABS.map(t => ({ key: t.key as TabKey, label: t.label })),
+    { key: "techStack" as TabKey, label: "Tech Stack" },
     { key: "dependencies" as TabKey, label: "Dependencies" },
     { key: "sensitiveData" as TabKey, label: "Sensitive Data" },
   ];
 
   // Render tab content with per-tab loading
   const renderTabContent = () => {
+    if (activeTab === "techStack") {
+      return (
+        <TechStackTab
+          techStack={analysis?.techStack}
+          repoBadges={repoBadges}
+          badgesLoading={badgesLoading}
+          platform={project?.platform}
+          analysisLoading={analysisLoading}
+        />
+      );
+    }
+
     // Dependencies tab
     if (activeTab === "dependencies") {
       if (dependencies && dependencies.length > 0) {
@@ -835,6 +926,9 @@ export default function ProjectDescription({ analysis, analysisLoading, onRefres
               {tab.label}
               {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
                 <span className="text-[9px] bg-red-200 text-red-700 px-1 rounded-full ml-1">{uploadedSensitiveData.length}</span>
+              )}
+              {tab.key === "techStack" && techStackCount > 0 && (
+                <span className="text-[9px] bg-dusk-200 text-dusk-700 dark:bg-dusk-700 dark:text-dusk-200 px-1 rounded-full ml-1">{techStackCount}</span>
               )}
               {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
                 <span className="text-[9px] bg-blue-200 text-blue-700 px-1 rounded-full ml-1">{dependencies.length}</span>

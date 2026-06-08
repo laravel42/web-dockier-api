@@ -6,7 +6,9 @@ import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
-import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from "./domain/mr-generator.js";
+import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "./domain/mr-generator.js";
+import { getFindingById } from "../code-analysis/domain/findings.js";
+import { CodeAnalysisError } from "../code-analysis/domain/scans.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
@@ -957,16 +959,17 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         summary: "Create fix MR/PR",
         params: z.object({ connectionId: z.string().uuid() }),
         body: z.object({
-          owner: z.string(),
-          repo: z.string(),
-          branch: z.string(),
-          filePath: z.string(),
-          startLine: z.number(),
-          endLine: z.number(),
-          ruleId: z.string(),
-          severity: z.string(),
-          message: z.string(),
-          snippet: z.string(),
+          findingId: z.string().uuid().optional(),
+          owner: z.string().optional(),
+          repo: z.string().optional(),
+          branch: z.string().optional(),
+          filePath: z.string().optional(),
+          startLine: z.number().optional(),
+          endLine: z.number().optional(),
+          ruleId: z.string().optional(),
+          severity: z.string().optional(),
+          message: z.string().optional(),
+          snippet: z.string().optional(),
           aiType: z.string().optional(),
           aiConfig: z.record(z.string(), z.string()).optional(),
           assignee: z.string().optional(),
@@ -978,8 +981,67 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+
+      let body = request.body;
+      if (body.findingId) {
+        try {
+          const finding = await getFindingById(body.findingId, auth.tenantId);
+          if (finding.connectionId !== conn.id) {
+            throw app.httpErrors.badRequest("Finding belongs to a different git connection");
+          }
+          const { owner, repo } = parseRepoKey(finding.repo);
+          body = {
+            ...body,
+            owner,
+            repo,
+            branch: finding.branch,
+            filePath: finding.filePath,
+            startLine: finding.startLine,
+            endLine: finding.endLine,
+            ruleId: finding.ruleId,
+            severity: finding.severity,
+            message: finding.message,
+            snippet: finding.snippet,
+            aiType: body.aiType ?? "openai",
+          };
+        } catch (error) {
+          if (error instanceof CodeAnalysisError) {
+            throw app.httpErrors.createError(error.code === "not_found" ? 404 : 403, error.message);
+          }
+          throw error;
+        }
+      }
+
+      const required = ["owner", "repo", "branch", "filePath", "startLine", "endLine", "ruleId", "severity", "message"] as const;
+      for (const key of required) {
+        if (body[key] === undefined || body[key] === null || body[key] === "") {
+          throw app.httpErrors.badRequest(`Missing required field: ${key}`);
+        }
+      }
+
       try {
-        return await createMergeRequest(conn, request.body);
+        return await createMergeRequest(
+          conn,
+          {
+            owner: body.owner!,
+            repo: body.repo!,
+            branch: body.branch!,
+            filePath: body.filePath!,
+            startLine: body.startLine!,
+            endLine: body.endLine!,
+            ruleId: body.ruleId!,
+            severity: body.severity!,
+            message: body.message!,
+            snippet: body.snippet || "",
+            aiType: body.aiType,
+            assignee: body.assignee,
+            reviewer: body.reviewer,
+          },
+          {
+            openAiApiKey: env.OPENAI_API_KEY,
+            openAiModel: env.OPENAI_MODEL,
+          },
+        );
       } catch (error) {
         throw app.httpErrors.badRequest((error as Error).message);
       }

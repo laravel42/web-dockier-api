@@ -2,7 +2,7 @@ import { useState } from "react";
 import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
-import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { inputCls, btnPrimary, btnDanger, typeCaption, typePanelDesc, typePanelTitle } from "../../utils/styles";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
@@ -51,8 +51,8 @@ export default function SshKeysTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-base font-semibold text-text">SSH Keys</h2>
-          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
+          <h2 className={typePanelTitle}>SSH Keys</h2>
+          <p className={`${typePanelDesc} mt-0.5`}>SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
         </div>
         {canManage && (
           <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
@@ -97,9 +97,9 @@ export default function SshKeysTab() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-base font-bold text-text">{k.label}</p>
-                  <p className="text-xs text-text-muted font-mono mt-0.5">{truncateKey(k.publicKey)}</p>
-                  <p className="text-xs text-text-muted mt-0.5">Added {new Date(k.createdAt).toLocaleDateString()}</p>
+                  <p className={`${typePanelTitle} truncate`}>{k.label}</p>
+                  <p className={`${typeCaption} font-mono mt-0.5`}>{truncateKey(k.publicKey)}</p>
+                  <p className={`${typeCaption} mt-0.5`}>Added {new Date(k.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
               <button onClick={() => setDeleteId(k.id)} className={btnDanger}>Remove</button>

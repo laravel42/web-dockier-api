@@ -184,7 +184,7 @@ export default function SourceControlTab() {
                   <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
+                  <p className="text-sm font-semibold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
                   <p className="text-xs text-text-muted truncate">{conn.label}</p>
                 </div>
               </div>

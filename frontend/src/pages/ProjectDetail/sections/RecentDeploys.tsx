@@ -20,7 +20,7 @@ export default function RecentDeploys({ deploys, allProviders, navigate }: Props
 
   return (
     <div className="mb-6">
-      <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Deploys</h2>
+      <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
       <div className={`${cardCls} divide-y divide-border`}>
         {deploys.map((d) => (
           <div key={d.id} className="px-4 py-3 flex items-start gap-3">

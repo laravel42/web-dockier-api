@@ -30,7 +30,7 @@ export function useDeploy() {
 
   const deployments = data?.deployments ?? [];
   const projects = data?.projects ?? [];
-  const projectLangs = useProjectBadges(projects);
+  const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projects);
 
   const projectById: Record<string, Project> = {};
   for (const p of projects) {
@@ -57,6 +57,7 @@ export function useDeploy() {
     error,
     reload,
     projectLangs,
+    projectBadgeLoading,
     projectById,
     grouped,
     viewMode,

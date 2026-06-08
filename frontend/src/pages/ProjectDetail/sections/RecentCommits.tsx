@@ -14,7 +14,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
   if (commitsLoading) {
     return (
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
         <div className={`${cardCls} p-6 flex justify-center`}>
           <Spinner className="size-5 " />
         </div>
@@ -25,7 +25,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
   if (commitsError) {
     return (
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
         <div className={`${cardCls} p-4`}>
           <p className="text-sm text-danger-500">{commitsError}</p>
         </div>
@@ -37,7 +37,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
 
   return (
     <div className="mb-6">
-      <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
+      <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
       <div className={`${cardCls} divide-y divide-border`}>
         {commits.map((c) => (
           <div key={c.hash} className="px-4 py-3 flex items-start gap-3">

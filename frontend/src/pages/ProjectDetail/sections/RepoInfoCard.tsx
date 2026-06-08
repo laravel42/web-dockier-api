@@ -24,7 +24,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
   if (isTemplate) {
     return (
       <div className={`${cardCls} p-5`}>
-        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Template</h2>
+        <h2 className="text-sm font-semibold text-text mb-4">Template</h2>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <LinkIcon className="size-5  text-text-muted shrink-0" />
@@ -48,7 +48,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
 
   return (
     <div className={`${cardCls} p-5`}>
-      <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Repository</h2>
+      <h2 className="text-sm font-semibold text-text mb-4">Repository</h2>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <LinkIcon className="size-5  text-text-muted shrink-0" />

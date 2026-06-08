@@ -6,6 +6,8 @@ Instructions for AI coding agents working on this codebase.
 
 Dockier is a developer platform that connects source code repositories to security scanning, AI-powered project analysis, deployment automation, and project management — all from a single dashboard. See `PRODUCT.md` for the full feature set and `DESCRIPTION.md` for goals, scope, non-goals, and success criteria.
 
+**UX parity program:** In-app UX is aligned with the web design system in [`../web-berry/docs/design-guidelines.html`](../web-berry/docs/design-guidelines.html) (Dockier tokens: `dockier-*`, `dusk`, `cream`, `seed`; Bely/Soleil via Adobe Typekit). Delivery is tracked in Linear project *Dockier App — UX Parity & Hardening*; see `docs/delivery/multi-agent-playbook.md` for agent routing and quota guidelines.
+
 ## Tech stack
 
 - **Backend:** Fastify + TypeScript (modular service routes in `backend/src/services`)

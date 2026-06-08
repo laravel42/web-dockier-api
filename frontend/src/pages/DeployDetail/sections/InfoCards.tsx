@@ -19,12 +19,12 @@ export default function InfoCards({ deploy, provKey, providerStyle }: Props) {
             showName={false}
             iconSize="w-3.5 h-3.5"
           />
-          <p className={`text-sm font-bold ${providerStyle.text}`}>{provKey.toUpperCase()}</p>
+          <p className={`text-sm font-semibold ${providerStyle.text}`}>{provKey.toUpperCase()}</p>
         </div>
         <p className="text-[10px] text-text-muted">Provider</p>
       </div>
       <div className={`${cardCls} px-3 py-2 text-center`}>
-        <p className="text-sm font-bold text-text">{strategyLabels[deploy.deployStrategy] || deploy.deployStrategy}</p>
+        <p className="text-sm font-semibold text-text">{strategyLabels[deploy.deployStrategy] || deploy.deployStrategy}</p>
         <p className="text-[10px] text-text-muted">Strategy</p>
       </div>
       {deploy.appUrl && (
@@ -33,7 +33,7 @@ export default function InfoCards({ deploy, provKey, providerStyle }: Props) {
             href={deploy.appUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm font-bold text-primary-500 hover:text-primary-700 transition-colors truncate block"
+            className="text-sm font-semibold text-primary-500 hover:text-primary-700 transition-colors truncate block"
           >
             {deploy.appUrl.replace(/^https?:\/\//, "").slice(0, 25)}
           </a>
@@ -42,7 +42,7 @@ export default function InfoCards({ deploy, provKey, providerStyle }: Props) {
       )}
       {deploy.dockerImage && (
         <div className={`${cardCls} px-3 py-2 text-center`}>
-          <p className="text-sm font-bold text-text truncate" title={deploy.dockerImage}>{deploy.dockerImage.split("/").pop()?.split(":")[0] || deploy.dockerImage}</p>
+          <p className="text-sm font-semibold text-text truncate" title={deploy.dockerImage}>{deploy.dockerImage.split("/").pop()?.split(":")[0] || deploy.dockerImage}</p>
           <p className="text-[10px] text-text-muted">Docker Image</p>
         </div>
       )}

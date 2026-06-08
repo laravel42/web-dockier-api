@@ -7,26 +7,56 @@ import {
 } from "../utils/projectBadgeCache";
 
 describe("selectProjectBadges", () => {
-  it("returns top 4 badges sorted by confidence", () => {
+  it("returns top badges sorted by confidence after whitelist filtering", () => {
     const badges = selectProjectBadges([
       { name: "TypeScript", category: "language", confidence: 90 },
       { name: "React", category: "framework", confidence: 95 },
       { name: "Node.js", category: "runtime", confidence: 80 },
       { name: "Docker", category: "infra", confidence: 70 },
       { name: "Vite", category: "tool", confidence: 60 },
+      { name: "Tailwind CSS", category: "tool", confidence: 85 },
     ]);
 
-    expect(badges).toHaveLength(4);
-    expect(badges.map((b) => b.name)).toEqual(["React", "TypeScript", "Node.js", "Docker"]);
+    expect(badges).toHaveLength(1);
+    expect(badges[0]?.name).toBe("React");
   });
 
-  it("includes languages and runtimes without whitelist filtering", () => {
+  it("drops redundant parent language when a framework is detected", () => {
     const badges = selectProjectBadges([
       { name: "PHP", category: "language", confidence: 90 },
       { name: "Laravel", category: "framework", confidence: 95 },
     ]);
 
-    expect(badges.map((b) => b.name)).toEqual(["Laravel", "PHP"]);
+    expect(badges.map((b) => b.name)).toEqual(["Laravel"]);
+  });
+
+  it("drops React when Next.js is detected", () => {
+    const badges = selectProjectBadges([
+      { name: "React", category: "framework", confidence: 95 },
+      { name: "Next.js", category: "framework", confidence: 98 },
+      { name: "TypeScript", category: "language", confidence: 90 },
+    ]);
+
+    expect(badges.map((b) => b.name)).toEqual(["Next.js"]);
+  });
+
+  it("hides secondary badges when a major framework is present", () => {
+    const badges = selectProjectBadges([
+      { name: "Laravel", category: "framework", confidence: 95 },
+      { name: "Tailwind CSS", category: "tool", confidence: 90 },
+      { name: "Prisma", category: "database", confidence: 85 },
+    ]);
+
+    expect(badges.map((b) => b.name)).toEqual(["Laravel"]);
+  });
+
+  it("keeps secondary badges when no major framework is detected", () => {
+    const badges = selectProjectBadges([
+      { name: "Tailwind CSS", category: "tool", confidence: 90 },
+      { name: "Prisma", category: "database", confidence: 85 },
+    ]);
+
+    expect(badges.map((b) => b.name)).toEqual(["Tailwind CSS", "Prisma"]);
   });
 });
 

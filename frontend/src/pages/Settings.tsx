@@ -22,15 +22,15 @@ export default function Settings() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Settings" />
+        <PageHeader title="Settings" description="Account, team, and integrations." />
         <PageLoading />
       </div>
     );
   }
 
   const tabCls = (active: boolean) =>
-    `h-9 px-4 text-sm font-medium rounded-[var(--radius-btn)] transition-colors ${
-      active ? "bg-primary-500 text-white" : "text-text-secondary hover:bg-secondary-50"
+    `h-9 px-4 text-sm font-medium rounded-md transition-colors ${
+      active ? "bg-primary-500/10 text-text" : "text-text-muted hover:bg-card/60 hover:text-text"
     }`;
 
   const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
@@ -48,7 +48,7 @@ export default function Settings() {
 
   return (
     <div>
-      <PageHeader title="Settings" />
+      <PageHeader title="Settings" description="Account, team, and integrations." />
       <div className="flex flex-wrap gap-2 mb-6" role="tablist">
         {tabs.filter((t) => t.visible).map(({ key, label }) => (
           <button

@@ -6,6 +6,7 @@ import { useDashboard } from "./useDashboard";
 import { usePermissions } from "../../context/PermissionsContext";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 import KpiGrid from "./sections/KpiGrid";
+import GettingStarted from "./sections/GettingStarted";
 import RecentDeploys from "./sections/RecentDeploys";
 import RecentScans from "./sections/RecentScans";
 
@@ -36,7 +37,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Dashboard" />
+        <PageHeader title="Dashboard" description="Overview of your projects, scans, and deployments." />
         <PageError message={error} onRetry={reload} />
       </div>
     );
@@ -46,6 +47,7 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Dashboard"
+        description="Overview of your projects, scans, and deployments."
         actions={
           <button
             onClick={() => navigate("/projects", { state: { openCreate: true } })}
@@ -57,34 +59,39 @@ export default function Dashboard() {
         }
       />
 
-      <KpiGrid
-        projects={projects.length}
-        deploys={deploys.length}
-        successDeploys={successDeploys}
-        failedDeploys={failedDeploys}
-        scans={scans.length}
-        totalFindings={totalFindings}
-        onNavigate={navigate}
-        showDeploys={canViewDeploys}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {canViewDeploys && (
-          <RecentDeploys
-            deploys={recentDeploys}
-            providers={providers}
-            projectMap={projectMap}
-            onViewAll={() => navigate("/deploy")}
-            onViewDeploy={(id) => navigate(`/deploy/${id}`)}
+      {projects.length === 0 ? (
+        <GettingStarted navigate={navigate} />
+      ) : (
+        <>
+          <KpiGrid
+            projects={projects.length}
+            deploys={deploys.length}
+            successDeploys={successDeploys}
+            failedDeploys={failedDeploys}
+            scans={scans.length}
+            totalFindings={totalFindings}
+            showDeploys={canViewDeploys}
           />
-        )}
-        <RecentScans
-          scans={recentScans}
-          projectMap={projectMap}
-          onViewAll={() => navigate("/security")}
-          onViewScan={(id) => navigate(`/security/${id}`)}
-        />
-      </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {canViewDeploys && (
+              <RecentDeploys
+                deploys={recentDeploys}
+                providers={providers}
+                projectMap={projectMap}
+                onViewAll={() => navigate("/deploy")}
+                onViewDeploy={(id) => navigate(`/deploy/${id}`)}
+              />
+            )}
+            <RecentScans
+              scans={recentScans}
+              projectMap={projectMap}
+              onViewAll={() => navigate("/security")}
+              onViewScan={(id) => navigate(`/security/${id}`)}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

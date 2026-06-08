@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { btnSecondary, cardCls } from "../../utils/styles";
+import { btnSecondary, cardCls, typeBodyMuted, typePanelTitle } from "../../utils/styles";
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -20,16 +20,10 @@ export default function EmptyState({
   return (
     <div className={`${cardCls} p-12 text-center`}>
       {icon && <div className="mb-4 flex justify-center text-text-muted">{icon}</div>}
-      {title && (
-        <h2 className="text-sm font-semibold text-text mb-2">{title}</h2>
-      )}
-      <p className="text-sm text-text-muted">{description}</p>
+      {title && <h2 className={`${typePanelTitle} mb-2`}>{title}</h2>}
+      <p className={typeBodyMuted}>{description}</p>
       {action && (
-        <button
-          type="button"
-          onClick={action.onClick}
-          className={`${btnSecondary} mt-4`}
-        >
+        <button type="button" onClick={action.onClick} className={`${btnSecondary} mt-4`}>
           {action.label}
         </button>
       )}
