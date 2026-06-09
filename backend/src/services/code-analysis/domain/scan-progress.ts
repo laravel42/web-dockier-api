@@ -9,6 +9,15 @@ const broadcastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DB_WRITE_INTERVAL_MS = 400;
 const WS_BROADCAST_INTERVAL_MS = 150;
 
+function clearProgressBroadcastTimer(scanId: string): void {
+  const timer = broadcastTimers.get(scanId);
+  if (timer) {
+    clearTimeout(timer);
+    broadcastTimers.delete(scanId);
+  }
+  pendingBroadcast.delete(scanId);
+}
+
 function scheduleProgressBroadcast(scanId: string, progress: ScanProgressPayload): void {
   pendingBroadcast.set(scanId, progress);
   if (broadcastTimers.has(scanId)) return;
@@ -47,6 +56,7 @@ export async function updateScanProgress(scanId: string, progress: ScanProgressP
 
 /** Force-write progress to DB (phase transitions, completion). */
 export async function persistScanProgress(scanId: string, progress: ScanProgressPayload): Promise<void> {
+  clearProgressBroadcastTimer(scanId);
   broadcastScanEvent(scanId, { type: "progress", scanId, progress });
 
   const { data, error: fetchError } = await supabaseAdmin
@@ -71,11 +81,6 @@ export function broadcastScanStatus(
   summary: Record<string, unknown>,
 ): void {
   lastDbWrite.delete(scanId);
-  pendingBroadcast.delete(scanId);
-  const timer = broadcastTimers.get(scanId);
-  if (timer) {
-    clearTimeout(timer);
-    broadcastTimers.delete(scanId);
-  }
+  clearProgressBroadcastTimer(scanId);
   broadcastScanEvent(scanId, { type: "status", scanId, status, summary });
 }

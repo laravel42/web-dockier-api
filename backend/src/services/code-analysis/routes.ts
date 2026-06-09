@@ -192,18 +192,31 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "List scan findings",
         params: z.object({ scanId: z.string().uuid() }),
-        querystring: z.object({ severity: z.string().optional() }),
-        response: { 200: z.object({ findings: z.array(findingSchema) }) },
+        querystring: z.object({
+          severity: z.string().optional(),
+          provider: z.enum(["semgrep", "sonar", "custom"]).optional(),
+          limit: z.coerce.number().int().positive().max(100).optional(),
+          offset: z.coerce.number().int().nonnegative().optional(),
+        }),
+        response: {
+          200: z.object({
+            findings: z.array(findingSchema),
+            total: z.number().int().nonnegative(),
+            hasMore: z.boolean(),
+          }),
+        },
       },
     },
     async (request) => {
       const auth = request.auth!;
-      const findings = await listFindings({
+      return await listFindings({
         scanId: request.params.scanId,
         tenantId: auth.tenantId,
         severity: request.query.severity,
+        provider: request.query.provider,
+        limit: request.query.limit,
+        offset: request.query.offset,
       });
-      return { findings };
     },
   );
 

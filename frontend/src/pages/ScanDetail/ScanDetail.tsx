@@ -6,6 +6,7 @@ import ScanHeader from "./sections/ScanHeader";
 import SummaryCards from "./sections/SummaryCards";
 import FindingsList from "./sections/FindingsList";
 import ScanSidebar from "./sections/ScanSidebar";
+import ScanProgressPanel from "./sections/ScanProgressPanel";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
@@ -61,9 +62,16 @@ export default function ScanDetail() {
         <ScanHeader
           scan={core.scan}
           project={core.project}
+          liveStatus={core.liveStatus}
           onBack={() => core.navigate("/security")}
           onNavigateProject={() => core.project && core.navigate(`/projects/${core.project.id}`)}
         />
+
+        {core.scanRunning && core.scanProgress && (
+          <div className="mb-4 rounded-card border border-primary/20 bg-primary/5 px-4 py-3">
+            <ScanProgressPanel progress={core.scanProgress} />
+          </div>
+        )}
 
         {core.displaySummary && (
           <SummaryCards
@@ -77,7 +85,11 @@ export default function ScanDetail() {
 
         <FindingsList
           findings={core.findings}
+          findingsTotal={core.findingsTotal}
           findingsLoading={core.findingsLoading}
+          findingsLoadingMore={core.findingsLoadingMore}
+          hasMoreFindings={core.hasMoreFindings}
+          onLoadMore={core.loadMoreFindings}
           scanCompleted={core.scan.status === "completed"}
           severityFilter={core.severityFilter}
           providerFilter={core.providerFilter}

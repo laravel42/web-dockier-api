@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
+    "cleanup:scans": "tsx src/scripts/cleanup-scans.ts",
     "start:auth": "SERVICE_NAME=auth tsx src/server.ts",
     "start:users": "SERVICE_NAME=users tsx src/server.ts",
     "start:projects": "SERVICE_NAME=projects tsx src/server.ts",

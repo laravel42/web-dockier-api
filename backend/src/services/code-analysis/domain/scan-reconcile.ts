@@ -21,8 +21,11 @@ function isStale(row: ScanRow): boolean {
   const ageMs = Date.now() - new Date(row.updated_at).getTime();
   if (row.status === "pending") return ageMs > PENDING_STALE_MS;
   if (row.status === "running") {
-    const parsed = parseSummary(row.summary) as { progress?: unknown };
-    const hasProgress = parsed.progress != null;
+    const raw =
+      typeof row.summary === "object" && row.summary !== null
+        ? (row.summary as Record<string, unknown>).progress
+        : undefined;
+    const hasProgress = raw != null || parseSummary(row.summary).progress != null;
     if (!hasProgress && ageMs > RUNNING_NO_PROGRESS_MS) return true;
     return ageMs > RUNNING_HEARTBEAT_STALE_MS;
   }

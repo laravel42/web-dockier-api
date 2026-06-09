@@ -166,7 +166,6 @@ async function runSemgrepBatch(
       "--json",
       "--quiet",
       "--use-git-ignore",
-      "--exclude-minified-files",
       ...semgrepExcludeArgs(),
       ...targets,
     ],
@@ -184,6 +183,7 @@ async function runSemgrep(
   repoDir: string,
   relativePaths: string[],
   disabledRuleIds: Set<string>,
+  onBatchProgress: (filesScanned: number, filesInRepo: number, currentFile: string) => void,
 ): Promise<ScanFindingInput[]> {
   await writeSemgrepIgnore(repoDir);
 
@@ -195,8 +195,14 @@ async function runSemgrep(
 
   for (let i = 0; i < targets.length; i += SEMGREP_TARGET_BATCH_SIZE) {
     const batch = targets.slice(i, i + SEMGREP_TARGET_BATCH_SIZE);
+    onBatchProgress(i, targets.length, batch[0] ?? "Running Semgrep…");
     const batchFindings = await runSemgrepBatch(semgrep, repoDir, batch, disabledRuleIds);
     findings.push(...batchFindings);
+    onBatchProgress(
+      Math.min(i + batch.length, targets.length),
+      targets.length,
+      batch[batch.length - 1] ?? batch[0] ?? "Running Semgrep…",
+    );
   }
 
   return findings;
@@ -491,7 +497,8 @@ export async function executeScan(
     const enableSemgrep = options.enableSemgrep !== false;
     const enableSonarqube = options.enableSonarqube !== false;
     const enableCustomRules = options.enableCustomRules !== false;
-    const enableSensitiveData = options.enableSensitiveData !== false;
+    // Schema-based sensitive-data belongs in project info, not security scans.
+    const enableSensitiveData = options.enableSensitiveData === true;
 
     const findings: ScanFindingInput[] = [];
     let filesScanned = 0;
@@ -524,7 +531,22 @@ export async function executeScan(
       }));
       let semgrepFindings: ScanFindingInput[];
       try {
-        semgrepFindings = await runSemgrep(cloneResult.repoDir, relativePaths, disabledRuleIds);
+        semgrepFindings = await runSemgrep(
+          cloneResult.repoDir,
+          relativePaths,
+          disabledRuleIds,
+          (filesScanned, filesInRepo, currentFile) => {
+            void reportProgress({
+              phase: "scanning",
+              scanner: "semgrep",
+              filesScanned,
+              filesInRepo,
+              findingsCount: findings.length,
+              currentFile,
+              currentRule: "semgrep/opengrep",
+            });
+          },
+        );
       } finally {
         stopSemgrepHeartbeat();
       }

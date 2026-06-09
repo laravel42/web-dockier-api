@@ -1,4 +1,4 @@
-import { summarySchema } from "../schemas.js";
+import { scanProgressSchema, summarySchema } from "../schemas.js";
 
 export interface ScanSummary {
   totalFindings: number;
@@ -7,6 +7,19 @@ export interface ScanSummary {
   infos: number;
   filesScanned: number;
   filesInRepo: number;
+  error?: string;
+  progress?: ReturnType<typeof scanProgressSchema.parse>;
+}
+
+function normalizeSummaryRaw(raw: unknown): unknown {
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return raw;
 }
 
 export function defaultSummary(): ScanSummary {
@@ -20,19 +33,33 @@ export function defaultSummary(): ScanSummary {
   };
 }
 
+/** Parse scan summary JSON without dropping in-flight `progress` on validation errors. */
 export function parseSummary(raw: unknown): ScanSummary {
-  if (typeof raw === "string") {
-    try {
-      return summarySchema.parse(JSON.parse(raw));
-    } catch {
-      return defaultSummary();
-    }
+  const normalized = normalizeSummaryRaw(raw);
+  const parsed = summarySchema.safeParse(normalized);
+  if (parsed.success) {
+    return parsed.data;
   }
-  try {
-    return summarySchema.parse(raw);
-  } catch {
-    return defaultSummary();
+
+  const fallback = defaultSummary();
+  if (!normalized || typeof normalized !== "object") {
+    return fallback;
   }
+
+  const meta = normalized as Record<string, unknown>;
+  const progressParsed = scanProgressSchema.safeParse(meta.progress);
+
+  return {
+    ...fallback,
+    totalFindings: Number(meta.totalFindings ?? 0),
+    errors: Number(meta.errors ?? 0),
+    warnings: Number(meta.warnings ?? 0),
+    infos: Number(meta.infos ?? 0),
+    filesScanned: Number(meta.filesScanned ?? 0),
+    filesInRepo: Number(meta.filesInRepo ?? 0),
+    error: typeof meta.error === "string" ? meta.error : undefined,
+    progress: progressParsed.success ? progressParsed.data : undefined,
+  };
 }
 
 export function rowToScan(row: any) {

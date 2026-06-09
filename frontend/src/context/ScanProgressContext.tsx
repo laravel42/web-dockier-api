@@ -20,7 +20,7 @@ export interface ScanLiveState {
 }
 
 interface ScanProgressContextValue {
-  getLiveState: (scanId: string) => ScanLiveState | undefined;
+  states: Record<string, ScanLiveState>;
   trackScan: (scanId: string) => void;
   seedFromScan: (scan: Scan) => void;
   setOptimisticRunning: (scanId: string) => void;
@@ -31,8 +31,26 @@ const ScanProgressContext = createContext<ScanProgressContextValue | null>(null)
 
 const ACTIVE_STATUSES = new Set(["pending", "running"]);
 const TERMINAL_STATUSES = new Set(["completed", "failed"]);
+const PHASE_ORDER: Record<string, number> = {
+  cloning: 0,
+  scanning: 1,
+  persisting: 2,
+  done: 3,
+};
 
-const POLL_INTERVAL_MS = 12_000;
+const POLL_INTERVAL_MS = 4_000;
+
+function emptySummaryFromProgress(progress: ScanProgress): ScanSummary {
+  return {
+    totalFindings: progress.findingsCount,
+    errors: 0,
+    warnings: 0,
+    infos: 0,
+    filesScanned: progress.filesScanned,
+    filesInRepo: progress.filesInRepo,
+    progress,
+  };
+}
 
 function summaryFromRecord(raw: Record<string, unknown>): ScanSummary {
   return {
@@ -88,6 +106,56 @@ function liveStateEqual(a: ScanLiveState | undefined, b: ScanLiveState): boolean
   );
 }
 
+function progressAhead(
+  live: ScanProgress | null | undefined,
+  api: ScanProgress | null | undefined,
+): ScanProgress | null {
+  if (!live) return api ?? null;
+  if (!api) return live;
+
+  if (live.filesScanned !== api.filesScanned) {
+    return live.filesScanned > api.filesScanned ? live : api;
+  }
+  if (live.findingsCount !== api.findingsCount) {
+    return live.findingsCount > api.findingsCount ? live : api;
+  }
+
+  const livePhase = PHASE_ORDER[live.phase] ?? 0;
+  const apiPhase = PHASE_ORDER[api.phase] ?? 0;
+  if (livePhase !== apiPhase) {
+    return livePhase > apiPhase ? live : api;
+  }
+
+  if (live.currentFile !== api.currentFile) return live;
+  return api;
+}
+
+/** Never let a stale API poll replace fresher WebSocket progress. */
+function mergeLiveWithScan(prev: ScanLiveState | undefined, fromApi: ScanLiveState): ScanLiveState {
+  if (!prev) return fromApi;
+  if (TERMINAL_STATUSES.has(fromApi.status)) return fromApi;
+  if (TERMINAL_STATUSES.has(prev.status)) return prev;
+
+  const progress = progressAhead(prev.progress, fromApi.progress);
+  const summary = fromApi.summary ?? prev.summary;
+  const mergedSummary = progress && summary
+    ? {
+        ...summary,
+        filesScanned: progress.filesScanned,
+        filesInRepo: progress.filesInRepo,
+        totalFindings: Math.max(summary.totalFindings, progress.findingsCount),
+        progress,
+      }
+    : summary;
+
+  return {
+    status: ACTIVE_STATUSES.has(fromApi.status) ? fromApi.status : prev.status,
+    progress,
+    summary: mergedSummary,
+    error: fromApi.error ?? prev.error,
+  };
+}
+
 function applyMessage(
   prev: ScanLiveState | undefined,
   message: ScanWsMessage,
@@ -95,10 +163,20 @@ function applyMessage(
   if (message.type === "progress") {
     const status =
       prev?.status && TERMINAL_STATUSES.has(prev.status) ? prev.status : (prev?.status ?? "running");
+    const summary = prev?.summary
+      ? {
+          ...prev.summary,
+          filesScanned: message.progress.filesScanned,
+          filesInRepo: message.progress.filesInRepo,
+          totalFindings: Math.max(prev.summary.totalFindings, message.progress.findingsCount),
+          progress: message.progress,
+        }
+      : emptySummaryFromProgress(message.progress);
+
     return {
       status,
       progress: message.progress,
-      summary: prev?.summary ?? null,
+      summary,
       error: prev?.error ?? null,
     };
   }
@@ -137,9 +215,8 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
   statesRef.current = states;
   const socketsRef = useRef<Map<string, WebSocket>>(new Map());
   const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const trackingRef = useRef<Set<string>>(new Set());
 
-  const setLiveState = useCallback((scanId: string, next: ScanLiveState) => {
+  const patchLiveState = useCallback((scanId: string, next: ScanLiveState) => {
     setStates((prev) => {
       if (liveStateEqual(prev[scanId], next)) return prev;
       return { ...prev, [scanId]: next };
@@ -158,81 +235,79 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
       socket.close();
       socketsRef.current.delete(scanId);
     }
-    trackingRef.current.delete(scanId);
   }, []);
 
   const syncFromApi = useCallback(async (scanId: string): Promise<boolean> => {
     const scan = await fetchScanSnapshot(scanId);
     if (!scan) {
-      return statesRef.current[scanId]
-        ? ACTIVE_STATUSES.has(statesRef.current[scanId].status)
-        : false;
+      const local = statesRef.current[scanId];
+      return local ? ACTIVE_STATUSES.has(local.status) : false;
     }
-    const next = liveStateFromScan(scan);
-    setLiveState(scanId, next);
+
+    const fromApi = liveStateFromScan(scan);
+    setStates((prev) => {
+      const merged = mergeLiveWithScan(prev[scanId], fromApi);
+      if (liveStateEqual(prev[scanId], merged)) return prev;
+      return { ...prev, [scanId]: merged };
+    });
     return ACTIVE_STATUSES.has(scan.status);
-  }, [setLiveState]);
+  }, []);
+
+  const openWebSocket = useCallback((scanId: string) => {
+    if (socketsRef.current.has(scanId)) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const ws = new WebSocket(getScanWebSocketUrl(scanId, token));
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data as string) as ScanWsMessage;
+        if (message.scanId !== scanId) return;
+        setStates((prev) => {
+          const next = applyMessage(prev[scanId], message);
+          if (liveStateEqual(prev[scanId], next)) return prev;
+          return { ...prev, [scanId]: next };
+        });
+
+        if (message.type === "status" && !ACTIVE_STATUSES.has(message.status)) {
+          closeSocket(scanId);
+        }
+      } catch {
+        /* ignore malformed messages */
+      }
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+
+    ws.onclose = () => {
+      socketsRef.current.delete(scanId);
+      void syncFromApi(scanId).then((stillActive) => {
+        const localActive = ACTIVE_STATUSES.has(statesRef.current[scanId]?.status ?? "");
+        if (!stillActive && !localActive) return;
+        if (reconnectTimersRef.current.has(scanId)) return;
+        const timer = setTimeout(() => {
+          reconnectTimersRef.current.delete(scanId);
+          openWebSocket(scanId);
+        }, 3000);
+        reconnectTimersRef.current.set(scanId, timer);
+      });
+    };
+
+    socketsRef.current.set(scanId, ws);
+  }, [closeSocket, syncFromApi]);
 
   const connect = useCallback(
     (scanId: string) => {
-      if (socketsRef.current.has(scanId) || trackingRef.current.has(scanId)) return;
-      trackingRef.current.add(scanId);
-
-      const token = localStorage.getItem("token");
-      if (!token) {
-        trackingRef.current.delete(scanId);
-        return;
+      if (!socketsRef.current.has(scanId)) {
+        openWebSocket(scanId);
       }
-
-      const openWebSocket = () => {
-        if (socketsRef.current.has(scanId)) return;
-
-        const ws = new WebSocket(getScanWebSocketUrl(scanId, token));
-
-        ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data as string) as ScanWsMessage;
-            if (message.scanId !== scanId) return;
-            setStates((prev) => {
-              const next = applyMessage(prev[scanId], message);
-              if (liveStateEqual(prev[scanId], next)) return prev;
-              return { ...prev, [scanId]: next };
-            });
-
-            if (message.type === "status" && !ACTIVE_STATUSES.has(message.status)) {
-              closeSocket(scanId);
-            }
-          } catch {
-            /* ignore malformed messages */
-          }
-        };
-
-        ws.onclose = () => {
-          socketsRef.current.delete(scanId);
-          trackingRef.current.delete(scanId);
-          void syncFromApi(scanId).then((stillActive) => {
-            if (!stillActive) return;
-            if (reconnectTimersRef.current.has(scanId)) return;
-            const timer = setTimeout(() => {
-              reconnectTimersRef.current.delete(scanId);
-              connect(scanId);
-            }, 3000);
-            reconnectTimersRef.current.set(scanId, timer);
-          });
-        };
-
-        socketsRef.current.set(scanId, ws);
-      };
-
-      void syncFromApi(scanId).then((stillActive) => {
-        if (!stillActive) {
-          trackingRef.current.delete(scanId);
-          return;
-        }
-        openWebSocket();
-      });
+      void syncFromApi(scanId);
     },
-    [closeSocket, syncFromApi],
+    [openWebSocket, syncFromApi],
   );
 
   const trackScan = useCallback(
@@ -243,23 +318,27 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
   );
 
   const seedFromScan = useCallback((scan: Scan) => {
-    setLiveState(scan.id, liveStateFromScan(scan));
+    setStates((prev) => {
+      const merged = mergeLiveWithScan(prev[scan.id], liveStateFromScan(scan));
+      if (liveStateEqual(prev[scan.id], merged)) return prev;
+      return { ...prev, [scan.id]: merged };
+    });
     if (ACTIVE_STATUSES.has(scan.status)) {
       connect(scan.id);
     } else {
       closeSocket(scan.id);
     }
-  }, [setLiveState, connect, closeSocket]);
+  }, [connect, closeSocket]);
 
   const setOptimisticRunning = useCallback((scanId: string) => {
-    setLiveState(scanId, {
+    patchLiveState(scanId, {
       status: "running",
       progress: { phase: "cloning", filesScanned: 0, filesInRepo: 0, findingsCount: 0 },
       summary: null,
       error: null,
     });
     connect(scanId);
-  }, [setLiveState, connect]);
+  }, [patchLiveState, connect]);
 
   const clearScanState = useCallback((scanId: string) => {
     setStates((prev) => {
@@ -271,12 +350,6 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
     closeSocket(scanId);
   }, [closeSocket]);
 
-  const getLiveState = useCallback(
-    (scanId: string) => states[scanId],
-    [states],
-  );
-
-  // Stable poll loop — reads active IDs from ref, never restarts on every progress tick.
   useEffect(() => {
     const interval = setInterval(() => {
       for (const [scanId, state] of Object.entries(statesRef.current)) {
@@ -295,8 +368,8 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
   }, [closeSocket]);
 
   const value = useMemo(
-    () => ({ getLiveState, trackScan, seedFromScan, setOptimisticRunning, clearScanState }),
-    [getLiveState, trackScan, seedFromScan, setOptimisticRunning, clearScanState],
+    () => ({ states, trackScan, seedFromScan, setOptimisticRunning, clearScanState }),
+    [states, trackScan, seedFromScan, setOptimisticRunning, clearScanState],
   );
 
   return (
@@ -306,13 +379,13 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Subscribe to live state for a scan — re-renders only when that scan's state changes. */
+/** Subscribe to live state for a scan — re-renders when that scan's slice changes. */
 export function useScanLiveState(scanId: string | undefined): ScanLiveState | undefined {
   const ctx = useContext(ScanProgressContext);
   if (!ctx) {
     throw new Error("useScanLiveState must be used within ScanProgressProvider");
   }
-  return scanId ? ctx.getLiveState(scanId) : undefined;
+  return scanId ? ctx.states[scanId] : undefined;
 }
 
 export function useScanProgress(): ScanProgressContextValue {

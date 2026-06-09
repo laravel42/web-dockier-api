@@ -31,7 +31,7 @@ export default function SummaryCards({
     { label: "Total", value: totalFindings, color: "text-text", filter: "" },
     { label: "Errors", value: summary.errors, color: "text-danger-500", filter: "error" },
     { label: "Warnings", value: summary.warnings, color: "text-warning-500", filter: "warning" },
-    { label: "Info", value: summary.infos, color: "text-primary-500", filter: "info" },
+    { label: "Info", value: summary.infos, color: "text-sky-400", filter: "info" },
   ];
 
   return (

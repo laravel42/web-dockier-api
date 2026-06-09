@@ -4,12 +4,17 @@ import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
 import { displayFindingPath } from "../../../utils/scanPaths";
 import { usePermissions } from "../../../context/PermissionsContext";
+import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
 import type { Finding, PMIntegration } from "../../../types";
 import Spinner from "../../../components/Spinner";
 
 interface Props {
   findings: Finding[];
+  findingsTotal: number;
   findingsLoading: boolean;
+  findingsLoadingMore: boolean;
+  hasMoreFindings: boolean;
+  onLoadMore: () => void;
   scanCompleted: boolean;
   severityFilter: string;
   providerFilter: string;
@@ -22,13 +27,25 @@ interface Props {
   onCreateMR: (f: Finding) => void;
 }
 
+const PROVIDERS = [
+  { key: "", label: "All Providers" },
+  { key: "semgrep", label: "Semgrep" },
+  { key: "sonar", label: "SonarQube" },
+  { key: "custom", label: "Custom Rules" },
+] as const;
+
 export default function FindingsList({
-  findings, findingsLoading, scanCompleted,
+  findings, findingsTotal, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
+  scanCompleted,
   severityFilter, providerFilter, onProviderFilterChange,
   fileContents, pmIntegrations, hasConnectionId, mrCreating,
   onCreateIssue, onCreateMR,
 }: Props) {
-  if (findingsLoading) {
+  const sentinelRef = useInfiniteScroll(onLoadMore, {
+    enabled: hasMoreFindings && !findingsLoading && !findingsLoadingMore,
+  });
+
+  if (findingsLoading && findings.length === 0) {
     return (
       <div className="flex justify-center py-8">
         <Spinner />
@@ -36,7 +53,7 @@ export default function FindingsList({
     );
   }
 
-  if (findings.length === 0 && scanCompleted) {
+  if (findingsTotal === 0 && scanCompleted) {
     return (
       <div className={`${cardCls} p-8 text-center`}>
         <CheckCircleIcon className="size-10  mx-auto text-success-500 mb-3" />
@@ -45,39 +62,10 @@ export default function FindingsList({
     );
   }
 
-  if (findings.length === 0) return null;
-
-  // Provider filter pills
-  const providerForFinding = (ruleId: string) => {
-    if (ruleId.startsWith("sonar.")) return "sonar";
-    if (ruleId.startsWith("custom.")) return "custom";
-    if (ruleId.startsWith("sensitive-data.")) return "sensitive-data";
-    return "semgrep";
-  };
-
-  const counts = findings.reduce<Record<string, number>>((acc, f) => {
-    const p = providerForFinding(f.ruleId);
-    acc[p] = (acc[p] || 0) + 1;
-    return acc;
-  }, {});
-
-  const providers = [
-    { key: "", label: "All Providers", count: findings.length },
-    { key: "semgrep", label: "Semgrep", count: counts["semgrep"] || 0 },
-    { key: "sonar", label: "SonarQube", count: counts["sonar"] || 0 },
-    { key: "custom", label: "Custom Rules", count: counts["custom"] || 0 },
-    { key: "sensitive-data", label: "Sensitive Data", count: counts["sensitive-data"] || 0 },
-  ].filter(p => p.key === "" || p.count > 0);
-
-  const filtered = findings
-    .filter((f) => !severityFilter || f.severity === severityFilter)
-    .filter((f) => {
-      if (!providerFilter) return true;
-      return providerForFinding(f.ruleId) === providerFilter;
-    });
+  if (findings.length === 0 && !findingsLoading) return null;
 
   const grouped = Object.entries(
-    filtered.reduce<Record<string, Finding[]>>((acc, f) => {
+    findings.reduce<Record<string, Finding[]>>((acc, f) => {
       (acc[f.filePath] ||= []).push(f);
       return acc;
     }, {}),
@@ -85,10 +73,9 @@ export default function FindingsList({
 
   return (
     <>
-      {/* Provider filter pills */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span className="text-xs text-text-muted mr-1">Source:</span>
-        {providers.map((p) => (
+        {PROVIDERS.map((p) => (
           <button
             key={p.key}
             type="button"
@@ -99,57 +86,70 @@ export default function FindingsList({
                 : "bg-secondary-50 text-text-muted hover:bg-secondary-100 hover:text-text"
             }`}
           >
-            {p.label} ({p.count})
+            {p.label}
           </button>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {findings.length === 0 ? (
         <div className={`${cardCls} p-8 text-center`}>
           <p className="text-sm text-text-muted">No findings from this provider{severityFilter ? ` with severity "${severityFilter}"` : ""}.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {grouped.map(([filePath, fileFindings]) => (
-            <details key={filePath} className={`${cardCls} group`}>
-              <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
-                <ChevronRightIcon className="size-3.5  text-text-muted shrink-0 transition-transform group-open:rotate-90" />
-                <span className="text-xs font-mono text-text truncate">{displayFindingPath(filePath)}</span>
-                <div className="flex items-center gap-1 ml-auto shrink-0">
-                  {fileFindings.filter(f => f.severity === "error").length > 0 && (
-                    <SeverityBadge severity="error" count={fileFindings.filter(f => f.severity === "error").length} />
-                  )}
-                  {fileFindings.filter(f => f.severity === "warning").length > 0 && (
-                    <SeverityBadge severity="warning" count={fileFindings.filter(f => f.severity === "warning").length} />
-                  )}
-                  {fileFindings.filter(f => f.severity === "info").length > 0 && (
-                    <SeverityBadge severity="info" count={fileFindings.filter(f => f.severity === "info").length} />
-                  )}
+        <>
+          <p className="text-xs text-text-muted mb-3 tabular-nums">
+            Showing {findings.length} of {findingsTotal} finding{findingsTotal !== 1 ? "s" : ""}
+          </p>
+          <div className="space-y-2">
+            {grouped.map(([filePath, fileFindings]) => (
+              <details key={filePath} className={`${cardCls} group`}>
+                <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
+                  <ChevronRightIcon className="size-3.5  text-text-muted shrink-0 transition-transform group-open:rotate-90" />
+                  <span className="text-xs font-mono text-text truncate">{displayFindingPath(filePath)}</span>
+                  <div className="flex items-center gap-1 ml-auto shrink-0">
+                    {fileFindings.filter(f => f.severity === "error").length > 0 && (
+                      <SeverityBadge severity="error" count={fileFindings.filter(f => f.severity === "error").length} />
+                    )}
+                    {fileFindings.filter(f => f.severity === "warning").length > 0 && (
+                      <SeverityBadge severity="warning" count={fileFindings.filter(f => f.severity === "warning").length} />
+                    )}
+                    {fileFindings.filter(f => f.severity === "info").length > 0 && (
+                      <SeverityBadge severity="info" count={fileFindings.filter(f => f.severity === "info").length} />
+                    )}
+                  </div>
+                </summary>
+                <div className="divide-y divide-border border-t border-border">
+                  {fileFindings.map((f) => (
+                    <FindingRow
+                      key={f.id}
+                      finding={f}
+                      fileContent={fileContents[displayFindingPath(f.filePath)]}
+                      pmIntegrations={pmIntegrations}
+                      hasConnectionId={hasConnectionId}
+                      mrCreating={mrCreating}
+                      onCreateIssue={onCreateIssue}
+                      onCreateMR={onCreateMR}
+                    />
+                  ))}
                 </div>
-              </summary>
-              <div className="divide-y divide-border border-t border-border">
-                {fileFindings.map((f) => (
-                  <FindingRow
-                    key={f.id}
-                    finding={f}
-                    fileContent={fileContents[displayFindingPath(f.filePath)]}
-                    pmIntegrations={pmIntegrations}
-                    hasConnectionId={hasConnectionId}
-                    mrCreating={mrCreating}
-                    onCreateIssue={onCreateIssue}
-                    onCreateMR={onCreateMR}
-                  />
-                ))}
-              </div>
-            </details>
-          ))}
-        </div>
+              </details>
+            ))}
+          </div>
+
+          <div ref={sentinelRef} className="h-4" aria-hidden />
+          {findingsLoadingMore && (
+            <div className="flex justify-center py-4">
+              <Spinner />
+            </div>
+          )}
+          {!hasMoreFindings && findings.length > 0 && (
+            <p className="text-center text-xs text-text-muted py-4">All findings loaded</p>
+          )}
+        </>
       )}
     </>
   );
 }
-
-// ── Individual finding row ───────────────────────────────────────
 
 interface FindingRowProps {
   finding: Finding;
@@ -167,9 +167,8 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
 
   return (
     <div className="p-3  pl-9 space-y-1.5">
-      {/* Top row: severity badge + buttons */}
       <div className="flex items-center gap-2">
-        <SeverityBadge severity={f.severity as "error" | "warning" | "info"} label={f.severity} />
+        <SeverityBadge severity={f.severity as "error" | "warning" | "info"} />
         <span className="text-[10px] text-text-muted font-mono">L{f.startLine}</span>
         <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
         {canManageScans && (pmIntegrations.length > 0 || hasConnectionId) && (
@@ -200,15 +199,11 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
           </div>
         )}
       </div>
-      {/* Message */}
       <p className="text-xs/snug text-text ">{f.message}</p>
-      {/* Code preview */}
       <CodePreview finding={f} fileContent={fileContent} />
     </div>
   );
 }
-
-// ── Code preview with context lines ──────────────────────────────
 
 function CodePreview({ finding: f, fileContent }: { finding: Finding; fileContent: string | undefined }) {
   if (!fileContent) {

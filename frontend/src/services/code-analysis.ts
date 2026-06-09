@@ -31,17 +31,29 @@ export const codeAnalysisApi = {
   getScan: (scanId: string) =>
     request<Scan & { summary: ScanSummaryApi }>(`/code-analysis/scans/${scanId}`),
 
-  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean }) =>
+  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean; enableSensitiveData?: boolean }) =>
     request<{
       id: string;
       status: string;
       summary: ScanSummaryApi;
     }>(`/code-analysis/scans/${scanId}/run`, { method: "POST", body: JSON.stringify({ scanId, ...tools }) }),
 
-  listFindings: (scanId: string, severity?: string) =>
-    request<{
+  listFindings: (
+    scanId: string,
+    options?: { severity?: string; provider?: "semgrep" | "sonar" | "custom"; limit?: number; offset?: number },
+  ) => {
+    const params = new URLSearchParams();
+    if (options?.severity) params.set("severity", options.severity);
+    if (options?.provider) params.set("provider", options.provider);
+    if (options?.limit != null) params.set("limit", String(options.limit));
+    if (options?.offset != null) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return request<{
       findings: Array<Finding & { createdAt: string }>;
-    }>(`/code-analysis/scans/${scanId}/findings${severity ? `?severity=${severity}` : ""}`),
+      total: number;
+      hasMore: boolean;
+    }>(`/code-analysis/scans/${scanId}/findings${qs ? `?${qs}` : ""}`);
+  },
 
   deleteScan: (scanId: string) =>
     request(`/code-analysis/scans/${scanId}`, { method: "DELETE" }),

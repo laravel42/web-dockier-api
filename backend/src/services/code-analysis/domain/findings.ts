@@ -1,12 +1,28 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { isSensitiveDataFinding } from "./finding-filters.js";
 import { rowToFinding } from "./mappers.js";
 import { CodeAnalysisError } from "./scans.js";
+
+export const FINDINGS_PAGE_SIZE_DEFAULT = 40;
+export const FINDINGS_PAGE_SIZE_MAX = 100;
+
+export type FindingProvider = "semgrep" | "sonar" | "custom";
 
 export interface ListFindingsParams {
   scanId: string;
   tenantId: string;
   severity?: string;
+  provider?: FindingProvider;
+  limit?: number;
+  offset?: number;
+  excludeSensitiveData?: boolean;
+}
+
+export interface ListFindingsResult {
+  findings: ReturnType<typeof rowToFinding>[];
+  total: number;
+  hasMore: boolean;
 }
 
 export interface FindingWithScanContext {
@@ -59,10 +75,23 @@ export async function getFindingById(findingId: string, tenantId: string): Promi
   };
 }
 
-export async function listFindings(params: ListFindingsParams) {
-  const { scanId, tenantId, severity } = params;
+export async function listFindings(params: ListFindingsParams): Promise<ListFindingsResult> {
+  const {
+    scanId,
+    tenantId,
+    severity,
+    provider,
+    limit: rawLimit,
+    offset: rawOffset,
+    excludeSensitiveData = true,
+  } = params;
 
-  // Verify scan belongs to this tenant
+  const limit = Math.min(
+    Math.max(rawLimit ?? FINDINGS_PAGE_SIZE_DEFAULT, 1),
+    FINDINGS_PAGE_SIZE_MAX,
+  );
+  const offset = Math.max(rawOffset ?? 0, 0);
+
   const { data: scan, error: scanError } = await supabaseAdmin
     .from("scans")
     .select("organization_id")
@@ -74,14 +103,35 @@ export async function listFindings(params: ListFindingsParams) {
 
   let query = supabaseAdmin
     .from("findings")
-    .select("id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,created_at")
+    .select("id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,created_at", { count: "exact" })
     .eq("scan_id", scanId)
     .order("severity", { ascending: true })
     .order("file_path", { ascending: true })
     .order("start_line", { ascending: true });
-  if (severity) query = query.eq("severity", severity);
 
-  const { data, error } = await query;
+  if (severity) query = query.eq("severity", severity);
+  if (excludeSensitiveData) query = query.not("rule_id", "like", "sensitive-data.%");
+  if (provider === "sonar") query = query.like("rule_id", "sonar.%");
+  else if (provider === "custom") query = query.like("rule_id", "custom.%");
+  else if (provider === "semgrep") {
+    query = query
+      .not("rule_id", "like", "sonar.%")
+      .not("rule_id", "like", "custom.%")
+      .not("rule_id", "like", "sensitive-data.%");
+  }
+
+  const { data, error, count } = await query.range(offset, offset + limit - 1);
   const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list findings" });
-  return rows.map(rowToFinding);
+  const total = count ?? rows.length;
+
+  return {
+    findings: rows.map(rowToFinding),
+    total,
+    hasMore: offset + rows.length < total,
+  };
+}
+
+/** Client-side guard when reading persisted rows outside listFindings. */
+export function filterSecurityFindings<T extends { ruleId: string }>(findings: T[]): T[] {
+  return findings.filter((finding) => !isSensitiveDataFinding(finding.ruleId));
 }

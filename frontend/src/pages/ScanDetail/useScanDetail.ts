@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+
+const FINDINGS_PAGE_SIZE = 40;
 import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, gitApi } from "../../services/api";
 import { getErrorMessage } from "../../utils/errors";
@@ -19,14 +21,17 @@ const TERMINAL_STATUSES = new Set(["completed", "failed"]);
 export function useScanDetail() {
   const { scanId, projectId: routeProjectId } = useParams<{ scanId?: string; projectId?: string }>();
   const navigate = useNavigate();
-  const { seedFromScan, setOptimisticRunning, clearScanState } = useScanProgress();
+  const { seedFromScan, setOptimisticRunning, clearScanState, trackScan } = useScanProgress();
   const live = useScanLiveState(scanId);
 
   const [scan, setScan] = useState<Scan | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [findingsTotal, setFindingsTotal] = useState(0);
+  const [hasMoreFindings, setHasMoreFindings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [findingsLoading, setFindingsLoading] = useState(false);
+  const [findingsLoadingMore, setFindingsLoadingMore] = useState(false);
   const [severityFilter, setSeverityFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [pageError, setPageError] = useState("");
@@ -41,15 +46,13 @@ export function useScanDetail() {
   const [runScanError, setRunScanError] = useState("");
   const terminalHandledRef = useRef<string | null>(null);
 
-  const apiTerminal = Boolean(scan?.status && TERMINAL_STATUSES.has(scan.status));
-  const liveTerminal = Boolean(live?.status && TERMINAL_STATUSES.has(live.status));
   const scanRunning =
-    !apiTerminal
-    && !liveTerminal
-    && ((live?.status === "running" || live?.status === "pending")
-      || (scan?.status === "running" || scan?.status === "pending"));
+    scan?.status === "running"
+    || scan?.status === "pending"
+    || live?.status === "running"
+    || live?.status === "pending";
   const scanProgress = scanRunning
-    ? (live?.progress ?? scan?.summary?.progress ?? DEFAULT_SCAN_PROGRESS)
+    ? (live?.progress ?? live?.summary?.progress ?? scan?.summary?.progress ?? DEFAULT_SCAN_PROGRESS)
     : null;
 
   const displaySummary = useMemo((): ScanSummary | null => {
@@ -58,7 +61,7 @@ export function useScanDetail() {
     if (!apiSummary && !liveSummary) return null;
 
     if (scanRunning) {
-      const progress = live?.progress ?? apiSummary?.progress;
+      const progress = live?.progress ?? liveSummary?.progress ?? apiSummary?.progress;
       const base = liveSummary ?? apiSummary!;
       return {
         ...base,
@@ -81,18 +84,52 @@ export function useScanDetail() {
     || live?.error
     || (scan?.status === "failed" ? scan.summary?.error || "Scan failed" : "");
 
-  const fetchFindings = useCallback(async (id: string, severity?: string) => {
-    setFindingsLoading(true);
+  const fetchFindings = useCallback(async (
+    id: string,
+    options: {
+      severity?: string;
+      provider?: "semgrep" | "sonar" | "custom";
+      append?: boolean;
+      offset?: number;
+    } = {},
+  ) => {
+    const { severity, provider, append = false, offset = 0 } = options;
+    if (append) {
+      setFindingsLoadingMore(true);
+    } else {
+      setFindingsLoading(true);
+      setFindings([]);
+      setFindingsTotal(0);
+      setHasMoreFindings(false);
+    }
     setFindingsError("");
     try {
-      const res = await codeAnalysisApi.listFindings(id, severity || undefined);
-      setFindings(res.findings);
+      const res = await codeAnalysisApi.listFindings(id, {
+        severity: severity || undefined,
+        provider: provider || undefined,
+        limit: FINDINGS_PAGE_SIZE,
+        offset,
+      });
+      setFindings((prev) => (append ? [...prev, ...res.findings] : res.findings));
+      setFindingsTotal(res.total);
+      setHasMoreFindings(res.hasMore);
     } catch (err) {
       setFindingsError(getErrorMessage(err, "Failed to load findings"));
     } finally {
       setFindingsLoading(false);
+      setFindingsLoadingMore(false);
     }
   }, []);
+
+  const loadMoreFindings = useCallback(() => {
+    if (!scanId || findingsLoading || findingsLoadingMore || !hasMoreFindings) return;
+    fetchFindings(scanId, {
+      severity: severityFilter || undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
+      append: true,
+      offset: findings.length,
+    });
+  }, [scanId, findingsLoading, findingsLoadingMore, hasMoreFindings, fetchFindings, severityFilter, providerFilter, findings.length]);
 
   const refreshAllScans = useCallback(async (projectId: string) => {
     setAllScansLoading(true);
@@ -111,7 +148,18 @@ export function useScanDetail() {
     setPageError("");
     setFindingsError("");
     terminalHandledRef.current = null;
+    setFindings([]);
+    setFindingsTotal(0);
+    setHasMoreFindings(false);
   }, [scanId]);
+
+  useEffect(() => {
+    if (!scanId) return;
+    fetchFindings(scanId, {
+      severity: severityFilter || undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
+    });
+  }, [scanId, severityFilter, providerFilter, fetchFindings]);
 
   useEffect(() => {
     if (scanId) {
@@ -131,7 +179,6 @@ export function useScanDetail() {
         })
         .catch((err: unknown) => setPageError(getErrorMessage(err, "Failed to load scan")))
         .finally(() => setLoading(false));
-      fetchFindings(scanId);
     } else if (routeProjectId) {
       setLoading(true);
       projectsApi.get(routeProjectId)
@@ -156,6 +203,43 @@ export function useScanDetail() {
         .finally(() => setLoading(false));
     }
   }, [scanId, routeProjectId, seedFromScan, fetchFindings, refreshAllScans, navigate]);
+
+  useEffect(() => {
+    if (!scanId || !scanRunning) return;
+    trackScan(scanId);
+  }, [scanId, scanRunning, trackScan]);
+
+  // Mirror live progress into scan record so cards/header stay in sync with polls/WS.
+  useEffect(() => {
+    if (!scanId || !scanRunning || !live?.progress) return;
+    setScan((prev) => {
+      if (!prev || prev.id !== scanId) return prev;
+      const p = live.progress!;
+      const prevP = prev.summary?.progress;
+      if (
+        prevP
+        && prevP.phase === p.phase
+        && prevP.filesScanned === p.filesScanned
+        && prevP.filesInRepo === p.filesInRepo
+        && prevP.findingsCount === p.findingsCount
+        && prevP.currentFile === p.currentFile
+        && prevP.scanner === p.scanner
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        status: live.status ?? prev.status,
+        summary: {
+          ...prev.summary,
+          filesScanned: p.filesScanned,
+          filesInRepo: p.filesInRepo,
+          totalFindings: Math.max(prev.summary?.totalFindings ?? 0, p.findingsCount),
+          progress: p,
+        },
+      };
+    });
+  }, [scanId, scanRunning, live?.status, live?.progress]);
 
   // Apply terminal live updates immediately, then refresh from API once.
   useEffect(() => {
@@ -184,10 +268,13 @@ export function useScanDetail() {
     }).catch(() => {});
 
     if (live.status === "completed") {
-      fetchFindings(scanId, severityFilter || undefined);
+      fetchFindings(scanId, {
+        severity: severityFilter || undefined,
+        provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
+      });
     }
     if (project) refreshAllScans(project.id);
-  }, [live?.status, live?.summary, scanId, scan?.status, scan?.summary?.totalFindings, severityFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
+  }, [live?.status, live?.summary, scanId, scan?.status, scan?.summary?.totalFindings, severityFilter, providerFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
 
   useEffect(() => {
     if (!project || findings.length === 0) return;
@@ -232,6 +319,7 @@ export function useScanDetail() {
             enableSemgrep: t.semgrep !== false,
             enableSonarqube: t.sonarqube !== false,
             enableCustomRules: t.customRules !== false,
+            enableSensitiveData: false,
           };
         } catch {
           return {};
@@ -255,9 +343,13 @@ export function useScanDetail() {
     scan,
     project,
     findings,
+    findingsTotal,
+    hasMoreFindings,
+    loadMoreFindings,
     fileContents,
     loading,
     findingsLoading,
+    findingsLoadingMore,
     pageError,
     findingsError,
     severityFilter,
@@ -269,6 +361,7 @@ export function useScanDetail() {
     scanRunning,
     scanProgress,
     displaySummary,
+    liveStatus: live?.status,
     scanError,
     handleRunScan,
   };

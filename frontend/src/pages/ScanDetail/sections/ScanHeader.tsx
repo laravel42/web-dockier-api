@@ -4,11 +4,13 @@ import type { Scan, Project } from "../../../types";
 interface Props {
   scan: Scan;
   project: Project | null;
+  liveStatus?: string;
   onBack: () => void;
   onNavigateProject: () => void;
 }
 
-export default function ScanHeader({ scan, project, onBack, onNavigateProject }: Props) {
+export default function ScanHeader({ scan, project, liveStatus, onBack, onNavigateProject }: Props) {
+  const status = liveStatus ?? scan.status;
   return (
     <>
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
@@ -28,8 +30,8 @@ export default function ScanHeader({ scan, project, onBack, onNavigateProject }:
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold text-text">Scan Results</h1>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[scan.status] || "bg-secondary-100 text-text-muted"}`}>
-                {scan.status}
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[status] || "bg-secondary-100 text-text-muted"}`}>
+                {status}
               </span>
             </div>
             <div className="flex items-center gap-3 mt-0.5">
