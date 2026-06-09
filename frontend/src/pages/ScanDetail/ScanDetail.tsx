@@ -43,8 +43,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        scanRunning={core.scanRunning}
-        scanProgress={core.scanProgress}
         scanError={core.scanError}
         onRunScan={core.handleRunScan}
         onSelectScan={(id) => core.navigate(`/security/${id}`)}
@@ -77,6 +75,9 @@ export default function ScanDetail() {
           <SummaryCards
             summary={core.displaySummary}
             severityFilter={core.severityFilter}
+            providerFilter={core.providerFilter}
+            findingCounts={core.findingCounts}
+            findingsTotal={core.findingsTotal}
             onFilterChange={core.handleSeverityFilter}
             scanRunning={core.scanRunning}
             progress={core.scanProgress}
@@ -86,6 +87,7 @@ export default function ScanDetail() {
         <FindingsList
           findings={core.findings}
           findingsTotal={core.findingsTotal}
+          findingCounts={core.findingCounts}
           findingsLoading={core.findingsLoading}
           findingsLoadingMore={core.findingsLoadingMore}
           hasMoreFindings={core.hasMoreFindings}
@@ -164,8 +166,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        scanRunning={core.scanRunning}
-        scanProgress={core.scanProgress}
         scanError={core.scanError}
         hasConnectionId={!!core.project?.connectionId}
         onRunScan={core.handleRunScan}

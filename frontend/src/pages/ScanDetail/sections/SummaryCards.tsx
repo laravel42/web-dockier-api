@@ -1,17 +1,56 @@
-import { cardCls, typeStatLabel, typeStatValueSm } from "../../../utils/styles";
-import type { ScanProgress, ScanSummary } from "../../../types";
+import { cardCls, typeCaption, typeStatValueSm } from "../../../utils/styles";
+import { resolveFilteredCounts } from "../../../utils/findingCounts";
+import type { ScanProgress, ScanSummary, SecurityFindingCounts } from "../../../types";
 
 interface Props {
   summary: ScanSummary;
   severityFilter: string;
+  providerFilter: string;
+  findingCounts: SecurityFindingCounts | null;
+  findingsTotal: number;
   onFilterChange: (severity: string) => void;
   scanRunning?: boolean;
   progress?: ScanProgress | null;
 }
 
+type CardTone = "neutral" | "error" | "warning" | "info";
+
+interface SummaryCard {
+  label: string;
+  value: string | number;
+  filter: string | null;
+  tone: CardTone;
+}
+
+const TONE_STYLES: Record<CardTone, { value: string; surface: string; active: string }> = {
+  neutral: {
+    value: "text-text",
+    surface: "border-border/50 bg-card/40 hover:bg-card/60",
+    active: "ring-2 ring-primary/40 border-primary/35 bg-primary/5",
+  },
+  error: {
+    value: "text-danger-500",
+    surface: "border-danger-500/25 bg-danger-500/8 hover:bg-danger-500/12",
+    active: "ring-2 ring-danger-500/40 border-danger-500/40 bg-danger-500/12",
+  },
+  warning: {
+    value: "text-warning-500",
+    surface: "border-warning-500/25 bg-warning-500/8 hover:bg-warning-500/12",
+    active: "ring-2 ring-warning-500/40 border-warning-500/40 bg-warning-500/12",
+  },
+  info: {
+    value: "text-sky-400",
+    surface: "border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/15",
+    active: "ring-2 ring-sky-500/40 border-sky-500/40 bg-sky-500/15",
+  },
+};
+
 export default function SummaryCards({
   summary,
   severityFilter,
+  providerFilter,
+  findingCounts,
+  findingsTotal,
   onFilterChange,
   scanRunning = false,
   progress = null,
@@ -19,34 +58,55 @@ export default function SummaryCards({
   const liveProgress = scanRunning ? (progress ?? summary.progress ?? null) : null;
   const filesScanned = liveProgress?.filesScanned ?? summary.filesScanned ?? 0;
   const filesInRepo = liveProgress?.filesInRepo ?? summary.filesInRepo ?? 0;
-  const totalFindings = liveProgress?.findingsCount ?? summary.totalFindings;
 
-  const cards = [
+  const counts = resolveFilteredCounts(
+    findingCounts,
+    providerFilter,
+    severityFilter,
+    findingsTotal,
     {
-      label: "Files",
-      value: `${filesScanned}/${filesInRepo}`,
-      color: scanRunning ? "text-primary" : "text-text-muted",
-      filter: null,
+      total: summary.totalFindings,
+      errors: summary.errors,
+      warnings: summary.warnings,
+      infos: summary.infos,
     },
-    { label: "Total", value: totalFindings, color: "text-text", filter: "" },
-    { label: "Errors", value: summary.errors, color: "text-danger-500", filter: "error" },
-    { label: "Warnings", value: summary.warnings, color: "text-warning-500", filter: "warning" },
-    { label: "Info", value: summary.infos, color: "text-sky-400", filter: "info" },
+  );
+
+  const totalFindings = scanRunning
+    ? (liveProgress?.findingsCount ?? counts.total)
+    : counts.total;
+
+  const cards: SummaryCard[] = [
+    { label: "Files", value: `${filesScanned}/${filesInRepo}`, filter: null, tone: "neutral" },
+    { label: "Total", value: totalFindings, filter: "", tone: "neutral" },
+    { label: "Errors", value: counts.errors, filter: "error", tone: "error" },
+    { label: "Warnings", value: counts.warnings, filter: "warning", tone: "warning" },
+    { label: "Info", value: counts.infos, filter: "info", tone: "info" },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
-      {cards.map((c) => (
-        <button
-          key={c.label}
-          type="button"
-          onClick={() => c.filter !== null && onFilterChange(c.filter)}
-          className={`${cardCls} px-3 py-2.5 text-center transition-all ${c.filter !== null && severityFilter === c.filter ? "ring-2 ring-primary-500/40" : "hover:bg-card/60"} ${c.filter === null ? "cursor-default pointer-events-none" : ""} ${c.label === "Files" && scanRunning ? "ring-1 ring-primary/30" : ""}`}
-        >
-          <p className={`${typeStatValueSm} ${c.color} tabular-nums`}>{c.value}</p>
-          <p className={`${typeStatLabel} mt-1 normal-case tracking-normal`}>{c.label}</p>
-        </button>
-      ))}
+      {cards.map((c) => {
+        const tone = TONE_STYLES[c.tone];
+        const isActive = c.filter !== null && severityFilter === c.filter;
+        const isFilesLive = c.label === "Files" && scanRunning;
+
+        return (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => c.filter !== null && onFilterChange(c.filter)}
+            className={`${cardCls} px-3 py-2.5 text-left transition-all ${tone.surface} ${
+              isActive ? tone.active : ""
+            } ${c.filter === null ? "cursor-default pointer-events-none" : "cursor-pointer"} ${
+              isFilesLive && !isActive ? "ring-1 ring-primary/30" : ""
+            }`}
+          >
+            <p className={`${typeCaption} font-medium text-text-muted`}>{c.label}</p>
+            <p className={`${typeStatValueSm} mt-1 ${tone.value} tabular-nums`}>{c.value}</p>
+          </button>
+        );
+      })}
     </div>
   );
 }

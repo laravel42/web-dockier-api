@@ -41,8 +41,6 @@ export default function ScanHeader({ scan, project, liveStatus, onBack, onNaviga
                 </button>
               )}
               <span className="text-sm text-text-muted font-mono">{scan.repo}</span>
-              <span className="text-xs text-text-muted">{scan.branch}</span>
-              <span className="text-xs text-text-muted">{new Date(scan.createdAt).toLocaleString()}</span>
             </div>
           </div>
         </div>

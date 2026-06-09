@@ -1,13 +1,77 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
-import { isSensitiveDataFinding } from "./finding-filters.js";
+import { findingProvider, isSensitiveDataFinding, type FindingProvider } from "./finding-filters.js";
 import { rowToFinding } from "./mappers.js";
 import { CodeAnalysisError } from "./scans.js";
 
+export type { FindingProvider };
+
+export interface ProviderSeverityCounts {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface SecurityFindingCounts {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+  semgrep: number;
+  sonar: number;
+  custom: number;
+  byProvider: Record<FindingProvider, ProviderSeverityCounts>;
+}
+
+function emptyProviderCounts(): ProviderSeverityCounts {
+  return { total: 0, errors: 0, warnings: 0, infos: 0 };
+}
+
+function emptyCounts(): SecurityFindingCounts {
+  return {
+    total: 0,
+    errors: 0,
+    warnings: 0,
+    infos: 0,
+    semgrep: 0,
+    sonar: 0,
+    custom: 0,
+    byProvider: {
+      semgrep: emptyProviderCounts(),
+      sonar: emptyProviderCounts(),
+      custom: emptyProviderCounts(),
+    },
+  };
+}
+
+function bumpCount(bucket: ProviderSeverityCounts, severity: string): void {
+  bucket.total++;
+  if (severity === "error") bucket.errors++;
+  else if (severity === "warning") bucket.warnings++;
+  else if (severity === "info") bucket.infos++;
+}
+
+export async function getSecurityFindingCounts(scanId: string): Promise<SecurityFindingCounts> {
+  const { data, error } = await supabaseAdmin
+    .from("findings")
+    .select("severity,rule_id")
+    .eq("scan_id", scanId)
+    .not("rule_id", "like", "sensitive-data.%");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
+
+  const counts = emptyCounts();
+  for (const row of data ?? []) {
+    bumpCount(counts, row.severity);
+    const provider = findingProvider(row.rule_id);
+    counts[provider]++;
+    bumpCount(counts.byProvider[provider], row.severity);
+  }
+  return counts;
+}
+
 export const FINDINGS_PAGE_SIZE_DEFAULT = 40;
 export const FINDINGS_PAGE_SIZE_MAX = 100;
-
-export type FindingProvider = "semgrep" | "sonar" | "custom";
 
 export interface ListFindingsParams {
   scanId: string;
@@ -23,6 +87,7 @@ export interface ListFindingsResult {
   findings: ReturnType<typeof rowToFinding>[];
   total: number;
   hasMore: boolean;
+  counts: SecurityFindingCounts;
 }
 
 export interface FindingWithScanContext {
@@ -120,7 +185,10 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
       .not("rule_id", "like", "sensitive-data.%");
   }
 
-  const { data, error, count } = await query.range(offset, offset + limit - 1);
+  const [{ data, error, count }, counts] = await Promise.all([
+    query.range(offset, offset + limit - 1),
+    getSecurityFindingCounts(scanId),
+  ]);
   const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list findings" });
   const total = count ?? rows.length;
 
@@ -128,6 +196,7 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
     findings: rows.map(rowToFinding),
     total,
     hasMore: offset + rows.length < total,
+    counts,
   };
 }
 

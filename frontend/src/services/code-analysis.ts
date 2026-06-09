@@ -1,5 +1,5 @@
 import { request } from "./request";
-import type { ScanSummary, Scan, Finding } from "../types";
+import type { ScanSummary, Scan, Finding, SecurityFindingCounts } from "../types";
 
 type ScanSummaryApi = ScanSummary & {
   progress?: {
@@ -52,6 +52,7 @@ export const codeAnalysisApi = {
       findings: Array<Finding & { createdAt: string }>;
       total: number;
       hasMore: boolean;
+      counts: SecurityFindingCounts;
     }>(`/code-analysis/scans/${scanId}/findings${qs ? `?${qs}` : ""}`);
   },
 

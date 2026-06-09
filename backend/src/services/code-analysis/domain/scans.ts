@@ -8,6 +8,7 @@ import { enqueueScan } from "./worker.js";
 import type { RunScanOptions } from "./scan-worker.js";
 import { persistScanProgress } from "./scan-progress.js";
 import { reconcileStaleScanById } from "./scan-reconcile.js";
+import { getSecurityFindingCounts } from "./findings.js";
 
 export type { RunScanOptions };
 
@@ -91,7 +92,18 @@ export async function getScan(scanId: string, tenantId: string) {
     internalMsg: "Failed to fetch scan",
   });
   if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
-  return rowToScan(scan);
+  const mapped = rowToScan(scan);
+  if (mapped.status === "completed" || mapped.status === "failed") {
+    const counts = await getSecurityFindingCounts(scanId);
+    mapped.summary = {
+      ...mapped.summary,
+      totalFindings: counts.total,
+      errors: counts.errors,
+      warnings: counts.warnings,
+      infos: counts.infos,
+    };
+  }
+  return mapped;
 }
 
 export async function deleteScan(scanId: string, tenantId: string) {

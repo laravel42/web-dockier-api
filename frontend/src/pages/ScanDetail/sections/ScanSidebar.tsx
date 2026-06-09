@@ -10,17 +10,14 @@ import {
   sidebarPanelHeadTitleCls,
 } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
-import type { Scan, ScanProgress } from "../../../types";
+import type { Scan } from "../../../types";
 import Spinner from "../../../components/Spinner";
-import ScanProgressPanel from "./ScanProgressPanel";
 import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
 
 interface Props {
   scanId: string | undefined;
   allScans: Scan[];
   allScansLoading: boolean;
-  scanRunning: boolean;
-  scanProgress: ScanProgress | null;
   scanError: string;
   hasConnectionId: boolean;
   onRunScan: () => void;
@@ -29,7 +26,7 @@ interface Props {
 
 export default function ScanSidebar({
   scanId, allScans, allScansLoading,
-  scanRunning, scanProgress, scanError,
+  scanError,
   hasConnectionId, onRunScan, onSelectScan,
 }: Props) {
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
@@ -50,12 +47,6 @@ export default function ScanSidebar({
               Run new scan
             </button>
           </div>
-
-          {scanRunning && scanProgress && (
-            <div className="px-2.5 py-2 border-b border-border/40 bg-muted/15">
-              <ScanProgressPanel progress={scanProgress} />
-            </div>
-          )}
 
           {scanError && (
             <div className="px-2.5 py-2 border-b border-danger-500/20 bg-danger-500/5 text-[10px] leading-snug text-danger-500">
@@ -106,9 +97,9 @@ export default function ScanSidebar({
                     </div>
                     {hasBadges && (
                       <div className="mt-1 ml-3.5 flex flex-wrap items-center gap-1">
-                        {s.summary!.errors > 0 && <SeverityBadge severity="error" count={s.summary!.errors} />}
-                        {s.summary!.warnings > 0 && <SeverityBadge severity="warning" count={s.summary!.warnings} />}
-                        {s.summary!.infos > 0 && <SeverityBadge severity="info" count={s.summary!.infos} />}
+                        {s.summary!.errors > 0 && <SeverityBadge severity="error" count={s.summary!.errors} size="compact" />}
+                        {s.summary!.warnings > 0 && <SeverityBadge severity="warning" count={s.summary!.warnings} size="compact" />}
+                        {s.summary!.infos > 0 && <SeverityBadge severity="info" count={s.summary!.infos} size="compact" />}
                       </div>
                     )}
                   </button>

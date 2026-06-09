@@ -1,6 +1,6 @@
 import { cardCls } from "../../../utils/styles";
 import ScanSidebar from "./ScanSidebar";
-import type { Scan, Project, ScanProgress } from "../../../types";
+import type { Scan, Project } from "../../../types";
 import ChevronLeftIcon from "../../../components/icons/outlined/ChevronLeftIcon";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 
@@ -11,8 +11,6 @@ interface Props {
   scanId: string | undefined;
   allScans: Scan[];
   allScansLoading: boolean;
-  scanRunning: boolean;
-  scanProgress: ScanProgress | null;
   scanError: string;
   onRunScan: () => void;
   onSelectScan: (id: string) => void;
@@ -21,7 +19,7 @@ interface Props {
 export default function EmptyScanState({
   project, onBack,
   scanId, allScans, allScansLoading,
-  scanRunning, scanProgress, scanError,
+  scanError,
   onRunScan, onSelectScan,
 }: Props) {
   return (
@@ -42,8 +40,6 @@ export default function EmptyScanState({
         scanId={scanId}
         allScans={allScans}
         allScansLoading={allScansLoading}
-        scanRunning={scanRunning}
-        scanProgress={scanProgress}
         scanError={scanError}
         hasConnectionId={!!project.connectionId}
         onRunScan={onRunScan}

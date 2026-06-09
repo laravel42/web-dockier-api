@@ -30,16 +30,25 @@ interface Props {
   severity: "error" | "warning" | "info" | "clean";
   count?: number;
   label?: string;
+  size?: "default" | "compact";
 }
 
-export default function SeverityBadge({ severity, count, label }: Props) {
+export default function SeverityBadge({ severity, count, label, size = "default" }: Props) {
   const s = STYLES[severity];
   if (!s) return null;
+  const compact = size === "compact";
   const baseLabel = label ?? SEVERITY_LABELS[severity] ?? severity;
   const text = count !== undefined ? `${count} ${baseLabel}` : baseLabel;
+
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border ${s.border} ${s.bg} ${s.text} text-xs font-semibold whitespace-nowrap`}>
-      {s.icon}
+    <span
+      className={`inline-flex items-center border whitespace-nowrap font-medium ${s.border} ${s.bg} ${s.text} ${
+        compact
+          ? "gap-0.5 rounded px-1 py-px text-[10px] leading-tight"
+          : "gap-1 rounded-md px-2 py-0.5 text-xs font-semibold"
+      }`}
+    >
+      {!compact && s.icon}
       {text}
     </span>
   );

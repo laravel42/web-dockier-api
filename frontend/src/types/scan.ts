@@ -35,6 +35,24 @@ export interface Finding {
   snippet: string;
 }
 
+export interface ProviderSeverityCounts {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface SecurityFindingCounts {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+  semgrep: number;
+  sonar: number;
+  custom: number;
+  byProvider: Record<"semgrep" | "sonar" | "custom", ProviderSeverityCounts>;
+}
+
 export interface ScanProgress {
   phase: string;
   filesScanned: number;

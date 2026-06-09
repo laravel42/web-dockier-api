@@ -3,14 +3,16 @@ import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIco
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
 import { displayFindingPath } from "../../../utils/scanPaths";
+import { providerCount } from "../../../utils/findingCounts";
 import { usePermissions } from "../../../context/PermissionsContext";
 import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
-import type { Finding, PMIntegration } from "../../../types";
+import type { Finding, PMIntegration, SecurityFindingCounts } from "../../../types";
 import Spinner from "../../../components/Spinner";
 
 interface Props {
   findings: Finding[];
   findingsTotal: number;
+  findingCounts: SecurityFindingCounts | null;
   findingsLoading: boolean;
   findingsLoadingMore: boolean;
   hasMoreFindings: boolean;
@@ -27,15 +29,28 @@ interface Props {
   onCreateMR: (f: Finding) => void;
 }
 
-const PROVIDERS = [
-  { key: "", label: "All Providers" },
-  { key: "semgrep", label: "Semgrep" },
-  { key: "sonar", label: "SonarQube" },
-  { key: "custom", label: "Custom Rules" },
-] as const;
+type ProviderKey = "semgrep" | "sonar" | "custom";
+
+const PROVIDER_DEFS: Array<{ key: string; label: string; countKey: ProviderKey | null }> = [
+  { key: "", label: "All Providers", countKey: null },
+  { key: "semgrep", label: "Semgrep", countKey: "semgrep" },
+  { key: "sonar", label: "SonarQube", countKey: "sonar" },
+  { key: "custom", label: "Custom Rules", countKey: "custom" },
+];
+
+function emptyFilterMessage(severityFilter: string, providerFilter: string): string {
+  const parts: string[] = [];
+  if (providerFilter) {
+    const label = PROVIDER_DEFS.find((p) => p.key === providerFilter)?.label ?? providerFilter;
+    parts.push(label);
+  }
+  if (severityFilter) parts.push(`severity "${severityFilter}"`);
+  if (parts.length === 0) return "No security findings for this scan.";
+  return `No findings match ${parts.join(" and ")}.`;
+}
 
 export default function FindingsList({
-  findings, findingsTotal, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
+  findings, findingsTotal, findingCounts, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
   scanCompleted,
   severityFilter, providerFilter, onProviderFilterChange,
   fileContents, pmIntegrations, hasConnectionId, mrCreating,
@@ -45,6 +60,15 @@ export default function FindingsList({
     enabled: hasMoreFindings && !findingsLoading && !findingsLoadingMore,
   });
 
+  const providers = PROVIDER_DEFS.filter((p) => {
+    if (p.key === "") return true;
+    if (!findingCounts || !p.countKey) return false;
+    return findingCounts[p.countKey] > 0;
+  });
+
+  const hasSecurityFindings = (findingCounts?.total ?? 0) > 0;
+  const hasActiveFilter = Boolean(severityFilter || providerFilter);
+
   if (findingsLoading && findings.length === 0) {
     return (
       <div className="flex justify-center py-8">
@@ -53,16 +77,14 @@ export default function FindingsList({
     );
   }
 
-  if (findingsTotal === 0 && scanCompleted) {
+  if (!hasSecurityFindings && scanCompleted && !hasActiveFilter) {
     return (
       <div className={`${cardCls} p-8 text-center`}>
         <CheckCircleIcon className="size-10  mx-auto text-success-500 mb-3" />
-        <p className="text-sm text-text-muted">No findings{severityFilter ? ` with severity "${severityFilter}"` : ""} — looking clean.</p>
+        <p className="text-sm text-text-muted">No security findings — looking clean.</p>
       </div>
     );
   }
-
-  if (findings.length === 0 && !findingsLoading) return null;
 
   const grouped = Object.entries(
     findings.reduce<Record<string, Finding[]>>((acc, f) => {
@@ -73,27 +95,34 @@ export default function FindingsList({
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <span className="text-xs text-text-muted mr-1">Source:</span>
-        {PROVIDERS.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => onProviderFilterChange(p.key)}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-              providerFilter === p.key
-                ? "bg-primary-500 text-white"
-                : "bg-secondary-50 text-text-muted hover:bg-secondary-100 hover:text-text"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {providers.length > 1 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-xs text-text-muted mr-1">Source:</span>
+          {providers.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => onProviderFilterChange(p.key)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                providerFilter === p.key
+                  ? "bg-primary-500 text-white"
+                  : "bg-secondary-50 text-text-muted hover:bg-secondary-100 hover:text-text"
+              }`}
+            >
+              {p.label}
+              {p.key === "" && findingCounts ? ` (${findingCounts.total})` : ""}
+              {p.countKey && findingCounts ? ` (${providerCount(findingCounts, p.countKey)})` : ""}
+            </button>
+          ))}
+        </div>
+      )}
 
       {findings.length === 0 ? (
         <div className={`${cardCls} p-8 text-center`}>
-          <p className="text-sm text-text-muted">No findings from this provider{severityFilter ? ` with severity "${severityFilter}"` : ""}.</p>
+          <p className="text-sm text-text-muted">{emptyFilterMessage(severityFilter, providerFilter)}</p>
+          {hasActiveFilter && (
+            <p className="text-xs text-text-muted mt-2">Clear the summary or source filters to see all findings.</p>
+          )}
         </div>
       ) : (
         <>

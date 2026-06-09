@@ -6,7 +6,7 @@ import { codeAnalysisApi, projectsApi, gitApi } from "../../services/api";
 import { getErrorMessage } from "../../utils/errors";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { useScanLiveState, useScanProgress } from "../../context/ScanProgressContext";
-import type { Scan, Finding, Project, ScanProgress, ScanSummary } from "../../types";
+import type { Scan, Finding, Project, ScanProgress, ScanSummary, SecurityFindingCounts } from "../../types";
 import { displayFindingPath } from "../../utils/scanPaths";
 
 const DEFAULT_SCAN_PROGRESS: ScanProgress = {
@@ -28,6 +28,7 @@ export function useScanDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [findingsTotal, setFindingsTotal] = useState(0);
+  const [findingCounts, setFindingCounts] = useState<SecurityFindingCounts | null>(null);
   const [hasMoreFindings, setHasMoreFindings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [findingsLoading, setFindingsLoading] = useState(false);
@@ -100,6 +101,7 @@ export function useScanDetail() {
       setFindingsLoading(true);
       setFindings([]);
       setFindingsTotal(0);
+      setFindingCounts(null);
       setHasMoreFindings(false);
     }
     setFindingsError("");
@@ -112,6 +114,7 @@ export function useScanDetail() {
       });
       setFindings((prev) => (append ? [...prev, ...res.findings] : res.findings));
       setFindingsTotal(res.total);
+      setFindingCounts(res.counts);
       setHasMoreFindings(res.hasMore);
     } catch (err) {
       setFindingsError(getErrorMessage(err, "Failed to load findings"));
@@ -150,6 +153,7 @@ export function useScanDetail() {
     terminalHandledRef.current = null;
     setFindings([]);
     setFindingsTotal(0);
+    setFindingCounts(null);
     setHasMoreFindings(false);
   }, [scanId]);
 
@@ -160,6 +164,14 @@ export function useScanDetail() {
       provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
     });
   }, [scanId, severityFilter, providerFilter, fetchFindings]);
+
+  useEffect(() => {
+    if (!findingCounts || !providerFilter) return;
+    const providerTotal = findingCounts[providerFilter as keyof SecurityFindingCounts];
+    if (typeof providerTotal === "number" && providerTotal === 0) {
+      setProviderFilter("");
+    }
+  }, [findingCounts, providerFilter]);
 
   useEffect(() => {
     if (scanId) {
@@ -292,7 +304,8 @@ export function useScanDetail() {
   }, [findings, project, fileContents]);
 
   const handleSeverityFilter = (severity: string) => {
-    setSeverityFilter(severity);
+    setProviderFilter("");
+    setSeverityFilter((prev) => (prev === severity ? "" : severity));
   };
 
   const handleRunScan = async () => {
@@ -344,6 +357,7 @@ export function useScanDetail() {
     project,
     findings,
     findingsTotal,
+    findingCounts,
     hasMoreFindings,
     loadMoreFindings,
     fileContents,
