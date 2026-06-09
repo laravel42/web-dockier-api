@@ -3,6 +3,7 @@ import {
   parseSemgrepOutput,
   toRepoRelativePath,
   runCustomRulesOnContent,
+  shouldApplyCustomRule,
   runSensitiveDataScan,
   mapSensitiveSeverity,
   matchesExtension,
@@ -189,6 +190,21 @@ describe("runCustomRulesOnContent", () => {
       { ruleId: "bad", severity: "error", message: "bad", pattern: "[", extensions: [] },
     ]);
     expect(findings).toEqual([]);
+  });
+
+  it("allows env() in Laravel config files", () => {
+    const rule = {
+      ruleId: "custom.laravel.env-in-code",
+      severity: "info",
+      message: "env() in application code",
+      pattern: String.raw`\benv\s*\(\s*['"][^'"]+['"]`,
+      extensions: [".php"],
+    };
+    const configPhp = "<?php\nreturn ['db' => env('DB_HOST')];";
+    expect(runCustomRulesOnContent("config/database.php", configPhp, [rule])).toEqual([]);
+    expect(runCustomRulesOnContent("app/Models/User.php", "$host = env('DB_HOST');", [rule])).toHaveLength(1);
+    expect(shouldApplyCustomRule("custom.laravel.env-in-code", "config/mail.php")).toBe(false);
+    expect(shouldApplyCustomRule("custom.laravel.env-in-code", "app/Services/Foo.php")).toBe(true);
   });
 });
 

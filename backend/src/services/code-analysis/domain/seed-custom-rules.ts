@@ -206,7 +206,7 @@ export const DEFAULT_SYSTEM_CUSTOM_RULES: SystemCustomRuleSeed[] = [
   {
     ruleId: "custom.laravel.env-in-code",
     severity: "info",
-    message: "Direct env() call outside config — use config() instead",
+    message: "env() in application code — prefer config() (config/*.php is excluded)",
     pattern: String.raw`\benv\s*\(\s*['"][^'"]+['"]`,
     extensions: [".php"],
   },

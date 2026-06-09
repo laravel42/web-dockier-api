@@ -134,6 +134,18 @@ export function matchesExtension(filePath: string, extensions: string[]): boolea
   });
 }
 
+/** Path-aware exclusions for custom rules that would false-positive in normal project files. */
+export function shouldApplyCustomRule(ruleId: string, filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+
+  if (ruleId === "custom.laravel.env-in-code") {
+    // Laravel config files are where env() belongs; flag only app/runtime usage.
+    if (/(?:^|\/)config\//i.test(normalized)) return false;
+  }
+
+  return true;
+}
+
 export function runCustomRulesOnContent(
   filePath: string,
   content: string,
@@ -142,6 +154,8 @@ export function runCustomRulesOnContent(
   const findings: ScanFindingInput[] = [];
 
   for (const rule of rules) {
+    if (!shouldApplyCustomRule(rule.ruleId, filePath)) continue;
+
     let regex: RegExp;
     try {
       regex = new RegExp(rule.pattern, "gi");
