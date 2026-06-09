@@ -12,8 +12,8 @@ import {
 import { usePermissions } from "../../../context/PermissionsContext";
 import type { Scan, ScanProgress } from "../../../types";
 import Spinner from "../../../components/Spinner";
+import ScanProgressPanel from "./ScanProgressPanel";
 import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
-import GitCommitIcon from "../../../components/icons/outlined/GitCommitIcon";
 
 interface Props {
   scanId: string | undefined;
@@ -36,113 +36,90 @@ export default function ScanSidebar({
   const canScan = has("scan:run");
 
   return (
-    <div className="w-80 shrink-0">
-      <div className="sticky top-6 space-y-3">
-        {canScan && (
-          <button
-            type="button"
-            onClick={onRunScan}
-            disabled={scanRunning || !hasConnectionId}
-            className={`${btnPrimary} w-full`}
-          >
-            {scanRunning ? (
-              <>
-                <span className="size-3.5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                Scanning…
-              </>
-            ) : (
-              <>
-                <ShieldCheckIcon className="size-4" />
-                Run new scan
-              </>
-            )}
-          </button>
-        )}
-
-        {scanRunning && scanProgress && (() => {
-          const pct = scanProgress.phase === "cloning" ? 5
-            : scanProgress.phase === "scanning" ? (scanProgress.filesInRepo > 0 ? 10 + Math.round((scanProgress.filesScanned / scanProgress.filesInRepo) * 50) : 30)
-            : scanProgress.phase === "persisting" ? (scanProgress.filesInRepo > 0 ? 60 + Math.round((scanProgress.filesScanned / scanProgress.filesInRepo) * 35) : 80)
-            : 100;
-          const label = scanProgress.phase === "cloning" ? "Cloning repository…"
-            : scanProgress.phase === "scanning" ? "Running security scanners…"
-            : scanProgress.phase === "persisting" ? "Processing findings…"
-            : "Finalizing…";
-          return (
-            <div className={`${cardCls} space-y-2 p-3`}>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-text">{label}</p>
-                <span className="text-xs font-semibold text-primary">{pct}%</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-[10px] text-text-muted">
-                <span>{scanProgress.filesScanned > 0 ? `${scanProgress.filesScanned}/${scanProgress.filesInRepo} files` : ""}</span>
-                <span>{scanProgress.findingsCount > 0 ? `${scanProgress.findingsCount} findings` : ""}</span>
-              </div>
-              {scanProgress.currentFile && (
-                <p className="truncate font-mono text-[10px] text-text-muted">{scanProgress.currentFile}</p>
-              )}
-            </div>
-          );
-        })()}
-
-        {scanError && (
-          <div className="rounded-lg border border-danger-500/20 bg-danger-500/10 px-3 py-2 text-xs text-danger-500">
-            {scanError}
-          </div>
-        )}
-
+    <div className="w-72 shrink-0">
+      <div className="sticky top-6 space-y-2">
         <div className={`${cardCls} overflow-hidden`}>
+          {canScan && (
+            <div className="p-2 border-b border-border/40">
+              <button
+                type="button"
+                onClick={onRunScan}
+                disabled={scanRunning || !hasConnectionId}
+                className={`${btnPrimary} w-full py-2 text-sm`}
+              >
+                {scanRunning ? (
+                  <>
+                    <span className="size-3 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                    Scanning…
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheckIcon className="size-3.5" />
+                    Run new scan
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {scanRunning && scanProgress && (
+            <div className="px-2.5 py-2 border-b border-border/40 bg-muted/15">
+              <ScanProgressPanel progress={scanProgress} />
+            </div>
+          )}
+
+          {scanError && (
+            <div className="px-2.5 py-2 border-b border-danger-500/20 bg-danger-500/5 text-[10px] leading-snug text-danger-500">
+              {scanError}
+            </div>
+          )}
+
           <div className={sidebarPanelHeadCls}>
-            <p className={sidebarPanelHeadTitleCls}>Scan History</p>
+            <p className={sidebarPanelHeadTitleCls}>History</p>
           </div>
+
           {allScansLoading ? (
-            <div className="flex justify-center py-6">
-              <Spinner className="size-4" />
+            <div className="flex justify-center py-4">
+              <Spinner className="size-3.5" />
             </div>
           ) : allScans.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-4">No scans yet</p>
+            <p className="text-[10px] text-text-muted text-center py-3">No scans yet</p>
           ) : (
-            <div className="max-h-[calc(100vh-220px)] overflow-y-auto divide-y divide-border/50">
+            <div className="max-h-[calc(100vh-200px)] overflow-y-auto divide-y divide-border/40">
               {allScans.map((s) => {
                 const isActive = s.id === scanId;
+                const isLive = s.status === "running" || s.status === "pending";
+                const hasBadges = s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0);
                 return (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => onSelectScan(s.id)}
-                    className={`${sidebarHistoryItemCls(isActive)} p-3`}
+                    className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className={`size-2.5 rounded-full shrink-0 ${getStatusDotClass(s.status)}`} />
-                      <span className={sidebarHistoryLabelCls(isActive)}>
-                        {new Date(s.createdAt).toLocaleDateString()}{" "}
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`size-2 rounded-full shrink-0 ${getStatusDotClass(s.status)}`} />
+                      <span className={`${sidebarHistoryLabelCls(isActive)} truncate`}>
+                        {new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        {" · "}
                         {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
+                      {isLive && (
+                        <span className="ml-auto shrink-0 text-[9px] font-medium text-primary">live</span>
+                      )}
                     </div>
-                    <div className="mt-1.5 ml-4.5 flex items-center gap-2">
-                      <GitBranchIcon className="size-3.5 shrink-0 text-text-muted" />
-                      <span className="truncate font-mono text-xs font-medium text-text">{s.branch}</span>
+                    <div className="mt-1 ml-3.5 flex items-center gap-1.5 min-w-0 text-[10px]">
+                      <GitBranchIcon className="size-3 shrink-0 text-text-muted" />
+                      <span className="truncate font-mono text-text-secondary">{s.branch}</span>
+                      {s.commitSha && (
+                        <span className="shrink-0 font-mono text-text-muted">{s.commitSha.slice(0, 7)}</span>
+                      )}
                     </div>
-                    {s.commitSha && (
-                      <div className="mt-1 ml-4.5 flex items-center gap-2">
-                        <GitCommitIcon className="size-3.5 shrink-0 text-text-muted" />
-                        <span className="font-mono text-xs font-medium text-text">{s.commitSha.slice(0, 7)}</span>
-                        {s.commitMessage && (
-                          <span className="truncate text-xs text-text-muted">{s.commitMessage.split("\n")[0]}</span>
-                        )}
-                      </div>
-                    )}
-                    {s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0) && (
-                      <div className="mt-1.5 ml-4.5 flex flex-wrap items-center gap-1.5">
-                        {s.summary.errors > 0 && <SeverityBadge severity="error" count={s.summary.errors} />}
-                        {s.summary.warnings > 0 && <SeverityBadge severity="warning" count={s.summary.warnings} />}
-                        {s.summary.infos > 0 && <SeverityBadge severity="info" count={s.summary.infos} />}
+                    {hasBadges && (
+                      <div className="mt-1 ml-3.5 flex flex-wrap items-center gap-1">
+                        {s.summary!.errors > 0 && <SeverityBadge severity="error" count={s.summary!.errors} />}
+                        {s.summary!.warnings > 0 && <SeverityBadge severity="warning" count={s.summary!.warnings} />}
+                        {s.summary!.infos > 0 && <SeverityBadge severity="info" count={s.summary!.infos} />}
                       </div>
                     )}
                   </button>

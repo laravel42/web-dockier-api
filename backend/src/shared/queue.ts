@@ -47,12 +47,21 @@ export function getQueue(): PgBoss | null {
  * Creates the pgboss schema if it doesn't exist and begins monitoring.
  * No-op if DATABASE_URL is not configured.
  */
-export async function startQueue(): Promise<void> {
+export async function startQueue(): Promise<boolean> {
   const queue = getQueue();
-  if (!queue) return;
+  if (!queue) return false;
 
-  await queue.start();
-  console.log("[queue] pg-boss started");
+  try {
+    await queue.start();
+    console.log("[queue] pg-boss started");
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
+    await queue.stop().catch(() => {});
+    boss = null;
+    return false;
+  }
 }
 
 /**
@@ -69,6 +78,7 @@ export async function stopQueue(): Promise<void> {
 
 export const DEPLOY_QUEUE = "deploy-pipeline";
 export const IMAGE_BUILD_QUEUE = "image-build";
+export const SECURITY_SCAN_QUEUE = "security-scan";
 
 // ─── Generic Worker Factory ────────────────────────────────────────
 

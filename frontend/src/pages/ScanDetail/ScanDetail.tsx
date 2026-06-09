@@ -70,6 +70,8 @@ export default function ScanDetail() {
             summary={core.scan.summary}
             severityFilter={core.severityFilter}
             onFilterChange={core.handleSeverityFilter}
+            scanRunning={core.scanRunning}
+            progress={core.scanProgress}
           />
         )}
 

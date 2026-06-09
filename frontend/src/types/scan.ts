@@ -5,6 +5,8 @@ export interface ScanSummary {
   infos: number;
   filesScanned: number;
   filesInRepo: number;
+  error?: string;
+  progress?: ScanProgress;
 }
 
 export interface Scan {
@@ -39,4 +41,8 @@ export interface ScanProgress {
   filesInRepo: number;
   findingsCount: number;
   currentFile?: string;
+  currentRule?: string;
+  scanner?: string;
+  rulesChecked?: number;
+  rulesTotal?: number;
 }

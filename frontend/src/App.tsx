@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { PermissionsProvider } from "./context/PermissionsContext";
 import { ToastProvider } from "./context/ToastContext";
+import { ScanProgressProvider } from "./context/ScanProgressContext";
 import SessionHandler from "./components/SessionHandler";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
@@ -30,6 +31,7 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <PermissionsProvider>
+            <ScanProgressProvider>
             <BrowserRouter>
               <SessionHandler />
               <Routes>
@@ -57,6 +59,7 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </BrowserRouter>
+            </ScanProgressProvider>
           </PermissionsProvider>
         </AuthProvider>
       </ToastProvider>

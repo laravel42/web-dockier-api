@@ -22,15 +22,33 @@ export interface CustomRuleInput {
   extensions: string[];
 }
 
-export function mapSemgrepSeverity(raw: string): "error" | "warning" | "info" {
-  switch (raw.toUpperCase()) {
+export function mapSemgrepSeverity(raw?: string): "error" | "warning" | "info" {
+  switch ((raw ?? "").toUpperCase()) {
     case "ERROR":
+    case "CRITICAL":
+    case "BLOCKER":
+    case "HIGH":
       return "error";
     case "WARNING":
+    case "MEDIUM":
+    case "LOW":
       return "warning";
-    default:
+    case "INFO":
       return "info";
+    default:
+      return "warning";
   }
+}
+
+function resolveSemgrepSeverity(extra: SemgrepJsonResult["extra"]): "error" | "warning" | "info" {
+  if (extra.severity) return mapSemgrepSeverity(extra.severity);
+
+  const metadata = extra.metadata as Record<string, unknown> | undefined;
+  const impact = String(metadata?.impact ?? "").toUpperCase();
+  const likelihood = String(metadata?.likelihood ?? "").toUpperCase();
+  if (impact === "HIGH" || likelihood === "HIGH") return "error";
+  if (impact === "MEDIUM" || likelihood === "MEDIUM") return "warning";
+  return "info";
 }
 
 export function normalizeSeverity(raw: string): "error" | "warning" | "info" {
@@ -46,8 +64,9 @@ interface SemgrepJsonResult {
   end: { line: number };
   extra: {
     message: string;
-    severity: string;
+    severity?: string;
     lines?: string;
+    metadata?: Record<string, unknown>;
   };
 }
 
@@ -65,7 +84,7 @@ export function parseSemgrepOutput(stdout: string, disabledRuleIds: Set<string>)
 
     findings.push({
       ruleId: result.check_id,
-      severity: mapSemgrepSeverity(result.extra.severity),
+      severity: resolveSemgrepSeverity(result.extra),
       message: result.extra.message,
       filePath: result.path,
       startLine: result.start.line,
@@ -91,30 +110,31 @@ export function runCustomRulesOnContent(
   rules: CustomRuleInput[],
 ): ScanFindingInput[] {
   const findings: ScanFindingInput[] = [];
-  const lines = content.split("\n");
 
   for (const rule of rules) {
     let regex: RegExp;
     try {
-      regex = new RegExp(rule.pattern, "g");
+      regex = new RegExp(rule.pattern, "gi");
     } catch {
       continue;
     }
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      regex.lastIndex = 0;
-      if (!regex.test(line)) continue;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content)) !== null) {
+      const lineNum = content.substring(0, match.index).split("\n").length;
+      const lineContent = content.split("\n")[lineNum - 1] ?? "";
 
       findings.push({
         ruleId: rule.ruleId,
         severity: normalizeSeverity(rule.severity),
         message: rule.message,
         filePath,
-        startLine: i + 1,
-        endLine: i + 1,
-        snippet: line.trim(),
+        startLine: lineNum,
+        endLine: lineNum,
+        snippet: lineContent.trim().slice(0, 200),
       });
+
+      if (match[0].length === 0) regex.lastIndex++;
     }
   }
 

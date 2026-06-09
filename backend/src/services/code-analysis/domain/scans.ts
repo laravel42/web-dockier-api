@@ -4,7 +4,10 @@ import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
-import { executeScan, type RunScanOptions } from "./scan-worker.js";
+import { enqueueScan } from "./worker.js";
+import type { RunScanOptions } from "./scan-worker.js";
+import { persistScanProgress } from "./scan-progress.js";
+import { reconcileStaleScanById } from "./scan-reconcile.js";
 
 export type { RunScanOptions };
 
@@ -68,10 +71,20 @@ export async function listScans(params: ListScansParams) {
   if (branch) query = query.eq("branch", branch);
   const { data, error } = await query;
   const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list scans" });
-  return rows.map(rowToScan);
+  await Promise.all(
+    rows
+      .filter((row) => row.status === "running" || row.status === "pending")
+      .map((row) => reconcileStaleScanById(row.id)),
+  );
+
+  const { data: finalData, error: finalError } = await query;
+  const finalRows = unwrapList(finalData, finalError, CodeAnalysisError, { internalMsg: "Failed to list scans" });
+  return finalRows.map(rowToScan);
 }
 
 export async function getScan(scanId: string, tenantId: string) {
+  await reconcileStaleScanById(scanId);
+
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   const scan = unwrapQuery(data, error, CodeAnalysisError, {
     notFoundMsg: "Scan not found",
@@ -98,15 +111,34 @@ export async function deleteScan(scanId: string, tenantId: string) {
 }
 
 export async function runScan(scanId: string, tenantId: string, options: RunScanOptions = {}) {
+  await reconcileStaleScanById(scanId);
+
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
   if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+
+  if (scan.status === "running") {
+    throw new CodeAnalysisError("A scan is already running for this record. Wait for it to finish or start a new scan.", "bad_request");
+  }
+
+  const initialProgress = {
+    phase: "cloning" as const,
+    scanner: "cloning" as const,
+    filesScanned: 0,
+    filesInRepo: 0,
+    findingsCount: 0,
+    currentFile: scan.repo,
+  };
+  const runningSummary = {
+    ...defaultSummary(),
+    progress: initialProgress,
+  };
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("scans")
     .update({
       status: "running",
-      summary: defaultSummary() as unknown as Json,
+      summary: runningSummary as unknown as Json,
       updated_at: new Date().toISOString(),
     })
     .eq("id", scanId)
@@ -114,9 +146,9 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
     .single();
   throwOnError(updateError, CodeAnalysisError, { internalMsg: "Failed to update scan status" });
 
-  void executeScan(scanId, tenantId, options).catch((err) => {
-    console.error(`[scan] Background scan ${scanId} failed:`, err);
-  });
+  await enqueueScan({ scanId, tenantId, options });
+
+  await persistScanProgress(scanId, initialProgress);
 
   return rowToScan(updated ?? data);
 }

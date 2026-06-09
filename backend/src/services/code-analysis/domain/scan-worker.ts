@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -23,6 +23,13 @@ import {
   type ScanFindingInput,
 } from "./scan-analysis.js";
 import { filterDisabledSonarFindings, runSonarScanner } from "./sonarqube.js";
+import { getOpengrepRulesDir } from "../../../shared/paths.js";
+import {
+  broadcastScanStatus,
+  persistScanProgress,
+  updateScanProgress,
+} from "./scan-progress.js";
+import type { ScanProgressPayload } from "./scan-events.js";
 
 export interface RunScanOptions {
   enableSemgrep?: boolean;
@@ -31,7 +38,7 @@ export interface RunScanOptions {
   enableSensitiveData?: boolean;
 }
 
-const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
+const RULES_DIR = getOpengrepRulesDir();
 
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -50,56 +57,110 @@ const SKIP_DIRS = new Set([
 ]);
 
 const INSERT_BATCH_SIZE = 100;
+const SEMGREP_TIMEOUT_MS = 600_000;
+const MAX_COMMAND_OUTPUT = 50 * 1024 * 1024;
+const HEARTBEAT_INTERVAL_MS = 10_000;
+
+function formatElapsed(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  return `${min}m ${sec % 60}s`;
+}
+
+function withElapsed(label: string, startedAt: number): string {
+  const base = label.replace(/ \(\d+m? ?\d*s\)$/, "");
+  return `${base} (${formatElapsed(Date.now() - startedAt)})`;
+}
+
+/** Keeps updated_at fresh during long-running steps so stale reconciliation can detect dead workers. */
+function startScanHeartbeat(
+  scanId: string,
+  getProgress: () => ScanProgressPayload,
+): () => void {
+  const startedAt = Date.now();
+  const interval = setInterval(() => {
+    const base = getProgress();
+    void persistScanProgress(scanId, {
+      ...base,
+      currentFile: withElapsed(base.currentFile ?? "Working", startedAt),
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(interval);
+}
 
 function findSemgrepBinary(): string {
   const candidates = [
-    "semgrep",
-    "/opt/homebrew/bin/semgrep",
     join(homedir(), ".local", "bin", "semgrep"),
+    "/opt/homebrew/bin/semgrep",
+    "semgrep",
   ];
 
   for (const bin of candidates) {
-    if (bin === "semgrep") {
-      try {
-        execSync("which semgrep", { stdio: "pipe" });
-        return bin;
-      } catch {
-        continue;
-      }
-    }
-    if (existsSync(bin)) return bin;
+    if (bin === "semgrep" || existsSync(bin)) return bin;
   }
 
   throw new Error("semgrep binary not found in PATH or common install locations");
 }
 
-function runSemgrep(repoDir: string, disabledRuleIds: Set<string>): ScanFindingInput[] {
-  const semgrep = findSemgrepBinary();
-  const args = [
-    "scan",
-    "--config",
-    RULES_DIR,
-    "--json",
-    "--quiet",
-    "--no-git-ignore",
-    repoDir,
-  ];
-
-  let stdout = "";
-  try {
-    stdout = execSync(`${JSON.stringify(semgrep)} ${args.map((a) => JSON.stringify(a)).join(" ")}`, {
-      encoding: "utf-8",
-      maxBuffer: 50 * 1024 * 1024,
-      timeout: 600_000,
-      stdio: ["pipe", "pipe", "pipe"],
+function runCommand(
+  cmd: string,
+  args: string[],
+  opts?: { cwd?: string; timeoutMs?: number },
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, {
+      cwd: opts?.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-  } catch (err) {
-    const execErr = err as { stdout?: string; status?: number };
-    if (execErr.stdout) {
-      stdout = execErr.stdout;
-    } else {
-      throw err;
-    }
+
+    let stdout = "";
+    let stderr = "";
+    let stdoutTruncated = false;
+
+    const timer = opts?.timeoutMs
+      ? setTimeout(() => {
+          proc.kill("SIGTERM");
+          reject(new Error(`Command timed out after ${opts.timeoutMs}ms`));
+        }, opts.timeoutMs)
+      : undefined;
+
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      if (stdoutTruncated) return;
+      stdout += chunk.toString();
+      if (stdout.length > MAX_COMMAND_OUTPUT) {
+        stdoutTruncated = true;
+        stdout = stdout.slice(0, MAX_COMMAND_OUTPUT);
+        proc.kill("SIGTERM");
+      }
+    });
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    proc.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      resolve({ stdout, stderr, code: code ?? 1 });
+    });
+
+    proc.on("error", (err) => {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+async function runSemgrep(repoDir: string, disabledRuleIds: Set<string>): Promise<ScanFindingInput[]> {
+  const semgrep = findSemgrepBinary();
+  const { stdout, stderr, code } = await runCommand(
+    semgrep,
+    ["scan", "--config", RULES_DIR, "--json", "--quiet", "--no-git-ignore", repoDir],
+    { timeoutMs: SEMGREP_TIMEOUT_MS },
+  );
+
+  if (!stdout.trim() && code !== 0) {
+    throw new Error(stderr.trim() || `semgrep exited with code ${code}`);
   }
 
   return parseSemgrepOutput(stdout, disabledRuleIds);
@@ -127,9 +188,14 @@ async function walkRepoFiles(repoDir: string): Promise<{ allFiles: string[]; rel
   return { allFiles, relativePaths };
 }
 
+type ScanProgressReporter = (progress: ScanProgressPayload) => void;
+
 async function runCustomRules(
   repoDir: string,
   tenantId: string,
+  filesInRepo: number,
+  allFiles: string[],
+  onProgress: ScanProgressReporter,
 ): Promise<{ findings: ScanFindingInput[]; filesScanned: number }> {
   const allRules = await listCustomRules({ tenantId });
   const rules = allRules
@@ -144,7 +210,6 @@ async function runCustomRules(
 
   if (rules.length === 0) return { findings: [], filesScanned: 0 };
 
-  const { allFiles } = await walkRepoFiles(repoDir);
   const findings: ScanFindingInput[] = [];
   let filesScanned = 0;
 
@@ -154,17 +219,49 @@ async function runCustomRules(
     if (applicableRules.length === 0) continue;
 
     filesScanned++;
+    if (filesScanned % 25 === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     const content = await readFile(filePath, "utf-8");
-    findings.push(...runCustomRulesOnContent(relPath, content, applicableRules));
+
+    onProgress({
+      phase: "scanning",
+      scanner: "custom",
+      filesScanned,
+      filesInRepo,
+      findingsCount: findings.length,
+      currentFile: relPath,
+      currentRule: applicableRules[0]?.ruleId,
+      rulesChecked: 0,
+      rulesTotal: applicableRules.length,
+    });
+
+    for (let ruleIndex = 0; ruleIndex < applicableRules.length; ruleIndex++) {
+      const rule = applicableRules[ruleIndex];
+      onProgress({
+        phase: "scanning",
+        scanner: "custom",
+        filesScanned,
+        filesInRepo,
+        findingsCount: findings.length,
+        currentFile: relPath,
+        currentRule: rule.ruleId,
+        rulesChecked: ruleIndex + 1,
+        rulesTotal: applicableRules.length,
+      });
+      findings.push(...runCustomRulesOnContent(relPath, content, [rule]));
+    }
   }
 
   return { findings, filesScanned };
 }
 
 async function runSensitiveDataScanner(
-  repoDir: string,
+  allFiles: string[],
+  relativePaths: string[],
+  filesInRepo: number,
+  onProgress: ScanProgressReporter,
 ): Promise<{ findings: ScanFindingInput[]; filesScanned: number }> {
-  const { allFiles, relativePaths } = await walkRepoFiles(repoDir);
   const scanFiles: Array<{ path: string; content: string }> = [];
   let filesScanned = 0;
 
@@ -173,11 +270,40 @@ async function runSensitiveDataScanner(
     if (!isSchemaFile(relPath) && !isModelFile(relPath)) continue;
 
     filesScanned++;
+    onProgress({
+      phase: "scanning",
+      scanner: "sensitive",
+      filesScanned,
+      filesInRepo,
+      findingsCount: 0,
+      currentFile: relPath,
+      currentRule: "sensitive-data.schema",
+      rulesChecked: 1,
+      rulesTotal: 1,
+    });
+
     const content = await readFile(allFiles[i], "utf-8");
     scanFiles.push({ path: relPath, content });
   }
 
-  return { findings: runSensitiveDataScan(scanFiles), filesScanned };
+  const findings: ScanFindingInput[] = [];
+  for (const file of scanFiles) {
+    const fileFindings = runSensitiveDataScan([file]);
+    findings.push(...fileFindings);
+    onProgress({
+      phase: "scanning",
+      scanner: "sensitive",
+      filesScanned,
+      filesInRepo,
+      findingsCount: findings.length,
+      currentFile: file.path,
+      currentRule: fileFindings[0]?.ruleId ?? "sensitive-data.schema",
+      rulesChecked: 1,
+      rulesTotal: 1,
+    });
+  }
+
+  return { findings, filesScanned };
 }
 
 function buildSummary(findings: ScanFindingInput[], filesInRepo: number, filesScanned: number) {
@@ -230,7 +356,7 @@ async function persistFindings(
 async function markScanFailed(scanId: string, message: string): Promise<void> {
   const summary = {
     ...defaultSummary(),
-    note: message,
+    error: message,
   };
   const { error } = await supabaseAdmin
     .from("scans")
@@ -241,6 +367,7 @@ async function markScanFailed(scanId: string, message: string): Promise<void> {
     })
     .eq("id", scanId);
   if (error) console.error(`[scan] Failed to mark scan ${scanId} as failed:`, error.message);
+  broadcastScanStatus(scanId, "failed", summary);
 }
 
 export async function executeScan(
@@ -266,6 +393,17 @@ export async function executeScan(
 
     const connection = await getConnectionForTenant(scanRow.connection_id, tenantId);
 
+    const reportProgress = (progress: ScanProgressPayload) => updateScanProgress(scanId, progress);
+
+    await persistScanProgress(scanId, {
+      phase: "cloning",
+      scanner: "cloning",
+      filesScanned: 0,
+      filesInRepo: 0,
+      findingsCount: 0,
+      currentFile: scanRow.repo,
+    });
+
     const cloneResult = await cloneRepo({
       git: {
         provider: connection.provider,
@@ -279,8 +417,16 @@ export async function executeScan(
     });
     workDir = cloneResult.workDir;
 
-    const { allFiles } = await walkRepoFiles(cloneResult.repoDir);
+    const { allFiles, relativePaths } = await walkRepoFiles(cloneResult.repoDir);
     const filesInRepo = allFiles.length;
+
+    await persistScanProgress(scanId, {
+      phase: "scanning",
+      filesScanned: 0,
+      filesInRepo,
+      findingsCount: 0,
+      currentFile: "Indexing repository…",
+    });
 
     const enableSemgrep = options.enableSemgrep !== false;
     const enableSonarqube = options.enableSonarqube !== false;
@@ -292,38 +438,103 @@ export async function executeScan(
 
     if (enableSemgrep) {
       await logger.section("Semgrep");
+      const semgrepLabel = `Running Semgrep on ${filesInRepo} files`;
+      const semgrepStarted = Date.now();
+      await persistScanProgress(scanId, {
+        phase: "scanning",
+        scanner: "semgrep",
+        filesScanned: 0,
+        filesInRepo,
+        findingsCount: findings.length,
+        currentFile: withElapsed(semgrepLabel, semgrepStarted),
+        currentRule: "semgrep/opengrep",
+      });
       const overrides = await listRuleOverrides(tenantId, "semgrep");
       const disabledRuleIds = new Set(
         overrides.filter((override) => !override.enabled).map((override) => override.ruleId),
       );
-      const semgrepFindings = runSemgrep(cloneResult.repoDir, disabledRuleIds);
+      const stopSemgrepHeartbeat = startScanHeartbeat(scanId, () => ({
+        phase: "scanning",
+        scanner: "semgrep",
+        filesScanned: 0,
+        filesInRepo,
+        findingsCount: findings.length,
+        currentFile: semgrepLabel,
+        currentRule: "semgrep/opengrep",
+      }));
+      let semgrepFindings: ScanFindingInput[];
+      try {
+        semgrepFindings = await runSemgrep(cloneResult.repoDir, disabledRuleIds);
+      } finally {
+        stopSemgrepHeartbeat();
+      }
       findings.push(...semgrepFindings);
       filesScanned = filesInRepo;
+      void reportProgress({
+        phase: "scanning",
+        scanner: "semgrep",
+        filesScanned: filesInRepo,
+        filesInRepo,
+        findingsCount: findings.length,
+        currentFile: `Repository (${filesInRepo} files)`,
+        currentRule: "semgrep/opengrep",
+      });
       await logger.success(`Semgrep found ${semgrepFindings.length} issue(s)`);
     }
 
     if (enableCustomRules) {
       await logger.section("Custom rules");
-      const customResult = await runCustomRules(cloneResult.repoDir, tenantId);
+      const customResult = await runCustomRules(
+        cloneResult.repoDir,
+        tenantId,
+        filesInRepo,
+        allFiles,
+        (progress) => {
+          void reportProgress(progress);
+        },
+      );
       findings.push(...customResult.findings);
-      if (!enableSemgrep) {
-        filesScanned = Math.max(filesScanned, customResult.filesScanned);
-      }
+      filesScanned = Math.max(filesScanned, customResult.filesScanned);
       await logger.success(`Custom rules found ${customResult.findings.length} issue(s)`);
     }
 
     if (enableSensitiveData) {
       await logger.section("Sensitive data");
-      const sensitiveResult = await runSensitiveDataScanner(cloneResult.repoDir);
+      const sensitiveResult = await runSensitiveDataScanner(
+        allFiles,
+        relativePaths,
+        filesInRepo,
+        (progress) => {
+          void reportProgress({ ...progress, findingsCount: findings.length + progress.findingsCount });
+        },
+      );
       findings.push(...sensitiveResult.findings);
-      if (!enableSemgrep && !enableCustomRules) {
-        filesScanned = sensitiveResult.filesScanned;
-      }
+      filesScanned = Math.max(filesScanned, sensitiveResult.filesScanned);
       await logger.success(`Sensitive data scan found ${sensitiveResult.findings.length} issue(s)`);
     }
 
     if (enableSonarqube) {
       await logger.section("SonarQube");
+      const sonarLabel = `Running SonarQube on ${filesInRepo} files`;
+      const sonarStarted = Date.now();
+      await persistScanProgress(scanId, {
+        phase: "scanning",
+        scanner: "sonarqube",
+        filesScanned,
+        filesInRepo,
+        findingsCount: findings.length,
+        currentFile: withElapsed(sonarLabel, sonarStarted),
+        currentRule: "sonarqube/analyze",
+      });
+      const stopSonarHeartbeat = startScanHeartbeat(scanId, () => ({
+        phase: "scanning",
+        scanner: "sonarqube",
+        filesScanned,
+        filesInRepo,
+        findingsCount: findings.length,
+        currentFile: sonarLabel,
+        currentRule: "sonarqube/analyze",
+      }));
       try {
         const sonarOverrides = await listRuleOverrides(tenantId, "sonarqube");
         const disabledSonarRuleIds = new Set(
@@ -341,8 +552,20 @@ export async function executeScan(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await logger.warn(`SonarQube scan skipped or failed: ${message}`);
+      } finally {
+        stopSonarHeartbeat();
       }
     }
+
+    await persistScanProgress(scanId, {
+      phase: "persisting",
+      scanner: "persisting",
+      filesScanned,
+      filesInRepo,
+      findingsCount: findings.length,
+      currentFile: "Saving findings…",
+      currentRule: "database/persist",
+    });
 
     await persistFindings(scanId, tenantId, findings);
 
@@ -357,6 +580,8 @@ export async function executeScan(
       })
       .eq("id", scanId);
     if (updateError) throw new Error(`Failed to update scan status: ${updateError.message}`);
+
+    broadcastScanStatus(scanId, "completed", summary);
 
     void sendNotification({
       tenantId,

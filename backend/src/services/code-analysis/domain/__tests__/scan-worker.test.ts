@@ -13,7 +13,10 @@ describe("mapSemgrepSeverity", () => {
     expect(mapSemgrepSeverity("ERROR")).toBe("error");
     expect(mapSemgrepSeverity("WARNING")).toBe("warning");
     expect(mapSemgrepSeverity("INFO")).toBe("info");
-    expect(mapSemgrepSeverity("unknown")).toBe("info");
+    expect(mapSemgrepSeverity("CRITICAL")).toBe("error");
+    expect(mapSemgrepSeverity("LOW")).toBe("warning");
+    expect(mapSemgrepSeverity(undefined)).toBe("warning");
+    expect(mapSemgrepSeverity("unknown")).toBe("warning");
   });
 });
 
@@ -76,6 +79,26 @@ describe("parseSemgrepOutput", () => {
 
   it("returns empty array for invalid JSON", () => {
     expect(parseSemgrepOutput("not json", new Set())).toEqual([]);
+  });
+
+  it("falls back to metadata impact when severity is missing", () => {
+    const output = JSON.stringify({
+      results: [
+        {
+          check_id: "rule.no-severity",
+          path: "src/app.ts",
+          start: { line: 1 },
+          end: { line: 1 },
+          extra: {
+            message: "High impact issue",
+            metadata: { impact: "HIGH", likelihood: "LOW" },
+          },
+        },
+      ],
+    });
+
+    const findings = parseSemgrepOutput(output, new Set());
+    expect(findings[0]?.severity).toBe("error");
   });
 });
 

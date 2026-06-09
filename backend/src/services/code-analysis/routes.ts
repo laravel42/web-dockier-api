@@ -1,6 +1,8 @@
+import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { verifyAuthToken } from "../../shared/auth.js";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -17,8 +19,49 @@ import {
   SonarNotConfiguredError,
   toggleSonarRule,
 } from "./domain/sonarqube.js";
+import {
+  subscribeToScan,
+  unsubscribeFromScan,
+  sendScanSnapshot,
+} from "./domain/scan-events.js";
 
 export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
+  await app.register(websocket);
+
+  app.get(
+    "/code-analysis/scans/:scanId/ws",
+    { websocket: true },
+    async (socket, request) => {
+      const scanId = (request.params as { scanId: string }).scanId;
+      const token = (request.query as { token?: string }).token;
+      if (!token) {
+        socket.close(1008, "Missing token");
+        return;
+      }
+
+      const auth = verifyAuthToken(token);
+      if (!auth) {
+        socket.close(1008, "Unauthorized");
+        return;
+      }
+
+      try {
+        const scan = await getScan(scanId, auth.tenantId);
+        subscribeToScan(scanId, socket);
+        sendScanSnapshot(
+          socket,
+          scanId,
+          scan.status,
+          scan.summary as unknown as Record<string, unknown>,
+        );
+
+        socket.on("close", () => unsubscribeFromScan(scanId, socket));
+      } catch {
+        socket.close(1008, "Scan not found");
+      }
+    },
+  );
+
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
   // ─── Scans ─────────────────────────────────────────────────────────────────

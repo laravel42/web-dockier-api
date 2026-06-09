@@ -13,6 +13,18 @@ export const findingSchema = z.object({
   createdAt: z.string(),
 });
 
+export const scanProgressSchema = z.object({
+  phase: z.string(),
+  filesScanned: z.number().int().nonnegative(),
+  filesInRepo: z.number().int().nonnegative(),
+  findingsCount: z.number().int().nonnegative(),
+  currentFile: z.string().optional(),
+  currentRule: z.string().optional(),
+  scanner: z.string().optional(),
+  rulesChecked: z.number().int().nonnegative().optional(),
+  rulesTotal: z.number().int().nonnegative().optional(),
+});
+
 export const summarySchema = z.object({
   totalFindings: z.number().int().nonnegative(),
   errors: z.number().int().nonnegative(),
@@ -20,6 +32,8 @@ export const summarySchema = z.object({
   infos: z.number().int().nonnegative(),
   filesScanned: z.number().int().nonnegative(),
   filesInRepo: z.number().int().nonnegative(),
+  error: z.string().optional(),
+  progress: scanProgressSchema.optional(),
 });
 
 export const scanStatusSchema = z.enum(["pending", "running", "completed", "failed"]);

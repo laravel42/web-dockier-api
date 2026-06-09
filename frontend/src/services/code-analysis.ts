@@ -2,7 +2,17 @@ import { request } from "./request";
 import type { ScanSummary, Scan, Finding } from "../types";
 
 type ScanSummaryApi = ScanSummary & {
-  progress?: { phase: "cloning" | "scanning" | "persisting" | "done"; currentFile?: string; filesScanned: number; filesInRepo: number; findingsCount: number };
+  progress?: {
+    phase: "cloning" | "scanning" | "persisting" | "done";
+    currentFile?: string;
+    currentRule?: string;
+    scanner?: string;
+    filesScanned: number;
+    filesInRepo: number;
+    findingsCount: number;
+    rulesChecked?: number;
+    rulesTotal?: number;
+  };
   error?: string;
 };
 
