@@ -1,5 +1,4 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import SeverityBadge from "../../../components/SeverityBadge";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import { chipCls } from "../../../utils/styles";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
@@ -86,18 +85,8 @@ export default function ScanProjectTable({
               {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-xs text-text-muted">—</span>}
             </td>
             <td className="px-4 py-3 text-text-muted">{sorted.length}</td>
-            <td className="px-4 py-3">
-              {summary && summary.totalFindings > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {summary.errors > 0 && <SeverityBadge severity="error" count={summary.errors} />}
-                  {summary.warnings > 0 && <SeverityBadge severity="warning" count={summary.warnings} />}
-                  {summary.infos > 0 && <SeverityBadge severity="info" count={summary.infos} />}
-                </div>
-              ) : summary && summary.totalFindings === 0 ? (
-                <SeverityBadge severity="clean" label="Clean" />
-              ) : (
-                <span className="text-xs text-text-muted">—</span>
-              )}
+            <td className="px-4 py-3 text-xs text-text-muted tabular-nums">
+              {summary != null ? summary.totalFindings : "—"}
             </td>
             <td className="px-4 py-3">
               <div className="flex items-center gap-2">

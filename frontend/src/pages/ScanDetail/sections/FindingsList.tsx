@@ -2,6 +2,7 @@ import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon"
 import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls } from "../../../utils/styles";
+import { displayFindingPath } from "../../../utils/scanPaths";
 import { usePermissions } from "../../../context/PermissionsContext";
 import type { Finding, PMIntegration } from "../../../types";
 import Spinner from "../../../components/Spinner";
@@ -113,7 +114,7 @@ export default function FindingsList({
             <details key={filePath} className={`${cardCls} group`}>
               <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
                 <ChevronRightIcon className="size-3.5  text-text-muted shrink-0 transition-transform group-open:rotate-90" />
-                <span className="text-xs font-mono text-text truncate">{filePath}</span>
+                <span className="text-xs font-mono text-text truncate">{displayFindingPath(filePath)}</span>
                 <div className="flex items-center gap-1 ml-auto shrink-0">
                   {fileFindings.filter(f => f.severity === "error").length > 0 && (
                     <SeverityBadge severity="error" count={fileFindings.filter(f => f.severity === "error").length} />
@@ -131,7 +132,7 @@ export default function FindingsList({
                   <FindingRow
                     key={f.id}
                     finding={f}
-                    fileContent={fileContents[f.filePath]}
+                    fileContent={fileContents[displayFindingPath(f.filePath)]}
                     pmIntegrations={pmIntegrations}
                     hasConnectionId={hasConnectionId}
                     mrCreating={mrCreating}
@@ -229,7 +230,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
   return (
     <div className="rounded-lg overflow-hidden border border-gray-700/50 bg-[#1e1e2e]">
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#181825] border-b border-gray-700/50">
-        <span className="text-[10px] text-gray-400 font-mono">{f.filePath}</span>
+        <span className="text-[10px] text-gray-400 font-mono">{displayFindingPath(f.filePath)}</span>
         <span className="text-[10px] text-gray-500">L{start + 1}–{end}</span>
       </div>
       <pre className="p-0 m-0 overflow-x-auto text-[11px] leading-[1.6] font-mono">

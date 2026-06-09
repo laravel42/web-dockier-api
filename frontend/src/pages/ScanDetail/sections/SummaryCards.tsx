@@ -16,7 +16,7 @@ export default function SummaryCards({
   scanRunning = false,
   progress = null,
 }: Props) {
-  const liveProgress = scanRunning ? progress : null;
+  const liveProgress = scanRunning ? (progress ?? summary.progress ?? null) : null;
   const filesScanned = liveProgress?.filesScanned ?? summary.filesScanned ?? 0;
   const filesInRepo = liveProgress?.filesInRepo ?? summary.filesInRepo ?? 0;
   const totalFindings = liveProgress?.findingsCount ?? summary.totalFindings;

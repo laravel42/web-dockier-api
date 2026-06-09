@@ -1,4 +1,5 @@
 import type { ScanProgress } from "../../../types";
+import { displayFindingPath } from "../../../utils/scanPaths";
 
 const SCANNER_LABELS: Record<string, string> = {
   cloning: "Cloning",
@@ -59,7 +60,9 @@ function detailLine(progress: ScanProgress): string | null {
     const checked = progress.rulesChecked ?? 0;
     return `${rule} (${checked}/${progress.rulesTotal})`;
   }
-  return progress.currentFile ?? null;
+  const current = progress.currentFile ?? null;
+  if (!current) return null;
+  return displayFindingPath(current);
 }
 
 export default function ScanProgressPanel({ progress }: { progress: ScanProgress }) {

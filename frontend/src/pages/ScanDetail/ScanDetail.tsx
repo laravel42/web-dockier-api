@@ -65,9 +65,9 @@ export default function ScanDetail() {
           onNavigateProject={() => core.project && core.navigate(`/projects/${core.project.id}`)}
         />
 
-        {core.scan.summary && (
+        {core.displaySummary && (
           <SummaryCards
-            summary={core.scan.summary}
+            summary={core.displaySummary}
             severityFilter={core.severityFilter}
             onFilterChange={core.handleSeverityFilter}
             scanRunning={core.scanRunning}

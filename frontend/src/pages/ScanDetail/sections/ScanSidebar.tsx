@@ -32,26 +32,24 @@ export default function ScanSidebar({
   scanRunning, scanProgress, scanError,
   hasConnectionId, onRunScan, onSelectScan,
 }: Props) {
-  const { has } = usePermissions();
-  const canScan = has("scan:run");
+  const { has, isOwner, loading: permissionsLoading } = usePermissions();
+  const canRunScan = isOwner || has("scan:run");
 
   return (
     <div className="w-72 shrink-0">
       <div className="sticky top-6 space-y-2">
         <div className={`${cardCls} overflow-hidden`}>
-          {canScan && (
-            <div className="p-2 border-b border-border/40">
-              <button
-                type="button"
-                onClick={onRunScan}
-                disabled={!hasConnectionId}
-                className={`${btnPrimary} w-full py-2 text-sm`}
-              >
-                <ShieldCheckIcon className="size-3.5" />
-                Run new scan
-              </button>
-            </div>
-          )}
+          <div className="p-2 border-b border-border/40">
+            <button
+              type="button"
+              onClick={onRunScan}
+              disabled={!hasConnectionId || permissionsLoading || !canRunScan}
+              className={`${btnPrimary} w-full py-2 text-sm`}
+            >
+              <ShieldCheckIcon className="size-3.5" />
+              Run new scan
+            </button>
+          </div>
 
           {scanRunning && scanProgress && (
             <div className="px-2.5 py-2 border-b border-border/40 bg-muted/15">

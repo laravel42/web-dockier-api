@@ -1,4 +1,4 @@
-import { extname } from "node:path";
+import { extname, relative, resolve } from "node:path";
 import {
   scanSensitiveData,
   type SensitiveField,
@@ -70,7 +70,37 @@ interface SemgrepJsonResult {
   };
 }
 
-export function parseSemgrepOutput(stdout: string, disabledRuleIds: Set<string>): ScanFindingInput[] {
+/** Normalize an absolute scanner path to a repo-relative path for storage and display. */
+export function toRepoRelativePath(filePath: string, repoDir?: string): string {
+  if (!filePath) return filePath;
+  const normalized = filePath.replace(/\\/g, "/");
+  if (!normalized.startsWith("/") && !/^[A-Za-z]:\//.test(normalized)) {
+    return normalized;
+  }
+
+  if (repoDir) {
+    const resolvedRepo = resolve(repoDir).replace(/\\/g, "/");
+    const resolvedFile = resolve(filePath).replace(/\\/g, "/");
+    if (resolvedFile === resolvedRepo) return "";
+    if (resolvedFile.startsWith(`${resolvedRepo}/`)) {
+      return relative(resolvedRepo, resolvedFile).replace(/\\/g, "/");
+    }
+  }
+
+  const repoMarker = "/repo/";
+  const markerIdx = normalized.indexOf(repoMarker);
+  if (markerIdx >= 0) {
+    return normalized.slice(markerIdx + repoMarker.length);
+  }
+
+  return normalized;
+}
+
+export function parseSemgrepOutput(
+  stdout: string,
+  disabledRuleIds: Set<string>,
+  repoDir?: string,
+): ScanFindingInput[] {
   let parsed: { results?: SemgrepJsonResult[] };
   try {
     parsed = JSON.parse(stdout) as { results?: SemgrepJsonResult[] };
@@ -86,7 +116,7 @@ export function parseSemgrepOutput(stdout: string, disabledRuleIds: Set<string>)
       ruleId: result.check_id,
       severity: resolveSemgrepSeverity(result.extra),
       message: result.extra.message,
-      filePath: result.path,
+      filePath: toRepoRelativePath(result.path, repoDir),
       startLine: result.start.line,
       endLine: result.end.line,
       snippet: result.extra.lines?.trim() ?? "",

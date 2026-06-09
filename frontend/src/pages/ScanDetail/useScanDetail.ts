@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, gitApi } from "../../services/api";
 import { getErrorMessage } from "../../utils/errors";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { useScanLiveState, useScanProgress } from "../../context/ScanProgressContext";
-import type { Scan, Finding, Project, ScanProgress } from "../../types";
+import type { Scan, Finding, Project, ScanProgress, ScanSummary } from "../../types";
+import { displayFindingPath } from "../../utils/scanPaths";
 
 const DEFAULT_SCAN_PROGRESS: ScanProgress = {
   phase: "cloning",
@@ -50,6 +51,31 @@ export function useScanDetail() {
   const scanProgress = scanRunning
     ? (live?.progress ?? scan?.summary?.progress ?? DEFAULT_SCAN_PROGRESS)
     : null;
+
+  const displaySummary = useMemo((): ScanSummary | null => {
+    const apiSummary = scan?.summary;
+    const liveSummary = live?.summary;
+    if (!apiSummary && !liveSummary) return null;
+
+    if (scanRunning) {
+      const progress = live?.progress ?? apiSummary?.progress;
+      const base = liveSummary ?? apiSummary!;
+      return {
+        ...base,
+        filesScanned: progress?.filesScanned ?? base.filesScanned ?? 0,
+        filesInRepo: progress?.filesInRepo ?? base.filesInRepo ?? 0,
+        totalFindings: progress?.findingsCount ?? base.totalFindings ?? 0,
+        progress,
+      };
+    }
+
+    if (liveSummary && live?.status && TERMINAL_STATUSES.has(live.status)) {
+      return { ...apiSummary, ...liveSummary, progress: undefined };
+    }
+
+    return apiSummary ?? liveSummary ?? null;
+  }, [scan?.summary, live?.summary, live?.progress, live?.status, scanRunning]);
+
   const scanError =
     runScanError
     || live?.error
@@ -131,11 +157,22 @@ export function useScanDetail() {
     }
   }, [scanId, routeProjectId, seedFromScan, fetchFindings, refreshAllScans, navigate]);
 
-  // Refresh scan record once when live transitions to a terminal status.
+  // Apply terminal live updates immediately, then refresh from API once.
   useEffect(() => {
     if (!scanId || !live) return;
     if (!TERMINAL_STATUSES.has(live.status)) return;
-    if (scan?.status === live.status) return;
+
+    if (live.summary) {
+      setScan((prev) => {
+        if (!prev || prev.id !== scanId) return prev;
+        if (prev.status === live.status && prev.summary === live.summary) return prev;
+        return { ...prev, status: live.status, summary: live.summary! };
+      });
+    }
+
+    if (scan?.status === live.status && scan?.summary?.totalFindings === live.summary?.totalFindings) {
+      return;
+    }
 
     const key = `${scanId}:${live.status}`;
     if (terminalHandledRef.current === key) return;
@@ -150,13 +187,13 @@ export function useScanDetail() {
       fetchFindings(scanId, severityFilter || undefined);
     }
     if (project) refreshAllScans(project.id);
-  }, [live?.status, scanId, scan?.status, severityFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
+  }, [live?.status, live?.summary, scanId, scan?.status, scan?.summary?.totalFindings, severityFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
 
   useEffect(() => {
     if (!project || findings.length === 0) return;
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
-    const uniqueFiles = [...new Set(findings.map((f) => f.filePath))];
+    const uniqueFiles = [...new Set(findings.map((f) => displayFindingPath(f.filePath)))];
     const toFetch = uniqueFiles.filter((fp) => !fileContents[fp] && !fetchingFiles.current.has(fp));
     if (toFetch.length === 0) return;
     toFetch.forEach((fp) => {
@@ -231,6 +268,7 @@ export function useScanDetail() {
     allScansLoading,
     scanRunning,
     scanProgress,
+    displaySummary,
     scanError,
     handleRunScan,
   };

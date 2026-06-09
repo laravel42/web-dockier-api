@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseSemgrepOutput,
+  toRepoRelativePath,
   runCustomRulesOnContent,
   runSensitiveDataScan,
   mapSensitiveSeverity,
@@ -17,6 +18,14 @@ describe("mapSemgrepSeverity", () => {
     expect(mapSemgrepSeverity("LOW")).toBe("warning");
     expect(mapSemgrepSeverity(undefined)).toBe("warning");
     expect(mapSemgrepSeverity("unknown")).toBe("warning");
+  });
+});
+
+describe("toRepoRelativePath", () => {
+  it("strips absolute clone paths to repo-relative paths", () => {
+    const repoDir = "/tmp/build-abc123/repo";
+    expect(toRepoRelativePath("/tmp/build-abc123/repo/src/app.ts", repoDir)).toBe("src/app.ts");
+    expect(toRepoRelativePath("src/app.ts", repoDir)).toBe("src/app.ts");
   });
 });
 
@@ -60,7 +69,7 @@ describe("parseSemgrepOutput", () => {
 
   it("parses semgrep JSON and skips disabled rules", () => {
     const disabled = new Set(["rule.disabled"]);
-    const findings = parseSemgrepOutput(sampleOutput, disabled);
+    const findings = parseSemgrepOutput(sampleOutput, disabled, "/tmp/build-abc123/repo");
 
     expect(findings).toHaveLength(2);
     expect(findings[0]).toEqual({
@@ -75,6 +84,22 @@ describe("parseSemgrepOutput", () => {
     expect(findings[1].ruleId).toBe("rule.info");
     expect(findings[1].severity).toBe("info");
     expect(findings[1].snippet).toBe("");
+  });
+
+  it("normalizes absolute semgrep paths using repoDir", () => {
+    const output = JSON.stringify({
+      results: [
+        {
+          check_id: "rule.abs",
+          path: "/tmp/build-abc123/repo/lib/util.ts",
+          start: { line: 1 },
+          end: { line: 1 },
+          extra: { message: "Issue", severity: "WARNING" },
+        },
+      ],
+    });
+    const findings = parseSemgrepOutput(output, new Set(), "/tmp/build-abc123/repo");
+    expect(findings[0]?.filePath).toBe("lib/util.ts");
   });
 
   it("returns empty array for invalid JSON", () => {

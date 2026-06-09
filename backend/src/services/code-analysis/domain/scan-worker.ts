@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { cloneRepo } from "../../../lib/build-pipeline.js";
@@ -11,7 +11,7 @@ import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../git-integration/domain/connections.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { listCustomRules } from "./custom-rules.js";
-import { defaultSummary } from "./mappers.js";
+import { defaultSummary, parseSummary } from "./mappers.js";
 import { listRuleOverrides } from "./rule-overrides.js";
 import {
   isModelFile,
@@ -20,6 +20,7 @@ import {
   parseSemgrepOutput,
   runCustomRulesOnContent,
   runSensitiveDataScan,
+  toRepoRelativePath,
   type ScanFindingInput,
 } from "./scan-analysis.js";
 import { filterDisabledSonarFindings, runSonarScanner } from "./sonarqube.js";
@@ -30,7 +31,12 @@ import {
   updateScanProgress,
 } from "./scan-progress.js";
 import type { ScanProgressPayload } from "./scan-events.js";
-import { SCAN_SKIP_DIRS, semgrepExcludeArgs } from "./scan-skip-dirs.js";
+import {
+  isScanSkippedDirName,
+  isScanSkippedRelativePath,
+  semgrepExcludeArgs,
+  writeSemgrepIgnore,
+} from "./scan-skip-dirs.js";
 
 export interface RunScanOptions {
   enableSemgrep?: boolean;
@@ -43,6 +49,8 @@ const RULES_DIR = getOpengrepRulesDir();
 
 const INSERT_BATCH_SIZE = 100;
 const SEMGREP_TIMEOUT_MS = 600_000;
+const SEMGREP_TARGET_BATCH_SIZE = 1000;
+const MAX_SCAN_FILE_BYTES = 1_000_000;
 const MAX_COMMAND_OUTPUT = 50 * 1024 * 1024;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
@@ -136,8 +144,19 @@ function runCommand(
   });
 }
 
-async function runSemgrep(repoDir: string, disabledRuleIds: Set<string>): Promise<ScanFindingInput[]> {
-  const semgrep = findSemgrepBinary();
+function filterScannableFindings(
+  findings: ScanFindingInput[],
+  repoDir: string,
+): ScanFindingInput[] {
+  return findings.filter((finding) => !isScanSkippedRelativePath(toRepoRelativePath(finding.filePath, repoDir)));
+}
+
+async function runSemgrepBatch(
+  semgrep: string,
+  repoDir: string,
+  targets: string[],
+  disabledRuleIds: Set<string>,
+): Promise<ScanFindingInput[]> {
   const { stdout, stderr, code } = await runCommand(
     semgrep,
     [
@@ -146,17 +165,41 @@ async function runSemgrep(repoDir: string, disabledRuleIds: Set<string>): Promis
       RULES_DIR,
       "--json",
       "--quiet",
+      "--use-git-ignore",
+      "--exclude-minified-files",
       ...semgrepExcludeArgs(),
-      repoDir,
+      ...targets,
     ],
-    { timeoutMs: SEMGREP_TIMEOUT_MS },
+    { cwd: repoDir, timeoutMs: SEMGREP_TIMEOUT_MS },
   );
 
   if (!stdout.trim() && code !== 0) {
     throw new Error(stderr.trim() || `semgrep exited with code ${code}`);
   }
 
-  return parseSemgrepOutput(stdout, disabledRuleIds);
+  return filterScannableFindings(parseSemgrepOutput(stdout, disabledRuleIds, repoDir), repoDir);
+}
+
+async function runSemgrep(
+  repoDir: string,
+  relativePaths: string[],
+  disabledRuleIds: Set<string>,
+): Promise<ScanFindingInput[]> {
+  await writeSemgrepIgnore(repoDir);
+
+  const targets = relativePaths.filter((path) => !isScanSkippedRelativePath(path));
+  if (targets.length === 0) return [];
+
+  const semgrep = findSemgrepBinary();
+  const findings: ScanFindingInput[] = [];
+
+  for (let i = 0; i < targets.length; i += SEMGREP_TARGET_BATCH_SIZE) {
+    const batch = targets.slice(i, i + SEMGREP_TARGET_BATCH_SIZE);
+    const batchFindings = await runSemgrepBatch(semgrep, repoDir, batch, disabledRuleIds);
+    findings.push(...batchFindings);
+  }
+
+  return findings;
 }
 
 async function walkRepoFiles(repoDir: string): Promise<{ allFiles: string[]; relativePaths: string[] }> {
@@ -166,14 +209,26 @@ async function walkRepoFiles(repoDir: string): Promise<{ allFiles: string[]; rel
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (SCAN_SKIP_DIRS.has(entry.name)) continue;
+      if (entry.isSymbolicLink() || isScanSkippedDirName(entry.name)) continue;
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(fullPath);
-      } else if (entry.isFile()) {
-        allFiles.push(fullPath);
-        relativePaths.push(relative(repoDir, fullPath));
+        continue;
       }
+      if (!entry.isFile()) continue;
+
+      const relPath = relative(repoDir, fullPath);
+      if (isScanSkippedRelativePath(relPath)) continue;
+
+      try {
+        const { size } = await stat(fullPath);
+        if (size > MAX_SCAN_FILE_BYTES) continue;
+      } catch {
+        continue;
+      }
+
+      allFiles.push(fullPath);
+      relativePaths.push(relPath);
     }
   }
 
@@ -208,6 +263,7 @@ async function runCustomRules(
 
   for (const filePath of allFiles) {
     const relPath = relative(repoDir, filePath);
+    if (isScanSkippedRelativePath(relPath)) continue;
     const applicableRules = rules.filter((rule) => matchesExtension(relPath, rule.extensions));
     if (applicableRules.length === 0) continue;
 
@@ -334,7 +390,7 @@ async function persistFindings(
       rule_id: finding.ruleId,
       severity: finding.severity,
       message: finding.message,
-      file_path: finding.filePath,
+      file_path: toRepoRelativePath(finding.filePath),
       start_line: finding.startLine,
       end_line: finding.endLine,
       snippet: finding.snippet,
@@ -347,8 +403,19 @@ async function persistFindings(
 }
 
 async function markScanFailed(scanId: string, message: string): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from("scans")
+    .select("summary")
+    .eq("id", scanId)
+    .single();
+
+  const existing = parseSummary(data?.summary) as ReturnType<typeof parseSummary> & {
+    progress?: { filesScanned?: number; filesInRepo?: number };
+  };
   const summary = {
     ...defaultSummary(),
+    filesScanned: existing.filesScanned || existing.progress?.filesScanned || 0,
+    filesInRepo: existing.filesInRepo || existing.progress?.filesInRepo || 0,
     error: message,
   };
   const { error } = await supabaseAdmin
@@ -457,7 +524,7 @@ export async function executeScan(
       }));
       let semgrepFindings: ScanFindingInput[];
       try {
-        semgrepFindings = await runSemgrep(cloneResult.repoDir, disabledRuleIds);
+        semgrepFindings = await runSemgrep(cloneResult.repoDir, relativePaths, disabledRuleIds);
       } finally {
         stopSemgrepHeartbeat();
       }
@@ -567,7 +634,7 @@ export async function executeScan(
       .from("scans")
       .update({
         status: "completed",
-        summary: summary as unknown as Json,
+        summary: { ...summary, progress: undefined } as unknown as Json,
         commit_sha: cloneResult.commitHash,
         updated_at: new Date().toISOString(),
       })

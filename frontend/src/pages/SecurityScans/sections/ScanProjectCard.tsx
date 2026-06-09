@@ -1,5 +1,4 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import SeverityBadge from "../../../components/SeverityBadge";
 import { cardInteractiveCls, chipCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
@@ -52,18 +51,6 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
           limit={4}
           className="mt-1.5"
         />
-        {summary && summary.totalFindings > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {summary.errors > 0 && <SeverityBadge severity="error" count={summary.errors} />}
-            {summary.warnings > 0 && <SeverityBadge severity="warning" count={summary.warnings} />}
-            {summary.infos > 0 && <SeverityBadge severity="info" count={summary.infos} />}
-          </div>
-        )}
-        {summary && summary.totalFindings === 0 && (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <SeverityBadge severity="clean" label="Clean" />
-          </div>
-        )}
       </div>
 
       <div className="flex items-center justify-between gap-2 mt-auto">
