@@ -11,6 +11,7 @@ import StepEnvironment from "./steps/StepEnvironment";
 import StepCompose from "./steps/StepCompose";
 import StepDeploy from "./steps/StepDeploy";
 import RocketIcon from "../icons/outlined/RocketIcon";
+import Spinner from "../Spinner";
 
 export default function DeployWizard({ open, onClose, project, analysis, analysisLoading, analysisError, providers, onDeployComplete }: DeployWizardProps) {
   const {
@@ -97,6 +98,10 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             }}
             onBuildMethodChange={(method) => setState(prev => ({ ...prev, buildMethod: method }))}
             onPostDeployCommandsChange={(commands) => setState(prev => ({ ...prev, postDeployCommands: commands }))}
+            onRegenerateScript={() => {
+              setState(prev => ({ ...prev, tofuScript: "" }));
+              void generateScript();
+            }}
           />
         )}
         {step === 6 && <StepDeploy state={state} />}
@@ -141,10 +146,19 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                 className={`${btnPrimary} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5`}
               >
                 {step === 5 ? (
-                  <>
-                    <RocketIcon />
-                    Deploy
-                  </>
+                  tofuLoading ? (
+                    <>
+                      <Spinner className="size-4" />
+                      Preparing deploy script…
+                    </>
+                  ) : !state.tofuScript ? (
+                    "Prepare deploy script"
+                  ) : (
+                    <>
+                      <RocketIcon />
+                      Deploy
+                    </>
+                  )
                 ) : (
                   "Next →"
                 )}

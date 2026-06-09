@@ -7,13 +7,14 @@ import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
 import StepPostDeployCommands from "./StepPostDeployCommands";
 
-export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onPostDeployCommandsChange, isTemplate }: {
+export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onPostDeployCommandsChange, onRegenerateScript, isTemplate }: {
   state: WizardState;
   loading: boolean;
   error: string;
   onToggleDocker: () => void;
   onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
   onPostDeployCommandsChange: (commands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>) => void;
+  onRegenerateScript?: () => void;
   isTemplate?: boolean;
 }) {
   return (
@@ -125,12 +126,36 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
         />
       )}
 
+      {/* Deploy script preview */}
+      {!loading && state.tofuScript && (
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Deploy script</p>
+            {onRegenerateScript && (
+              <button type="button" onClick={onRegenerateScript} className="text-xs text-primary-500 hover:underline">
+                Regenerate
+              </button>
+            )}
+          </div>
+          <pre className="max-h-40 overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs whitespace-pre-wrap text-text-secondary">
+            {state.tofuScript}
+          </pre>
+        </div>
+      )}
+
       {/* Loading */}
       {loading && (
-        <div className="flex items-center gap-2 py-6 justify-center">
+        <div className="flex items-center justify-center gap-2 py-6">
           <Spinner className="size-4 " />
-          <span className="text-sm text-text-muted">Preparing deployment…</span>
+          <span className="text-sm text-text-muted">Preparing deploy script…</span>
         </div>
+      )}
+
+      {/* Empty / retry prompt */}
+      {!loading && !state.tofuScript && !error && (
+        <p className="text-center text-sm text-text-muted py-4">
+          Configure build options above, then prepare the deploy script to continue.
+        </p>
       )}
 
       {/* Error */}

@@ -504,13 +504,20 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
   const handleNext = async () => {
     if (step === 5) {
+      if (tofuLoading) return;
+      if (!state.tofuScript) {
+        await generateScript();
+        return;
+      }
       setStep(6);
       startDeploy();
       return;
     }
     if (step === 4) {
       setStep(5);
-      generateScript();
+      if (!state.tofuScript) {
+        void generateScript();
+      }
       return;
     }
     // When advancing from Env Vars (2) to Analysis (3), run detection

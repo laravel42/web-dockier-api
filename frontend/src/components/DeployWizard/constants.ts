@@ -4,7 +4,7 @@ export const STEPS = [
   { label: "Env Vars", icon: "🔑" },
   { label: "Analysis", icon: "🔍" },
   { label: "Plan", icon: "📋" },
-  { label: "Config", icon: "🔧" },
+  { label: "Deploy script", icon: "📜" },
   { label: "Deploy", icon: "🚀" },
 ];
 
