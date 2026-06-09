@@ -52,6 +52,16 @@ function bumpCount(bucket: ProviderSeverityCounts, severity: string): void {
   else if (severity === "info") bucket.infos++;
 }
 
+function applyFindingRow(
+  counts: SecurityFindingCounts,
+  row: { severity: string; rule_id: string },
+): void {
+  bumpCount(counts, row.severity);
+  const provider = findingProvider(row.rule_id);
+  counts[provider]++;
+  bumpCount(counts.byProvider[provider], row.severity);
+}
+
 export async function getSecurityFindingCounts(scanId: string): Promise<SecurityFindingCounts> {
   const { data, error } = await supabaseAdmin
     .from("findings")
@@ -62,12 +72,47 @@ export async function getSecurityFindingCounts(scanId: string): Promise<Security
 
   const counts = emptyCounts();
   for (const row of data ?? []) {
-    bumpCount(counts, row.severity);
-    const provider = findingProvider(row.rule_id);
-    counts[provider]++;
-    bumpCount(counts.byProvider[provider], row.severity);
+    applyFindingRow(counts, row);
   }
   return counts;
+}
+
+export type ScanSeveritySummary = Pick<SecurityFindingCounts, "total" | "errors" | "warnings" | "infos">;
+
+/** Batch severity totals for list views (excludes sensitive-data findings). */
+export async function getSecurityFindingCountsForScans(
+  scanIds: string[],
+): Promise<Map<string, ScanSeveritySummary>> {
+  const result = new Map<string, ScanSeveritySummary>();
+  if (scanIds.length === 0) return result;
+
+  const { data, error } = await supabaseAdmin
+    .from("findings")
+    .select("scan_id,severity,rule_id")
+    .in("scan_id", scanIds)
+    .not("rule_id", "like", "sensitive-data.%");
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
+
+  const byScan = new Map<string, SecurityFindingCounts>();
+  for (const row of data ?? []) {
+    let counts = byScan.get(row.scan_id);
+    if (!counts) {
+      counts = emptyCounts();
+      byScan.set(row.scan_id, counts);
+    }
+    applyFindingRow(counts, row);
+  }
+
+  for (const scanId of scanIds) {
+    const counts = byScan.get(scanId) ?? emptyCounts();
+    result.set(scanId, {
+      total: counts.total,
+      errors: counts.errors,
+      warnings: counts.warnings,
+      infos: counts.infos,
+    });
+  }
+  return result;
 }
 
 export const FINDINGS_PAGE_SIZE_DEFAULT = 40;

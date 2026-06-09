@@ -8,7 +8,7 @@ import { enqueueScan } from "./worker.js";
 import type { RunScanOptions } from "./scan-worker.js";
 import { persistScanProgress } from "./scan-progress.js";
 import { reconcileStaleScanById } from "./scan-reconcile.js";
-import { getSecurityFindingCounts } from "./findings.js";
+import { getSecurityFindingCounts, getSecurityFindingCountsForScans } from "./findings.js";
 
 export type { RunScanOptions };
 
@@ -80,7 +80,27 @@ export async function listScans(params: ListScansParams) {
 
   const { data: finalData, error: finalError } = await query;
   const finalRows = unwrapList(finalData, finalError, CodeAnalysisError, { internalMsg: "Failed to list scans" });
-  return finalRows.map(rowToScan);
+
+  const terminalIds = finalRows
+    .filter((row) => row.status === "completed" || row.status === "failed")
+    .map((row) => row.id);
+  const severityByScan = await getSecurityFindingCountsForScans(terminalIds);
+
+  return finalRows.map((row) => {
+    const mapped = rowToScan(row);
+    const counts = severityByScan.get(row.id);
+    if (!counts) return mapped;
+    return {
+      ...mapped,
+      summary: {
+        ...mapped.summary,
+        totalFindings: counts.total,
+        errors: counts.errors,
+        warnings: counts.warnings,
+        infos: counts.infos,
+      },
+    };
+  });
 }
 
 export async function getScan(scanId: string, tenantId: string) {

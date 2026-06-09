@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "../../../components/DeployWizard";
 import MDEditor from "@uiw/react-md-editor";
 import { cardCls } from "../../../utils/styles";
@@ -483,7 +484,18 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
       .finally(() => setLoading(false));
   }, [vuln.id, vuln.details]);
 
-  return (
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  return createPortal(
     <div className="fixed inset-0 z-99999" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
@@ -535,7 +547,8 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

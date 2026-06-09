@@ -11,6 +11,7 @@ import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../git-integration/domain/connections.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { listCustomRules } from "./custom-rules.js";
+import { filterSecurityFindings } from "./findings.js";
 import { defaultSummary, parseSummary } from "./mappers.js";
 import { listRuleOverrides } from "./rule-overrides.js";
 import {
@@ -362,13 +363,14 @@ async function runSensitiveDataScanner(
 }
 
 function buildSummary(findings: ScanFindingInput[], filesInRepo: number, filesScanned: number) {
-  const errors = findings.filter((f) => f.severity === "error").length;
-  const warnings = findings.filter((f) => f.severity === "warning").length;
-  const infos = findings.filter((f) => f.severity === "info").length;
+  const securityFindings = filterSecurityFindings(findings);
+  const errors = securityFindings.filter((f) => f.severity === "error").length;
+  const warnings = securityFindings.filter((f) => f.severity === "warning").length;
+  const infos = securityFindings.filter((f) => f.severity === "info").length;
 
   return {
     ...defaultSummary(),
-    totalFindings: findings.length,
+    totalFindings: securityFindings.length,
     errors,
     warnings,
     infos,
