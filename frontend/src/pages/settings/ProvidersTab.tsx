@@ -4,6 +4,7 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary, btnDanger, cardInteractiveCls } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
@@ -78,10 +79,16 @@ export default function ProvidersTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="provider-type" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
-            <select id="provider-type" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className={inputCls}>
-              <option value="aws">AWS</option>
-              <option value="gcp">Google Cloud</option>
-            </select>
+            <SearchableCombobox
+              id="provider-type"
+              value={form.provider}
+              onValueChange={(provider) => setForm({ ...form, provider })}
+              options={[
+                { value: "aws", label: "AWS" },
+                { value: "gcp", label: "Google Cloud" },
+              ]}
+              placeholder="Select provider"
+            />
           </div>
           <div>
             <label htmlFor="provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>

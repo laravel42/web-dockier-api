@@ -11,7 +11,7 @@ export default function Toolbar() {
 
   return (
     <header className="h-[72px] bg-dusk-900/40 light:bg-cream-50/80 backdrop-blur-xl border-b border-white/8 light:border-cream-200 flex items-center justify-between px-8 shrink-0">
-      <div className="relative w-80">
+      <div className="relative w-64 max-w-full">
         <SearchIcon className="size-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-dusk-400" />
         <input
           type="text"

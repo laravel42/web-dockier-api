@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../../services/api";
-import { getProviderStyle } from "../../data/providers";
 import { getErrorMessage } from "../../utils/errors";
 import { getRepoKey } from "../../utils/parseOwnerRepo";
 import type { Deployment, Provider, Project } from "../../types";
@@ -60,13 +59,11 @@ export function useDeployDetail() {
 
   const prov = deploy ? providers.find(p => p.id === deploy.providerId) : undefined;
   const provKey = prov?.provider || "";
-  const providerStyle = getProviderStyle(provKey);
-
   return {
     deployId, navigate,
     deploy, project, providers,
     loading, error,
     allDeploys, allDeploysLoading,
-    prov, provKey, providerStyle,
+    prov, provKey,
   };
 }

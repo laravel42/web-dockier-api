@@ -4,6 +4,7 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
@@ -245,11 +246,16 @@ export default function SecurityRulesTab() {
           </div>
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Severity</label>
-            <select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })} className={inputCls}>
-              <option value="error">Error</option>
-              <option value="warning">Warning</option>
-              <option value="info">Info</option>
-            </select>
+            <SearchableCombobox
+              value={form.severity}
+              onValueChange={(severity) => setForm({ ...form, severity })}
+              options={[
+                { value: "error", label: "Error" },
+                { value: "warning", label: "Warning" },
+                { value: "info", label: "Info" },
+              ]}
+              placeholder="Select severity"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Message</label>

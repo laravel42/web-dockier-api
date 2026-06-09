@@ -3,6 +3,7 @@ import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIco
 import Modal from "../../../components/Modal";
 import type { PMIntegration, PMTeam, PMMember } from "../../../types";
 import Spinner from "../../../components/Spinner";
+import { SearchableCombobox } from "../../../components/ui/combobox";
 
 interface Props {
   open: boolean;
@@ -53,7 +54,6 @@ export default function CreateIssueModal({
   issueCreating, issueSuccess, issueSuccessUrl, issueError, onDismissError,
   onSubmit,
 }: Props) {
-  const selectCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
   const inputCls = `w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors`;
 
   return (
@@ -81,9 +81,13 @@ export default function CreateIssueModal({
           {pmIntegrations.length > 1 && (
             <div>
               <label htmlFor="issue-integration" className="block text-sm font-medium text-text-secondary mb-1.5">Integration</label>
-              <select id="issue-integration" value={issueIntegration} onChange={(e) => onIntegrationChange(e.target.value)} className={selectCls}>
-                {pmIntegrations.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-              </select>
+              <SearchableCombobox
+                id="issue-integration"
+                value={issueIntegration}
+                onValueChange={onIntegrationChange}
+                options={pmIntegrations.map((pm) => ({ value: pm.id, label: pm.name }))}
+                placeholder="Select integration"
+              />
             </div>
           )}
           {pmIntegrations.length === 1 && (
@@ -109,9 +113,18 @@ export default function CreateIssueModal({
                 <span className="text-sm text-text-muted">Fetching {pmTeamLabel.toLowerCase()}s…</span>
               </div>
             ) : pmProjects.length > 0 ? (
-              <select id="issue-pm-team" value={selectedPmProject} onChange={(e) => onTeamChange(e.target.value)} className={selectCls}>
-                {pmProjects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>)}
-              </select>
+              <SearchableCombobox
+                id="issue-pm-team"
+                value={selectedPmProject}
+                onValueChange={onTeamChange}
+                options={pmProjects.map((p) => ({
+                  value: p.id,
+                  label: `${p.name}${p.key ? ` (${p.key})` : ""}`,
+                  keywords: [p.key ?? "", p.name],
+                }))}
+                placeholder={`Select ${pmTeamLabel.toLowerCase()}`}
+                searchPlaceholder={`Search ${pmTeamLabel.toLowerCase()}s…`}
+              />
             ) : (
               <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50 text-sm text-text-muted">
                 No {pmTeamLabel.toLowerCase()}s found
@@ -130,10 +143,24 @@ export default function CreateIssueModal({
                   <span className="text-sm text-text-muted">Fetching {pmProjectLabel.toLowerCase()}s…</span>
                 </div>
               ) : pmSubProjects.length > 0 ? (
-                <select id="issue-pm-project" value={selectedPmSubProject} onChange={(e) => onSubProjectChange(e.target.value)} className={selectCls}>
-                  <option value="">None (create at {pmTeamLabel.toLowerCase()} level)</option>
-                  {pmSubProjects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>)}
-                </select>
+                <SearchableCombobox
+                  id="issue-pm-project"
+                  value={selectedPmSubProject}
+                  onValueChange={onSubProjectChange}
+                  options={[
+                    {
+                      value: "",
+                      label: `None (create at ${pmTeamLabel.toLowerCase()} level)`,
+                    },
+                    ...pmSubProjects.map((p) => ({
+                      value: p.id,
+                      label: `${p.name}${p.key ? ` (${p.key})` : ""}`,
+                      keywords: [p.key ?? "", p.name],
+                    })),
+                  ]}
+                  placeholder={`Select ${pmProjectLabel.toLowerCase()}`}
+                  searchPlaceholder={`Search ${pmProjectLabel.toLowerCase()}s…`}
+                />
               ) : (
                 <p className="text-xs text-text-muted py-1">No {pmProjectLabel.toLowerCase()}s in this {pmTeamLabel.toLowerCase()}</p>
               )}
@@ -153,19 +180,35 @@ export default function CreateIssueModal({
           {pmMembers.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
-              <select value={selectedPmAssignee} onChange={(e) => onAssigneeChange(e.target.value)} className={selectCls}>
-                <option value="">Unassigned</option>
-                {pmMembers.map(m => <option key={m.id} value={m.id}>{m.name}{m.email ? ` (${m.email})` : ""}</option>)}
-              </select>
+              <SearchableCombobox
+                value={selectedPmAssignee}
+                onValueChange={onAssigneeChange}
+                options={pmMembers.map((m) => ({
+                  value: m.id,
+                  label: `${m.name}${m.email ? ` (${m.email})` : ""}`,
+                  keywords: [m.email ?? "", m.name],
+                }))}
+                placeholder="Select assignee"
+                allowEmpty
+                emptyLabel="Unassigned"
+              />
             </div>
           )}
           {pmIntegrations.length === 0 && gitMembers && gitMembers.length > 0 && onGitAssigneeChange && (
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
-              <select value={selectedGitAssignee || ""} onChange={(e) => onGitAssigneeChange(e.target.value)} className={selectCls}>
-                <option value="">Unassigned</option>
-                {gitMembers.map(m => <option key={m.id} value={m.id}>{m.name}{m.name !== m.username ? ` (${m.username})` : ""}</option>)}
-              </select>
+              <SearchableCombobox
+                value={selectedGitAssignee || ""}
+                onValueChange={onGitAssigneeChange}
+                options={gitMembers.map((m) => ({
+                  value: m.id,
+                  label: `${m.name}${m.name !== m.username ? ` (${m.username})` : ""}`,
+                  keywords: [m.username, m.name],
+                }))}
+                placeholder="Select assignee"
+                allowEmpty
+                emptyLabel="Unassigned"
+              />
             </div>
           )}
           {issueError && (

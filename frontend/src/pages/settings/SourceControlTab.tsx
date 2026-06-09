@@ -3,6 +3,7 @@ import { gitApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -69,9 +70,18 @@ export default function SourceControlTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="git-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
-            <select id="git-provider" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className={inputCls}>
-              <option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="gitlab_self_hosted">GitLab Self-Hosted</option><option value="bitbucket">Bitbucket</option>
-            </select>
+            <SearchableCombobox
+              id="git-provider"
+              value={form.provider}
+              onValueChange={(provider) => setForm({ ...form, provider })}
+              options={[
+                { value: "github", label: "GitHub" },
+                { value: "gitlab", label: "GitLab" },
+                { value: "gitlab_self_hosted", label: "GitLab Self-Hosted" },
+                { value: "bitbucket", label: "Bitbucket" },
+              ]}
+              placeholder="Select provider"
+            />
           </div>
           <div>
             <label htmlFor="git-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>

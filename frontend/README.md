@@ -45,6 +45,43 @@ Table components: `ProjectTable`, `DeployTable`, `ScanProjectTable`.
 - Displays top **4** technologies by `confidence` from `GET /git/repo-badges`
 - Used on project/deploy/security scan cards and list tables; `PlatformBadge` when none detected
 
+## shadcn/ui + Shadcn Blocks
+
+The frontend uses [shadcn/ui](https://ui.shadcn.com/) primitives with the [Shadcn Blocks](https://www.shadcnblocks.com/) registry for richer input patterns.
+
+### Setup
+
+1. Add your API key to `frontend/.env.local`:
+
+```bash
+SHADCNBLOCKS_API_KEY=your_api_key_here
+```
+
+2. Registry is configured in `components.json` under `@shadcnblocks`.
+
+3. Install **blocks** (page sections) via CLI — slug is shown on each block page (e.g. `login1`, `hero1`):
+
+```bash
+pnpm ui:add input label                 # shadcn primitives
+pnpm ui:add @shadcnblocks/login1        # free block example
+pnpm ui:add @shadcnblocks/hero125         # pro block (valid API key required)
+```
+
+**Input components** ([catalog](https://www.shadcnblocks.com/components/input)) are **not** CLI-installable under names like `input-types-4`. Install the base `input` primitive, then copy the component source from the block page Code tab — or use the field helpers in `src/components/ui/fields/`.
+
+### Project layout
+
+| Path | Purpose |
+| ---- | ------- |
+| `src/components/ui/input.tsx` | Base shadcn `Input` primitive |
+| `src/components/ui/combobox.tsx` | Searchable combobox (popover + command filter) |
+| `src/components/ui/field.tsx` | shadcn `Field` layout (label, description, error) |
+| `src/components/ui/label.tsx` | Base shadcn `Label` primitive |
+| `src/components/ui/fields/` | Field compositions — `InputField`, `ComboboxField`, `PasswordInput`, `SearchInput` |
+| `src/lib/utils.ts` | `cn()` helper for class merging |
+
+Auth pages (`Login`, `Register`) use `InputWithLabel` / `PasswordInput`. Settings and modals still use legacy `inputCls` until migrated.
+
 ## Design system
 
 **Source of truth:** [`../web-berry/docs/design-guidelines.html`](../web-berry/docs/design-guidelines.html) (legacy repo name *Berry*; product is *Dockier*).

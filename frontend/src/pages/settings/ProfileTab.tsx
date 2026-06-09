@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { usersApi } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { countries } from "../../data/countries";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import Alert from "../../components/ui/Alert";
@@ -78,21 +79,40 @@ export default function ProfileTab() {
         </div>
         <div>
           <label htmlFor="profile-country" className="block text-sm font-medium text-text-secondary mb-1.5">Country</label>
-          <select id="profile-country" value={country} onChange={(e) => setCountry(e.target.value)} className={inputCls}>
-            {countries.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-          </select>
+          <SearchableCombobox
+            id="profile-country"
+            value={country}
+            onValueChange={setCountry}
+            options={countries.map(([code, label]) => ({ value: code, label }))}
+            placeholder="Select country"
+            searchPlaceholder="Search countries…"
+          />
         </div>
         <div>
           <label htmlFor="profile-language" className="block text-sm font-medium text-text-secondary mb-1.5">Language</label>
-          <select id="profile-language" value={language} onChange={(e) => setLanguage(e.target.value)} className={inputCls}>
-            {languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-          </select>
+          <SearchableCombobox
+            id="profile-language"
+            value={language}
+            onValueChange={setLanguage}
+            options={languages.map(([code, label]) => ({ value: code, label }))}
+            placeholder="Select language"
+            searchPlaceholder="Search languages…"
+          />
         </div>
         <div>
           <label htmlFor="profile-timezone" className="block text-sm font-medium text-text-secondary mb-1.5">Timezone</label>
-          <select id="profile-timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} className={inputCls}>
-            {timezones.map((tz) => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
-          </select>
+          <SearchableCombobox
+            id="profile-timezone"
+            value={timezone}
+            onValueChange={setTimezone}
+            options={timezones.map((tz) => ({
+              value: tz,
+              label: tz.replace(/_/g, " "),
+              keywords: [tz],
+            }))}
+            placeholder="Select timezone"
+            searchPlaceholder="Search timezones…"
+          />
         </div>
         <div className="flex justify-end pt-2">
           <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>

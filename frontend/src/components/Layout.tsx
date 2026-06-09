@@ -77,8 +77,8 @@ export default function Layout() {
           })}
         </nav>
 
-        <main className="flex-1 overflow-auto px-4 py-8 lg:px-10">
-          <div className="mx-auto max-w-7xl">
+        <main className="flex-1 overflow-auto px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
+          <div className="w-full min-w-0">
             <ErrorBoundary title="This page encountered an error">
               <Outlet />
             </ErrorBoundary>

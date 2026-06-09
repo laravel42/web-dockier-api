@@ -11,7 +11,6 @@ import ContributorsGrid from "./sections/ContributorsGrid";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
 import ProjectDescription from "./sections/ProjectDescription";
-import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
 import PageLoading from "../../components/ui/PageLoading";
@@ -92,17 +91,13 @@ export default function ProjectDetail() {
 
       <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
 
-      <RecentDeploys deploys={recentDeploys} allProviders={allProviders} navigate={navigate} />
-
-      {lastDeploy && (
-        <LastDeployCard
-          lastDeploy={lastDeploy}
-          allProviders={allProviders}
-          destroying={destroying}
-          onDestroy={() => setShowDestroyConfirm(true)}
-          onViewDetails={() => navigate(`/deploy/${lastDeploy.id}`)}
-        />
-      )}
+      <RecentDeploys
+        deploys={recentDeploys}
+        allProviders={allProviders}
+        navigate={navigate}
+        destroying={destroying}
+        onDestroy={lastDeploy ? () => setShowDestroyConfirm(true) : undefined}
+      />
 
       <DeployWizard
         open={showDeployWizard}

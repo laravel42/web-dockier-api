@@ -1,14 +1,16 @@
 import type { Deployment, Project } from "../../../types";
 import { statusBadgeColors as statusColors, typeCaption, typePageTitle } from "../../../utils/styles";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
+import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
 
 interface Props {
   deploy: Deployment;
   project: Project | null;
+  deployUrl?: string;
   onNavigateProject: () => void;
 }
 
-export default function DeployHeader({ deploy, project, onNavigateProject }: Props) {
+export default function DeployHeader({ deploy, project, deployUrl, onNavigateProject }: Props) {
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
@@ -35,6 +37,22 @@ export default function DeployHeader({ deploy, project, onNavigateProject }: Pro
             <span className={typeCaption}>{deploy.branch}</span>
             <span className={typeCaption}>{new Date(deploy.createdAt).toLocaleString()}</span>
           </div>
+          {deployUrl && (
+            <div className="mt-2">
+              <a
+                href={deployUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-center gap-1.5 text-sm font-semibold text-primary-500 transition-colors hover:text-primary-700 break-all"
+              >
+                <ExternalLinkIcon className="size-4 shrink-0" />
+                {deployUrl}
+              </a>
+              {deploy.status !== "success" && (
+                <p className="mt-0.5 text-xs text-text-muted">Infrastructure no longer active.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

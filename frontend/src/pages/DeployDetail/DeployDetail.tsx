@@ -3,6 +3,7 @@ import { useDeployDetail } from "./useDeployDetail";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
 import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
+import { resolveDeployUrl } from "../../utils/resolveDeployUrl";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
 import PageLoading from "../../components/ui/PageLoading";
@@ -14,7 +15,7 @@ export default function DeployDetail() {
     deploy, project, providers,
     loading, error,
     allDeploys, allDeploysLoading,
-    provKey, providerStyle,
+    provKey,
   } = useDeployDetail();
 
   if (loading) {
@@ -34,6 +35,8 @@ export default function DeployDetail() {
     );
   }
 
+  const deployUrl = resolveDeployUrl(deploy);
+
   return (
     <div className="flex gap-6">
       <div className="flex-1 min-w-0">
@@ -48,13 +51,14 @@ export default function DeployDetail() {
         <DeployHeader
           deploy={deploy}
           project={project}
+          deployUrl={deployUrl}
           onNavigateProject={() => project && navigate(`/projects/${project.id}`)}
         />
 
-        <InfoCards deploy={deploy} provKey={provKey} providerStyle={providerStyle} />
+        <InfoCards deploy={deploy} provKey={provKey} />
 
         {/* VPS warm-up notice */}
-        {deploy.status === "success" && deploy.deployStrategy === "vps" && deploy.appUrl && (
+        {deploy.status === "success" && deploy.deployStrategy === "vps" && deployUrl && (
           <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 mb-6">
             <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
             <p className="text-xs/relaxed text-text-muted ">

@@ -1,4 +1,5 @@
 import Modal from "../../../components/Modal";
+import { SearchableCombobox } from "../../../components/ui/combobox";
 import type { Finding, RepoMember, FixResult } from "../../../types";
 
 interface Props {
@@ -32,8 +33,6 @@ export default function FixWithAIModal({
   mrReviewer, onReviewerChange,
   onSubmit,
 }: Props) {
-  const selectCls = "w-full h-11 px-3 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 transition-colors";
-
   return (
     <Modal open={open} onClose={onClose} title="Fix with AI">
       {fixResult ? (
@@ -79,17 +78,31 @@ export default function FixWithAIModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
-            <select value={mrAssignee} onChange={(e) => onAssigneeChange(e.target.value)} className={selectCls}>
-              <option value="">None</option>
-              {repoMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.username})</option>)}
-            </select>
+            <SearchableCombobox
+              value={mrAssignee}
+              onValueChange={onAssigneeChange}
+              options={repoMembers.map((m) => ({
+                value: m.id,
+                label: `${m.name} (${m.username})`,
+                keywords: [m.username, m.name],
+              }))}
+              placeholder="Select assignee"
+              allowEmpty
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Reviewer</label>
-            <select value={mrReviewer} onChange={(e) => onReviewerChange(e.target.value)} className={selectCls}>
-              <option value="">None</option>
-              {repoMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.username})</option>)}
-            </select>
+            <SearchableCombobox
+              value={mrReviewer}
+              onValueChange={onReviewerChange}
+              options={repoMembers.map((m) => ({
+                value: m.id,
+                label: `${m.name} (${m.username})`,
+                keywords: [m.username, m.name],
+              }))}
+              placeholder="Select reviewer"
+              allowEmpty
+            />
           </div>
           {fixError && (
             <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">

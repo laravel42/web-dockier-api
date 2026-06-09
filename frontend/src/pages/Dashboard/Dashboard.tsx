@@ -43,6 +43,10 @@ export default function Dashboard() {
     );
   }
 
+  if (projects.length === 0) {
+    return <GettingStarted navigate={navigate} />;
+  }
+
   return (
     <div>
       <PageHeader
@@ -59,39 +63,33 @@ export default function Dashboard() {
         }
       />
 
-      {projects.length === 0 ? (
-        <GettingStarted navigate={navigate} />
-      ) : (
-        <>
-          <KpiGrid
-            projects={projects.length}
-            deploys={deploys.length}
-            successDeploys={successDeploys}
-            failedDeploys={failedDeploys}
-            scans={scans.length}
-            totalFindings={totalFindings}
-            showDeploys={canViewDeploys}
-          />
+      <KpiGrid
+        projects={projects.length}
+        deploys={deploys.length}
+        successDeploys={successDeploys}
+        failedDeploys={failedDeploys}
+        scans={scans.length}
+        totalFindings={totalFindings}
+        showDeploys={canViewDeploys}
+      />
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {canViewDeploys && (
-              <RecentDeploys
-                deploys={recentDeploys}
-                providers={providers}
-                projectMap={projectMap}
-                onViewAll={() => navigate("/deploy")}
-                onViewDeploy={(id) => navigate(`/deploy/${id}`)}
-              />
-            )}
-            <RecentScans
-              scans={recentScans}
-              projectMap={projectMap}
-              onViewAll={() => navigate("/security")}
-              onViewScan={(id) => navigate(`/security/${id}`)}
-            />
-          </div>
-        </>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {canViewDeploys && (
+          <RecentDeploys
+            deploys={recentDeploys}
+            providers={providers}
+            projectMap={projectMap}
+            onViewAll={() => navigate("/deploy")}
+            onViewDeploy={(id) => navigate(`/deploy/${id}`)}
+          />
+        )}
+        <RecentScans
+          scans={recentScans}
+          projectMap={projectMap}
+          onViewAll={() => navigate("/security")}
+          onViewScan={(id) => navigate(`/security/${id}`)}
+        />
+      </div>
     </div>
   );
 }

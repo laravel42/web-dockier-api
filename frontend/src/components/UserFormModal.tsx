@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SearchableCombobox } from "./ui/combobox";
 import Modal from "./Modal";
 
 interface Props {
@@ -9,9 +10,6 @@ interface Props {
 
 const inputCls =
   "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
-const selectCls =
-  "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors appearance-none cursor-pointer";
-
 const LANGUAGES = [
   { code: "en", name: "English" }, { code: "es", name: "Spanish" }, { code: "fr", name: "French" },
   { code: "de", name: "German" }, { code: "pt", name: "Portuguese" }, { code: "ja", name: "Japanese" },
@@ -73,15 +71,29 @@ export default function UserFormModal({ open, onClose, onSubmit }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="user-language" className="block text-sm font-medium text-text-secondary mb-1.5">Language</label>
-            <select id="user-language" value={form.language} onChange={(e) => set("language", e.target.value)} className={selectCls}>
-              {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
-            </select>
+            <SearchableCombobox
+              id="user-language"
+              value={form.language}
+              onValueChange={(v) => set("language", v)}
+              options={LANGUAGES.map((l) => ({ value: l.code, label: l.name }))}
+              placeholder="Select language"
+              searchPlaceholder="Search languages…"
+            />
           </div>
           <div>
             <label htmlFor="user-timezone" className="block text-sm font-medium text-text-secondary mb-1.5">Timezone</label>
-            <select id="user-timezone" value={form.timezone} onChange={(e) => set("timezone", e.target.value)} className={selectCls}>
-              {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
-            </select>
+            <SearchableCombobox
+              id="user-timezone"
+              value={form.timezone}
+              onValueChange={(v) => set("timezone", v)}
+              options={TIMEZONES.map((tz) => ({
+                value: tz,
+                label: tz.replace(/_/g, " "),
+                keywords: [tz],
+              }))}
+              placeholder="Select timezone"
+              searchPlaceholder="Search timezones…"
+            />
           </div>
         </div>
 

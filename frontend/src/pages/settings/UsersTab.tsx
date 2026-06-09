@@ -4,6 +4,7 @@ import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import ComboBox from "../../components/ComboBox";
 import { inputCls, btnPrimary } from "../../utils/styles";
+import ListSearchBar from "../../components/ui/ListSearchBar";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import Alert from "../../components/ui/Alert";
@@ -208,16 +209,11 @@ export default function UsersTab() {
         )}
       </div>
 
-      {/* Search */}
-      <div className="flex items-center gap-2 mb-4">
-        <input
-          type="text"
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <ListSearchBar
           value={search}
-          onChange={e => setSearch(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleSearch()}
+          onChange={setSearch}
           placeholder="Search by name or email…"
-          className={inputCls}
-          style={{ width: 320 }}
         />
         <button onClick={handleSearch} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">
           Search

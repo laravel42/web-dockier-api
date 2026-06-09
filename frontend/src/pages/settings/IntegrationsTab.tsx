@@ -4,7 +4,9 @@ import { INTEGRATION_ICONS } from "../../data/integration-icons";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import ListSearchBar from "../../components/ui/ListSearchBar";
 import { usePermissions } from "../../context/PermissionsContext";
 import { integrationsApi } from "../../services/api";
 import { useTabList } from "../../hooks/useTabList";
@@ -203,12 +205,11 @@ export default function IntegrationsTab() {
 
             {/* Main content */}
             <div className="flex-1 min-w-0 space-y-3">
-              <input
-                type="text"
+              <ListSearchBar
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={setSearchQuery}
                 placeholder="Search integrations..."
-                className={inputCls}
+                className="input-enlarge-wrap--wide w-full"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: "none" }}>
               {INTEGRATION_CATALOG
@@ -264,14 +265,13 @@ export default function IntegrationsTab() {
                     placeholder={f.placeholder}
                   />
                 ) : Array.isArray(f.options) ? (
-                  <select
+                  <SearchableCombobox
                     id={`int-${f.key}`}
                     value={formConfig[f.key] || f.options[0]?.value || ""}
-                    onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
-                    className={inputCls}
-                  >
-                    {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                    onValueChange={(v) => setFormConfig({ ...formConfig, [f.key]: v })}
+                    options={f.options.map((o) => ({ value: o.value, label: o.label }))}
+                    placeholder={`Select ${f.label.toLowerCase()}`}
+                  />
                 ) : (
                   <input
                     id={`int-${f.key}`}
@@ -357,14 +357,13 @@ export default function IntegrationsTab() {
                         placeholder={f.placeholder}
                       />
                     ) : Array.isArray(f.options) ? (
-                      <select
+                      <SearchableCombobox
                         id={`edit-int-${f.key}`}
                         value={editConfig[f.key] || f.options[0]?.value || ""}
-                        onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
-                        className={inputCls}
-                      >
-                        {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                        onValueChange={(v) => setEditConfig({ ...editConfig, [f.key]: v })}
+                        options={f.options.map((o) => ({ value: o.value, label: o.label }))}
+                        placeholder={`Select ${f.label.toLowerCase()}`}
+                      />
                     ) : (
                       <input
                         id={`edit-int-${f.key}`}

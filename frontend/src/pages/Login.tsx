@@ -5,7 +5,9 @@ import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
 import Alert from "../components/ui/Alert";
 import AuthLayout from "../components/AuthLayout";
-import { btnPrimaryAuth, btnSecondaryAuth, btnLink, inputCls, labelCls } from "../utils/styles";
+import { InputWithLabel } from "../components/ui/fields";
+import { PasswordInput } from "../components/ui/fields/password-input";
+import { btnPrimaryAuth, btnSecondaryAuth, btnLink } from "../utils/styles";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -108,53 +110,37 @@ export default function Login() {
       {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <label htmlFor="email" className={labelCls}>
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputCls}
-            required
-            disabled={otpSent && loginMode === "otp"}
-          />
-        </div>
+        <InputWithLabel
+          id="email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={otpSent && loginMode === "otp"}
+        />
         {loginMode === "password" && (
-          <div>
-            <label htmlFor="password" className={labelCls}>
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={inputCls}
-              required
-              autoComplete="current-password"
-            />
-          </div>
+          <PasswordInput
+            id="password"
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
         )}
         {loginMode === "otp" && otpSent && (
-          <div>
-            <label htmlFor="otp-token" className={labelCls}>
-              Email code
-            </label>
-            <input
-              id="otp-token"
-              type="text"
-              value={otpToken}
-              onChange={(e) => setOtpToken(e.target.value)}
-              className={inputCls}
-              placeholder="Enter code"
-              minLength={4}
-              required
-              autoComplete="one-time-code"
-            />
-          </div>
+          <InputWithLabel
+            id="otp-token"
+            label="Email code"
+            type="text"
+            value={otpToken}
+            onChange={(e) => setOtpToken(e.target.value)}
+            placeholder="Enter code"
+            minLength={4}
+            required
+            autoComplete="one-time-code"
+          />
         )}
         <button
           type="submit"

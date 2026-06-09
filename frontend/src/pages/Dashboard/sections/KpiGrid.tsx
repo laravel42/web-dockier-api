@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { statCardCls, typeStatDelta, typeStatLabel, typeStatValue } from "../../../utils/styles";
+import { statCardCls, typeStatDelta, typeStatLabel, typeStatValueSm } from "../../../utils/styles";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
@@ -54,17 +54,22 @@ export default function KpiGrid({
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-8">
-      {kpis.map((kpi) => (
-        <div key={kpi.label} className={statCardCls}>
-          <div className="flex items-center justify-between">
-            <span className={typeStatLabel}>{kpi.label}</span>
-            {kpi.icon}
+    <div className="mb-8 overflow-x-auto scrollbar-hide">
+      <div className="flex min-w-full gap-3 sm:gap-4">
+        {kpis.map((kpi) => (
+          <div
+            key={kpi.label}
+            className={`${statCardCls} min-w-[8.25rem] flex-1 p-3 sm:min-w-[9rem] sm:p-4`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className={`${typeStatLabel} truncate`}>{kpi.label}</span>
+              <span className="shrink-0">{kpi.icon}</span>
+            </div>
+            <div className={`mt-2 sm:mt-3 ${typeStatValueSm}`}>{kpi.value}</div>
+            <div className={`mt-0.5 sm:mt-1 ${typeStatDelta} truncate`}>{kpi.delta}</div>
           </div>
-          <div className={`mt-3 ${typeStatValue}`}>{kpi.value}</div>
-          <div className={`mt-1 ${typeStatDelta}`}>{kpi.delta}</div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

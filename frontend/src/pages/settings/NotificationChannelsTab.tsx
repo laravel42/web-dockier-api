@@ -3,6 +3,7 @@ import { notificationsApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
@@ -76,12 +77,18 @@ export default function NotificationChannelsTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="channel-type" className="block text-sm font-medium text-text-secondary mb-1.5">Channel Type</label>
-            <select id="channel-type" value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className={inputCls}>
-              <option value="email">Email</option>
-              <option value="slack">Slack</option>
-              <option value="webhook">Webhook</option>
-              <option value="in_app">In-App</option>
-            </select>
+            <SearchableCombobox
+              id="channel-type"
+              value={formData.type}
+              onValueChange={(type) => setFormData({ ...formData, type })}
+              options={[
+                { value: "email", label: "Email" },
+                { value: "slack", label: "Slack" },
+                { value: "webhook", label: "Webhook" },
+                { value: "in_app", label: "In-App" },
+              ]}
+              placeholder="Select channel type"
+            />
           </div>
           {formData.type !== "in_app" && (
             <div>

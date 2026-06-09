@@ -5,7 +5,8 @@ import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
 import Alert from "../components/ui/Alert";
 import AuthLayout from "../components/AuthLayout";
-import { btnPrimaryAuth, btnLink, inputCls, labelCls } from "../utils/styles";
+import { InputWithLabel } from "../components/ui/fields";
+import { btnPrimaryAuth, btnLink } from "../utils/styles";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -79,65 +80,46 @@ export default function Register() {
       {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <label htmlFor="name" className={labelCls}>
-            Name
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={inputCls}
-            required
-            minLength={2}
-            disabled={otpSent}
-          />
-        </div>
-        <div>
-          <label htmlFor="email" className={labelCls}>
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputCls}
-            required
-            disabled={otpSent}
-          />
-        </div>
-        <div>
-          <label htmlFor="workspace-name" className={labelCls}>
-            Workspace name (optional)
-          </label>
-          <input
-            id="workspace-name"
-            type="text"
-            value={workspaceName}
-            onChange={(e) => setWorkspaceName(e.target.value)}
-            className={inputCls}
-            placeholder={`${name || "Your"} workspace`}
-            disabled={otpSent}
-          />
-        </div>
+        <InputWithLabel
+          id="name"
+          label="Name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          minLength={2}
+          disabled={otpSent}
+        />
+        <InputWithLabel
+          id="email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={otpSent}
+        />
+        <InputWithLabel
+          id="workspace-name"
+          label="Workspace name"
+          type="text"
+          value={workspaceName}
+          onChange={(e) => setWorkspaceName(e.target.value)}
+          placeholder={`${name || "Your"} workspace`}
+          optional
+          disabled={otpSent}
+        />
         {otpSent && (
-          <div>
-            <label htmlFor="otp-token" className={labelCls}>
-              OTP code
-            </label>
-            <input
-              id="otp-token"
-              type="text"
-              value={otpToken}
-              onChange={(e) => setOtpToken(e.target.value)}
-              className={inputCls}
-              required
-              minLength={4}
-              autoComplete="one-time-code"
-            />
-          </div>
+          <InputWithLabel
+            id="otp-token"
+            label="OTP code"
+            type="text"
+            value={otpToken}
+            onChange={(e) => setOtpToken(e.target.value)}
+            required
+            minLength={4}
+            autoComplete="one-time-code"
+          />
         )}
         <button
           type="submit"

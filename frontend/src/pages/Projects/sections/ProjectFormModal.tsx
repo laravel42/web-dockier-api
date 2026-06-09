@@ -2,8 +2,15 @@ import Modal from "../../../components/Modal";
 import SourceControlSelect from "../../../components/SourceControlSelect";
 import RepoSelect from "../../../components/RepoSelect";
 import BranchSelect from "../../../components/BranchSelect";
-import { btnSecondary } from "../../../utils/styles";
-import { btnPrimary, inputCls } from "../../../utils/styles";
+import {
+  btnPrimary,
+  btnSecondary,
+  choiceCardIconIdleCls,
+  choiceCardIconSelectedCls,
+  choiceCardIdleCls,
+  choiceCardSelectedCls,
+  inputCls,
+} from "../../../utils/styles";
 import type { Connection, Repo, ProjectSourceType } from "../../../types";
 import { PROJECT_TEMPLATES } from "../templates";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
@@ -85,41 +92,37 @@ export default function ProjectFormModal({
               <button
                 type="button"
                 onClick={() => onSourceTypeChange("repository")}
-                className={`flex items-center gap-3 p-3 rounded-(--radius-input) border text-left transition-all ${
-                  sourceType === "repository"
-                    ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
-                    : "border-border bg-card hover:border-secondary-300"
+                className={`flex items-center gap-3 rounded-(--radius-input) border p-3 text-left transition-all ${
+                  sourceType === "repository" ? choiceCardSelectedCls : choiceCardIdleCls
                 }`}
               >
-                <div className={`size-9  rounded-lg flex items-center justify-center ${
-                  sourceType === "repository" ? "bg-primary-100 text-primary-500" : "bg-secondary-100 text-text-muted"
+                <div className={`flex size-9 items-center justify-center rounded-lg ${
+                  sourceType === "repository" ? choiceCardIconSelectedCls : choiceCardIconIdleCls
                 }`}>
                   <CodeIcon className="size-5 " />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-text">Source Control</p>
-                  <p className="text-xs text-text-muted">Connect a Git repository</p>
+                  <p className="text-sm font-medium text-foreground">Source Control</p>
+                  <p className="text-xs text-muted-foreground">Connect a Git repository</p>
                 </div>
               </button>
               <button
                 type="button"
                 onClick={() => onSourceTypeChange("template")}
-                className={`flex items-center gap-3 p-3 rounded-(--radius-input) border text-left transition-all ${
-                  sourceType === "template"
-                    ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
-                    : "border-border bg-card hover:border-secondary-300"
+                className={`flex items-center gap-3 rounded-(--radius-input) border p-3 text-left transition-all ${
+                  sourceType === "template" ? choiceCardSelectedCls : choiceCardIdleCls
                 }`}
               >
-                <div className={`size-9  rounded-lg flex items-center justify-center ${
-                  sourceType === "template" ? "bg-primary-100 text-primary-500" : "bg-secondary-100 text-text-muted"
+                <div className={`flex size-9 items-center justify-center rounded-lg ${
+                  sourceType === "template" ? choiceCardIconSelectedCls : choiceCardIconIdleCls
                 }`}>
                   <svg className="size-5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-text">Template</p>
-                  <p className="text-xs text-text-muted">Start from a pre-built template</p>
+                  <p className="text-sm font-medium text-foreground">Template</p>
+                  <p className="text-xs text-muted-foreground">Start from a pre-built template</p>
                 </div>
               </button>
             </div>
@@ -147,7 +150,7 @@ export default function ProjectFormModal({
 
             {!selectedConnectionId && (
               <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
-                <div className="size-14  rounded-full bg-primary-50 flex items-center justify-center text-primary-400">
+                <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <LinkIcon className="size-7 " />
                 </div>
                 <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
@@ -184,14 +187,12 @@ export default function ProjectFormModal({
                     onTemplateChange(tpl.id);
                     if (!form.name) onFormChange({ ...form, name: tpl.name });
                   }}
-                  className={`flex items-center gap-4 p-4 rounded-(--radius-input) border text-left transition-all ${
-                    selectedTemplate === tpl.id
-                      ? "border-primary-400 bg-primary-50 ring-2 ring-primary-500/10"
-                      : "border-border bg-card hover:border-secondary-300"
+                  className={`flex items-center gap-4 rounded-(--radius-input) border p-4 text-left transition-all ${
+                    selectedTemplate === tpl.id ? choiceCardSelectedCls : choiceCardIdleCls
                   }`}
                 >
-                  <div className={`size-12  rounded-xl flex items-center justify-center shrink-0 ${
-                    selectedTemplate === tpl.id ? "bg-primary-100 text-primary-600" : "bg-secondary-100 text-text-muted"
+                  <div className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${
+                    selectedTemplate === tpl.id ? choiceCardIconSelectedCls : choiceCardIconIdleCls
                   }`}>
                     {templateIcons[tpl.icon] || (
                       <svg className="size-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -200,8 +201,8 @@ export default function ProjectFormModal({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-text">{tpl.name}</p>
-                    <p className="text-xs text-text-muted mt-0.5">{tpl.description}</p>
+                    <p className="text-sm font-medium text-foreground">{tpl.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{tpl.description}</p>
                   </div>
                   {selectedTemplate === tpl.id && (
                     <div className="ml-auto shrink-0">
