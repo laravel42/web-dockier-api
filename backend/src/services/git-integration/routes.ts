@@ -31,10 +31,53 @@ import {
   getCollaborators as ghGetCollaborators,
   createIssue as ghCreateIssue,
 } from "./domain/github-client.js";
+import {
+  GitLabApiError,
+  listCommits as glListCommits,
+  getRepoInfo as glGetRepoInfo,
+  getLanguages as glGetLanguages,
+  getContributors as glGetContributors,
+} from "./domain/gitlab-client.js";
+
+type RepoStatsPayload = {
+  stars: number;
+  forks: number;
+  openIssues: number;
+  watchers: number;
+  language: string;
+  languages: Record<string, number>;
+  lastCommitDate: string;
+  lastCommitMessage: string;
+  lastCommitAuthor: string;
+  lastCommitHash: string;
+  totalCommits: number;
+  contributors: number;
+  topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
+};
+
+function isPlaceholderStats(stats: RepoStatsPayload): boolean {
+  return (
+    stats.stars === 0
+    && stats.forks === 0
+    && stats.openIssues === 0
+    && stats.totalCommits === 0
+    && stats.contributors === 0
+    && !stats.lastCommitHash
+  );
+}
+
+function primaryLanguage(languages: Record<string, number>): string {
+  const entries = Object.entries(languages);
+  if (entries.length === 0) return "";
+  return entries.sort(([, a], [, b]) => b - a)[0][0];
+}
 
 function throwProviderError(app: FastifyInstance, error: unknown): never {
   if (error instanceof GitHubApiError) {
     throw app.httpErrors.badRequest(`GitHub API error ${error.status}: ${error.statusText}`);
+  }
+  if (error instanceof GitLabApiError) {
+    throw app.httpErrors.badRequest(`GitLab API error ${error.status}: ${error.statusText}`);
   }
   throw app.httpErrors.badRequest((error as Error).message);
 }
@@ -557,10 +600,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       if (!request.query.refresh) {
         const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
-        if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+        if (cached.data?.result) {
+          const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+          if (!isPlaceholderStats(parsed as RepoStatsPayload)) return parsed;
+        }
       }
 
-      const stats = {
+      const stats: RepoStatsPayload = {
         stars: 0,
         forks: 0,
         openIssues: 0,
@@ -607,9 +653,41 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         } catch (error) {
           throwProviderError(app, error);
         }
+      } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
+        try {
+          const { owner, repo } = request.query;
+          const [repoInfo, commits, contributors, languages] = await Promise.all([
+            glGetRepoInfo(conn, { owner, repo }),
+            glListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => []),
+            glGetContributors(conn, { owner, repo, limit: 20 }),
+            glGetLanguages(conn, { owner, repo }),
+          ]);
+
+          stats.stars = repoInfo.stars;
+          stats.forks = repoInfo.forks;
+          stats.openIssues = repoInfo.openIssues;
+          stats.watchers = repoInfo.watchers;
+          stats.language = primaryLanguage(languages);
+          stats.languages = languages;
+          stats.totalCommits = repoInfo.totalCommits;
+
+          if (commits.length > 0) {
+            const latest = commits[0];
+            stats.lastCommitDate = latest.date;
+            stats.lastCommitMessage = latest.message;
+            stats.lastCommitAuthor = latest.author;
+            stats.lastCommitHash = latest.hash;
+          }
+
+          stats.contributors = contributors.length;
+          stats.topContributors = contributors;
+        } catch (error) {
+          throwProviderError(app, error);
+        }
       }
 
-      await db.from("stats_cache").upsert(
+      if (!isPlaceholderStats(stats)) {
+        await db.from("stats_cache").upsert(
         {
           id: auth.tenantId + ":" + repoKey + ":" + branch,
           repo: repoKey,
@@ -620,7 +698,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           project_id: request.query.projectId ?? "",
         },
         { onConflict: "organization_id,repo,branch" },
-      );
+        );
+      }
       return stats;
     },
   );

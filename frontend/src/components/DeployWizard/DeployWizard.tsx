@@ -19,7 +19,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     canNext, handleNext, handleBack,
     startDeploy, generateScript,
     isDeploying, isFinished,
-  } = useDeployWizard({ open, project, analysis, analysisLoading, onDeployComplete });
+  } = useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete });
 
   return (
     <Modal
@@ -47,6 +47,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           <StepService
             state={state}
             templateId={project.sourceType === "template" ? project.template : undefined}
+            analysis={analysis}
             onChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}
           />
         )}
@@ -128,9 +129,11 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           )}
           {step < 6 && !isDeploying && (
             <>
-              <button type="button" onClick={() => { if (!isDeploying) onClose(); }} className={btnSecondary}>
-                Cancel
-              </button>
+              {step === 0 && (
+                <button type="button" onClick={() => { if (!isDeploying) onClose(); }} className={btnSecondary}>
+                  Cancel
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleNext}

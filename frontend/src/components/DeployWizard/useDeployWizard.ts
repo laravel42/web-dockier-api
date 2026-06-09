@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { deployApi, imageBuilderApi, projectsApi } from "../../services/api";
 import type { WizardState, RepoAnalysis } from "./types";
-import { INITIAL_WIZARD_STATE } from "./constants";
+import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
+import type { Provider } from "./types";
 import { getPlans } from "./plans";
 import { parseOwnerRepo } from "./utils";
 import { detectServiceModes } from "./envDetection";
@@ -22,10 +23,11 @@ interface UseDeployWizardParams {
   project: { id: string; name: string; repository: string; branch: string; connectionId: string; sourceType?: string; template?: string };
   analysis: RepoAnalysis | null;
   analysisLoading?: boolean;
+  providers: Provider[];
   onDeployComplete?: () => void;
 }
 
-export function useDeployWizard({ open, project, analysis, analysisLoading, onDeployComplete }: UseDeployWizardParams) {
+export function useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete }: UseDeployWizardParams) {
   const [step, setStep] = useState(0);
   const [state, setState] = useState<WizardState>({ ...INITIAL_WIZARD_STATE });
   const [tofuLoading, setTofuLoading] = useState(false);
@@ -37,7 +39,11 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
   useEffect(() => {
     if (open) {
       setStep(0);
-      setState({ ...INITIAL_WIZARD_STATE });
+      const defaultProvider = getDefaultProviderSelection(providers);
+      setState({
+        ...INITIAL_WIZARD_STATE,
+        ...(defaultProvider ?? {}),
+      });
       setTofuLoading(false);
       setTofuError("");
       setDeployError("");
@@ -55,7 +61,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, onDe
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [open]);
+  }, [open, providers, project.id]);
 
   // Sync service modes when analysis arrives (without resetting wizard)
   useEffect(() => {

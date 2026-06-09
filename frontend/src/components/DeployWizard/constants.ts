@@ -95,6 +95,23 @@ export const PROVIDER_REGIONS: Record<string, Array<{ id: string; name: string; 
 
 export { btnPrimary, btnSecondary, inputCls } from "../../utils/styles";
 
+/** Preselect when exactly one provider type is configured. */
+export function getDefaultProviderSelection(
+  providers: Array<{ id: string; provider: string }>,
+): Pick<import("./types").WizardState, "selectedProvider" | "selectedProviderId" | "tofuRegion"> | null {
+  if (providers.length === 0) return null;
+  const slugs = [...new Set(providers.map((p) => p.provider))];
+  if (slugs.length !== 1) return null;
+  const slug = slugs[0];
+  const first = providers.find((p) => p.provider === slug);
+  if (!first) return null;
+  return {
+    selectedProvider: slug,
+    selectedProviderId: first.id,
+    tofuRegion: PROVIDER_REGIONS[slug]?.[0]?.id || "",
+  };
+}
+
 export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   selectedProvider: "",
   selectedProviderId: "",

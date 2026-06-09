@@ -10,6 +10,7 @@ import KpiDashboard from "./sections/KpiDashboard";
 import ContributorsGrid from "./sections/ContributorsGrid";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
+import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
@@ -21,6 +22,7 @@ export default function ProjectDetail() {
     project, loading, error, navigate,
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
     handleDelete, handlePullOrigin, handleOpenBranchModal,
+    handleUpdateName, nameSaving, nameError,
     showDeployWizard, setShowDeployWizard,
     allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy, refreshAnalysis,
     stats, statsLoading, statsError,
@@ -31,6 +33,7 @@ export default function ProjectDetail() {
     pullLog, setPullLog, pullLoading,
     lastDeploy, destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
     recentDeploys,
+    recentScans,
   } = useProjectDetail();
 
   if (loading) {
@@ -66,9 +69,12 @@ export default function ProjectDetail() {
         onPull={handlePullOrigin}
         onSwitchBranch={handleOpenBranchModal}
         onDelete={() => setShowDelete(true)}
+        onNameSave={handleUpdateName}
+        nameSaving={nameSaving}
+        nameError={nameError}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 items-stretch">
         <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
         <ProjectDetailsCard project={project} lastCommitDate={stats?.lastCommitDate} />
       </div>
@@ -98,6 +104,8 @@ export default function ProjectDetail() {
         destroying={destroying}
         onDestroy={lastDeploy ? () => setShowDestroyConfirm(true) : undefined}
       />
+
+      <RecentScans scans={recentScans} navigate={navigate} />
 
       <DeployWizard
         open={showDeployWizard}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { projectsApi, gitApi, deployApi } from "../../services/api";
+import { projectsApi, gitApi, deployApi, codeAnalysisApi } from "../../services/api";
 import { parseOwnerRepo, getRepoKey } from "../../utils/parseOwnerRepo";
 import {
   clearProjectBadgeCache,
@@ -9,7 +9,8 @@ import {
   selectProjectBadges,
 } from "../../utils/projectBadgeCache";
 import { getErrorMessage } from "../../utils/errors";
-import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo } from "../../types";
+import { parseApiTimestamp } from "../../utils/timeAgo";
+import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo, Scan } from "../../types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
 // ─── Analysis cache (survives navigation within session) ───
@@ -121,6 +122,13 @@ export function useProjectDetail() {
   // Recent deploys
   const [recentDeploys, setRecentDeploys] = useState<DeployInfo[]>([]);
 
+  // Recent security scans
+  const [recentScans, setRecentScans] = useState<Scan[]>([]);
+
+  // Inline name edit
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
+
   // Auto-open deploy wizard from navigation state
   useEffect(() => {
     if ((location.state as { openDeploy?: boolean })?.openDeploy) {
@@ -212,7 +220,9 @@ export function useProjectDetail() {
     if (!project) return;
     deployApi.listDeployments()
       .then((res) => {
-        const match = res.deployments.filter((d: DeployInfo) => d.projectId === project.id);
+        const match = res.deployments
+          .filter((d: DeployInfo) => d.projectId === project.id)
+          .sort((a, b) => parseApiTimestamp(b.createdAt).getTime() - parseApiTimestamp(a.createdAt).getTime());
         setLastDeploy(match.length > 0 ? match[0] : null);
         setRecentDeploys(match.slice(0, 5));
       })
@@ -221,6 +231,31 @@ export function useProjectDetail() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchLastDeploy(); }, [project]);
+
+  const fetchRecentScans = () => {
+    if (!projectId) return;
+    codeAnalysisApi.listScans(projectId)
+      .then((res) => setRecentScans(res.scans.slice(0, 5)))
+      .catch(() => setRecentScans([]));
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchRecentScans(); }, [projectId]);
+
+  const handleUpdateName = async (name: string) => {
+    if (!projectId || !project) return;
+    setNameSaving(true);
+    setNameError("");
+    try {
+      const updated = await projectsApi.update(projectId, { name });
+      setProject(updated);
+    } catch (err: unknown) {
+      setNameError(getErrorMessage(err, "Failed to update project name"));
+      throw err;
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   // Actions
   const handleDelete = async () => {
@@ -316,6 +351,7 @@ export function useProjectDetail() {
     // Header
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
     handleDelete, handlePullOrigin, handleOpenBranchModal,
+    handleUpdateName, nameSaving, nameError,
     // Deploy wizard
     showDeployWizard, setShowDeployWizard,
     allProviders,
@@ -361,6 +397,7 @@ export function useProjectDetail() {
     lastDeploy,
     // Recent deploys
     recentDeploys,
+    recentScans,
     destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
   };
 }
