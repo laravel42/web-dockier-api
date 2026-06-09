@@ -81,7 +81,21 @@ pnpm docs:dev
 pnpm docs:build
 ```
 
-### Cloudflare Pages workflow (frontend)
+### Publish to Cloudflare or AWS
+
+Copy `scripts/publish.env.example` to `scripts/publish.env` and set `DOCKIER_API_URL` to your production API.
+
+```bash
+# Frontend → Cloudflare Pages (API must run elsewhere)
+pnpm publish:cloudflare
+
+# Backend Docker image → ECR; optional S3 + CloudFront for frontend
+pnpm publish:aws
+```
+
+See `bash scripts/publish.sh --help` for flags and required env vars.
+
+### Cloudflare Pages workflow (frontend only)
 
 ```bash
 cd frontend
