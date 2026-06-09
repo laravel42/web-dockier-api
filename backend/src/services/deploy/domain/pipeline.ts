@@ -241,7 +241,6 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
           appendLog,
         });
         actualImage = result.remoteImageUri;
-        skippedBuild = true; // Don't try local build after CodeBuild
       } else if (!skippedBuild) {
         await logger.section("Build Docker Image");
         const { readFile, writeFile } = await import("node:fs/promises");

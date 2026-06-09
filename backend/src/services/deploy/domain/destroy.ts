@@ -42,10 +42,10 @@ export async function destroyDeployment(db: any, deploymentId: string): Promise<
   const region = providerRow?.region || "us-east-1";
 
   // Clean up local Docker image
-  if (deployment.docker_image) {
+  if (deployment.docker_image && /^[a-zA-Z0-9_.:/@-]+$/.test(deployment.docker_image)) {
     try {
       const { execSync } = await import("node:child_process");
-      execSync(`docker rmi ${JSON.stringify(deployment.docker_image)} 2>/dev/null`, { timeout: 15_000, stdio: "pipe" });
+      execSync("docker rmi " + JSON.stringify(deployment.docker_image) + " 2>/dev/null", { timeout: 15_000, stdio: "pipe" });
     } catch {}
   }
 

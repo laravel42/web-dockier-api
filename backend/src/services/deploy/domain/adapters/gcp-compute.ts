@@ -426,7 +426,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       let currentMachineTypeIdx = -1; // -1 means using original machine type
 
       // Outer loop: try each machine type (original first via zone iteration, then fallbacks)
-      while (!zoneRetrySuccess) {
+      while (!zoneRetrySuccess && currentMachineTypeIdx < machineTypeFallbacks.length) {
         // Try all available zones for the current machine type
         for (const candidateZone of availableZones) {
           if (triedZones.has(candidateZone)) continue;
@@ -776,7 +776,7 @@ export class GcpComputeAdapter implements DeployAdapter {
             }
           }
 
-          if (!containerRunning && sshReady) {
+          if (!containerRunning) {
             // SCP succeeded or we need to proceed with the image load path
             // Wait for Docker to be installed by the startup script
             await appendLog("ℹ Waiting for Docker to be ready on server...");
@@ -822,7 +822,8 @@ export class GcpComputeAdapter implements DeployAdapter {
 
             // Build env flags from wizard-provided env vars (user vars first, then infra overrides)
             const userEnvFlags = (event.envVars || [])
-              .map((e) => `-e ${e.name}='${e.value.replace(/'/g, "'\\''")}'`)
+              .filter((e) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(e.name))
+              .map((e) => "-e " + e.name + "='" + e.value.replace(/'/g, "'\\''") + "'")
               .join(" ");
 
             // Infrastructure env vars that must override user values

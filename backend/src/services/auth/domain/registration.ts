@@ -269,7 +269,6 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
     };
     memberships = [selected];
   }
-  if (!selected) throw new RegistrationError("Unable to resolve tenant membership", "internal");
 
   // Sync user's active org
   const { error: syncError } = await supabaseAdmin

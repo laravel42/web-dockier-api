@@ -398,21 +398,27 @@ export class GcpStorageAdapter implements DeployAdapter {
             );
           };
 
-          const uploadDirRecursive = async (dir: string, prefix: string) => {
+          const filesToUpload: Array<{ fullPath: string; objectName: string }> = [];
+          const collectFiles = (dir: string, prefix: string) => {
             const entries = readdirSync(dir);
             for (const entry of entries) {
               if (SKIP_DIRS.has(entry)) continue;
               const fullPath = join(dir, entry);
               const objectName = prefix ? `${prefix}/${entry}` : entry;
               if (statSync(fullPath).isDirectory()) {
-                await uploadDirRecursive(fullPath, objectName);
+                collectFiles(fullPath, objectName);
               } else {
-                await uploadFile(fullPath, objectName);
+                filesToUpload.push({ fullPath, objectName });
               }
             }
           };
+          collectFiles(uploadDir, "");
 
-          await uploadDirRecursive(uploadDir, "");
+          const concurrencyLimit = 10;
+          for (let i = 0; i < filesToUpload.length; i += concurrencyLimit) {
+            const batch = filesToUpload.slice(i, i + concurrencyLimit);
+            await Promise.all(batch.map((file) => uploadFile(file.fullPath, file.objectName)));
+          }
           await appendLog(`✓ Static files uploaded to gs://${gcsBucket}`);
         }
       }
@@ -496,8 +502,18 @@ export class GcpStorageAdapter implements DeployAdapter {
             const listRes = await fetch(listUrl, { headers: authHeaders });
             if (!listRes.ok) break;
             const objData = await listRes.json() as { items?: { name: string }[]; nextPageToken?: string };
-            for (const obj of objData.items || []) {
-              await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o/${encodeURIComponent(obj.name)}`, { method: "DELETE", headers: authHeaders });
+            const items = objData.items || [];
+            const concurrencyLimit = 10;
+            for (let i = 0; i < items.length; i += concurrencyLimit) {
+              const batch = items.slice(i, i + concurrencyLimit);
+              await Promise.all(
+                batch.map((obj) =>
+                  fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}/o/${encodeURIComponent(obj.name)}`, {
+                    method: "DELETE",
+                    headers: authHeaders,
+                  }),
+                ),
+              );
             }
             pageToken = objData.nextPageToken;
           } while (pageToken);

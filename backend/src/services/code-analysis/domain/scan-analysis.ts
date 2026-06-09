@@ -209,13 +209,18 @@ export function mapSensitiveSeverity(
   }
 }
 
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function findFieldLocation(
   content: string,
   field: string,
 ): { line: number; snippet: string } | null {
   const lines = content.split("\n");
-  const columnPattern = new RegExp(`["\`']?${field}["\`']?\\s+`, "i");
-  const propPattern = new RegExp(`(?:readonly\\s+)?["\`']?${field}["\`']?\\s*[?:]?\\s*[:=]`, "i");
+  const escapedField = escapeRegexLiteral(field);
+  const columnPattern = new RegExp(`["\`']?${escapedField}["\`']?\\s+`, "i");
+  const propPattern = new RegExp(`(?:readonly\\s+)?["\`']?${escapedField}["\`']?\\s*[?:]?\\s*[:=]`, "i");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -230,8 +235,9 @@ function locateSqlFinding(
   finding: SensitiveField,
   schemaFiles: Record<string, string>,
 ): { filePath: string; startLine: number; endLine: number; snippet: string } | null {
+  const escapedEntity = escapeRegexLiteral(finding.entity);
   const tablePattern = new RegExp(
-    `CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?["\`']?${finding.entity}["\`']?`,
+    `CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?["\`']?${escapedEntity}["\`']?`,
     "i",
   );
 

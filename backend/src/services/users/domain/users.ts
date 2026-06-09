@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/security.js";

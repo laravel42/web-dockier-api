@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { PM_PROVIDERS } from "./domain/pm-integrations.js";
 
 export const pmIntegrationSchema = z.object({
   id: z.string().uuid(),

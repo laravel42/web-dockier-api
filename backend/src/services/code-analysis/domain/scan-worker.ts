@@ -75,9 +75,12 @@ function startScanHeartbeat(
   const startedAt = Date.now();
   const interval = setInterval(() => {
     const base = getProgress();
-    void persistScanProgress(scanId, {
+    persistScanProgress(scanId, {
       ...base,
       currentFile: withElapsed(base.currentFile ?? "Working", startedAt),
+    }).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[scan] Heartbeat progress persist failed: " + message);
     });
   }, HEARTBEAT_INTERVAL_MS);
   return () => clearInterval(interval);

@@ -251,8 +251,9 @@ export class AwsS3Adapter implements DeployAdapter {
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
 
     let fileCount = 0;
+    const filesToUpload: Array<{ fullPath: string; objectKey: string }> = [];
 
-    const uploadRecursive = async (dir: string, prefix: string) => {
+    const collectFiles = (dir: string, prefix: string) => {
       const entries = readdirSync(dir);
       for (const entry of entries) {
         if (SKIP_DIRS.has(entry)) continue;
@@ -261,33 +262,42 @@ export class AwsS3Adapter implements DeployAdapter {
         const objectKey = prefix ? `${prefix}/${entry}` : entry;
 
         if (statSync(fullPath).isDirectory()) {
-          await uploadRecursive(fullPath, objectKey);
+          collectFiles(fullPath, objectKey);
         } else {
-          const content = readFileSync(fullPath);
-          const ext = extname(fullPath).toLowerCase();
-          const contentType = MIME_TYPES[ext] || "application/octet-stream";
-
-          // HTML files get no-cache, everything else gets long-lived immutable cache
-          const isHtml = ext === ".html";
-          const cacheControl = isHtml
-            ? "no-cache"
-            : "public, max-age=31536000, immutable";
-
-          await s3.send(
-            new PutObjectCommand({
-              Bucket: bucket,
-              Key: objectKey,
-              Body: content,
-              ContentType: contentType,
-              CacheControl: cacheControl,
-            }),
-          );
-          fileCount++;
+          filesToUpload.push({ fullPath, objectKey });
         }
       }
     };
 
-    await uploadRecursive(uploadDir, "");
+    collectFiles(uploadDir, "");
+
+    const uploadFile = async (file: { fullPath: string; objectKey: string }) => {
+      const content = readFileSync(file.fullPath);
+      const ext = extname(file.fullPath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || "application/octet-stream";
+
+      const isHtml = ext === ".html";
+      const cacheControl = isHtml
+        ? "no-cache"
+        : "public, max-age=31536000, immutable";
+
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: file.objectKey,
+          Body: content,
+          ContentType: contentType,
+          CacheControl: cacheControl,
+        }),
+      );
+      fileCount++;
+    };
+
+    const concurrencyLimit = 10;
+    for (let i = 0; i < filesToUpload.length; i += concurrencyLimit) {
+      const batch = filesToUpload.slice(i, i + concurrencyLimit);
+      await Promise.all(batch.map(uploadFile));
+    }
     await appendLog(`✓ ${fileCount} files uploaded to s3://${bucket}`);
   }
 
