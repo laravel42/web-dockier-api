@@ -131,6 +131,44 @@ export async function getLanguages(
   return languageData;
 }
 
+interface GitLabMember {
+  username: string;
+  name: string;
+  avatar_url: string;
+  web_url: string;
+}
+
+function normalizeLookupKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function profileFromNoreplyEmail(email: string, baseUrl: string): string {
+  const match = email.match(/^(?:\d+\+)?([^@]+)@users\.noreply\.gitlab\.com$/i);
+  if (!match) return "";
+  return `${baseUrl}/${match[1]}`;
+}
+
+async function getProjectMembers(
+  connection: ConnectionLike,
+  owner: string,
+  repo: string,
+): Promise<GitLabMember[]> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const project = encodeProjectPath(owner, repo);
+
+  const res = await fetch(`${baseUrl}/api/v4/projects/${project}/members/all?per_page=100`, { headers });
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as Array<Record<string, unknown>>;
+  return data.map((member) => ({
+    username: String(member.username ?? ""),
+    name: String(member.name ?? ""),
+    avatar_url: String(member.avatar_url ?? ""),
+    web_url: String(member.web_url ?? ""),
+  }));
+}
+
 export async function getContributors(
   connection: ConnectionLike,
   params: { owner: string; repo: string; limit?: number },
@@ -140,14 +178,38 @@ export async function getContributors(
   const project = encodeProjectPath(params.owner, params.repo);
   const limit = params.limit ?? 20;
 
-  const res = await fetch(`${baseUrl}/api/v4/projects/${project}/repository/contributors?per_page=${limit}`, { headers });
-  if (!res.ok || res.status === 204) return [];
+  const [contribRes, members] = await Promise.all([
+    fetch(`${baseUrl}/api/v4/projects/${project}/repository/contributors?per_page=${limit}`, { headers }),
+    getProjectMembers(connection, params.owner, params.repo).catch(() => []),
+  ]);
+  if (!contribRes.ok || contribRes.status === 204) return [];
 
-  const data = (await res.json()) as Array<Record<string, unknown>>;
-  return data.slice(0, limit).map((contributor) => ({
-    name: String(contributor.name ?? contributor.email ?? "Unknown"),
-    avatarUrl: "",
-    commits: Number(contributor.commits ?? 0),
-    profileUrl: "",
-  }));
+  const membersByName = new Map<string, GitLabMember>();
+  const membersByUsername = new Map<string, GitLabMember>();
+  for (const member of members) {
+    if (member.name) membersByName.set(normalizeLookupKey(member.name), member);
+    if (member.username) membersByUsername.set(normalizeLookupKey(member.username), member);
+  }
+
+  const data = (await contribRes.json()) as Array<Record<string, unknown>>;
+  return data.slice(0, limit).map((contributor) => {
+    const name = String(contributor.name ?? contributor.email ?? "Unknown");
+    const email = String(contributor.email ?? "");
+    const matchedMember = membersByName.get(normalizeLookupKey(name));
+    const emailProfileUrl = profileFromNoreplyEmail(email, baseUrl);
+    const emailUsername = emailProfileUrl ? emailProfileUrl.split("/").pop() ?? "" : "";
+    const emailMember = emailUsername ? membersByUsername.get(normalizeLookupKey(emailUsername)) : undefined;
+    const resolvedMember = matchedMember ?? emailMember;
+
+    const profileUrl = resolvedMember?.web_url
+      || emailProfileUrl
+      || (resolvedMember?.username ? `${baseUrl}/${resolvedMember.username}` : "");
+
+    return {
+      name,
+      avatarUrl: resolvedMember?.avatar_url ?? "",
+      commits: Number(contributor.commits ?? 0),
+      profileUrl,
+    };
+  });
 }

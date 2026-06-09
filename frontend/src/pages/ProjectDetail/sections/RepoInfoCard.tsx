@@ -1,6 +1,5 @@
 import type { Project, RepoStats } from "../../../types";
 import { cardCls } from "../../../utils/styles";
-import { getRepoKey } from "../../../utils/parseOwnerRepo";
 import { timeAgo } from "../../../utils/timeAgo";
 import GitCommitIcon from "../../../components/icons/outlined/GitCommitIcon";
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
@@ -26,7 +25,6 @@ function valueLinkCls() {
 
 export default function RepoInfoCard({ project, stats, badges, allBadges }: Props) {
   const isTemplate = project.sourceType === "template";
-  const repoKey = project.repository ? getRepoKey(project.repository) : null;
   const displayBadges = allBadges && allBadges.length > 0 ? allBadges : badges;
 
   if (isTemplate) {
@@ -69,11 +67,6 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
             </a>
           ) : (
             <p className="text-sm text-text-muted mt-0.5">No repository linked</p>
-          )}
-          {repoKey && (
-            <span className="inline-block mt-1 px-2 py-0.5 rounded bg-secondary-50 border border-border text-[11px] text-text-muted font-mono select-all">
-              {repoKey}
-            </span>
           )}
         </div>
 

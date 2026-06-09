@@ -176,12 +176,16 @@ export async function getContributors(
   if (!res.ok || res.status === 204) return [];
 
   const data = (await res.json()) as any[];
-  return data.map((contributor) => ({
-    name: contributor.login,
-    avatarUrl: contributor.avatar_url ?? "",
-    commits: contributor.contributions ?? 0,
-    profileUrl: contributor.html_url ?? "",
-  }));
+  const host = baseUrl.replace(/\/api\.github\.com$/, "https://github.com");
+  return data.map((contributor) => {
+    const login = String(contributor.login ?? "");
+    return {
+      name: login,
+      avatarUrl: contributor.avatar_url ?? "",
+      commits: contributor.contributions ?? 0,
+      profileUrl: contributor.html_url ?? (login ? `${host}/${login}` : ""),
+    };
+  });
 }
 
 /**

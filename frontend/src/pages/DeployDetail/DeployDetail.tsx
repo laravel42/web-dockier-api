@@ -1,3 +1,4 @@
+import DeployWizard from "../../components/DeployWizard";
 import { btnSecondary } from "../../utils/styles";
 import { useDeployDetail } from "./useDeployDetail";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
@@ -16,6 +17,10 @@ export default function DeployDetail() {
     loading, error,
     allDeploys, allDeploysLoading,
     provKey,
+    showDeployWizard, setShowDeployWizard,
+    openDeployWizard, canLaunchDeploy,
+    analysis, analysisLoading, analysisError,
+    handleDeployComplete,
   } = useDeployDetail();
 
   if (loading) {
@@ -51,11 +56,10 @@ export default function DeployDetail() {
         <DeployHeader
           deploy={deploy}
           project={project}
-          deployUrl={deployUrl}
           onNavigateProject={() => project && navigate(`/projects/${project.id}`)}
         />
 
-        <InfoCards deploy={deploy} provKey={provKey} />
+        <InfoCards deploy={deploy} provKey={provKey} deployUrl={deployUrl} />
 
         {/* VPS warm-up notice */}
         {deploy.status === "success" && deploy.deployStrategy === "vps" && deployUrl && (
@@ -75,8 +79,23 @@ export default function DeployDetail() {
         providers={providers}
         activeDeployId={deployId}
         loading={allDeploysLoading}
+        canLaunchDeploy={canLaunchDeploy}
+        onNewDeploy={openDeployWizard}
         onSelect={(id) => navigate(`/deploy/${id}`)}
       />
+
+      {project && (
+        <DeployWizard
+          open={showDeployWizard}
+          onClose={() => setShowDeployWizard(false)}
+          project={project}
+          analysis={analysis}
+          analysisLoading={analysisLoading}
+          analysisError={analysisError}
+          providers={providers}
+          onDeployComplete={handleDeployComplete}
+        />
+      )}
     </div>
   );
 }

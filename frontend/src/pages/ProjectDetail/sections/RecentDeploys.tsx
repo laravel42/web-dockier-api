@@ -5,6 +5,7 @@ import ProviderBadge from "../../../components/ProviderBadge";
 import { getProviderStyle } from "../../../data/providers";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 import StatusBadge from "../../../components/badges/StatusBadge";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { usePermissions } from "../../../context/PermissionsContext";
 
 interface Props {
@@ -38,12 +39,11 @@ export default function RecentDeploys({ deploys, allProviders, navigate, destroy
             <div key={d.id} className="px-4 py-2.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <ProviderBadge provider={pk} showName={false} iconSize="size-4" />
-                <button
+                <BranchCommitLabel
+                  branch={d.branch}
+                  commit={d.commitHash || undefined}
                   onClick={() => navigate(`/deploy/${d.id}`)}
-                  className="text-sm font-medium text-text hover:text-primary-500 transition-colors truncate text-left"
-                >
-                  {d.branch}{d.commitHash ? ` @ ${d.commitHash.substring(0, 7)}` : ""}
-                </button>
+                />
                 {isLatest && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none shrink-0 bg-primary/10 text-primary">
                     Last

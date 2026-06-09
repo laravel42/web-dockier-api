@@ -66,6 +66,12 @@ function isPlaceholderStats(stats: RepoStatsPayload): boolean {
   );
 }
 
+function needsContributorProfileRefresh(stats: RepoStatsPayload, provider: string): boolean {
+  if (provider !== "gitlab" && provider !== "gitlab_self_hosted") return false;
+  if (!stats.topContributors?.length) return false;
+  return stats.topContributors.every((contributor) => !contributor.profileUrl);
+}
+
 function primaryLanguage(languages: Record<string, number>): string {
   const entries = Object.entries(languages);
   if (entries.length === 0) return "";
@@ -602,7 +608,10 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
         if (cached.data?.result) {
           const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
-          if (!isPlaceholderStats(parsed as RepoStatsPayload)) return parsed;
+          const cachedStats = parsed as RepoStatsPayload;
+          if (!isPlaceholderStats(cachedStats) && !needsContributorProfileRefresh(cachedStats, conn.provider)) {
+            return parsed;
+          }
         }
       }
 

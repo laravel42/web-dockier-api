@@ -2,6 +2,7 @@ import type { Scan } from "../../../types";
 import { cardCls, chipCls } from "../../../utils/styles";
 import { timeAgo } from "../../../utils/timeAgo";
 import StatusBadge from "../../../components/badges/StatusBadge";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 
 interface Props {
@@ -28,14 +29,11 @@ export default function RecentScans({ scans, navigate }: Props) {
             <div key={scan.id} className="px-4 py-2.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <ShieldCheckIcon className="size-4 shrink-0 text-primary-500" />
-                <button
-                  type="button"
+                <BranchCommitLabel
+                  branch={scan.branch}
+                  commit={scan.commitSha || undefined}
                   onClick={() => navigate(`/security/${scan.id}`)}
-                  className="text-sm font-medium text-text hover:text-primary-500 transition-colors truncate text-left"
-                >
-                  {scan.branch}
-                  {scan.commitSha ? ` @ ${scan.commitSha.slice(0, 7)}` : ""}
-                </button>
+                />
                 {isLatest && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none shrink-0 bg-primary/10 text-primary">
                     Latest
@@ -56,7 +54,7 @@ export default function RecentScans({ scans, navigate }: Props) {
                 <button
                   type="button"
                   onClick={() => navigate(`/security/${scan.id}`)}
-                  className="text-xs text-primary-500 hover:text-primary-700 font-medium transition-colors"
+                  className="ml-auto text-xs text-primary-500 hover:text-primary-700 font-medium transition-colors shrink-0"
                 >
                   View scan →
                 </button>
