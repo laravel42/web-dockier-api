@@ -85,8 +85,8 @@ export default function ComboBox({ value, onChange, options, placeholder = "Sele
                   key={o.value}
                   type="button"
                   onClick={() => { onChange(o.value); setOpen(false); }}
-                  className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                    value === o.value ? "bg-primary-50 text-primary-600 font-medium" : "text-text"
+                  className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-primary/10 transition-colors ${
+                    value === o.value ? "text-primary-600 font-medium" : "text-text"
                   }`}
                 >
                   {o.label}

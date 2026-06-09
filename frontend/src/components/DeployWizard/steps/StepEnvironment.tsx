@@ -29,7 +29,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 onChange(env, standardIdx >= 0 ? standardIdx : 0);
               }}
               className={`px-4 py-2 text-sm font-medium transition-colors capitalize ${
-                state.environment === env ? "bg-primary-500 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"
+                state.environment === env ? "bg-primary/30 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"
               }`}
             >
               {env === "staging" ? "🧪 Staging" : "🚀 Production"}
@@ -50,7 +50,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 onClick={() => onRegionChange(r.id)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs transition-all ${
                   state.tofuRegion === r.id
-                    ? "border-primary-500 bg-primary-50 text-text"
+                    ? "border-primary-500 bg-primary/10 text-text"
                     : "border-border bg-card text-text-secondary hover:border-primary-300"
                 }`}
               >
@@ -77,7 +77,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 type="button"
                 onClick={() => onChange(state.environment, i)}
                 className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${
-                  selected ? "border-primary-500 bg-primary-50 shadow-sm" : "border-border bg-card hover:border-primary-300"
+                  selected ? "border-primary-500 bg-primary/10 shadow-sm" : "border-border bg-card hover:border-primary-300"
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">

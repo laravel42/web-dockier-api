@@ -88,7 +88,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
     <div className="space-y-4">
       {/* AI Summary */}
       {analysis.aiAnalysis?.summary && (
-        <div className="flex items-start gap-2 p-3 bg-primary-50 border border-primary-200 rounded-lg">
+        <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary-200 rounded-lg">
           <span className="text-base mt-0.5">✨</span>
           <div className="text-xs text-text-secondary">
             <span className="font-semibold">AI Analysis:</span> {analysis.aiAnalysis.summary}

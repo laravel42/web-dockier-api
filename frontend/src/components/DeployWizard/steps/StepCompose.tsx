@@ -62,7 +62,7 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
                 onClick={() => onBuildMethodChange(m.id)}
                 className={`p-3 rounded-lg border text-left transition-all ${
                   state.buildMethod === m.id
-                    ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
+                    ? "border-primary-500 bg-primary/10 ring-1 ring-primary-500/30"
                     : "border-border bg-surface hover:border-primary-500/30"
                 }`}
               >

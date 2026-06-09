@@ -76,9 +76,9 @@ export default function StepEnvVars({
   return (
     <div className="space-y-4">
       {/* Privacy disclaimer */}
-      <div className="flex items-start gap-2.5 p-3 bg-success-50 border border-success-200 rounded-lg">
-        <LockIcon className="size-4  text-success-600 mt-0.5 shrink-0" />
-        <p className="text-xs text-success-700">
+      <div className="flex items-start gap-2.5 p-3 bg-primary/10 border border-primary-400 rounded-lg">
+        <LockIcon className="size-4 text-primary-600 mt-0.5 shrink-0" />
+        <p className="text-xs text-primary-600">
           We do not store your environment variables. They are only used during
           the deployment process and are injected directly into your instance.
         </p>

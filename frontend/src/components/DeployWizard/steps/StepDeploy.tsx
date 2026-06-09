@@ -39,12 +39,13 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         {["Provisioning", "Building Image", "Pushing", "Starting"].map((step, i) => {
           const phases = ["pending", "building", "deploying", "success"];
           const currentIdx = phases.indexOf(state.deployStatus);
-          const done = currentIdx > i;
-          const active = currentIdx === i;
+          const isSuccess = state.deployStatus === "success";
+          const done = currentIdx > i || (isSuccess && currentIdx === i);
+          const active = currentIdx === i && !isSuccess;
           return (
             <div key={step} className="flex items-center gap-1.5 flex-1">
               <div className={`size-5  rounded-full flex items-center justify-center shrink-0 ${
-                done ? "bg-success-500 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
+                done ? "bg-primary-500/80 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
               }`}>
                 {done ? (
                   <CheckIcon className="size-3 " />
@@ -55,7 +56,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
                 )}
               </div>
               <span className={`hidden sm:block ${active ? "text-text font-medium" : "text-text-muted"}`}>{step}</span>
-              {i < 3 && <div className={`flex-1 h-px ${done ? "bg-success-500" : "bg-border"}`} />}
+              {i < 3 && <div className={`flex-1 h-px ${done ? "bg-primary-500/80" : "bg-border"}`} />}
             </div>
           );
         })}
@@ -63,7 +64,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
 
       {/* Logs */}
       {state.deployLogs.length > 0 && (
-        <div ref={logsRef} className="rounded-lg bg-gray-900 p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed ">
+        <div ref={logsRef} className="rounded-lg bg-taupe-800 p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed ">
           {state.deployLogs.map((line, i) => (
             <div key={i} className={
               line.includes("✓") ? "text-green-400" :
@@ -81,7 +82,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
       )}
 
       {state.deployLogs.length === 0 && isRunning && (
-        <div className="rounded-lg bg-gray-900 p-6 flex items-center justify-center gap-2">
+        <div className="rounded-lg bg-taupe-800 p-6 flex items-center justify-center gap-2">
           <div className="size-4  border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-gray-400">Waiting for logs…</span>
         </div>
@@ -120,7 +121,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
       {/* VPS warm-up notice — shown when deploy succeeds on a VPS strategy */}
       {state.deployAppUrl && state.deployStatus === "success" && state.deployStrategy === "vps" && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-          <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
+          <p className="text-sm text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
           <p className="text-xs/relaxed text-text-muted ">
             If you see an nginx welcome page, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes as the container starts and configures itself.
           </p>
