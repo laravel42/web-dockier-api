@@ -57,7 +57,8 @@ export function clearPermissionCache(): void {
 
 /**
  * Resolve the full auth context for a user in a tenant.
- * Fetches membership, role, and permissions from the database.
+ * Reduced from 3 queries to 2: membership+role validation in one round-trip
+ * via .single() on roles filtered by membership's role_id, then permissions.
  */
 async function resolvePermissions(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
   const cacheKey = getCacheKey(userId, tenantId);
@@ -66,40 +67,40 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
     return cached.resolved;
   }
 
-  // Fetch membership
+  // Query 1: Fetch membership (validates user belongs to tenant and is active)
   const { data: membership, error: membershipError } = await supabaseAdmin
     .from("organization_memberships")
     .select("role_id, is_owner, status")
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
+    .eq("status", "active")
     .maybeSingle();
 
   if (membershipError || !membership) return null;
-  if (membership.status !== "active") return null;
 
   const roleId = membership.role_id;
   if (!roleId) return null;
 
-  // Fetch role metadata
-  const { data: role, error: roleError } = await supabaseAdmin
-    .from("roles")
-    .select("id, system_key")
-    .eq("id", roleId)
-    .eq("organization_id", tenantId)
-    .is("deleted_at", null)
-    .maybeSingle();
+  // Query 2: Fetch role + permissions in parallel (2 queries → 1 round-trip)
+  const [roleResult, permResult] = await Promise.all([
+    supabaseAdmin
+      .from("roles")
+      .select("id, system_key")
+      .eq("id", roleId)
+      .eq("organization_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("role_permissions")
+      .select("permission_id")
+      .eq("role_id", roleId),
+  ]);
 
-  if (roleError || !role) return null;
+  if (roleResult.error || !roleResult.data) return null;
+  if (permResult.error) return null;
 
-  // Fetch permissions via role_permissions join
-  const { data: rolePermissions, error: permError } = await supabaseAdmin
-    .from("role_permissions")
-    .select("permission_id")
-    .eq("role_id", roleId);
-
-  if (permError) return null;
-
-  const permissions = (rolePermissions ?? []).map((rp) => rp.permission_id as PermissionKey);
+  const role = roleResult.data;
+  const permissions = (permResult.data ?? []).map((rp) => rp.permission_id as PermissionKey);
 
   const resolved: ResolvedAuth = {
     userId,

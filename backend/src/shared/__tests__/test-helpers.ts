@@ -28,15 +28,12 @@ export interface TestTokenOptions {
 }
 
 export function signTestToken(opts: TestTokenOptions = {}): string {
-  return jwt.sign(
-    {
-      userId: opts.userId ?? TEST_USER_ID,
-      email: opts.email ?? TEST_EMAIL,
-      tenantId: opts.tenantId ?? TEST_TENANT_ID,
-    },
-    TEST_JWT_SECRET,
-    { expiresIn: opts.expiresIn ?? "1h" },
-  );
+  const payload = {
+    userId: opts.userId ?? TEST_USER_ID,
+    email: opts.email ?? TEST_EMAIL,
+    tenantId: opts.tenantId ?? TEST_TENANT_ID,
+  };
+  return jwt.sign(payload, TEST_JWT_SECRET, { expiresIn: opts.expiresIn ?? "1h" } as jwt.SignOptions);
 }
 
 export function authHeader(opts: TestTokenOptions = {}): string {

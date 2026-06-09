@@ -36,4 +36,15 @@ const envSchema = z.object({
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
-export const env: AppEnv = envSchema.parse(process.env);
+
+const parsed = envSchema.parse(process.env);
+
+// Enforce CORS_ORIGIN in production — wildcard is not acceptable
+if (parsed.NODE_ENV === "production" && parsed.CORS_ORIGIN === "*") {
+  throw new Error(
+    "CORS_ORIGIN must be set to a specific origin (not \"*\") in production. " +
+    "Example: CORS_ORIGIN=https://app.dockier.dev"
+  );
+}
+
+export const env: AppEnv = parsed;

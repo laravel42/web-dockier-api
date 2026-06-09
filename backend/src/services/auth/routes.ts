@@ -12,6 +12,7 @@ import { env } from "../../shared/config.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { rateLimit } from "../../shared/rate-limit.js";
 
 // Domain modules
 import {
@@ -36,11 +37,17 @@ import {
 export async function registerAuthRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
+  // Rate limiters for public auth endpoints
+  const authStartLimit = rateLimit({ max: 5, windowMs: 60_000, prefix: "auth-start" });
+  const authVerifyLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-verify" });
+  const authLoginLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-login" });
+
   // ─── Demo Login ────────────────────────────────────────────────────────────
 
   typed.post(
     "/auth/demo-login",
     {
+      preHandler: authLoginLimit,
       schema: {
         tags: ["auth"],
         summary: "Development-only demo login",
@@ -62,6 +69,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/password/login",
     {
+      preHandler: authLoginLimit,
       schema: {
         tags: ["auth"],
         summary: "Password-based login (development)",
@@ -92,6 +100,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/register/start",
     {
+      preHandler: authStartLimit,
       schema: {
         tags: ["auth"],
         summary: "Start passwordless signup via Supabase OTP/magic link",
@@ -123,6 +132,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/passwordless/start",
     {
+      preHandler: authStartLimit,
       schema: {
         tags: ["auth"],
         summary: "Start passwordless authentication via Supabase email OTP/magic link",
@@ -150,6 +160,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/passwordless/verify",
     {
+      preHandler: authVerifyLimit,
       schema: {
         tags: ["auth"],
         summary: "Verify OTP/magic link token and issue tenant-scoped API JWT",
