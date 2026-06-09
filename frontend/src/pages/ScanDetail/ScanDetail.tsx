@@ -21,10 +21,10 @@ export default function ScanDetail() {
     return <PageLoading />;
   }
 
-  if (core.error || (!core.scan && !core.project)) {
+  if (core.pageError || (!core.scan && !core.project)) {
     return (
       <div>
-        <PageError message={core.error || "Scan not found"} />
+        <PageError message={core.pageError || "Scan not found"} />
         <div className="text-center mt-4">
           <button type="button" onClick={() => core.navigate("/security")} className={btnSecondary}>
             Back to Security Scans

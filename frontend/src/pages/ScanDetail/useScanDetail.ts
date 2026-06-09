@@ -28,7 +28,8 @@ export function useScanDetail() {
   const [findingsLoading, setFindingsLoading] = useState(false);
   const [severityFilter, setSeverityFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [findingsError, setFindingsError] = useState("");
 
   const [allScans, setAllScans] = useState<Scan[]>([]);
   const [allScansLoading, setAllScansLoading] = useState(false);
@@ -39,12 +40,13 @@ export function useScanDetail() {
   const [runScanError, setRunScanError] = useState("");
   const terminalHandledRef = useRef<string | null>(null);
 
-  const resolvedStatus =
-    scan?.status && TERMINAL_STATUSES.has(scan.status)
-      ? scan.status
-      : (live?.status ?? scan?.status ?? "");
-
-  const scanRunning = resolvedStatus === "running" || resolvedStatus === "pending";
+  const apiTerminal = Boolean(scan?.status && TERMINAL_STATUSES.has(scan.status));
+  const liveTerminal = Boolean(live?.status && TERMINAL_STATUSES.has(live.status));
+  const scanRunning =
+    !apiTerminal
+    && !liveTerminal
+    && ((live?.status === "running" || live?.status === "pending")
+      || (scan?.status === "running" || scan?.status === "pending"));
   const scanProgress = scanRunning
     ? (live?.progress ?? scan?.summary?.progress ?? DEFAULT_SCAN_PROGRESS)
     : null;
@@ -55,11 +57,12 @@ export function useScanDetail() {
 
   const fetchFindings = useCallback(async (id: string, severity?: string) => {
     setFindingsLoading(true);
+    setFindingsError("");
     try {
       const res = await codeAnalysisApi.listFindings(id, severity || undefined);
       setFindings(res.findings);
     } catch (err) {
-      setError(getErrorMessage(err, "Failed to load findings"));
+      setFindingsError(getErrorMessage(err, "Failed to load findings"));
     } finally {
       setFindingsLoading(false);
     }
@@ -79,6 +82,8 @@ export function useScanDetail() {
 
   useEffect(() => {
     setRunScanError("");
+    setPageError("");
+    setFindingsError("");
     terminalHandledRef.current = null;
   }, [scanId]);
 
@@ -98,7 +103,7 @@ export function useScanDetail() {
           }
           return s;
         })
-        .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load scan")))
+        .catch((err: unknown) => setPageError(getErrorMessage(err, "Failed to load scan")))
         .finally(() => setLoading(false));
       fetchFindings(scanId);
     } else if (routeProjectId) {
@@ -121,7 +126,7 @@ export function useScanDetail() {
             setAllScansLoading(false);
           }
         })
-        .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load scan")))
+        .catch((err: unknown) => setPageError(getErrorMessage(err, "Failed to load project")))
         .finally(() => setLoading(false));
     }
   }, [scanId, routeProjectId, seedFromScan, fetchFindings, refreshAllScans, navigate]);
@@ -216,7 +221,8 @@ export function useScanDetail() {
     fileContents,
     loading,
     findingsLoading,
-    error,
+    pageError,
+    findingsError,
     severityFilter,
     handleSeverityFilter,
     providerFilter,

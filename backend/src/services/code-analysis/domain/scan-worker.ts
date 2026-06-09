@@ -30,6 +30,7 @@ import {
   updateScanProgress,
 } from "./scan-progress.js";
 import type { ScanProgressPayload } from "./scan-events.js";
+import { SCAN_SKIP_DIRS, semgrepExcludeArgs } from "./scan-skip-dirs.js";
 
 export interface RunScanOptions {
   enableSemgrep?: boolean;
@@ -39,22 +40,6 @@ export interface RunScanOptions {
 }
 
 const RULES_DIR = getOpengrepRulesDir();
-
-const SKIP_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "vendor",
-  "dist",
-  "build",
-  ".next",
-  ".turbo",
-  ".cache",
-  "coverage",
-  "__pycache__",
-  ".venv",
-  "venv",
-  ".pnpm-store",
-]);
 
 const INSERT_BATCH_SIZE = 100;
 const SEMGREP_TIMEOUT_MS = 600_000;
@@ -155,7 +140,15 @@ async function runSemgrep(repoDir: string, disabledRuleIds: Set<string>): Promis
   const semgrep = findSemgrepBinary();
   const { stdout, stderr, code } = await runCommand(
     semgrep,
-    ["scan", "--config", RULES_DIR, "--json", "--quiet", "--no-git-ignore", repoDir],
+    [
+      "scan",
+      "--config",
+      RULES_DIR,
+      "--json",
+      "--quiet",
+      ...semgrepExcludeArgs(),
+      repoDir,
+    ],
     { timeoutMs: SEMGREP_TIMEOUT_MS },
   );
 
@@ -173,7 +166,7 @@ async function walkRepoFiles(repoDir: string): Promise<{ allFiles: string[]; rel
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (SKIP_DIRS.has(entry.name)) continue;
+      if (SCAN_SKIP_DIRS.has(entry.name)) continue;
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(fullPath);

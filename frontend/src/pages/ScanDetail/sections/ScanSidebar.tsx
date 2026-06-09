@@ -44,20 +44,11 @@ export default function ScanSidebar({
               <button
                 type="button"
                 onClick={onRunScan}
-                disabled={scanRunning || !hasConnectionId}
+                disabled={!hasConnectionId}
                 className={`${btnPrimary} w-full py-2 text-sm`}
               >
-                {scanRunning ? (
-                  <>
-                    <span className="size-3 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                    Scanning…
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheckIcon className="size-3.5" />
-                    Run new scan
-                  </>
-                )}
+                <ShieldCheckIcon className="size-3.5" />
+                Run new scan
               </button>
             </div>
           )}

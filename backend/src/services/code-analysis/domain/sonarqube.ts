@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ScanFindingInput } from "./scan-analysis.js";
+import { sonarExclusionGlobs } from "./scan-skip-dirs.js";
 
 export interface SonarConfig {
   baseUrl: string;
@@ -307,6 +308,7 @@ export async function runSonarScanner(
   const props = [
     `sonar.projectKey=${projectKey}`,
     `sonar.sources=.`,
+    `sonar.exclusions=${sonarExclusionGlobs()}`,
     `sonar.host.url=${config.baseUrl}`,
     `sonar.token=${config.token}`,
     `sonar.sourceEncoding=UTF-8`,

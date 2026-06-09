@@ -11,6 +11,12 @@
 import { PgBoss } from "pg-boss";
 
 let boss: PgBoss | null = null;
+let queueStarted = false;
+let queueInitFailed = false;
+
+export function isQueueReady(): boolean {
+  return queueStarted && boss !== null;
+}
 
 /**
  * Get or create the pg-boss instance.
@@ -19,6 +25,7 @@ let boss: PgBoss | null = null;
  */
 export function getQueue(): PgBoss | null {
   if (boss) return boss;
+  if (queueInitFailed) return null;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -48,16 +55,22 @@ export function getQueue(): PgBoss | null {
  * No-op if DATABASE_URL is not configured.
  */
 export async function startQueue(): Promise<boolean> {
+  if (queueStarted) return true;
+  if (queueInitFailed) return false;
+
   const queue = getQueue();
   if (!queue) return false;
 
   try {
     await queue.start();
+    queueStarted = true;
     console.log("[queue] pg-boss started");
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
+    queueInitFailed = true;
+    queueStarted = false;
     await queue.stop().catch(() => {});
     boss = null;
     return false;
@@ -71,6 +84,7 @@ export async function stopQueue(): Promise<void> {
   if (!boss) return;
   await boss.stop({ graceful: true, timeout: 30_000 });
   boss = null;
+  queueStarted = false;
   console.log("[queue] pg-boss stopped");
 }
 
@@ -122,8 +136,9 @@ export function createWorker<T>(
   let registered = false;
 
   async function register(): Promise<void> {
-    const queue = getQueue();
-    if (!queue || registered) return;
+    if (!isQueueReady() || registered) return;
+    const queue = boss;
+    if (!queue) return;
 
     // Set flag synchronously to prevent concurrent duplicate registrations
     registered = true;
@@ -157,22 +172,22 @@ export function createWorker<T>(
   }
 
   async function enqueue(input: T, singletonKey?: string): Promise<void> {
-    const queue = getQueue();
-
-    if (queue) {
-      await queue.send(queueName, input as unknown as Record<string, unknown>, {
+    if (isQueueReady() && boss) {
+      await boss.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
         expireInSeconds,
         ...(singletonKey ? { singletonKey } : {}),
       });
       console.log(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
-    } else {
-      setImmediate(() => {
-        handler(input).catch((err) => {
-          console.error(`[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}:`, err);
-        });
-      });
+      return;
     }
+
+    console.warn(`[${queueName}] Queue unavailable — running job in-process${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+    setImmediate(() => {
+      handler(input).catch((err) => {
+        console.error(`[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}:`, err);
+      });
+    });
   }
 
   return { register, enqueue };
