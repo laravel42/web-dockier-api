@@ -1,44 +1,103 @@
+import { useMemo, useState } from "react";
 import { useDeploy } from "./useDeploy";
-import EmptyState from "./sections/EmptyState";
+import DeployEmptyState from "./sections/EmptyState";
 import DeployCard from "./sections/DeployCard";
-import Spinner from "../../components/Spinner";
+import DeployTable from "./sections/DeployTable";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
+import ListToolbar from "../../components/ui/ListToolbar";
+import { EmptyMessage } from "../../components/ui/PageError";
 
 export default function Deploy() {
-  const { navigate, deployments, loading, projectLangs, projectById, grouped } = useDeploy();
+  const [search, setSearch] = useState("");
+  const {
+    navigate,
+    deployments,
+    loading,
+    error,
+    reload,
+    projectLangs,
+    projectBadgeLoading,
+    projectById,
+    grouped,
+    viewMode,
+    changeViewMode,
+  } = useDeploy();
+
+  const filteredGrouped = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return grouped;
+    return grouped.filter(([groupKey, repoDeploys]) => {
+      const proj = projectById[groupKey];
+      const latest = repoDeploys[0];
+      const name = (proj?.name || latest?.repo || "").toLowerCase();
+      const repo = (latest?.repo || "").toLowerCase();
+      return name.includes(q) || repo.includes(q);
+    });
+  }, [grouped, projectById, search]);
 
   if (loading) {
+    return <PageLoading />;
+  }
+
+  if (error) {
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
+      <div>
+        <PageHeader title="Deployments" />
+        <PageError message={error} onRetry={reload} />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Deployments</h1>
-      </div>
+      <PageHeader title="Deployments" description={`${deployments.length} total deployments`} />
 
       {deployments.length === 0 ? (
-        <EmptyState onGoToProjects={() => navigate("/projects")} />
+        <DeployEmptyState onGoToProjects={() => navigate("/projects")} />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {grouped.map(([groupKey, repoDeploys]) => {
-            const proj = projectById[groupKey];
-            const latest = repoDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-            return (
-              <DeployCard
-                key={groupKey}
-                repo={latest.repo}
-                deploys={repoDeploys}
-                project={proj}
-                badges={proj ? projectLangs[proj.id] : undefined}
-                onClick={() => navigate(`/deploy/${latest.id}`)}
-              />
-            );
-          })}
-        </div>
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by project or repository"
+            viewMode={viewMode}
+            onViewModeChange={changeViewMode}
+          />
+
+          {filteredGrouped.length === 0 ? (
+            <EmptyMessage>No deployments match your search.</EmptyMessage>
+          ) : viewMode === "table" ? (
+            <DeployTable
+              grouped={filteredGrouped}
+              projectById={projectById}
+              projectLangs={projectLangs}
+              projectBadgeLoading={projectBadgeLoading}
+              onSelect={(id) => navigate(`/deploy/${id}`)}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredGrouped.map(([groupKey, repoDeploys]) => {
+                const proj = projectById[groupKey];
+                const latest = [...repoDeploys].sort(
+                  (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+                )[0];
+                return (
+                  <DeployCard
+                    key={groupKey}
+                    repo={latest.repo}
+                    deploys={repoDeploys}
+                    project={proj}
+                    badges={proj ? projectLangs[proj.id] : undefined}
+                    badgeLoading={proj ? projectBadgeLoading.has(proj.id) : false}
+                    onClick={() => navigate(`/deploy/${latest.id}`)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

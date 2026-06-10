@@ -3,10 +3,12 @@ import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIco
 import Modal from "../../../components/Modal";
 import type { PMIntegration, PMTeam, PMMember } from "../../../types";
 import Spinner from "../../../components/Spinner";
+import { SearchableCombobox } from "../../../components/ui/combobox";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  repoUrl?: string;
   // form state
   pmIntegrations: PMIntegration[];
   issueIntegration: string;
@@ -29,6 +31,9 @@ interface Props {
   pmMembers: PMMember[];
   selectedPmAssignee: string;
   onAssigneeChange: (id: string) => void;
+  gitMembers?: Array<{ id: string; username: string; name: string; avatarUrl: string }>;
+  selectedGitAssignee?: string;
+  onGitAssigneeChange?: (username: string) => void;
   issueCreating: boolean;
   issueSuccess: string;
   issueSuccessUrl: string;
@@ -38,25 +43,25 @@ interface Props {
 }
 
 export default function CreateIssueModal({
-  open, onClose,
+  open, onClose, repoUrl,
   pmIntegrations, issueIntegration, onIntegrationChange,
   pmProjects, pmProjectsLoading, selectedPmProject, pmTeamLabel, pmProjectLabel,
   pmSubProjects, pmSubProjectsLoading, selectedPmSubProject, onSubProjectChange, onTeamChange,
   issueTitle, onTitleChange, titleGenerating,
   issueDescription, onDescriptionChange,
   pmMembers, selectedPmAssignee, onAssigneeChange,
+  gitMembers, selectedGitAssignee, onGitAssigneeChange,
   issueCreating, issueSuccess, issueSuccessUrl, issueError, onDismissError,
   onSubmit,
 }: Props) {
-  const selectCls = "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
   const inputCls = `w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors`;
 
   return (
     <Modal open={open} onClose={onClose} title="Create Issue from Finding">
       {issueSuccess ? (
         <div className="flex flex-col items-center py-6 gap-4">
-          <div className="w-12 h-12 rounded-full bg-success-500/10 flex items-center justify-center">
-            <CheckCircleIcon className="w-7 h-7 text-success-500" />
+          <div className="size-12  rounded-full bg-success-500/10 flex items-center justify-center">
+            <CheckCircleIcon className="size-7  text-success-500" />
           </div>
           <p className="text-sm font-medium text-success-500">{issueSuccess}</p>
           {issueSuccessUrl && (
@@ -66,7 +71,7 @@ export default function CreateIssueModal({
               rel="noopener noreferrer"
               className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors"
             >
-              <ExternalLinkIcon className="w-4 h-4" />
+              <ExternalLinkIcon className="size-4 " />
               Open Issue
             </a>
           )}
@@ -76,9 +81,13 @@ export default function CreateIssueModal({
           {pmIntegrations.length > 1 && (
             <div>
               <label htmlFor="issue-integration" className="block text-sm font-medium text-text-secondary mb-1.5">Integration</label>
-              <select id="issue-integration" value={issueIntegration} onChange={(e) => onIntegrationChange(e.target.value)} className={selectCls}>
-                {pmIntegrations.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-              </select>
+              <SearchableCombobox
+                id="issue-integration"
+                value={issueIntegration}
+                onValueChange={onIntegrationChange}
+                options={pmIntegrations.map((pm) => ({ value: pm.id, label: pm.name }))}
+                placeholder="Select integration"
+              />
             </div>
           )}
           {pmIntegrations.length === 1 && (
@@ -86,22 +95,38 @@ export default function CreateIssueModal({
               Creating in {pmIntegrations[0].name}
             </div>
           )}
+          {pmIntegrations.length === 0 && repoUrl && (
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
+              <input type="text" value={repoUrl} readOnly className={`${inputCls} bg-secondary-50 text-text-muted cursor-default`} />
+            </div>
+          )}
+          {pmIntegrations.length > 0 && (<>
           <div>
             <label htmlFor="issue-pm-team" className="block text-sm font-medium text-text-secondary mb-1.5">
               {pmTeamLabel}
               {pmProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
             </label>
             {pmProjectsLoading ? (
-              <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
-                <Spinner className="w-4 h-4" />
+              <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50">
+                <Spinner className="size-4 " />
                 <span className="text-sm text-text-muted">Fetching {pmTeamLabel.toLowerCase()}s…</span>
               </div>
             ) : pmProjects.length > 0 ? (
-              <select id="issue-pm-team" value={selectedPmProject} onChange={(e) => onTeamChange(e.target.value)} className={selectCls}>
-                {pmProjects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>)}
-              </select>
+              <SearchableCombobox
+                id="issue-pm-team"
+                value={selectedPmProject}
+                onValueChange={onTeamChange}
+                options={pmProjects.map((p) => ({
+                  value: p.id,
+                  label: `${p.name}${p.key ? ` (${p.key})` : ""}`,
+                  keywords: [p.key ?? "", p.name],
+                }))}
+                placeholder={`Select ${pmTeamLabel.toLowerCase()}`}
+                searchPlaceholder={`Search ${pmTeamLabel.toLowerCase()}s…`}
+              />
             ) : (
-              <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50 text-sm text-text-muted">
+              <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50 text-sm text-text-muted">
                 No {pmTeamLabel.toLowerCase()}s found
               </div>
             )}
@@ -113,20 +138,35 @@ export default function CreateIssueModal({
                 {pmSubProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
               </label>
               {pmSubProjectsLoading ? (
-                <div className="flex items-center gap-2 h-11 px-3 rounded-[var(--radius-input)] border border-border bg-secondary-50">
-                  <Spinner className="w-4 h-4" />
+                <div className="flex items-center gap-2 h-11 px-3 rounded-(--radius-input) border border-border bg-secondary-50">
+                  <Spinner className="size-4 " />
                   <span className="text-sm text-text-muted">Fetching {pmProjectLabel.toLowerCase()}s…</span>
                 </div>
               ) : pmSubProjects.length > 0 ? (
-                <select id="issue-pm-project" value={selectedPmSubProject} onChange={(e) => onSubProjectChange(e.target.value)} className={selectCls}>
-                  <option value="">None (create at {pmTeamLabel.toLowerCase()} level)</option>
-                  {pmSubProjects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ""}</option>)}
-                </select>
+                <SearchableCombobox
+                  id="issue-pm-project"
+                  value={selectedPmSubProject}
+                  onValueChange={onSubProjectChange}
+                  options={[
+                    {
+                      value: "",
+                      label: `None (create at ${pmTeamLabel.toLowerCase()} level)`,
+                    },
+                    ...pmSubProjects.map((p) => ({
+                      value: p.id,
+                      label: `${p.name}${p.key ? ` (${p.key})` : ""}`,
+                      keywords: [p.key ?? "", p.name],
+                    })),
+                  ]}
+                  placeholder={`Select ${pmProjectLabel.toLowerCase()}`}
+                  searchPlaceholder={`Search ${pmProjectLabel.toLowerCase()}s…`}
+                />
               ) : (
                 <p className="text-xs text-text-muted py-1">No {pmProjectLabel.toLowerCase()}s in this {pmTeamLabel.toLowerCase()}</p>
               )}
             </div>
           )}
+          </>)}
           <div>
             <label htmlFor="issue-title" className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
             <input id="issue-title" type="text" value={issueTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
@@ -135,15 +175,40 @@ export default function CreateIssueModal({
           <div>
             <label htmlFor="issue-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
             <textarea id="issue-desc" value={issueDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={8}
-              className="w-full px-3 py-2 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
+              className="w-full px-3 py-2 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
           </div>
           {pmMembers.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
-              <select value={selectedPmAssignee} onChange={(e) => onAssigneeChange(e.target.value)} className={selectCls}>
-                <option value="">Unassigned</option>
-                {pmMembers.map(m => <option key={m.id} value={m.id}>{m.name}{m.email ? ` (${m.email})` : ""}</option>)}
-              </select>
+              <SearchableCombobox
+                value={selectedPmAssignee}
+                onValueChange={onAssigneeChange}
+                options={pmMembers.map((m) => ({
+                  value: m.id,
+                  label: `${m.name}${m.email ? ` (${m.email})` : ""}`,
+                  keywords: [m.email ?? "", m.name],
+                }))}
+                placeholder="Select assignee"
+                allowEmpty
+                emptyLabel="Unassigned"
+              />
+            </div>
+          )}
+          {pmIntegrations.length === 0 && gitMembers && gitMembers.length > 0 && onGitAssigneeChange && (
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
+              <SearchableCombobox
+                value={selectedGitAssignee || ""}
+                onValueChange={onGitAssigneeChange}
+                options={gitMembers.map((m) => ({
+                  value: m.id,
+                  label: `${m.name}${m.name !== m.username ? ` (${m.username})` : ""}`,
+                  keywords: [m.username, m.name],
+                }))}
+                placeholder="Select assignee"
+                allowEmpty
+                emptyLabel="Unassigned"
+              />
             </div>
           )}
           {issueError && (
@@ -153,8 +218,8 @@ export default function CreateIssueModal({
             </div>
           )}
           <div className="flex justify-end">
-            <button type="submit" disabled={issueCreating || !issueIntegration || (!selectedPmProject && pmProjects.length > 0)}
-              className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-[var(--radius-btn)] hover:bg-primary-600 disabled:opacity-50 transition-colors">
+            <button type="submit" disabled={issueCreating || (pmIntegrations.length > 0 && (!issueIntegration || (!selectedPmProject && pmProjects.length > 0)))}
+              className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 disabled:opacity-50 transition-colors">
               {issueCreating ? "Creating..." : "Create Issue"}
             </button>
           </div>

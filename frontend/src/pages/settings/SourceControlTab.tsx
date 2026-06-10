@@ -1,28 +1,33 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { gitApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import { getErrorMessage } from "../../utils/errors";
+import { usePermissions } from "../../context/PermissionsContext";
+import { useToast } from "../../context/useToast";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
+import { useTabList } from "../../hooks/useTabList";
 
 export default function SourceControlTab() {
-  const [connections, setConnections] = useState<Array<{ id: string; provider: string; label: string; endpoint?: string; personalToken?: string }>>([]);
+  const { has } = usePermissions();
+  const canManage = has("credential:manage");
+  const toast = useToast();
+  const { data: connections, loading, error, reload } = useTabList(
+    () => gitApi.listConnections().then((res) => res.connections),
+    [],
+  );
+  const connectionList = connections ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editingConn, setEditingConn] = useState<{ id: string; provider: string; label: string; endpoint?: string; createdAt?: string } | null>(null);
   const [editForm, setEditForm] = useState({ label: "", personalToken: "", endpoint: "" });
   const [form, setForm] = useState({ provider: "github", personalToken: "", label: "", endpoint: "" });
-  const [loading, setLoading] = useState(true);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const fetch_ = async () => {
-    setLoading(true);
-    try { const res = await gitApi.listConnections(); setConnections(res.connections); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetch_(); }, []);
+  const fetch_ = reload;
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,11 +35,11 @@ export default function SourceControlTab() {
       await gitApi.addConnection({ ...form, repoUrl: "" });
       setShowForm(false); setForm({ provider: "github", personalToken: "", label: "", endpoint: "" }); fetch_();
     } catch (err: unknown) {
-      alert((err as Error).message || "Failed to add connection");
+      toast.error(getErrorMessage(err, "Failed to add connection"));
     }
   };
 
-  const openEdit = (conn: typeof connections[number]) => {
+  const openEdit = (conn: (typeof connectionList)[number]) => {
     setEditingConn(conn);
     setEditForm({ label: conn.label, personalToken: "", endpoint: conn.endpoint || "" });
   };
@@ -42,7 +47,10 @@ export default function SourceControlTab() {
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingConn) return;
-    await gitApi.updateConnection(editingConn.id, { label: editForm.label });
+    await gitApi.updateConnection(editingConn.id, {
+      label: editForm.label,
+      ...(editForm.personalToken ? { personalToken: editForm.personalToken } : {}),
+    });
     setEditingConn(null); fetch_();
   };
 
@@ -50,19 +58,30 @@ export default function SourceControlTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-semibold text-text">Source Control Connections</h2>
-        <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add Connection
-        </button>
+        {canManage && (
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add Connection
+          </button>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Connection">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="git-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
-            <select id="git-provider" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className={inputCls}>
-              <option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="gitlab_self_hosted">GitLab Self-Hosted</option><option value="bitbucket">Bitbucket</option>
-            </select>
+            <SearchableCombobox
+              id="git-provider"
+              value={form.provider}
+              onValueChange={(provider) => setForm({ ...form, provider })}
+              options={[
+                { value: "github", label: "GitHub" },
+                { value: "gitlab", label: "GitLab" },
+                { value: "gitlab_self_hosted", label: "GitLab Self-Hosted" },
+                { value: "bitbucket", label: "Bitbucket" },
+              ]}
+              placeholder="Select provider"
+            />
           </div>
           <div>
             <label htmlFor="git-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
@@ -97,7 +116,7 @@ export default function SourceControlTab() {
           <form onSubmit={handleEditSave} className="space-y-5">
             {/* Hero header */}
             <div className="flex items-center gap-5">
-              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0">
+              <div className="size-14  rounded-xl flex items-center justify-center shrink-0">
                 <SourceControlBadge provider={editingConn.provider} showName={false} iconSize="w-10 h-10" />
               </div>
               <div className="min-w-0">
@@ -127,7 +146,7 @@ export default function SourceControlTab() {
             {/* Overview */}
             <div>
               <h3 className="text-sm font-semibold text-text mb-1">Overview</h3>
-              <p className="text-sm text-text-secondary leading-relaxed">{getSourceControl(editingConn.provider).description}</p>
+              <p className="text-sm/relaxed text-text-secondary ">{getSourceControl(editingConn.provider).description}</p>
             </div>
 
             {/* Configuration */}
@@ -136,6 +155,13 @@ export default function SourceControlTab() {
               <div>
                 <label htmlFor="edit-conn-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
                 <input id="edit-conn-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} className={inputCls} required />
+              </div>
+              <div>
+                <label htmlFor="edit-conn-token" className="block text-sm font-medium text-text-secondary mb-1.5">
+                  Personal Access Token <span className="text-text-muted font-normal">(leave empty to keep current)</span>
+                </label>
+                <input id="edit-conn-token" type="password" value={editForm.personalToken} onChange={(e) => setEditForm({ ...editForm, personalToken: e.target.value })} className={inputCls} placeholder="••••••••" autoComplete="off" />
+                <p className="text-xs text-text-muted mt-1">Enter a new token to replace the existing one. Leave blank to keep the current token.</p>
               </div>
               <div>
                 <label htmlFor="edit-conn-endpoint" className="block text-sm font-medium text-text-secondary mb-1.5">
@@ -156,17 +182,19 @@ export default function SourceControlTab() {
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingConn) gitApi.deleteConnection(editingConn.id).then(fetch_); setEditingConn(null); setConfirmRemove(false); }} message="Are you sure you want to remove this connection?" />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : error ? (
+        <PageError message={error} onRetry={reload} />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {connections.map((conn) => (
-            <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-[var(--radius-card)] p-4 hover:border-primary-500/30 transition-all shadow-[var(--shadow-card)] cursor-pointer">
+          {connectionList.map((conn) => (
+            <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                <div className="size-8  flex items-center justify-center shrink-0">
                   <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
+                  <p className="text-sm font-semibold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
                   <p className="text-xs text-text-muted truncate">{conn.label}</p>
                 </div>
               </div>
@@ -174,7 +202,11 @@ export default function SourceControlTab() {
               <p className="text-xs text-text-muted mt-2">{getSourceControl(conn.provider).description}</p>
             </div>
           ))}
-          {connections.length === 0 && <p className="text-text-muted text-center py-12 text-sm col-span-full">No source control connections yet. Add one to get started.</p>}
+          {connectionList.length === 0 && (
+            <div className="col-span-full">
+              <EmptyMessage>No source control connections yet. Add one to get started.</EmptyMessage>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,34 +1,112 @@
-import { cardCls } from "../../../utils/styles";
-import type { ScanSummary } from "../../../types";
+import { cardCls, typeCaption, typeStatValueSm } from "../../../utils/styles";
+import { resolveFilteredCounts } from "../../../utils/findingCounts";
+import type { ScanProgress, ScanSummary, SecurityFindingCounts } from "../../../types";
 
 interface Props {
   summary: ScanSummary;
   severityFilter: string;
+  providerFilter: string;
+  findingCounts: SecurityFindingCounts | null;
+  findingsTotal: number;
   onFilterChange: (severity: string) => void;
+  scanRunning?: boolean;
+  progress?: ScanProgress | null;
 }
 
-export default function SummaryCards({ summary, severityFilter, onFilterChange }: Props) {
-  const cards = [
-    { label: "Files", value: `${summary.filesScanned ?? 0}/${summary.filesInRepo ?? 0}`, color: "text-text-secondary", filter: null },
-    { label: "Total", value: summary.totalFindings, color: "text-text", filter: "" },
-    { label: "Errors", value: summary.errors, color: "text-danger-500", filter: "error" },
-    { label: "Warnings", value: summary.warnings, color: "text-warning-500", filter: "warning" },
-    { label: "Info", value: summary.infos, color: "text-primary-500", filter: "info" },
+type CardTone = "neutral" | "error" | "warning" | "info";
+
+interface SummaryCard {
+  label: string;
+  value: string | number;
+  filter: string | null;
+  tone: CardTone;
+}
+
+const TONE_STYLES: Record<CardTone, { value: string; surface: string; active: string }> = {
+  neutral: {
+    value: "text-text",
+    surface: "border-border/50 bg-card/40 hover:bg-card/60",
+    active: "ring-2 ring-primary/40 border-primary/35 bg-primary/5",
+  },
+  error: {
+    value: "text-danger-500",
+    surface: "border-danger-500/25 bg-danger-500/8 hover:bg-danger-500/12",
+    active: "ring-2 ring-danger-500/40 border-danger-500/40 bg-danger-500/12",
+  },
+  warning: {
+    value: "text-warning-500",
+    surface: "border-warning-500/25 bg-warning-500/8 hover:bg-warning-500/12",
+    active: "ring-2 ring-warning-500/40 border-warning-500/40 bg-warning-500/12",
+  },
+  info: {
+    value: "text-sky-400",
+    surface: "border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/15",
+    active: "ring-2 ring-sky-500/40 border-sky-500/40 bg-sky-500/15",
+  },
+};
+
+export default function SummaryCards({
+  summary,
+  severityFilter,
+  providerFilter,
+  findingCounts,
+  findingsTotal,
+  onFilterChange,
+  scanRunning = false,
+  progress = null,
+}: Props) {
+  const liveProgress = scanRunning ? (progress ?? summary.progress ?? null) : null;
+  const filesScanned = liveProgress?.filesScanned ?? summary.filesScanned ?? 0;
+  const filesInRepo = liveProgress?.filesInRepo ?? summary.filesInRepo ?? 0;
+
+  const counts = resolveFilteredCounts(
+    findingCounts,
+    providerFilter,
+    severityFilter,
+    findingsTotal,
+    {
+      total: summary.totalFindings,
+      errors: summary.errors,
+      warnings: summary.warnings,
+      infos: summary.infos,
+    },
+  );
+
+  const totalFindings = scanRunning
+    ? (liveProgress?.findingsCount ?? counts.total)
+    : counts.total;
+
+  const cards: SummaryCard[] = [
+    { label: "Files", value: `${filesScanned}/${filesInRepo}`, filter: null, tone: "neutral" },
+    { label: "Total", value: totalFindings, filter: "", tone: "neutral" },
+    { label: "Errors", value: counts.errors, filter: "error", tone: "error" },
+    { label: "Warnings", value: counts.warnings, filter: "warning", tone: "warning" },
+    { label: "Info", value: counts.infos, filter: "info", tone: "info" },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
-      {cards.map((c) => (
-        <button
-          key={c.label}
-          type="button"
-          onClick={() => c.filter !== null && onFilterChange(c.filter)}
-          className={`${cardCls} px-3 py-2 text-center transition-all ${c.filter !== null && severityFilter === c.filter ? "ring-2 ring-primary-500" : "hover:shadow-md"} ${c.filter === null ? "cursor-default" : ""}`}
-        >
-          <p className={`text-lg font-bold ${c.color}`}>{c.value}</p>
-          <p className="text-[10px] text-text-muted">{c.label}</p>
-        </button>
-      ))}
+      {cards.map((c) => {
+        const tone = TONE_STYLES[c.tone];
+        const isActive = c.filter !== null && severityFilter === c.filter;
+        const isFilesLive = c.label === "Files" && scanRunning;
+
+        return (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => c.filter !== null && onFilterChange(c.filter)}
+            className={`${cardCls} px-3 py-2.5 text-left transition-all ${tone.surface} ${
+              isActive ? tone.active : ""
+            } ${c.filter === null ? "cursor-default pointer-events-none" : "cursor-pointer"} ${
+              isFilesLive && !isActive ? "ring-1 ring-primary/30" : ""
+            }`}
+          >
+            <p className={`${typeCaption} font-medium text-text-muted`}>{c.label}</p>
+            <p className={`${typeStatValueSm} mt-1 ${tone.value} tabular-nums`}>{c.value}</p>
+          </button>
+        );
+      })}
     </div>
   );
 }

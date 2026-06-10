@@ -1,5 +1,6 @@
 import type { CommitInfo } from "../../../types";
 import { cardCls } from "../../../utils/styles";
+import { timeAgo } from "../../../utils/timeAgo";
 import Spinner from "../../../components/Spinner";
 
 interface Props {
@@ -8,29 +9,14 @@ interface Props {
   commitsError: string;
 }
 
-function timeAgo(dateStr: string): string {
-  if (!dateStr) return "";
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = Math.max(0, now - then);
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
 
 export default function RecentCommits({ commits, commitsLoading, commitsError }: Props) {
   if (commitsLoading) {
     return (
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
         <div className={`${cardCls} p-6 flex justify-center`}>
-          <Spinner className="w-5 h-5" />
+          <Spinner className="size-5 " />
         </div>
       </div>
     );
@@ -39,7 +25,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
   if (commitsError) {
     return (
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
         <div className={`${cardCls} p-4`}>
           <p className="text-sm text-danger-500">{commitsError}</p>
         </div>
@@ -51,14 +37,14 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
 
   return (
     <div className="mb-6">
-      <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">Recent Commits</h2>
+      <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
       <div className={`${cardCls} divide-y divide-border`}>
         {commits.map((c) => (
           <div key={c.hash} className="px-4 py-3 flex items-start gap-3">
             {c.authorAvatar ? (
-              <img src={c.authorAvatar} alt={c.author} className="w-8 h-8 rounded-full shrink-0 mt-0.5" />
+              <img src={c.authorAvatar} alt={c.author} className="size-8  rounded-full shrink-0 mt-0.5" />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-xs shrink-0 mt-0.5">
+              <div className="size-8  rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-xs shrink-0 mt-0.5">
                 {c.author.charAt(0).toUpperCase()}
               </div>
             )}

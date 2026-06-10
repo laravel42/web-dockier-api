@@ -7,8 +7,11 @@ export const rolesApi = {
         id: string;
         name: string;
         description: string;
+        systemKey: string | null;
+        isSystem: boolean;
+        isEditable: boolean;
+        isDeletable: boolean;
         permissions: string[];
-        createdAt: string;
       }>;
     }>("/roles"),
 
@@ -22,5 +25,17 @@ export const rolesApi = {
     request(`/roles/${roleId}`, { method: "DELETE" }),
 
   update: (roleId: string, data: { name?: string; description?: string; permissions?: string[] }) =>
-    request(`/roles/${roleId}`, { method: "PUT", body: JSON.stringify({ roleId, ...data }) }),
+    request(`/roles/${roleId}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  get: (roleId: string) =>
+    request<{
+      id: string;
+      name: string;
+      description: string;
+      systemKey: string | null;
+      isSystem: boolean;
+      isEditable: boolean;
+      isDeletable: boolean;
+      permissions: string[];
+    }>(`/roles/${roleId}`),
 };

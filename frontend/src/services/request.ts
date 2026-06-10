@@ -1,4 +1,6 @@
-const API_BASE = "/api";
+import { notifySessionExpired } from "./session";
+
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 export async function request<T>(
   path: string,
@@ -6,7 +8,7 @@ export async function request<T>(
 ): Promise<T> {
   const token = localStorage.getItem("token");
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string>),
   };
@@ -17,6 +19,13 @@ export async function request<T>(
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      const hadToken = !!token;
+      localStorage.removeItem("token");
+      localStorage.removeItem("userId");
+      if (hadToken) notifySessionExpired();
+      throw new Error("Your session is invalid or expired. Please sign in again.");
+    }
     const error = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(error.message || "Request failed");
   }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { integrationsApi, gitApi } from "../../services/api";
-import { INTEGRATION_CATALOG } from "../../data/integrations";
+import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "../../types";
 
 export function useIssueModal(project: Project | null) {
@@ -26,16 +26,14 @@ export function useIssueModal(project: Project | null) {
   const [pmMembers, setPmMembers] = useState<PMMember[]>([]);
   const [selectedPmAssignee, setSelectedPmAssignee] = useState("");
 
-  // Load integrations from localStorage
+  // Git repo members (for assignee when no PM integration)
+  const [gitMembers, setGitMembers] = useState<Array<{ id: string; username: string; name: string; avatarUrl: string }>>([]);
+  const [selectedGitAssignee, setSelectedGitAssignee] = useState("");
+
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("integrations");
-      if (stored) {
-        const all: PMIntegration[] = JSON.parse(stored);
-        const pmTypes = INTEGRATION_CATALOG.filter(c => c.category === "Project Management" || c.category === "DevOps").map(c => c.type);
-        setPmIntegrations(all.filter(i => i.enabled && pmTypes.includes(i.type)));
-      }
-    } catch {}
+    integrationsApi.listPMIntegrations()
+      .then((res) => setPmIntegrations(res.integrations.filter((i) => i.enabled)))
+      .catch(() => setPmIntegrations([]));
   }, []);
 
   // ── PM team/project/member cascading fetches ───────────────────
@@ -45,7 +43,7 @@ export function useIssueModal(project: Project | null) {
     setPmProjects([]); setSelectedPmProject(""); setPmSubProjects([]); setSelectedPmSubProject("");
     setPmMembers([]); setSelectedPmAssignee("");
     try {
-      const res = await integrationsApi.listPMTeams(pm.type, pm.config);
+      const res = await integrationsApi.listPMTeams(pm.id);
       setPmProjects(res.teams); setPmTeamLabel(res.teamLabel); setPmProjectLabel(res.projectLabel);
       if (res.teams.length > 0) {
         setSelectedPmProject(res.teams[0].id);
@@ -59,7 +57,7 @@ export function useIssueModal(project: Project | null) {
   const fetchPmMembers = async (pm: PMIntegration, teamId: string) => {
     setPmMembers([]); setSelectedPmAssignee("");
     try {
-      const res = await integrationsApi.listPMTeamMembers(pm.type, pm.config, teamId);
+      const res = await integrationsApi.listPMTeamMembers(pm.id, teamId);
       setPmMembers(res.members);
     } catch {}
   };
@@ -67,7 +65,7 @@ export function useIssueModal(project: Project | null) {
   const fetchPmSubProjects = async (pm: PMIntegration, teamId: string) => {
     setPmSubProjectsLoading(true); setPmSubProjects([]); setSelectedPmSubProject("");
     try {
-      const res = await integrationsApi.listPMTeamProjects(pm.type, pm.config, teamId);
+      const res = await integrationsApi.listPMTeamProjects(pm.id, teamId);
       setPmSubProjects(res.projects);
       if (res.projects.length > 0) setSelectedPmSubProject(res.projects[0].id);
     } catch {}
@@ -92,6 +90,16 @@ export function useIssueModal(project: Project | null) {
     setPmTeamLabel("Project"); setPmProjectLabel("");
     setIssueModal({ open: true, finding: f });
     if (firstPm) fetchPmTeams(firstPm);
+    // Fetch git repo members for assignee when no PM integration
+    setGitMembers([]); setSelectedGitAssignee("");
+    if (!firstPm && project?.connectionId && project?.repository) {
+      const parsed = parseOwnerRepo(project.repository);
+      if (parsed) {
+        gitApi.listRepoMembers(project.connectionId, parsed.owner, parsed.repo)
+          .then(res => setGitMembers(res.members))
+          .catch(() => {});
+      }
+    }
     setAiEstimate(0);
     gitApi.summarizeFinding(f.severity, f.message, f.filePath, f.snippet || "")
       .then(res => { setIssueTitle(res.title); setAiEstimate(res.estimateMinutes); setTitleGenerating(false); })
@@ -116,20 +124,37 @@ export function useIssueModal(project: Project | null) {
   const handleCreateIssue = async (e: React.FormEvent) => {
     e.preventDefault();
     const pm = pmIntegrations.find(i => i.id === issueIntegration);
-    if (!pm) return;
     setIssueCreating(true); setIssueSuccess(""); setIssueSuccessUrl(""); setIssueError("");
     try {
-      const severityToPriority: Record<string, number> = { error: 2, warning: 3, info: 4 };
-      const priority = issueModal.finding ? severityToPriority[issueModal.finding.severity] : undefined;
-      const estimateMinutes = aiEstimate || undefined;
-      const result = await integrationsApi.createPMIssue({
-        type: pm.type, config: pm.config, teamId: selectedPmProject,
-        projectId: selectedPmSubProject, title: issueTitle, description: issueDescription,
-        priority, estimateMinutes, assigneeId: selectedPmAssignee || undefined,
-      });
-      const label = result.issueKey || result.issueId;
-      setIssueSuccess(result.issueUrl ? `Issue ${label} created` : `Issue created`);
-      setIssueSuccessUrl(result.issueUrl || "");
+      if (pm) {
+        const severityToPriority: Record<string, number> = { error: 2, warning: 3, info: 4 };
+        const priority = issueModal.finding ? severityToPriority[issueModal.finding.severity] : undefined;
+        const estimateMinutes = aiEstimate || undefined;
+        const result = await integrationsApi.createPMIssue({
+          integrationId: pm.id,
+          teamId: selectedPmProject,
+          projectId: selectedPmSubProject,
+          title: issueTitle,
+          description: issueDescription,
+          priority,
+          estimateMinutes,
+          assigneeId: selectedPmAssignee || undefined,
+        });
+        const label = result.issueKey || result.issueId;
+        setIssueSuccess(result.issueUrl ? `Issue ${label} created` : `Issue created`);
+        setIssueSuccessUrl(result.issueUrl || "");
+      } else if (project?.connectionId && project?.repository) {
+        const parsed = parseOwnerRepo(project.repository);
+        if (!parsed) throw new Error("Could not parse repository URL");
+        const result = await gitApi.createGitIssue(
+          project.connectionId, parsed.owner, parsed.repo,
+          issueTitle, issueDescription, selectedGitAssignee || undefined,
+        );
+        setIssueSuccess(`Issue #${result.issueNumber} created`);
+        setIssueSuccessUrl(result.issueUrl || "");
+      } else {
+        throw new Error("No integration or git connection available");
+      }
     } catch (err: unknown) {
       const msg = (err as Error).message || "Unknown error";
       let friendly = "Failed to create issue";
@@ -155,6 +180,7 @@ export function useIssueModal(project: Project | null) {
     pmTeamLabel, pmProjectLabel,
     pmSubProjects, pmSubProjectsLoading, selectedPmSubProject, setSelectedPmSubProject,
     pmMembers, selectedPmAssignee, setSelectedPmAssignee,
+    gitMembers, selectedGitAssignee, setSelectedGitAssignee,
     handleTeamChange, handleCreateIssue,
   };
 }

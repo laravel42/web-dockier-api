@@ -1,41 +1,67 @@
 import { btnPrimary } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 import { useDashboard } from "./useDashboard";
+import { usePermissions } from "../../context/PermissionsContext";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 import KpiGrid from "./sections/KpiGrid";
+import GettingStarted from "./sections/GettingStarted";
 import RecentDeploys from "./sections/RecentDeploys";
 import RecentScans from "./sections/RecentScans";
 
 export default function Dashboard() {
   const {
     navigate,
-    projects, deploys, scans, providers,
+    projects,
+    deploys,
+    scans,
+    providers,
     loading,
-    successDeploys, failedDeploys, totalFindings,
-    recentDeploys, recentScans,
+    error,
+    reload,
+    successDeploys,
+    failedDeploys,
+    totalFindings,
+    recentDeploys,
+    recentScans,
     projectMap,
   } = useDashboard();
+  const { has, loading: permLoading } = usePermissions();
+  const canViewDeploys = has("deploy:view");
 
-  if (loading) {
+  if (loading || permLoading) {
+    return <PageLoading />;
+  }
+
+  if (error) {
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
+      <div>
+        <PageHeader title="Dashboard" description="Overview of your projects, scans, and deployments." />
+        <PageError message={error} onRetry={reload} />
       </div>
     );
   }
 
+  if (projects.length === 0) {
+    return <GettingStarted navigate={navigate} />;
+  }
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Dashboard</h1>
-        <button
-          onClick={() => navigate("/projects", { state: { openCreate: true } })}
-          className={`${btnPrimary} inline-flex items-center gap-2`}
-        >
-          <PlusIcon className="w-4 h-4" />
-          New Project
-        </button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        description="Overview of your projects, scans, and deployments."
+        actions={
+          <button
+            onClick={() => navigate("/projects", { state: { openCreate: true } })}
+            className={`${btnPrimary} inline-flex items-center gap-2`}
+          >
+            <PlusIcon className="size-4 " />
+            New Project
+          </button>
+        }
+      />
 
       <KpiGrid
         projects={projects.length}
@@ -44,17 +70,19 @@ export default function Dashboard() {
         failedDeploys={failedDeploys}
         scans={scans.length}
         totalFindings={totalFindings}
-        onNavigate={navigate}
+        showDeploys={canViewDeploys}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentDeploys
-          deploys={recentDeploys}
-          providers={providers}
-          projectMap={projectMap}
-          onViewAll={() => navigate("/deploy")}
-          onViewDeploy={(id) => navigate(`/deploy/${id}`)}
-        />
+        {canViewDeploys && (
+          <RecentDeploys
+            deploys={recentDeploys}
+            providers={providers}
+            projectMap={projectMap}
+            onViewAll={() => navigate("/deploy")}
+            onViewDeploy={(id) => navigate(`/deploy/${id}`)}
+          />
+        )}
         <RecentScans
           scans={recentScans}
           projectMap={projectMap}

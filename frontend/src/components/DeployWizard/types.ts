@@ -1,4 +1,5 @@
-export type { Provider } from "../../types";
+import type { Provider } from "../../types";
+export type { Provider };
 
 export interface DetectedService {
   type: string;
@@ -72,6 +73,33 @@ export interface RepoAnalysis {
   hasDocker: boolean;
   hasCi: boolean;
   aiAnalysis?: AIAnalysis;
+  sensitiveData?: SensitiveField[];
+  dependencies?: Dependency[];
+}
+
+export interface SensitiveField {
+  entity: string;
+  field: string;
+  sensitivity: "personal" | "sensitive" | "secret";
+  reason: string;
+}
+
+export interface Dependency {
+  name: string;
+  version: string;
+  type: "production" | "dev";
+  ecosystem: "npm" | "composer" | "pip" | "gem" | "go" | "cargo";
+  repoUrl: string;
+  latestVersion?: string;
+  status: "active" | "outdated" | "deprecated" | "unknown";
+  vulnerabilities: Array<{
+    id: string;
+    severity: "critical" | "high" | "medium" | "low";
+    title: string;
+    details: string;
+    aliases: string[];
+    url: string;
+  }>;
 }
 
 export interface WizardState {
@@ -80,20 +108,24 @@ export interface WizardState {
   selectedProviderId: string;
   // Step 2
   deployStrategy: "vps" | "managed" | "static";
-  // Step 3
+  // Step 3 (Env Vars)
+  envVars: Array<{ name: string; value: string }>;
+  // Step 4 (Analysis)
   servicesModes: Record<string, "vps" | "managed">;
-  // Step 4
+  envDetectionHints: Record<string, string>;
+  manualServiceOverrides: string[];
+  // Step 5 (Plan)
   environment: "staging" | "production";
   selectedPlan: number;
-  // Step 5
+  // Step 6 (Config)
   tofuScript: string;
   tofuResources: string[];
   tofuAppName: string;
   tofuRegion: string;
   useDocker: boolean;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
-  envVars: Array<{ name: string; value: string }>;
-  // Step 6
+  postDeployCommands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>;
+  // Step 7 (Deploy)
   deploymentId: string;
   deployStatus: string;
   deployLogs: string[];

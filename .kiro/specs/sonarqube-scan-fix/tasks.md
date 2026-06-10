@@ -1,0 +1,105 @@
+# Implementation Plan
+
+- [ ] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - SonarQube Scanner Discovery and Invocation Failures
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the three bug conditions exist
+  - **Scoped PBT Approach**: Scope the property to the concrete failing cases:
+    - Case 1: `findSonarScanner()` does not check `/opt/homebrew/bin/sonar-scanner` — mock filesystem so scanner only exists at that path, assert function returns it
+    - Case 2: `runSonarScanner()` invokes binary without `-Dsonar.projectBaseDir` argument — capture execSync command, assert it contains `-Dsonar.projectBaseDir`
+    - Case 3: `runScan` endpoint uses `enableSemgrep` instead of `enableOpengrep` — send request with `enableOpengrep: false`, assert Semgrep/Opengrep scanning is disabled
+  - Create test file at `code-analysis/code-analysis.test.ts` (or appropriate test location)
+  - Mock `spawnSync` to simulate sonar-scanner only available at `/opt/homebrew/bin/sonar-scanner`
+  - Mock `execSync` to capture the command string passed to it
+  - Assert `findSonarScanner()` returns `"/opt/homebrew/bin/sonar-scanner"` when binary only exists there
+  - Assert `execSync` command contains `-Dsonar.projectBaseDir` argument
+  - Assert `runScan` correctly interprets `enableOpengrep` parameter
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found:
+    - `findSonarScanner()` returns `null` when only `/opt/homebrew/bin/sonar-scanner` exists
+    - `execSync` called with `'"/path/to/sonar-scanner"'` and no arguments
+    - `params.enableSemgrep` is `undefined` when frontend sends `enableOpengrep`
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4_
+
+- [ ] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Non-Homebrew Scanner Discovery and Existing Behavior
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs (cases where isBugCondition returns false):
+    - Observe: `findSonarScanner()` returns the bare `"sonar-scanner"` candidate when it exists in system PATH via `spawnSync` returning status 0
+    - Observe: `findSonarScanner()` returns `null` when no candidate binary exists (all `spawnSync` calls fail)
+    - Observe: `runSonarScanner()` returns `[]` when SonarQube URL or token is not configured
+    - Observe: `runSonarScanner()` returns `[]` when `findSonarScanner()` returns `null`
+    - Observe: `findSonarScanner()` returns `"/usr/local/bin/sonar-scanner"` when binary exists at that path
+    - Observe: `findSonarScanner()` returns `"/opt/sonar-scanner/bin/sonar-scanner"` when binary exists at that path
+    - Observe: `findSonarScanner()` returns `~/.sonar/native-sonar-scanner/sonar-scanner` when binary exists at that path
+  - Write property-based tests capturing observed behavior patterns:
+    - For all non-Homebrew candidate paths, `findSonarScanner()` returns the first candidate where `spawnSync --version` succeeds
+    - For all cases where SonarQube is not configured, `runSonarScanner()` returns empty array without error
+    - For all cases where no scanner binary is found, `findSonarScanner()` returns `null`
+    - `sonar-project.properties` file is still written to `repoDir` before scanner invocation
+  - Verify tests PASS on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [ ] 3. Fix for SonarQube scanner discovery, invocation, and parameter mismatch
+
+  - [ ] 3.1 Add `/opt/homebrew/bin/sonar-scanner` to `findSonarScanner()` candidate paths
+    - In `code-analysis/code-analysis.ts`, locate the `candidates` array in `findSonarScanner()` (~line 820)
+    - Add `"/opt/homebrew/bin/sonar-scanner"` to the candidates array after `"/usr/local/bin/sonar-scanner"`
+    - Add comment: `// macOS Homebrew (Apple Silicon)`
+    - _Bug_Condition: isBugCondition(input) where input.sonarScannerInstalledAt = "/opt/homebrew/bin/sonar-scanner" AND path NOT IN candidates_
+    - _Expected_Behavior: findSonarScanner() returns "/opt/homebrew/bin/sonar-scanner" when binary exists there_
+    - _Preservation: All existing candidate paths remain in the same order and continue to be checked_
+    - _Requirements: 1.1, 1.4, 2.1, 2.4, 3.1_
+
+  - [ ] 3.2 Fix `runSonarScanner()` to pass `-Dsonar.projectBaseDir` argument
+    - In `code-analysis/code-analysis.ts`, locate the `execSync` call in `runSonarScanner()` (~line 900)
+    - Change `execSync(\`${JSON.stringify(scannerBin)}\`, ...)` to `execSync(\`${JSON.stringify(scannerBin)} -Dsonar.projectBaseDir=${JSON.stringify(repoDir)}\`, ...)`
+    - This ensures the scanner explicitly knows where to find the project and its `sonar-project.properties` file
+    - _Bug_Condition: isBugCondition(input) where input.scannerBinResolved = true AND execSyncCommand does not contain "-Dsonar."_
+    - _Expected_Behavior: execSync command contains "-Dsonar.projectBaseDir=<repoDir>" argument_
+    - _Preservation: cwd is still set to repoDir, sonar-project.properties is still written before invocation_
+    - _Requirements: 1.2, 2.2_
+
+  - [ ] 3.3 Rename `enableSemgrep` to `enableOpengrep` in `runScan` endpoint
+    - In `code-analysis/code-analysis.ts`, locate the `runScan` endpoint params type (~line 416)
+    - Change `enableSemgrep?: boolean` to `enableOpengrep?: boolean` in the params interface
+    - Update the `tools` object construction to use `params.enableOpengrep !== false` instead of `params.enableSemgrep !== false`
+    - _Bug_Condition: isBugCondition(input) where input.requestBody.enableOpengrep IS DEFINED AND backend uses enableSemgrep_
+    - _Expected_Behavior: Backend correctly interprets enableOpengrep parameter from frontend_
+    - _Preservation: Default behavior (when parameter is undefined) remains "enabled" (i.e., !== false defaults to true)_
+    - _Requirements: 1.3, 2.3_
+
+  - [ ] 3.4 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - SonarQube Scanner Discovery and Invocation
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied:
+      - `findSonarScanner()` discovers binary at `/opt/homebrew/bin/sonar-scanner`
+      - `runSonarScanner()` passes `-Dsonar.projectBaseDir` argument
+      - `runScan` correctly interprets `enableOpengrep` parameter
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [ ] 3.5 Verify preservation tests still pass
+    - **Property 2: Preservation** - Non-Homebrew Scanner Discovery and Existing Behavior
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all preservation tests still pass after fix:
+      - PATH-based scanner discovery unchanged
+      - Graceful skip when unconfigured unchanged
+      - Null return when no binary found unchanged
+      - Existing candidate path order preserved
+
+- [ ] 4. Checkpoint - Ensure all tests pass
+  - Run full test suite to confirm no regressions
+  - Verify bug condition exploration test passes (confirms fix works)
+  - Verify preservation tests pass (confirms no regressions)
+  - Ensure all tests pass, ask the user if questions arise

@@ -1,33 +1,63 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import type { ReactNode } from "react";
+import AppBrand from "./AppBrand";
+import {
+  type NavIconName,
+  type NavItemConfig,
+  sidebarNavItems,
+  isNavItemActive,
+} from "../config/nav";
+import { useUnreadNotificationCount } from "../hooks/useUnreadNotificationCount";
+import { navLinkActiveCls, navLinkCls, navLinkIdleCls } from "../utils/styles";
 import DashboardIcon from "./icons/outlined/DashboardIcon";
 import FolderIcon from "./icons/outlined/FolderIcon";
 import UploadIcon from "./icons/outlined/UploadIcon";
 import ShieldCheckIcon from "./icons/outlined/ShieldCheckIcon";
 import SettingsIcon from "./icons/outlined/SettingsIcon";
+import BellIcon from "./icons/outlined/BellIcon";
 import LogoutIcon from "./icons/outlined/LogoutIcon";
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: ReactNode;
+const navIcons: Record<NavIconName, ReactNode> = {
+  dashboard: <DashboardIcon className="size-4 shrink-0" />,
+  projects: <FolderIcon className="size-4 shrink-0" />,
+  deploy: <UploadIcon className="size-4 shrink-0" />,
+  security: <ShieldCheckIcon className="size-4 shrink-0" />,
+  settings: <SettingsIcon className="size-4 shrink-0" />,
+  notifications: <BellIcon className="size-4 shrink-0" />,
+};
+
+function NavItem({
+  item,
+  active,
+  badge,
+}: {
+  item: NavItemConfig;
+  active: boolean;
+  badge?: number;
+}) {
+  return (
+    <Link
+      to={item.to}
+      className={`${navLinkCls} ${active ? navLinkActiveCls : navLinkIdleCls}`}
+      aria-current={active ? "page" : undefined}
+    >
+      {navIcons[item.icon]}
+      <span className="flex-1 truncate">{item.label}</span>
+      {badge != null && badge > 0 && (
+        <span className="min-w-5 h-5 px-1.5 rounded-full bg-primary/15 text-primary text-xs font-semibold tabular-nums flex items-center justify-center">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
+    </Link>
+  );
 }
 
-const iconCls = "w-[18px] h-[18px] shrink-0 opacity-80";
-
-const navItems: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon className={iconCls} /> },
-  { to: "/projects", label: "Projects", icon: <FolderIcon className={iconCls} /> },
-  { to: "/deploy", label: "Deployments", icon: <UploadIcon className={iconCls} /> },
-  { to: "/security", label: "Security Scan", icon: <ShieldCheckIcon className={iconCls} /> },
-  { to: "/settings", label: "Settings", icon: <SettingsIcon className={iconCls} /> },
-];
-
 export default function Sidebar() {
-  const { logout, userProfile } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const unreadCount = useUnreadNotificationCount();
 
   const handleLogout = () => {
     logout();
@@ -35,52 +65,28 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-[260px] bg-sidebar border-r border-border/80 flex flex-col shrink-0">
-      <div className="h-[72px] flex items-center px-6 border-b border-border/80">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Dockier logo" className="w-9 h-9 rounded-xl shadow-sm" />
-          <span className="text-2xl font-display font-semibold text-text tracking-tight">Dockier</span>
-        </div>
-      </div>
+    <aside className="hidden w-60 shrink-0 border-r border-border/40 bg-card/30 px-4 py-6 lg:flex lg:flex-col lg:sticky lg:top-0 lg:h-screen">
+      <AppBrand />
 
-      <nav className="flex-1 px-3 py-5 space-y-1.5 overflow-y-auto" aria-label="Main navigation">
-        {navItems.map((item) => {
-          const active = location.pathname === item.to;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[15px] font-medium transition-all duration-200 ${
-                active
-                  ? "bg-sidebar-active text-primary-300 shadow-sm"
-                  : "text-text-secondary hover:bg-secondary-50/80 hover:text-text"
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="mt-8 flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Main navigation">
+        {sidebarNavItems.map((item) => (
+          <NavItem
+            key={item.to}
+            item={item}
+            active={isNavItemActive(location.pathname, item)}
+            badge={item.icon === "notifications" ? unreadCount : undefined}
+          />
+        ))}
       </nav>
 
-      <div className="p-3 border-t border-border/80">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary-50/50">
-          <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center">
-            <span className="text-primary-600 text-sm font-semibold">{(userProfile?.name || "U")[0].toUpperCase()}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-text truncate">{userProfile?.name || "User"}</p>
-            <p className="text-xs text-text-muted">Admin</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-1.5 rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-50 transition-colors"
-            aria-label="Logout"
-          >
-            <LogoutIcon />
-          </button>
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="mt-4 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+      >
+        <LogoutIcon className="size-4" />
+        Sign out
+      </button>
     </aside>
   );
 }

@@ -1,11 +1,14 @@
+import DeployWizard from "../../components/DeployWizard";
 import { btnSecondary } from "../../utils/styles";
 import { useDeployDetail } from "./useDeployDetail";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
 import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
+import { resolveDeployUrl } from "../../utils/resolveDeployUrl";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 
 export default function DeployDetail() {
   const {
@@ -13,30 +16,31 @@ export default function DeployDetail() {
     deploy, project, providers,
     loading, error,
     allDeploys, allDeploysLoading,
-    provKey, providerStyle,
+    provKey,
+    showDeployWizard, setShowDeployWizard,
+    openDeployWizard, canLaunchDeploy,
+    analysis, analysisLoading, analysisError,
+    handleDeployComplete,
   } = useDeployDetail();
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (error || !deploy) {
     return (
-      <div className="text-center py-16">
-        <p className="text-danger-500 text-sm mb-4">{error || "Deployment not found"}</p>
-        <button
-          onClick={() => navigate("/deploy")}
-          className={btnSecondary}
-        >
-          Back to Deployments
-        </button>
+      <div>
+        <PageError message={error || "Deployment not found"} />
+        <div className="text-center mt-4">
+          <button type="button" onClick={() => navigate("/deploy")} className={btnSecondary}>
+            Back to Deployments
+          </button>
+        </div>
       </div>
     );
   }
+
+  const deployUrl = resolveDeployUrl(deploy);
 
   return (
     <div className="flex gap-6">
@@ -45,7 +49,7 @@ export default function DeployDetail() {
           onClick={() => navigate("/deploy")}
           className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6"
         >
-          <ChevronLeftIcon className="w-4 h-4" />
+          <ChevronLeftIcon className="size-4 " />
           Back to Deployments
         </button>
 
@@ -55,7 +59,17 @@ export default function DeployDetail() {
           onNavigateProject={() => project && navigate(`/projects/${project.id}`)}
         />
 
-        <InfoCards deploy={deploy} provKey={provKey} providerStyle={providerStyle} />
+        <InfoCards deploy={deploy} provKey={provKey} deployUrl={deployUrl} />
+
+        {/* VPS warm-up notice */}
+        {deploy.status === "success" && deploy.deployStrategy === "vps" && deployUrl && (
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 mb-6">
+            <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
+            <p className="text-xs/relaxed text-text-muted ">
+              If you see an nginx welcome page when visiting the URL, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes.
+            </p>
+          </div>
+        )}
 
         <DeployLogs logs={deploy.logs} />
       </div>
@@ -65,8 +79,23 @@ export default function DeployDetail() {
         providers={providers}
         activeDeployId={deployId}
         loading={allDeploysLoading}
+        canLaunchDeploy={canLaunchDeploy}
+        onNewDeploy={openDeployWizard}
         onSelect={(id) => navigate(`/deploy/${id}`)}
       />
+
+      {project && (
+        <DeployWizard
+          open={showDeployWizard}
+          onClose={() => setShowDeployWizard(false)}
+          project={project}
+          analysis={analysis}
+          analysisLoading={analysisLoading}
+          analysisError={analysisError}
+          providers={providers}
+          onDeployComplete={handleDeployComplete}
+        />
+      )}
     </div>
   );
 }

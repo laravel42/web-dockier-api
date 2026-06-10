@@ -1,8 +1,17 @@
-.encore
-encore.gen.go
-encore.gen.cue
-/.encore
 node_modules
-/encore.gen
 .env
+.env.local
 /dumps
+*.tsbuildinfo
+.DS_Store
+backend/dist
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/
+
+# Supabase
+supabase/.branches
+supabase/.temp

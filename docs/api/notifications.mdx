@@ -1,0 +1,16 @@
+# Notifications API
+
+## Endpoints
+
+- `POST /notifications/channels`
+- `GET /notifications/channels`
+- `PUT /notifications/channels/:channelId/toggle`
+- `DELETE /notifications/channels/:channelId`
+- `POST /notifications/send`
+- `GET /notifications`
+- `PUT /notifications/:notificationId/read`
+
+## Notes
+
+- In-app notifications are always persisted in `notifications`.
+- Slack/webhook delivery runs best-effort per configured channel.

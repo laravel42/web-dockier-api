@@ -2,8 +2,9 @@ export interface PMIntegration {
   id: string;
   type: string;
   name: string;
-  config: Record<string, string>;
+  config?: Record<string, string>;
   enabled: boolean;
+  createdAt?: string;
 }
 
 export interface PMTeam {

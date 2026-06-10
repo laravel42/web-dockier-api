@@ -1,0 +1,33 @@
+# Migration Plan
+
+## Architecture
+
+- Each domain remains a dedicated microservice.
+- Service runtime: Fastify + TypeScript strict mode.
+- Storage: Supabase Postgres (`@supabase/supabase-js` admin client).
+- API contract: route-level Zod schemas -> OpenAPI via `fastify-type-provider-zod`.
+
+## Endpoint conversion strategy
+
+1. Preserve existing route paths and payload semantics.
+2. Convert shared concerns first (auth, validation, error normalization).
+3. Migrate high-traffic CRUD services before asynchronous integrations.
+4. Keep `/SERVICE/_migration/status` available as an observability endpoint after cutover.
+
+## Migration completion checklist
+
+- Route handlers ported for:
+  - `roles`
+  - `deploy`
+  - `notifications`
+  - `integrations`
+  - `code-analysis`
+  - `git-integration`
+  - `image-builder`
+- `encore.dev/*` route wiring replaced by Fastify route modules in `backend/src/services`.
+- Restored domain/helper parity modules:
+  - `git-integration/domain`: analyzer and scanner modules reintroduced from legacy implementation.
+  - `integrations/domain/providers`: multi-provider PM adapters restored and routed through provider registry.
+  - `image-builder/domain/aws-runtime`: CloudWatch log + CodeBuild status parity.
+  - `deploy/domain/destroy`: best-effort destroy flow with explicit cleanup logging.
+- Remaining hardening: expand parity tests and complete infra-coupled adapter paths still marked with explicit restoration TODOs.

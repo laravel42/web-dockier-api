@@ -1,37 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
-import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import { inputCls, btnPrimary, btnDanger, typeCaption, typePanelDesc, typePanelTitle } from "../../utils/styles";
+import { getErrorMessage } from "../../utils/errors";
+import { usePermissions } from "../../context/PermissionsContext";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
+import Alert from "../../components/ui/Alert";
+import { useTabList } from "../../hooks/useTabList";
 
 export default function SshKeysTab() {
-  const [keys, setKeys] = useState<Array<{ id: string; label: string; publicKey: string; fingerprint: string; createdAt: string }>>([]);
+  const { has } = usePermissions();
+  const canManage = has("credential:manage");
+  const { data: keys, loading, error: loadError, reload } = useTabList(
+    () => deployApi.listSshKeys().then((res) => res.keys),
+    [],
+  );
+  const keyList = keys ?? [];
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ label: "", publicKey: "" });
-  const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  const fetchKeys = async () => {
-    setLoading(true);
-    try { const res = await deployApi.listSshKeys(); setKeys(res.keys); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchKeys(); }, []);
+  const [formError, setFormError] = useState("");
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setFormError("");
     try {
       await deployApi.addSshKey({ label: form.label, publicKey: form.publicKey });
       setShowForm(false);
       setForm({ label: "", publicKey: "" });
-      fetchKeys();
+      reload();
     } catch (err: unknown) {
-      setError((err as Error).message || "Failed to add SSH key");
+      setFormError(getErrorMessage(err, "Failed to add SSH key"));
     }
   };
 
@@ -50,16 +51,18 @@ export default function SshKeysTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-base font-semibold text-text">SSH Keys</h2>
-          <p className="text-sm text-text-muted mt-0.5">SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
+          <h2 className={typePanelTitle}>SSH Keys</h2>
+          <p className={`${typePanelDesc} mt-0.5`}>SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
         </div>
-        <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Add SSH Key
-        </button>
+        {canManage && (
+          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Add SSH Key
+          </button>
+        )}
       </div>
 
-      <Modal open={showForm} onClose={() => { setShowForm(false); setError(""); }} title="Add SSH Key">
+      <Modal open={showForm} onClose={() => { setShowForm(false); setFormError(""); }} title="Add SSH Key">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="ssh-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
@@ -72,7 +75,7 @@ export default function SshKeysTab() {
               placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host" required />
             <p className="text-xs text-text-muted mt-1">Paste the contents of your public key file (e.g. ~/.ssh/id_ed25519.pub)</p>
           </div>
-          {error && <p className="text-sm text-danger-500">{error}</p>}
+          {formError && <Alert variant="error">{formError}</Alert>}
           <div className="flex justify-end">
             <button type="submit" className={btnPrimary}>Add Key</button>
           </div>
@@ -80,30 +83,32 @@ export default function SshKeysTab() {
       </Modal>
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : loadError ? (
+        <PageError message={loadError} onRetry={reload} />
       ) : (
         <div className="space-y-3">
-          {keys.map((k) => (
-            <div key={k.id} className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-5 flex items-center justify-between hover:shadow-[var(--shadow-card-hover)] transition-shadow">
+          {keyList.map((k) => (
+            <div key={k.id} className="bg-card rounded-card shadow-(--shadow-card) p-5 flex items-center justify-between hover:shadow-(--shadow-card-hover) transition-shadow">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <div className="size-10  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="size-7 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
                   </svg>
                 </div>
                 <div>
-                  <p className="text-base font-bold text-text">{k.label}</p>
-                  <p className="text-xs text-text-muted font-mono mt-0.5">{truncateKey(k.publicKey)}</p>
-                  <p className="text-xs text-text-muted mt-0.5">Added {new Date(k.createdAt).toLocaleDateString()}</p>
+                  <p className={`${typePanelTitle} truncate`}>{k.label}</p>
+                  <p className={`${typeCaption} font-mono mt-0.5`}>{truncateKey(k.publicKey)}</p>
+                  <p className={`${typeCaption} mt-0.5`}>Added {new Date(k.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
               <button onClick={() => setDeleteId(k.id)} className={btnDanger}>Remove</button>
             </div>
           ))}
-          {keys.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No SSH keys added yet</p>}
+          {keyList.length === 0 && <EmptyMessage>No SSH keys added yet</EmptyMessage>}
         </div>
       )}
-      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) deployApi.deleteSshKey(deleteId).then(fetchKeys); setDeleteId(null); }} message="Are you sure you want to remove this SSH key?" />
+      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) deployApi.deleteSshKey(deleteId).then(reload); setDeleteId(null); }} message="Are you sure you want to remove this SSH key?" />
     </div>
   );
 }

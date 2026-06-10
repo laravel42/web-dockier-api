@@ -1,29 +1,55 @@
-import { btnSecondary, cardCls } from "../../utils/styles";
+import { useMemo, useState } from "react";
 import { useSecurityScans } from "./useSecurityScans";
 import ScanProjectCard from "./sections/ScanProjectCard";
+import ScanProjectTable from "./sections/ScanProjectTable";
 import EmptyProjectCard from "./sections/EmptyProjectCard";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
+import EmptyState from "../../components/ui/EmptyState";
+import ListToolbar from "../../components/ui/ListToolbar";
+import { EmptyMessage } from "../../components/ui/PageError";
 import ShieldCheckIcon from "../../components/icons/outlined/ShieldCheckIcon";
-import Spinner from "../../components/Spinner";
 
 export default function SecurityScans() {
+  const [search, setSearch] = useState("");
   const {
     navigate,
     loading,
+    error,
+    reload,
     projects,
     grouped,
-    projectLangs,
     sortedProjectIds,
+    projectLangs,
+    projectBadgeLoading,
+    viewMode,
+    changeViewMode,
   } = useSecurityScans();
+
+  const filteredProjectIds = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sortedProjectIds;
+    return sortedProjectIds.filter((id) => {
+      const name = (projects[id]?.name || id).toLowerCase();
+      return name.includes(q);
+    });
+  }, [sortedProjectIds, projects, search]);
 
   if (loading) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
-        </div>
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+        <PageHeader title="Security Scans" />
+        <PageLoading />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Security Scans" />
+        <PageError message={error} onRetry={reload} />
       </div>
     );
   }
@@ -31,48 +57,73 @@ export default function SecurityScans() {
   if (sortedProjectIds.length === 0) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
-        </div>
-        <div className={`${cardCls} p-12 text-center`}>
-          <ShieldCheckIcon className="w-12 h-12 mx-auto text-text-muted mb-4" />
-          <p className="text-sm text-text-muted mb-4">No projects yet. Create a project first to run security scans.</p>
-          <button onClick={() => navigate("/projects")} className={btnSecondary}>Go to Projects</button>
-        </div>
+        <PageHeader title="Security Scans" />
+        <EmptyState
+          icon={<ShieldCheckIcon className="size-12" />}
+          description="No projects yet. Create a project first to run security scans."
+          action={{ label: "Go to Projects", onClick: () => navigate("/projects") }}
+        />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Security Scans</h1>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {sortedProjectIds.map((projectId) => {
-          const projectScans = grouped[projectId];
-          if (!projectScans || projectScans.length === 0) {
+      <PageHeader
+        title="Security Scans"
+        description={`${sortedProjectIds.length} ${sortedProjectIds.length === 1 ? "project" : "projects"}`}
+      />
+
+      <ListToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by project name"
+        viewMode={viewMode}
+        onViewModeChange={changeViewMode}
+      />
+
+      {filteredProjectIds.length === 0 ? (
+        <EmptyMessage>No projects match your search.</EmptyMessage>
+      ) : viewMode === "table" ? (
+        <ScanProjectTable
+          sortedProjectIds={filteredProjectIds}
+          grouped={grouped}
+          projects={projects}
+          projectLangs={projectLangs}
+          projectBadgeLoading={projectBadgeLoading}
+          onSelectScan={(scanId) => navigate(`/security/${scanId}`)}
+          onSelectEmpty={(projectId) => navigate(`/security/project/${projectId}`)}
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredProjectIds.map((projectId) => {
+            const projectScans = grouped[projectId];
+            if (!projectScans || projectScans.length === 0) {
+              return (
+                <EmptyProjectCard
+                  key={projectId}
+                  project={projects[projectId]}
+                  projectId={projectId}
+                  badges={projectLangs[projectId]}
+                  badgeLoading={projectBadgeLoading.has(projectId)}
+                  onSelect={() => navigate(`/security/project/${projectId}`)}
+                />
+              );
+            }
             return (
-              <EmptyProjectCard
+              <ScanProjectCard
                 key={projectId}
                 project={projects[projectId]}
                 projectId={projectId}
-                onSelect={() => navigate(`/security/project/${projectId}`)}
+                scans={projectScans}
+                badges={projectLangs[projectId]}
+                badgeLoading={projectBadgeLoading.has(projectId)}
+                onSelect={(scanId) => navigate(`/security/${scanId}`)}
               />
             );
-          }
-          return (
-            <ScanProjectCard
-              key={projectId}
-              project={projects[projectId]}
-              projectId={projectId}
-              scans={projectScans}
-              badges={projectLangs[projectId]}
-              onSelect={(scanId) => navigate(`/security/${scanId}`)}
-            />
-          );
-        })}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

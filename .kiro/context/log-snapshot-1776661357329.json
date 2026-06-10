@@ -1,0 +1,95 @@
+{
+  "entries": [
+    {
+      "id": "5c05aff3-66b4-4d95-93d5-2480a70651d7",
+      "timestamp": 1776661352957,
+      "group": "default",
+      "type": "info",
+      "source": "proxy",
+      "message": "GET /notifications?unreadOnly=true → 200 (48ms)",
+      "method": "GET",
+      "endpoint": "/notifications?unreadOnly=true",
+      "query": {
+        "unreadOnly": "true"
+      },
+      "response": "{\"notifications\":[]}",
+      "requestHeaders": {
+        "host": "localhost:3000",
+        "connection": "close",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "authorization": "[REDACTED]",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Google Chrome\";v=\"147\", \"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"147\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "accept": "*/*",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        "referer": "http://localhost:5174/deploy",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      "responseHeaders": {
+        "access-control-allow-credentials": "true",
+        "access-control-expose-headers": "x-request-id,x-correlation-id,x-encore-trace-id",
+        "content-length": "20",
+        "content-type": "application/json",
+        "date": "Mon, 20 Apr 2026 05:02:32 GMT",
+        "vary": "origin, access-control-request-method, access-control-request-headers",
+        "x-encore-trace-id": "d592q5btmogc3u3bf0ui3ebchg"
+      },
+      "status": 200,
+      "duration": 48,
+      "payloadSize": 0
+    },
+    {
+      "id": "5c05aff3-66b4-4d95-93d5-2480a70651d7",
+      "timestamp": 1776661352957,
+      "group": "default",
+      "type": "info",
+      "source": "proxy",
+      "message": "GET /notifications?unreadOnly=true → 200 (48ms)",
+      "method": "GET",
+      "endpoint": "/notifications?unreadOnly=true",
+      "query": {
+        "unreadOnly": "true"
+      },
+      "response": "{\"notifications\":[]}",
+      "requestHeaders": {
+        "host": "localhost:3000",
+        "connection": "close",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "authorization": "[REDACTED]",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Google Chrome\";v=\"147\", \"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"147\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "accept": "*/*",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        "referer": "http://localhost:5174/deploy",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+      },
+      "responseHeaders": {
+        "access-control-allow-credentials": "true",
+        "access-control-expose-headers": "x-request-id,x-correlation-id,x-encore-trace-id",
+        "content-length": "20",
+        "content-type": "application/json",
+        "date": "Mon, 20 Apr 2026 05:02:32 GMT",
+        "vary": "origin, access-control-request-method, access-control-request-headers",
+        "x-encore-trace-id": "d592q5btmogc3u3bf0ui3ebchg"
+      },
+      "status": 200,
+      "duration": 48,
+      "payloadSize": 0
+    }
+  ],
+  "metadata": {
+    "exportedAt": 1776661357322,
+    "count": 2,
+    "source": "observability"
+  }
+}

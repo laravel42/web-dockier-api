@@ -1,63 +1,90 @@
+import { useMemo, useState } from "react";
 import ConfirmModal from "../../components/ConfirmModal";
-import Spinner from "../../components/Spinner";
+import PageHeader from "../../components/ui/PageHeader";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
+import ListToolbar from "../../components/ui/ListToolbar";
 import { useProjects } from "./useProjects";
 import { btnPrimary } from "../../utils/styles";
+import { usePermissions } from "../../context/PermissionsContext";
+import { getRepoSlug } from "../../utils/parseOwnerRepo";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
-import GridIcon from "../../components/icons/outlined/GridIcon";
-import Bars3Icon from "../../components/icons/outlined/Bars3Icon";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 
 export default function Projects() {
+  const { has } = usePermissions();
+  const canCreate = has("project:create");
+  const canDelete = has("project:delete");
+  const [search, setSearch] = useState("");
   const {
     navigate,
-    projects, loading,
-    showForm, editing, form, setForm,
-    deleteId, setDeleteId,
-    viewMode, changeViewMode,
-    sourceType, setSourceType,
-    selectedTemplate, setSelectedTemplate,
-    connections, selectedConnectionId, setSelectedConnectionId,
-    repos, selectedRepo, setSelectedRepo,
-    branches, selectedBranch, setSelectedBranch,
-    loadingRepos, loadingBranches, loadingConnections,
+    projects,
+    loading,
+    loadError,
+    reload,
+    showForm,
+    editing,
+    form,
+    setForm,
+    deleteId,
+    setDeleteId,
+    viewMode,
+    changeViewMode,
+    sourceType,
+    setSourceType,
+    selectedTemplate,
+    setSelectedTemplate,
+    connections,
+    selectedConnectionId,
+    setSelectedConnectionId,
+    repos,
+    selectedRepo,
+    setSelectedRepo,
+    branches,
+    selectedBranch,
+    setSelectedBranch,
+    loadingRepos,
+    loadingBranches,
+    loadingConnections,
+    refreshRepos,
+    refreshingRepos,
     error,
-    openCreate, closeForm, handleSubmit,
+    submitting,
+    openCreate,
+    closeForm,
+    handleSubmit,
     confirmDelete,
-    deployments, projectLangs,
+    deployments,
+    projectLangs,
+    projectBadgeLoading,
   } = useProjects();
+
+  const filteredProjects = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => {
+      const repo = p.repository ? getRepoSlug(p.repository).toLowerCase() : "";
+      return p.name.toLowerCase().includes(q) || repo.includes(q);
+    });
+  }, [projects, search]);
 
   return (
     <div>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Projects</h1>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-secondary-50 border border-border rounded-lg p-0.5 h-10">
-            <button
-              onClick={() => changeViewMode("cards")}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === "cards" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
-              title="Card view"
-            >
-              <GridIcon />
+      <PageHeader
+        title="Projects"
+        description={`${projects.length} connected ${projects.length === 1 ? "repository" : "repositories"}`}
+        actions={
+          canCreate ? (
+            <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
+              <PlusIcon className="size-4" />
+              New Project
             </button>
-            <button
-              onClick={() => changeViewMode("table")}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === "table" ? "bg-card text-primary-500 shadow-sm" : "text-text-muted hover:text-text-secondary"}`}
-              title="Table view"
-            >
-              <Bars3Icon />
-            </button>
-          </div>
-          <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <PlusIcon />
-            New Project
-          </button>
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
-      {/* Create / Edit modal */}
       <ProjectFormModal
         open={showForm}
         editing={!!editing}
@@ -83,6 +110,9 @@ export default function Projects() {
           }
         }}
         loadingRepos={loadingRepos}
+        onRefreshRepos={refreshRepos}
+        refreshingRepos={refreshingRepos}
+        submitting={submitting}
         branches={branches}
         selectedBranch={selectedBranch}
         onBranchChange={setSelectedBranch}
@@ -90,40 +120,57 @@ export default function Projects() {
         error={error}
       />
 
-      {/* Content */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+        <PageLoading />
+      ) : loadError ? (
+        <PageError message={loadError} onRetry={reload} />
       ) : projects.length === 0 ? (
-        <p className="text-text-muted text-center py-12 text-sm">No projects yet. Create one to get started.</p>
-      ) : viewMode === "table" ? (
-        <ProjectTable
-          projects={projects}
-          deployments={deployments}
-          projectLangs={projectLangs}
-          onSelect={(id) => navigate(`/projects/${id}`)}
-        />
+        <EmptyMessage>No projects yet. Create one to get started.</EmptyMessage>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {projects.map((p) => (
-            <ProjectCard
-              key={p.id}
-              project={p}
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by name or repository"
+            viewMode={viewMode}
+            onViewModeChange={changeViewMode}
+          />
+
+          {filteredProjects.length === 0 ? (
+            <EmptyMessage>No projects match your search.</EmptyMessage>
+          ) : viewMode === "table" ? (
+            <ProjectTable
+              projects={filteredProjects}
               deployments={deployments}
-              badges={projectLangs[p.id]}
+              projectLangs={projectLangs}
+              projectBadgeLoading={projectBadgeLoading}
               onSelect={(id) => navigate(`/projects/${id}`)}
             />
-          ))}
-        </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredProjects.map((p) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  deployments={deployments}
+                  badges={projectLangs[p.id]}
+                  badgeLoading={projectBadgeLoading.has(p.id)}
+                  onSelect={(id) => navigate(`/projects/${id}`)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      <ConfirmModal
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
-        message="Are you sure you want to delete this project?"
-      />
+      {canDelete && (
+        <ConfirmModal
+          open={!!deleteId}
+          onClose={() => setDeleteId(null)}
+          onConfirm={confirmDelete}
+          message="Are you sure you want to delete this project?"
+        />
+      )}
     </div>
   );
 }

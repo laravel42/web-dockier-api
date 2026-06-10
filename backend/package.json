@@ -1,0 +1,44 @@
+{
+  "name": "@dockier/backend-fastify",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "seed:admin": "tsx src/scripts/seed-admin.ts",
+    "cleanup:scans": "tsx src/scripts/cleanup-scans.ts",
+    "start:auth": "SERVICE_NAME=auth tsx src/server.ts",
+    "start:users": "SERVICE_NAME=users tsx src/server.ts",
+    "start:projects": "SERVICE_NAME=projects tsx src/server.ts",
+    "start:gateway": "SERVICE_NAME=gateway tsx src/server.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/swagger": "^9.6.1",
+    "@fastify/swagger-ui": "^5.2.3",
+    "@fastify/websocket": "^11.2.0",
+    "@supabase/supabase-js": "^2.58.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.6.1",
+    "fastify-plugin": "^5.1.0",
+    "fastify-type-provider-zod": "^5.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "otplib": "^12.0.1",
+    "pg-boss": "^12.18.2",
+    "qrcode": "^1.5.4",
+    "resend": "^6.12.4",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.6.0",
+    "@types/qrcode": "^1.5.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

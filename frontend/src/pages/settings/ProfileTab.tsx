@@ -2,8 +2,11 @@ import { useState, useEffect } from "react";
 import { usersApi } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { countries } from "../../data/countries";
+import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary } from "../../utils/styles";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import Alert from "../../components/ui/Alert";
+import { getErrorMessage } from "../../utils/errors";
 
 export default function ProfileTab() {
   const { userId, email: authEmail, userProfile, setUserProfile } = useAuth();
@@ -15,14 +18,17 @@ export default function ProfileTab() {
   const [loading, setLoading] = useState(!userProfile);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageVariant, setMessageVariant] = useState<"error" | "success">("success");
 
   useEffect(() => {
     if (!userId || userProfile) { setLoading(false); return; }
     usersApi.get(userId).then((u) => {
       setName(u.name); setEmail(u.email); setCountry(u.country || ""); setLanguage(u.language || "en"); setTimezone(u.timezone || "UTC");
       setUserProfile({ name: u.name, country: u.country || "", language: u.language || "en", timezone: u.timezone || "UTC" });
-    }).catch(() => {
+    }).catch((err) => {
       setEmail(authEmail || "");
+      setMessage(getErrorMessage(err, "Failed to load profile"));
+      setMessageVariant("error");
     }).finally(() => setLoading(false));
   }, [userId, authEmail, userProfile, setUserProfile]);
 
@@ -34,11 +40,15 @@ export default function ProfileTab() {
       await usersApi.update(userId, { name, country, language, timezone });
       setUserProfile({ name, country, language, timezone });
       setMessage("Profile updated successfully");
-    } catch (err: unknown) { setMessage((err as Error).message); }
+      setMessageVariant("success");
+    } catch (err: unknown) {
+      setMessage(getErrorMessage(err, "Failed to update profile"));
+      setMessageVariant("error");
+    }
     finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const languages = [
     ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["pt", "Portuguese"],
@@ -54,10 +64,10 @@ export default function ProfileTab() {
   ];
 
   return (
-    <div className="bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-6 max-w-lg">
+    <div className="bg-card rounded-card shadow-(--shadow-card) p-6 max-w-lg">
       <h2 className="text-base font-semibold text-text mb-1">Profile</h2>
       <p className="text-sm text-text-secondary mb-5">Manage your personal information.</p>
-      {message && <div className="mb-4 p-3 rounded-[var(--radius-btn)] bg-primary-50 text-primary-600 text-sm" role="status">{message}</div>}
+      {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}
       <form onSubmit={handleSave} className="space-y-4">
         <div>
           <label htmlFor="profile-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
@@ -69,21 +79,40 @@ export default function ProfileTab() {
         </div>
         <div>
           <label htmlFor="profile-country" className="block text-sm font-medium text-text-secondary mb-1.5">Country</label>
-          <select id="profile-country" value={country} onChange={(e) => setCountry(e.target.value)} className={inputCls}>
-            {countries.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-          </select>
+          <SearchableCombobox
+            id="profile-country"
+            value={country}
+            onValueChange={setCountry}
+            options={countries.map(([code, label]) => ({ value: code, label }))}
+            placeholder="Select country"
+            searchPlaceholder="Search countries…"
+          />
         </div>
         <div>
           <label htmlFor="profile-language" className="block text-sm font-medium text-text-secondary mb-1.5">Language</label>
-          <select id="profile-language" value={language} onChange={(e) => setLanguage(e.target.value)} className={inputCls}>
-            {languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-          </select>
+          <SearchableCombobox
+            id="profile-language"
+            value={language}
+            onValueChange={setLanguage}
+            options={languages.map(([code, label]) => ({ value: code, label }))}
+            placeholder="Select language"
+            searchPlaceholder="Search languages…"
+          />
         </div>
         <div>
           <label htmlFor="profile-timezone" className="block text-sm font-medium text-text-secondary mb-1.5">Timezone</label>
-          <select id="profile-timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)} className={inputCls}>
-            {timezones.map((tz) => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
-          </select>
+          <SearchableCombobox
+            id="profile-timezone"
+            value={timezone}
+            onValueChange={setTimezone}
+            options={timezones.map((tz) => ({
+              value: tz,
+              label: tz.replace(/_/g, " "),
+              keywords: [tz],
+            }))}
+            placeholder="Select timezone"
+            searchPlaceholder="Search timezones…"
+          />
         </div>
         <div className="flex justify-end pt-2">
           <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
