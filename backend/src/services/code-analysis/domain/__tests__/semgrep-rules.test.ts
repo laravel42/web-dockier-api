@@ -1,4 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { TEST_JWT_SECRET } from "../../../../shared/__tests__/test-helpers.js";
+
+vi.mock("../../../../shared/config.js", () => ({
+  env: {
+    NODE_ENV: "test",
+    PORT: 4000,
+    SERVICE_NAME: "gateway",
+    SUPABASE_URL: "https://test.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key-minimum-20-chars",
+    JWT_SECRET: TEST_JWT_SECRET,
+    CORS_ORIGIN: "*",
+  },
+}));
+
 import { listSemgrepRules } from "../semgrep-rules.js";
 
 describe("listSemgrepRules", () => {
