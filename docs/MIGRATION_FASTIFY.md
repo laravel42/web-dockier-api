@@ -47,7 +47,8 @@ This repository now includes a practical migration foundation in `backend/` to r
 ## Required environment variables
 
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_...`)
+- `SUPABASE_SECRET_KEY` (`sb_secret_...`, server-side; replaces legacy `service_role` JWT)
 - `JWT_SECRET`
 - `SERVICE_NAME` (gateway/auth/users/projects/etc.)
 - `PORT`

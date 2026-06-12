@@ -17,7 +17,7 @@ require_cmd() {
 }
 
 load_publish_env() {
-  local env_file="${PUBLISH_ENV_FILE:-$ROOT_DIR/scripts/publish.env}"
+  local env_file="${PUBLISH_ENV_FILE:-$ROOT_DIR/.env}"
   if [[ -f "$env_file" ]]; then
     # shellcheck disable=SC1090
     set -a

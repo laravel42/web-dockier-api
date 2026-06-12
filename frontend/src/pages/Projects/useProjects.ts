@@ -92,7 +92,7 @@ export function useProjects() {
       setLoadingRepos(true);
       setRepos([]); setSelectedRepo(""); setBranches([]); setSelectedBranch(""); setError("");
       try {
-        const res = await gitApi.listRepos(selectedConnectionId);
+        const res = await gitApi.listRepos(selectedConnectionId, true);
         if (!cancelled) setRepos(res.repos);
       } catch (err: unknown) {
         if (!cancelled) setError((err as Error).message || "Failed to load repositories");

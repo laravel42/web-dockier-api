@@ -10,7 +10,7 @@
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../lib/buildspec-generator/index.js";
-import { getAwsAccountId } from "../../../lib/aws.js";
+import { getAwsAccountId, ensureS3Bucket } from "../../../lib/aws.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -97,6 +97,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
   const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
   const s3Key = `${deploymentId}.zip`;
+  await ensureS3Bucket(region, { accessKeyId, secretAccessKey }, bucketName);
   await s3.send(new PutObjectCommand({ Bucket: bucketName, Key: s3Key, Body: zipBuffer, ContentType: "application/zip" }));
   await logFn(deploymentId, `[${ts()}] ✓ Source uploaded to S3 (${bucketName}/${s3Key})`);
 

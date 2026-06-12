@@ -12,7 +12,7 @@ import {
   restorePulumiState,
   savePulumiState,
 } from "../pulumi-workspace.js";
-import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, SKIP_DIRS } from "../static-site-builder.js";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, getStaticDeployBlockReason, SKIP_DIRS } from "../static-site-builder.js";
 import type {
   DeployAdapter,
   AdapterContext,

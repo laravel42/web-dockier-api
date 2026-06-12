@@ -91,12 +91,16 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             loading={tofuLoading}
             error={tofuError}
             isTemplate={project.sourceType === "template"}
+            hasRepoDockerfile={analysis?.hasDocker ?? false}
             onToggleDocker={() => {
               const next = !state.useDocker;
               setState(prev => ({ ...prev, useDocker: next, tofuScript: "" }));
               generateScript({ useDocker: next });
             }}
             onBuildMethodChange={(method) => setState(prev => ({ ...prev, buildMethod: method }))}
+            onDockerfileSourceChange={(useRepoDockerfile) => {
+              setState(prev => ({ ...prev, useRepoDockerfile, tofuScript: "" }));
+            }}
             onPostDeployCommandsChange={(commands) => setState(prev => ({ ...prev, postDeployCommands: commands }))}
             onRegenerateScript={() => {
               setState(prev => ({ ...prev, tofuScript: "" }));

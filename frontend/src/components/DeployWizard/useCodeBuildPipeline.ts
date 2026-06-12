@@ -107,6 +107,7 @@ export function useCodeBuildPipeline() {
           .filter(([, mode]) => mode === "vps")
           .map(([type]) => type),
         techStack: analysis?.techStack?.map(t => t.name) || undefined,
+        useRepoDockerfile: state.useRepoDockerfile || undefined,
       },
     });
 
@@ -123,6 +124,7 @@ export function useCodeBuildPipeline() {
         primaryLanguage: analysis?.primaryLanguage || "",
         deployStrategy: state.deployStrategy,
         buildMethod: "codebuild",
+        useRepoDockerfile: state.useRepoDockerfile || undefined,
         skipPipeline: true,
         templateId: project.sourceType === "template" ? project.template : undefined,
       });

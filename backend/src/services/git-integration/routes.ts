@@ -233,10 +233,23 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
+      const REPO_CACHE_TTL_MS = 10 * 60 * 1000;
+
       if (!request.query.refresh) {
-        const cached = await db.from("repo_cache").select("repos").eq("connection_id", request.params.connectionId).maybeSingle();
+        const cached = await db
+          .from("repo_cache")
+          .select("repos, created_at")
+          .eq("connection_id", request.params.connectionId)
+          .maybeSingle();
         if (cached.data?.repos) {
-          return { repos: typeof cached.data.repos === "string" ? JSON.parse(cached.data.repos) : cached.data.repos, cached: true };
+          const cachedAt = cached.data.created_at ? new Date(cached.data.created_at).getTime() : 0;
+          const isFresh = cachedAt > 0 && Date.now() - cachedAt < REPO_CACHE_TTL_MS;
+          if (isFresh) {
+            return {
+              repos: typeof cached.data.repos === "string" ? JSON.parse(cached.data.repos) : cached.data.repos,
+              cached: true,
+            };
+          }
         }
       }
 

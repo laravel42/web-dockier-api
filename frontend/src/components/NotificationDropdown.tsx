@@ -53,7 +53,7 @@ export default function NotificationDropdown() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/80 rounded-2xl shadow-(--shadow-card-hover) z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/80 rounded-lg shadow-(--shadow-card-hover) z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-sm font-semibold text-text">Notifications</span>
             <Link to="/notifications" onClick={() => setOpen(false)} className="text-xs text-primary-500 hover:text-primary-700 font-medium">

@@ -15,3 +15,6 @@ frontend/.playwright/
 # Supabase
 supabase/.branches
 supabase/.temp
+
+# Railway
+.railway

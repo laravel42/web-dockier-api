@@ -7,6 +7,7 @@
 
 import { join, extname } from "node:path";
 import { existsSync, readdirSync, statSync, readFileSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import type { DetectedStack } from "../../../lib/repo-analyzer/types.js";
 import type { RunCmdFn } from "./run-cmd.js";
 
 // ─── MIME Types ────────────────────────────────────────────────────
@@ -46,6 +47,58 @@ export const SKIP_DIRS = new Set([
   ".cache",
   "__pycache__",
 ]);
+
+function hasPayloadCms(repoDir: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(repoDir, "package.json"), "utf-8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    return Boolean(deps.payload || deps["@payloadcms/next"]);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns a user-facing error when the repo cannot be deployed to S3/GCS static hosting.
+ */
+export function getStaticDeployBlockReason(opts: {
+  detectedStack: DetectedStack;
+  repoDir: string;
+  techStack: string[];
+}): string | null {
+  const { detectedStack, repoDir, techStack } = opts;
+  const stackLower = techStack.map((t) => t.toLowerCase());
+
+  if (detectedStack.runtime === "php" || detectedStack.runtime === "python" || detectedStack.runtime === "go") {
+    return `${detectedStack.runtime.toUpperCase()} apps need a server runtime (EC2/ECS), not S3 static hosting.`;
+  }
+
+  if (hasPayloadCms(repoDir) || stackLower.some((t) => t.includes("payload"))) {
+    return "Payload CMS requires a Node.js server and database — use AWS EC2 or ECS, not S3 + CloudFront.";
+  }
+
+  if (detectedStack.runtime !== "node") return null;
+
+  const isNext =
+    detectedStack.framework === "nextjs" ||
+    stackLower.some((t) => t.includes("next.js") || t === "nextjs" || t === "next");
+  if (isNext && !detectedStack.isStatic) {
+    return "This Next.js project uses SSR/App Router and cannot be deployed as a static S3 site. Use EC2 or ECS, or set output: 'export' in next.config for static export only.";
+  }
+
+  if (detectedStack.framework === "nuxt" && !detectedStack.isStatic) {
+    return "This Nuxt project uses SSR and cannot be deployed as a static S3 site. Use EC2 or ECS instead.";
+  }
+
+  if ((detectedStack.framework === "astro" || stackLower.includes("remix")) && !detectedStack.isStatic) {
+    return "This project uses server-side rendering and cannot be deployed as a static S3 site. Use EC2 or ECS instead.";
+  }
+
+  return null;
+}
 
 /**
  * Get the MIME type for a file based on its extension.

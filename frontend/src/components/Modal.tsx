@@ -37,7 +37,7 @@ export default function Modal({ open, onClose, title, children, size = "default"
       {/* Dialog */}
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div
-          className={`${widthCls} w-full pointer-events-auto relative bg-card rounded-card shadow-(--shadow-card-hover) border border-border/50 p-6 flex flex-col`}
+          className={`${widthCls} w-full pointer-events-auto relative bg-card rounded-card shadow-(--shadow-card-hover) border border-border/50 p-5 flex flex-col`}
           style={{ maxHeight: "85vh" }}
           onClick={(e) => e.stopPropagation()}
         >

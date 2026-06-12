@@ -17,7 +17,7 @@ import {
   destroyCfnStack,
 } from "../aws-helpers.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
-import { installDeps, buildSite, findOutputDir, ensureIndexHtml, MIME_TYPES, SKIP_DIRS } from "../static-site-builder.js";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../static-site-builder.js";
 
 /**
  * Sanitize a name for use as an S3 bucket name.
@@ -120,16 +120,32 @@ export class AwsS3Adapter implements DeployAdapter {
 
     // 2. Build the static site locally
     await appendLog("── Build Static Site ──────────────");
+    const blockReason = getStaticDeployBlockReason({
+      detectedStack: ctx.detectedStack,
+      repoDir,
+      techStack: ctx.event.techStack || [],
+    });
+    if (blockReason) {
+      throw new Error(blockReason);
+    }
+
     const packageManager = ("packageManager" in ctx.detectedStack ? ctx.detectedStack.packageManager : null) || "npm";
     await installDeps({ repoDir, packageManager, runCmd: ctx.runCmd, appendLog });
-    await buildSite({ repoDir, techStack: ctx.event.techStack || [], runCmd: ctx.runCmd, appendLog, packageManager });
+    const buildOk = await buildSite({ repoDir, techStack: ctx.event.techStack || [], runCmd: ctx.runCmd, appendLog, packageManager });
+    if (!buildOk) {
+      throw new Error("Static site build failed. Fix build errors before deploying to S3.");
+    }
 
     // 3. Identify the output directory
     const uploadDir = findOutputDir(repoDir);
     await appendLog(`ℹ Build output: ${uploadDir.replace(repoDir, ".")}`);
 
-    // Ensure index.html exists (fall back to 200.html for Nuxt SPA)
-    await ensureIndexHtml(uploadDir, appendLog);
+    const hasIndex = await ensureIndexHtml(uploadDir, appendLog);
+    if (!hasIndex) {
+      throw new Error(
+        "No index.html in build output. Static S3 hosting requires exported HTML (e.g. Next.js output: 'export', Vite dist/, or Nuxt generate).",
+      );
+    }
     // 4. Create S3 bucket if it doesn't exist
     const websiteBucket = `${sanitizeBucketName(repoName)}-static-site`;
     await appendLog("── Upload to S3 ───────────────────");

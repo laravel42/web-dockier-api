@@ -82,7 +82,7 @@ cat <<EOF
 
 Next steps (if not using ECS_CLUSTER + ECS_SERVICE):
   1. Create or update an ECS Fargate service (or EC2 host) using image $ECR_URI
-  2. Inject runtime env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, JWT_SECRET, CORS_ORIGIN, DATABASE_URL, WEBHOOK_SECRET)
+  2. Inject runtime env vars (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, JWT_SECRET, CORS_ORIGIN, DATABASE_URL, WEBHOOK_SECRET)
   3. Expose port 4000 behind an ALB / HTTPS listener
   4. Set DOCKIER_API_URL to that public API URL when publishing the frontend
 

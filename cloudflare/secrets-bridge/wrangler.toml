@@ -1,0 +1,11 @@
+name = "dockier-secrets-bridge"
+main = "src/index.ts"
+compatibility_date = "2026-05-12"
+
+# Set CLOUDFLARE_SECRETS_STORE_ID before deploy, or replace the placeholder below.
+# wrangler secret put BRIDGE_TOKEN --name dockier-secrets-bridge
+#
+# [[secrets_store_secrets]]
+# binding = "DOCKIER_ENV"
+# store_id = "<CLOUDFLARE_SECRETS_STORE_ID>"
+# secret_name = "dockier-env"

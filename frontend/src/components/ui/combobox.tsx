@@ -70,7 +70,7 @@ export function SearchableCombobox({
           disabled={disabled}
           aria-invalid={ariaInvalid}
           className={cn(
-            "flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm transition-colors outline-none select-none",
+            "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-ui transition-colors outline-none select-none",
             "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
             "disabled:cursor-not-allowed disabled:opacity-50",
             "aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",

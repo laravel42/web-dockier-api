@@ -5,36 +5,42 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'EOF'
-Publish Dockier to Cloudflare or AWS.
+Publish Dockier to Railway, Cloudflare, or AWS.
 
 Usage:
-  bash scripts/publish.sh cloudflare
-  bash scripts/publish.sh aws
+  bash scripts/publish.sh prod          # Railway backend + Cloudflare frontend (production)
+  bash scripts/publish.sh railway       # Backend only → Railway
+  bash scripts/publish.sh cloudflare    # Frontend only → Cloudflare Pages
+  bash scripts/publish.sh aws           # Legacy: ECR + optional S3 frontend
 
 Environment:
-  Copy scripts/publish.env.example to scripts/publish.env (or set PUBLISH_ENV_FILE).
+  Set DOCKIER_API_URL (and other publish vars) in .env at the repo root,
+  or pass PUBLISH_ENV_FILE to point at another env file.
 
 Targets:
+  prod         Deploy backend to Railway, then frontend to Cloudflare Pages.
+  railway      Build and deploy the Fastify backend Docker image to Railway.
   cloudflare   Build the React SPA and deploy to Cloudflare Pages (wrangler).
-  aws          Build/push the Fastify backend Docker image to ECR; optionally sync
-               the frontend to S3 + invalidate CloudFront.
-
-Cloudflare Pages hosts the frontend only. The API must run elsewhere (use aws).
+  aws          Legacy — push backend image to ECR; optional S3 + CloudFront.
 
 Examples:
-  DOCKIER_API_URL=https://api.example.com bash scripts/publish.sh cloudflare
+  pnpm publish:prod
 
-  DOCKIER_API_URL=https://api.example.com \
-  S3_FRONTEND_BUCKET=dockier-app \
-  ECS_CLUSTER=dockier \
-  ECS_SERVICE=dockier-api \
-  bash scripts/publish.sh aws
+  DOCKIER_API_URL=https://dockier-api.up.railway.app pnpm publish:cloudflare
+
+  SYNC_RAILWAY_ENV=true pnpm publish:railway
 
 EOF
 }
 
 target="${1:-}"
 case "$target" in
+  prod)
+    exec "$SCRIPT_DIR/publish-prod.sh" "${@:2}"
+    ;;
+  railway)
+    exec "$SCRIPT_DIR/publish-railway.sh" "${@:2}"
+    ;;
   cloudflare|cf)
     exec "$SCRIPT_DIR/publish-cloudflare.sh" "${@:2}"
     ;;

@@ -104,6 +104,36 @@ export function hasLegacyNativeNodeDeps(appDir: string): boolean {
   return false;
 }
 
+function readPackageManagerField(appDir: string): { name: string; version: string } | null {
+  try {
+    const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf-8"));
+    const raw = pkg.packageManager as string | undefined;
+    if (!raw) return null;
+    const [name, ver] = raw.split("@");
+    if (!name) return null;
+    return { name, version: ver?.split("+")[0] || "" };
+  } catch {
+    return null;
+  }
+}
+
+/** Node image for Laravel/Vite frontend asset builds inside PHP Dockerfiles. */
+export function resolveFrontendNodeImage(appDir: string | undefined): string {
+  if (appDir && hasLegacyNativeNodeDeps(appDir)) {
+    return "public.ecr.aws/docker/library/node:16";
+  }
+  // pnpm 10+ requires node:sqlite (Node 22+). Default to 22 for modern frontend tooling.
+  return "public.ecr.aws/docker/library/node:22-slim";
+}
+
+function pnpmCorepackSetup(appDir: string | undefined): string {
+  const pm = appDir ? readPackageManagerField(appDir) : null;
+  if (pm?.name === "pnpm" && pm.version) {
+    return `corepack enable && corepack prepare pnpm@${pm.version} --activate && `;
+  }
+  return "corepack enable && ";
+}
+
 /**
  * Resolve the PHP version from composer.json and composer.lock.
  *
@@ -262,21 +292,21 @@ function generateLaravelDockerfile(
   lines.push("RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist");
 
   if (hasNodeAssets) {
-    const useLegacyNode = appDir ? hasLegacyNativeNodeDeps(appDir) : false;
-    const nodeImage = useLegacyNode
-      ? "public.ecr.aws/docker/library/node:16"
-      : "public.ecr.aws/docker/library/node:20-slim";
+    const nodeImage = resolveFrontendNodeImage(appDir);
+    const pnpmSetup = pnpmCorepackSetup(appDir);
 
     lines.push("");
     lines.push(`FROM ${nodeImage} AS frontend`);
     lines.push("WORKDIR /app");
     lines.push("COPY package*.json yarn.lock* pnpm-lock.yaml* bun.lockb* ./");
-    lines.push('RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --no-frozen-lockfile; \\');
+    lines.push(`RUN if [ -f pnpm-lock.yaml ]; then ${pnpmSetup}pnpm install --no-frozen-lockfile; \\`);
     lines.push('    elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install; \\');
     lines.push("    else npm ci || npm install; fi");
     lines.push("COPY . .");
+    // Vite/Filament imports CSS from vendor/ — available from deps stage, not build context (.dockerignore)
+    lines.push("COPY --from=deps /var/www/html/vendor ./vendor");
     lines.push("RUN mkdir -p public/build && \\");
-    lines.push('    (if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm run build; \\');
+    lines.push(`    (if [ -f pnpm-lock.yaml ]; then ${pnpmSetup}pnpm run build; \\`);
     lines.push('    elif [ -f yarn.lock ]; then yarn build; \\');
     lines.push("    else npm run build; fi)");
   }

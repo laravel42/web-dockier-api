@@ -2,7 +2,7 @@ import type {
   AdapterContext,
   ProvisionResult,
 } from "./types.js";
-import { AwsCloudFormationAdapter } from "./aws-cfn-base";
+import { AwsCloudFormationAdapter } from "./aws-cfn-base.js";
 import {
   getDefaultVpcAndSubnets,
   cleanupStuckStack,

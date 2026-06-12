@@ -9,6 +9,7 @@ import {
   registerStartResponseSchema,
 } from "./schemas.js";
 import { env } from "../../shared/config.js";
+import { resolveSupabaseSecretKey } from "../../shared/supabase/keys.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -90,7 +91,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         email: request.body.email,
         password: request.body.password,
         supabaseUrl: env.SUPABASE_URL,
-        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+        supabaseSecretKey: resolveSupabaseSecretKey(env),
       });
     },
   );

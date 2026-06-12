@@ -1,10 +1,10 @@
 import type { DeployAdapter } from "./types.js";
-import { GcpCloudRunAdapter } from "./gcp-cloudrun";
-import { GcpComputeAdapter } from "./gcp-compute";
-import { GcpStorageAdapter } from "./gcp-storage";
-import { AwsEcsAdapter } from "./aws-ecs";
-import { AwsEc2Adapter } from "./aws-ec2";
-import { AwsS3Adapter } from "./aws-s3";
+import { GcpCloudRunAdapter } from "./gcp-cloudrun.js";
+import { GcpComputeAdapter } from "./gcp-compute.js";
+import { GcpStorageAdapter } from "./gcp-storage.js";
+import { AwsEcsAdapter } from "./aws-ecs.js";
+import { AwsEc2Adapter } from "./aws-ec2.js";
+import { AwsS3Adapter } from "./aws-s3.js";
 
 const adapters: DeployAdapter[] = [
   new GcpCloudRunAdapter(),

@@ -25,7 +25,10 @@ export default function YamlEditor({ value, onChange, height = "320px", readOnly
       yaml(),
       oneDark,
       EditorView.theme({
-        "&": { height },
+        "&": {
+          height,
+          fontFamily: '"Space Grotesk", ui-sans-serif, system-ui, sans-serif',
+        },
         ".cm-scroller": { overflow: "auto", scrollbarWidth: "none" },
         ".cm-scroller::-webkit-scrollbar": { display: "none" },
       }),

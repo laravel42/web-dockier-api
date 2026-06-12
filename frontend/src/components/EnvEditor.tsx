@@ -37,7 +37,13 @@ export default function EnvEditor({ value, onChange, height = "140px", placehold
         basicSetup,
         envLang,
         oneDark,
-        EditorView.theme({ "&": { height }, ".cm-scroller": { overflow: "auto" } }),
+        EditorView.theme({
+          "&": {
+            height,
+            fontFamily: '"Space Grotesk", ui-sans-serif, system-ui, sans-serif',
+          },
+          ".cm-scroller": { overflow: "auto" },
+        }),
         ...(placeholder ? [EditorView.contentAttributes.of({ "aria-placeholder": placeholder })] : []),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChangeRef.current(update.state.doc.toString());

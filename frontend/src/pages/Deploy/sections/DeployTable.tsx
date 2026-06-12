@@ -1,8 +1,12 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { statusDotColors as statusColors } from "../../../utils/styles";
+import {
+  chipCls,
+  statusDotColors as statusColors,
+  tableCellCls,
+  tableCellMutedCls,
+} from "../../../utils/styles";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { chipCls } from "../../../utils/styles";
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
 
 interface Props {
@@ -27,25 +31,25 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
 
         return (
           <tr key={groupKey} onClick={() => onSelect(latest.id)} className={tableRowCls}>
-            <td className="px-4 py-3 font-medium text-text">{proj?.name || latest.repo}</td>
-            <td className="px-4 py-3 text-text-muted lowercase">{repoLabel}</td>
-            <td className="px-4 py-3">
+            <td className={`${tableCellCls} font-medium`}>{proj?.name || latest.repo}</td>
+            <td className={`${tableCellMutedCls} lowercase`}>{repoLabel}</td>
+            <td>
               <span className={chipCls}>{latest.branch}</span>
             </td>
-            <td className="px-4 py-3 text-text-muted">{sorted.length}</td>
-            <td className="px-4 py-3">
+            <td className={tableCellMutedCls}>{sorted.length}</td>
+            <td>
               <ProjectTechBadges
                 badges={badges}
                 loading={proj ? projectBadgeLoading.has(proj.id) : false}
                 platform={proj?.platform}
                 limit={3}
-                emptyPlaceholder={<span className="text-xs text-text-muted">—</span>}
+                emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
               />
             </td>
-            <td className="px-4 py-3">
-              <div className="flex items-center gap-2">
+            <td>
+              <div className="flex items-center gap-1.5">
                 <span className={`size-2 rounded-full shrink-0 ${statusColors[latest.status] || "bg-text-muted"}`} />
-                <span className="text-xs text-text-muted">
+                <span className="text-ui-sm text-text-muted">
                   {new Date(latest.createdAt).toLocaleString(undefined, {
                     month: "short",
                     day: "numeric",

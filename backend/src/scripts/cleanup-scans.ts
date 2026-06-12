@@ -1,18 +1,7 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { config as loadEnv } from "dotenv";
 import pg from "pg";
+import { initConfig } from "../shared/config.js";
+import { getPostgresConnectionConfig } from "../shared/postgres.js";
 import { SECURITY_SCAN_QUEUE } from "../shared/queue.js";
-
-const thisFile = fileURLToPath(import.meta.url);
-const scriptsDir = dirname(thisFile);
-const backendDir = resolve(scriptsDir, "../..");
-const workspaceDir = resolve(backendDir, "..");
-
-loadEnv({ path: resolve(workspaceDir, ".env.local"), override: false });
-loadEnv({ path: resolve(workspaceDir, ".env"), override: false });
-loadEnv({ path: resolve(backendDir, ".env.local"), override: false });
-loadEnv({ path: resolve(backendDir, ".env"), override: false });
 
 const dryRun = process.argv.includes("--dry-run");
 
@@ -22,13 +11,15 @@ async function countRows(client: pg.Client, sql: string, params: unknown[] = [])
 }
 
 async function main(): Promise<void> {
+  await initConfig();
+
   const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
   if (!connectionString) {
-    console.error("DIRECT_URL or DATABASE_URL is required (set in .env.local).");
+    console.error("DIRECT_URL or DATABASE_URL is required.");
     process.exit(1);
   }
 
-  const client = new pg.Client({ connectionString });
+  const client = new pg.Client(getPostgresConnectionConfig(connectionString));
   await client.connect();
 
   try {

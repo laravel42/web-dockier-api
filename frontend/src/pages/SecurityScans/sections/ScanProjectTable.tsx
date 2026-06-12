@@ -1,6 +1,6 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { chipCls } from "../../../utils/styles";
+import { chipCls, tableCellCls, tableCellMutedCls } from "../../../utils/styles";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 
 interface Props {
@@ -47,24 +47,24 @@ export default function ScanProjectTable({
             loading={projectBadgeLoading.has(projectId)}
             platform={project?.platform}
             limit={3}
-            emptyPlaceholder={<span className="text-xs text-text-muted">—</span>}
+            emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
           />
         );
 
         if (!hasScans) {
           return (
             <tr key={projectId} onClick={() => onSelectEmpty(projectId)} className={tableRowCls}>
-              <td className="px-4 py-3 font-medium text-text">{project?.name || projectId.slice(0, 8)}</td>
-              <td className="px-4 py-3">{techCell}</td>
-              <td className="px-4 py-3">
-                {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-xs text-text-muted">—</span>}
+              <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
+              <td>{techCell}</td>
+              <td>
+                {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-ui-sm text-text-muted">—</span>}
               </td>
-              <td className="px-4 py-3 text-text-muted">0</td>
-              <td className="px-4 py-3">
-                <span className="text-xs text-text-muted">Not scanned yet</span>
+              <td className={tableCellMutedCls}>0</td>
+              <td>
+                <span className="text-ui-sm text-text-muted">Not scanned yet</span>
               </td>
-              <td className="px-4 py-3">
-                <span className="text-xs text-text-muted">—</span>
+              <td>
+                <span className="text-ui-sm text-text-muted">—</span>
               </td>
             </tr>
           );
@@ -79,19 +79,19 @@ export default function ScanProjectTable({
 
         return (
           <tr key={projectId} onClick={() => onSelectScan(latest.id)} className={tableRowCls}>
-            <td className="px-4 py-3 font-medium text-text">{project?.name || projectId.slice(0, 8)}</td>
-            <td className="px-4 py-3">{techCell}</td>
-            <td className="px-4 py-3">
-              {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-xs text-text-muted">—</span>}
+            <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
+            <td>{techCell}</td>
+            <td>
+              {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-ui-sm text-text-muted">—</span>}
             </td>
-            <td className="px-4 py-3 text-text-muted">{sorted.length}</td>
-            <td className="px-4 py-3 text-xs text-text-muted tabular-nums">
+            <td className={tableCellMutedCls}>{sorted.length}</td>
+            <td className={`${tableCellMutedCls} tabular-nums`}>
               {summary != null ? summary.totalFindings : "—"}
             </td>
-            <td className="px-4 py-3">
-              <div className="flex items-center gap-2">
+            <td>
+              <div className="flex items-center gap-1.5">
                 <span className={`size-2 rounded-full shrink-0 ${getScanStatusDot(latest, summary)}`} />
-                <span className="text-xs text-text-muted">
+                <span className="text-ui-sm text-text-muted">
                   {new Date(latest.createdAt).toLocaleString(undefined, {
                     month: "short",
                     day: "numeric",

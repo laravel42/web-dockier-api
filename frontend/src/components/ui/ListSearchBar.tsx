@@ -23,7 +23,7 @@ function ClearIcon() {
 }
 
 const shellCls =
-  "input-enlarge-wrap group flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm transition-[max-width,border-color,box-shadow] duration-300 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30";
+  "input-enlarge-wrap group flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-ui transition-[max-width,border-color,box-shadow] duration-300 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30";
 
 const fieldCls =
   "min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-text outline-none placeholder:text-text-muted";

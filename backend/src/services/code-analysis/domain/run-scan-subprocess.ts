@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +27,18 @@ function resolveTsxLoader(): string {
   return require.resolve("tsx");
 }
 
+/** Production runs compiled scan-runner.js with plain node; dev uses tsx on the .ts source. */
+function resolveScanRunnerSpawnArgs(): string[] {
+  const jsRunner = join(__dirname, "scan-runner.js");
+  if (existsSync(jsRunner)) {
+    return [jsRunner];
+  }
+
+  const tsRunner = join(__dirname, "scan-runner.ts");
+  const tsxLoader = resolveTsxLoader();
+  return ["--import", tsxLoader, tsRunner];
+}
+
 function relayScanIpc(msg: unknown): void {
   if (!msg || typeof msg !== "object") return;
   const payload = msg as Partial<ScanIpcMessage>;
@@ -35,12 +48,11 @@ function relayScanIpc(msg: unknown): void {
 
 export function runScanInSubprocess(input: ScanJobInput): Promise<void> {
   return new Promise((resolve, reject) => {
-    const runnerPath = join(__dirname, "scan-runner.ts");
-    const tsxLoader = resolveTsxLoader();
+    const runnerArgs = [...resolveScanRunnerSpawnArgs(), JSON.stringify(input)];
 
     let child: ChildProcess;
     try {
-      child = spawn(process.execPath, ["--import", tsxLoader, runnerPath, JSON.stringify(input)], {
+      child = spawn(process.execPath, runnerArgs, {
         stdio: ["ignore", "inherit", "inherit", "ipc"],
         env: process.env,
       });

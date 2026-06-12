@@ -42,6 +42,7 @@ export const deployApi = {
     registryUrl?: string;
     deployStrategy?: string;
     buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+    useRepoDockerfile?: boolean;
     skipPipeline?: boolean;
     templateId?: string;
     envVars?: Array<{ name: string; value: string }>;

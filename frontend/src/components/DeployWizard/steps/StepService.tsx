@@ -12,6 +12,15 @@ function isStaticDeployIncompatible(analysis: RepoAnalysis | null | undefined, t
   if (!analysis) return false;
   if (analysis.techStack?.some((t) => t.name.toLowerCase() === "laravel")) return true;
   if (analysis.aiAnalysis?.framework?.toLowerCase() === "laravel") return true;
+  if (analysis.techStack?.some((t) => t.name.toLowerCase().includes("payload"))) return true;
+  if (analysis.dependencies?.some((d) => d.name.toLowerCase().includes("payload"))) return true;
+  const framework = analysis.aiAnalysis?.framework?.toLowerCase() ?? "";
+  const stackNames = (analysis.techStack ?? []).map((t) => t.name.toLowerCase());
+  const isNext = framework.includes("next") || stackNames.some((t) => t.includes("next"));
+  const hasPayload =
+    stackNames.some((t) => t.includes("payload")) ||
+    (analysis.dependencies ?? []).some((d) => d.name.toLowerCase().includes("payload"));
+  if (isNext && hasPayload) return true;
   return false;
 }
 

@@ -19,7 +19,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const { refresh: refreshPermissions } = usePermissions();
   const navigate = useNavigate();
 
@@ -79,6 +79,9 @@ export default function Login() {
     setNotice("");
   };
 
+  const demoLoginEnabled =
+    import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
+
   const handleDemoLogin = async () => {
     setError("");
     setNotice("");
@@ -86,6 +89,12 @@ export default function Login() {
     try {
       const res = await authApi.demoLogin();
       login(res.session.token, res.session.userId);
+      try {
+        await authApi.getMe();
+      } catch {
+        logout();
+        throw new Error("Demo workspace setup failed. Try again or sign up for a full account.");
+      }
       await refreshPermissions();
       navigate("/dashboard");
     } catch (err: unknown) {
@@ -176,6 +185,7 @@ export default function Login() {
           {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
         </button>
       </div>
+      {demoLoginEnabled && (
       <button
         type="button"
         onClick={handleDemoLogin}
@@ -184,6 +194,13 @@ export default function Login() {
       >
         Continue in demo mode
       </button>
+      )}
+
+      {!demoLoginEnabled && (
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          Demo mode is for local development. Use Sign up to create a production account.
+        </p>
+      )}
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         Need an account?{" "}

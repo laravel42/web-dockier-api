@@ -46,6 +46,7 @@ export interface PipelineInput {
   envVars?: Array<{ name: string; value: string }>;
   postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure?: boolean }>;
   services?: Array<{ type: string; name: string; mode: string }>;
+  useRepoDockerfile?: boolean;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -188,7 +189,11 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await db.from("deployments").update({ commit_hash: commitHash }).eq("id", deploymentId);
 
     // 3. Analyze and generate Dockerfile
-    const { repoConfig } = await analyzeAndGenerate({ repoDir, logger });
+    const { repoConfig } = await analyzeAndGenerate({
+      repoDir,
+      logger,
+      skipExistingDockerfile: event.useRepoDockerfile === true,
+    });
 
     // 4. Build Docker image (local or remote via CodeBuild)
     const isStaticDeploy = event.deployStrategy === "static";

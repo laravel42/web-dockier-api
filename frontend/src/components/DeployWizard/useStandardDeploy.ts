@@ -59,6 +59,7 @@ export function useStandardDeploy() {
       primaryLanguage: analysis?.primaryLanguage || "",
       deployStrategy: state.deployStrategy,
       buildMethod: state.buildMethod,
+      useRepoDockerfile: state.useRepoDockerfile || undefined,
       templateId: project.sourceType === "template" ? project.template : undefined,
       envVars: state.envVars.length > 0 ? state.envVars : undefined,
       services: analysis?.detectedServices?.length

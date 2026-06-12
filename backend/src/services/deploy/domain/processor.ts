@@ -21,6 +21,7 @@ type CreateDeploymentInput = {
   buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   registryUrl?: string;
   skipPipeline?: boolean;
+  useRepoDockerfile?: boolean;
   services?: ServiceEntry[];
   aiAnalysis?: {
     runtime?: string;

@@ -413,6 +413,13 @@ async function persistFindings(
   }
 }
 
+export async function failScanIfStillRunning(scanId: string, err: unknown): Promise<void> {
+  const { data } = await supabaseAdmin.from("scans").select("status").eq("id", scanId).single();
+  if (data?.status !== "running") return;
+  const message = err instanceof Error ? err.message : String(err);
+  await markScanFailed(scanId, message);
+}
+
 async function markScanFailed(scanId: string, message: string): Promise<void> {
   const { data } = await supabaseAdmin
     .from("scans")
@@ -466,26 +473,40 @@ export async function executeScan(
 
     const reportProgress = (progress: ScanProgressPayload) => updateScanProgress(scanId, progress);
 
+    const cloneLabel = scanRow.repo;
     await persistScanProgress(scanId, {
       phase: "cloning",
       scanner: "cloning",
       filesScanned: 0,
       filesInRepo: 0,
       findingsCount: 0,
-      currentFile: scanRow.repo,
+      currentFile: cloneLabel,
     });
 
-    const cloneResult = await cloneRepo({
-      git: {
-        provider: connection.provider,
-        token: connection.personal_token,
-        repo: scanRow.repo,
-        endpoint: connection.endpoint || undefined,
-      },
-      branch: scanRow.branch,
-      shortId: scanId.slice(0, 8),
-      logger,
-    });
+    const stopCloneHeartbeat = startScanHeartbeat(scanId, () => ({
+      phase: "cloning",
+      scanner: "cloning",
+      filesScanned: 0,
+      filesInRepo: 0,
+      findingsCount: 0,
+      currentFile: cloneLabel,
+    }));
+    let cloneResult: Awaited<ReturnType<typeof cloneRepo>>;
+    try {
+      cloneResult = await cloneRepo({
+        git: {
+          provider: connection.provider,
+          token: connection.personal_token,
+          repo: scanRow.repo,
+          endpoint: connection.endpoint || undefined,
+        },
+        branch: scanRow.branch,
+        shortId: scanId.slice(0, 8),
+        logger,
+      });
+    } finally {
+      stopCloneHeartbeat();
+    }
     workDir = cloneResult.workDir;
 
     const { allFiles, relativePaths } = await walkRepoFiles(cloneResult.repoDir);

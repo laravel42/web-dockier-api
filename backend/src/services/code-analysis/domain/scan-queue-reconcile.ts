@@ -1,5 +1,6 @@
 import pg from "pg";
 import { getQueue, SECURITY_SCAN_QUEUE } from "../../../shared/queue.js";
+import { getPostgresConnectionConfig } from "../../../shared/postgres.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 
 interface ActiveJobRow {
@@ -15,7 +16,7 @@ async function listActiveScanJobs(): Promise<ActiveJobRow[]> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) return [];
 
-  const client = new pg.Client({ connectionString: databaseUrl });
+  const client = new pg.Client(getPostgresConnectionConfig(databaseUrl));
   try {
     await client.connect();
     const { rows } = await client.query<ActiveJobRow>(

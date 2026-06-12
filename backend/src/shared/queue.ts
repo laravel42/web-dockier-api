@@ -9,6 +9,7 @@
  */
 
 import { PgBoss } from "pg-boss";
+import { getPostgresConnectionConfig } from "./postgres.js";
 
 let boss: PgBoss | null = null;
 let queueStarted = false;
@@ -34,7 +35,7 @@ export function getQueue(): PgBoss | null {
   }
 
   boss = new PgBoss({
-    connectionString: databaseUrl,
+    ...getPostgresConnectionConfig(databaseUrl),
     schema: "pgboss",
     // Auto-create schema and tables on start
     migrate: true,

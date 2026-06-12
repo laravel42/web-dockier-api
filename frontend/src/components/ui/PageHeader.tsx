@@ -15,10 +15,10 @@ export default function PageHeader({
   className = "",
 }: PageHeaderProps) {
   return (
-    <div className={`flex flex-wrap items-end justify-between gap-3 mb-8 ${className}`}>
+    <div className={`flex flex-wrap items-end justify-between gap-2 mb-6 ${className}`}>
       <div className="min-w-0">
         <h1 className={typePageTitle}>{title}</h1>
-        {description && <p className={`${typePageDesc} mt-1`}>{description}</p>}
+        {description && <p className={`${typePageDesc} mt-0.5`}>{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </div>

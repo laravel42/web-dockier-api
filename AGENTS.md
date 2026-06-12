@@ -39,7 +39,7 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 ### Key patterns
 
 - **Database access:** Use Supabase via `backend/src/shared/supabase/client.ts` with typed payloads and explicit row-to-response mapping.
-- **Secrets:** Read from environment variables in backend shared config; never hardcode secrets.
+- **Secrets:** Local fallback in gitignored root `.env`. Production: Cloudflare Secrets Store (`pnpm secrets:push`, `LOAD_SECRETS_FROM=cloudflare`). Backend hosted on Railway — see `docs/operations/railway.mdx`.
 - **Auth:** JWT-based. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 

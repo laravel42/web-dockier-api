@@ -7,12 +7,14 @@ import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
 import StepPostDeployCommands from "./StepPostDeployCommands";
 
-export default function StepCompose({ state, loading, error, onToggleDocker, onBuildMethodChange, onPostDeployCommandsChange, onRegenerateScript, isTemplate }: {
+export default function StepCompose({ state, loading, error, hasRepoDockerfile, onToggleDocker, onBuildMethodChange, onDockerfileSourceChange, onPostDeployCommandsChange, onRegenerateScript, isTemplate }: {
   state: WizardState;
   loading: boolean;
   error: string;
+  hasRepoDockerfile?: boolean;
   onToggleDocker: () => void;
   onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
+  onDockerfileSourceChange: (useRepoDockerfile: boolean) => void;
   onPostDeployCommandsChange: (commands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>) => void;
   onRegenerateScript?: () => void;
   isTemplate?: boolean;
@@ -41,11 +43,54 @@ export default function StepCompose({ state, loading, error, onToggleDocker, onB
       </div>
       )}
 
+      {/* Dockerfile source — only when repo includes one and container build is enabled */}
+      {!isTemplate && hasRepoDockerfile && state.deployStrategy !== "static" && state.useDocker && (
+        <div>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Dockerfile Source</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => onDockerfileSourceChange(false)}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                !state.useRepoDockerfile
+                  ? "border-primary-500 bg-primary/10 ring-1 ring-primary-500/30"
+                  : "border-border bg-surface hover:border-primary-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <DockerfileIcon className="size-4 text-blue-500" />
+                <span className="text-sm font-medium text-text">Let Dockier generate</span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Recommended for Laravel — nginx, PHP extensions, and asset builds are configured automatically.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onDockerfileSourceChange(true)}
+              className={`p-3 rounded-lg border text-left transition-all ${
+                state.useRepoDockerfile
+                  ? "border-primary-500 bg-primary/10 ring-1 ring-primary-500/30"
+                  : "border-border bg-surface hover:border-primary-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <DockerfileIcon className="size-4 text-blue-500" />
+                <span className="text-sm font-medium text-text">Use repository Dockerfile</span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Build with the Dockerfile committed in your repo — you maintain the image setup.
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Build method selector for non-static deploys */}
       {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (() => {
         const isAws = state.selectedProvider === "aws";
         const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
-          { id: "dockerfile", label: "Dockerfile", desc: "Auto-generated Dockerfile with auto-fix on failure", icon: <DockerfileIcon className="size-4  text-blue-500" /> },
+          { id: "dockerfile", label: "Auto-generate", desc: "Dockier writes and auto-fixes the Dockerfile on build failure", icon: <DockerfileIcon className="size-4  text-blue-500" /> },
           { id: "railpack", label: "Railpack", desc: "Zero-config builder by Railway, falls back to Dockerfile", icon: <RailpackIcon className="size-4  text-purple-500" /> },
           { id: "nixpacks", label: "Nixpacks", desc: "Nix-based builder by Railway, falls back to Dockerfile", icon: <NixpacksIcon className="size-4  text-cyan-500" /> },
           { id: "codebuild", label: "CodeBuild", desc: "AWS CodeBuild with BuildKit + ECR cache, no local Docker needed", icon: <CodeBuildIcon className="size-4  text-orange-500" />, awsOnly: true },

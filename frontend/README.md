@@ -51,7 +51,7 @@ The frontend uses [shadcn/ui](https://ui.shadcn.com/) primitives with the [Shadc
 
 ### Setup
 
-1. Add your API key to `frontend/.env.local`:
+1. Add your API key to `.env.local` at the repo root (or `.env`):
 
 ```bash
 SHADCNBLOCKS_API_KEY=your_api_key_here
@@ -143,4 +143,4 @@ VS Code: `.vscode/settings.json` enables ESLint fix-on-save and disables duplica
 
 ## Environment
 
-Copy `frontend/.env.example` if present, or set `VITE_API_BASE` to point at the backend (empty uses same-origin / dev proxy).
+Set `VITE_API_BASE` in root `.env` (see `.env.example`) to point at the backend. Empty uses same-origin / dev proxy.

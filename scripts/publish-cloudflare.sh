@@ -34,10 +34,10 @@ cat <<EOF
   Project : $CF_PAGES_PROJECT
   API URL : $API_URL
 
-Cloudflare Pages serves the React SPA only. Run the Fastify backend separately
-(AWS ECS/EC2, Fly.io, Railway, etc.) and point DOCKIER_API_URL at that URL.
+Cloudflare Pages serves the React SPA. The API runs on Railway in production.
 
-  pnpm publish:aws          # backend container + optional S3 frontend
-  pnpm backend:dev          # local API for development
+  pnpm publish:railway       # backend → Railway
+  pnpm publish:prod          # Railway + Cloudflare Pages
+  pnpm backend:dev           # local API for development
 
 EOF

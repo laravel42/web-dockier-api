@@ -53,7 +53,7 @@ export function buildAndPush(): string {
         BUILD_EXIT=\$?
         set -e
         echo "=== Docker Build ERRORS ==="
-        grep -i "error\|failed\|fatal\|denied\|not found" /tmp/docker_build.log || echo "(no error lines found)"
+        grep -iE "error|failed|fatal|denied|not found|ELIFECYCLE|undici" /tmp/docker_build.log || echo "(no error lines found)"
         echo "=== Docker Build Output (last 30 lines) ==="
         tail -30 /tmp/docker_build.log
         echo "=== End Docker Build Output (exit code: \$BUILD_EXIT) ==="

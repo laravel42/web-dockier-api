@@ -65,10 +65,10 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="hidden w-60 shrink-0 border-r border-border/40 bg-card/30 px-4 py-6 lg:flex lg:flex-col lg:sticky lg:top-0 lg:h-screen">
+    <aside className="hidden w-56 shrink-0 border-r border-border/40 bg-card/30 px-3 py-5 lg:flex lg:flex-col lg:sticky lg:top-0 lg:h-screen">
       <AppBrand />
 
-      <nav className="mt-8 flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Main navigation">
+      <nav className="mt-6 flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Main navigation">
         {sidebarNavItems.map((item) => (
           <NavItem
             key={item.to}
@@ -82,7 +82,7 @@ export default function Sidebar() {
       <button
         type="button"
         onClick={handleLogout}
-        className="mt-4 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+        className="mt-3 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-ui text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
       >
         <LogoutIcon className="size-4" />
         Sign out

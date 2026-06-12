@@ -2,6 +2,9 @@ packages:
   - "frontend"
   - "backend"
 allowBuilds:
+  '@railway/cli': true
   esbuild: true
   sharp: true
   workerd: true
+minimumReleaseAgeExclude:
+  - '@railway/cli@5.8.0'

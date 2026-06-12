@@ -28,7 +28,7 @@ export default function Layout() {
       <Sidebar />
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border/40 px-6 py-4 lg:hidden">
+        <header className="flex items-center justify-between border-b border-border/40 px-4 py-3 lg:hidden">
           <AppBrand size="sm" />
           <div className="flex items-center gap-1">
             <button
@@ -77,7 +77,7 @@ export default function Layout() {
           })}
         </nav>
 
-        <main className="flex-1 overflow-auto px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
+        <main className="flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8">
           <div className="w-full min-w-0">
             <ErrorBoundary title="This page encountered an error">
               <Outlet />

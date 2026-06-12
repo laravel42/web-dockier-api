@@ -1,8 +1,7 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import { getRepoSlug, getRepoKey } from "../../../utils/parseOwnerRepo";
-import { statusDotColors as statusColors } from "../../../utils/styles";
+import { chipCls, statusDotColors as statusColors, tableCellCls, tableCellMutedCls } from "../../../utils/styles";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { chipCls } from "../../../utils/styles";
 import type { Project, TechBadgeInfo } from "../../../types";
 
 interface Deploy {
@@ -34,25 +33,25 @@ export default function ProjectTable({ projects, deployments, projectLangs, proj
         const badges = projectLangs[p.id];
         return (
           <tr key={p.id} onClick={() => onSelect(p.id)} className={tableRowCls}>
-            <td className="px-4 py-3 font-medium text-text">{p.name}</td>
-            <td className="px-4 py-3 text-text-muted lowercase">{p.repository ? getRepoSlug(p.repository) : "—"}</td>
-            <td className="px-4 py-3">
+            <td className={`${tableCellCls} font-medium`}>{p.name}</td>
+            <td className={`${tableCellMutedCls} lowercase`}>{p.repository ? getRepoSlug(p.repository) : "—"}</td>
+            <td>
               <span className={chipCls}>{p.branch || "main"}</span>
             </td>
-            <td className="px-4 py-3">
+            <td>
               <ProjectTechBadges
                 badges={badges}
                 loading={projectBadgeLoading.has(p.id)}
                 platform={p.platform}
                 limit={3}
-                emptyPlaceholder={<span className="text-xs text-text-muted">—</span>}
+                emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
               />
             </td>
-            <td className="px-4 py-3">
+            <td>
               {lastDeploy ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className={`size-2 rounded-full shrink-0 ${statusColors[lastDeploy.status] || "bg-text-muted"}`} />
-                  <span className="text-xs text-text-muted">
+                  <span className="text-ui-sm text-text-muted">
                     {new Date(lastDeploy.createdAt).toLocaleString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -62,7 +61,7 @@ export default function ProjectTable({ projects, deployments, projectLangs, proj
                   </span>
                 </div>
               ) : (
-                <span className="text-xs text-text-muted">—</span>
+                <span className="text-ui-sm text-text-muted">—</span>
               )}
             </td>
           </tr>

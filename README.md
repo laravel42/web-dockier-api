@@ -81,19 +81,30 @@ pnpm docs:dev
 pnpm docs:build
 ```
 
-### Publish to Cloudflare or AWS
+### Publish to production (Railway + Cloudflare)
 
-Copy `scripts/publish.env.example` to `scripts/publish.env` and set `DOCKIER_API_URL` to your production API.
+Copy `.env.example` → `.env`, configure secrets, then:
 
 ```bash
-# Frontend → Cloudflare Pages (API must run elsewhere)
-pnpm publish:cloudflare
+# One-time Railway setup
+pnpm exec railway login
+pnpm exec railway link
 
-# Backend Docker image → ECR; optional S3 + CloudFront for frontend
-pnpm publish:aws
+# Full production deploy (backend → Railway, frontend → Cloudflare Pages)
+pnpm publish:prod
+
+# Or deploy separately
+pnpm publish:railway      # backend only
+pnpm publish:cloudflare   # frontend only (set DOCKIER_API_URL first)
 ```
 
-See `bash scripts/publish.sh --help` for flags and required env vars.
+See `docs/operations/railway.mdx` and `docs/operations/cloudflare.mdx`.
+
+### Legacy AWS publish
+
+```bash
+pnpm publish:aws   # ECR image + optional S3 frontend
+```
 
 ### Cloudflare Pages workflow (frontend only)
 
@@ -106,16 +117,14 @@ pnpm cf:pages:deploy
 
 ## Environment Variables
 
-For the Fastify backend, copy `backend/.env.example` and set:
+Secrets are managed through **Cloudflare Secrets Store** (production), **gitignored local files** (dev), with optional Supabase Edge Function sync:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `JWT_SECRET`
-- `SERVICE_NAME`
-- `PORT`
-- `CORS_ORIGIN`
+1. **Local dev:** copy `.env.example` → `.env`, or use `.env.local` overrides.
+2. **Production:** `pnpm secrets:push` uploads `.env` to Cloudflare Secrets Store. See `docs/operations/cloudflare.mdx`.
+3. **Backend runtime:** Railway in production. Set `LOAD_SECRETS_FROM=cloudflare` with bridge vars on Railway, or `SYNC_RAILWAY_ENV=true pnpm publish:railway`. AWS Secrets Manager / SSM remain supported as fallback.
+4. **Edge Functions (optional):** `pnpm secrets:push:supabase`.
 
-Supabase Auth email OTP/magic-link must be enabled for passwordless sign-in flows.
+The backend calls `initConfig()` before startup, which loads local files then fetches Cloudflare or AWS secrets (without overwriting keys already in `process.env`).
 
 ## Database and Migrations
 

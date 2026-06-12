@@ -73,7 +73,7 @@ export default function SourceControlSelect({ value, onChange, connections, load
         ref={triggerRef}
         type="button"
         onClick={() => { if (!open) updatePos(); setOpen(!open); }}
-        className="w-full h-11 px-3 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
+        className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
       >
         {selected ? (
           <>

@@ -9,7 +9,7 @@ interface Props {
 }
 
 const inputCls =
-  "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
+  "w-full h-9 px-3 rounded-[var(--radius-input)] border border-border bg-card text-ui text-text outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
 const LANGUAGES = [
   { code: "en", name: "English" }, { code: "es", name: "Spanish" }, { code: "fr", name: "French" },
   { code: "de", name: "German" }, { code: "pt", name: "Portuguese" }, { code: "ja", name: "Japanese" },

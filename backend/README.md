@@ -59,7 +59,7 @@ pnpm --filter @dockier/backend-fastify start:gateway
 
 ## Environment variables
 
-Copy `backend/.env.example` and provide values via your deployment platform or local env.
+Copy `.env.example` to `.env` at the repo root and provide values via your deployment platform or local env.
 
 ## Admin seeder
 
@@ -76,4 +76,4 @@ It is safe to run multiple times. The seeder:
 - ensures `user_roles` includes `admin`,
 - ensures app-side `users` and `profiles` rows are synchronized.
 
-Optional env overrides live in `backend/.env.example` (`ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_DISPLAY_NAME`, `ADMIN_SEED_ORG_NAME`, `ADMIN_SEED_ORG_SLUG`).
+Optional env overrides live in root `.env` (`ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_DISPLAY_NAME`, `ADMIN_SEED_ORG_NAME`, `ADMIN_SEED_ORG_SLUG`).

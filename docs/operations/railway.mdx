@@ -1,0 +1,85 @@
+# Railway (Backend)
+
+Dockier's production backend runs on **Railway** as a Docker service built from `backend/Dockerfile`.
+
+## Architecture
+
+| Component | Platform |
+|-----------|----------|
+| **Backend API** | Railway (`dockier-api` service) |
+| **Frontend SPA** | Cloudflare Pages |
+| **Secrets** | Cloudflare Secrets Store (+ bridge Worker) or Railway variables |
+| **Database / Auth** | Supabase |
+
+## One-time setup
+
+1. Create a [Railway](https://railway.com) project and link the repo:
+
+```bash
+pnpm exec railway login
+pnpm exec railway link
+```
+
+2. Create a service named `dockier-api` (or set `RAILWAY_SERVICE` in `.env`).
+
+3. Generate a public domain in the Railway dashboard (**Settings → Networking → Generate domain**).
+
+4. Configure runtime env on Railway (pick one):
+
+**Option A — Cloudflare secrets bridge (recommended)**
+
+Set only these on Railway:
+
+```bash
+NODE_ENV=production
+LOAD_SECRETS_FROM=cloudflare
+CLOUDFLARE_SECRETS_BRIDGE_URL=https://dockier-secrets-bridge.<account>.workers.dev
+CLOUDFLARE_SECRETS_BRIDGE_TOKEN=...
+CORS_ORIGIN=https://your-frontend.pages.dev
+```
+
+Push app secrets with `pnpm secrets:push` to Cloudflare.
+
+**Option B — Railway variables from `.env`**
+
+```bash
+SYNC_RAILWAY_ENV=true pnpm publish:railway
+```
+
+5. Set `DOCKIER_API_URL` in root `.env` to the Railway public URL.
+
+## Deploy commands
+
+| Command | Purpose |
+|---------|---------|
+| `pnpm publish:railway` | Deploy backend Docker image to Railway |
+| `pnpm publish:cloudflare` | Deploy frontend to Cloudflare Pages |
+| `pnpm publish:prod` | Railway backend + Cloudflare frontend |
+
+## CI deploy
+
+Create a Railway project token and set `RAILWAY_TOKEN` in CI. Link metadata is stored in `.railway/` locally; in CI set:
+
+```bash
+RAILWAY_PROJECT_ID=...
+RAILWAY_ENVIRONMENT=production
+RAILWAY_SERVICE=dockier-api
+```
+
+Then:
+
+```bash
+pnpm publish:railway
+```
+
+## Resource sizing
+
+The image includes Semgrep and Git. Start with **≥ 2 GB RAM** on Railway for security scans. Scale up if scan jobs OOM.
+
+## Health check
+
+Railway uses `GET /healthz` (see `railway.toml`). Railway injects `PORT`; the backend reads it via `process.env.PORT`.
+
+## Legacy AWS / ECS
+
+`pnpm publish:aws` remains for optional AWS-hosted frontend or legacy ECS workflows. Production default is Railway + Cloudflare.

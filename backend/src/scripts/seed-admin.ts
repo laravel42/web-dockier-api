@@ -1,24 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { initConfig, env } from "../shared/config.js";
+import { resolveSupabaseSecretKey } from "../shared/supabase/keys.js";
 import { seedDefaultRoles } from "../services/roles/seed.js";
 
-const thisFile = fileURLToPath(import.meta.url);
-const scriptsDir = dirname(thisFile);
-const backendDir = resolve(scriptsDir, "../..");
-const workspaceDir = resolve(backendDir, "..");
-
-loadEnv({ path: resolve(workspaceDir, ".env.local"), override: false });
-loadEnv({ path: resolve(workspaceDir, ".env"), override: false });
-loadEnv({ path: resolve(backendDir, ".env.local"), override: false });
-loadEnv({ path: resolve(backendDir, ".env"), override: false });
-
-const envSchema = z.object({
-  SUPABASE_URL: z.url(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
+const seederEnvSchema = z.object({
   ADMIN_SEED_EMAIL: z.email().default("admin@example.com"),
   ADMIN_SEED_PASSWORD: z.string().min(8).optional(),
   ADMIN_SEED_DISPLAY_NAME: z.string().min(1).default("Dockier Admin"),
@@ -30,7 +17,7 @@ const envSchema = z.object({
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, "ADMIN_SEED_ORG_SLUG must be lowercase letters, numbers, and hyphens"),
 });
 
-type SeederEnv = z.infer<typeof envSchema>;
+type SeederEnv = z.infer<typeof seederEnvSchema>;
 
 function normalizeSlug(value: string): string {
   const slug = value
@@ -102,26 +89,28 @@ async function resolveAuthUser(
 }
 
 async function main() {
-  const env = envSchema.parse({
+  await initConfig();
+
+  const seederEnv = seederEnvSchema.parse({
     ...process.env,
     ADMIN_SEED_ORG_SLUG: process.env.ADMIN_SEED_ORG_SLUG
       ? normalizeSlug(process.env.ADMIN_SEED_ORG_SLUG)
       : normalizeSlug(process.env.ADMIN_SEED_ORG_NAME ?? "Dockier"),
   });
 
-  const supabase = createClient<any>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  const supabase = createClient<any>(env.SUPABASE_URL, resolveSupabaseSecretKey(env), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { userId, wasCreated } = await resolveAuthUser(supabase, env);
-  const email = env.ADMIN_SEED_EMAIL.toLowerCase();
-  const displayName = env.ADMIN_SEED_DISPLAY_NAME;
+  const { userId, wasCreated } = await resolveAuthUser(supabase, seederEnv);
+  const email = seederEnv.ADMIN_SEED_EMAIL.toLowerCase();
+  const displayName = seederEnv.ADMIN_SEED_DISPLAY_NAME;
 
   // 1. Upsert organization
   const { data: org, error: orgError } = await supabase
     .from("organizations")
     .upsert(
-      { name: env.ADMIN_SEED_ORG_NAME, slug: env.ADMIN_SEED_ORG_SLUG, created_by: userId },
+      { name: seederEnv.ADMIN_SEED_ORG_NAME, slug: seederEnv.ADMIN_SEED_ORG_SLUG, created_by: userId },
       { onConflict: "slug" },
     )
     .select("id, slug")

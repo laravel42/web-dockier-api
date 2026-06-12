@@ -11,11 +11,11 @@ export default function DataTable({ children, columns, className = "" }: Props) 
   return (
     <div className={`${tablePanelCls} ${className}`}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full table-compact">
           <thead className={tableHeadCls}>
             <tr>
               {columns.map((col) => (
-                <th key={col} className="px-4 py-3 font-medium">
+                <th key={col} className="font-medium">
                   {col}
                 </th>
               ))}

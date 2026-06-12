@@ -28,6 +28,7 @@ export const imageBuilderApi = {
       envVars?: Array<{ name: string; value: string }>;
       selfHostedServices?: string[];
       techStack?: string[];
+      useRepoDockerfile?: boolean;
     };
   }) =>
     request<{

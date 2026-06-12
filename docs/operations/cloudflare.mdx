@@ -1,15 +1,75 @@
-# Cloudflare Static Hosting
+# Cloudflare Secrets Store
 
-The frontend can be deployed as static assets to Cloudflare Pages.
+Dockier uses **Cloudflare Secrets Store** as the single entry point for environment variables in production.
 
-## Build command
+## Architecture
 
-`pnpm --filter frontend build`
+| Layer | How secrets arrive |
+|-------|-------------------|
+| **Local dev** | Root `.env` (gitignored), loaded automatically |
+| **Management** | `pnpm secrets:push` → Cloudflare Secrets Store |
+| **Backend (Railway / Node)** | `LOAD_SECRETS_FROM=cloudflare` + secrets bridge Worker |
+| **Frontend (Pages)** | `DOCKIER_API_URL` baked at build via `pnpm publish:cloudflare` |
+| **Supabase Edge Functions** | Optional: `pnpm secrets:push:supabase` |
 
-## Output directory
+Secrets Store values are **write-only** via the REST API. The Fastify backend fetches them at runtime through a small Cloudflare Worker (`cloudflare/secrets-bridge/`) that binds the `dockier-env` bundle secret.
 
-`frontend/dist`
+## One-time setup
 
-## Config
+1. Create a Secrets Store (if you do not have one):
 
-See `frontend/wrangler.toml` for Pages-compatible local/deploy settings.
+```bash
+pnpm secrets:store:create dockier
+# or: pnpm exec wrangler secrets-store store create dockier --remote
+```
+
+2. Set bootstrap credentials in `.env`:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...        # Secrets Store Write
+CLOUDFLARE_SECRETS_STORE_ID=...
+```
+
+3. Copy app secrets to `.env` (from `.env.example`), then push:
+
+```bash
+pnpm secrets:push
+pnpm secrets:list
+```
+
+4. Deploy the secrets bridge Worker:
+
+```bash
+# Edit cloudflare/secrets-bridge/wrangler.toml — set store_id under [[secrets_store_secrets]]
+pnpm exec wrangler secret put BRIDGE_TOKEN --config cloudflare/secrets-bridge/wrangler.toml
+pnpm secrets:bridge:deploy
+```
+
+5. On the backend host (Railway service env), set only:
+
+```bash
+LOAD_SECRETS_FROM=cloudflare
+CLOUDFLARE_SECRETS_BRIDGE_URL=https://dockier-secrets-bridge.<subdomain>.workers.dev
+CLOUDFLARE_SECRETS_BRIDGE_TOKEN=<same as BRIDGE_TOKEN>
+```
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `pnpm secrets:push` | Upload `.env` to Cloudflare Secrets Store |
+| `pnpm secrets:list` | List secret names in the store |
+| `pnpm secrets:store:create` | Create a new Secrets Store |
+| `pnpm secrets:bridge:deploy` | Deploy the runtime secrets bridge Worker |
+| `pnpm secrets:push:supabase` | Push to Supabase project secrets (Edge Functions only) |
+
+## Frontend
+
+Cloudflare Pages serves the React SPA. The API URL is injected at build time:
+
+```bash
+DOCKIER_API_URL=https://api.example.com pnpm publish:cloudflare
+```
+
+See `frontend/wrangler.toml` for Pages project settings.
