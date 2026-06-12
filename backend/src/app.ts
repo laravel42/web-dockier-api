@@ -10,7 +10,6 @@ import { registerDeployRoutes } from "./services/deploy/routes.js";
 import { registerGitIntegrationRoutes } from "./services/git-integration/routes.js";
 import { registerImageBuilderRoutes } from "./services/image-builder/routes.js";
 import { registerIntegrationsRoutes } from "./services/integrations/routes.js";
-import { registerMigrationStatusRoute, remainingServices } from "./services/migration-placeholders.js";
 import { registerNotificationsRoutes } from "./services/notifications/routes.js";
 import { registerProjectsRoutes } from "./services/projects/routes.js";
 import { registerRolesRoutes } from "./services/roles/routes.js";
@@ -27,12 +26,11 @@ export type ServiceName =
   | "integrations"
   | "code-analysis"
   | "git-integration"
-  | "image-builder"
-  | (typeof remainingServices)[number];
+  | "image-builder";
 
 type RegisterFn = (app: FastifyInstance) => Promise<void>;
 
-type MigratedServiceName = Exclude<ServiceName, "gateway" | (typeof remainingServices)[number]>;
+type MigratedServiceName = Exclude<ServiceName, "gateway">;
 
 const serviceRegistry: Record<MigratedServiceName, RegisterFn> = {
   auth: registerAuthRoutes,
@@ -55,13 +53,7 @@ async function registerCoreRoutesByService(app: FastifyInstance, service: Servic
     return;
   }
 
-  const registerFn = serviceRegistry[service as MigratedServiceName];
-  if (registerFn) {
-    await registerFn(app);
-    return;
-  }
-
-  await registerMigrationStatusRoute(app, service);
+  await serviceRegistry[service](app);
 }
 
 export async function buildApp(service: ServiceName) {
