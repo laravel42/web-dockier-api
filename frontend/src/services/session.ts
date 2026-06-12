@@ -34,16 +34,16 @@ export function clearSession(): void {
 
 type SessionExpiredHandler = () => void;
 
-let handler: SessionExpiredHandler | null = null;
+const handlers = new Set<SessionExpiredHandler>();
 
 /** Register a callback for expired/invalid sessions (401). Returns unsubscribe. */
 export function onSessionExpired(fn: SessionExpiredHandler): () => void {
-  handler = fn;
+  handlers.add(fn);
   return () => {
-    if (handler === fn) handler = null;
+    handlers.delete(fn);
   };
 }
 
 export function notifySessionExpired(): void {
-  handler?.();
+  for (const fn of handlers) fn();
 }

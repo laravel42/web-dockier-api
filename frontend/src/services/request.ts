@@ -40,8 +40,11 @@ export async function request<T>(
   const canRetry = !noRetry && RETRYABLE_METHODS.has(method);
 
   const token = getToken();
+  // For FormData bodies, let the browser set Content-Type (including the
+  // multipart boundary). Only default to JSON for other (string) bodies.
+  const isFormData = fetchOptions.body instanceof FormData;
   const headers: Record<string, string> = {
-    ...(fetchOptions.body ? { "Content-Type": "application/json" } : {}),
+    ...(fetchOptions.body && !isFormData ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(fetchOptions.headers as Record<string, string>),
   };
@@ -63,8 +66,18 @@ export async function request<T>(
     try {
       res = await fetchWithTimeout(`${API_BASE}${path}`, { ...fetchOptions, headers }, timeout);
     } catch (err) {
-      // Network or timeout error
-      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      // Network, timeout, or caller-initiated abort.
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+
+      // If the caller aborted via their own signal (e.g. component unmount or
+      // user cancel), rethrow the original AbortError immediately — do not
+      // reclassify it as a timeout and do not retry.
+      if (isAbort && options.signal?.aborted) {
+        throw err;
+      }
+
+      // Any remaining AbortError is from our timeout controller.
+      const isTimeout = isAbort;
       lastError = new ApiError(
         isTimeout
           ? "Request timed out. Please check your connection and try again."
@@ -110,8 +123,18 @@ export async function request<T>(
       );
     }
 
-    // Success
-    return res.json() as Promise<T>;
+    // Success — parse the body, tolerating empty responses (e.g. 204 No Content)
+    // and wrapping malformed JSON in a structured ApiError instead of a raw SyntaxError.
+    try {
+      const text = await res.text();
+      return (text ? JSON.parse(text) : undefined) as T;
+    } catch {
+      throw new ApiError(
+        "Received an invalid response from the server.",
+        res.status,
+        "PARSE_ERROR",
+      );
+    }
   }
 
   // Should not reach here, but satisfy TypeScript

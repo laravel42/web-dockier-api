@@ -9,6 +9,7 @@ import AuthLayout from "../components/AuthLayout";
 import { InputWithLabel } from "../components/ui/fields";
 import { PasswordInput } from "../components/ui/fields/password-input";
 import { btnPrimaryAuth, btnSecondaryAuth, btnLink } from "../utils/styles";
+import { getErrorMessage } from "../utils/errors";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -65,7 +66,7 @@ export default function Login() {
       if (err instanceof ApiError && err.isRateLimit) {
         setCooldownSeconds((value) => (value > 0 ? value : 60));
       }
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -98,7 +99,7 @@ export default function Login() {
       await refreshPermissions();
       navigate("/dashboard");
     } catch (err: unknown) {
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

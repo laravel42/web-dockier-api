@@ -8,6 +8,7 @@ import Alert from "../components/ui/Alert";
 import AuthLayout from "../components/AuthLayout";
 import { InputWithLabel } from "../components/ui/fields";
 import { btnPrimaryAuth, btnLink } from "../utils/styles";
+import { getErrorMessage } from "../utils/errors";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -63,7 +64,7 @@ export default function Register() {
       if (err instanceof ApiError && err.isRateLimit) {
         setCooldownSeconds((value) => (value > 0 ? value : 60));
       }
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

@@ -8,11 +8,19 @@ import { ApiError } from "../services/api-error";
  */
 export function getErrorMessage(err: unknown, fallback = "Something went wrong"): string {
   if (err instanceof ApiError) {
-    if (err.isNetworkError && err.isTimeout) return "Request timed out. Please try again.";
-    if (err.isNetworkError) return "Network error — check your connection and try again.";
+    // Synthetic network/timeout errors carry no useful server message.
+    if (err.isNetworkError) {
+      if (err.isTimeout) return "Request timed out. Please try again.";
+      return "Network error — check your connection and try again.";
+    }
+    // Prefer a specific server-provided message over generic fallbacks.
+    // The request layer uses "Request failed (NNN)" as a placeholder when the
+    // backend returns no message, so treat that as "no real message".
+    if (err.message && !err.message.startsWith("Request failed (")) {
+      return err.message;
+    }
     if (err.isRateLimit) return "Too many requests. Please wait a moment and try again.";
-    if (err.message) return err.message;
-    return fallback;
+    return err.message || fallback;
   }
 
   if (err instanceof Error && err.message) return err.message;
