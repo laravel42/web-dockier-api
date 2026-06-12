@@ -37,11 +37,7 @@
   },
   "packageManager": "pnpm@11.5.3+sha512.7ac1c919341c213a34dc0d02afb7143c5c26ac26ee8c4782deea821b8ac64d2134a081fd8941dae6e29bbb48f58dfc2b7fbceeccc07cb2f09d219d342a4969ed",
   "devDependencies": {
-    "@types/adm-zip": "^0.5.8",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.6.0",
-    "@types/pg": "^8.20.0",
-    "@types/qrcode": "^1.5.6",
     "supabase": "^2.105.0",
     "@railway/cli": "^5.8.0",
     "tsx": "^4.20.6",
@@ -50,23 +46,6 @@
     "wrangler": "^4.46.0"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudformation": "^3.1030.0",
-    "@aws-sdk/client-cloudwatch-logs": "^3.1030.0",
-    "@aws-sdk/client-codebuild": "^3.1030.0",
-    "@aws-sdk/client-ec2": "^3.1038.0",
-    "@aws-sdk/client-ecr": "^3.1030.0",
-    "@aws-sdk/client-s3": "^3.1030.0",
-    "@aws-sdk/client-sns": "^3.1030.0",
-    "@aws-sdk/client-ssm": "^3.1045.0",
-    "@aws-sdk/client-sts": "^3.1030.0",
-    "@specfy/stack-analyser": "^1.27.6",
-    "adm-zip": "^0.5.17",
-    "bcryptjs": "^3.0.3",
-    "dotenv": "^17.4.2",
-    "jsonwebtoken": "^9.0.3",
-    "otplib": "^13.4.0",
-    "pg": "^8.20.0",
-    "qrcode": "^1.5.4",
-    "uuid": "^13.0.0"
+    "dotenv": "^17.4.2"
   }
 }
