@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { authApi } from "../services/api";
+import { getToken } from "../services/session";
 
 interface PermissionsContextValue {
   permissions: Set<string>;
@@ -33,7 +34,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true);
 
   const fetchPermissions = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (!token) { setPermissions(new Set()); setRoleId(""); setRoleName(""); setIsOwner(false); setLoading(false); return; }
     try {
       setLoading(true);
