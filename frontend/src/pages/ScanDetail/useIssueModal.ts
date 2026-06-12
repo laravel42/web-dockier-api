@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { integrationsApi, gitApi } from "../../services/api";
+import { ApiError } from "../../services/api-error";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "../../types";
 
@@ -156,15 +157,17 @@ export function useIssueModal(project: Project | null) {
         throw new Error("No integration or git connection available");
       }
     } catch (err: unknown) {
-      const msg = (err as Error).message || "Unknown error";
-      let friendly = "Failed to create issue";
-      if (msg.includes("Timeout") || msg.includes("timeout")) friendly = "Connection timed out — the server may be unreachable. Check your network and try again.";
-      else if (msg.includes("fetch failed")) friendly = "Could not connect to the integration server. Check that the service is running and accessible.";
-      else if (msg.includes("401") || msg.includes("Unauthorized")) friendly = "Authentication failed — check your API key or token in the integration settings.";
-      else if (msg.includes("403") || msg.includes("Forbidden")) friendly = "Permission denied — your token may not have permission to create issues.";
-      else if (msg.includes("404") || msg.includes("Not Found")) friendly = "Project or resource not found — check the selected team/project exists.";
-      else if (msg.includes("429")) friendly = "Rate limited — too many requests. Wait a moment and try again.";
-      else friendly = msg;
+      let friendly: string;
+      if (err instanceof ApiError) {
+        if (err.isTimeout || err.isNetworkError) friendly = "Connection timed out — the server may be unreachable. Check your network and try again.";
+        else if (err.isUnauthorized) friendly = "Authentication failed — check your API key or token in the integration settings.";
+        else if (err.isForbidden) friendly = "Permission denied — your token may not have permission to create issues.";
+        else if (err.isNotFound) friendly = "Project or resource not found — check the selected team/project exists.";
+        else if (err.isRateLimit) friendly = "Rate limited — too many requests. Wait a moment and try again.";
+        else friendly = err.message || "Failed to create issue";
+      } else {
+        friendly = (err as Error).message || "Failed to create issue";
+      }
       setIssueError(friendly);
     } finally { setIssueCreating(false); }
   };

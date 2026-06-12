@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
+import { ApiError } from "../services/api-error";
 import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
 import Alert from "../components/ui/Alert";
@@ -61,11 +62,10 @@ export default function Login() {
         navigate("/dashboard");
       }
     } catch (err: unknown) {
-      const message = (err as Error).message;
-      if (/rate limit/i.test(message)) {
+      if (err instanceof ApiError && err.isRateLimit) {
         setCooldownSeconds((value) => (value > 0 ? value : 60));
       }
-      setError(message);
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
