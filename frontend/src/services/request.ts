@@ -1,4 +1,4 @@
-import { notifySessionExpired } from "./session";
+import { clearSession, getToken, notifySessionExpired } from "./session";
 import { ApiError } from "./api-error";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
@@ -39,7 +39,7 @@ export async function request<T>(
   const method = (fetchOptions.method || "GET").toUpperCase();
   const canRetry = !noRetry && RETRYABLE_METHODS.has(method);
 
-  const token = localStorage.getItem("token");
+  const token = getToken();
   const headers: Record<string, string> = {
     ...(fetchOptions.body ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -82,8 +82,7 @@ export async function request<T>(
     // 401 — session expired, no retry
     if (res.status === 401) {
       const hadToken = !!token;
-      localStorage.removeItem("token");
-      localStorage.removeItem("userId");
+      clearSession();
       if (hadToken) notifySessionExpired();
       throw new ApiError(
         "Your session is invalid or expired. Please sign in again.",

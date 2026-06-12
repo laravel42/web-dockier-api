@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/useToast";
-import { onSessionExpired } from "../services/session";
+import { onSessionExpired, getToken } from "../services/session";
 
 /** Redirects to login and clears auth when the API returns 401. */
 export default function SessionHandler() {
@@ -12,7 +12,7 @@ export default function SessionHandler() {
 
   useEffect(() => {
     return onSessionExpired(() => {
-      if (!isAuthenticated && !localStorage.getItem("token")) return;
+      if (!isAuthenticated && !getToken()) return;
       logout();
       toast.error("Your session expired. Please sign in again.");
       navigate("/login", { replace: true });

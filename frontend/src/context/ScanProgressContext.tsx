@@ -10,6 +10,7 @@ import {
 } from "react";
 import { fetchScanSnapshot } from "../services/scan-sync";
 import { getScanWebSocketUrl, type ScanWsMessage } from "../services/scan-websocket";
+import { getToken } from "../services/session";
 import type { Scan, ScanProgress, ScanSummary } from "../types";
 
 export interface ScanLiveState {
@@ -256,7 +257,7 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
   const openWebSocket = useCallback((scanId: string) => {
     if (socketsRef.current.has(scanId)) return;
 
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (!token) return;
 
     const ws = new WebSocket(getScanWebSocketUrl(scanId, token));
