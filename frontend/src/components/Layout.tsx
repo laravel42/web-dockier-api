@@ -3,8 +3,9 @@ import Sidebar from "./Sidebar";
 import ErrorBoundary from "./ErrorBoundary";
 import AppBrand from "./AppBrand";
 import { useAuth } from "../context/AuthContext";
-import { mobileNavItems, isNavItemActive } from "../config/nav";
+import { mobileNavItems, isNavItemActive, navItemsForInAppState } from "../config/nav";
 import { useUnreadNotificationCount } from "../hooks/useUnreadNotificationCount";
+import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
 import LogoutIcon from "./icons/outlined/LogoutIcon";
 import NotificationDropdown from "./NotificationDropdown";
 import { useTheme } from "../context/ThemeContext";
@@ -17,6 +18,8 @@ export default function Layout() {
   const navigate = useNavigate();
   const pathname = useLocation().pathname;
   const unreadCount = useUnreadNotificationCount();
+  const { enabled: inAppEnabled } = useInAppNotificationsEnabled();
+  const mobileItems = navItemsForInAppState(mobileNavItems, inAppEnabled);
 
   const signOut = () => {
     logout();
@@ -39,7 +42,7 @@ export default function Layout() {
             >
               {theme === "light" ? <MoonIcon className="size-4" /> : <SunIcon className="size-4" />}
             </button>
-            <NotificationDropdown />
+            {inAppEnabled && <NotificationDropdown />}
             <button
               type="button"
               onClick={signOut}
@@ -55,7 +58,7 @@ export default function Layout() {
           className="flex gap-1 overflow-x-auto border-b border-border/40 px-4 py-2 lg:hidden scrollbar-hide"
           aria-label="Mobile navigation"
         >
-          {mobileNavItems.map((item) => {
+          {mobileItems.map((item) => {
             const active = isNavItemActive(pathname, item);
             const isNotifications = item.to === "/notifications";
             return (

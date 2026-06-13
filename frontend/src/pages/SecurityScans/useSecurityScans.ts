@@ -4,6 +4,7 @@ import { codeAnalysisApi, projectsApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import type { Scan, Project } from "../../types";
+import { compareByTime } from "../../utils/sortByTime";
 
 interface SecurityScansData {
   scans: Scan[];
@@ -41,7 +42,7 @@ export function useSecurityScans() {
     const aScans = grouped[a];
     const bScans = grouped[b];
     if (aScans && bScans) {
-      return new Date(bScans[0].createdAt).getTime() - new Date(aScans[0].createdAt).getTime();
+      return compareByTime(aScans[0], bScans[0], "updated");
     }
     if (aScans) return -1;
     if (bScans) return 1;

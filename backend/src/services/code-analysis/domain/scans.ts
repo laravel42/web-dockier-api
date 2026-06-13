@@ -66,7 +66,7 @@ export async function listScans(params: ListScansParams) {
     .from("scans")
     .select("*")
     .eq("organization_id", tenantId)
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(50);
   if (projectId) query = query.eq("project_id", projectId);
   if (branch) query = query.eq("branch", branch);

@@ -1,6 +1,7 @@
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import { cardInteractiveCls, chipCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
+import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export default function DeployCard({ repo, deploys, project, badges, badgeLoading, onClick }: Props) {
-  const sorted = deploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const sorted = [...deploys].sort((a, b) => compareByTime(a, b, "updated"));
   const latest = sorted[0];
   const statusDot =
     latest.status === "success"
@@ -49,7 +50,7 @@ export default function DeployCard({ repo, deploys, project, badges, badgeLoadin
         <div className="flex items-center gap-2">
           <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
           <span className="text-xs text-text-muted">
-            {new Date(latest.createdAt).toLocaleString(undefined, {
+            {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
               month: "short",
               day: "numeric",
               hour: "numeric",

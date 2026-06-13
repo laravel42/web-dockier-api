@@ -38,4 +38,5 @@ export const authMeSchema = z.object({
   isOwner: z.boolean(),
   permissions: z.array(z.string()),
   memberships: z.array(membershipSchema),
+  twoFactorEnabled: z.boolean(),
 });

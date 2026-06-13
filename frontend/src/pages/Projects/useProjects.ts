@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { projectsApi, gitApi, deployApi } from "../../services/api";
+import { projectsApi, gitApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project, ProjectSourceType } from "../../types";
 import { PROJECT_TEMPLATES } from "./templates";
+import { compareByTime } from "../../utils/sortByTime";
 
 export function useProjects() {
   const navigate = useNavigate();
@@ -42,8 +43,6 @@ export function useProjects() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [deployments, setDeployments] = useState<Array<{ id: string; repo: string; branch: string; status: string; createdAt: string }>>([]);
-
   // ── Data fetching ──────────────────────────────────────────────
 
   const fetchProjects = useCallback(async () => {
@@ -51,7 +50,7 @@ export function useProjects() {
     setLoadError("");
     try {
       const res = await projectsApi.list();
-      setProjects(res.projects);
+      setProjects([...res.projects].sort((a, b) => compareByTime(a, b, "created")));
     } catch (err) {
       setLoadError(getErrorMessage(err, "Failed to load projects"));
     } finally {
@@ -60,13 +59,6 @@ export function useProjects() {
   }, []);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
-
-  useEffect(() => {
-    deployApi
-      .listDeployments()
-      .then((r) => setDeployments(r.deployments || []))
-      .catch(() => {});
-  }, []);
 
   // ── Connection / repo / branch cascading fetches ───────────────
 
@@ -254,6 +246,6 @@ export function useProjects() {
     openCreate, closeForm, handleSubmit,
     confirmDelete,
     // derived
-    deployments, projectLangs, projectBadgeLoading,
+    projectLangs, projectBadgeLoading,
   };
 }

@@ -32,7 +32,7 @@ export const notificationsApi = {
   toggleChannel: (channelId: string, enabled: boolean) =>
     request(`/notifications/channels/${channelId}/toggle`, {
       method: "PUT",
-      body: JSON.stringify({ channelId, enabled }),
+      body: JSON.stringify({ enabled }),
     }),
 
   deleteChannel: (channelId: string) =>

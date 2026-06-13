@@ -8,6 +8,7 @@ import { useProjects } from "./useProjects";
 import { btnPrimary } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import { getRepoSlug } from "../../utils/parseOwnerRepo";
+import { compareByTime } from "../../utils/sortByTime";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
@@ -56,7 +57,6 @@ export default function Projects() {
     closeForm,
     handleSubmit,
     confirmDelete,
-    deployments,
     projectLangs,
     projectBadgeLoading,
   } = useProjects();
@@ -64,10 +64,12 @@ export default function Projects() {
   const filteredProjects = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return projects;
-    return projects.filter((p) => {
-      const repo = p.repository ? getRepoSlug(p.repository).toLowerCase() : "";
-      return p.name.toLowerCase().includes(q) || repo.includes(q);
-    });
+    return projects
+      .filter((p) => {
+        const repo = p.repository ? getRepoSlug(p.repository).toLowerCase() : "";
+        return p.name.toLowerCase().includes(q) || repo.includes(q);
+      })
+      .sort((a, b) => compareByTime(a, b, "created"));
   }, [projects, search]);
 
   return (
@@ -141,7 +143,6 @@ export default function Projects() {
           ) : viewMode === "table" ? (
             <ProjectTable
               projects={filteredProjects}
-              deployments={deployments}
               projectLangs={projectLangs}
               projectBadgeLoading={projectBadgeLoading}
               onSelect={(id) => navigate(`/projects/${id}`)}
@@ -152,7 +153,6 @@ export default function Projects() {
                 <ProjectCard
                   key={p.id}
                   project={p}
-                  deployments={deployments}
                   badges={projectLangs[p.id]}
                   badgeLoading={projectBadgeLoading.has(p.id)}
                   onSelect={(id) => navigate(`/projects/${id}`)}

@@ -1,5 +1,8 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "../services/api";
 import { useAsyncData } from "../hooks/useAsyncData";
+import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
 import PageHeader from "../components/ui/PageHeader";
 import PageLoading from "../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../components/ui/PageError";
@@ -12,7 +15,19 @@ async function fetchNotifications(): Promise<Notification[]> {
 }
 
 export default function Notifications() {
+  const navigate = useNavigate();
+  const { enabled: inAppEnabled, loading: inAppLoading } = useInAppNotificationsEnabled();
   const { data: notifications, loading, error, reload } = useAsyncData(fetchNotifications, []);
+
+  useEffect(() => {
+    if (!inAppLoading && !inAppEnabled) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [inAppEnabled, inAppLoading, navigate]);
+
+  if (inAppLoading || !inAppEnabled) {
+    return <PageLoading />;
+  }
 
   const markRead = async (id: string) => {
     await notificationsApi.markRead(id);

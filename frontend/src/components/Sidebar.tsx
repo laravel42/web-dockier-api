@@ -7,8 +7,10 @@ import {
   type NavItemConfig,
   sidebarNavItems,
   isNavItemActive,
+  navItemsForInAppState,
 } from "../config/nav";
 import { useUnreadNotificationCount } from "../hooks/useUnreadNotificationCount";
+import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
 import { navLinkActiveCls, navLinkCls, navLinkIdleCls } from "../utils/styles";
 import DashboardIcon from "./icons/outlined/DashboardIcon";
 import FolderIcon from "./icons/outlined/FolderIcon";
@@ -58,6 +60,8 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const unreadCount = useUnreadNotificationCount();
+  const { enabled: inAppEnabled } = useInAppNotificationsEnabled();
+  const navItems = navItemsForInAppState(sidebarNavItems, inAppEnabled);
 
   const handleLogout = () => {
     logout();
@@ -69,7 +73,7 @@ export default function Sidebar() {
       <AppBrand />
 
       <nav className="mt-6 flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Main navigation">
-        {sidebarNavItems.map((item) => (
+        {navItems.map((item) => (
           <NavItem
             key={item.to}
             item={item}

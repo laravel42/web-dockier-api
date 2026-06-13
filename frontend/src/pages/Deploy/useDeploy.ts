@@ -4,6 +4,7 @@ import { deployApi, projectsApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import type { Deployment, Project } from "../../types";
+import { compareByTime } from "../../utils/sortByTime";
 
 interface DeployPageData {
   deployments: Deployment[];
@@ -37,13 +38,15 @@ export function useDeploy() {
     projectById[p.id] = p;
   }
 
+  const sortedDeployments = [...deployments].sort((a, b) => compareByTime(a, b, "updated"));
+
   const grouped = Object.entries(
-    deployments.reduce<Record<string, Deployment[]>>((acc, d) => {
+    sortedDeployments.reduce<Record<string, Deployment[]>>((acc, d) => {
       const key = d.projectId || d.repo;
       (acc[key] ||= []).push(d);
       return acc;
     }, {}),
-  ).sort(([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime());
+  ).sort(([, a], [, b]) => compareByTime(a[0], b[0], "updated"));
 
   const changeViewMode = (mode: "cards" | "table") => {
     setViewMode(mode);

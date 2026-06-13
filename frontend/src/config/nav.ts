@@ -35,8 +35,8 @@ export const sidebarNavGroups: NavGroupConfig[] = [
   {
     label: "Account",
     items: [
-      { to: "/notifications", label: "Notifications", icon: "notifications" },
       { to: "/settings", label: "Settings", icon: "settings" },
+      { to: "/notifications", label: "Notifications", icon: "notifications" },
     ],
   },
 ];
@@ -53,3 +53,8 @@ export function isNavItemActive(pathname: string, item: NavItemConfig): boolean 
 
 /** Flat list for mobile tab bar */
 export const mobileNavItems: NavItemConfig[] = sidebarNavGroups.flatMap((g) => g.items);
+
+export function navItemsForInAppState(items: NavItemConfig[], inAppEnabled: boolean): NavItemConfig[] {
+  if (inAppEnabled) return items;
+  return items.filter((item) => item.to !== "/notifications");
+}

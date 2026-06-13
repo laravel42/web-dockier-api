@@ -8,6 +8,7 @@ import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import ListToolbar from "../../components/ui/ListToolbar";
 import { EmptyMessage } from "../../components/ui/PageError";
+import { compareByTime } from "../../utils/sortByTime";
 
 export default function Deploy() {
   const [search, setSearch] = useState("");
@@ -30,7 +31,7 @@ export default function Deploy() {
     if (!q) return grouped;
     return grouped.filter(([groupKey, repoDeploys]) => {
       const proj = projectById[groupKey];
-      const latest = repoDeploys[0];
+      const latest = [...repoDeploys].sort((a, b) => compareByTime(a, b, "updated"))[0];
       const name = (proj?.name || latest?.repo || "").toLowerCase();
       const repo = (latest?.repo || "").toLowerCase();
       return name.includes(q) || repo.includes(q);
@@ -80,9 +81,7 @@ export default function Deploy() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredGrouped.map(([groupKey, repoDeploys]) => {
                 const proj = projectById[groupKey];
-                const latest = [...repoDeploys].sort(
-                  (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-                )[0];
+                const latest = [...repoDeploys].sort((a, b) => compareByTime(a, b, "updated"))[0];
                 return (
                   <DeployCard
                     key={groupKey}

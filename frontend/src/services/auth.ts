@@ -113,5 +113,6 @@ export const authApi = {
       isOwner: boolean;
       permissions: string[];
       memberships: TenantMembership[];
+      twoFactorEnabled: boolean;
     }>("/auth/me"),
 };

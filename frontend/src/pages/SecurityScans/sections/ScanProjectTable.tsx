@@ -2,6 +2,7 @@ import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import { chipCls, tableCellCls, tableCellMutedCls } from "../../../utils/styles";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
+import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 
 interface Props {
   sortedProjectIds: string[];
@@ -70,9 +71,7 @@ export default function ScanProjectTable({
           );
         }
 
-        const sorted = [...projectScans].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
+        const sorted = [...projectScans].sort((a, b) => compareByTime(a, b, "updated"));
         const latest = sorted[0];
         const latestCompleted = sorted.find((s) => s.status === "completed");
         const summary = latestCompleted?.summary;
@@ -92,7 +91,7 @@ export default function ScanProjectTable({
               <div className="flex items-center gap-1.5">
                 <span className={`size-2 rounded-full shrink-0 ${getScanStatusDot(latest, summary)}`} />
                 <span className="text-ui-sm text-text-muted">
-                  {new Date(latest.createdAt).toLocaleString(undefined, {
+                  {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
                     month: "short",
                     day: "numeric",
                     hour: "numeric",

@@ -1,5 +1,6 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import { cardInteractiveCls, chipCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
+import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export default function ScanProjectCard({ project, projectId, scans, badges, badgeLoading, onSelect }: Props) {
-  const sorted = [...scans].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const sorted = [...scans].sort((a, b) => compareByTime(a, b, "updated"));
   const latest = sorted[0];
   const latestCompleted = sorted.find((s) => s.status === "completed");
   const summary = latestCompleted?.summary;
@@ -57,7 +58,7 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
         <div className="flex items-center gap-2">
           <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
           <span className="text-xs text-text-muted">
-            {new Date(latest.createdAt).toLocaleString(undefined, {
+            {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
               month: "short",
               day: "numeric",
               hour: "numeric",

@@ -5,6 +5,7 @@ import { getErrorMessage } from "../../utils/errors";
 import { getRepoKey, parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 import type { Deployment, Provider, Project } from "../../types";
+import { compareByTime } from "../../utils/sortByTime";
 
 export function useDeployDetail() {
   const { deployId } = useParams<{ deployId: string }>();
@@ -31,7 +32,7 @@ export function useDeployDetail() {
         const repoDeploys = current.projectId
           ? (res.deployments as Deployment[]).filter((dep) => dep.projectId === current.projectId)
           : (res.deployments as Deployment[]).filter((dep) => dep.repo === current.repo);
-        setAllDeploys(repoDeploys.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setAllDeploys(repoDeploys.sort((a, b) => compareByTime(a, b, "updated")));
       })
       .catch(() => {})
       .finally(() => setAllDeploysLoading(false));

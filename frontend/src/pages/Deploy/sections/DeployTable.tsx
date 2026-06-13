@@ -8,6 +8,7 @@ import {
 } from "../../../utils/styles";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
+import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 
 interface Props {
   grouped: Array<[string, Deployment[]]>;
@@ -22,9 +23,7 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
     <DataTable columns={["Name", "Repository", "Branch", "Deploys", "Tech", "Last deploy"]}>
       {grouped.map(([groupKey, repoDeploys]) => {
         const proj = projectById[groupKey];
-        const sorted = [...repoDeploys].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
+        const sorted = [...repoDeploys].sort((a, b) => compareByTime(a, b, "updated"));
         const latest = sorted[0];
         const badges = proj ? projectLangs[proj.id] : undefined;
         const repoLabel = proj?.repository ? getRepoSlug(proj.repository) : latest.repo;
@@ -50,7 +49,7 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
               <div className="flex items-center gap-1.5">
                 <span className={`size-2 rounded-full shrink-0 ${statusColors[latest.status] || "bg-text-muted"}`} />
                 <span className="text-ui-sm text-text-muted">
-                  {new Date(latest.createdAt).toLocaleString(undefined, {
+                  {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
                     month: "short",
                     day: "numeric",
                     hour: "numeric",

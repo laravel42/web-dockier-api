@@ -9,6 +9,7 @@ import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useTabList } from "../../hooks/useTabList";
+import { notifyInAppNotificationsChanged } from "../../hooks/useInAppNotificationsEnabled";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
@@ -48,6 +49,9 @@ export default function NotificationChannelsTab() {
     if (!editingChannel) return;
     if (editingChannel.enabled !== editEnabled) {
       await notificationsApi.toggleChannel(editingChannel.id, editEnabled);
+      if (editingChannel.type === "in_app") {
+        notifyInAppNotificationsChanged();
+      }
     }
     setEditingChannel(null); fetch_();
   };
@@ -85,7 +89,6 @@ export default function NotificationChannelsTab() {
                 { value: "email", label: "Email" },
                 { value: "slack", label: "Slack" },
                 { value: "webhook", label: "Webhook" },
-                { value: "in_app", label: "In-App" },
               ]}
               placeholder="Select channel type"
             />
@@ -159,8 +162,10 @@ export default function NotificationChannelsTab() {
             )}
 
             {/* Footer */}
-            <div className="flex items-center justify-between pt-2 border-t border-border">
-              <button type="button" onClick={() => setConfirmRemove(true)} className={btnDanger}>Remove</button>
+            <div className={`flex items-center pt-2 border-t border-border ${editingChannel.type === "in_app" ? "justify-end" : "justify-between"}`}>
+              {editingChannel.type !== "in_app" && (
+                <button type="button" onClick={() => setConfirmRemove(true)} className={btnDanger}>Remove</button>
+              )}
               <button type="submit" className={btnPrimary}>Save Changes</button>
             </div>
           </form>
@@ -190,6 +195,9 @@ export default function NotificationChannelsTab() {
                   {channelIcons[ch.type] || channelIcons.in_app}
                 </div>
                 <p className="text-sm font-semibold text-text">{channelNames[ch.type] || ch.type}</p>
+                {ch.type === "in_app" && (
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-text-muted">Default</span>
+                )}
               </div>
               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${ch.enabled ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>
                 {ch.enabled ? "Enabled" : "Disabled"}

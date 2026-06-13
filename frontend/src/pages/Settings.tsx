@@ -3,7 +3,6 @@ import { usePermissions } from "../context/PermissionsContext";
 import PageHeader from "../components/ui/PageHeader";
 import PageLoading from "../components/ui/PageLoading";
 import ProfileTab from "./settings/ProfileTab";
-import SecurityTab from "./settings/SecurityTab";
 import UsersTab from "./settings/UsersTab";
 import RolesTab from "./settings/RolesTab";
 import ProvidersTab from "./settings/ProvidersTab";
@@ -13,7 +12,7 @@ import NotificationChannelsTab from "./settings/NotificationChannelsTab";
 import IntegrationsTab from "./settings/IntegrationsTab";
 import SecurityRulesTab from "./settings/SecurityRulesTab";
 
-type Tab = "profile" | "security" | "users" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
+type Tab = "profile" | "users" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
 
 export default function Settings() {
   const { has, loading } = usePermissions();
@@ -35,7 +34,6 @@ export default function Settings() {
 
   const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
     { key: "profile", label: "Profile", visible: true },
-    { key: "security", label: "Security", visible: true },
     { key: "users", label: "Users", visible: has("user:view") || has("user:manage") },
     { key: "roles", label: "Roles", visible: has("role:view") || has("role:manage") },
     { key: "providers", label: "Providers", visible: has("credential:view") || has("credential:manage") },
@@ -63,7 +61,6 @@ export default function Settings() {
         ))}
       </div>
       {tab === "profile" && <ProfileTab />}
-      {tab === "security" && <SecurityTab />}
       {tab === "users" && <UsersTab />}
       {tab === "roles" && <RolesTab />}
       {tab === "providers" && <ProvidersTab />}
