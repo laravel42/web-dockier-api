@@ -70,7 +70,7 @@ export function useProjects() {
 
   // ── Connection / repo / branch cascading fetches ───────────────
 
-  const fetchConnections = async () => {
+  const fetchConnections = useCallback(async () => {
     setLoadingConnections(true);
     try {
       const res = await gitApi.listConnections();
@@ -80,7 +80,7 @@ export function useProjects() {
     } finally {
       setLoadingConnections(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (!selectedConnectionId) {
@@ -161,7 +161,7 @@ export function useProjects() {
     resetSelections();
     setShowForm(true);
     fetchConnections();
-  }, []);
+  }, [fetchConnections]);
 
   // Auto-open create modal when navigated with state
   useEffect(() => {

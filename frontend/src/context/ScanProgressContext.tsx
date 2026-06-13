@@ -213,9 +213,13 @@ function liveStateFromScan(scan: Scan): ScanLiveState {
 export function ScanProgressProvider({ children }: { children: ReactNode }) {
   const [states, setStates] = useState<Record<string, ScanLiveState>>({});
   const statesRef = useRef(states);
-  statesRef.current = states;
   const socketsRef = useRef<Map<string, WebSocket>>(new Map());
   const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const openWebSocketRef = useRef<(scanId: string) => void>(() => {});
+
+  useEffect(() => {
+    statesRef.current = states;
+  }, [states]);
 
   const patchLiveState = useCallback((scanId: string, next: ScanLiveState) => {
     setStates((prev) => {
@@ -292,7 +296,7 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
         if (reconnectTimersRef.current.has(scanId)) return;
         const timer = setTimeout(() => {
           reconnectTimersRef.current.delete(scanId);
-          openWebSocket(scanId);
+          openWebSocketRef.current(scanId);
         }, 3000);
         reconnectTimersRef.current.set(scanId, timer);
       });
@@ -300,6 +304,10 @@ export function ScanProgressProvider({ children }: { children: ReactNode }) {
 
     socketsRef.current.set(scanId, ws);
   }, [closeSocket, syncFromApi]);
+
+  useEffect(() => {
+    openWebSocketRef.current = openWebSocket;
+  }, [openWebSocket]);
 
   const connect = useCallback(
     (scanId: string) => {

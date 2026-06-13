@@ -79,7 +79,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       codeBuild.cleanup();
       standardDeploy.cleanup();
     };
-  }, [open, providers, project.id]);
+  }, [open, providers, project.id, codeBuild, standardDeploy]);
 
   // ─── Sync Analysis ───────────────────────────────────────────────
 
@@ -157,8 +157,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         tofuAppName: res.appName,
         tofuRegion: res.region,
       }));
-    } catch (err: any) {
-      setTofuError(err.message || "Failed to generate Pulumi program");
+    } catch (err: unknown) {
+      setTofuError(err instanceof Error ? err.message : "Failed to generate Pulumi program");
     } finally {
       setTofuLoading(false);
     }
@@ -207,8 +207,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
           onComplete: onDeployComplete,
         });
       }
-    } catch (err: any) {
-      setDeployError(err.message || "Failed to start deployment");
+    } catch (err: unknown) {
+      setDeployError(err instanceof Error ? err.message : "Failed to start deployment");
       setState(prev => ({ ...prev, deployStatus: "failed" }));
     }
   }, [state, project, analysis, onDeployComplete, codeBuild, standardDeploy]);

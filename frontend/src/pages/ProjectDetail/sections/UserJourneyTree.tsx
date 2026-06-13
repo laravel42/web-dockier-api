@@ -109,21 +109,23 @@ function buildHorizontalTree(root: UserJourneyNode): { nodes: Node[]; edges: Edg
 }
 
 export default function UserJourneyTree({ journey }: Props) {
-  if (!journey?.label) return null;
+  const hasJourney = Boolean(journey?.label);
+  const total = useMemo(() => (hasJourney ? countNodes(journey) : 0), [hasJourney, journey]);
+  const { nodes, edges } = useMemo(
+    () => (hasJourney ? buildHorizontalTree(journey) : { nodes: [], edges: [] }),
+    [hasJourney, journey],
+  );
 
-  const total = countNodes(journey);
-
-  const { nodes, edges } = useMemo(() => buildHorizontalTree(journey), [journey]);
-
-  // Calculate graph bounds to size the container
   const padding = 20;
   const graphHeight = useMemo(() => {
     if (!nodes.length) return 200;
-    const ys = nodes.map(n => n.position.y);
+    const ys = nodes.map((n) => n.position.y);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
     return Math.max(200, maxY - minY + 40 + padding * 2);
   }, [nodes]);
+
+  if (!hasJourney) return null;
 
   return (
     <div className={`${cardCls} mb-6 overflow-hidden`}>

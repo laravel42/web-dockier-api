@@ -94,7 +94,7 @@ export const deployApi = {
     dockerImage?: string;
     instanceType?: string;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
-    aiAnalysis?: Record<string, any>;
+    aiAnalysis?: Record<string, unknown>;
     templateId?: string;
   }) =>
     request<{

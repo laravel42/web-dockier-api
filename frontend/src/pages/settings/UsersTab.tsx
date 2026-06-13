@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usersApi, rolesApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
@@ -57,12 +57,12 @@ export default function UsersTab() {
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async (searchQuery?: string) => {
     setLoading(true);
     setLoadError("");
     try {
       const [usersRes, rolesRes] = await Promise.all([
-        usersApi.list({ search: search || undefined }),
+        usersApi.list({ search: searchQuery || undefined }),
         rolesApi.list(),
       ]);
       setUsers(usersRes.users);
@@ -70,11 +70,11 @@ export default function UsersTab() {
     } catch (err) {
       setLoadError(getErrorMessage(err, "Failed to load users"));
     } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleSearch = () => fetchData();
+  const handleSearch = () => fetchData(search);
 
   const generatePassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
@@ -142,7 +142,7 @@ export default function UsersTab() {
       setShowInvite(false);
       setInviteForm({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
       setShowPassword(false);
-      fetchData();
+      fetchData(search);
     } catch (err: unknown) {
       setInviteError(getErrorMessage(err, "Failed to create user"));
     } finally { setInviting(false); }
@@ -162,7 +162,7 @@ export default function UsersTab() {
       // If the edited user is the current user, refresh permissions
       if (editUser.id === userId) refreshPermissions();
       setEditUser(null);
-      fetchData();
+      fetchData(search);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to update user"));
     }
@@ -173,7 +173,7 @@ export default function UsersTab() {
     if (!deleteId) return;
     try {
       await usersApi.delete(deleteId);
-      fetchData();
+      fetchData(search);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to remove user"));
     }

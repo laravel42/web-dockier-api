@@ -128,5 +128,6 @@ The backend calls `initConfig()` before startup, which loads local files then fe
 
 ## Database and Migrations
 
-- Add and run SQL migrations from root `migrations/` only.
-- Historical lineage is documented in `migrations/legacy-index.md`.
+- SQL migrations live in `supabase/migrations/`.
+- Apply to your remote database: `pnpm db:migrate` (reads `DIRECT_URL` or `DATABASE_URL` from `.env`, or uses a linked Supabase project via `pnpm db:link`).
+- Historical lineage is documented in `supabase/migrations/legacy-index.md`.

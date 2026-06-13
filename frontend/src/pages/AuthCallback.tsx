@@ -11,14 +11,30 @@ export default function AuthCallback() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const code = searchParams.get("code");
+  const missingAuth = !code || !provider;
+
   useEffect(() => {
-    const code = searchParams.get("code");
-    if (!code || !provider) { setError("Missing authorization code"); return; }
+    if (missingAuth) return;
+
     const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
     authApi.socialLogin({ provider, code, redirectUri })
       .then((res) => { login(res.token, res.userId); navigate("/dashboard"); })
-      .catch((err) => setError(err.message));
-  }, [provider, searchParams]);
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Authentication failed");
+      });
+  }, [missingAuth, code, provider, login, navigate]);
+
+  if (missingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-danger-500 mb-4" role="alert">Missing authorization code</p>
+          <a href="/login" className="text-primary-500 font-medium hover:underline text-sm">Back to login</a>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (

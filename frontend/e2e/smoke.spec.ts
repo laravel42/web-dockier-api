@@ -16,10 +16,8 @@ test.describe("smoke", () => {
 
     await page.goto("/dashboard");
 
-    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Connect repository" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /AI-native DevSecOps/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Connect repository" })).toBeVisible();
   });
 
   test("projects list loads with mocked auth", async ({ page }) => {

@@ -14,6 +14,44 @@ export interface ScanFindingInput {
   snippet: string;
 }
 
+const SEVERITY_RANK: Record<ScanFindingInput["severity"], number> = {
+  error: 3,
+  warning: 2,
+  info: 1,
+};
+
+/** Stable key for the same issue location (rule + file + line span). */
+export function scanFindingDedupeKey(
+  finding: ScanFindingInput,
+  repoDir?: string,
+): string {
+  const filePath = toRepoRelativePath(finding.filePath, repoDir);
+  return `${finding.ruleId}\0${filePath}\0${finding.startLine}\0${finding.endLine}`;
+}
+
+/** Collapse duplicate findings from overlapping scanners or batched Semgrep runs. */
+export function dedupeScanFindings(
+  findings: ScanFindingInput[],
+  repoDir?: string,
+): ScanFindingInput[] {
+  const byKey = new Map<string, ScanFindingInput>();
+
+  for (const finding of findings) {
+    const filePath = toRepoRelativePath(finding.filePath, repoDir);
+    const normalized = { ...finding, filePath };
+    const key = scanFindingDedupeKey(normalized, repoDir);
+    const existing = byKey.get(key);
+    if (
+      !existing
+      || SEVERITY_RANK[normalized.severity] > SEVERITY_RANK[existing.severity]
+    ) {
+      byKey.set(key, normalized);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
 export interface CustomRuleInput {
   ruleId: string;
   severity: string;

@@ -11,10 +11,6 @@ import type { FastifyInstance } from "fastify";
 import {
   TEST_JWT_SECRET,
   TEST_TENANT_ID,
-  TEST_USER_ID,
-  TEST_EMAIL,
-  TEST_ROLE_ID,
-  OTHER_TENANT_ID,
   TEST_PROVIDER_ID,
   TEST_DEPLOYMENT_ID,
   TEST_GIT_CONNECTION_ID,

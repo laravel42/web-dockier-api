@@ -51,7 +51,9 @@ export function useIssueModal(project: Project | null) {
         if (res.projectLabel) fetchPmSubProjects(pm, res.teams[0].id);
         fetchPmMembers(pm, res.teams[0].id);
       }
-    } catch {}
+    } catch {
+      /* PM teams optional — leave lists empty */
+    }
     finally { setPmProjectsLoading(false); }
   };
 
@@ -60,7 +62,9 @@ export function useIssueModal(project: Project | null) {
     try {
       const res = await integrationsApi.listPMTeamMembers(pm.id, teamId);
       setPmMembers(res.members);
-    } catch {}
+    } catch {
+      /* PM teams optional — leave lists empty */
+    }
   };
 
   const fetchPmSubProjects = async (pm: PMIntegration, teamId: string) => {
@@ -69,7 +73,9 @@ export function useIssueModal(project: Project | null) {
       const res = await integrationsApi.listPMTeamProjects(pm.id, teamId);
       setPmSubProjects(res.projects);
       if (res.projects.length > 0) setSelectedPmSubProject(res.projects[0].id);
-    } catch {}
+    } catch {
+      /* PM teams optional — leave lists empty */
+    }
     finally { setPmSubProjectsLoading(false); }
   };
 

@@ -31,16 +31,18 @@ export default function StepService({ state, templateId, analysis, onChange }: {
   onChange: (strategy: "vps" | "managed" | "static") => void;
 }) {
   const meta = PROVIDER_META[state.selectedProvider];
-  if (!meta) return <p className="text-sm text-text-muted">Select a provider first.</p>;
-
-  const hideStatic = isStaticDeployIncompatible(analysis, templateId);
-  const services = hideStatic ? meta.services.filter((svc) => svc.type !== "static") : meta.services;
+  const hideStatic = meta ? isStaticDeployIncompatible(analysis, templateId) : false;
 
   useEffect(() => {
+    if (!meta) return;
     if (hideStatic && state.deployStrategy === "static") {
       onChange("vps");
     }
-  }, [hideStatic, state.deployStrategy, onChange]);
+  }, [meta, hideStatic, state.deployStrategy, onChange]);
+
+  if (!meta) return <p className="text-sm text-text-muted">Select a provider first.</p>;
+
+  const services = hideStatic ? meta.services.filter((svc) => svc.type !== "static") : meta.services;
 
   const typeIcons: Record<string, string> = {
     vps: "🖥️",

@@ -78,7 +78,7 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     try {
       await s3.send(new HeadBucketCommand({ Bucket: templateBucket }));
     } catch {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const createParams: any = { Bucket: templateBucket };
       if (region !== "us-east-1") {
         createParams.CreateBucketConfiguration = { LocationConstraint: region };

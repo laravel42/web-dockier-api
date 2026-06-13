@@ -42,6 +42,92 @@ export function useCodeBuildPipeline() {
     }
   }, []);
 
+  const startCfnPolling = useCallback(({
+    buildId,
+    state,
+    project,
+    repo,
+    formattedLogs,
+    syncDeployRecord,
+    onStateUpdate,
+    onError,
+    onComplete,
+  }: {
+    buildId: string;
+    state: WizardState;
+    project: CodeBuildParams["project"];
+    analysis: RepoAnalysis | null;
+    repo: string;
+    formattedLogs: string[];
+    syncDeployRecord: (status: "building" | "deploying" | "success" | "failed", logs: string[], appUrl?: string) => void;
+    onStateUpdate: (updater: (prev: WizardState) => WizardState) => void;
+    onError: (msg: string) => void;
+    onComplete?: () => void;
+  }) => {
+    const pollCfnDeploy = async () => {
+      if (!mountedRef.current) return;
+      try {
+        const ds = await imageBuilderApi.getDeployStatus(buildId);
+
+        if (ds.status === "success" && ds.appUrl) {
+          const appName = state.tofuAppName || project.name?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || repo.split("/").pop() || "app";
+          formattedLogs.push(
+            logSuccess("CloudFormation stack: CREATE_COMPLETE"),
+            logSuccess(`App URL: ${ds.appUrl}`),
+          );
+          onStateUpdate(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
+          syncDeployRecord("deploying", formattedLogs);
+
+          await runPostDeployCommands(buildId, state.postDeployCommands, formattedLogs, onStateUpdate);
+
+          formattedLogs.push(
+            logEmpty(),
+            logSection("Complete"),
+            logSuccess(`Docker image: ${appName}`),
+            logSuccess("Infrastructure deployed via CloudFormation"),
+            logSuccess(`Application URL: ${ds.appUrl}`),
+          );
+          onStateUpdate(prev => ({
+            ...prev,
+            deployStatus: "success",
+            deployAppUrl: ds.appUrl,
+            deployLogs: [...formattedLogs],
+          }));
+          syncDeployRecord("success", formattedLogs, ds.appUrl);
+          onComplete?.();
+          return;
+        }
+
+        if (ds.status === "failed") {
+          formattedLogs.push(logError("CloudFormation failed"));
+          onStateUpdate(prev => ({ ...prev, deployStatus: "failed", deployLogs: [...formattedLogs] }));
+          syncDeployRecord("failed", formattedLogs);
+          onError("CloudFormation deployment failed.");
+          onComplete?.();
+          return;
+        }
+
+        if (ds.status === "deploying") {
+          const lastCfnLog = formattedLogs.filter(l => l.includes("CloudFormation:")).pop();
+          const lastCfnTime = lastCfnLog?.match(/\[([\d\s:-]+)\]/)?.[1] || "";
+          const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+          if (!lastCfnLog || lastCfnTime !== now) {
+            formattedLogs.push(logInfo("CloudFormation: CREATE_IN_PROGRESS..."));
+            onStateUpdate(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
+            syncDeployRecord("deploying", formattedLogs);
+          }
+        }
+
+        pollRef.current = setTimeout(pollCfnDeploy, 10000);
+      } catch (err) {
+        console.warn("[deploy] CFN poll error:", err);
+        if (mountedRef.current) pollRef.current = setTimeout(pollCfnDeploy, 10000);
+      }
+    };
+
+    pollRef.current = setTimeout(pollCfnDeploy, 5000);
+  }, []);
+
   const start = useCallback(async ({
     state,
     project,
@@ -234,96 +320,7 @@ export function useCodeBuildPipeline() {
     };
 
     pollRef.current = setTimeout(pollCodeBuild, 3000);
-  }, []);
-
-  // ── CloudFormation Deploy Polling ──
-
-  const startCfnPolling = useCallback(({
-    buildId,
-    state,
-    project,
-    repo,
-    formattedLogs,
-    syncDeployRecord,
-    onStateUpdate,
-    onError,
-    onComplete,
-  }: {
-    buildId: string;
-    state: WizardState;
-    project: CodeBuildParams["project"];
-    analysis: RepoAnalysis | null;
-    repo: string;
-    formattedLogs: string[];
-    syncDeployRecord: (status: "building" | "deploying" | "success" | "failed", logs: string[], appUrl?: string) => void;
-    onStateUpdate: (updater: (prev: WizardState) => WizardState) => void;
-    onError: (msg: string) => void;
-    onComplete?: () => void;
-  }) => {
-    const pollCfnDeploy = async () => {
-      if (!mountedRef.current) return;
-      try {
-        const ds = await imageBuilderApi.getDeployStatus(buildId);
-
-        if (ds.status === "success" && ds.appUrl) {
-          const appName = state.tofuAppName || project.name?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || repo.split("/").pop() || "app";
-          formattedLogs.push(
-            logSuccess("CloudFormation stack: CREATE_COMPLETE"),
-            logSuccess(`App URL: ${ds.appUrl}`),
-          );
-          onStateUpdate(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
-          syncDeployRecord("deploying", formattedLogs);
-
-          // Run post-deploy commands
-          await runPostDeployCommands(buildId, state.postDeployCommands, formattedLogs, onStateUpdate);
-
-          formattedLogs.push(
-            logEmpty(),
-            logSection("Complete"),
-            logSuccess(`Docker image: ${appName}`),
-            logSuccess("Infrastructure deployed via CloudFormation"),
-            logSuccess(`Application URL: ${ds.appUrl}`),
-          );
-          onStateUpdate(prev => ({
-            ...prev,
-            deployStatus: "success",
-            deployAppUrl: ds.appUrl,
-            deployLogs: [...formattedLogs],
-          }));
-          syncDeployRecord("success", formattedLogs, ds.appUrl);
-          onComplete?.();
-          return;
-        }
-
-        if (ds.status === "failed") {
-          formattedLogs.push(logError("CloudFormation failed"));
-          onStateUpdate(prev => ({ ...prev, deployStatus: "failed", deployLogs: [...formattedLogs] }));
-          syncDeployRecord("failed", formattedLogs);
-          onError("CloudFormation deployment failed.");
-          onComplete?.();
-          return;
-        }
-
-        if (ds.status === "deploying") {
-          const lastCfnLog = formattedLogs.filter(l => l.includes("CloudFormation:")).pop();
-          const lastCfnTime = lastCfnLog?.match(/\[([\d\s:-]+)\]/)?.[1] || "";
-          const now = new Date().toISOString().replace("T", " ").slice(0, 19);
-          if (!lastCfnLog || lastCfnTime !== now) {
-            formattedLogs.push(logInfo("CloudFormation: CREATE_IN_PROGRESS..."));
-            onStateUpdate(prev => ({ ...prev, deployLogs: [...formattedLogs] }));
-            syncDeployRecord("deploying", formattedLogs);
-          }
-        }
-
-        pollRef.current = setTimeout(pollCfnDeploy, 10000);
-      } catch (err) {
-        console.warn("[deploy] CFN poll error:", err);
-        if (mountedRef.current) pollRef.current = setTimeout(pollCfnDeploy, 10000);
-      }
-    };
-
-    pollRef.current = setTimeout(pollCfnDeploy, 5000);
-  }, []);
+  }, [startCfnPolling]);
 
   return { start, cleanup, pollRef };
 }
@@ -356,8 +353,9 @@ async function runPostDeployCommands(
     } else {
       formattedLogs.push(logWarning("Post-deploy commands finished with errors"));
     }
-  } catch (e: any) {
-    formattedLogs.push(logWarning(`Post-deploy commands failed: ${e.message || "unknown error"}`));
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "unknown error";
+    formattedLogs.push(logWarning(`Post-deploy commands failed: ${message}`));
   }
 }
 

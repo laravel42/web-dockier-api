@@ -59,7 +59,7 @@ export async function ensureS3Bucket(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     await s3.send(new CreateBucketCommand(createParams as any));
   } catch (err: unknown) {
     if (!isS3BucketAlreadyOwnedError(err)) {

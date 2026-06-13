@@ -16,7 +16,6 @@ import {
   TEST_ROLE_ID,
   OTHER_TENANT_ID,
   authHeader,
-  signTestToken,
   ADMIN_MEMBERSHIP,
   OWNER_MEMBERSHIP,
   ADMIN_ROLE,

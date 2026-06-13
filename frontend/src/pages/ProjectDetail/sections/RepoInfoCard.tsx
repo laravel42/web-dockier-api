@@ -45,7 +45,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
           {project.template && templateDescriptions[project.template] && (
             <div className="mt-auto pt-3 border-t border-border">
               <p className={labelCls()}>About</p>
-              <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+              <p className="text-xs/relaxed text-text-secondary mt-1 ">
                 {templateDescriptions[project.template]}
               </p>
             </div>

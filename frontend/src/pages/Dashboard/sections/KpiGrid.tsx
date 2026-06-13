@@ -59,7 +59,7 @@ export default function KpiGrid({
         {kpis.map((kpi) => (
           <div
             key={kpi.label}
-            className={`${statCardCls} min-w-[8.25rem] flex-1 p-3 sm:min-w-[9rem] sm:p-4`}
+            className={`${statCardCls} min-w-33 flex-1 p-3 sm:min-w-36 sm:p-4`}
           >
             <div className="flex items-center justify-between gap-2">
               <span className={`${typeStatLabel} truncate`}>{kpi.label}</span>

@@ -23,6 +23,7 @@ import {
   runSensitiveDataScan,
   toRepoRelativePath,
   type ScanFindingInput,
+  dedupeScanFindings,
 } from "./scan-analysis.js";
 import { filterDisabledSonarFindings, runSonarScanner } from "./sonarqube.js";
 import { getOpengrepRulesDir } from "../../../shared/paths.js";
@@ -209,7 +210,7 @@ async function runSemgrep(
     );
   }
 
-  return findings;
+  return dedupeScanFindings(findings, repoDir);
 }
 
 async function walkRepoFiles(repoDir: string): Promise<{ allFiles: string[]; relativePaths: string[] }> {
@@ -675,9 +676,10 @@ export async function executeScan(
       currentRule: "database/persist",
     });
 
-    await persistFindings(scanId, tenantId, findings);
+    const uniqueFindings = dedupeScanFindings(findings, cloneResult.repoDir);
+    await persistFindings(scanId, tenantId, uniqueFindings);
 
-    const summary = buildSummary(findings, filesInRepo, filesScanned);
+    const summary = buildSummary(uniqueFindings, filesInRepo, filesScanned);
     const { error: updateError } = await supabaseAdmin
       .from("scans")
       .update({

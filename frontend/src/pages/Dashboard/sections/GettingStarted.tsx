@@ -112,7 +112,7 @@ function FeatureCard({ feature }: { feature: Feature }) {
       </div>
       <div>
         <h3 className="text-sm font-semibold text-text">{feature.title}</h3>
-        <p className="mt-1 text-xs text-text-muted leading-relaxed">{feature.description}</p>
+        <p className="mt-1 text-xs/relaxed text-text-muted ">{feature.description}</p>
       </div>
       <ul className="mt-auto space-y-1.5 pt-1">
         {feature.bullets.map((bullet) => (
@@ -133,7 +133,7 @@ function WorkflowStepCard({ step }: { step: WorkflowStep }) {
         {step.number}
       </span>
       <h3 className="text-sm font-semibold text-text">{step.title}</h3>
-      <p className="text-xs text-text-muted leading-relaxed">{step.description}</p>
+      <p className="text-xs/relaxed text-text-muted ">{step.description}</p>
     </div>
   );
 }

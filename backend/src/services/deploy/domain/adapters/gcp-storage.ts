@@ -12,7 +12,7 @@ import {
   restorePulumiState,
   savePulumiState,
 } from "../pulumi-workspace.js";
-import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, getStaticDeployBlockReason, SKIP_DIRS } from "../static-site-builder.js";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, SKIP_DIRS } from "../static-site-builder.js";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -535,7 +535,7 @@ export class GcpStorageAdapter implements DeployAdapter {
       for (const type of resourceTypes) {
         const match = ctx.tofuScript.match(resourcePatterns[type]);
         if (!match) continue;
-        let name = (match[1] || match[2] || "").replace(/\$\{[^}]+\}/g, "").replace(/-+$/, "");
+        const name = (match[1] || match[2] || "").replace(/\$\{[^}]+\}/g, "").replace(/-+$/, "");
         if (!name) continue;
         try {
           const listRes = await fetch(`https://compute.googleapis.com/compute/v1/projects/${gcpProjectId}/global/${type}`, { headers: authHeaders });

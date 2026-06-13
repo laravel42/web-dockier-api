@@ -8,6 +8,7 @@ import {
   mapSensitiveSeverity,
   matchesExtension,
   mapSemgrepSeverity,
+  dedupeScanFindings,
 } from "../scan-analysis.js";
 
 describe("mapSemgrepSeverity", () => {
@@ -268,5 +269,31 @@ describe("runSensitiveDataScan", () => {
 
   it("returns empty array when no schema or model files are provided", () => {
     expect(runSensitiveDataScan([{ path: "README.md", content: "# docs" }])).toEqual([]);
+  });
+});
+
+describe("dedupeScanFindings", () => {
+  const base = {
+    ruleId: "rule.sql-injection",
+    severity: "error" as const,
+    message: "SQL injection risk",
+    filePath: "src/app.ts",
+    startLine: 10,
+    endLine: 10,
+    snippet: "query(userInput)",
+  };
+
+  it("removes exact duplicates and keeps higher severity", () => {
+    const dup = { ...base, severity: "warning" as const };
+    const deduped = dedupeScanFindings([base, dup, base]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].severity).toBe("error");
+  });
+
+  it("keeps distinct rules or locations", () => {
+    const otherLine = { ...base, startLine: 11, endLine: 11 };
+    const otherRule = { ...base, ruleId: "rule.xss" };
+    const deduped = dedupeScanFindings([base, otherLine, otherRule]);
+    expect(deduped).toHaveLength(3);
   });
 });

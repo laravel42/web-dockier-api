@@ -236,7 +236,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
     };
     reader.onerror = () => setError("Failed to read file");
     reader.readAsText(file);
-  }, [onParsed, onAiResult]);
+  }, [onParsed, onAiResult, projectId]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

@@ -20,6 +20,26 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      'react-refresh/only-export-components': [
+        'warn',
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            'useAuth',
+            'usePermissions',
+            'useTheme',
+            'useScanLiveState',
+            'useScanProgress',
+            'buttonVariants',
+            'getSourceControl',
+            'getSensitivityStyle',
+          ],
+        },
+      ],
+      // Many dropdowns and auth flows intentionally sync local state on open/prop change.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
   {
     files: ['**/*.{ts,tsx}'],
