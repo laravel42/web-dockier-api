@@ -55,10 +55,19 @@ export default function Notifications() {
                 key={n.id}
                 className={`px-5 py-4 flex items-start justify-between gap-4 ${!n.read ? "bg-primary-500/5" : ""}`}
               >
-                <div className="min-w-0">
-                  <h3 className={`text-sm font-medium ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
-                  <p className="text-sm text-text-muted mt-0.5">{n.message}</p>
-                  <p className="text-xs text-text-muted mt-1.5">{new Date(n.createdAt).toLocaleString()}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <h3 className={`text-sm font-medium truncate min-w-0 ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
+                    <time className="text-[10px] leading-snug text-text-muted shrink-0 whitespace-nowrap">
+                      {new Date(n.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </time>
+                  </div>
+                  <p className="text-xs text-text-muted mt-0.5 leading-snug">{n.message}</p>
                 </div>
                 {!n.read && (
                   <button type="button" onClick={() => markRead(n.id)} className={`${btnLink} shrink-0 text-xs`}>
