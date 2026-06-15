@@ -13,34 +13,48 @@ export async function runServer(): Promise<void> {
   const serviceName = env.SERVICE_NAME as ServiceName;
   const app = await buildApp(serviceName);
 
-  const queueReady = await startQueue();
-  if (queueReady) {
-    const staleJobs = await reconcileStaleScanJobs();
-    if (staleJobs > 0) {
-      logger.info(`[scan] Cancelled ${staleJobs} stale queue job(s) on startup`);
-    }
-    await registerDeployWorker();
-    await registerImageBuildWorker();
-    await registerScanWorker();
-  } else {
+  // Only the domains that own a background queue run workers. The `gateway`
+  // service runs all of them (monolith mode); split services run only their own,
+  // avoiding unnecessary queue connections and unrelated worker registration.
+  const runDeploy = serviceName === "gateway" || serviceName === "deploy";
+  const runImageBuilder = serviceName === "gateway" || serviceName === "image-builder";
+  const runCodeAnalysis = serviceName === "gateway" || serviceName === "code-analysis";
+  const needsQueue = runDeploy || runImageBuilder || runCodeAnalysis;
+
+  const queueReady = needsQueue ? await startQueue() : false;
+  if (needsQueue && !queueReady) {
     logger.warn("[queue] Skipping worker registration — queue unavailable");
   }
 
-  try {
-    await seedCustomRules();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.warn(`[scan] Custom rule seed skipped: ${message}`);
+  if (queueReady) {
+    if (runCodeAnalysis) {
+      const staleJobs = await reconcileStaleScanJobs();
+      if (staleJobs > 0) {
+        logger.info(`[scan] Cancelled ${staleJobs} stale queue job(s) on startup`);
+      }
+    }
+    if (runDeploy) await registerDeployWorker();
+    if (runImageBuilder) await registerImageBuildWorker();
+    if (runCodeAnalysis) await registerScanWorker();
   }
 
-  try {
-    const staleScans = await reconcileAllStaleScans();
-    if (staleScans > 0) {
-      logger.info(`[scan] Reconciled ${staleScans} stale scan(s) on startup`);
+  if (runCodeAnalysis) {
+    try {
+      await seedCustomRules();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(`[scan] Custom rule seed skipped: ${message}`);
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.warn(`[scan] Stale scan reconciliation skipped: ${message}`);
+
+    try {
+      const staleScans = await reconcileAllStaleScans();
+      if (staleScans > 0) {
+        logger.info(`[scan] Reconciled ${staleScans} stale scan(s) on startup`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(`[scan] Stale scan reconciliation skipped: ${message}`);
+    }
   }
 
   await app.listen({
@@ -52,7 +66,7 @@ export async function runServer(): Promise<void> {
 
   const shutdown = async () => {
     await app.close();
-    await stopQueue();
+    if (needsQueue) await stopQueue();
     process.exit(0);
   };
   process.on("SIGTERM", shutdown);
