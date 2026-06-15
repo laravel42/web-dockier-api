@@ -44,6 +44,7 @@ export function useScanDetail() {
 
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const fetchingFiles = useRef(new Set<string>());
+  const findingsFetchOffsetRef = useRef(0);
 
   const [runScanError, setRunScanError] = useState("");
   const terminalHandledRef = useRef<string | null>(null);
@@ -118,6 +119,7 @@ export function useScanDetail() {
         setFindingsTotal(res.hasMore ? res.total : deduped.length);
         return deduped;
       });
+      findingsFetchOffsetRef.current = offset + res.findings.length;
       setFindingCounts(res.counts);
       setHasMoreFindings(res.hasMore);
     } catch (err) {
@@ -134,9 +136,9 @@ export function useScanDetail() {
       severity: severityFilter || undefined,
       provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
       append: true,
-      offset: findings.length,
+      offset: findingsFetchOffsetRef.current,
     });
-  }, [scanId, findingsLoading, findingsLoadingMore, hasMoreFindings, fetchFindings, severityFilter, providerFilter, findings.length]);
+  }, [scanId, findingsLoading, findingsLoadingMore, hasMoreFindings, fetchFindings, severityFilter, providerFilter]);
 
   const refreshAllScans = useCallback(async (projectId: string) => {
     setAllScansLoading(true);
@@ -159,6 +161,7 @@ export function useScanDetail() {
     setFindingsTotal(0);
     setFindingCounts(null);
     setHasMoreFindings(false);
+    findingsFetchOffsetRef.current = 0;
   }, [scanId]);
 
   useEffect(() => {

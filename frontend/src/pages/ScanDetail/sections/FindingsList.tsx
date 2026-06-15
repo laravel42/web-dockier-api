@@ -57,7 +57,8 @@ export default function FindingsList({
   onCreateIssue, onCreateMR,
 }: Props) {
   const sentinelRef = useInfiniteScroll(onLoadMore, {
-    enabled: hasMoreFindings && !findingsLoading && !findingsLoadingMore,
+    enabled: hasMoreFindings && !findingsLoading,
+    isLoading: findingsLoadingMore,
   });
 
   const providers = PROVIDER_DEFS.filter((p) => {
