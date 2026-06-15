@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 import type { Deployment, Provider } from "../types";
 
 export const deployApi = {
@@ -27,7 +28,7 @@ export const deployApi = {
 
   listDeployments: (providerId?: string) =>
     request<{ deployments: Deployment[] }>(
-      `/deploy/deployments${providerId ? `?providerId=${providerId}` : ""}`
+      `/deploy/deployments${buildQuery({ providerId })}`
     ),
 
   createDeployment: (data: {

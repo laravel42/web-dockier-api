@@ -145,7 +145,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         services: analysis?.detectedServices?.length
           ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: s.servicesModes[svc.type] || "vps" }))
           : undefined,
-        aiAnalysis: analysis?.aiAnalysis || undefined,
+        aiAnalysis: (analysis?.aiAnalysis as Record<string, unknown> | undefined) || undefined,
         templateId: project.sourceType === "template" ? project.template : undefined,
       });
 
