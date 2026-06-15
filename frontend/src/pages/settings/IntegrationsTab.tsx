@@ -4,6 +4,7 @@ import { INTEGRATION_ICONS } from "../../data/integration-icons";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
+import { SettingsField } from "../../components/SettingsField";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
 import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
@@ -254,8 +255,7 @@ export default function IntegrationsTab() {
               <button type="button" onClick={() => setSelectedType(null)} className="ml-auto text-xs text-primary-500 hover:text-primary-700 transition-colors">← Back</button>
             </div>
             {catalog.fields.map((f) => (
-              <div key={f.key}>
-                <label htmlFor={`int-${f.key}`} className="block text-sm font-medium text-text-secondary mb-1.5">{f.label}</label>
+              <SettingsField key={f.key} id={`int-${f.key}`} label={f.label}>
                 {f.options === "dynamic" ? (
                   <input
                     id={`int-${f.key}`}
@@ -284,7 +284,7 @@ export default function IntegrationsTab() {
                     required
                   />
                 )}
-              </div>
+              </SettingsField>
             ))}
             <div className="flex justify-end">
               <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
@@ -346,8 +346,7 @@ export default function IntegrationsTab() {
               <div className="border-t border-border pt-4 space-y-4">
                 <h3 className="text-sm font-semibold text-text">Configuration</h3>
                 {editCat.fields.map((f) => (
-                  <div key={f.key}>
-                    <label htmlFor={`edit-int-${f.key}`} className="block text-sm font-medium text-text-secondary mb-1.5">{f.label}</label>
+                  <SettingsField key={f.key} id={`edit-int-${f.key}`} label={f.label}>
                     {f.options === "dynamic" ? (
                       <input
                         id={`edit-int-${f.key}`}
@@ -376,7 +375,7 @@ export default function IntegrationsTab() {
                         required={!isPMType(editingIntg.type)}
                       />
                     )}
-                  </div>
+                  </SettingsField>
                 ))}
               </div>
 

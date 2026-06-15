@@ -3,6 +3,7 @@ import { usersApi, rolesApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
+import { SettingsField, SettingsTextField } from "../../components/SettingsField";
 import ComboBox from "../../components/ComboBox";
 import { inputCls, btnPrimary, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
 import { formatCardDateTime } from "../../utils/formatCardDate";
@@ -283,14 +284,8 @@ export default function UsersTab() {
       {/* Invite User Modal */}
       <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Add User">
         <form onSubmit={handleInvite} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Email <span className="text-danger-500">*</span></label>
-            <input type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} className={inputCls} placeholder="user@example.com" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Name <span className="text-danger-500">*</span></label>
-            <input type="text" value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} className={inputCls} placeholder="John Doe" required />
-          </div>
+          <SettingsTextField id="invite-email" label="Email" requiredMark required type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" />
+          <SettingsTextField id="invite-name" label="Name" requiredMark required type="text" value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Password <span className="text-danger-500">*</span></label>
             <div className="flex gap-2">
@@ -351,33 +346,30 @@ export default function UsersTab() {
               </div>
             )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Role <span className="text-danger-500">*</span></label>
+          <SettingsField label="Role" requiredMark>
             <ComboBox
               value={inviteForm.roleId}
               onChange={v => setInviteForm(f => ({ ...f, roleId: v }))}
               options={roles.map(r => ({ value: r.id, label: r.name }))}
               placeholder="Select role…"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Language <span className="text-danger-500">*</span></label>
+          </SettingsField>
+          <SettingsField label="Language" requiredMark>
             <ComboBox
               value={inviteForm.language}
               onChange={v => setInviteForm(f => ({ ...f, language: v }))}
               options={[["en","English"],["es","Spanish"],["it","Italian"]].map(([code, name]) => ({ value: code, label: name }))}
               placeholder="Select language…"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Timezone <span className="text-danger-500">*</span></label>
+          </SettingsField>
+          <SettingsField label="Timezone" requiredMark>
             <ComboBox
               value={inviteForm.timezone}
               onChange={v => setInviteForm(f => ({ ...f, timezone: v }))}
               options={Object.keys(tzToCountry).filter(tz => tz !== "UTC").concat(["UTC"]).sort((a, b) => a.localeCompare(b)).map(tz => ({ value: tz, label: tz.replace(/_/g, " ") }))}
               placeholder="Select timezone…"
             />
-          </div>
+          </SettingsField>
           {inviteError && <Alert variant="error">{inviteError}</Alert>}
           <div className="flex justify-end">
             <button type="submit" disabled={inviting || !inviteForm.roleId || !inviteForm.timezone || (!!inviteForm.password && !passwordValid)} className={`${btnPrimary} disabled:opacity-50`}>{inviting ? "Creating…" : "Add User"}</button>
@@ -388,16 +380,9 @@ export default function UsersTab() {
       {/* Edit User Modal */}
       <Modal open={!!editUser} onClose={() => setEditUser(null)} title={`Edit ${editUser?.name || "User"}`}>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Email</label>
-            <input type="text" value={editUser?.email || ""} readOnly className={`${inputCls} bg-secondary-50 text-text-muted cursor-default`} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Name <span className="text-danger-500">*</span></label>
-            <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Role <span className="text-danger-500">*</span></label>
+          <SettingsTextField id="edit-email" label="Email" type="text" value={editUser?.email || ""} readOnly className="bg-secondary-50 text-text-muted cursor-default" />
+          <SettingsTextField id="edit-name" label="Name" requiredMark type="text" value={editName} onChange={e => setEditName(e.target.value)} />
+          <SettingsField label="Role" requiredMark>
             <ComboBox
               value={editRoleId}
               onChange={v => setEditRoleId(v)}
@@ -415,25 +400,23 @@ export default function UsersTab() {
                 </div>
               );
             })()}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Language <span className="text-danger-500">*</span></label>
+          </SettingsField>
+          <SettingsField label="Language" requiredMark>
             <ComboBox
               value={editLanguage}
               onChange={v => setEditLanguage(v)}
               options={[["en","English"],["es","Spanish"],["it","Italian"]].map(([code, name]) => ({ value: code, label: name }))}
               placeholder="Select language…"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Timezone <span className="text-danger-500">*</span></label>
+          </SettingsField>
+          <SettingsField label="Timezone" requiredMark>
             <ComboBox
               value={editTimezone}
               onChange={v => setEditTimezone(v)}
               options={Object.keys(tzToCountry).filter(tz => tz !== "UTC").concat(["UTC"]).sort((a, b) => a.localeCompare(b)).map(tz => ({ value: tz, label: tz.replace(/_/g, " ") }))}
               placeholder="Select timezone…"
             />
-          </div>
+          </SettingsField>
           <SettingsModalFooter
             onDelete={editUser && canManage && !editUser.isOwner ? () => setConfirmDelete(true) : undefined}
             deleteAriaLabel={`Remove ${editUser?.name || editUser?.email || "user"}`}

@@ -5,6 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
 import { SearchableCombobox } from "../../components/ui/combobox";
+import { SettingsField, SettingsTextField } from "../../components/SettingsField";
 import { inputCls, btnPrimary } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
@@ -240,12 +241,8 @@ export default function SecurityRulesTab() {
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editingRule ? "Edit Rule" : "Add Custom Rule"}>
         <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Rule ID</label>
-            <input type="text" value={form.ruleId} onChange={e => setForm({ ...form, ruleId: e.target.value })} className={inputCls} placeholder="custom.category.name" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Severity</label>
+          <SettingsTextField id="rule-id" label="Rule ID" type="text" value={form.ruleId} onChange={e => setForm({ ...form, ruleId: e.target.value })} placeholder="custom.category.name" required />
+          <SettingsField label="Severity">
             <SearchableCombobox
               value={form.severity}
               onValueChange={(severity) => setForm({ ...form, severity })}
@@ -256,18 +253,13 @@ export default function SecurityRulesTab() {
               ]}
               placeholder="Select severity"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Message</label>
-            <input type="text" value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} className={inputCls} placeholder="Description of the vulnerability" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Regex Pattern</label>
+          </SettingsField>
+          <SettingsTextField id="rule-message" label="Message" type="text" value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} placeholder="Description of the vulnerability" required />
+          <SettingsField label="Regex Pattern">
             <input type="text" value={form.pattern} onChange={e => setForm({ ...form, pattern: e.target.value })} className={`${inputCls} font-mono text-xs`} placeholder="\beval\s*\(" required />
             <p className="text-xs text-text-muted mt-1">JavaScript regex syntax (flags gi applied automatically)</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">File Extensions</label>
+          </SettingsField>
+          <SettingsField label="File Extensions">
             <div className="flex flex-wrap gap-2">
               {([
                 { ext: ".php", icon: "php", label: "PHP" }, { ext: ".blade.php", icon: "php", label: "Blade" },
@@ -292,7 +284,7 @@ export default function SecurityRulesTab() {
                 );
               })}
             </div>
-          </div>
+          </SettingsField>
           {error && <p className="text-sm text-danger-500">{error}</p>}
           <div className="flex justify-end">
             <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>{saving ? "Saving…" : editingRule ? "Update" : "Create"}</button>
@@ -867,17 +859,13 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
       {/* Create Rule Modal */}
       <Modal open={adding} onClose={onAddingDone} title="Add Semgrep Rule" size="xl">
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Rule ID</label>
-            <input type="text" value={newRuleId} onChange={e => setNewRuleId(e.target.value)} className={inputCls + " font-mono text-xs"} placeholder="custom.my-rule" required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Rule YAML</label>
+          <SettingsTextField id="semgrep-rule-id" label="Rule ID" type="text" value={newRuleId} onChange={e => setNewRuleId(e.target.value)} className="font-mono text-xs" placeholder="custom.my-rule" required />
+          <SettingsField label="Rule YAML">
             <YamlEditor value={newRuleContent} onChange={setNewRuleContent} height="400px" />
             <p className="text-xs text-text-muted mt-1">
               Required fields: <code className="text-xs">id</code>, <code className="text-xs">message</code>, <code className="text-xs">severity</code> (WARNING, ERROR, INFO), <code className="text-xs">languages</code>, and one of <code className="text-xs">pattern</code> / <code className="text-xs">patterns</code> / <code className="text-xs">pattern-either</code> / <code className="text-xs">pattern-regex</code>
             </p>
-          </div>
+          </SettingsField>
           {newRuleError && <p className="text-sm text-danger-500">{newRuleError}</p>}
           <div className="flex justify-end gap-2">
             <button onClick={onAddingDone} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Cancel</button>

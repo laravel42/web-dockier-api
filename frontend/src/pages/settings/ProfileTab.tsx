@@ -4,7 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../context/PermissionsContext";
 import { countries } from "../../data/countries";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary } from "../../utils/styles";
+import { SettingsField, SettingsTextField } from "../../components/SettingsField";
+import { btnPrimary } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import Alert from "../../components/ui/Alert";
 import { getErrorMessage } from "../../utils/errors";
@@ -172,16 +173,9 @@ export default function ProfileTab() {
           {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="profile-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
-                <input id="profile-name" type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
-              </div>
-              <div>
-                <label htmlFor="profile-email" className="block text-sm font-medium text-text-secondary mb-1.5">Email</label>
-                <input id="profile-email" type="email" value={email} className={`${inputCls} bg-secondary-50 text-text-muted cursor-not-allowed`} readOnly />
-              </div>
-              <div>
-                <label htmlFor="profile-country" className="block text-sm font-medium text-text-secondary mb-1.5">Country</label>
+              <SettingsTextField id="profile-name" label="Name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+              <SettingsTextField id="profile-email" label="Email" type="email" value={email} className="bg-secondary-50 text-text-muted cursor-not-allowed" readOnly />
+              <SettingsField id="profile-country" label="Country">
                 <SearchableCombobox
                   id="profile-country"
                   value={country}
@@ -190,9 +184,8 @@ export default function ProfileTab() {
                   placeholder="Select country"
                   searchPlaceholder="Search countries…"
                 />
-              </div>
-              <div>
-                <label htmlFor="profile-language" className="block text-sm font-medium text-text-secondary mb-1.5">Language</label>
+              </SettingsField>
+              <SettingsField id="profile-language" label="Language">
                 <SearchableCombobox
                   id="profile-language"
                   value={language}
@@ -201,9 +194,8 @@ export default function ProfileTab() {
                   placeholder="Select language"
                   searchPlaceholder="Search languages…"
                 />
-              </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="profile-timezone" className="block text-sm font-medium text-text-secondary mb-1.5">Timezone</label>
+              </SettingsField>
+              <SettingsField id="profile-timezone" label="Timezone" className="sm:col-span-2">
                 <SearchableCombobox
                   id="profile-timezone"
                   value={timezone}
@@ -216,7 +208,7 @@ export default function ProfileTab() {
                   placeholder="Select timezone"
                   searchPlaceholder="Search timezones…"
                 />
-              </div>
+              </SettingsField>
             </div>
             <div className="flex justify-end pt-2">
               <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
@@ -237,107 +229,81 @@ export default function ProfileTab() {
                 {billingMessage && <Alert variant={billingMessageVariant} className="mb-4">{billingMessage}</Alert>}
                 <form onSubmit={handleSaveBilling} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="billing-company" className="block text-sm font-medium text-text-secondary mb-1.5">Company name</label>
-                      <input
-                        id="billing-company"
-                        type="text"
-                        value={billing.companyName}
-                        onChange={(e) => setBilling((b) => ({ ...b, companyName: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-legal" className="block text-sm font-medium text-text-secondary mb-1.5">Legal name</label>
-                      <input
-                        id="billing-legal"
-                        type="text"
-                        value={billing.legalName}
-                        onChange={(e) => setBilling((b) => ({ ...b, legalName: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-tax-id" className="block text-sm font-medium text-text-secondary mb-1.5">Tax / VAT ID</label>
-                      <input
-                        id="billing-tax-id"
-                        type="text"
-                        value={billing.taxId}
-                        onChange={(e) => setBilling((b) => ({ ...b, taxId: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-email" className="block text-sm font-medium text-text-secondary mb-1.5">Billing email</label>
-                      <input
-                        id="billing-email"
-                        type="email"
-                        value={billing.billingEmail}
-                        onChange={(e) => setBilling((b) => ({ ...b, billingEmail: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label htmlFor="billing-address-1" className="block text-sm font-medium text-text-secondary mb-1.5">Address line 1</label>
-                      <input
-                        id="billing-address-1"
-                        type="text"
-                        value={billing.addressLine1}
-                        onChange={(e) => setBilling((b) => ({ ...b, addressLine1: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label htmlFor="billing-address-2" className="block text-sm font-medium text-text-secondary mb-1.5">Address line 2</label>
-                      <input
-                        id="billing-address-2"
-                        type="text"
-                        value={billing.addressLine2}
-                        onChange={(e) => setBilling((b) => ({ ...b, addressLine2: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-city" className="block text-sm font-medium text-text-secondary mb-1.5">City</label>
-                      <input
-                        id="billing-city"
-                        type="text"
-                        value={billing.city}
-                        onChange={(e) => setBilling((b) => ({ ...b, city: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-state" className="block text-sm font-medium text-text-secondary mb-1.5">State / Province</label>
-                      <input
-                        id="billing-state"
-                        type="text"
-                        value={billing.state}
-                        onChange={(e) => setBilling((b) => ({ ...b, state: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-postal" className="block text-sm font-medium text-text-secondary mb-1.5">Postal code</label>
-                      <input
-                        id="billing-postal"
-                        type="text"
-                        value={billing.postalCode}
-                        onChange={(e) => setBilling((b) => ({ ...b, postalCode: e.target.value }))}
-                        className={inputCls}
-                        disabled={!canManageBilling}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="billing-country" className="block text-sm font-medium text-text-secondary mb-1.5">Country</label>
+                    <SettingsTextField
+                      id="billing-company"
+                      label="Company name"
+                      type="text"
+                      value={billing.companyName}
+                      onChange={(e) => setBilling((b) => ({ ...b, companyName: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsTextField
+                      id="billing-legal"
+                      label="Legal name"
+                      type="text"
+                      value={billing.legalName}
+                      onChange={(e) => setBilling((b) => ({ ...b, legalName: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsTextField
+                      id="billing-tax-id"
+                      label="Tax / VAT ID"
+                      type="text"
+                      value={billing.taxId}
+                      onChange={(e) => setBilling((b) => ({ ...b, taxId: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsTextField
+                      id="billing-email"
+                      label="Billing email"
+                      type="email"
+                      value={billing.billingEmail}
+                      onChange={(e) => setBilling((b) => ({ ...b, billingEmail: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsTextField
+                      id="billing-address-1"
+                      label="Address line 1"
+                      type="text"
+                      value={billing.addressLine1}
+                      onChange={(e) => setBilling((b) => ({ ...b, addressLine1: e.target.value }))}
+                      disabled={!canManageBilling}
+                      containerClassName="sm:col-span-2"
+                    />
+                    <SettingsTextField
+                      id="billing-address-2"
+                      label="Address line 2"
+                      type="text"
+                      value={billing.addressLine2}
+                      onChange={(e) => setBilling((b) => ({ ...b, addressLine2: e.target.value }))}
+                      disabled={!canManageBilling}
+                      containerClassName="sm:col-span-2"
+                    />
+                    <SettingsTextField
+                      id="billing-city"
+                      label="City"
+                      type="text"
+                      value={billing.city}
+                      onChange={(e) => setBilling((b) => ({ ...b, city: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsTextField
+                      id="billing-state"
+                      label="State / Province"
+                      type="text"
+                      value={billing.state}
+                      onChange={(e) => setBilling((b) => ({ ...b, state: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsTextField
+                      id="billing-postal"
+                      label="Postal code"
+                      type="text"
+                      value={billing.postalCode}
+                      onChange={(e) => setBilling((b) => ({ ...b, postalCode: e.target.value }))}
+                      disabled={!canManageBilling}
+                    />
+                    <SettingsField id="billing-country" label="Country">
                       <SearchableCombobox
                         id="billing-country"
                         value={billing.country}
@@ -347,7 +313,7 @@ export default function ProfileTab() {
                         searchPlaceholder="Search countries…"
                         disabled={!canManageBilling}
                       />
-                    </div>
+                    </SettingsField>
                   </div>
                   {canManageBilling && (
                     <div className="flex justify-end pt-2">
@@ -387,20 +353,17 @@ export default function ProfileTab() {
               </p>
             </div>
             <form onSubmit={handleEnable2FA} className="space-y-3">
-              <div>
-                <label htmlFor="verify-token" className="block text-sm font-medium text-text-secondary mb-1.5">Verification Code</label>
-                <input
-                  id="verify-token"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={verifyToken}
-                  onChange={(e) => setVerifyToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  className={inputCls}
-                  placeholder="Enter 6-digit code"
-                  required
-                />
-              </div>
+              <SettingsTextField
+                id="verify-token"
+                label="Verification Code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={verifyToken}
+                onChange={(e) => setVerifyToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="Enter 6-digit code"
+                required
+              />
               <div className="flex justify-end">
                 <button
                   type="submit"
