@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
-import type { Database } from "../../shared/supabase/types.js";
+import type { Database, Json } from "../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "./domain/mr-generator.js";
@@ -97,6 +97,42 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
    */
   async function requireConnection(connectionId: string, tenantId: string) {
     return await getConnectionForTenant(connectionId, tenantId);
+  }
+
+  /**
+   * Delete cached rows for a tenant, optionally scoped to a repo and/or branch.
+   * Backs the cache-invalidation endpoints (stats/stack/analysis).
+   */
+  async function invalidateCache(
+    table: "stats_cache" | "stack_cache" | "analysis_cache",
+    tenantId: string,
+    filters: { repo?: string; branch?: string },
+  ): Promise<void> {
+    let del = db.from(table).delete().eq("organization_id", tenantId);
+    if (filters.repo) del = del.eq("repo", filters.repo);
+    if (filters.branch) del = del.eq("branch", filters.branch);
+    await del;
+  }
+
+  /**
+   * Upsert a repo-scoped cache row (stats/stack) keyed by tenant + repo + branch.
+   */
+  async function writeRepoCache(
+    table: "stats_cache" | "stack_cache",
+    params: { tenantId: string; repoKey: string; branch: string; projectId?: string; result: Json },
+  ): Promise<void> {
+    await db.from(table).upsert(
+      {
+        id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
+        repo: params.repoKey,
+        branch: params.branch,
+        result: params.result,
+        created_at: new Date().toISOString(),
+        organization_id: params.tenantId,
+        project_id: params.projectId ?? "",
+      },
+      { onConflict: "organization_id,repo,branch" },
+    );
   }
 
   typed.post(
@@ -316,7 +352,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
   );
 
-  app.delete(
+  typed.delete(
     "/git/stats-cache",
     {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
@@ -327,17 +363,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         response: { 200: z.object({ done: z.literal(true) }) },
       },
     },
-    async (request: any) => {
-      const auth = request.auth!;
-      const query = request.query as { repo: string; branch?: string };
-      let del = db.from("stats_cache").delete().eq("organization_id", auth.tenantId).eq("repo", query.repo);
-      if (query.branch) del = del.eq("branch", query.branch);
-      await del;
+    async (request) => {
+      await invalidateCache("stats_cache", request.auth!.tenantId, request.query);
       return { done: true as const };
     },
   );
 
-  app.delete(
+  typed.delete(
     "/git/stack-cache",
     {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
@@ -348,17 +380,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         response: { 200: z.object({ done: z.literal(true) }) },
       },
     },
-    async (request: any) => {
-      const auth = request.auth!;
-      const query = request.query as { repo: string; branch?: string };
-      let del = db.from("stack_cache").delete().eq("organization_id", auth.tenantId).eq("repo", query.repo);
-      if (query.branch) del = del.eq("branch", query.branch);
-      await del;
+    async (request) => {
+      await invalidateCache("stack_cache", request.auth!.tenantId, request.query);
       return { done: true as const };
     },
   );
 
-  app.delete(
+  typed.delete(
     "/git/analysis-cache",
     {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
@@ -369,12 +397,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         response: { 200: z.object({ deleted: z.literal(true) }) },
       },
     },
-    async (request: any) => {
-      const auth = request.auth!;
-      let del = db.from("analysis_cache").delete().eq("organization_id", auth.tenantId);
-      if (request.query.repo) del = del.eq("repo", request.query.repo);
-      if (request.query.branch) del = del.eq("branch", request.query.branch);
-      await del;
+    async (request) => {
+      await invalidateCache("analysis_cache", request.auth!.tenantId, request.query);
       return { deleted: true as const };
     },
   );
@@ -709,18 +733,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       }
 
       if (!isPlaceholderStats(stats)) {
-        await db.from("stats_cache").upsert(
-        {
-          id: auth.tenantId + ":" + repoKey + ":" + branch,
-          repo: repoKey,
+        await writeRepoCache("stats_cache", {
+          tenantId: auth.tenantId,
+          repoKey,
           branch,
+          projectId: request.query.projectId,
           result: stats,
-          created_at: new Date().toISOString(),
-          organization_id: auth.tenantId,
-          project_id: request.query.projectId ?? "",
-        },
-        { onConflict: "organization_id,repo,branch" },
-        );
+        });
       }
       return stats;
     },
@@ -775,18 +794,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           fileCount: count,
         }));
       const stack = { components };
-      await db.from("stack_cache").upsert(
-        {
-          id: auth.tenantId + ":" + repoKey + ":" + branch,
-          repo: repoKey,
-          branch,
-          result: stack,
-          created_at: new Date().toISOString(),
-          organization_id: auth.tenantId,
-          project_id: request.query.projectId ?? "",
-        },
-        { onConflict: "organization_id,repo,branch" },
-      );
+      await writeRepoCache("stack_cache", {
+        tenantId: auth.tenantId,
+        repoKey,
+        branch,
+        projectId: request.query.projectId,
+        result: stack,
+      });
       return { stack, cached: false };
     },
   );
