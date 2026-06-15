@@ -6,6 +6,9 @@ node_modules
 .DS_Store
 backend/dist
 
+# Test coverage reports
+coverage/
+
 # Playwright
 frontend/test-results/
 frontend/playwright-report/

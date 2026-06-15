@@ -67,7 +67,7 @@ export default function Notifications() {
                       })}
                     </time>
                   </div>
-                  <p className="text-xs text-text-muted mt-0.5 leading-snug">{n.message}</p>
+                  <p className="text-xs/snug text-text-muted mt-0.5 ">{n.message}</p>
                 </div>
                 {!n.read && (
                   <button type="button" onClick={() => markRead(n.id)} className={`${btnLink} shrink-0 text-xs`}>

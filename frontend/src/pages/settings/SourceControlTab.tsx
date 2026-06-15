@@ -5,7 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";

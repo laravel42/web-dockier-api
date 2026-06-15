@@ -3,7 +3,7 @@ import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { inputCls, btnPrimary, typeCaption, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, btnPrimary, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -56,17 +56,6 @@ export default function SshKeysTab() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const truncateKey = (key: string) => {
-    const parts = key.split(/\s+/);
-    if (parts.length >= 2) {
-      const type = parts[0];
-      const b64 = parts[1];
-      const comment = parts[2] || "";
-      return `${type} ${b64.slice(0, 20)}...${b64.slice(-8)}${comment ? ` ${comment}` : ""}`;
-    }
-    return key.length > 60 ? key.slice(0, 60) + "..." : key;
   };
 
   const keyType = (key: string) => key.trim().split(/\s+/)[0] || "ssh";
