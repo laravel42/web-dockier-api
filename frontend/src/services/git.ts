@@ -1,6 +1,9 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-import type { Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult } from "../types";
+import type {
+  Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult,
+  RepoAnalysisResponse, StackAnalysisResponse, SensitiveDataAnalysis,
+} from "../types";
 
 export const gitApi = {
   listConnections: () =>
@@ -41,90 +44,7 @@ export const gitApi = {
     request<RepoStats>(`/git/connections/${connectionId}/repo-stats${buildQuery({ owner, repo, branch, projectId })}`),
 
   analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string, aiType?: string, projectId?: string) =>
-    request<{
-      techStack: TechBadgeInfo[];
-      deployOptions: Array<{
-        provider: string;
-        type: string;
-        description: string;
-        pros: string[];
-        cons: string[];
-        estimatedMonthlyCost: string;
-        bestFor: string;
-      }>;
-      detectedServices: Array<{
-        type: string;
-        name: string;
-        provider: string;
-        confidence: number;
-        configFile?: string;
-      }>;
-      repoSize: number;
-      primaryLanguage: string;
-      hasDocker: boolean;
-      hasCi: boolean;
-      aiAnalysis?: {
-        runtime: string;
-        runtimeVersion: string;
-        framework: string;
-        frameworkVersion: string;
-        phpExtensions?: string[];
-        nodeVersion?: string;
-        buildCommand: string;
-        startCommand: string;
-        port: number;
-        needsScheduler: boolean;
-        needsQueueWorker: boolean;
-        needsWebsockets: boolean;
-        envVars: string[];
-        postDeployCommands: string[];
-        nginxConfig: "php-fpm" | "reverse-proxy" | "static";
-        summary: string;
-        description?: string;
-        sections?: {
-          overview: string;
-          howItWorks: string;
-          techStack: string;
-          architecture: string;
-          dataStorage: string;
-          codeQuality: string;
-          security: string;
-          deployment: string;
-        };
-        deployOptions?: Array<{
-          provider: string;
-          type: string;
-          description: string;
-          pros: string[];
-          cons: string[];
-          estimatedMonthlyCost: string;
-          bestFor: string;
-        }>;
-      };
-      sensitiveData?: Array<{
-        entity: string;
-        field: string;
-        sensitivity: "personal" | "sensitive" | "secret";
-        reason: string;
-      }>;
-      dependencies?: Array<{
-        name: string;
-        version: string;
-        type: "production" | "dev";
-        ecosystem: "npm" | "composer" | "pip" | "gem" | "go" | "cargo";
-        repoUrl: string;
-        latestVersion?: string;
-        status: "active" | "outdated" | "deprecated" | "unknown";
-        vulnerabilities: Array<{
-          id: string;
-          severity: "critical" | "high" | "medium" | "low";
-          title: string;
-          details: string;
-          aliases: string[];
-          url: string;
-        }>;
-      }>;
-    }>(`/git/connections/${connectionId}/repo-analyze${buildQuery({ owner, repo, branch, aiType, projectId })}`),
+    request<RepoAnalysisResponse>(`/git/connections/${connectionId}/repo-analyze${buildQuery({ owner, repo, branch, aiType, projectId })}`),
 
   getRepoTree: (connectionId: string, owner: string, repo: string, branch?: string) =>
     request<{
@@ -176,22 +96,7 @@ export const gitApi = {
     }),
 
   getStackAnalysis: (connectionId: string, owner: string, repo: string, branch?: string, projectId?: string) =>
-    request<{
-      stack: {
-        components: Array<{
-          id: string;
-          name: string;
-          path: string[];
-          tech: string | null;
-          techs: string[];
-          languages: Record<string, number>;
-          dependencies: Array<{ ecosystem: string; name: string; version: string }>;
-          edges: Array<{ target: string; read: boolean; write: boolean }>;
-          childs: Array<unknown>;
-        }>;
-      } | null;
-      cached: boolean;
-    }>(`/git/connections/${connectionId}/stack-analysis${buildQuery({ owner, repo, branch, projectId })}`),
+    request<StackAnalysisResponse>(`/git/connections/${connectionId}/stack-analysis${buildQuery({ owner, repo, branch, projectId })}`),
 
   invalidateStackCache: (repo: string, branch?: string) =>
     request<{ done: boolean }>(`/git/stack-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
@@ -214,25 +119,7 @@ export const gitApi = {
     ),
 
   analyzeSensitiveData: (schema: string, projectId?: string) =>
-    request<{
-      tables: Array<{
-        name: string;
-        riskScore: number;
-        columns: Array<{
-          name: string;
-          type: string;
-          category: string;
-          sensitivity: string;
-          reason: string;
-          confidence: number;
-        }>;
-      }>;
-      summary: {
-        totalTables: number;
-        highRiskTables: number;
-        criticalFindings: string[];
-      };
-    }>("/git/analyze-sensitive-data", {
+    request<SensitiveDataAnalysis>("/git/analyze-sensitive-data", {
       method: "POST",
       body: JSON.stringify({ schema, projectId }),
     }),
