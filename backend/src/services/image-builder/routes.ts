@@ -278,8 +278,9 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           credentials,
           logger: { debug: (msg: string) => app.log.debug(msg) },
         });
-      } catch (err: any) {
-        app.log.debug(`deploy-status error: ${err.message}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        app.log.debug(`deploy-status error: ${message}`);
         if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
         return { status: "deploying", appUrl: "", stackName };
       }
@@ -328,8 +329,9 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           commands: request.body.commands,
           credentials,
         });
-      } catch (err: any) {
-        throw app.httpErrors.preconditionFailed(err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw app.httpErrors.preconditionFailed(message);
       }
     },
   );

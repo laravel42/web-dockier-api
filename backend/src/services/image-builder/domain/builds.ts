@@ -92,13 +92,14 @@ export async function createBuild(params: CreateBuildParams) {
       deployTarget: params.deployTarget ?? "",
       deployParams: params.deployParams ?? {},
     });
-  } catch (enqueueError: any) {
+  } catch (enqueueError: unknown) {
+    const message = enqueueError instanceof Error ? enqueueError.message : String(enqueueError);
     await supabaseAdmin.from("builds").update({
       status: "failed",
-      status_reason: `Failed to enqueue build job: ${enqueueError.message}`,
+      status_reason: `Failed to enqueue build job: ${message}`,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
-    throw new ImageBuilderError(`Failed to start build pipeline: ${enqueueError.message}`, "internal");
+    throw new ImageBuilderError(`Failed to start build pipeline: ${message}`, "internal");
   }
 
   return rowToBuild(payload);

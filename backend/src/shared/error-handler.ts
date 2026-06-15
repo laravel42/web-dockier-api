@@ -5,7 +5,7 @@
  * codes to consistent HTTP error responses across all service route files.
  */
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyError, FastifyInstance } from "fastify";
 import { DomainError } from "./supabase/errors.js";
 
 /**
@@ -54,7 +54,8 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
     // For Fastify HTTP errors (from @fastify/sensible) and validation errors,
     // preserve their status code and send the standard error response shape.
     // Log at warn level for client errors (4xx), error level for server errors (5xx).
-    const statusCode = (error as any).statusCode as number | undefined;
+    const fastifyError = error as FastifyError;
+    const statusCode = fastifyError.statusCode;
     if (statusCode) {
       if (statusCode >= 500) {
         request.log.error({ err: error }, error.message);
@@ -63,8 +64,8 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
       }
 
       // Preserve validation details for schema validation errors
-      const validation = (error as any).validation;
-      const validationContext = (error as any).validationContext;
+      const validation = fastifyError.validation;
+      const validationContext = fastifyError.validationContext;
       if (validation) {
         return reply.status(statusCode).send({
           statusCode,
