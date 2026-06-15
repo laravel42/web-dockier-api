@@ -2,6 +2,7 @@ import pg from "pg";
 import { getQueue, SECURITY_SCAN_QUEUE } from "../../../shared/queue.js";
 import { getPostgresConnectionConfig } from "../../../shared/postgres.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { logger } from "../../../shared/logger.js";
 
 interface ActiveJobRow {
   id: string;
@@ -71,9 +72,9 @@ export async function reconcileStaleScanJobs(): Promise<number> {
     try {
       await queue.cancel(SECURITY_SCAN_QUEUE, job.id);
       cancelled++;
-      console.log(`[security-scan] Cancelled stale active job ${job.id} (scan ${scanId.slice(0, 8)})`);
+      logger.info(`[security-scan] Cancelled stale active job ${job.id} (scan ${scanId.slice(0, 8)})`);
     } catch (err) {
-      console.error(`[security-scan] Failed to cancel job ${job.id}:`, err);
+      logger.error({ err }, `[security-scan] Failed to cancel job ${job.id}`);
     }
   }
 

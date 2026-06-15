@@ -10,6 +10,7 @@
 
 import { PgBoss } from "pg-boss";
 import { getPostgresConnectionConfig } from "./postgres.js";
+import { logger } from "./logger.js";
 
 let boss: PgBoss | null = null;
 let queueStarted = false;
@@ -30,7 +31,7 @@ export function getQueue(): PgBoss | null {
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.warn("[queue] DATABASE_URL not set — job queue disabled, falling back to in-process execution");
+    logger.warn("[queue] DATABASE_URL not set — job queue disabled, falling back to in-process execution");
     return null;
   }
 
@@ -49,7 +50,7 @@ export function getQueue(): PgBoss | null {
   });
 
   boss.on("error", (err: Error) => {
-    console.error("[queue] pg-boss error:", err);
+    logger.error({ err }, "[queue] pg-boss error");
   });
 
   return boss;
@@ -70,11 +71,11 @@ export async function startQueue(): Promise<boolean> {
   try {
     await queue.start();
     queueStarted = true;
-    console.log("[queue] pg-boss started");
+    logger.info("[queue] pg-boss started");
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
+    logger.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
     queueInitFailed = true;
     queueStarted = false;
     await queue.stop().catch(() => {});
@@ -91,7 +92,7 @@ export async function stopQueue(): Promise<void> {
   await boss.stop({ graceful: true, timeout: 30_000 });
   boss = null;
   queueStarted = false;
-  console.log("[queue] pg-boss stopped");
+  logger.info("[queue] pg-boss stopped");
 }
 
 // ─── Queue Names ───────────────────────────────────────────────────
@@ -159,18 +160,18 @@ export function createWorker<T>(
           if (!job) continue;
           const input = job.data as T;
           const jobId = job.id as string;
-          console.log(`[${queueName}] Processing job ${jobId}`);
+          logger.info(`[${queueName}] Processing job ${jobId}`);
           try {
             await handler(input);
-            console.log(`[${queueName}] Completed job ${jobId}`);
+            logger.info(`[${queueName}] Completed job ${jobId}`);
           } catch (err) {
-            console.error(`[${queueName}] Failed job ${jobId}:`, err);
+            logger.error({ err }, `[${queueName}] Failed job ${jobId}`);
             throw err; // re-throw so pg-boss marks it failed and retries
           }
         }
       });
 
-      console.log(`[${queueName}] Worker registered`);
+      logger.info(`[${queueName}] Worker registered`);
     } catch (err) {
       registered = false;
       throw err;
@@ -184,14 +185,14 @@ export function createWorker<T>(
         expireInSeconds,
         ...(singletonKey ? { singletonKey } : {}),
       });
-      console.log(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+      logger.info(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
       return;
     }
 
-    console.warn(`[${queueName}] Queue unavailable — running job in-process${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+    logger.warn(`[${queueName}] Queue unavailable — running job in-process${singletonKey ? ` (key: ${singletonKey})` : ""}`);
     setImmediate(() => {
       handler(input).catch((err) => {
-        console.error(`[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}:`, err);
+        logger.error({ err }, `[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}`);
       });
     });
   }

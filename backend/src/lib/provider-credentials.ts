@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from "../shared/supabase/client.js";
+import { logger } from "../shared/logger.js";
 
 export interface ResolvedCredentials {
   accessKeyId: string;
@@ -30,7 +31,7 @@ export async function resolveAwsCredentials(providerId: string): Promise<Resolve
     .maybeSingle();
 
   if (error) {
-    console.warn(`Failed to fetch provider credentials for ${providerId}: ${error.message}`);
+    logger.warn(`Failed to fetch provider credentials for ${providerId}: ${error.message}`);
     return null;
   }
 

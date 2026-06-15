@@ -1,3 +1,5 @@
+import { logger } from "../logger.js";
+
 export function applyEnvRecord(
   record: Record<string, unknown>,
   source: string,
@@ -15,7 +17,7 @@ export function applyEnvRecord(
   }
 
   if (applied > 0) {
-    console.log(`[env] Applied ${applied} variable(s) from ${source}`);
+    logger.info(`[env] Applied ${applied} variable(s) from ${source}`);
   }
 }
 

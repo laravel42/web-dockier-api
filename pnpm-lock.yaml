@@ -114,6 +114,9 @@ importers:
       pg-boss:
         specifier: ^12.18.2
         version: 12.18.2
+      pino:
+        specifier: 10.3.1
+        version: 10.3.1
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4

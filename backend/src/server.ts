@@ -1,4 +1,5 @@
 import { initConfig } from "./shared/config.js";
+import { logger } from "./shared/logger.js";
 
 async function start() {
   await initConfig();
@@ -7,6 +8,6 @@ async function start() {
 }
 
 start().catch((error) => {
-  console.error(error);
+  logger.error({ err: error }, "Server error");
   process.exit(1);
 });

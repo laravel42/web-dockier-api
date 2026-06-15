@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { cloneRepo } from "../../../lib/build-pipeline.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
+import { logger as obsLogger } from "../../../shared/logger.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../git-integration/domain/connections.js";
@@ -81,7 +82,7 @@ function startScanHeartbeat(
       currentFile: withElapsed(base.currentFile ?? "Working", startedAt),
     }).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
-      console.error("[scan] Heartbeat progress persist failed: " + message);
+      obsLogger.error("[scan] Heartbeat progress persist failed: " + message);
     });
   }, HEARTBEAT_INTERVAL_MS);
   return () => clearInterval(interval);
@@ -445,7 +446,7 @@ async function markScanFailed(scanId: string, message: string): Promise<void> {
       updated_at: new Date().toISOString(),
     })
     .eq("id", scanId);
-  if (error) console.error(`[scan] Failed to mark scan ${scanId} as failed:`, error.message);
+  if (error) obsLogger.error({ err: error.message }, `[scan] Failed to mark scan ${scanId} as failed`);
   broadcastScanStatus(scanId, "failed", summary);
 }
 
@@ -698,7 +699,7 @@ export async function executeScan(
       title: "Security scan completed",
       message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${findings.length} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).`,
     }).catch((err) => {
-      console.error(`[scan] Failed to send scan complete notification for ${scanId}:`, err);
+      obsLogger.error({ err }, `[scan] Failed to send scan complete notification for ${scanId}`);
     });
 
     await logger.success(

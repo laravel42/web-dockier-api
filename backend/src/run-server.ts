@@ -1,5 +1,6 @@
 import { buildApp, type ServiceName } from "./app.js";
 import { env } from "./shared/config.js";
+import { logger } from "./shared/logger.js";
 import { startQueue, stopQueue } from "./shared/queue.js";
 import { registerDeployWorker } from "./services/deploy/domain/worker.js";
 import { registerImageBuildWorker } from "./services/image-builder/domain/worker.js";
@@ -16,30 +17,30 @@ export async function runServer(): Promise<void> {
   if (queueReady) {
     const staleJobs = await reconcileStaleScanJobs();
     if (staleJobs > 0) {
-      console.log(`[scan] Cancelled ${staleJobs} stale queue job(s) on startup`);
+      logger.info(`[scan] Cancelled ${staleJobs} stale queue job(s) on startup`);
     }
     await registerDeployWorker();
     await registerImageBuildWorker();
     await registerScanWorker();
   } else {
-    console.warn("[queue] Skipping worker registration — queue unavailable");
+    logger.warn("[queue] Skipping worker registration — queue unavailable");
   }
 
   try {
     await seedCustomRules();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[scan] Custom rule seed skipped: ${message}`);
+    logger.warn(`[scan] Custom rule seed skipped: ${message}`);
   }
 
   try {
     const staleScans = await reconcileAllStaleScans();
     if (staleScans > 0) {
-      console.log(`[scan] Reconciled ${staleScans} stale scan(s) on startup`);
+      logger.info(`[scan] Reconciled ${staleScans} stale scan(s) on startup`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[scan] Stale scan reconciliation skipped: ${message}`);
+    logger.warn(`[scan] Stale scan reconciliation skipped: ${message}`);
   }
 
   await app.listen({
@@ -47,7 +48,7 @@ export async function runServer(): Promise<void> {
     host: "0.0.0.0",
   });
 
-  console.log(`\n🚀 Backend v2025-05-18-C — server running on port ${env.PORT} (service: ${serviceName})\n`);
+  logger.info(`\n🚀 Backend v2025-05-18-C — server running on port ${env.PORT} (service: ${serviceName})\n`);
 
   const shutdown = async () => {
     await app.close();

@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, parseSummary } from "./mappers.js";
 import { broadcastScanStatus } from "./scan-progress.js";
+import { logger } from "../../../shared/logger.js";
 
 /** Running scans must heartbeat within this window (see scan-worker). */
 const RUNNING_HEARTBEAT_STALE_MS = 90 * 1000;
@@ -49,12 +50,12 @@ async function failStaleScan(scanId: string, message: string): Promise<void> {
     .in("status", ["running", "pending"]);
 
   if (error) {
-    console.error(`[scan] Failed to reconcile stale scan ${scanId}:`, error.message);
+    logger.error({ err: error.message }, `[scan] Failed to reconcile stale scan ${scanId}`);
     return;
   }
 
   broadcastScanStatus(scanId, "failed", summary);
-  console.log(`[scan] Reconciled stale scan ${scanId} → failed`);
+  logger.info(`[scan] Reconciled stale scan ${scanId} → failed`);
 }
 
 export async function reconcileStaleScanById(scanId: string): Promise<boolean> {

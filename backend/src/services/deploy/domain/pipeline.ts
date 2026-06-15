@@ -10,6 +10,7 @@
  */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { logger as obsLogger } from "../../../shared/logger.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createDeployLogger, BuildError } from "../../../lib/logging.js";
 import { patchDockerfile, toDetectedStack } from "../../../lib/repo-analyzer/index.js";
@@ -399,7 +400,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       title: "Deployment succeeded",
       message: deployMessage,
     }).catch((err) => {
-      console.error(`[deploy] Failed to send deploy complete notification for ${deploymentId}:`, err);
+      obsLogger.error({ err }, `[deploy] Failed to send deploy complete notification for ${deploymentId}`);
     });
 
     // Cleanup work directory

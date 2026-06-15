@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ScanFindingInput } from "./scan-analysis.js";
 import { sonarExclusionGlobs } from "./scan-skip-dirs.js";
+import { logger } from "../../../shared/logger.js";
 
 export interface SonarConfig {
   baseUrl: string;
@@ -288,7 +289,7 @@ export async function runSonarScanner(
   projectKey: string,
   deps: RunSonarScannerDeps = {},
 ): Promise<ScanFindingInput[]> {
-  const log = deps.log ?? ((message: string) => console.log(`[sonar] ${message}`));
+  const log = deps.log ?? ((message: string) => logger.info(`[sonar] ${message}`));
 
   const config = getSonarConfig();
   if (!config) {

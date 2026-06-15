@@ -2,6 +2,8 @@
  * AI-powered security finding remediation using OpenAI.
  */
 
+import { logger } from "../../../shared/logger.js";
+
 export interface GenerateCodeFixInput {
   filePath: string;
   fileContent: string;
@@ -43,7 +45,7 @@ async function callOpenAI(
 
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    console.error(`[AI-Fix] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
+    logger.error(`[AI-Fix] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
     return null;
   }
 
@@ -53,14 +55,14 @@ async function callOpenAI(
   const text = data.choices?.[0]?.message?.content?.trim() || "";
 
   if (data.choices?.[0]?.finish_reason === "length") {
-    console.error(`[AI-Fix] Response truncated (${text.length} chars)`);
+    logger.error(`[AI-Fix] Response truncated (${text.length} chars)`);
     return null;
   }
 
   try {
     return JSON.parse(text) as CodeFixResponse;
   } catch (e: unknown) {
-    console.error(`[AI-Fix] JSON parse failed: ${(e as Error).message}`);
+    logger.error(`[AI-Fix] JSON parse failed: ${(e as Error).message}`);
     return null;
   }
 }

@@ -3,6 +3,7 @@ import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./plann
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
+import { logger } from "../../../shared/logger.js";
 import type { ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
@@ -147,7 +148,7 @@ export async function applyDeploymentWebhookUpdate(
       title: "Deployment succeeded",
       message,
     }).catch((err) => {
-      console.error(`[deploy] Failed to send deploy webhook notification for ${buildId}:`, err);
+      logger.error({ err }, `[deploy] Failed to send deploy webhook notification for ${buildId}`);
     });
   }
 }

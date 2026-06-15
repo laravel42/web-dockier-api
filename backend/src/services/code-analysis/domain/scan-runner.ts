@@ -4,6 +4,7 @@
  */
 
 import { initConfig } from "../../../shared/config.js";
+import { logger } from "../../../shared/logger.js";
 import type { RunScanOptions } from "./scan-worker.js";
 
 interface ScanRunnerInput {
@@ -34,6 +35,6 @@ main()
   .then(() => process.exit(0))
   .catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[scan-runner] ${message}`);
+    logger.error(`[scan-runner] ${message}`);
     process.exit(1);
   });

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { logger } from "../../../shared/logger.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
@@ -160,7 +161,7 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
       // Clean up the orphaned role
       const { error: cleanupError } = await supabaseAdmin.from("roles").delete().eq("id", id);
       if (cleanupError) {
-        console.error(`Failed to clean up orphaned role ${id}:`, cleanupError);
+        logger.error({ err: cleanupError }, `Failed to clean up orphaned role ${id}`);
       }
       throw new RolesError("Failed to assign permissions", "internal", permError);
     }
