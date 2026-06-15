@@ -1,10 +1,13 @@
 import { z } from "zod";
 
+export const findingSeveritySchema = z.enum(["error", "warning", "info"]);
+export type FindingSeverity = z.infer<typeof findingSeveritySchema>;
+
 export const findingSchema = z.object({
   id: z.string().uuid(),
   scanId: z.string().uuid(),
   ruleId: z.string(),
-  severity: z.enum(["error", "warning", "info"]),
+  severity: findingSeveritySchema,
   message: z.string(),
   filePath: z.string(),
   startLine: z.number().int().nonnegative(),
@@ -37,6 +40,8 @@ export const summarySchema = z.object({
 });
 
 export const scanStatusSchema = z.enum(["pending", "running", "completed", "failed"]);
+
+export type ScanStatus = z.infer<typeof scanStatusSchema>;
 
 export const scanSchema = z.object({
   id: z.string().uuid(),

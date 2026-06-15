@@ -182,5 +182,5 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
 
   await persistScanProgress(scanId, initialProgress);
 
-  return rowToScan(updated ?? data);
+  return rowToScan(updated ?? scan);
 }

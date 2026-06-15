@@ -89,10 +89,10 @@ export async function listChannels(tenantId: string) {
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list channels" });
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
-    type: row.type,
-    config: typeof row.config === "string" ? JSON.parse(row.config) : row.config,
+    type: row.type as ChannelType,
+    config: (typeof row.config === "string" ? JSON.parse(row.config) : row.config) as Record<string, string>,
     enabled: row.enabled,
     createdAt: row.created_at,
   }));
@@ -240,7 +240,7 @@ export async function listNotifications(tenantId: string, unreadOnly?: boolean) 
   if (unreadOnly) query = query.eq("read", false);
   const { data, error } = await query;
   const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
     channel: row.channel,
     title: row.title,

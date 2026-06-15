@@ -19,7 +19,7 @@ export async function listRuleOverrides(tenantId: string, tool: OverrideTool): P
     .eq("organization_id", tenantId)
     .order("rule_id", { ascending: true });
   const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list rule overrides" });
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
     ruleId: row.rule_id,
     enabled: row.enabled,
