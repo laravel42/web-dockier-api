@@ -37,6 +37,11 @@ export function getQueue(): PgBoss | null {
   boss = new PgBoss({
     ...getPostgresConnectionConfig(databaseUrl),
     schema: "pgboss",
+    // Cap the internal connection pool. The DB pooler runs in session mode with
+    // a hard client limit (e.g. 15), shared across all environments (local dev +
+    // Railway). Keeping this small leaves headroom and avoids EMAXCONNSESSION,
+    // even when a `tsx watch` restart briefly overlaps old and new connections.
+    max: Number(process.env.PGBOSS_MAX_CONNECTIONS ?? 5),
     // Auto-create schema and tables on start
     migrate: true,
     // Monitor for stuck jobs every 60s
