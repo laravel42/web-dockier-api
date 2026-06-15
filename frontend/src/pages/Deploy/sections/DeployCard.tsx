@@ -1,6 +1,7 @@
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import { cardInteractiveCls, chipCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
+import { cardInteractiveCls, chipCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
@@ -49,13 +50,8 @@ export default function DeployCard({ repo, deploys, project, badges, badgeLoadin
       <div className="flex items-center justify-between gap-2 mt-auto">
         <div className="flex items-center gap-2">
           <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
-          <span className="text-xs text-text-muted">
-            {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
+          <span className={typeCardDateCls}>
+            {formatCardDateTime(getSortTimestamp(latest, "updated"))}
           </span>
         </div>
         <span className={chipCls}>

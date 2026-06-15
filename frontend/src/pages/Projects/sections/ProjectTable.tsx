@@ -1,6 +1,7 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { chipCls, tableCellCls, tableCellMutedCls } from "../../../utils/styles";
+import { chipCls, tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import type { Project, TechBadgeInfo } from "../../../types";
 
@@ -32,13 +33,8 @@ export default function ProjectTable({ projects, projectLangs, projectBadgeLoadi
                 emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
               />
             </td>
-            <td className="text-ui-sm text-text-muted">
-              {new Date(p.createdAt).toLocaleString(undefined, {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              })}
+            <td className={typeCardDateCls}>
+              {formatCardDateTime(p.createdAt)}
             </td>
           </tr>
         );

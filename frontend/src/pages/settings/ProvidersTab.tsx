@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
+import SettingsModalFooter from "../../components/SettingsModalFooter";
 import ConfirmModal from "../../components/ConfirmModal";
 import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, btnDanger, cardInteractiveCls } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -66,7 +67,10 @@ export default function ProvidersTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-text">Server Providers</h2>
+        <div>
+          <h2 className="text-base font-semibold text-text">Server Providers</h2>
+          <p className="text-sm text-text-muted mt-0.5">Connect cloud providers used for deployments.</p>
+        </div>
         {canManage && (
           <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
             <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -180,10 +184,12 @@ export default function ProvidersTab() {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between pt-2 border-t border-border">
-                <button type="button" onClick={() => setConfirmRemove(true)} className={btnDanger}>Remove</button>
+              <SettingsModalFooter
+                onDelete={canManage ? () => setConfirmRemove(true) : undefined}
+                deleteAriaLabel={`Remove ${editForm.label || "provider"}`}
+              >
                 <button type="submit" className={btnPrimary}>Save Changes</button>
-              </div>
+              </SettingsModalFooter>
             </form>
         )}
       </Modal>
@@ -194,9 +200,9 @@ export default function ProvidersTab() {
       ) : error ? (
         <PageError message={error} onRetry={reload} />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className={settingsCardGridCls}>
           {providerList.map((p) => (
-            <div key={p.id} onClick={() => openEdit(p)} className={`${cardInteractiveCls} p-4`}>
+            <div key={p.id} onClick={() => canManage && openEdit(p)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="size-8  flex items-center justify-center shrink-0">
                   <ProviderBadge provider={p.provider} showName={false} iconSize="w-7 h-7" />
@@ -207,7 +213,7 @@ export default function ProvidersTab() {
                 </div>
               </div>
               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-success-50 text-success-500`}>Connected</span>
-              <p className="text-xs text-text-muted mt-2">{getProviderStyle(p.provider).description}</p>
+              <span className={`block text-xs text-text-muted text-left px-2 py-0.5`}>{getProviderStyle(p.provider).description}</span>
             </div>
           ))}
           {providerList.length === 0 && (

@@ -1,5 +1,6 @@
 import type { Deployment as Deploy, Provider, Project } from "../../../types";
-import { cardCls, btnLink, getStatusDotClass, typeCardMeta, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
+import { cardCls, btnLink, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import ProviderBadge from "../../../components/ProviderBadge";
 
 interface Props {
@@ -41,8 +42,8 @@ export default function RecentDeploys({ deploys, providers, projectMap, onViewAl
                   <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
                   <div className="min-w-0 flex-1">
                     <p className={`${typeCardTitle} truncate`}>{projectName}</p>
-                    <p className={`${typeCardMeta} mt-0.5`}>
-                      {d.branch} · {new Date(d.createdAt).toLocaleDateString()}
+                    <p className={`${typeCardDateCls} mt-0.5`}>
+                      {d.branch} · {formatCardDateTime(d.createdAt)}
                     </p>
                   </div>
                   <ProviderBadge provider={pk} />

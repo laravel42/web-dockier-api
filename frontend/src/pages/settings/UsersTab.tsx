@@ -2,16 +2,19 @@ import { useState, useEffect, useCallback } from "react";
 import { usersApi, rolesApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
+import SettingsModalFooter from "../../components/SettingsModalFooter";
 import ComboBox from "../../components/ComboBox";
-import { inputCls, btnPrimary } from "../../utils/styles";
-import ListSearchBar from "../../components/ui/ListSearchBar";
+import { inputCls, btnPrimary, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { formatCardDateTime } from "../../utils/formatCardDate";
 import PageLoading from "../../components/ui/PageLoading";
-import PageError from "../../components/ui/PageError";
+import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import Alert from "../../components/ui/Alert";
 import { getErrorMessage } from "../../utils/errors";
 import { useToast } from "../../context/useToast";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../context/PermissionsContext";
+import ClipboardIcon from "../../components/icons/outlined/ClipboardIcon";
+import CheckIcon from "../../components/icons/outlined/CheckIcon";
 
 interface UserItem {
   id: string;
@@ -43,10 +46,11 @@ export default function UsersTab() {
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [search, setSearch] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordGenerated, setPasswordGenerated] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState("");
   const [editUser, setEditUser] = useState<UserItem | null>(null);
@@ -55,26 +59,28 @@ export default function UsersTab() {
   const [editLanguage, setEditLanguage] = useState("en");
   const [editTimezone, setEditTimezone] = useState("UTC");
   const [saving, setSaving] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const fetchData = useCallback(async (searchQuery?: string) => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setLoadError("");
     try {
       const [usersRes, rolesRes] = await Promise.all([
-        usersApi.list({ search: searchQuery || undefined }),
+        usersApi.list(),
         rolesApi.list(),
       ]);
       setUsers(usersRes.users);
       setRoles(rolesRes.roles);
     } catch (err) {
       setLoadError(getErrorMessage(err, "Failed to load users"));
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const handleSearch = () => fetchData(search);
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   const generatePassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
@@ -90,6 +96,19 @@ export default function UsersTab() {
     for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
     setInviteForm(f => ({ ...f, password: arr.join("") }));
     setShowPassword(true);
+    setPasswordGenerated(true);
+    setPasswordCopied(false);
+  };
+
+  const copyGeneratedPassword = async () => {
+    if (!inviteForm.password) return;
+    try {
+      await navigator.clipboard.writeText(inviteForm.password);
+      setPasswordCopied(true);
+      window.setTimeout(() => setPasswordCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
   };
 
   const passwordChecks = {
@@ -142,7 +161,9 @@ export default function UsersTab() {
       setShowInvite(false);
       setInviteForm({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
       setShowPassword(false);
-      fetchData(search);
+      setPasswordGenerated(false);
+      setPasswordCopied(false);
+      fetchData();
     } catch (err: unknown) {
       setInviteError(getErrorMessage(err, "Failed to create user"));
     } finally { setInviting(false); }
@@ -162,7 +183,7 @@ export default function UsersTab() {
       // If the edited user is the current user, refresh permissions
       if (editUser.id === userId) refreshPermissions();
       setEditUser(null);
-      fetchData(search);
+      fetchData();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to update user"));
     }
@@ -170,14 +191,15 @@ export default function UsersTab() {
   };
 
   const handleDelete = async () => {
-    if (!deleteId) return;
+    if (!editUser) return;
     try {
-      await usersApi.delete(deleteId);
-      fetchData(search);
+      await usersApi.delete(editUser.id);
+      setEditUser(null);
+      fetchData();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to remove user"));
     }
-    setDeleteId(null);
+    setConfirmDelete(false);
   };
 
   const openEdit = async (u: UserItem) => {
@@ -209,81 +231,52 @@ export default function UsersTab() {
         )}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <ListSearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search by name or email…"
-        />
-        <button onClick={handleSearch} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">
-          Search
-        </button>
-      </div>
-
-      {/* Users table */}
       {loading ? (
         <PageLoading />
       ) : loadError ? (
         <PageError message={loadError} onRetry={fetchData} />
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary-50/50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">User</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Role</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Joined</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {users.map(u => (
-                <tr key={u.id} className="hover:bg-secondary-50/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="size-8  rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-semibold shrink-0">
-                        {(u.name || u.email).charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-text truncate">{u.name || "—"}</p>
-                        <p className="text-xs text-text-muted truncate">{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      {u.roleName ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-50 text-primary-600">{u.roleName}</span>
-                      ) : (
-                        <span className="text-xs text-text-muted">No role</span>
-                      )}
-                      {u.isOwner && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-600">Owner</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-text-muted">
-                    {new Date(u.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {canManage && !u.isOwner && (
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => openEdit(u)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit role">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
-                        </button>
-                        <button onClick={() => setDeleteId(u.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Remove user">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
-                        </button>
-                      </div>
+        <div className={settingsCardGridCls}>
+          {users.map((u) => {
+            const editable = canManage && !u.isOwner;
+            return (
+              <div
+                key={u.id}
+                onClick={() => editable && openEdit(u)}
+                className={editable ? settingsCardInteractiveCls : settingsCardCls}
+              >
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="size-9 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-semibold shrink-0">
+                    {(u.name || u.email).charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-text truncate">{u.name || "—"}</p>
+                    <p className="text-xs text-text-muted truncate">{u.email}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    {u.roleName ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600">{u.roleName}</span>
+                    ) : (
+                      <span className="text-[10px] text-text-muted">No role</span>
                     )}
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr><td colSpan={4} className="text-center py-12 text-sm text-text-muted">No users found</td></tr>
-              )}
-            </tbody>
-          </table>
+                    {u.isOwner && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">Owner</span>
+                    )}
+                  </div>
+                  <span className={`${typeCardDateCls} text-xs text-text-muted text-right`}>
+                    Joined {formatCardDateTime(u.createdAt)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {users.length === 0 && (
+            <div className="col-span-full">
+              <EmptyMessage>No users yet</EmptyMessage>
+            </div>
+          )}
         </div>
       )}
 
@@ -305,10 +298,28 @@ export default function UsersTab() {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={inviteForm.password}
-                  onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))}
-                  className={inputCls}
+                  onChange={(e) => {
+                    setPasswordGenerated(false);
+                    setPasswordCopied(false);
+                    setInviteForm(f => ({ ...f, password: e.target.value }));
+                  }}
+                  className={`${inputCls}${inviteForm.password ? (passwordGenerated ? " pr-16" : " pr-9") : ""}`}
                   placeholder="••••••••"
                 />
+                {passwordGenerated && inviteForm.password && (
+                  <button
+                    type="button"
+                    onClick={() => void copyGeneratedPassword()}
+                    className="absolute right-9 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
+                    aria-label="Copy password"
+                  >
+                    {passwordCopied ? (
+                      <CheckIcon className="size-4 text-primary-500" />
+                    ) : (
+                      <ClipboardIcon className="size-4" />
+                    )}
+                  </button>
+                )}
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors">
                   {showPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
@@ -317,7 +328,7 @@ export default function UsersTab() {
                   )}
                 </button>
               </div>
-              <button type="button" onClick={generatePassword} className="h-10 px-3 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors whitespace-nowrap">
+              <button type="button" onClick={generatePassword} className="h-9 shrink-0 px-3 text-xs font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600 transition-colors whitespace-nowrap">
                 Generate
               </button>
             </div>
@@ -366,9 +377,6 @@ export default function UsersTab() {
               options={Object.keys(tzToCountry).filter(tz => tz !== "UTC").concat(["UTC"]).sort((a, b) => a.localeCompare(b)).map(tz => ({ value: tz, label: tz.replace(/_/g, " ") }))}
               placeholder="Select timezone…"
             />
-            {inviteForm.timezone && tzToCountry[inviteForm.timezone] && (
-              <p className="text-xs text-text-muted mt-1">Country: {tzToCountry[inviteForm.timezone]}</p>
-            )}
           </div>
           {inviteError && <Alert variant="error">{inviteError}</Alert>}
           <div className="flex justify-end">
@@ -425,18 +433,22 @@ export default function UsersTab() {
               options={Object.keys(tzToCountry).filter(tz => tz !== "UTC").concat(["UTC"]).sort((a, b) => a.localeCompare(b)).map(tz => ({ value: tz, label: tz.replace(/_/g, " ") }))}
               placeholder="Select timezone…"
             />
-            {editTimezone && tzToCountry[editTimezone] && (
-              <p className="text-xs text-text-muted mt-1">Country: {tzToCountry[editTimezone]}</p>
-            )}
           </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setEditUser(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Cancel</button>
+          <SettingsModalFooter
+            onDelete={editUser && canManage && !editUser.isOwner ? () => setConfirmDelete(true) : undefined}
+            deleteAriaLabel={`Remove ${editUser?.name || editUser?.email || "user"}`}
+          >            
             <button onClick={handleEditSave} disabled={saving || !editRoleId || !editTimezone} className={`${btnPrimary} disabled:opacity-50`}>{saving ? "Saving…" : "Save"}</button>
-          </div>
+          </SettingsModalFooter>
         </div>
       </Modal>
 
-      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} message="Are you sure you want to remove this user? This action cannot be undone." />
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={handleDelete}
+        message="Are you sure you want to remove this user? This action cannot be undone."
+      />
     </div>
   );
 }

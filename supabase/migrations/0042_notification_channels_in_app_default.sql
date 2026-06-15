@@ -6,7 +6,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_channels_org_type
 INSERT INTO notification_channels (id, organization_id, type, config, enabled, created_at)
 SELECT
   gen_random_uuid()::text,
-  o.id,
+  o.id::text,
   'in_app',
   '{}',
   true,
@@ -15,6 +15,6 @@ FROM organizations o
 WHERE NOT EXISTS (
   SELECT 1
   FROM notification_channels nc
-  WHERE nc.organization_id = o.id
+  WHERE nc.organization_id = o.id::text
     AND nc.type = 'in_app'
 );

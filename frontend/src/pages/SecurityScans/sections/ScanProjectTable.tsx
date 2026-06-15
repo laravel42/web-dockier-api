@@ -1,6 +1,7 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { chipCls, tableCellCls, tableCellMutedCls } from "../../../utils/styles";
+import { chipCls, tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 
@@ -90,13 +91,8 @@ export default function ScanProjectTable({
             <td>
               <div className="flex items-center gap-1.5">
                 <span className={`size-2 rounded-full shrink-0 ${getScanStatusDot(latest, summary)}`} />
-                <span className="text-ui-sm text-text-muted">
-                  {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                <span className={typeCardDateCls}>
+                  {formatCardDateTime(getSortTimestamp(latest, "updated"))}
                 </span>
               </div>
             </td>

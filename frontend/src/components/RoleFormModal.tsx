@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import Modal from "./Modal";
+import SettingsModalFooter from "./SettingsModalFooter";
 
 interface Permission {
   key: string;
@@ -98,19 +99,30 @@ interface Props {
   initialData?: { name: string; description: string; permissions: string[] };
   title?: string;
   submitLabel?: string;
+  onDelete?: () => void;
+  deleteAriaLabel?: string;
 }
 
-export default function RoleFormModal({ open, onClose, onSubmit, initialData, title, submitLabel }: Props) {
+export default function RoleFormModal({ open, onClose, onSubmit, initialData, title, submitLabel, onDelete, deleteAriaLabel }: Props) {
   const [mountKey, setMountKey] = useState(0);
 
   return (
-    <Modal open={open} onClose={onClose} title={title || "New role"} size="lg">
-      {open && <RoleFormInner key={mountKey} onSubmit={(data) => { onSubmit(data); setMountKey(k => k + 1); }} initialData={initialData} submitLabel={submitLabel} />}
+    <Modal open={open} onClose={onClose} title={title || "New role"} size="lg" bodyScroll={false}>
+      {open && (
+        <RoleFormInner
+          key={mountKey}
+          onSubmit={(data) => { onSubmit(data); setMountKey(k => k + 1); }}
+          initialData={initialData}
+          submitLabel={submitLabel}
+          onDelete={onDelete}
+          deleteAriaLabel={deleteAriaLabel}
+        />
+      )}
     </Modal>
   );
 }
 
-function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props["onSubmit"]; initialData?: Props["initialData"]; submitLabel?: string }) {
+function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAriaLabel }: { onSubmit: Props["onSubmit"]; initialData?: Props["initialData"]; submitLabel?: string; onDelete?: () => void; deleteAriaLabel?: string }) {
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [selected, setSelected] = useState<Set<string>>(
@@ -175,7 +187,9 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
   };
 
   return (
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="flex h-full min-h-0 flex-col gap-4">
+      <form id="role-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+        <div className="shrink-0 space-y-5">
         {/* Name */}
         <div>
           <label htmlFor="role-name" className="mb-0.5 block text-sm font-semibold text-foreground">
@@ -206,10 +220,11 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
             className={inputCls}
           />
         </div>
+        </div>
 
         {/* Permissions */}
-        <div>
-          <p className="mb-2 text-sm font-semibold text-foreground">Permissions</p>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <p className="mb-2 shrink-0 text-sm font-semibold text-foreground">Permissions</p>
 
           {/* Search */}
           <div className="relative mb-3">
@@ -229,7 +244,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
           </div>
 
           {/* Permission groups */}
-          <div className="max-h-80 overflow-y-auto rounded-(--radius-input) border border-border">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-(--radius-input) border border-border">
             {filteredGroups.map((group) => {
               const checkState = getGroupCheckState(group);
               const isCollapsed = collapsed.has(group.name);
@@ -320,7 +335,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
           </div>
 
           {/* Select / Deselect all */}
-          <div className="mt-2 flex gap-3">
+          <div className="mt-2 flex shrink-0 gap-3">
             <button type="button" onClick={selectAll} className="text-sm font-medium text-primary transition-colors hover:text-primary/80">
               Select all permissions
             </button>
@@ -329,17 +344,18 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
             </button>
           </div>
         </div>
-
-        {/* Submit */}
-        <div className="flex justify-end pt-1">
-          <button
-            type="submit"
-            disabled={!name.trim()}
-            className="h-9 px-5 bg-text text-card text-sm font-medium rounded-(--radius-btn) hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {submitLabel || "Create role"}
-          </button>
-        </div>
       </form>
+
+      <SettingsModalFooter onDelete={onDelete} deleteAriaLabel={deleteAriaLabel}>
+        <button
+          type="submit"
+          form="role-form"
+          disabled={!name.trim()}
+          className="h-9 px-5 bg-text text-card text-sm font-medium rounded-(--radius-btn) hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {submitLabel || "Create role"}
+        </button>
+      </SettingsModalFooter>
+      </div>
   );
 }

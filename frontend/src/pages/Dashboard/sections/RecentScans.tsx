@@ -1,5 +1,6 @@
 import type { Scan, Project } from "../../../types";
-import { cardCls, btnLink, typeCardMeta, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
+import { cardCls, btnLink, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import SeverityBadge from "../../../components/SeverityBadge";
 
 interface Props {
@@ -47,8 +48,8 @@ export default function RecentScans({ scans, projectMap, onViewAll, onViewScan }
                   <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
                   <div className="min-w-0 flex-1">
                     <p className={`${typeCardTitle} truncate`}>{proj?.name || s.repo}</p>
-                    <p className={`${typeCardMeta} mt-0.5`}>
-                      {s.branch} · {new Date(s.createdAt).toLocaleDateString()}
+                    <p className={`${typeCardDateCls} mt-0.5`}>
+                      {s.branch} · {formatCardDateTime(s.createdAt)}
                     </p>
                   </div>
                   {s.summary && s.status === "completed" && (

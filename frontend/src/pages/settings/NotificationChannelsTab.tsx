@@ -2,9 +2,10 @@ import { useState } from "react";
 import { notificationsApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
+import SettingsModalFooter from "../../components/SettingsModalFooter";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -68,7 +69,10 @@ export default function NotificationChannelsTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-text">Notification Channels</h2>
+        <div>
+          <h2 className="text-base font-semibold text-text">Notification Channels</h2>
+          <p className="text-sm text-text-muted mt-0.5">Configure where alerts and notifications are delivered.</p>
+        </div>
         {canManage && (
           <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
             <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -162,12 +166,12 @@ export default function NotificationChannelsTab() {
             )}
 
             {/* Footer */}
-            <div className={`flex items-center pt-2 border-t border-border ${editingChannel.type === "in_app" ? "justify-end" : "justify-between"}`}>
-              {editingChannel.type !== "in_app" && (
-                <button type="button" onClick={() => setConfirmRemove(true)} className={btnDanger}>Remove</button>
-              )}
+            <SettingsModalFooter
+              onDelete={canManage && editingChannel.type !== "in_app" ? () => setConfirmRemove(true) : undefined}
+              deleteAriaLabel={`Remove ${chName} channel`}
+            >
               <button type="submit" className={btnPrimary}>Save Changes</button>
-            </div>
+            </SettingsModalFooter>
           </form>
           );
         })()}
@@ -179,7 +183,7 @@ export default function NotificationChannelsTab() {
       ) : error ? (
         <PageError message={error} onRetry={reload} />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className={settingsCardGridCls}>
           {channelList.map((ch) => {
             const channelNames: Record<string, string> = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" };
             const channelIcons: Record<string, React.ReactNode> = {
@@ -189,7 +193,7 @@ export default function NotificationChannelsTab() {
               in_app: <svg xmlns="http://www.w3.org/2000/svg" className="size-7 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>,
             };
             return (
-            <div key={ch.id} onClick={() => openEditChannel(ch)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
+            <div key={ch.id} onClick={() => canManage && openEditChannel(ch)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="size-8  flex items-center justify-center shrink-0 text-text-secondary">
                   {channelIcons[ch.type] || channelIcons.in_app}

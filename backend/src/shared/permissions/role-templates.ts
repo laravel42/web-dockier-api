@@ -89,7 +89,7 @@ export const DEFAULT_ROLE_TEMPLATES: RoleTemplate[] = [
     description: "Standard access to view and work with projects, deployments, and scans.",
     isSystem: true,
     isEditable: true,
-    isDeletable: false,
+    isDeletable: true,
     hierarchyLevel: 1,
     permissions: [
       PERMISSIONS.PROJECT_VIEW,

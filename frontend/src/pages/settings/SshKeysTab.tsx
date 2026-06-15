@@ -2,7 +2,9 @@ import { useState } from "react";
 import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
-import { inputCls, btnPrimary, btnDanger, typeCaption, typePanelDesc, typePanelTitle } from "../../utils/styles";
+import SettingsModalFooter from "../../components/SettingsModalFooter";
+import { inputCls, btnPrimary, typeCaption, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { formatCardDateTime } from "../../utils/formatCardDate";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
@@ -19,20 +21,40 @@ export default function SshKeysTab() {
   );
   const keyList = keys ?? [];
   const [showForm, setShowForm] = useState(false);
+  const [viewingKey, setViewingKey] = useState<(typeof keyList)[number] | null>(null);
   const [form, setForm] = useState({ label: "", publicKey: "" });
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [formError, setFormError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const normalizeSshPublicKey = (key: string) => {
+    const parts = key.trim().split(/\s+/);
+    if (parts.length < 2) return key.trim();
+    return `${parts[0]} ${parts[1]}`;
+  };
+
+  const isDuplicateKey = (publicKey: string) => {
+    const normalized = normalizeSshPublicKey(publicKey);
+    return keyList.some((k) => normalizeSshPublicKey(k.publicKey) === normalized);
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
+    if (isDuplicateKey(form.publicKey)) {
+      setFormError("This SSH public key is already registered");
+      return;
+    }
+    setSubmitting(true);
     try {
-      await deployApi.addSshKey({ label: form.label, publicKey: form.publicKey });
+      await deployApi.addSshKey({ label: form.label, publicKey: form.publicKey.trim() });
       setShowForm(false);
       setForm({ label: "", publicKey: "" });
       reload();
     } catch (err: unknown) {
       setFormError(getErrorMessage(err, "Failed to add SSH key"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -46,6 +68,8 @@ export default function SshKeysTab() {
     }
     return key.length > 60 ? key.slice(0, 60) + "..." : key;
   };
+
+  const keyType = (key: string) => key.trim().split(/\s+/)[0] || "ssh";
 
   return (
     <div>
@@ -62,7 +86,7 @@ export default function SshKeysTab() {
         )}
       </div>
 
-      <Modal open={showForm} onClose={() => { setShowForm(false); setFormError(""); }} title="Add SSH Key">
+      <Modal open={showForm} onClose={() => { setShowForm(false); setFormError(""); setSubmitting(false); }} title="Add SSH Key">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="ssh-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
@@ -77,9 +101,40 @@ export default function SshKeysTab() {
           </div>
           {formError && <Alert variant="error">{formError}</Alert>}
           <div className="flex justify-end">
-            <button type="submit" className={btnPrimary}>Add Key</button>
+            <button type="submit" disabled={submitting} className={`${btnPrimary} disabled:opacity-50`}>
+              {submitting ? "Adding…" : "Add Key"}
+            </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!viewingKey} onClose={() => setViewingKey(null)} title={viewingKey?.label || "SSH Key"}>
+        {viewingKey && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Algorithm</label>
+              <p className="text-sm text-text">{keyType(viewingKey.publicKey)}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
+              <textarea
+                readOnly
+                value={viewingKey.publicKey}
+                className={`${inputCls} h-28 py-2.5 font-mono text-xs resize-none bg-secondary-50 text-text-muted cursor-default`}
+              />
+            </div>
+            {canManage && (
+              <SettingsModalFooter
+                onDelete={() => setConfirmRemove(true)}
+                deleteAriaLabel={`Remove ${viewingKey.label}`}
+              >
+                <button type="button" onClick={() => setViewingKey(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">
+                  Close
+                </button>
+              </SettingsModalFooter>
+            )}
+          </div>
+        )}
       </Modal>
 
       {loading ? (
@@ -87,28 +142,48 @@ export default function SshKeysTab() {
       ) : loadError ? (
         <PageError message={loadError} onRetry={reload} />
       ) : (
-        <div className="space-y-3">
+        <div className={settingsCardGridCls}>
           {keyList.map((k) => (
-            <div key={k.id} className="bg-card rounded-card shadow-(--shadow-card) p-5 flex items-center justify-between hover:shadow-(--shadow-card-hover) transition-shadow">
-              <div className="flex items-center gap-4">
-                <div className="size-10  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-7 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div
+              key={k.id}
+              onClick={() => setViewingKey(k)}
+              className={settingsCardInteractiveCls}
+            >
+              <div className="flex items-start gap-3 mb-3">
+                <div className="size-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
                   </svg>
                 </div>
-                <div>
-                  <p className={`${typePanelTitle} truncate`}>{k.label}</p>
-                  <p className={`${typeCaption} font-mono mt-0.5`}>{truncateKey(k.publicKey)}</p>
-                  <p className={`${typeCaption} mt-0.5`}>Added {new Date(k.createdAt).toLocaleDateString()}</p>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-text truncate">{k.label}</p>
+                  <span className="inline-flex mt-1 items-center px-2 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600">
+                    {keyType(k.publicKey)}
+                  </span>
                 </div>
               </div>
-              <button onClick={() => setDeleteId(k.id)} className={btnDanger}>Remove</button>
+              <span className={`${typeCardDateCls} text-xs text-text-muted text-right`}>           
+                Added {formatCardDateTime(k.createdAt)}
+              </span>
             </div>
           ))}
-          {keyList.length === 0 && <EmptyMessage>No SSH keys added yet</EmptyMessage>}
+          {keyList.length === 0 && (
+            <div className="col-span-full">
+              <EmptyMessage>No SSH keys added yet</EmptyMessage>
+            </div>
+          )}
         </div>
       )}
-      <ConfirmModal open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => { if (deleteId) deployApi.deleteSshKey(deleteId).then(reload); setDeleteId(null); }} message="Are you sure you want to remove this SSH key?" />
+      <ConfirmModal
+        open={confirmRemove}
+        onClose={() => setConfirmRemove(false)}
+        onConfirm={() => {
+          if (viewingKey) deployApi.deleteSshKey(viewingKey.id).then(reload);
+          setViewingKey(null);
+          setConfirmRemove(false);
+        }}
+        message="Are you sure you want to remove this SSH key?"
+      />
     </div>
   );
 }

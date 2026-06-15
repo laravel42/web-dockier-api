@@ -2,9 +2,10 @@ import { useState } from "react";
 import { gitApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
+import SettingsModalFooter from "../../components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls, typeCardDateCls } from "../../utils/styles";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";
@@ -57,7 +58,10 @@ export default function SourceControlTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-text">Source Control Connections</h2>
+        <div>
+          <h2 className="text-base font-semibold text-text">Source Control Connections</h2>
+          <p className="text-sm text-text-muted mt-0.5">Connect Git providers for projects and deployments.</p>
+        </div>
         {canManage && (
           <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
             <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -172,10 +176,12 @@ export default function SourceControlTab() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between pt-2 border-t border-border">
-              <button type="button" onClick={() => setConfirmRemove(true)} className={btnDanger}>Remove</button>
+            <SettingsModalFooter
+              onDelete={canManage ? () => setConfirmRemove(true) : undefined}
+              deleteAriaLabel={`Remove ${editForm.label || "connection"}`}
+            >
               <button type="submit" className={btnPrimary}>Save Changes</button>
-            </div>
+            </SettingsModalFooter>
           </form>
         )}
       </Modal>
@@ -186,9 +192,9 @@ export default function SourceControlTab() {
       ) : error ? (
         <PageError message={error} onRetry={reload} />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className={settingsCardGridCls}>
           {connectionList.map((conn) => (
-            <div key={conn.id} onClick={() => openEdit(conn)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
+            <div key={conn.id} onClick={() => canManage && openEdit(conn)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
               <div className="flex items-center gap-3 mb-2">
                 <div className="size-8  flex items-center justify-center shrink-0">
                   <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
@@ -199,7 +205,7 @@ export default function SourceControlTab() {
                 </div>
               </div>
               <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-success-50 text-success-500">Connected</span>
-              <p className="text-xs text-text-muted mt-2">{getSourceControl(conn.provider).description}</p>
+              <span className={`block text-xs text-text-muted text-left px-2 py-0.5 `}>{getSourceControl(conn.provider).description}</span>
             </div>
           ))}
           {connectionList.length === 0 && (

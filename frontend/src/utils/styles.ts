@@ -23,6 +23,8 @@ export const typeStatDelta = "text-ui-sm text-text-muted";
 export const typeCardTitle = "text-ui font-semibold leading-snug text-text";
 /** Card meta, timestamps */
 export const typeCardMeta = "text-ui-sm text-text-muted";
+/** Card date/time — matches DeployCard footer timestamps */
+export const typeCardDateCls = "text-xs text-text-muted";
 /** Default UI body copy */
 export const typeBody = "text-ui text-text leading-snug";
 /** Muted body copy */
@@ -116,6 +118,18 @@ export const inputCls =
   "w-full h-9 px-3 rounded-md border border-border bg-background text-ui text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30";
 export const cardCls = panelCls;
 export const cardInteractiveCls = `${panelCls} hover:bg-card/60 transition-colors cursor-pointer`;
+
+/** Settings tab card — static */
+export const settingsCardCls =
+  "bg-card border border-border rounded-card p-4 transition-all shadow-(--shadow-card)";
+
+/** Settings tab card — clickable with border hover */
+export const settingsCardInteractiveCls =
+  `${settingsCardCls} hover:border-primary-500/30 cursor-pointer`;
+
+/** Settings tab responsive card grid */
+export const settingsCardGridCls =
+  "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3";
 
 /** Table wrapper — list pages */
 export const tablePanelCls = "overflow-hidden rounded-xl border border-border/50 bg-card/40 backdrop-blur";

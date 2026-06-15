@@ -31,6 +31,7 @@ export type Database = {
           slug: string;
           created_by: string | null;
           created_at: string;
+          billing: Json;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> &
           Pick<Database["public"]["Tables"]["organizations"]["Row"], "name" | "slug">;

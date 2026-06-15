@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   authMeSchema,
   authSessionSchema,
+  billingDetailsSchema,
   membershipSchema,
   registerStartBodySchema,
   registerStartResponseSchema,
@@ -35,6 +36,7 @@ import {
   transferOwnership,
 } from "./domain/tenant.js";
 import { setupTwoFactor, enableTwoFactor } from "./domain/two-factor.js";
+import { getBillingDetails, updateBillingDetails } from "./domain/billing.js";
 
 export async function registerAuthRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -263,6 +265,41 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       return await enableTwoFactor(auth.userId, request.body.token);
+    },
+  );
+
+  // ─── Billing ───────────────────────────────────────────────────────────────
+
+  typed.get(
+    "/auth/billing",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.BILLING_VIEW),
+      schema: {
+        tags: ["auth"],
+        summary: "Get organization billing details",
+        response: { 200: billingDetailsSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      return await getBillingDetails(auth.tenantId);
+    },
+  );
+
+  typed.put(
+    "/auth/billing",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.BILLING_MANAGE),
+      schema: {
+        tags: ["auth"],
+        summary: "Update organization billing details",
+        body: billingDetailsSchema,
+        response: { 200: billingDetailsSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      return await updateBillingDetails(auth.tenantId, request.body);
     },
   );
 

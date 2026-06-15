@@ -4,6 +4,11 @@ import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
+import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
+
+function resolveIsDeletable(systemKey: string | null, isDeletable: boolean): boolean {
+  return systemKey !== SYSTEM_ROLE_KEYS.ADMIN && isDeletable;
+}
 
 export type RolesErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal";
 
@@ -63,7 +68,7 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
       systemKey: r.system_key ?? null,
       isSystem: r.is_system,
       isEditable: r.is_editable,
-      isDeletable: r.is_deletable,
+      isDeletable: resolveIsDeletable(r.system_key ?? null, r.is_deletable),
       permissions: permsByRole.get(r.id) ?? [],
     })),
   };
@@ -95,7 +100,7 @@ export async function getRole(roleId: string, tenantId: string): Promise<RoleRes
     systemKey: found.system_key ?? null,
     isSystem: found.is_system,
     isEditable: found.is_editable,
-    isDeletable: found.is_deletable,
+    isDeletable: resolveIsDeletable(found.system_key ?? null, found.is_deletable),
     permissions: permRows.map((p) => p.permission_id),
   };
 }
@@ -267,7 +272,7 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     systemKey: role.system_key ?? null,
     isSystem: role.is_system,
     isEditable: role.is_editable,
-    isDeletable: role.is_deletable,
+    isDeletable: resolveIsDeletable(role.system_key ?? null, role.is_deletable),
     permissions: finalPermissions,
   };
 }
@@ -284,6 +289,9 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     notFoundMsg: "Role not found",
     internalMsg: "Failed to fetch role",
   });
+  if (role.system_key === SYSTEM_ROLE_KEYS.ADMIN) {
+    throw new RolesError("The Admin role cannot be deleted", "forbidden");
+  }
   if (!role.is_deletable) throw new RolesError("This role cannot be deleted", "forbidden");
 
   // Escalation check

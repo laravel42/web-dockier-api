@@ -5,7 +5,9 @@ import {
   statusDotColors as statusColors,
   tableCellCls,
   tableCellMutedCls,
+  typeCardDateCls,
 } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
@@ -48,13 +50,8 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
             <td>
               <div className="flex items-center gap-1.5">
                 <span className={`size-2 rounded-full shrink-0 ${statusColors[latest.status] || "bg-text-muted"}`} />
-                <span className="text-ui-sm text-text-muted">
-                  {new Date(getSortTimestamp(latest, "updated")).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                <span className={typeCardDateCls}>
+                  {formatCardDateTime(getSortTimestamp(latest, "updated"))}
                 </span>
               </div>
             </td>

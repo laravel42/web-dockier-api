@@ -40,3 +40,16 @@ export const authMeSchema = z.object({
   memberships: z.array(membershipSchema),
   twoFactorEnabled: z.boolean(),
 });
+
+export const billingDetailsSchema = z.object({
+  companyName: z.string(),
+  legalName: z.string(),
+  taxId: z.string(),
+  addressLine1: z.string(),
+  addressLine2: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  country: z.string(),
+  billingEmail: z.string(),
+});

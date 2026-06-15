@@ -3,9 +3,10 @@ import { INTEGRATION_CATALOG, CATEGORY_COLORS } from "../../data/integrations";
 import { INTEGRATION_ICONS } from "../../data/integration-icons";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
+import SettingsModalFooter from "../../components/SettingsModalFooter";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, btnDanger } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
 import ListSearchBar from "../../components/ui/ListSearchBar";
 import { usePermissions } from "../../context/PermissionsContext";
 import { integrationsApi } from "../../services/api";
@@ -380,10 +381,12 @@ export default function IntegrationsTab() {
               </div>
 
               {/* Footer actions */}
-              <div className="flex items-center justify-between pt-2 border-t border-border">
-                <button type="button" onClick={() => setConfirmRemove(true)} className={btnDanger}>Remove</button>
+              <SettingsModalFooter
+                onDelete={canManage ? () => setConfirmRemove(true) : undefined}
+                deleteAriaLabel={`Remove ${editingIntg.name}`}
+              >
                 <button type="submit" className={btnPrimary}>Save Changes</button>
-              </div>
+              </SettingsModalFooter>
             </form>
           );
         })()}
@@ -391,11 +394,11 @@ export default function IntegrationsTab() {
       <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={handleRemove} message="Are you sure you want to remove this integration?" />
 
       {integrations.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className={settingsCardGridCls}>
           {integrations.map((intg) => {
             const cat = INTEGRATION_CATALOG.find(c => c.type === intg.type);
             return (
-              <div key={intg.id} onClick={() => openEdit(intg)} className="bg-card border border-border rounded-card p-4 hover:border-primary-500/30 transition-all shadow-(--shadow-card) cursor-pointer">
+              <div key={intg.id} onClick={() => canManage && openEdit(intg)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
                 <div className="flex items-center gap-3 mb-2">
                   <div className="size-8  flex items-center justify-center shrink-0">
                     {(cat && INTEGRATION_ICONS[cat.type]) ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-7 h-7" /> : null}

@@ -3,6 +3,23 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { DeployError } from "./providers.js";
 
+/** Compare keys by algorithm + key data (ignore optional comment). */
+export function normalizeSshPublicKey(publicKey: string): string {
+  const parts = publicKey.trim().split(/\s+/);
+  if (parts.length < 2) return publicKey.trim();
+  return `${parts[0]} ${parts[1]}`;
+}
+
+async function findDuplicateSshKey(tenantId: string, publicKey: string): Promise<boolean> {
+  const normalized = normalizeSshPublicKey(publicKey);
+  const { data, error } = await supabaseAdmin
+    .from("ssh_keys")
+    .select("public_key")
+    .eq("organization_id", tenantId);
+  if (error) throw new DeployError("Failed to validate SSH key", "internal", error);
+  return (data ?? []).some((row) => normalizeSshPublicKey(row.public_key) === normalized);
+}
+
 export async function listSshKeys(tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("ssh_keys")
@@ -37,6 +54,11 @@ export async function createSshKey(params: CreateSshKeyParams) {
   if (parts.length < 2 || parts[1].length < 20) {
     throw new DeployError("Invalid SSH public key format: missing key data", "bad_request");
   }
+
+  if (await findDuplicateSshKey(tenantId, publicKey)) {
+    throw new DeployError("This SSH public key is already registered", "bad_request");
+  }
+
   const fingerprint = `SHA256:${parts[1].slice(0, 16)}...`;
   const id = randomUUID();
   const payload = {
@@ -50,7 +72,7 @@ export async function createSshKey(params: CreateSshKeyParams) {
   const { error } = await supabaseAdmin.from("ssh_keys").insert(payload);
   throwOnError(error, DeployError, {
     internalMsg: "Failed to create SSH key",
-    duplicateMsg: `An SSH key with label "${label}" already exists`,
+    duplicateMsg: "This SSH public key is already registered",
   });
   return {
     id,

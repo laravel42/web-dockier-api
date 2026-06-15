@@ -1,7 +1,8 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import SourceControlBadge from "../../../components/SourceControlBadge";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { cardInteractiveCls, chipCls, typeCardTitle } from "../../../utils/styles";
+import { cardInteractiveCls, chipCls, typeCardDateCls, typeCardTitle } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import type { Project, TechBadgeInfo } from "../../../types";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
@@ -40,14 +41,8 @@ export default function ProjectCard({ project: p, badges, badgeLoading, onSelect
 
       {/* Created + branch */}
       <div className="flex items-center justify-between gap-2 mt-auto">
-        <span className="text-xs text-text-muted">
-          Created: {new Date(p.createdAt).toLocaleString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
+        <span className={typeCardDateCls}>
+          Created: {formatCardDateTime(p.createdAt)}
         </span>
         <span className={chipCls}>
           <LinkIcon className="size-3" strokeWidth={2} />

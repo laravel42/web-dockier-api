@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   open: boolean;
@@ -7,9 +8,11 @@ interface ModalProps {
   children: ReactNode;
   size?: "default" | "lg" | "xl";
   compact?: boolean;
+  /** When false, modal body does not scroll — content must manage its own overflow. */
+  bodyScroll?: boolean;
 }
 
-export default function Modal({ open, onClose, title, children, size = "default" }: ModalProps) {
+export default function Modal({ open, onClose, title, children, size = "default", bodyScroll = true }: ModalProps) {
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -29,8 +32,8 @@ export default function Modal({ open, onClose, title, children, size = "default"
 
   const widthCls = size === "xl" ? "max-w-5xl" : size === "lg" ? "max-w-2xl" : "max-w-lg";
 
-  return (
-    <div className="fixed inset-0 z-9999" role="dialog" aria-modal="true">
+  return createPortal(
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
@@ -49,9 +52,10 @@ export default function Modal({ open, onClose, title, children, size = "default"
               </svg>
             </button>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">{children}</div>
+          <div className={`flex-1 min-h-0 ${bodyScroll ? "overflow-y-auto" : "flex flex-col overflow-hidden"}`}>{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

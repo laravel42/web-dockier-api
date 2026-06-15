@@ -139,11 +139,11 @@ export function canAssignPermissions(actor: ResolvedAuth, permissionsToAssign: P
 
 /**
  * Check if an actor can manage a target role based on hierarchy.
- * Users cannot assign/edit roles at or above their own level.
+ * Users can assign/edit roles at their own level or below, but not above.
  */
 export function canManageRole(actor: ResolvedAuth, targetSystemKey: string | null): boolean {
   const targetLevel = getHierarchyLevel(targetSystemKey);
-  return actor.hierarchyLevel < targetLevel;
+  return actor.hierarchyLevel <= targetLevel;
 }
 
 export const authorizationPlugin = fp(async (app: FastifyInstance) => {
