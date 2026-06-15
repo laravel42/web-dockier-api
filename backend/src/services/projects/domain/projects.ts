@@ -4,7 +4,7 @@ import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { projectConfigSchema } from "../schemas.js";
+import { rowToProject } from "./mappers.js";
 
 export type ProjectsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
@@ -17,32 +17,6 @@ export class ProjectsError extends DomainError {
     super(message, code, cause);
     this.name = "ProjectsError";
   }
-}
-
-function rowToProject(row: {
-  id: string;
-  name: string;
-  repository: string;
-  branch: string;
-  connection_id: string | null;
-  platform: string | null;
-  source_type: string | null;
-  template: string | null;
-  config: unknown;
-  created_at: string;
-}) {
-  return {
-    id: row.id,
-    name: row.name,
-    repository: row.repository,
-    branch: row.branch,
-    connectionId: row.connection_id ?? "",
-    platform: row.platform ?? "",
-    sourceType: row.source_type ?? "repository",
-    template: row.template ?? "",
-    config: projectConfigSchema.parse(row.config ?? {}),
-    createdAt: row.created_at,
-  };
 }
 
 export interface CreateProjectParams {

@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
+import { rowToSummary } from "./mappers.js";
 
 export const PM_PROVIDERS = ["linear", "jira"] as const;
 export type PMProvider = (typeof PM_PROVIDERS)[number];
@@ -33,16 +34,6 @@ export interface PMIntegrationRow {
 
 export interface PMIntegrationCredentials {
   config: Record<string, string>;
-}
-
-function rowToSummary(row: Pick<PMIntegrationRow, "id" | "provider" | "name" | "enabled" | "created_at">) {
-  return {
-    id: row.id,
-    type: row.provider,
-    name: row.name,
-    enabled: row.enabled,
-    createdAt: row.created_at,
-  };
 }
 
 function parseCredentials(encrypted: string): PMIntegrationCredentials {
