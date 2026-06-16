@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { join, extname } from "node:path";
 import { readdirSync, statSync, readFileSync } from "node:fs";
 import type {

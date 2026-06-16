@@ -1,6 +1,7 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { chipCls, tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
@@ -59,7 +60,11 @@ export default function ScanProjectTable({
               <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
               <td>{techCell}</td>
               <td>
-                {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-ui-sm text-text-muted">—</span>}
+                {project?.branch ? (
+                  <BranchCommitLabel branch={project.branch} onClick={() => onSelectEmpty(projectId)} />
+                ) : (
+                  <span className="text-ui-sm text-text-muted">—</span>
+                )}
               </td>
               <td className={tableCellMutedCls}>0</td>
               <td>
@@ -82,7 +87,15 @@ export default function ScanProjectTable({
             <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
             <td>{techCell}</td>
             <td>
-              {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-ui-sm text-text-muted">—</span>}
+              {project?.branch ? (
+                <BranchCommitLabel
+                  branch={project.branch}
+                  commit={latest.commitSha || undefined}
+                  onClick={() => onSelectScan(latest.id)}
+                />
+              ) : (
+                <span className="text-ui-sm text-text-muted">—</span>
+              )}
             </td>
             <td className={tableCellMutedCls}>{sorted.length}</td>
             <td className={`${tableCellMutedCls} tabular-nums`}>

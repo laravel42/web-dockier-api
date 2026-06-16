@@ -1,17 +1,20 @@
 import { projectConfigSchema } from "../schemas.js";
 
-export function rowToProject(row: {
-  id: string;
-  name: string;
-  repository: string;
-  branch: string;
-  connection_id: string | null;
-  platform: string | null;
-  source_type: string | null;
-  template: string | null;
-  config: unknown;
-  created_at: string;
-}) {
+export function rowToProject(
+  row: {
+    id: string;
+    name: string;
+    repository: string;
+    branch: string;
+    connection_id: string | null;
+    platform: string | null;
+    source_type: string | null;
+    template: string | null;
+    config: unknown;
+    created_at: string;
+  },
+  lastCommitHash = "",
+) {
   return {
     id: row.id,
     name: row.name,
@@ -22,6 +25,7 @@ export function rowToProject(row: {
     sourceType: row.source_type ?? "repository",
     template: row.template ?? "",
     config: projectConfigSchema.parse(row.config ?? {}),
+    lastCommitHash,
     createdAt: row.created_at,
   };
 }

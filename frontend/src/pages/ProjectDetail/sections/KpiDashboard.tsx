@@ -13,7 +13,7 @@ interface Props {
 export default function KpiDashboard({ stats, statsLoading, statsError }: Props) {
   if (statsLoading) {
     return (
-      <div className="mb-6">
+      <div className="mb-8">
         <SectionHeader title="Repository KPIs" />
         <div className="flex justify-center py-8">
           <Spinner />
@@ -24,7 +24,7 @@ export default function KpiDashboard({ stats, statsLoading, statsError }: Props)
 
   if (statsError) {
     return (
-      <div className="mb-6">
+      <div className="mb-8">
         <SectionHeader title="Repository KPIs" />
         <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-4 py-3 text-sm text-danger-500">{statsError}</div>
       </div>
@@ -36,7 +36,7 @@ export default function KpiDashboard({ stats, statsLoading, statsError }: Props)
   const kpiCards = getKpiCards(stats);
 
   return (
-    <div className="mb-6">
+    <div className="mb-8">
       <SectionHeader title="Repository KPIs" />
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
         {kpiCards.map((kpi) => (

@@ -2,15 +2,17 @@ import type { Scan, Project } from "../../../types";
 import { cardCls, btnLink, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import SeverityBadge from "../../../components/SeverityBadge";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 
 interface Props {
   scans: Scan[];
   projectMap: Record<string, Project>;
+  fallbackCommitByProject?: Record<string, string>;
   onViewAll: () => void;
   onViewScan: (id: string) => void;
 }
 
-export default function RecentScans({ scans, projectMap, onViewAll, onViewScan }: Props) {
+export default function RecentScans({ scans, projectMap, fallbackCommitByProject, onViewAll, onViewScan }: Props) {
   return (
     <div className={cardCls}>
       <div className="px-5 py-4 flex items-center justify-between">
@@ -40,17 +42,29 @@ export default function RecentScans({ scans, projectMap, onViewAll, onViewScan }
                   : "bg-primary-500";
             return (
               <li key={s.id}>
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onViewScan(s.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onViewScan(s.id);
+                    }
+                  }}
                   className="w-full px-5 py-3 flex items-center gap-3 hover:bg-card/40 transition-colors text-left"
                 >
                   <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
                   <div className="min-w-0 flex-1">
                     <p className={`${typeCardTitle} truncate`}>{proj?.name || s.repo}</p>
-                    <p className={`${typeCardDateCls} mt-0.5`}>
-                      {s.branch} · {formatCardDateTime(s.createdAt)}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <BranchCommitLabel
+                        branch={s.branch}
+                        commit={s.commitSha || fallbackCommitByProject?.[s.projectId] || undefined}
+                        onClick={() => onViewScan(s.id)}
+                      />
+                      <span className={typeCardDateCls}>{formatCardDateTime(s.createdAt)}</span>
+                    </div>
                   </div>
                   {s.summary && s.status === "completed" && (
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -60,7 +74,7 @@ export default function RecentScans({ scans, projectMap, onViewAll, onViewScan }
                       {s.summary.totalFindings === 0 && <SeverityBadge severity="clean" label="Clean" />}
                     </div>
                   )}
-                </button>
+                </div>
               </li>
             );
           })}

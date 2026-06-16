@@ -6,9 +6,12 @@ interface Props {
   deploy: Deployment;
   project: Project | null;
   onNavigateProject: () => void;
+  canDestroy: boolean;
+  destroying: boolean;
+  onDestroy: () => void;
 }
 
-export default function DeployHeader({ deploy, project, onNavigateProject }: Props) {
+export default function DeployHeader({ deploy, project, onNavigateProject, canDestroy, destroying, onDestroy }: Props) {
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
@@ -37,6 +40,16 @@ export default function DeployHeader({ deploy, project, onNavigateProject }: Pro
           </div>
         </div>
       </div>
+      {canDestroy && deploy.status === "success" && (
+        <button
+          type="button"
+          onClick={onDestroy}
+          disabled={destroying}
+          className="text-xs text-danger-500 hover:text-danger-700 font-medium transition-colors disabled:opacity-50"
+        >
+          {destroying ? "Destroying..." : "Destroy"}
+        </button>
+      )}
     </div>
   );
 }

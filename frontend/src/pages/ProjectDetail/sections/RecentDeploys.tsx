@@ -1,108 +1,134 @@
 import type { Deployment as DeployInfo, Provider as ProviderInfo } from "../../../types";
-import { cardCls, chipCls, strategyLabels } from "../../../utils/styles";
-import { timeAgo } from "../../../utils/timeAgo";
-import ProviderBadge from "../../../components/ProviderBadge";
+import { cardCls, strategyLabels } from "../../../utils/styles";
+import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { getProviderStyle } from "../../../data/providers";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
+import ProviderBadge from "../../../components/ProviderBadge";
 import StatusBadge from "../../../components/badges/StatusBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import { usePermissions } from "../../../context/PermissionsContext";
+
+const serviceByProvider: Record<string, Record<string, string>> = {
+  aws: { managed: "ECS", vps: "EC2", static: "S3" },
+  gcp: { managed: "Cloud Run", vps: "Compute Engine", static: "Cloud Storage" },
+};
+
+function serviceLabel(provider: string, strategy: string): string {
+  return serviceByProvider[provider]?.[strategy] || strategyLabels[strategy] || strategy;
+}
 
 interface Props {
   deploys: DeployInfo[];
   allProviders: ProviderInfo[];
   navigate: (path: string) => void;
-  destroying?: boolean;
-  onDestroy?: () => void;
+  fallbackCommitHash?: string;
 }
 
-export default function RecentDeploys({ deploys, allProviders, navigate, destroying, onDestroy }: Props) {
-  const { has } = usePermissions();
-  const canDestroy = has("deploy:manage");
+function dayLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+type TimelineRow =
+  | { type: "header"; key: string; label: string }
+  | { type: "deploy"; key: string; deploy: DeployInfo };
+
+function buildRows(deploys: DeployInfo[]): TimelineRow[] {
+  const rows: TimelineRow[] = [];
+  let currentDay = "";
+  for (const deploy of deploys) {
+    const day = new Date(deploy.createdAt).toDateString();
+    if (day !== currentDay) {
+      currentDay = day;
+      rows.push({ type: "header", key: `day-${day}`, label: dayLabel(deploy.createdAt) });
+    }
+    rows.push({ type: "deploy", key: deploy.id, deploy });
+  }
+  return rows;
+}
+
+export default function RecentDeploys({
+  deploys,
+  allProviders,
+  navigate,
+  fallbackCommitHash,
+}: Props) {
   if (!deploys.length) return null;
 
   const providerKey = (providerId: string) =>
     allProviders.find((p) => p.id === providerId)?.provider || "";
 
+  const rows = buildRows(deploys);
+
   return (
-    <div className="mb-6">
+    <div className="flex h-full flex-col">
       <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
-      <div className={`${cardCls} divide-y divide-border`}>
-        {deploys.map((d, index) => {
-          const isLatest = index === 0;
-
-          const pk = providerKey(d.providerId);
-          const providerLabel = getProviderStyle(pk).name || pk.toUpperCase();
-          const strategyLabel = d.deployStrategy ? strategyLabels[d.deployStrategy] || d.deployStrategy : "";
-
-          return (
-            <div key={d.id} className="px-4 py-2.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <ProviderBadge provider={pk} showName={false} iconSize="size-4" />
-                <BranchCommitLabel
-                  branch={d.branch}
-                  commit={d.commitHash || undefined}
-                  onClick={() => navigate(`/deploy/${d.id}`)}
-                />
-                {isLatest && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none shrink-0 bg-primary/10 text-primary">
-                    Last
-                  </span>
+      <div className={`${cardCls} p-4 flex-1`}>
+        <ol className="relative">
+          {rows.map((row, i) => {
+            const isLast = i === rows.length - 1;
+            const lineTop = row.type === "header" ? "top-6" : "top-9";
+            const pk = row.type === "deploy" ? providerKey(row.deploy.providerId) : "";
+            const providerName = pk ? getProviderStyle(pk).name || pk.toUpperCase() : "";
+            const service = row.type === "deploy" ? serviceLabel(pk, row.deploy.deployStrategy) : "";
+            return (
+              <li key={row.key} className="relative flex gap-3 pb-4 last:pb-0">
+                {!isLast && (
+                  <span
+                    aria-hidden
+                    className={`absolute left-4 ${lineTop} bottom-0 w-px -translate-x-1/2 bg-border`}
+                  />
                 )}
-                <StatusBadge status={d.status} />
-                {(providerLabel || strategyLabel) && (
-                  <span className={`${chipCls} whitespace-nowrap`}>
-                    {providerLabel}
-                    {strategyLabel && ` · ${strategyLabel}`}
-                  </span>
+                {row.type === "header" ? (
+                  <>
+                    <div className="relative z-10 flex size-8 shrink-0 items-center justify-center">
+                      <span className="size-2.5 rounded-full bg-border ring-4 ring-card" />
+                    </div>
+                    <span className="text-[14px] font-bold text-text-muted pt-1.5">{row.label}</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="relative z-10 shrink-0 flex size-8 items-center justify-center rounded-full bg-card ring-2 ring-border">
+                      <ProviderBadge provider={pk} showName={false} iconSize="size-4" />
+                    </div>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <BranchCommitLabel
+                          branch={row.deploy.branch}
+                          commit={row.deploy.commitHash || fallbackCommitHash || undefined}
+                          onClick={() => navigate(`/deploy/${row.deploy.id}`)}
+                        />
+                        <StatusBadge status={row.deploy.status} />
+                      </div>
+                      <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-text-muted mt-1">
+                        {providerName && <span className="font-medium text-text-secondary">{providerName}</span>}
+                        {service && (
+                          <>
+                            <span>·</span>
+                            <span>{service}</span>
+                          </>
+                        )}
+                        <span>·</span>
+                        <span>{formatCardDateTime(row.deploy.createdAt)}</span>
+                        {row.deploy.dockerImage && (
+                          <>
+                            <span>·</span>
+                            <span className="font-mono truncate max-w-40" title={row.deploy.dockerImage}>
+                              {row.deploy.dockerImage.split("/").pop()?.split(":")[0] || row.deploy.dockerImage}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
-                <span className="text-xs text-text-muted ml-auto shrink-0">{timeAgo(d.createdAt)}</span>
-              </div>
-              {d.dockerImage && (
-                <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 pl-6">
-                  <span className="font-mono truncate max-w-30" title={d.dockerImage}>
-                    {d.dockerImage.split("/").pop()?.split(":")[0] || d.dockerImage}
-                  </span>
-                </div>
-              )}
-              {(d.appUrl || d.id) && (
-                <div className="flex items-center gap-2 mt-0.5 pl-6">
-                  {d.appUrl && (
-                    <>
-                      <LinkIcon className="size-4 text-text-muted shrink-0" />
-                      <a
-                        href={d.appUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary-500 hover:text-primary-700 transition-colors"
-                      >
-                        {d.appUrl}
-                      </a>
-                    </>
-                  )}
-                  <div className="flex items-center gap-3 ml-auto shrink-0">
-                    {isLatest && canDestroy && d.status === "success" && onDestroy && (
-                      <button
-                        type="button"
-                        disabled={destroying}
-                        onClick={onDestroy}
-                        className="text-xs text-danger-500 hover:text-danger-700 font-medium transition-colors disabled:opacity-50"
-                      >
-                        {destroying ? "Destroying…" : "Destroy"}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => navigate(`/deploy/${d.id}`)}
-                      className="text-xs text-primary-500 hover:text-primary-700 font-medium transition-colors"
-                    >
-                      View details →
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+              </li>
+            );
+          })}
+        </ol>
       </div>
     </div>
   );

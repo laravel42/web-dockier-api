@@ -1,7 +1,7 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
 import {
-  chipCls,
   statusDotColors as statusColors,
   tableCellCls,
   tableCellMutedCls,
@@ -35,7 +35,11 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
             <td className={`${tableCellCls} font-medium`}>{proj?.name || latest.repo}</td>
             <td className={`${tableCellMutedCls} lowercase`}>{repoLabel}</td>
             <td>
-              <span className={chipCls}>{latest.branch}</span>
+              <BranchCommitLabel
+                branch={latest.branch}
+                commit={latest.commitHash || proj?.lastCommitHash || undefined}
+                onClick={() => onSelect(latest.id)}
+              />
             </td>
             <td className={tableCellMutedCls}>{sorted.length}</td>
             <td>

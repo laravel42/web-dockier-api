@@ -4,6 +4,7 @@ export type { Provider } from "./provider";
 export type { ScanSummary, Scan, Finding, ScanProgress, SecurityFindingCounts, ProviderSeverityCounts } from "./scan";
 export type {
   Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult, CommitInfo,
+  RepoIssue, RepoPullRequest,
   DeployOption, DetectedServiceInfo, RepoAiAnalysis, SensitiveDataField,
   RepoVulnerability, RepoDependency, RepoAnalysisResponse,
   StackComponent, StackAnalysisResponse,

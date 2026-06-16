@@ -10,6 +10,7 @@ import {
 } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import ProviderBadge from "../../../components/ProviderBadge";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import Spinner from "../../../components/Spinner";
 
@@ -70,10 +71,17 @@ export default function DeployHistory({
                 const dp = providers.find((p) => p.id === d.providerId);
                 const dk = dp?.provider || "";
                 return (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     key={d.id}
-                    type="button"
                     onClick={() => onSelect(d.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelect(d.id);
+                      }
+                    }}
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -86,9 +94,13 @@ export default function DeployHistory({
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 ml-3.5">
                       <ProviderBadge provider={dk} />
-                      <span className="text-[10px] text-text-muted truncate">{d.branch}</span>
+                      <BranchCommitLabel
+                        branch={d.branch}
+                        commit={d.commitHash || undefined}
+                        onClick={() => onSelect(d.id)}
+                      />
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

@@ -2,13 +2,16 @@ import DeployWizard from "../../components/DeployWizard";
 import { btnSecondary } from "../../utils/styles";
 import { useDeployDetail } from "./useDeployDetail";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
+import { useState } from "react";
 import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
 import { resolveDeployUrl } from "../../utils/resolveDeployUrl";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
+import ConfirmModal from "../../components/ConfirmModal";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
+import { usePermissions } from "../../context/PermissionsContext";
 
 export default function DeployDetail() {
   const {
@@ -16,12 +19,17 @@ export default function DeployDetail() {
     deploy, project, providers,
     loading, error,
     allDeploys, allDeploysLoading,
+    destroying,
     provKey,
     showDeployWizard, setShowDeployWizard,
     openDeployWizard, canLaunchDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
+    handleDestroy,
   } = useDeployDetail();
+  const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
+  const { has } = usePermissions();
+  const canDestroy = has("deploy:manage");
 
   if (loading) {
     return <PageLoading />;
@@ -57,6 +65,9 @@ export default function DeployDetail() {
           deploy={deploy}
           project={project}
           onNavigateProject={() => project && navigate(`/projects/${project.id}`)}
+          canDestroy={canDestroy}
+          destroying={destroying}
+          onDestroy={() => setShowDestroyConfirm(true)}
         />
 
         <InfoCards deploy={deploy} provKey={provKey} deployUrl={deployUrl} />
@@ -96,6 +107,18 @@ export default function DeployDetail() {
           onDeployComplete={handleDeployComplete}
         />
       )}
+
+      <ConfirmModal
+        open={showDestroyConfirm}
+        onClose={() => setShowDestroyConfirm(false)}
+        title="Destroy Deployment"
+        message="This will destroy all cloud infrastructure for this deployment (servers, firewall rules, static IPs, etc). This action cannot be undone."
+        confirmLabel="Destroy"
+        onConfirm={async () => {
+          const result = await handleDestroy();
+          if (result.success) setShowDestroyConfirm(false);
+        }}
+      />
     </div>
   );
 }

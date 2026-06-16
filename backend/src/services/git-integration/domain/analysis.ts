@@ -5,7 +5,20 @@ import { suggestDeployOptions } from "./deploy-options.js";
 import { detectServices, type DetectedService } from "./services.js";
 import { detectTechStack, type TechStackItem } from "./tech-stack.js";
 
-export function analyzeSensitiveDataFromText(schema: string): { tables: Array<any>; summary: { totalTables: number; highRiskTables: number; criticalFindings: string[] } } {
+type SensitiveTable = {
+  name: string;
+  riskScore: number;
+  columns: Array<{
+    name: string;
+    type: string;
+    category: SensitiveField["sensitivity"];
+    sensitivity: "critical" | "high" | "medium";
+    reason: string;
+    confidence: number;
+  }>;
+};
+
+export function analyzeSensitiveDataFromText(schema: string): { tables: SensitiveTable[]; summary: { totalTables: number; highRiskTables: number; criticalFindings: string[] } } {
   const findings: SensitiveField[] = [];
   const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)["`]?\s*\(([\s\S]*?)\);/gi;
   const sensitiveTokens = [
@@ -37,14 +50,14 @@ export function analyzeSensitiveDataFromText(schema: string): { tables: Array<an
     bucket.push(finding);
     grouped.set(finding.entity, bucket);
   }
-  const tables = Array.from(grouped.entries()).map(([name, columns]) => ({
+  const tables: SensitiveTable[] = Array.from(grouped.entries()).map(([name, columns]) => ({
     name,
     riskScore: Math.min(100, columns.length * 20 + (columns.some((c) => c.sensitivity === "secret") ? 40 : 0)),
     columns: columns.map((column) => ({
       name: column.field,
       type: "unknown",
       category: column.sensitivity,
-      sensitivity: column.sensitivity === "secret" ? "critical" : column.sensitivity === "sensitive" ? "high" : "medium",
+      sensitivity: (column.sensitivity === "secret" ? "critical" : column.sensitivity === "sensitive" ? "high" : "medium") as "critical" | "high" | "medium",
       reason: column.reason,
       confidence: 0.85,
     })),

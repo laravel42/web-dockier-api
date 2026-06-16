@@ -44,10 +44,12 @@ export function useScanDetail() {
 
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const fetchingFiles = useRef(new Set<string>());
+  const missingFiles = useRef(new Set<string>());
   const findingsFetchOffsetRef = useRef(0);
 
   const [runScanError, setRunScanError] = useState("");
   const terminalHandledRef = useRef<string | null>(null);
+  const missingFilesStorageKeyRef = useRef<string>("");
 
   const scanRunning =
     scan?.status === "running"
@@ -162,7 +164,26 @@ export function useScanDetail() {
     setFindingCounts(null);
     setHasMoreFindings(false);
     findingsFetchOffsetRef.current = 0;
+    fetchingFiles.current.clear();
+    missingFiles.current.clear();
+    setFileContents({});
   }, [scanId]);
+
+  useEffect(() => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    const key = `scan-missing-files:${project.connectionId}:${parsed.owner}/${parsed.repo}:${project.branch || "main"}`;
+    missingFilesStorageKeyRef.current = key;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as string[];
+      missingFiles.current = new Set(saved);
+    } catch {
+      missingFiles.current = new Set();
+    }
+  }, [project]);
 
   useEffect(() => {
     if (!scanId) return;
@@ -300,13 +321,39 @@ export function useScanDetail() {
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
     const uniqueFiles = [...new Set(findings.map((f) => displayFindingPath(f.filePath)))];
-    const toFetch = uniqueFiles.filter((fp) => !fileContents[fp] && !fetchingFiles.current.has(fp));
+    const toFetch = uniqueFiles.filter(
+      (fp) => !fileContents[fp] && !fetchingFiles.current.has(fp) && !missingFiles.current.has(fp.toLowerCase()),
+    );
     if (toFetch.length === 0) return;
     toFetch.forEach((fp) => {
       fetchingFiles.current.add(fp);
       gitApi.getFileContent(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", fp)
-        .then((res) => setFileContents((prev) => ({ ...prev, [fp]: res.content })))
-        .catch(() => { fetchingFiles.current.delete(fp); });
+        .then((res) => {
+          setFileContents((prev) => ({ ...prev, [fp]: res.content }));
+        })
+        .catch(() => {
+          // Missing files (404) are expected for stale findings; avoid retry loops
+          // and remove those findings from the current list entirely.
+          const normalized = fp.toLowerCase();
+          missingFiles.current.add(normalized);
+          if (missingFilesStorageKeyRef.current) {
+            try {
+              localStorage.setItem(
+                missingFilesStorageKeyRef.current,
+                JSON.stringify(Array.from(missingFiles.current)),
+              );
+            } catch {
+              // ignore persistence errors
+            }
+          }
+          setFindings((prev) =>
+            prev.filter((finding) => displayFindingPath(finding.filePath) !== fp),
+          );
+          setFindingsTotal((prev) => Math.max(0, prev - 1));
+        })
+        .finally(() => {
+          fetchingFiles.current.delete(fp);
+        });
     });
   }, [findings, project, fileContents]);
 

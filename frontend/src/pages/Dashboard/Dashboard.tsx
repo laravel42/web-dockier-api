@@ -26,6 +26,7 @@ export default function Dashboard() {
     recentDeploys,
     recentScans,
     projectMap,
+    fallbackCommitByProject,
   } = useDashboard();
   const { has, loading: permLoading } = usePermissions();
   const canViewDeploys = has("deploy:view");
@@ -79,6 +80,7 @@ export default function Dashboard() {
             deploys={recentDeploys}
             providers={providers}
             projectMap={projectMap}
+            fallbackCommitByProject={fallbackCommitByProject}
             onViewAll={() => navigate("/deploy")}
             onViewDeploy={(id) => navigate(`/deploy/${id}`)}
           />
@@ -86,6 +88,7 @@ export default function Dashboard() {
         <RecentScans
           scans={recentScans}
           projectMap={projectMap}
+          fallbackCommitByProject={fallbackCommitByProject}
           onViewAll={() => navigate("/security")}
           onViewScan={(id) => navigate(`/security/${id}`)}
         />

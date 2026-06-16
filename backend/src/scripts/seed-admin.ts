@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { initConfig, env } from "../shared/config.js";
 import { resolveSupabaseSecretKey } from "../shared/supabase/keys.js";
@@ -30,7 +30,7 @@ function normalizeSlug(value: string): string {
 }
 
 async function findAuthUserIdByEmail(
-  supabase: any,
+  supabase: SupabaseClient,
   email: string,
 ): Promise<string | null> {
   const lowerEmail = email.toLowerCase();
@@ -57,7 +57,7 @@ async function findAuthUserIdByEmail(
 }
 
 async function resolveAuthUser(
-  supabase: any,
+  supabase: SupabaseClient,
   env: SeederEnv,
 ): Promise<{ userId: string; wasCreated: boolean }> {
   const email = env.ADMIN_SEED_EMAIL.toLowerCase();
@@ -98,7 +98,7 @@ async function main() {
       : normalizeSlug(process.env.ADMIN_SEED_ORG_NAME ?? "Dockier"),
   });
 
-  const supabase = createClient<any>(env.SUPABASE_URL, resolveSupabaseSecretKey(env), {
+  const supabase = createClient(env.SUPABASE_URL, resolveSupabaseSecretKey(env), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 

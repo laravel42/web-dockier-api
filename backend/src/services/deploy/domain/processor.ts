@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";

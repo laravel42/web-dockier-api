@@ -20,6 +20,8 @@ import {
   getLanguages as ghGetLanguages,
   getContributors as ghGetContributors,
   getCollaborators as ghGetCollaborators,
+  listIssues as ghListIssues,
+  listPullRequests as ghListPullRequests,
   createIssue as ghCreateIssue,
 } from "./github-client.js";
 import {
@@ -27,6 +29,8 @@ import {
   getRepoInfo as glGetRepoInfo,
   getLanguages as glGetLanguages,
   getContributors as glGetContributors,
+  listIssues as glListIssues,
+  listPullRequests as glListPullRequests,
 } from "./gitlab-client.js";
 
 // ─── Canonical cross-provider shapes ───────────────────────────────────────────
@@ -36,9 +40,12 @@ export interface RepoCommit {
   shortHash: string;
   message: string;
   author: string;
+  authorLogin: string;
   authorAvatar: string;
   date: string;
   url: string;
+  additions: number;
+  deletions: number;
 }
 
 export type RepoContributor = {
@@ -46,6 +53,8 @@ export type RepoContributor = {
   avatarUrl: string;
   commits: number;
   profileUrl: string;
+  additions: number;
+  deletions: number;
 };
 
 export interface RepoMember {
@@ -71,6 +80,33 @@ export type RepoStats = {
   topContributors: RepoContributor[];
 };
 
+export interface RepoIssue {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  comments: number;
+  labels: Array<{ name: string; color: string }>;
+}
+
+export interface RepoPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  draft: boolean;
+}
+
+export interface ListQuery {
+  owner: string;
+  repo: string;
+  limit: number;
+}
+
 export interface IssueInput {
   owner: string;
   repo: string;
@@ -90,6 +126,7 @@ export interface CommitQuery {
   repo: string;
   branch: string;
   limit: number;
+  includeStats?: boolean;
 }
 
 export interface RepoQuery {
@@ -110,6 +147,10 @@ export interface GitProviderClient {
   getRepoStats(query: RepoQuery): Promise<RepoStats>;
   /** Repository members/collaborators. Returns [] for providers without member support. */
   listMembers(query: MemberQuery): Promise<RepoMember[]>;
+  /** Open issues. Returns [] for providers without issue support. */
+  listIssues(query: ListQuery): Promise<RepoIssue[]>;
+  /** Open pull/merge requests. Returns [] for providers without PR support. */
+  listPullRequests(query: ListQuery): Promise<RepoPullRequest[]>;
   /** Present only on providers that support issue creation. */
   createIssue?(input: IssueInput): Promise<IssueResult>;
 }
@@ -185,6 +226,14 @@ class GitHubProvider implements GitProviderClient {
     return ghGetCollaborators(this.conn, query);
   }
 
+  listIssues(query: ListQuery): Promise<RepoIssue[]> {
+    return ghListIssues(this.conn, query);
+  }
+
+  listPullRequests(query: ListQuery): Promise<RepoPullRequest[]> {
+    return ghListPullRequests(this.conn, query);
+  }
+
   createIssue(input: IssueInput): Promise<IssueResult> {
     return ghCreateIssue(this.conn, input);
   }
@@ -225,6 +274,14 @@ class GitLabProvider implements GitProviderClient {
   async listMembers(): Promise<RepoMember[]> {
     return [];
   }
+
+  listIssues(query: ListQuery): Promise<RepoIssue[]> {
+    return glListIssues(this.conn, query);
+  }
+
+  listPullRequests(query: ListQuery): Promise<RepoPullRequest[]> {
+    return glListPullRequests(this.conn, query);
+  }
 }
 
 /**
@@ -241,6 +298,14 @@ class UnsupportedProvider implements GitProviderClient {
   }
 
   async listMembers(): Promise<RepoMember[]> {
+    return [];
+  }
+
+  async listIssues(): Promise<RepoIssue[]> {
+    return [];
+  }
+
+  async listPullRequests(): Promise<RepoPullRequest[]> {
     return [];
   }
 }

@@ -1,84 +1,84 @@
 import type { RepoStats } from "../../../types";
-import { cardCls } from "../../../utils/styles";
 
 interface Props {
   stats: RepoStats | null;
+  nameByLogin?: Record<string, string>;
 }
 
-function ContributorAvatar({
-  name,
-  avatarUrl,
-  profileUrl,
-}: {
-  name: string;
-  avatarUrl: string;
-  profileUrl: string;
-}) {
-  const avatar = avatarUrl ? (
-    <img src={avatarUrl} alt="" className="size-6 rounded-full shrink-0" />
-  ) : (
-    <div className="size-6 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-[10px] shrink-0">
+function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt="" className="size-10 rounded-full shrink-0 ring-2 ring-border" />;
+  }
+  return (
+    <div className="size-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm shrink-0 ring-2 ring-border">
       {name.charAt(0).toUpperCase()}
     </div>
   );
-
-  if (!profileUrl) return avatar;
-
-  return (
-    <a
-      href={profileUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="shrink-0 rounded-full hover:opacity-80 transition-opacity"
-      title={`View ${name} profile`}
-    >
-      {avatar}
-    </a>
-  );
 }
 
-export default function ContributorsGrid({ stats }: Props) {
+export default function ContributorsGrid({ stats, nameByLogin }: Props) {
   if (!stats?.topContributors?.length) return null;
 
+  const contributors = stats.topContributors;
+  const maxCommits = Math.max(...contributors.map((c) => c.commits), 1);
+
   return (
-    <div className="mb-6">
+    <div className="mb-8">
       <h2 className="text-sm font-semibold text-text mb-3">Contributors</h2>
-      <div className={`${cardCls} p-3 sm:p-4`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-3 gap-y-2.5">
-          {stats.topContributors.map((c) => {
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+        {contributors.map((c, i) => {
+            const rank = i + 1;
+            const pct = Math.round((c.commits / maxCommits) * 100);
+            const realName = nameByLogin?.[c.name.toLowerCase()];
+            const displayName = realName && realName !== c.name ? `${realName} (${c.name})` : c.name;
             const nameEl = c.profileUrl ? (
               <a
                 href={c.profileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-medium text-primary-500 hover:text-primary-700 transition-colors truncate"
-                title={c.name}
+                className="block text-sm font-semibold text-primary-500 hover:text-primary-700 transition-colors truncate"
+                title={displayName}
               >
-                {c.name}
+                {displayName}
               </a>
             ) : (
-              <span className="text-xs font-medium text-text truncate" title={c.name}>
-                {c.name}
+              <span className="block text-sm font-semibold text-text truncate" title={displayName}>
+                {displayName}
               </span>
             );
 
             return (
               <div
                 key={c.name}
-                className="flex items-center gap-2 min-w-0 rounded-md px-2 py-1.5 hover:bg-secondary-50/60 transition-colors"
+                className="flex items-center gap-3 min-w-0 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors"
               >
-                <ContributorAvatar name={c.name} avatarUrl={c.avatarUrl} profileUrl={c.profileUrl} />
-                <div className="min-w-0 flex-1">{nameEl}</div>
-                <span
-                  className="text-[10px] text-text-muted tabular-nums shrink-0"
-                  title={`${c.commits} commit${c.commits !== 1 ? "s" : ""}`}
-                >
-                  {c.commits}
+                <span className="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-1.5 rounded-full text-[11px] font-bold tabular-nums ring-1 bg-secondary-100/50 text-text-muted ring-border">
+                  #{rank}
                 </span>
+                <Avatar name={c.name} avatarUrl={c.avatarUrl} />
+                <div className="min-w-0 flex-1">
+                  {nameEl}
+                  <div className="mt-1.5 h-1.5 w-[85%] overflow-hidden rounded-full bg-secondary-100/60">
+                    <div
+                      className="h-full rounded-full bg-primary-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-xs text-text-muted tabular-nums">
+                    {c.commits.toLocaleString()} commit{c.commits !== 1 ? "s" : ""}
+                  </div>
+                  {(c.additions > 0 || c.deletions > 0) && (
+                    <div className="mt-0.5 flex items-center justify-end gap-2 text-[11px] tabular-nums">
+                      <span className="text-emerald-400">{c.additions.toLocaleString()} ++</span>
+                      <span className="text-danger-500">{c.deletions.toLocaleString()} --</span>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
-        </div>
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ export interface Project {
   sourceType?: ProjectSourceType;
   template?: string;
   config?: ProjectConfig;
+  lastCommitHash?: string;
   createdAt: string;
 }
 

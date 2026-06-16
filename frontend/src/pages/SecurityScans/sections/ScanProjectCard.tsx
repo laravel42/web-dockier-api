@@ -1,10 +1,10 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import { cardInteractiveCls, chipCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
 interface Props {
   project: Project | undefined;
@@ -63,10 +63,11 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
           </span>
         </div>
         {project?.branch && (
-          <span className={chipCls}>
-            <LinkIcon className="size-3" strokeWidth={2} />
-            {project.branch}
-          </span>
+          <BranchCommitLabel
+            branch={project.branch}
+            commit={latest.commitSha || undefined}
+            onClick={() => onSelect(latest.id)}
+          />
         )}
       </div>
     </div>

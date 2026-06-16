@@ -15,5 +15,6 @@ export const projectSchema = z.object({
   sourceType: z.string(),
   template: z.string(),
   config: projectConfigSchema,
+  lastCommitHash: z.string(),
   createdAt: z.string(),
 });

@@ -12,7 +12,7 @@ import {
 import { usePermissions } from "../../../context/PermissionsContext";
 import type { Scan } from "../../../types";
 import Spinner from "../../../components/Spinner";
-import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 
 interface Props {
   scanId: string | undefined;
@@ -71,10 +71,17 @@ export default function ScanSidebar({
                 const isLive = s.status === "running" || s.status === "pending";
                 const hasBadges = s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0);
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectScan(s.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectScan(s.id);
+                      }
+                    }}
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -88,12 +95,8 @@ export default function ScanSidebar({
                         <span className="ml-auto shrink-0 text-[9px] font-medium text-primary">live</span>
                       )}
                     </div>
-                    <div className="mt-1 ml-3.5 flex items-center gap-1.5 min-w-0 text-[10px]">
-                      <GitBranchIcon className="size-3 shrink-0 text-text-muted" />
-                      <span className="truncate font-mono text-text-secondary">{s.branch}</span>
-                      {s.commitSha && (
-                        <span className="shrink-0 font-mono text-text-muted">{s.commitSha.slice(0, 7)}</span>
-                      )}
+                    <div className="mt-1 ml-3.5">
+                      <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} />
                     </div>
                     {hasBadges && (
                       <div className="mt-1 ml-3.5 flex flex-wrap items-center gap-1">
@@ -102,7 +105,7 @@ export default function ScanSidebar({
                         {s.summary!.infos > 0 && <SeverityBadge severity="info" count={s.summary!.infos} size="compact" />}
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
