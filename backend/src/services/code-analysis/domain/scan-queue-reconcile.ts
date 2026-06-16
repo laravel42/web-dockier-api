@@ -3,6 +3,7 @@ import { getQueue, SECURITY_SCAN_QUEUE } from "../../../shared/queue.js";
 import { getPostgresConnectionConfig } from "../../../shared/postgres.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { env } from "../../../shared/config.js";
 
 interface ActiveJobRow {
   id: string;
@@ -14,7 +15,7 @@ interface ActiveJobRow {
 const HEARTBEAT_STALE_MS = 90 * 1000;
 
 async function listActiveScanJobs(): Promise<ActiveJobRow[]> {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) return [];
 
   const client = new pg.Client(getPostgresConnectionConfig(databaseUrl));

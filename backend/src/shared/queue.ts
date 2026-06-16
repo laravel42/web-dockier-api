@@ -11,6 +11,7 @@
 import { PgBoss } from "pg-boss";
 import { getPostgresConnectionConfig } from "./postgres.js";
 import { logger } from "./logger.js";
+import { env } from "./config.js";
 
 let boss: PgBoss | null = null;
 let queueStarted = false;
@@ -29,7 +30,7 @@ export function getQueue(): PgBoss | null {
   if (boss) return boss;
   if (queueInitFailed) return null;
 
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) {
     logger.warn("[queue] DATABASE_URL not set — job queue disabled, falling back to in-process execution");
     return null;
@@ -42,7 +43,7 @@ export function getQueue(): PgBoss | null {
     // a hard client limit (e.g. 15), shared across all environments (local dev +
     // Railway). Keeping this small leaves headroom and avoids EMAXCONNSESSION,
     // even when a `tsx watch` restart briefly overlaps old and new connections.
-    max: Number(process.env.PGBOSS_MAX_CONNECTIONS ?? 5),
+    max: env.PGBOSS_MAX_CONNECTIONS,
     // Auto-create schema and tables on start
     migrate: true,
     // Monitor for stuck jobs every 60s

@@ -1,8 +1,8 @@
 /**
  * Deploy pipeline executor.
  *
- * Replaces the Encore pub/sub subscription. When a deployment is created,
- * this module is called to execute the full pipeline asynchronously:
+ * When a deployment is created, this module is called to execute the full
+ * pipeline asynchronously:
  * clone → analyze → build → push → provision → post-deploy.
  *
  * The pipeline runs in the background (fire-and-forget from the HTTP handler)

@@ -11,6 +11,7 @@ import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../lib/buildspec-generator/index.js";
 import { getAwsAccountId, ensureS3Bucket } from "../../../lib/aws.js";
+import { env } from "../../../shared/config.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -41,7 +42,6 @@ export interface CodeBuildOptions {
 
 // ─── Constants ─────────────────────────────────────────────────────
 
-const CODEBUILD_PROJECT = "image-builder";
 const CODEBUILD_POLL_INTERVAL_MS = 15_000;
 const CODEBUILD_MAX_ATTEMPTS = 60; // 15 minutes
 
@@ -81,7 +81,8 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
 
   const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const cacheRepoName = `${imageRepoName}-cache`;
-  const bucketName = `${CODEBUILD_PROJECT}-source-${accountId}`;
+  const codebuildProject = env.IMAGE_BUILDER_CODEBUILD_PROJECT;
+  const bucketName = `${codebuildProject}-source-${accountId}`;
 
   // 2. Generate and inject buildspec
   const buildspecContent = generateBuildspec(toDetectedStack(opts.repoConfig));
@@ -107,12 +108,12 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   const deployParams = buildDeployParams(repoName, opts.repoConfig, opts, deployTarget);
 
   // Callback URL from environment (optional — used by Lambda to notify completion)
-  const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
-  const webhookSecret = process.env.WEBHOOK_SECRET || "";
+  const callbackUrl = env.DEPLOY_CALLBACK_URL ?? "";
+  const webhookSecret = env.WEBHOOK_SECRET ?? "";
 
   const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
   const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
-  const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${CODEBUILD_PROJECT}-build-request`;
+  const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
 
   await sns.send(new PublishCommand({
     TopicArn: buildRequestTopicArn,
@@ -120,7 +121,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
     Message: JSON.stringify({
       buildId: deploymentId, sourceRepo: opts.repo, sourceRef: opts.branch, commitSha: commitHash,
       imageRepoName, cacheRepoName, s3Bucket: bucketName, s3Key, accountId, region,
-      codebuildProject: CODEBUILD_PROJECT, deployTarget, deployParams, callbackUrl, webhookSecret,
+      codebuildProject, deployTarget, deployParams, callbackUrl, webhookSecret,
     }),
   }));
   await logFn(deploymentId, `[${ts()}] ✓ Build queued via SNS → CodeBuild`);
@@ -130,7 +131,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
 
   // 7. Poll CodeBuild until image is ready
   const remoteImageUri = await pollCodeBuild({
-    deploymentId, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash, appendLog: logFn,
+    deploymentId, codebuildProject, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash, appendLog: logFn,
   });
 
   return { remoteImageUri, imageRepoName };
@@ -214,6 +215,7 @@ function buildDeployParams(
  */
 async function pollCodeBuild(opts: {
   deploymentId: string;
+  codebuildProject: string;
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -222,7 +224,7 @@ async function pollCodeBuild(opts: {
   commitHash: string;
   appendLog: (deploymentId: string, line: string) => Promise<void>;
 }): Promise<string> {
-  const { deploymentId, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash, appendLog: logFn } = opts;
+  const { deploymentId, codebuildProject, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash, appendLog: logFn } = opts;
   const credentials = { accessKeyId, secretAccessKey };
 
   const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
@@ -237,7 +239,7 @@ async function pollCodeBuild(opts: {
     if (!codebuildId) {
       try {
         const listResult = await cbClient.send(new ListBuildsForProjectCommand({
-          projectName: CODEBUILD_PROJECT, sortOrder: "DESCENDING",
+          projectName: codebuildProject, sortOrder: "DESCENDING",
         }));
         const buildIds = (listResult.ids || []).slice(0, 10);
         if (buildIds.length > 0) {
