@@ -72,7 +72,7 @@ export default function Sidebar() {
     <aside className="hidden w-56 shrink-0 border-r border-border/40 bg-card/30 px-3 py-5 lg:flex lg:flex-col lg:sticky lg:top-0 lg:h-screen">
       <AppBrand />
 
-      <nav className="mt-6 flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Main navigation">
+      <nav className="mt-6 flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Main navigation">
         {navItems.map((item) => (
           <NavItem
             key={item.to}

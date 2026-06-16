@@ -104,7 +104,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
                           href={row.commit.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs/snug font-medium text-text hover:text-primary-500 transition-colors line-clamp-2"
+                          className="text-[14px]/snug font-medium text-text hover:text-primary-500 transition-colors line-clamp-2"
                         >
                           {row.commit.message.split("\n")[0].trim()}
                         </a>

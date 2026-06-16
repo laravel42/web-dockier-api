@@ -107,7 +107,7 @@ export const btnAccent = btnPrimary;
 
 /** Sidebar nav link */
 export const navLinkCls =
-  "flex items-center gap-2 rounded-md px-3 py-1.5 text-ui font-medium leading-snug transition-colors";
+  "flex items-center gap-2 rounded-md px-3 py-1.5 text-[14px] font-medium leading-snug transition-colors";
 /** Sidebar nav link — active */
 export const navLinkActiveCls = "bg-primary/10 text-foreground";
 /** Sidebar nav link — idle hover */

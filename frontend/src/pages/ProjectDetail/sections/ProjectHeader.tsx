@@ -97,12 +97,12 @@ export default function ProjectHeader({
   };
 
   return (
-    <div className="flex items-center justify-between mb-8">
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-4 mb-8">
+      <div className="flex items-center gap-3 min-w-0">
         <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
           <FolderIcon className="size-6 " />
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {editing ? (
               <input
@@ -154,7 +154,7 @@ export default function ProjectHeader({
           </p>
         </div>
       </div>
-      <div className="relative flex items-center gap-4">
+      <div className="relative flex shrink-0 items-center gap-4">
         {hasGitActions && (
           <BranchSelector
             currentBranch={project.branch}

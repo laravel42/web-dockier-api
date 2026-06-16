@@ -25,6 +25,18 @@ const SECTION_TABS = [
   { key: "deployment",   label: "Deployment" },
 ] as const;
 
+const MAIN_TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "deployments", label: "Deployments" },
+  { key: "processes", label: "Processes" },
+  { key: "commands", label: "Commands" },
+  { key: "network", label: "Network" },
+  { key: "observe", label: "Observe" },
+  { key: "domains", label: "Domains" },
+  { key: "settings", label: "Settings" },
+] as const;
+
+type MainTabKey = typeof MAIN_TABS[number]["key"];
 type TabKey = typeof SECTION_TABS[number]["key"] | "sensitiveData" | "dependencies" | "techStack";
 
 // ─── SQL Schema Parser ───
@@ -658,6 +670,7 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
 // ─── Main Component ───
 
 export default function ProjectDescription({ analysis, analysisLoading, onRefresh, projectId }: Props) {
+  const [activeMainTab, setActiveMainTab] = useState<MainTabKey>("overview");
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
@@ -816,50 +829,80 @@ export default function ProjectDescription({ analysis, analysisLoading, onRefres
     return <p className="text-sm text-text-muted py-6 text-center">No data available for this section yet.</p>;
   };
 
+  const renderMainTabPlaceholder = (label: string) => (
+    <p className="text-sm text-text-muted py-10 text-center">{label} — coming soon.</p>
+  );
+
   return (
     <div className={`${cardCls} mb-8 overflow-hidden`}>
       <div className="h-1 bg-linear-to-r from-primary-500 via-primary-400 to-primary-300" />
 
       <div className="px-5 pt-4 pb-5">
-        {/* Header */}
-        <div className="flex items-center gap-2.5 mb-3">
-          <h2 className="text-lg font-semibold text-text">Project Overview</h2>
-          {onRefresh && (
-            <button onClick={onRefresh} className="ml-auto p-1.5 rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" title="Re-analyze project">
-              <svg className={`size-4  ${analysisLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        {/* Main tab nav */}
+        <div className="flex items-center gap-3 border-b border-border mb-4">
+          <div className="flex flex-1 gap-0.5 overflow-x-auto scrollbar-none">
+            {MAIN_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveMainTab(tab.key)}
+                className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  activeMainTab === tab.key
+                    ? "border-primary-500 text-text"
+                    : "border-transparent text-text-muted hover:text-text"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {onRefresh && activeMainTab === "overview" && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="shrink-0 p-1.5 rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors"
+              title="Re-analyze project"
+            >
+              <svg className={`size-4 ${analysisLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
               </svg>
             </button>
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-0.5 overflow-x-auto pb-2 mb-3 border-b border-border scrollbar-none">
-          {allTabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all ${
-                activeTab === tab.key
-                  ? tab.key === "sensitiveData" ? "bg-red-500/15 text-red-700 dark:text-red-300"
-                  : tab.key === "dependencies" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
-                  : "bg-primary-500/15 text-primary-700 dark:text-white"
-                  : "text-text-muted hover:text-text hover:bg-secondary-50"
-              }`}
-            >
-              {tab.label}
-              {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                <span className="text-[9px] bg-red-200 text-red-700 px-1 rounded-full ml-1">{uploadedSensitiveData.length}</span>
-              )}
-              {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                <span className="text-[9px] bg-blue-200 text-blue-700 px-1 rounded-full ml-1">{dependencies.length}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        {activeMainTab === "overview" ? (
+          <div className="flex gap-5">
+            {/* Overview sub-tabs sidebar */}
+            <div className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border pr-3">
+              {allTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-left transition-all ${
+                    activeTab === tab.key
+                      ? tab.key === "sensitiveData" ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                      : tab.key === "dependencies" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
+                      : "bg-primary-500/15 text-primary-700 dark:text-white"
+                      : "text-text-muted hover:text-text hover:bg-secondary-50"
+                  }`}
+                >
+                  <span className="flex-1 truncate">{tab.label}</span>
+                  {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
+                    <span className="text-[9px] bg-red-200 text-red-700 px-1 rounded-full shrink-0">{uploadedSensitiveData.length}</span>
+                  )}
+                  {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
+                    <span className="text-[9px] bg-blue-200 text-blue-700 px-1 rounded-full shrink-0">{dependencies.length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
 
-        {/* Tab content */}
-        {renderTabContent()}
+            <div className="min-w-0 flex-1">{renderTabContent()}</div>
+          </div>
+        ) : (
+          renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTab)?.label ?? "")
+        )}
       </div>
     </div>
   );

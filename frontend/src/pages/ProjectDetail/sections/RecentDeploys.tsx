@@ -3,7 +3,7 @@ import { cardCls, strategyLabels } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { getProviderStyle } from "../../../data/providers";
 import ProviderBadge from "../../../components/ProviderBadge";
-import StatusBadge from "../../../components/badges/StatusBadge";
+import StatusRingIcon from "../../../components/badges/StatusRingIcon";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 
 const serviceByProvider: Record<string, Record<string, string>> = {
@@ -75,7 +75,7 @@ export default function RecentDeploys({
             const providerName = pk ? getProviderStyle(pk).name || pk.toUpperCase() : "";
             const service = row.type === "deploy" ? serviceLabel(pk, row.deploy.deployStrategy) : "";
             return (
-              <li key={row.key} className="relative flex gap-3 pb-4 last:pb-0">
+              <li key={row.key} className="relative flex gap-4 pb-4 last:pb-0">
                 {!isLast && (
                   <span
                     aria-hidden
@@ -93,6 +93,7 @@ export default function RecentDeploys({
                   <>
                     <div className="relative z-10 shrink-0 flex size-8 items-center justify-center rounded-full bg-card ring-2 ring-border">
                       <ProviderBadge provider={pk} showName={false} iconSize="size-4" />
+                      <StatusRingIcon status={row.deploy.status} />
                     </div>
                     <div className="min-w-0 flex-1 pt-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -101,7 +102,6 @@ export default function RecentDeploys({
                           commit={row.deploy.commitHash || fallbackCommitHash || undefined}
                           onClick={() => navigate(`/deploy/${row.deploy.id}`)}
                         />
-                        <StatusBadge status={row.deploy.status} />
                       </div>
                       <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-text-muted mt-1">
                         {providerName && <span className="font-medium text-text-secondary">{providerName}</span>}

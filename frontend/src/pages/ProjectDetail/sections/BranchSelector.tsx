@@ -48,7 +48,7 @@ export default function BranchSelector({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={close} />
-          <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg bg-card shadow-lg border border-border p-2">
+          <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-lg bg-card shadow-lg border border-border p-2">
             <input
               type="text"
               placeholder="Search branches…"

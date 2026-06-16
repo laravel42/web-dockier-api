@@ -1,6 +1,6 @@
 import type { Scan } from "../../../types";
 import { cardCls } from "../../../utils/styles";
-import StatusBadge from "../../../components/badges/StatusBadge";
+import StatusRingIcon from "../../../components/badges/StatusRingIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
@@ -52,7 +52,7 @@ export default function RecentScans({ scans, navigate }: Props) {
             const isLast = i === rows.length - 1;
             const lineTop = row.type === "header" ? "top-6" : "top-9";
             return (
-              <li key={row.key} className="relative flex gap-3 pb-4 last:pb-0">
+              <li key={row.key} className="relative flex gap-4 pb-4 last:pb-0">
                 {!isLast && (
                   <span
                     aria-hidden
@@ -70,6 +70,7 @@ export default function RecentScans({ scans, navigate }: Props) {
                   <>
                     <div className="relative z-10 shrink-0 flex size-8 items-center justify-center rounded-full bg-card ring-2 ring-border">
                       <ShieldCheckIcon className="size-4 text-primary-500" />
+                      <StatusRingIcon status={row.scan.status} />
                     </div>
                     <div className="min-w-0 flex-1 pt-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -78,7 +79,6 @@ export default function RecentScans({ scans, navigate }: Props) {
                           commit={row.scan.commitSha || undefined}
                           onClick={() => navigate(`/security/${row.scan.id}`)}
                         />
-                        <StatusBadge status={row.scan.status} />
                       </div>
                       {row.scan.summary && row.scan.status === "completed" && (
                         <div className="flex items-center flex-wrap gap-1 mt-1.5">
