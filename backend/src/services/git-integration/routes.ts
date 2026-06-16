@@ -22,40 +22,11 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "./domain/connections.js";
-import {
-  GitHubApiError,
-  listCommits as ghListCommits,
-  getRepoInfo as ghGetRepoInfo,
-  getLanguages as ghGetLanguages,
-  getContributors as ghGetContributors,
-  getCollaborators as ghGetCollaborators,
-  createIssue as ghCreateIssue,
-} from "./domain/github-client.js";
-import {
-  GitLabApiError,
-  listCommits as glListCommits,
-  getRepoInfo as glGetRepoInfo,
-  getLanguages as glGetLanguages,
-  getContributors as glGetContributors,
-} from "./domain/gitlab-client.js";
+import { GitHubApiError } from "./domain/github-client.js";
+import { GitLabApiError } from "./domain/gitlab-client.js";
+import { getGitProvider, type RepoStats } from "./domain/git-provider.js";
 
-type RepoStatsPayload = {
-  stars: number;
-  forks: number;
-  openIssues: number;
-  watchers: number;
-  language: string;
-  languages: Record<string, number>;
-  lastCommitDate: string;
-  lastCommitMessage: string;
-  lastCommitAuthor: string;
-  lastCommitHash: string;
-  totalCommits: number;
-  contributors: number;
-  topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
-};
-
-function isPlaceholderStats(stats: RepoStatsPayload): boolean {
+function isPlaceholderStats(stats: RepoStats): boolean {
   return (
     stats.stars === 0
     && stats.forks === 0
@@ -66,16 +37,10 @@ function isPlaceholderStats(stats: RepoStatsPayload): boolean {
   );
 }
 
-function needsContributorProfileRefresh(stats: RepoStatsPayload, provider: string): boolean {
+function needsContributorProfileRefresh(stats: RepoStats, provider: string): boolean {
   if (provider !== "gitlab" && provider !== "gitlab_self_hosted") return false;
   if (!stats.topContributors?.length) return false;
   return stats.topContributors.every((contributor) => !contributor.profileUrl);
-}
-
-function primaryLanguage(languages: Record<string, number>): string {
-  const entries = Object.entries(languages);
-  if (entries.length === 0) return "";
-  return entries.sort(([, a], [, b]) => b - a)[0][0];
 }
 
 function throwProviderError(app: FastifyInstance, error: unknown): never {
@@ -424,20 +389,21 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      if (conn.provider === "github") {
-        try {
-          return await ghCreateIssue(conn, {
-            owner: request.body.owner,
-            repo: request.body.repo,
-            title: request.body.title,
-            body: request.body.body,
-            assignee: request.body.assignee,
-          });
-        } catch (error) {
-          throwProviderError(app, error);
-        }
+      const provider = getGitProvider(conn);
+      if (!provider.createIssue) {
+        throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
       }
-      throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
+      try {
+        return await provider.createIssue({
+          owner: request.body.owner,
+          repo: request.body.repo,
+          title: request.body.title,
+          body: request.body.body,
+          assignee: request.body.assignee,
+        });
+      } catch (error) {
+        throwProviderError(app, error);
+      }
     },
   );
 
@@ -463,17 +429,20 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.body.branch || "main";
       const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
-      if (conn.provider === "github") {
-        try {
-          const commits = await ghListCommits(conn, { owner: request.body.owner, repo: request.body.repo, branch, limit: 10 });
-          if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
-            log.push("Already up to date.");
-          } else {
-            for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
-          }
-        } catch (error) {
-          throwProviderError(app, error);
+      try {
+        const commits = await getGitProvider(conn).listCommits({
+          owner: request.body.owner,
+          repo: request.body.repo,
+          branch,
+          limit: 10,
+        });
+        if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
+          log.push("Already up to date.");
+        } else {
+          for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
         }
+      } catch (error) {
+        throwProviderError(app, error);
       }
       return { log };
     },
@@ -515,15 +484,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
-      if (conn.provider === "github") {
-        try {
-          const commits = await ghListCommits(conn, { owner: request.query.owner, repo: request.query.repo, branch, limit });
-          return { commits };
-        } catch (error) {
-          throwProviderError(app, error);
-        }
+      try {
+        const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit });
+        return { commits };
+      } catch (error) {
+        throwProviderError(app, error);
       }
-      return { commits: [] };
     },
   );
 
@@ -591,11 +557,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      if (conn.provider === "github") {
-        const members = await ghGetCollaborators(conn, { owner: request.query.owner, repo: request.query.repo });
-        return { members };
-      }
-      return { members: [] };
+      const members = await getGitProvider(conn).listMembers({ owner: request.query.owner, repo: request.query.repo });
+      return { members };
     },
   );
 
@@ -645,91 +608,22 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
         if (cached.data?.result) {
           const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
-          const cachedStats = parsed as RepoStatsPayload;
+          const cachedStats = parsed as RepoStats;
           if (!isPlaceholderStats(cachedStats) && !needsContributorProfileRefresh(cachedStats, conn.provider)) {
             return parsed;
           }
         }
       }
 
-      const stats: RepoStatsPayload = {
-        stars: 0,
-        forks: 0,
-        openIssues: 0,
-        watchers: 0,
-        language: "",
-        languages: {} as Record<string, number>,
-        lastCommitDate: "",
-        lastCommitMessage: "",
-        lastCommitAuthor: "",
-        lastCommitHash: "",
-        totalCommits: 0,
-        contributors: 0,
-        topContributors: [] as Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>,
-      };
-
-      if (conn.provider === "github") {
-        try {
-          const { owner, repo } = request.query;
-          const [repoInfo, commits, contributors, languages] = await Promise.all([
-            ghGetRepoInfo(conn, { owner, repo }),
-            ghListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => [] as any[]),
-            ghGetContributors(conn, { owner, repo, limit: 20 }),
-            ghGetLanguages(conn, { owner, repo }),
-          ]);
-
-          stats.stars = repoInfo.stars;
-          stats.forks = repoInfo.forks;
-          stats.openIssues = repoInfo.openIssues;
-          stats.watchers = repoInfo.watchers;
-          stats.language = repoInfo.language;
-          stats.languages = languages;
-
-          if (commits.length > 0) {
-            const latest = commits[0];
-            stats.lastCommitDate = latest.date;
-            stats.lastCommitMessage = latest.message;
-            stats.lastCommitAuthor = latest.author;
-            stats.lastCommitHash = latest.hash;
-            stats.totalCommits = commits.length;
-          }
-
-          stats.contributors = contributors.length;
-          stats.topContributors = contributors;
-        } catch (error) {
-          throwProviderError(app, error);
-        }
-      } else if (conn.provider === "gitlab" || conn.provider === "gitlab_self_hosted") {
-        try {
-          const { owner, repo } = request.query;
-          const [repoInfo, commits, contributors, languages] = await Promise.all([
-            glGetRepoInfo(conn, { owner, repo }),
-            glListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => []),
-            glGetContributors(conn, { owner, repo, limit: 20 }),
-            glGetLanguages(conn, { owner, repo }),
-          ]);
-
-          stats.stars = repoInfo.stars;
-          stats.forks = repoInfo.forks;
-          stats.openIssues = repoInfo.openIssues;
-          stats.watchers = repoInfo.watchers;
-          stats.language = primaryLanguage(languages);
-          stats.languages = languages;
-          stats.totalCommits = repoInfo.totalCommits;
-
-          if (commits.length > 0) {
-            const latest = commits[0];
-            stats.lastCommitDate = latest.date;
-            stats.lastCommitMessage = latest.message;
-            stats.lastCommitAuthor = latest.author;
-            stats.lastCommitHash = latest.hash;
-          }
-
-          stats.contributors = contributors.length;
-          stats.topContributors = contributors;
-        } catch (error) {
-          throwProviderError(app, error);
-        }
+      let stats: RepoStats;
+      try {
+        stats = await getGitProvider(conn).getRepoStats({
+          owner: request.query.owner,
+          repo: request.query.repo,
+          branch,
+        });
+      } catch (error) {
+        throwProviderError(app, error);
       }
 
       if (!isPlaceholderStats(stats)) {
