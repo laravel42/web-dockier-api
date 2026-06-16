@@ -58,6 +58,31 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   const db = supabaseAdmin;
 
   /**
+   * Cache writes here are best-effort: a failure must not fail the user's
+   * request, but it must not be silently swallowed either. Log a warning so
+   * cache write failures are observable instead of disappearing.
+   */
+  function logCacheWriteError(table: string, error: unknown): void {
+    if (error) {
+      app.log.warn({ err: error, table }, `git-integration: failed to write cache table "${table}"`);
+    }
+  }
+
+  /**
+   * Run a best-effort cache write. Logs (but does not throw on) both the
+   * returned Supabase error and any thrown rejection (network/connection
+   * failure), so a cache hiccup never fails an otherwise-successful request.
+   */
+  async function runCacheWrite(table: string, run: () => PromiseLike<{ error: unknown }>): Promise<void> {
+    try {
+      const { error } = await run();
+      logCacheWriteError(table, error);
+    } catch (err) {
+      logCacheWriteError(table, err);
+    }
+  }
+
+  /**
    * Get connection for tenant, letting domain errors propagate to the global handler.
    */
   async function requireConnection(connectionId: string, tenantId: string) {
@@ -73,10 +98,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     tenantId: string,
     filters: { repo?: string; branch?: string },
   ): Promise<void> {
-    let del = db.from(table).delete().eq("organization_id", tenantId);
-    if (filters.repo) del = del.eq("repo", filters.repo);
-    if (filters.branch) del = del.eq("branch", filters.branch);
-    await del;
+    await runCacheWrite(table, () => {
+      let del = db.from(table).delete().eq("organization_id", tenantId);
+      if (filters.repo) del = del.eq("repo", filters.repo);
+      if (filters.branch) del = del.eq("branch", filters.branch);
+      return del;
+    });
   }
 
   /**
@@ -86,17 +113,19 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     table: "stats_cache" | "stack_cache",
     params: { tenantId: string; repoKey: string; branch: string; projectId?: string; result: Json },
   ): Promise<void> {
-    await db.from(table).upsert(
-      {
-        id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
-        repo: params.repoKey,
-        branch: params.branch,
-        result: params.result,
-        created_at: new Date().toISOString(),
-        organization_id: params.tenantId,
-        project_id: params.projectId ?? "",
-      },
-      { onConflict: "organization_id,repo,branch" },
+    await runCacheWrite(table, () =>
+      db.from(table).upsert(
+        {
+          id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
+          repo: params.repoKey,
+          branch: params.branch,
+          result: params.result,
+          created_at: new Date().toISOString(),
+          organization_id: params.tenantId,
+          project_id: params.projectId ?? "",
+        },
+        { onConflict: "organization_id,repo,branch" },
+      ),
     );
   }
 
@@ -261,15 +290,17 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         throw app.httpErrors.badRequest((error as Error).message);
       }
 
-      await db.from("repo_cache").upsert(
-        {
-          id: request.params.connectionId,
-          connection_id: request.params.connectionId,
-          organization_id: auth.tenantId,
-          repos,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: "connection_id" },
+      await runCacheWrite("repo_cache", () =>
+        db.from("repo_cache").upsert(
+          {
+            id: request.params.connectionId,
+            connection_id: request.params.connectionId,
+            organization_id: auth.tenantId,
+            repos,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: "connection_id" },
+        ),
       );
       return { repos, cached: false };
     },
@@ -764,14 +795,16 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const result = analyzeSensitiveDataFromText(request.body.schema);
       if (request.body.projectId) {
-        await db.from("sensitive_cache").upsert(
-          {
-            id: request.body.projectId,
-            project_id: request.body.projectId,
-            result,
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: "project_id" },
+        await runCacheWrite("sensitive_cache", () =>
+          db.from("sensitive_cache").upsert(
+            {
+              id: request.body.projectId!,
+              project_id: request.body.projectId!,
+              result,
+              created_at: new Date().toISOString(),
+            },
+            { onConflict: "project_id" },
+          ),
         );
       }
       return result;
@@ -831,17 +864,19 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           const repoName = parts[parts.length - 1]!;
           const conn = await requireConnection(request.query.connectionId, auth.tenantId);
           const result = await runRepoAnalysis(conn, { owner, repo: repoName, branch });
-          await db.from("analysis_cache").upsert(
-            {
-              id: auth.tenantId + ":" + repo + ":" + branch,
-              repo,
-              branch,
-              commit_sha: "",
-              result: result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
-              created_at: new Date().toISOString(),
-              organization_id: auth.tenantId,
-            },
-            { onConflict: "organization_id,repo,branch" },
+          await runCacheWrite("analysis_cache", () =>
+            db.from("analysis_cache").upsert(
+              {
+                id: auth.tenantId + ":" + repo + ":" + branch,
+                repo,
+                branch,
+                commit_sha: "",
+                result: result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
+                created_at: new Date().toISOString(),
+                organization_id: auth.tenantId,
+              },
+              { onConflict: "organization_id,repo,branch" },
+            ),
           );
           return {
             badges: result.techStack.map((item) => ({
@@ -903,7 +938,9 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           );
           if (aiResult) {
             const updated = { ...parsed, aiAnalysis: aiResult };
-            await db.from("analysis_cache").update({ result: updated }).eq("repo", repoKey).eq("branch", branch);
+            await runCacheWrite("analysis_cache", () =>
+              db.from("analysis_cache").update({ result: updated }).eq("repo", repoKey).eq("branch", branch),
+            );
             return updated;
           }
         }
@@ -942,18 +979,20 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const finalResult = aiAnalysis ? { ...result, aiAnalysis } : result;
 
-      await db.from("analysis_cache").upsert(
-        {
-          id: auth.tenantId + ":" + repoKey + ":" + branch,
-          repo: repoKey,
-          branch,
-          commit_sha: "",
-          result: finalResult as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
-          created_at: new Date().toISOString(),
-          organization_id: auth.tenantId,
-          project_id: request.query.projectId ?? "",
-        },
-        { onConflict: "organization_id,repo,branch" },
+      await runCacheWrite("analysis_cache", () =>
+        db.from("analysis_cache").upsert(
+          {
+            id: auth.tenantId + ":" + repoKey + ":" + branch,
+            repo: repoKey,
+            branch,
+            commit_sha: "",
+            result: finalResult as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
+            created_at: new Date().toISOString(),
+            organization_id: auth.tenantId,
+            project_id: request.query.projectId ?? "",
+          },
+          { onConflict: "organization_id,repo,branch" },
+        ),
       );
       return finalResult;
     },
