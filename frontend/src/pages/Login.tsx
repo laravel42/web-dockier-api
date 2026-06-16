@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
+import { ApiError } from "../services/api-error";
 import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
+import Alert from "../components/ui/Alert";
+import AuthLayout from "../components/AuthLayout";
+import { InputWithLabel } from "../components/ui/fields";
+import { PasswordInput } from "../components/ui/fields/password-input";
+import { btnPrimaryAuth, btnSecondaryAuth, btnLink } from "../utils/styles";
+import { getErrorMessage } from "../utils/errors";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -14,7 +21,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const { refresh: refreshPermissions } = usePermissions();
   const navigate = useNavigate();
 
@@ -56,11 +63,10 @@ export default function Login() {
         navigate("/dashboard");
       }
     } catch (err: unknown) {
-      const message = (err as Error).message;
-      if (/rate limit/i.test(message)) {
+      if (err instanceof ApiError && err.isRateLimit) {
         setCooldownSeconds((value) => (value > 0 ? value : 60));
       }
-      setError(message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -74,6 +80,9 @@ export default function Login() {
     setNotice("");
   };
 
+  const demoLoginEnabled =
+    import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
+
   const handleDemoLogin = async () => {
     setError("");
     setNotice("");
@@ -81,120 +90,125 @@ export default function Login() {
     try {
       const res = await authApi.demoLogin();
       login(res.session.token, res.session.userId);
+      try {
+        await authApi.getMe();
+      } catch {
+        logout();
+        throw new Error("Demo workspace setup failed. Try again or sign up for a full account.");
+      }
       await refreshPermissions();
       navigate("/dashboard");
     } catch (err: unknown) {
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface">
-      <div className="w-full max-w-105 bg-card rounded-card shadow-(--shadow-card-hover) p-8 border border-border/50">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-            <img src="/logo.png" alt="Dockier logo" className="w-full h-full object-contain" />
-          </div>
-          <span className="text-lg font-display font-semibold text-text tracking-tight">Dockier</span>
-        </div>
-        <h1 className="text-xl font-display font-semibold text-text text-center mb-1">Welcome back</h1>
-        <p className="text-sm text-text-secondary text-center mb-6">
-          {loginMode === "password"
-            ? "Sign in with your email and password"
-            : otpSent
-              ? "Enter the code sent to your email"
-              : "Sign in with a secure email code"}
-        </p>
+    <AuthLayout>
+      <h1 className="font-display text-2xl font-semibold text-foreground">Welcome back</h1>
+      <p className="mt-1 mb-6 text-sm text-muted-foreground">
+        {loginMode === "password"
+          ? "Sign in with your email and password"
+          : otpSent
+            ? "Enter the code sent to your email"
+            : "Sign in with a secure email code"}
+      </p>
 
-        {error && <div className="mb-4 p-3 rounded-(--radius-btn) bg-danger-50 text-danger-500 text-sm" role="alert">{error}</div>}
-        {notice && <div className="mb-4 p-3 rounded-(--radius-btn) bg-primary-50 text-primary-700 text-sm" role="status">{notice}</div>}
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-1.5">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
-              required
-              disabled={otpSent && loginMode === "otp"}
-            />
-          </div>
-          {loginMode === "password" && (
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-text-secondary mb-1.5">Password</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-          )}
-          {loginMode === "otp" && otpSent && (
-            <div>
-              <label htmlFor="otp-token" className="block text-sm font-medium text-text-secondary mb-1.5">Email code</label>
-              <input
-                id="otp-token"
-                type="text"
-                value={otpToken}
-                onChange={(e) => setOtpToken(e.target.value)}
-                className="w-full h-11 px-4 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all"
-                placeholder="Enter code"
-                minLength={4}
-                required
-                autoComplete="one-time-code"
-              />
-            </div>
-          )}
-          <button type="submit" disabled={loading || (loginMode === "otp" && !otpSent && cooldownSeconds > 0)}
-            className="w-full h-11 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
-            {loading
-              ? "Please wait..."
-              : loginMode === "password"
-                ? "Sign in"
-                : otpSent
-                  ? "Verify and sign in"
-                  : cooldownSeconds > 0
-                    ? `Retry in ${cooldownSeconds}s`
-                    : "Send sign-in code"}
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <InputWithLabel
+          id="email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={otpSent && loginMode === "otp"}
+        />
+        {loginMode === "password" && (
+          <PasswordInput
+            id="password"
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+        )}
+        {loginMode === "otp" && otpSent && (
+          <InputWithLabel
+            id="otp-token"
+            label="Email code"
+            type="text"
+            value={otpToken}
+            onChange={(e) => setOtpToken(e.target.value)}
+            placeholder="Enter code"
+            minLength={4}
+            required
+            autoComplete="one-time-code"
+          />
+        )}
+        <button
+          type="submit"
+          disabled={loading || (loginMode === "otp" && !otpSent && cooldownSeconds > 0)}
+          className={btnPrimaryAuth}
+        >
+          {loading
+            ? "Please wait..."
+            : loginMode === "password"
+              ? "Sign in"
+              : otpSent
+                ? "Verify and sign in"
+                : cooldownSeconds > 0
+                  ? `Retry in ${cooldownSeconds}s`
+                  : "Send sign-in code"}
+        </button>
+        {loginMode === "otp" && otpSent && (
+          <button type="button" onClick={resetFlow} className={btnSecondaryAuth}>
+            Use a different email
           </button>
-          {loginMode === "otp" && otpSent && (
-            <button
-              type="button"
-              onClick={resetFlow}
-              className="w-full h-11 border border-border text-text text-sm font-medium rounded-(--radius-btn) hover:bg-surface transition-colors"
-            >
-              Use a different email
-            </button>
-          )}
-        </form>
+        )}
+      </form>
 
-        <div className="flex items-center gap-3 mt-4">
-          <button
-            type="button"
-            onClick={() => { setLoginMode(loginMode === "otp" ? "password" : "otp"); resetFlow(); }}
-            className="text-sm text-primary-500 font-medium hover:underline"
-          >
-            {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
-          </button>
-        </div>
+      <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
-          onClick={handleDemoLogin}
-          disabled={loading}
-          className="w-full h-11 mt-3 border border-primary-400 text-primary-600 text-sm font-medium rounded-(--radius-btn) hover:bg-primary-50 disabled:opacity-50 transition-colors"
+          onClick={() => {
+            setLoginMode(loginMode === "otp" ? "password" : "otp");
+            resetFlow();
+          }}
+          className={btnLink}
         >
-          Continue in demo mode
+          {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
         </button>
-
-        <p className="text-center text-sm text-text-secondary mt-6">
-          Need an account? <Link to="/register" className="text-primary-500 font-medium hover:underline">Sign up</Link>
-        </p>
       </div>
-    </div>
+      {demoLoginEnabled && (
+      <button
+        type="button"
+        onClick={handleDemoLogin}
+        disabled={loading}
+        className={`${btnSecondaryAuth} mt-3`}
+      >
+        Continue in demo mode
+      </button>
+      )}
+
+      {!demoLoginEnabled && (
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          Demo mode is for local development. Use Sign up to create a production account.
+        </p>
+      )}
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        Need an account?{" "}
+        <Link to="/register" className={btnLink}>
+          Sign up
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

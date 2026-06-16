@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 import type { Deployment, Provider } from "../types";
 
 export const deployApi = {
@@ -27,7 +28,7 @@ export const deployApi = {
 
   listDeployments: (providerId?: string) =>
     request<{ deployments: Deployment[] }>(
-      `/deploy/deployments${providerId ? `?providerId=${providerId}` : ""}`
+      `/deploy/deployments${buildQuery({ providerId })}`
     ),
 
   createDeployment: (data: {
@@ -42,6 +43,7 @@ export const deployApi = {
     registryUrl?: string;
     deployStrategy?: string;
     buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+    useRepoDockerfile?: boolean;
     skipPipeline?: boolean;
     templateId?: string;
     envVars?: Array<{ name: string; value: string }>;
@@ -93,7 +95,7 @@ export const deployApi = {
     dockerImage?: string;
     instanceType?: string;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
-    aiAnalysis?: Record<string, any>;
+    aiAnalysis?: Record<string, unknown>;
     templateId?: string;
   }) =>
     request<{

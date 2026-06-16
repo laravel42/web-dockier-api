@@ -1,17 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { projectsApi, gitApi, deployApi } from "../../services/api";
+import { projectsApi, gitApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
+import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
+import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project, ProjectSourceType } from "../../types";
 import { PROJECT_TEMPLATES } from "./templates";
+import { compareByTime } from "../../utils/sortByTime";
 
 export function useProjects() {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Pick<Project, "id" | "name" | "repository" | "branch" | "connectionId"> | null>(null);
   const [form, setForm] = useState({ name: "", repository: "", branch: "" });
@@ -38,44 +43,36 @@ export function useProjects() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [deployments, setDeployments] = useState<Array<{ id: string; repo: string; branch: string; status: string; createdAt: string }>>([]);
-
   // ── Data fetching ──────────────────────────────────────────────
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const res = await projectsApi.list();
-      setProjects(res.projects);
+      setProjects([...res.projects].sort((a, b) => compareByTime(a, b, "created")));
     } catch (err) {
-      console.error(err);
+      setLoadError(getErrorMessage(err, "Failed to load projects"));
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => { fetchProjects(); }, []);
-
-  useEffect(() => {
-    deployApi
-      .listDeployments()
-      .then((r) => setDeployments(r.deployments || []))
-      .catch(() => {});
   }, []);
+
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   // ── Connection / repo / branch cascading fetches ───────────────
 
-  const fetchConnections = async () => {
+  const fetchConnections = useCallback(async () => {
     setLoadingConnections(true);
     try {
       const res = await gitApi.listConnections();
       setConnections(res.connections);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err, "Failed to load source control connections"));
     } finally {
       setLoadingConnections(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (!selectedConnectionId) {
@@ -87,7 +84,7 @@ export function useProjects() {
       setLoadingRepos(true);
       setRepos([]); setSelectedRepo(""); setBranches([]); setSelectedBranch(""); setError("");
       try {
-        const res = await gitApi.listRepos(selectedConnectionId);
+        const res = await gitApi.listRepos(selectedConnectionId, true);
         if (!cancelled) setRepos(res.repos);
       } catch (err: unknown) {
         if (!cancelled) setError((err as Error).message || "Failed to load repositories");
@@ -156,7 +153,7 @@ export function useProjects() {
     resetSelections();
     setShowForm(true);
     fetchConnections();
-  }, []);
+  }, [fetchConnections]);
 
   // Auto-open create modal when navigated with state
   useEffect(() => {
@@ -228,11 +225,11 @@ export function useProjects() {
     if (deleteId) projectsApi.delete(deleteId).then(fetchProjects);
   };
 
-  const projectLangs = useProjectBadges(projects);
+  const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projects);
 
   return {
     navigate,
-    projects, loading,
+    projects, loading, loadError, reload: fetchProjects,
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,
@@ -249,6 +246,6 @@ export function useProjects() {
     openCreate, closeForm, handleSubmit,
     confirmDelete,
     // derived
-    deployments, projectLangs,
+    projectLangs, projectBadgeLoading,
   };
 }

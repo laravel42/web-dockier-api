@@ -8,6 +8,7 @@
 
 import type { TechStackItem } from "./tech-stack.js";
 import type { DetectedService } from "./services.js";
+import { logger } from "../../../shared/logger.js";
 
 // ─── Types ───
 
@@ -74,7 +75,7 @@ async function callOpenAI(apiKey: string, prompt: string, maxTokens = 4096): Pro
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    console.error(`[AI] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
+    logger.error(`[AI] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
     return null;
   }
 
@@ -82,14 +83,14 @@ async function callOpenAI(apiKey: string, prompt: string, maxTokens = 4096): Pro
   const text = data.choices?.[0]?.message?.content?.trim() || "";
 
   if (data.choices?.[0]?.finish_reason === "length") {
-    console.error(`[AI] Response truncated (${text.length} chars)`);
+    logger.error(`[AI] Response truncated (${text.length} chars)`);
     return null;
   }
 
   try {
     return JSON.parse(text);
   } catch (e: unknown) {
-    console.error(`[AI] JSON parse failed: ${(e as Error).message}`);
+    logger.error(`[AI] JSON parse failed: ${(e as Error).message}`);
     return null;
   }
 }
@@ -158,7 +159,7 @@ export async function analyzeWithAI(
   techStack: TechStackItem[],
   detectedServices: DetectedService[],
 ): Promise<AIRepoAnalysis | null> {
-  if (!apiKey) { console.error("[AI] API key not provided"); return null; }
+  if (!apiKey) { logger.error("[AI] API key not provided"); return null; }
 
   const configSummary = Object.entries(configContents)
     .map(([f, c]) => `── ${f} ──\n${c.slice(0, 3000)}`)
@@ -166,7 +167,7 @@ export async function analyzeWithAI(
 
   const context = buildContext(techStack, detectedServices, files, configSummary);
 
-  console.log("[AI] Starting parallel calls: 1 core + 7 sections...");
+  logger.info("[AI] Starting parallel calls: 1 core + 7 sections...");
   const startTime = Date.now();
 
   const [coreResult, ...sectionResults] = await Promise.allSettled([
@@ -175,10 +176,10 @@ export async function analyzeWithAI(
   ]);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`[AI] All parallel calls completed in ${elapsed}s`);
+  logger.info(`[AI] All parallel calls completed in ${elapsed}s`);
 
   const core = coreResult.status === "fulfilled" ? coreResult.value : null;
-  if (!core) { console.error("[AI] Core analysis failed"); return null; }
+  if (!core) { logger.error("[AI] Core analysis failed"); return null; }
 
   const sections: Record<string, string> = {};
   for (const result of sectionResults) {

@@ -379,16 +379,24 @@ Resources:
                 fi
 
                 # Append user env vars (these override the defaults above)
-                # Strip inline comments (# ...) from values that look like .env comments
-                # Docker --env-file format: KEY=value (no quotes — Docker handles spaces correctly)
+                # Quote values with spaces/special chars so Laravel dotenv can parse the file
                 cat /tmp/env-vars.json | python3 -c "
                 import sys, json, re
+                def needs_quotes(val):
+                  if val == '': return True
+                  for ch in val:
+                    if ch in ' \t#\"\\\'' or ord(ch) < 33:
+                      return True
+                  return False
+                def fmt(name, val):
+                  val = re.sub(r'\s+#.*$', '', val)
+                  if needs_quotes(val):
+                    esc = val.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"')
+                    return name + '=\"' + esc + '\"'
+                  return name + '=' + val
                 try:
                   for e in json.load(sys.stdin):
-                    val = e['value']
-                    # Strip inline comments: space(s) before # indicates a comment
-                    val = re.sub(r'\s+#.*$', '', val)
-                    print(e['name'] + '=' + val)
+                    print(fmt(e['name'], e['value']))
                 except: pass
                 " >> /tmp/${AppName}.env 2>/dev/null
 

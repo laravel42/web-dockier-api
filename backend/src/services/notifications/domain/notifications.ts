@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { sendEmailNotification } from "./email-dispatch.js";
 
 export type NotificationsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
 
@@ -20,6 +21,34 @@ export class NotificationsError extends DomainError {
 
 export type ChannelType = "email" | "slack" | "webhook" | "in_app";
 
+const IN_APP_CHANNEL_TYPE: ChannelType = "in_app";
+
+export async function ensureDefaultInAppChannel(tenantId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("notification_channels")
+    .select("id")
+    .eq("organization_id", tenantId)
+    .eq("type", IN_APP_CHANNEL_TYPE)
+    .maybeSingle();
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to look up in-app channel" });
+  if (data) return;
+
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const { error: insertError } = await supabaseAdmin.from("notification_channels").insert({
+    id,
+    organization_id: tenantId,
+    type: IN_APP_CHANNEL_TYPE,
+    config: "{}",
+    enabled: true,
+    created_at: now,
+  });
+  throwOnError(insertError, NotificationsError, {
+    internalMsg: "Failed to create default in-app channel",
+    duplicateMsg: "A channel of this type already exists",
+  });
+}
+
 export interface CreateChannelParams {
   tenantId: string;
   type: ChannelType;
@@ -28,6 +57,10 @@ export interface CreateChannelParams {
 
 export async function createChannel(params: CreateChannelParams) {
   const { tenantId, type, config } = params;
+
+  if (type === IN_APP_CHANNEL_TYPE) {
+    throw new NotificationsError("The in-app channel is included by default and cannot be added manually", "bad_request");
+  }
 
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -48,16 +81,18 @@ export async function createChannel(params: CreateChannelParams) {
 }
 
 export async function listChannels(tenantId: string) {
+  await ensureDefaultInAppChannel(tenantId);
+
   const { data, error } = await supabaseAdmin
     .from("notification_channels")
     .select("id,type,config,enabled,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list channels" });
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
-    type: row.type,
-    config: typeof row.config === "string" ? JSON.parse(row.config) : row.config,
+    type: row.type as ChannelType,
+    config: (typeof row.config === "string" ? JSON.parse(row.config) : row.config) as Record<string, string>,
     enabled: row.enabled,
     createdAt: row.created_at,
   }));
@@ -75,6 +110,18 @@ export async function toggleChannel(channelId: string, tenantId: string, enabled
 }
 
 export async function deleteChannel(channelId: string, tenantId: string) {
+  const { data: channel, error: lookupError } = await supabaseAdmin
+    .from("notification_channels")
+    .select("id,type")
+    .eq("id", channelId)
+    .eq("organization_id", tenantId)
+    .maybeSingle();
+  throwOnError(lookupError, NotificationsError, { internalMsg: "Failed to look up channel" });
+  if (!channel) throw new NotificationsError("Channel not found", "not_found");
+  if (channel.type === IN_APP_CHANNEL_TYPE) {
+    throw new NotificationsError("The in-app channel cannot be removed", "bad_request");
+  }
+
   const { data, error } = await supabaseAdmin
     .from("notification_channels")
     .delete()
@@ -98,24 +145,39 @@ export async function sendNotification(params: SendNotificationParams): Promise<
   const { tenantId, title, message, channels: filterChannels } = params;
   if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
 
-  // 1. Store in-app notification first to ensure consistency before performing external side-effects
-  const { error: insertError } = await supabaseAdmin.from("notifications").insert({
-    id: randomUUID(),
-    organization_id: tenantId,
-    channel: "in_app",
-    title,
-    message,
-    read: false,
-    created_at: new Date().toISOString(),
-  });
-  throwOnError(insertError, NotificationsError, { internalMsg: "Failed to store notification" });
+  await ensureDefaultInAppChannel(tenantId);
 
-  // 2. Fetch enabled channels
+  const { data: inAppChannel, error: inAppError } = await supabaseAdmin
+    .from("notification_channels")
+    .select("enabled")
+    .eq("organization_id", tenantId)
+    .eq("type", IN_APP_CHANNEL_TYPE)
+    .maybeSingle();
+  throwOnError(inAppError, NotificationsError, { internalMsg: "Failed to look up in-app channel" });
+
+  const inAppEnabled = inAppChannel?.enabled ?? false;
+  const wantsInApp = !filterChannels || filterChannels.includes(IN_APP_CHANNEL_TYPE);
+
+  if (inAppEnabled && wantsInApp) {
+    const { error: insertError } = await supabaseAdmin.from("notifications").insert({
+      id: randomUUID(),
+      organization_id: tenantId,
+      channel: IN_APP_CHANNEL_TYPE,
+      title,
+      message,
+      read: false,
+      created_at: new Date().toISOString(),
+    });
+    throwOnError(insertError, NotificationsError, { internalMsg: "Failed to store notification" });
+  }
+
+  // Fetch enabled external channels
   const { data, error } = await supabaseAdmin
     .from("notification_channels")
     .select("id,type,config,enabled")
     .eq("organization_id", tenantId)
-    .eq("enabled", true);
+    .eq("enabled", true)
+    .neq("type", IN_APP_CHANNEL_TYPE);
   const channels = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to fetch channels" });
 
   // 3. Dispatch external notifications concurrently with timeouts
@@ -134,6 +196,15 @@ export async function sendNotification(params: SendNotificationParams): Promise<
         });
         clearTimeout(timeoutId);
         return true;
+      } else if (channel.type === "email" && config?.email) {
+        const sent = await sendEmailNotification({
+          to: config.email,
+          title,
+          message,
+          idempotencyKey: `notification/${tenantId}/${channel.id}/${title}`,
+        });
+        clearTimeout(timeoutId);
+        return sent;
       } else if (channel.type === "webhook" && config?.url) {
         await fetch(config.url, {
           method: "POST",
@@ -152,7 +223,7 @@ export async function sendNotification(params: SendNotificationParams): Promise<
   });
 
   const results = await Promise.all(sendPromises);
-  const sent = results.filter(Boolean).length;
+  const sent = results.filter(Boolean).length + (inAppEnabled && wantsInApp ? 1 : 0);
 
   return { sent };
 }
@@ -169,7 +240,7 @@ export async function listNotifications(tenantId: string, unreadOnly?: boolean) 
   if (unreadOnly) query = query.eq("read", false);
   const { data, error } = await query;
   const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
-  return rows.map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
     channel: row.channel,
     title: row.title,

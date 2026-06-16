@@ -1,5 +1,6 @@
 import DevIcon from "./DevIcon";
 import { getProviderStyle } from "../data/providers";
+import { chipCls } from "../utils/styles";
 
 interface Props {
   provider: string;
@@ -16,10 +17,12 @@ export default function ProviderBadge({ provider, suffix, iconSize = "w-2.5 h-2.
     return ps.icon ? <DevIcon src={ps.icon} alt="" className={iconSize} /> : null;
   }
 
+  const label = ps.name || provider.toUpperCase();
+
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium shrink-0 ${ps.bg} ${ps.text}`}>
+    <span className={`${chipCls} whitespace-nowrap`}>
       {ps.icon && <DevIcon src={ps.icon} alt="" className={iconSize} />}
-      {provider.toUpperCase()}
+      {label}
       {suffix && <>{suffix}</>}
     </span>
   );

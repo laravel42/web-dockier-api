@@ -9,8 +9,16 @@
  */
 
 import { PgBoss } from "pg-boss";
+import { getPostgresConnectionConfig } from "./postgres.js";
+import { logger } from "./logger.js";
 
 let boss: PgBoss | null = null;
+let queueStarted = false;
+let queueInitFailed = false;
+
+export function isQueueReady(): boolean {
+  return queueStarted && boss !== null;
+}
 
 /**
  * Get or create the pg-boss instance.
@@ -19,16 +27,22 @@ let boss: PgBoss | null = null;
  */
 export function getQueue(): PgBoss | null {
   if (boss) return boss;
+  if (queueInitFailed) return null;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.warn("[queue] DATABASE_URL not set — job queue disabled, falling back to in-process execution");
+    logger.warn("[queue] DATABASE_URL not set — job queue disabled, falling back to in-process execution");
     return null;
   }
 
   boss = new PgBoss({
-    connectionString: databaseUrl,
+    ...getPostgresConnectionConfig(databaseUrl),
     schema: "pgboss",
+    // Cap the internal connection pool. The DB pooler runs in session mode with
+    // a hard client limit (e.g. 15), shared across all environments (local dev +
+    // Railway). Keeping this small leaves headroom and avoids EMAXCONNSESSION,
+    // even when a `tsx watch` restart briefly overlaps old and new connections.
+    max: Number(process.env.PGBOSS_MAX_CONNECTIONS ?? 5),
     // Auto-create schema and tables on start
     migrate: true,
     // Monitor for stuck jobs every 60s
@@ -36,7 +50,7 @@ export function getQueue(): PgBoss | null {
   });
 
   boss.on("error", (err: Error) => {
-    console.error("[queue] pg-boss error:", err);
+    logger.error({ err }, "[queue] pg-boss error");
   });
 
   return boss;
@@ -47,12 +61,27 @@ export function getQueue(): PgBoss | null {
  * Creates the pgboss schema if it doesn't exist and begins monitoring.
  * No-op if DATABASE_URL is not configured.
  */
-export async function startQueue(): Promise<void> {
-  const queue = getQueue();
-  if (!queue) return;
+export async function startQueue(): Promise<boolean> {
+  if (queueStarted) return true;
+  if (queueInitFailed) return false;
 
-  await queue.start();
-  console.log("[queue] pg-boss started");
+  const queue = getQueue();
+  if (!queue) return false;
+
+  try {
+    await queue.start();
+    queueStarted = true;
+    logger.info("[queue] pg-boss started");
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
+    queueInitFailed = true;
+    queueStarted = false;
+    await queue.stop().catch(() => {});
+    boss = null;
+    return false;
+  }
 }
 
 /**
@@ -62,13 +91,15 @@ export async function stopQueue(): Promise<void> {
   if (!boss) return;
   await boss.stop({ graceful: true, timeout: 30_000 });
   boss = null;
-  console.log("[queue] pg-boss stopped");
+  queueStarted = false;
+  logger.info("[queue] pg-boss stopped");
 }
 
 // ─── Queue Names ───────────────────────────────────────────────────
 
 export const DEPLOY_QUEUE = "deploy-pipeline";
 export const IMAGE_BUILD_QUEUE = "image-build";
+export const SECURITY_SCAN_QUEUE = "security-scan";
 
 // ─── Generic Worker Factory ────────────────────────────────────────
 
@@ -112,8 +143,9 @@ export function createWorker<T>(
   let registered = false;
 
   async function register(): Promise<void> {
-    const queue = getQueue();
-    if (!queue || registered) return;
+    if (!isQueueReady() || registered) return;
+    const queue = boss;
+    if (!queue) return;
 
     // Set flag synchronously to prevent concurrent duplicate registrations
     registered = true;
@@ -128,18 +160,18 @@ export function createWorker<T>(
           if (!job) continue;
           const input = job.data as T;
           const jobId = job.id as string;
-          console.log(`[${queueName}] Processing job ${jobId}`);
+          logger.info(`[${queueName}] Processing job ${jobId}`);
           try {
             await handler(input);
-            console.log(`[${queueName}] Completed job ${jobId}`);
+            logger.info(`[${queueName}] Completed job ${jobId}`);
           } catch (err) {
-            console.error(`[${queueName}] Failed job ${jobId}:`, err);
+            logger.error({ err }, `[${queueName}] Failed job ${jobId}`);
             throw err; // re-throw so pg-boss marks it failed and retries
           }
         }
       });
 
-      console.log(`[${queueName}] Worker registered`);
+      logger.info(`[${queueName}] Worker registered`);
     } catch (err) {
       registered = false;
       throw err;
@@ -147,22 +179,22 @@ export function createWorker<T>(
   }
 
   async function enqueue(input: T, singletonKey?: string): Promise<void> {
-    const queue = getQueue();
-
-    if (queue) {
-      await queue.send(queueName, input as unknown as Record<string, unknown>, {
+    if (isQueueReady() && boss) {
+      await boss.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
         expireInSeconds,
         ...(singletonKey ? { singletonKey } : {}),
       });
-      console.log(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
-    } else {
-      setImmediate(() => {
-        handler(input).catch((err) => {
-          console.error(`[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}:`, err);
-        });
-      });
+      logger.info(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+      return;
     }
+
+    logger.warn(`[${queueName}] Queue unavailable — running job in-process${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+    setImmediate(() => {
+      handler(input).catch((err) => {
+        logger.error({ err }, `[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+      });
+    });
   }
 
   return { register, enqueue };

@@ -46,14 +46,14 @@ export default function NotificationDropdown() {
       >
         <BellIcon />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-danger-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+          <span className="absolute top-1 right-1 size-4  bg-danger-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/80 rounded-2xl shadow-[var(--shadow-card-hover)] z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-80 bg-card border border-border/80 rounded-lg shadow-(--shadow-card-hover) z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <span className="text-sm font-semibold text-text">Notifications</span>
             <Link to="/notifications" onClick={() => setOpen(false)} className="text-xs text-primary-500 hover:text-primary-700 font-medium">
@@ -67,10 +67,19 @@ export default function NotificationDropdown() {
               notifications.slice(0, 5).map((n) => (
                 <div key={n.id} className={`px-4 py-3 border-b border-border last:border-b-0 hover:bg-secondary-50 transition-colors ${!n.read ? "bg-primary-50/30" : ""}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className={`text-sm truncate ${!n.read ? "font-medium text-text" : "text-text-secondary"}`}>{n.title}</p>
-                      <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{n.message}</p>
-                      <p className="text-[10px] text-text-muted mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <p className={`text-sm truncate min-w-0 ${!n.read ? "font-medium text-text" : "text-text-secondary"}`}>{n.title}</p>
+                        <time className="text-[10px] leading-snug text-text-muted shrink-0 whitespace-nowrap">
+                          {new Date(n.createdAt).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </time>
+                      </div>
+                      <p className="text-[11px] leading-snug text-text-muted mt-0.5 line-clamp-2">{n.message}</p>
                     </div>
                     {!n.read && (
                       <button onClick={() => handleMarkRead(n.id)} className="text-[10px] text-primary-500 hover:text-primary-700 font-medium whitespace-nowrap shrink-0">

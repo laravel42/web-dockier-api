@@ -4,13 +4,16 @@
  * Extracted from the run-post-deploy route handler. Encapsulates all logic for:
  * - Resolving the EC2 instance from CloudFormation stack outputs
  * - Building Docker exec command chains with container readiness checks
+ * - Laravel .env injection (S3 upload → container copy, quoted values)
  * - Executing commands via SSM SendCommand
  * - Polling for SSM command completion
  *
  * This module is pure business logic — no Fastify request/reply coupling.
  */
 
+import { ensureS3Bucket, getAwsAccountId } from "../../../lib/aws.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
+import { formatEnvFileContent } from "../../../shared/env/format-env-file.js";
 import { deriveAppName, deriveStackName } from "./cfn-deploy.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -41,14 +44,48 @@ export interface PostDeployResult {
 function parseBuildMetadata(raw: string | null | undefined): Record<string, unknown> {
   if (!raw) return {};
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return {};
   }
 }
 
-function isLaravelProject(metadata: Record<string, unknown>, sourceRepo: string): boolean {
-  const techStack = Array.isArray(metadata.techStack) ? metadata.techStack : [];
+function parseDeployParams(metadata: Record<string, unknown>): Record<string, unknown> {
+  const raw = metadata.deployParams;
+  if (!raw) return {};
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return raw as Record<string, unknown>;
+}
+
+function normalizeEnvVars(rawEnvVars: unknown): Array<{ name: string; value: string }> {
+  if (!Array.isArray(rawEnvVars)) return [];
+  return rawEnvVars
+    .map((v: unknown) => {
+      if (typeof v === "string") {
+        const idx = v.indexOf("=");
+        return idx > 0 ? { name: v.slice(0, idx), value: v.slice(idx + 1) } : { name: v, value: "" };
+      }
+      if (v && typeof v === "object" && typeof (v as { name?: string }).name === "string") {
+        const row = v as { name: string; value?: unknown };
+        return { name: row.name, value: String(row.value ?? "") };
+      }
+      return null;
+    })
+    .filter((v): v is { name: string; value: string } => v !== null && v.name.length > 0);
+}
+
+function isLaravelProject(metadata: Record<string, unknown>, deployParams: Record<string, unknown>, sourceRepo: string): boolean {
+  const techStack = Array.isArray(deployParams.techStack)
+    ? deployParams.techStack
+    : Array.isArray(metadata.techStack)
+      ? metadata.techStack
+      : [];
   return (
     techStack.some((s) => typeof s === "string" && s.toLowerCase() === "laravel") ||
     sourceRepo.toLowerCase().includes("laravel")
@@ -72,7 +109,70 @@ function buildCommandChain(commands: PostDeployCommand[], containerName: string)
     .join(" && ");
 }
 
-function buildScript(containerName: string, cmdChain: string, envSetup: string): string {
+function buildEnvOverrides(containerName: string, selfHostedServices: string[]): string[] {
+  const overrides: string[] = [];
+  if (selfHostedServices.includes("database")) {
+    overrides.push(
+      `docker exec ${containerName} sh -c 'grep -q "^DB_HOST=" /var/www/html/.env && sed -i "s/^DB_HOST=.*/DB_HOST=host.docker.internal/" /var/www/html/.env || echo "DB_HOST=host.docker.internal" >> /var/www/html/.env'`,
+    );
+  }
+  if (selfHostedServices.includes("cache") || selfHostedServices.includes("broadcasting")) {
+    overrides.push(
+      `docker exec ${containerName} sh -c 'grep -q "^REDIS_HOST=" /var/www/html/.env && sed -i "s/^REDIS_HOST=.*/REDIS_HOST=host.docker.internal/" /var/www/html/.env || echo "REDIS_HOST=host.docker.internal" >> /var/www/html/.env'`,
+    );
+  }
+  return overrides;
+}
+
+function buildEnvSetupCommand(containerName: string, envOverrides: string[]): string {
+  const envFixCmd = envOverrides.length > 0 ? `${envOverrides.join(" && ")} && ` : "";
+  return `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && ${envFixCmd}`;
+}
+
+async function uploadEnvToS3(
+  containerName: string,
+  envVars: Array<{ name: string; value: string }>,
+  credentials: ResolvedCredentials,
+): Promise<string> {
+  if (envVars.length === 0) return "";
+
+  const envContent = formatEnvFileContent(envVars);
+  const accountId = await getAwsAccountId(credentials.region, {
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+  });
+  const envBucket = `image-builder-templates-${accountId}`;
+  const envKey = `env-files/${containerName}-postdeploy.env`;
+
+  await ensureS3Bucket(credentials.region, {
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+  }, envBucket);
+
+  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const s3 = new S3Client({
+    region: credentials.region,
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+    },
+  });
+  await s3.send(new PutObjectCommand({
+    Bucket: envBucket,
+    Key: envKey,
+    Body: envContent,
+    ContentType: "text/plain",
+  }));
+
+  return `aws s3 cp s3://${envBucket}/${envKey} /tmp/${containerName}.env --region ${credentials.region}`;
+}
+
+function buildScript(
+  containerName: string,
+  cmdChain: string,
+  envDownloadCmd: string,
+  envSetup: string,
+): string {
   assertSafeShellToken(containerName, "container name");
   return [
     "#!/bin/bash",
@@ -82,8 +182,9 @@ function buildScript(containerName: string, cmdChain: string, envSetup: string):
     "  sleep 2",
     "done",
     `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
+    envDownloadCmd,
     `${envSetup}${cmdChain}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 // ─── Resolve Instance ────────────────────────────────────────────────────────
@@ -110,7 +211,7 @@ async function resolveInstanceId(
   }
 
   const outputs = Object.fromEntries(
-    (stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
+    (stack.Outputs || []).map((o: { OutputKey?: string; OutputValue?: string }) => [o.OutputKey, o.OutputValue]),
   );
   const instanceId = outputs.InstanceId || "";
   if (!instanceId) {
@@ -155,7 +256,6 @@ async function executeSsmCommand(
     throw new Error("Failed to send SSM command");
   }
 
-  // Poll for completion
   for (let i = 0; i < SSM_POLL_MAX_ATTEMPTS; i++) {
     await new Promise((r) => setTimeout(r, SSM_POLL_INTERVAL_MS));
     try {
@@ -197,8 +297,9 @@ async function executeSsmCommand(
           output: outputLines.length > 0 ? outputLines : [`Command ${status}`],
         };
       }
-    } catch (err: any) {
-      if (err.name !== "InvocationDoesNotExist") {
+    } catch (err: unknown) {
+      const awsErr = err as { name?: string };
+      if (awsErr.name !== "InvocationDoesNotExist") {
         throw err;
       }
     }
@@ -230,21 +331,26 @@ export async function runPostDeployCommands(params: PostDeployParams): Promise<P
 
   const stackName = deriveStackName(appName);
   const containerName = appName;
+  const metadata = parseBuildMetadata(buildRow.build_metadata);
+  const deployParams = parseDeployParams(metadata);
+  const envVars = normalizeEnvVars(deployParams.envVars);
+  const selfHostedServices = Array.isArray(deployParams.selfHostedServices)
+    ? deployParams.selfHostedServices.filter((s): s is string => typeof s === "string")
+    : [];
+  const isLaravel = isLaravelProject(metadata, deployParams, buildRow.source_repo || "");
 
-  // Resolve EC2 instance from the CloudFormation stack
   const instanceId = await resolveInstanceId(stackName, credentials);
-
-  // Build command chain
   const cmdChain = buildCommandChain(enabledCommands, containerName);
 
-  // Laravel: copy .env into container before running commands
-  const metadata = parseBuildMetadata(buildRow.build_metadata);
-  const envSetup = isLaravelProject(metadata, buildRow.source_repo || "")
-    ? `docker cp /tmp/${containerName}.env ${containerName}:/var/www/html/.env 2>/dev/null || docker exec ${containerName} sh -c 'touch .env' && `
+  let envDownloadCmd = "";
+  if (isLaravel && envVars.length > 0) {
+    envDownloadCmd = await uploadEnvToS3(containerName, envVars, credentials);
+  }
+
+  const envSetup = isLaravel
+    ? buildEnvSetupCommand(containerName, buildEnvOverrides(containerName, selfHostedServices))
     : "";
 
-  const script = buildScript(containerName, cmdChain, envSetup);
-
-  // Execute via SSM
+  const script = buildScript(containerName, cmdChain, envDownloadCmd, envSetup);
   return await executeSsmCommand(instanceId, script, credentials);
 }

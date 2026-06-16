@@ -4,14 +4,17 @@ import { z } from "zod";
 import {
   authMeSchema,
   authSessionSchema,
+  billingDetailsSchema,
   membershipSchema,
   registerStartBodySchema,
   registerStartResponseSchema,
 } from "./schemas.js";
 import { env } from "../../shared/config.js";
+import { resolveSupabaseSecretKey } from "../../shared/supabase/keys.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { rateLimit } from "../../shared/rate-limit.js";
 
 // Domain modules
 import {
@@ -32,15 +35,24 @@ import {
   switchTenant,
   transferOwnership,
 } from "./domain/tenant.js";
+import { setupTwoFactor, enableTwoFactor } from "./domain/two-factor.js";
+import { getBillingDetails, updateBillingDetails } from "./domain/billing.js";
 
 export async function registerAuthRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  // Rate limiters for public auth endpoints
+  const authStartLimit = rateLimit({ max: 5, windowMs: 60_000, prefix: "auth-start" });
+  const authVerifyLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-verify" });
+  const authLoginLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-login" });
+  const auth2faLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-2fa" });
 
   // ─── Demo Login ────────────────────────────────────────────────────────────
 
   typed.post(
     "/auth/demo-login",
     {
+      preHandler: authLoginLimit,
       schema: {
         tags: ["auth"],
         summary: "Development-only demo login",
@@ -62,6 +74,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/password/login",
     {
+      preHandler: authLoginLimit,
       schema: {
         tags: ["auth"],
         summary: "Password-based login (development)",
@@ -82,7 +95,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         email: request.body.email,
         password: request.body.password,
         supabaseUrl: env.SUPABASE_URL,
-        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+        supabaseSecretKey: resolveSupabaseSecretKey(env),
       });
     },
   );
@@ -92,6 +105,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/register/start",
     {
+      preHandler: authStartLimit,
       schema: {
         tags: ["auth"],
         summary: "Start passwordless signup via Supabase OTP/magic link",
@@ -123,6 +137,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/passwordless/start",
     {
+      preHandler: authStartLimit,
       schema: {
         tags: ["auth"],
         summary: "Start passwordless authentication via Supabase email OTP/magic link",
@@ -150,6 +165,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/passwordless/verify",
     {
+      preHandler: authVerifyLimit,
       schema: {
         tags: ["auth"],
         summary: "Verify OTP/magic link token and issue tenant-scoped API JWT",
@@ -207,6 +223,83 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     async (request) => {
       const memberships = await listMembershipsForUser(request.auth!.userId);
       return { memberships };
+    },
+  );
+
+  // ─── Two-Factor Authentication ─────────────────────────────────────────────
+
+  typed.post(
+    "/auth/2fa/setup",
+    {
+      preHandler: [app.requireAuth, auth2faLimit],
+      schema: {
+        tags: ["auth"],
+        summary: "Generate a TOTP secret and QR code for 2FA setup",
+        response: {
+          200: z.object({
+            secret: z.string(),
+            qrCodeUrl: z.string(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      return await setupTwoFactor(auth.userId, auth.email);
+    },
+  );
+
+  typed.post(
+    "/auth/2fa/enable",
+    {
+      preHandler: [app.requireAuth, auth2faLimit],
+      schema: {
+        tags: ["auth"],
+        summary: "Verify a TOTP code and enable 2FA",
+        body: z.object({
+          token: z.string().trim().min(6).max(8),
+        }),
+        response: { 200: z.object({ success: z.literal(true) }) },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      return await enableTwoFactor(auth.userId, request.body.token);
+    },
+  );
+
+  // ─── Billing ───────────────────────────────────────────────────────────────
+
+  typed.get(
+    "/auth/billing",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.BILLING_VIEW),
+      schema: {
+        tags: ["auth"],
+        summary: "Get organization billing details",
+        response: { 200: billingDetailsSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      return await getBillingDetails(auth.tenantId);
+    },
+  );
+
+  typed.put(
+    "/auth/billing",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.BILLING_MANAGE),
+      schema: {
+        tags: ["auth"],
+        summary: "Update organization billing details",
+        body: billingDetailsSchema,
+        response: { 200: billingDetailsSchema },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      return await updateBillingDetails(auth.tenantId, request.body);
     },
   );
 

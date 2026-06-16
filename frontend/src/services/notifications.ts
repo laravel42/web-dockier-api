@@ -1,5 +1,13 @@
 import { request } from "./request";
 
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
 export const notificationsApi = {
   listChannels: () =>
     request<{
@@ -24,22 +32,16 @@ export const notificationsApi = {
   toggleChannel: (channelId: string, enabled: boolean) =>
     request(`/notifications/channels/${channelId}/toggle`, {
       method: "PUT",
-      body: JSON.stringify({ channelId, enabled }),
+      body: JSON.stringify({ enabled }),
     }),
 
   deleteChannel: (channelId: string) =>
     request(`/notifications/channels/${channelId}`, { method: "DELETE" }),
 
   list: (unreadOnly?: boolean) =>
-    request<{
-      notifications: Array<{
-        id: string;
-        title: string;
-        message: string;
-        read: boolean;
-        createdAt: string;
-      }>;
-    }>(`/notifications${unreadOnly ? "?unreadOnly=true" : ""}`),
+    request<{ notifications: Notification[] }>(
+      `/notifications${unreadOnly ? "?unreadOnly=true" : ""}`,
+    ),
 
   markRead: (notificationId: string) =>
     request(`/notifications/${notificationId}/read`, { method: "PUT" }),

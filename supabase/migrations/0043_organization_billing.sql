@@ -1,0 +1,2 @@
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS billing JSONB NOT NULL DEFAULT '{}';

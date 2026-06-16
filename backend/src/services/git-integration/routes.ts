@@ -3,10 +3,12 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
-import type { Database } from "../../shared/supabase/types.js";
+import type { Database, Json } from "../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
-import { createMergeRequest, estimateFixMinutes, summarizeFindingTitle } from "./domain/mr-generator.js";
+import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "./domain/mr-generator.js";
+import { getFindingById } from "../code-analysis/domain/findings.js";
+import { CodeAnalysisError } from "../code-analysis/domain/scans.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
@@ -20,19 +22,33 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "./domain/connections.js";
-import {
-  GitHubApiError,
-  listCommits as ghListCommits,
-  getRepoInfo as ghGetRepoInfo,
-  getLanguages as ghGetLanguages,
-  getContributors as ghGetContributors,
-  getCollaborators as ghGetCollaborators,
-  createIssue as ghCreateIssue,
-} from "./domain/github-client.js";
+import { GitHubApiError } from "./domain/github-client.js";
+import { GitLabApiError } from "./domain/gitlab-client.js";
+import { getGitProvider, type RepoStats } from "./domain/git-provider.js";
+
+function isPlaceholderStats(stats: RepoStats): boolean {
+  return (
+    stats.stars === 0
+    && stats.forks === 0
+    && stats.openIssues === 0
+    && stats.totalCommits === 0
+    && stats.contributors === 0
+    && !stats.lastCommitHash
+  );
+}
+
+function needsContributorProfileRefresh(stats: RepoStats, provider: string): boolean {
+  if (provider !== "gitlab" && provider !== "gitlab_self_hosted") return false;
+  if (!stats.topContributors?.length) return false;
+  return stats.topContributors.every((contributor) => !contributor.profileUrl);
+}
 
 function throwProviderError(app: FastifyInstance, error: unknown): never {
   if (error instanceof GitHubApiError) {
     throw app.httpErrors.badRequest(`GitHub API error ${error.status}: ${error.statusText}`);
+  }
+  if (error instanceof GitLabApiError) {
+    throw app.httpErrors.badRequest(`GitLab API error ${error.status}: ${error.statusText}`);
   }
   throw app.httpErrors.badRequest((error as Error).message);
 }
@@ -46,6 +62,42 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
    */
   async function requireConnection(connectionId: string, tenantId: string) {
     return await getConnectionForTenant(connectionId, tenantId);
+  }
+
+  /**
+   * Delete cached rows for a tenant, optionally scoped to a repo and/or branch.
+   * Backs the cache-invalidation endpoints (stats/stack/analysis).
+   */
+  async function invalidateCache(
+    table: "stats_cache" | "stack_cache" | "analysis_cache",
+    tenantId: string,
+    filters: { repo?: string; branch?: string },
+  ): Promise<void> {
+    let del = db.from(table).delete().eq("organization_id", tenantId);
+    if (filters.repo) del = del.eq("repo", filters.repo);
+    if (filters.branch) del = del.eq("branch", filters.branch);
+    await del;
+  }
+
+  /**
+   * Upsert a repo-scoped cache row (stats/stack) keyed by tenant + repo + branch.
+   */
+  async function writeRepoCache(
+    table: "stats_cache" | "stack_cache",
+    params: { tenantId: string; repoKey: string; branch: string; projectId?: string; result: Json },
+  ): Promise<void> {
+    await db.from(table).upsert(
+      {
+        id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
+        repo: params.repoKey,
+        branch: params.branch,
+        result: params.result,
+        created_at: new Date().toISOString(),
+        organization_id: params.tenantId,
+        project_id: params.projectId ?? "",
+      },
+      { onConflict: "organization_id,repo,branch" },
+    );
   }
 
   typed.post(
@@ -182,10 +234,23 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
+      const REPO_CACHE_TTL_MS = 10 * 60 * 1000;
+
       if (!request.query.refresh) {
-        const cached = await db.from("repo_cache").select("repos").eq("connection_id", request.params.connectionId).maybeSingle();
+        const cached = await db
+          .from("repo_cache")
+          .select("repos, created_at")
+          .eq("connection_id", request.params.connectionId)
+          .maybeSingle();
         if (cached.data?.repos) {
-          return { repos: typeof cached.data.repos === "string" ? JSON.parse(cached.data.repos) : cached.data.repos, cached: true };
+          const cachedAt = cached.data.created_at ? new Date(cached.data.created_at).getTime() : 0;
+          const isFresh = cachedAt > 0 && Date.now() - cachedAt < REPO_CACHE_TTL_MS;
+          if (isFresh) {
+            return {
+              repos: typeof cached.data.repos === "string" ? JSON.parse(cached.data.repos) : cached.data.repos,
+              cached: true,
+            };
+          }
         }
       }
 
@@ -252,7 +317,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     },
   );
 
-  app.delete(
+  typed.delete(
     "/git/stats-cache",
     {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
@@ -263,17 +328,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         response: { 200: z.object({ done: z.literal(true) }) },
       },
     },
-    async (request: any) => {
-      const auth = request.auth!;
-      const query = request.query as { repo: string; branch?: string };
-      let del = db.from("stats_cache").delete().eq("organization_id", auth.tenantId).eq("repo", query.repo);
-      if (query.branch) del = del.eq("branch", query.branch);
-      await del;
+    async (request) => {
+      await invalidateCache("stats_cache", request.auth!.tenantId, request.query);
       return { done: true as const };
     },
   );
 
-  app.delete(
+  typed.delete(
     "/git/stack-cache",
     {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
@@ -284,17 +345,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         response: { 200: z.object({ done: z.literal(true) }) },
       },
     },
-    async (request: any) => {
-      const auth = request.auth!;
-      const query = request.query as { repo: string; branch?: string };
-      let del = db.from("stack_cache").delete().eq("organization_id", auth.tenantId).eq("repo", query.repo);
-      if (query.branch) del = del.eq("branch", query.branch);
-      await del;
+    async (request) => {
+      await invalidateCache("stack_cache", request.auth!.tenantId, request.query);
       return { done: true as const };
     },
   );
 
-  app.delete(
+  typed.delete(
     "/git/analysis-cache",
     {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
@@ -305,12 +362,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         response: { 200: z.object({ deleted: z.literal(true) }) },
       },
     },
-    async (request: any) => {
-      const auth = request.auth!;
-      let del = db.from("analysis_cache").delete().eq("organization_id", auth.tenantId);
-      if (request.query.repo) del = del.eq("repo", request.query.repo);
-      if (request.query.branch) del = del.eq("branch", request.query.branch);
-      await del;
+    async (request) => {
+      await invalidateCache("analysis_cache", request.auth!.tenantId, request.query);
       return { deleted: true as const };
     },
   );
@@ -336,20 +389,21 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      if (conn.provider === "github") {
-        try {
-          return await ghCreateIssue(conn, {
-            owner: request.body.owner,
-            repo: request.body.repo,
-            title: request.body.title,
-            body: request.body.body,
-            assignee: request.body.assignee,
-          });
-        } catch (error) {
-          throwProviderError(app, error);
-        }
+      const provider = getGitProvider(conn);
+      if (!provider.createIssue) {
+        throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
       }
-      throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
+      try {
+        return await provider.createIssue({
+          owner: request.body.owner,
+          repo: request.body.repo,
+          title: request.body.title,
+          body: request.body.body,
+          assignee: request.body.assignee,
+        });
+      } catch (error) {
+        throwProviderError(app, error);
+      }
     },
   );
 
@@ -375,17 +429,20 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.body.branch || "main";
       const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
-      if (conn.provider === "github") {
-        try {
-          const commits = await ghListCommits(conn, { owner: request.body.owner, repo: request.body.repo, branch, limit: 10 });
-          if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
-            log.push("Already up to date.");
-          } else {
-            for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
-          }
-        } catch (error) {
-          throwProviderError(app, error);
+      try {
+        const commits = await getGitProvider(conn).listCommits({
+          owner: request.body.owner,
+          repo: request.body.repo,
+          branch,
+          limit: 10,
+        });
+        if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
+          log.push("Already up to date.");
+        } else {
+          for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
         }
+      } catch (error) {
+        throwProviderError(app, error);
       }
       return { log };
     },
@@ -427,15 +484,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
-      if (conn.provider === "github") {
-        try {
-          const commits = await ghListCommits(conn, { owner: request.query.owner, repo: request.query.repo, branch, limit });
-          return { commits };
-        } catch (error) {
-          throwProviderError(app, error);
-        }
+      try {
+        const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit });
+        return { commits };
+      } catch (error) {
+        throwProviderError(app, error);
       }
-      return { commits: [] };
     },
   );
 
@@ -503,11 +557,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      if (conn.provider === "github") {
-        const members = await ghGetCollaborators(conn, { owner: request.query.owner, repo: request.query.repo });
-        return { members };
-      }
-      return { members: [] };
+      const members = await getGitProvider(conn).listMembers({ owner: request.query.owner, repo: request.query.repo });
+      return { members };
     },
   );
 
@@ -555,70 +606,35 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       if (!request.query.refresh) {
         const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
-        if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
-      }
-
-      const stats = {
-        stars: 0,
-        forks: 0,
-        openIssues: 0,
-        watchers: 0,
-        language: "",
-        languages: {} as Record<string, number>,
-        lastCommitDate: "",
-        lastCommitMessage: "",
-        lastCommitAuthor: "",
-        lastCommitHash: "",
-        totalCommits: 0,
-        contributors: 0,
-        topContributors: [] as Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>,
-      };
-
-      if (conn.provider === "github") {
-        try {
-          const { owner, repo } = request.query;
-          const [repoInfo, commits, contributors, languages] = await Promise.all([
-            ghGetRepoInfo(conn, { owner, repo }),
-            ghListCommits(conn, { owner, repo, branch, limit: 20 }).catch(() => [] as any[]),
-            ghGetContributors(conn, { owner, repo, limit: 20 }),
-            ghGetLanguages(conn, { owner, repo }),
-          ]);
-
-          stats.stars = repoInfo.stars;
-          stats.forks = repoInfo.forks;
-          stats.openIssues = repoInfo.openIssues;
-          stats.watchers = repoInfo.watchers;
-          stats.language = repoInfo.language;
-          stats.languages = languages;
-
-          if (commits.length > 0) {
-            const latest = commits[0];
-            stats.lastCommitDate = latest.date;
-            stats.lastCommitMessage = latest.message;
-            stats.lastCommitAuthor = latest.author;
-            stats.lastCommitHash = latest.hash;
-            stats.totalCommits = commits.length;
+        if (cached.data?.result) {
+          const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+          const cachedStats = parsed as RepoStats;
+          if (!isPlaceholderStats(cachedStats) && !needsContributorProfileRefresh(cachedStats, conn.provider)) {
+            return parsed;
           }
-
-          stats.contributors = contributors.length;
-          stats.topContributors = contributors;
-        } catch (error) {
-          throwProviderError(app, error);
         }
       }
 
-      await db.from("stats_cache").upsert(
-        {
-          id: auth.tenantId + ":" + repoKey + ":" + branch,
-          repo: repoKey,
+      let stats: RepoStats;
+      try {
+        stats = await getGitProvider(conn).getRepoStats({
+          owner: request.query.owner,
+          repo: request.query.repo,
           branch,
+        });
+      } catch (error) {
+        throwProviderError(app, error);
+      }
+
+      if (!isPlaceholderStats(stats)) {
+        await writeRepoCache("stats_cache", {
+          tenantId: auth.tenantId,
+          repoKey,
+          branch,
+          projectId: request.query.projectId,
           result: stats,
-          created_at: new Date().toISOString(),
-          organization_id: auth.tenantId,
-          project_id: request.query.projectId ?? "",
-        },
-        { onConflict: "organization_id,repo,branch" },
-      );
+        });
+      }
       return stats;
     },
   );
@@ -672,18 +688,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           fileCount: count,
         }));
       const stack = { components };
-      await db.from("stack_cache").upsert(
-        {
-          id: auth.tenantId + ":" + repoKey + ":" + branch,
-          repo: repoKey,
-          branch,
-          result: stack,
-          created_at: new Date().toISOString(),
-          organization_id: auth.tenantId,
-          project_id: request.query.projectId ?? "",
-        },
-        { onConflict: "organization_id,repo,branch" },
-      );
+      await writeRepoCache("stack_cache", {
+        tenantId: auth.tenantId,
+        repoKey,
+        branch,
+        projectId: request.query.projectId,
+        result: stack,
+      });
       return { stack, cached: false };
     },
   );
@@ -779,17 +790,70 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
+      const auth = request.auth!;
       const branch = request.query.branch || "main";
-      const cached = await db.from("stack_cache").select("result").eq("repo", request.query.repo).eq("branch", branch).maybeSingle();
-      if (!cached.data?.result) return { badges: [] };
-      const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
-      const techSet = new Set<string>();
-      for (const component of parsed.components ?? []) {
-        for (const tech of component.techs ?? []) techSet.add(tech);
+      const repo = request.query.repo;
+
+      const stackCached = await db.from("stack_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      if (stackCached.data?.result) {
+        const parsed = typeof stackCached.data.result === "string" ? JSON.parse(stackCached.data.result) : stackCached.data.result;
+        const techSet = new Set<string>();
+        for (const component of parsed.components ?? []) {
+          for (const tech of component.techs ?? []) techSet.add(tech);
+        }
+        if (techSet.size > 0) {
+          return {
+            badges: Array.from(techSet).map((name) => ({ name, category: "framework", confidence: 90 })),
+          };
+        }
       }
-      return {
-        badges: Array.from(techSet).map((name) => ({ name, category: "framework", confidence: 90 })),
-      };
+
+      const analysisCached = await db.from("analysis_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      if (analysisCached.data?.result) {
+        const parsed = typeof analysisCached.data.result === "string" ? JSON.parse(analysisCached.data.result) : analysisCached.data.result;
+        const techStack: Array<{ name: string; category: string; confidence: number }> = parsed.techStack ?? [];
+        const hasFramework = techStack.some((item) => item.category === "framework");
+        if (techStack.length > 0 && (hasFramework || !request.query.connectionId)) {
+          return {
+            badges: techStack.map((item) => ({
+              name: item.name,
+              category: item.category,
+              confidence: item.confidence,
+            })),
+          };
+        }
+      }
+
+      if (request.query.connectionId) {
+        const parts = repo.split("/").filter(Boolean);
+        if (parts.length >= 2) {
+          const owner = parts.slice(0, -1).join("/");
+          const repoName = parts[parts.length - 1]!;
+          const conn = await requireConnection(request.query.connectionId, auth.tenantId);
+          const result = await runRepoAnalysis(conn, { owner, repo: repoName, branch });
+          await db.from("analysis_cache").upsert(
+            {
+              id: auth.tenantId + ":" + repo + ":" + branch,
+              repo,
+              branch,
+              commit_sha: "",
+              result: result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
+              created_at: new Date().toISOString(),
+              organization_id: auth.tenantId,
+            },
+            { onConflict: "organization_id,repo,branch" },
+          );
+          return {
+            badges: result.techStack.map((item) => ({
+              name: item.name,
+              category: item.category,
+              confidence: item.confidence,
+            })),
+          };
+        }
+      }
+
+      return { badges: [] };
     },
   );
 
@@ -904,16 +968,17 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         summary: "Create fix MR/PR",
         params: z.object({ connectionId: z.string().uuid() }),
         body: z.object({
-          owner: z.string(),
-          repo: z.string(),
-          branch: z.string(),
-          filePath: z.string(),
-          startLine: z.number(),
-          endLine: z.number(),
-          ruleId: z.string(),
-          severity: z.string(),
-          message: z.string(),
-          snippet: z.string(),
+          findingId: z.string().uuid().optional(),
+          owner: z.string().optional(),
+          repo: z.string().optional(),
+          branch: z.string().optional(),
+          filePath: z.string().optional(),
+          startLine: z.number().optional(),
+          endLine: z.number().optional(),
+          ruleId: z.string().optional(),
+          severity: z.string().optional(),
+          message: z.string().optional(),
+          snippet: z.string().optional(),
           aiType: z.string().optional(),
           aiConfig: z.record(z.string(), z.string()).optional(),
           assignee: z.string().optional(),
@@ -925,8 +990,67 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = request.auth!;
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+
+      let body = request.body;
+      if (body.findingId) {
+        try {
+          const finding = await getFindingById(body.findingId, auth.tenantId);
+          if (finding.connectionId !== conn.id) {
+            throw app.httpErrors.badRequest("Finding belongs to a different git connection");
+          }
+          const { owner, repo } = parseRepoKey(finding.repo);
+          body = {
+            ...body,
+            owner,
+            repo,
+            branch: finding.branch,
+            filePath: finding.filePath,
+            startLine: finding.startLine,
+            endLine: finding.endLine,
+            ruleId: finding.ruleId,
+            severity: finding.severity,
+            message: finding.message,
+            snippet: finding.snippet,
+            aiType: body.aiType ?? "openai",
+          };
+        } catch (error) {
+          if (error instanceof CodeAnalysisError) {
+            throw app.httpErrors.createError(error.code === "not_found" ? 404 : 403, error.message);
+          }
+          throw error;
+        }
+      }
+
+      const required = ["owner", "repo", "branch", "filePath", "startLine", "endLine", "ruleId", "severity", "message"] as const;
+      for (const key of required) {
+        if (body[key] === undefined || body[key] === null || body[key] === "") {
+          throw app.httpErrors.badRequest(`Missing required field: ${key}`);
+        }
+      }
+
       try {
-        return await createMergeRequest(conn, request.body);
+        return await createMergeRequest(
+          conn,
+          {
+            owner: body.owner!,
+            repo: body.repo!,
+            branch: body.branch!,
+            filePath: body.filePath!,
+            startLine: body.startLine!,
+            endLine: body.endLine!,
+            ruleId: body.ruleId!,
+            severity: body.severity!,
+            message: body.message!,
+            snippet: body.snippet || "",
+            aiType: body.aiType,
+            assignee: body.assignee,
+            reviewer: body.reviewer,
+          },
+          {
+            openAiApiKey: env.OPENAI_API_KEY,
+            openAiModel: env.OPENAI_MODEL,
+          },
+        );
       } catch (error) {
         throw app.httpErrors.badRequest((error as Error).message);
       }

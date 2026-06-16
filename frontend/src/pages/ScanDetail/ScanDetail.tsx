@@ -6,10 +6,12 @@ import ScanHeader from "./sections/ScanHeader";
 import SummaryCards from "./sections/SummaryCards";
 import FindingsList from "./sections/FindingsList";
 import ScanSidebar from "./sections/ScanSidebar";
+import ScanProgressPanel from "./sections/ScanProgressPanel";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 
 export default function ScanDetail() {
   const core = useScanDetail();
@@ -17,23 +19,22 @@ export default function ScanDetail() {
   const fix = useFixModal(core.project);
 
   if (core.loading) {
+    return <PageLoading />;
+  }
+
+  if (core.pageError || (!core.scan && !core.project)) {
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
+      <div>
+        <PageError message={core.pageError || "Scan not found"} />
+        <div className="text-center mt-4">
+          <button type="button" onClick={() => core.navigate("/security")} className={btnSecondary}>
+            Back to Security Scans
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (core.error || (!core.scan && !core.project)) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-danger-500 text-sm mb-4">{core.error || "Scan not found"}</p>
-        <button onClick={() => core.navigate("/security")} className={btnSecondary}>Back to Security Scans</button>
-      </div>
-    );
-  }
-
-  // Project loaded but no scan selected
   if (!core.scan && core.project) {
     return (
       <EmptyScanState
@@ -42,8 +43,6 @@ export default function ScanDetail() {
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        scanRunning={core.scanRunning}
-        scanProgress={core.scanProgress}
         scanError={core.scanError}
         onRunScan={core.handleRunScan}
         onSelectScan={(id) => core.navigate(`/security/${id}`)}
@@ -52,35 +51,47 @@ export default function ScanDetail() {
   }
 
   if (!core.scan) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
     <div className="flex gap-6">
-      {/* Main content */}
       <div className="flex-1 min-w-0">
         <ScanHeader
           scan={core.scan}
           project={core.project}
+          liveStatus={core.liveStatus}
           onBack={() => core.navigate("/security")}
           onNavigateProject={() => core.project && core.navigate(`/projects/${core.project.id}`)}
         />
 
-        {core.scan.summary && (
+        {core.scanRunning && core.scanProgress && (
+          <div className="mb-4 rounded-card border border-primary/20 bg-primary/5 px-4 py-3">
+            <ScanProgressPanel progress={core.scanProgress} />
+          </div>
+        )}
+
+        {core.displaySummary && (
           <SummaryCards
-            summary={core.scan.summary}
+            summary={core.displaySummary}
             severityFilter={core.severityFilter}
+            providerFilter={core.providerFilter}
+            findingCounts={core.findingCounts}
+            findingsTotal={core.findingsTotal}
             onFilterChange={core.handleSeverityFilter}
+            scanRunning={core.scanRunning}
+            progress={core.scanProgress}
           />
         )}
 
         <FindingsList
           findings={core.findings}
+          findingsTotal={core.findingsTotal}
+          findingCounts={core.findingCounts}
           findingsLoading={core.findingsLoading}
+          findingsLoadingMore={core.findingsLoadingMore}
+          hasMoreFindings={core.hasMoreFindings}
+          onLoadMore={core.loadMoreFindings}
           scanCompleted={core.scan.status === "completed"}
           severityFilter={core.severityFilter}
           providerFilter={core.providerFilter}
@@ -151,13 +162,10 @@ export default function ScanDetail() {
         />
       </div>
 
-      {/* Sidebar */}
       <ScanSidebar
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
-        scanRunning={core.scanRunning}
-        scanProgress={core.scanProgress}
         scanError={core.scanError}
         hasConnectionId={!!core.project?.connectionId}
         onRunScan={core.handleRunScan}

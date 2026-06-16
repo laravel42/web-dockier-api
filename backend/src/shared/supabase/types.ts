@@ -31,6 +31,7 @@ export type Database = {
           slug: string;
           created_by: string | null;
           created_at: string;
+          billing: Json;
         };
         Insert: Partial<Database["public"]["Tables"]["organizations"]["Row"]> &
           Pick<Database["public"]["Tables"]["organizations"]["Row"], "name" | "slug">;
@@ -313,6 +314,21 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["notifications"]["Row"]> &
           Pick<Database["public"]["Tables"]["notifications"]["Row"], "id" | "organization_id" | "channel" | "title" | "message">;
         Update: Partial<Database["public"]["Tables"]["notifications"]["Row"]>;
+        Relationships: [];
+      };
+      pm_integrations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          provider: string;
+          name: string;
+          credentials_encrypted: string;
+          enabled: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["pm_integrations"]["Row"]> &
+          Pick<Database["public"]["Tables"]["pm_integrations"]["Row"], "id" | "organization_id" | "provider" | "credentials_encrypted">;
+        Update: Partial<Database["public"]["Tables"]["pm_integrations"]["Row"]>;
         Relationships: [];
       };
       server_providers: {

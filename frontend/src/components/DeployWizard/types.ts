@@ -123,6 +123,8 @@ export interface WizardState {
   tofuAppName: string;
   tofuRegion: string;
   useDocker: boolean;
+  /** When true, keep the repo's Dockerfile instead of Dockier generating one. */
+  useRepoDockerfile: boolean;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   postDeployCommands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>;
   // Step 7 (Deploy)

@@ -28,6 +28,27 @@
 - `DELETE /git/stack-cache`
 - `DELETE /git/analysis-cache`
 
+## `GET /git/repo-badges`
+
+Returns detected technology badges for a repository. Used by project list cards/tables and the project detail page.
+
+**Query parameters:** `repo` (required, `owner/repo` key), `branch` (optional, default `main`), `connectionId` (optional UUID).
+
+**Response:** `{ badges: Array<{ name, category, confidence }> }`
+
+**Resolution order:**
+
+1. **`stack_cache`** — component `techs` when populated
+2. **`analysis_cache`** — `techStack` from repo analysis (primary source for most projects)
+3. **On-demand analysis** — when `connectionId` is provided and cache is missing or only contains languages (no frameworks), runs `runRepoAnalysis`, upserts `analysis_cache`, and returns the result
+
+Repo analysis also enriches `techStack` from dependency manifests (`package.json`, `composer.json`, etc.) so frameworks like React, Next.js, and Laravel are detected even when not inferred from file paths alone.
+
+**Frontend consumption:**
+
+- `useProjectBadges` hook fetches badges and caches the top 4 by confidence in `localStorage` (`projectBadgeCache.ts`)
+- Cache invalidates automatically when a project’s repo, branch, or connection changes; project detail refresh clears the cache explicitly
+
 ## Notes
 
 - Core provider connectivity endpoints are migrated.
@@ -36,4 +57,5 @@
   - repo analysis heuristics (tech stack, deploy options, service detection)
   - stack cache generation from repository tree structure
   - sensitive schema analysis (`GET /sensitive-data`, `POST /analyze-sensitive-data`)
+  - tech badge resolution for list/detail UI (`GET /repo-badges`)
 - AI-heavy remediation endpoints (`create-mr`, AI summarize/fix) are still best-effort placeholders.

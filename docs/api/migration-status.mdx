@@ -1,13 +1,15 @@
 # Migration Status Endpoints
 
-Each scaffolded service exposes:
+> **Removed.** The Encore → Fastify migration is complete, so the per-service
+> `GET /<service>/_migration/status` observability endpoint has been retired
+> along with its scaffolding (`services/migration-placeholders.ts`).
 
-- `GET /<service>/_migration/status`
+All services below are fully migrated to Fastify route modules under
+`backend/src/services`:
 
-This endpoint is retained for migration observability and now reports migrated status.
-
-## Migrated services
-
+- `auth`
+- `users`
+- `projects`
 - `roles`
 - `deploy`
 - `notifications`

@@ -1,5 +1,5 @@
 import { resolveIcon } from "../data/devicons";
-import { useTheme } from "../hooks/useTheme";
+import { useIsDarkMode } from "../hooks/useIsDarkMode";
 
 interface Props {
   /** A devicons slug (e.g. "react", "github") or a pre-resolved URL */
@@ -16,7 +16,7 @@ interface Props {
  * Slugs are resolved with theme awareness; URLs are used as-is.
  */
 export default function DevIcon({ src, className = "", alt = "" }: Props) {
-  const dark = useTheme();
+  const dark = useIsDarkMode();
 
   const isUrl = src.startsWith("http") || src.startsWith("/") || src.startsWith("data:");
   const url = isUrl ? src : resolveIcon(src, dark);

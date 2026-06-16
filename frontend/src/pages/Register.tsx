@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authApi } from "../services/api";
+import { ApiError } from "../services/api-error";
 import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../context/PermissionsContext";
+import Alert from "../components/ui/Alert";
+import AuthLayout from "../components/AuthLayout";
+import { InputWithLabel } from "../components/ui/fields";
+import { btnPrimaryAuth, btnLink } from "../utils/styles";
+import { getErrorMessage } from "../utils/errors";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -55,101 +61,87 @@ export default function Register() {
         navigate("/dashboard");
       }
     } catch (err: unknown) {
-      const message = (err as Error).message;
-      if (/rate limit/i.test(message)) {
+      if (err instanceof ApiError && err.isRateLimit) {
         setCooldownSeconds((value) => (value > 0 ? value : 60));
       }
-      setError(message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const inputCls = "w-full h-11 px-4 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 transition-all";
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface">
-      <div className="w-full max-w-[420px] bg-card rounded-card shadow-(--shadow-card-hover) p-8 border border-border/50">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm">
-            <img src="/logo.png" alt="Dockier logo" className="w-full h-full object-contain" />
-          </div>
-          <span className="text-lg font-display font-semibold text-text tracking-tight">Dockier</span>
-        </div>
-        <h1 className="text-xl font-display font-semibold text-text text-center mb-1">Create Account</h1>
-        <p className="text-sm text-text-secondary text-center mb-6">Sign up with secure email OTP verification</p>
+    <AuthLayout>
+      <h1 className="font-display text-2xl font-semibold text-foreground">Create account</h1>
+      <p className="mt-1 mb-6 text-sm text-muted-foreground">
+        Sign up with secure email OTP verification
+      </p>
 
-        {error && <div className="mb-4 p-3 rounded-(--radius-btn) bg-danger-50 text-danger-500 text-sm" role="alert">{error}</div>}
-        {notice && <div className="mb-4 p-3 rounded-(--radius-btn) bg-primary-50 text-primary-700 text-sm" role="status">{notice}</div>}
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+      {notice && <Alert variant="info" className="mb-4">{notice}</Alert>}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputCls}
-              required
-              minLength={2}
-              disabled={otpSent}
-            />
-          </div>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-text-secondary mb-1.5">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputCls}
-              required
-              disabled={otpSent}
-            />
-          </div>
-          <div>
-            <label htmlFor="workspace-name" className="block text-sm font-medium text-text-secondary mb-1.5">Workspace name (optional)</label>
-            <input
-              id="workspace-name"
-              type="text"
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              className={inputCls}
-              placeholder={`${name || "Your"} workspace`}
-              disabled={otpSent}
-            />
-          </div>
-          {otpSent && (
-            <div>
-              <label htmlFor="otp-token" className="block text-sm font-medium text-text-secondary mb-1.5">OTP code</label>
-              <input
-                id="otp-token"
-                type="text"
-                value={otpToken}
-                onChange={(e) => setOtpToken(e.target.value)}
-                className={inputCls}
-                required
-                minLength={4}
-                autoComplete="one-time-code"
-              />
-            </div>
-          )}
-          <button type="submit" disabled={loading || (!otpSent && cooldownSeconds > 0)}
-            className="w-full h-11 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
-            {loading
-              ? "Please wait..."
-              : otpSent
-                ? "Verify and continue"
-                : cooldownSeconds > 0
-                  ? `Retry in ${cooldownSeconds}s`
-                  : "Send verification code"}
-          </button>
-        </form>
-        <p className="text-center text-sm text-text-secondary mt-6">
-          Already have an account? <Link to="/login" className="text-primary-500 font-medium hover:underline">Sign in</Link>
-        </p>
-      </div>
-    </div>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <InputWithLabel
+          id="name"
+          label="Name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          minLength={2}
+          disabled={otpSent}
+        />
+        <InputWithLabel
+          id="email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={otpSent}
+        />
+        <InputWithLabel
+          id="workspace-name"
+          label="Workspace name"
+          type="text"
+          value={workspaceName}
+          onChange={(e) => setWorkspaceName(e.target.value)}
+          placeholder={`${name || "Your"} workspace`}
+          optional
+          disabled={otpSent}
+        />
+        {otpSent && (
+          <InputWithLabel
+            id="otp-token"
+            label="OTP code"
+            type="text"
+            value={otpToken}
+            onChange={(e) => setOtpToken(e.target.value)}
+            required
+            minLength={4}
+            autoComplete="one-time-code"
+          />
+        )}
+        <button
+          type="submit"
+          disabled={loading || (!otpSent && cooldownSeconds > 0)}
+          className={btnPrimaryAuth}
+        >
+          {loading
+            ? "Please wait..."
+            : otpSent
+              ? "Verify and continue"
+              : cooldownSeconds > 0
+                ? `Retry in ${cooldownSeconds}s`
+                : "Send verification code"}
+        </button>
+      </form>
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <Link to="/login" className={btnLink}>
+          Sign in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }

@@ -34,7 +34,7 @@ export interface QueryErrorOptions {
  * Uses a loose type for the code parameter to accommodate
  * service-specific error code unions that are subsets of BaseDomainErrorCode.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type DomainErrorConstructor<E extends Error> = new (message: string, code: any, cause?: unknown) => E;
 
 /**

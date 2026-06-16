@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import Modal from "./Modal";
+import SettingsModalFooter from "./SettingsModalFooter";
 
 interface Permission {
   key: string;
@@ -98,19 +99,30 @@ interface Props {
   initialData?: { name: string; description: string; permissions: string[] };
   title?: string;
   submitLabel?: string;
+  onDelete?: () => void;
+  deleteAriaLabel?: string;
 }
 
-export default function RoleFormModal({ open, onClose, onSubmit, initialData, title, submitLabel }: Props) {
+export default function RoleFormModal({ open, onClose, onSubmit, initialData, title, submitLabel, onDelete, deleteAriaLabel }: Props) {
   const [mountKey, setMountKey] = useState(0);
 
   return (
-    <Modal open={open} onClose={onClose} title={title || "New role"}>
-      {open && <RoleFormInner key={mountKey} onSubmit={(data) => { onSubmit(data); setMountKey(k => k + 1); }} initialData={initialData} submitLabel={submitLabel} />}
+    <Modal open={open} onClose={onClose} title={title || "New role"} size="lg" bodyScroll={false}>
+      {open && (
+        <RoleFormInner
+          key={mountKey}
+          onSubmit={(data) => { onSubmit(data); setMountKey(k => k + 1); }}
+          initialData={initialData}
+          submitLabel={submitLabel}
+          onDelete={onDelete}
+          deleteAriaLabel={deleteAriaLabel}
+        />
+      )}
     </Modal>
   );
 }
 
-function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props["onSubmit"]; initialData?: Props["initialData"]; submitLabel?: string }) {
+function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAriaLabel }: { onSubmit: Props["onSubmit"]; initialData?: Props["initialData"]; submitLabel?: string; onDelete?: () => void; deleteAriaLabel?: string }) {
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [selected, setSelected] = useState<Set<string>>(
@@ -120,7 +132,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const inputCls =
-    "w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors";
+    "h-10 w-full rounded-(--radius-input) border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20";
 
   const toggle = (key: string, locked?: boolean) => {
     if (locked) return;
@@ -175,13 +187,15 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
   };
 
   return (
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="flex h-full min-h-0 flex-col gap-4">
+      <form id="role-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+        <div className="shrink-0 space-y-5">
         {/* Name */}
         <div>
-          <label htmlFor="role-name" className="block text-sm font-semibold text-text mb-0.5">
+          <label htmlFor="role-name" className="mb-0.5 block text-sm font-semibold text-foreground">
             Name
           </label>
-          <p className="text-xs text-text-muted mb-1.5">The name of the role.</p>
+          <p className="mb-1.5 text-xs text-muted-foreground">The name of the role.</p>
           <input
             id="role-name"
             type="text"
@@ -194,10 +208,10 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
 
         {/* Description */}
         <div>
-          <label htmlFor="role-desc" className="block text-sm font-semibold text-text mb-0.5">
-            Description <span className="text-xs font-normal text-text-muted border border-border rounded px-1.5 py-0.5 ml-1">Optional</span>
+          <label htmlFor="role-desc" className="mb-0.5 block text-sm font-semibold text-foreground">
+            Description <span className="ml-1 rounded border border-border px-1.5 py-0.5 text-xs font-normal text-muted-foreground">Optional</span>
           </label>
-          <p className="text-xs text-text-muted mb-1.5">An optional, informational description of the role.</p>
+          <p className="mb-1.5 text-xs text-muted-foreground">An optional, informational description of the role.</p>
           <input
             id="role-desc"
             type="text"
@@ -206,15 +220,16 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
             className={inputCls}
           />
         </div>
+        </div>
 
         {/* Permissions */}
-        <div>
-          <p className="text-sm font-semibold text-text mb-2">Permissions</p>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <p className="mb-2 shrink-0 text-sm font-semibold text-foreground">Permissions</p>
 
           {/* Search */}
           <div className="relative mb-3">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -224,12 +239,12 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search"
-              className="w-full h-9 pl-9 pr-3 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors"
+              className="h-9 w-full rounded-(--radius-input) border border-border bg-card pl-9 pr-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
             />
           </div>
 
           {/* Permission groups */}
-          <div className="border border-border rounded-(--radius-input) max-h-72 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-(--radius-input) border border-border">
             {filteredGroups.map((group) => {
               const checkState = getGroupCheckState(group);
               const isCollapsed = collapsed.has(group.name);
@@ -240,32 +255,30 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.name)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-secondary-50 transition-colors"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/50"
                   >
                     {/* Group checkbox indicator */}
                     <span
-                      className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border transition-colors ${
-                        checkState === "all"
-                          ? "bg-primary-500 border-primary-500"
-                          : checkState === "partial"
-                          ? "bg-primary-500 border-primary-500"
-                          : "border-border"
+                      className={`flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors ${
+                        checkState === "all" || checkState === "partial"
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background"
                       }`}
                     >
                       {checkState === "all" && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       )}
                       {checkState === "partial" && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
                         </svg>
                       )}
                     </span>
-                    <span className="text-sm font-semibold text-text flex-1 text-left">{group.name}</span>
+                    <span className="flex-1 text-left text-sm font-semibold text-foreground">{group.name}</span>
                     <svg
-                      className={`w-4 h-4 text-text-muted transition-transform ${isCollapsed ? "" : "rotate-180"}`}
+                      className={`size-4 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-180"}`}
                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -278,34 +291,36 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
                       {group.permissions.map((perm) => (
                         <label
                           key={perm.key}
-                          className={`flex items-start gap-3 px-3 py-2.5 pl-6 cursor-pointer hover:bg-secondary-50 transition-colors ${
-                            perm.locked ? "opacity-80" : ""
+                          className={`flex items-start gap-2.5 px-3 py-2 pl-5 transition-colors hover:bg-muted/50 ${
+                            perm.locked ? "cursor-default" : "cursor-pointer"
                           }`}
                         >
                           <span
                             onClick={(e) => { e.preventDefault(); toggle(perm.key, perm.locked); }}
-                            className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                            className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors ${
                               selected.has(perm.key)
-                                ? "bg-primary-500 border-primary-500"
-                                : "border-border"
-                            } ${perm.locked ? "cursor-not-allowed" : "cursor-pointer"}`}
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background"
+                            } ${perm.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
                           >
                             {selected.has(perm.key) && (
-                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                               </svg>
                             )}
                           </span>
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-text">{perm.key}</span>
+                              <span className={`text-sm font-medium ${perm.locked ? "text-muted-foreground" : "text-foreground"}`}>
+                                {perm.key}
+                              </span>
                               {perm.locked && (
-                                <svg className="w-3.5 h-3.5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <svg className="size-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                                 </svg>
                               )}
                             </div>
-                            <p className="text-xs text-text-muted mt-0.5">{perm.label}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{perm.label}</p>
                           </div>
                         </label>
                       ))}
@@ -315,31 +330,32 @@ function RoleFormInner({ onSubmit, initialData, submitLabel }: { onSubmit: Props
               );
             })}
             {filteredGroups.length === 0 && (
-              <div className="px-3 py-6 text-sm text-text-muted text-center">No permissions found</div>
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">No permissions found</div>
             )}
           </div>
 
           {/* Select / Deselect all */}
-          <div className="flex gap-3 mt-2">
-            <button type="button" onClick={selectAll} className="text-sm text-primary-500 hover:text-primary-600 font-medium transition-colors">
+          <div className="mt-2 flex shrink-0 gap-3">
+            <button type="button" onClick={selectAll} className="text-sm font-medium text-primary transition-colors hover:text-primary/80">
               Select all permissions
             </button>
-            <button type="button" onClick={deselectAll} className="text-sm text-primary-500 hover:text-primary-600 font-medium transition-colors">
+            <button type="button" onClick={deselectAll} className="text-sm font-medium text-primary transition-colors hover:text-primary/80">
               Deselect all permissions
             </button>
           </div>
         </div>
-
-        {/* Submit */}
-        <div className="flex justify-end pt-1">
-          <button
-            type="submit"
-            disabled={!name.trim()}
-            className="h-9 px-5 bg-text text-card text-sm font-medium rounded-(--radius-btn) hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {submitLabel || "Create role"}
-          </button>
-        </div>
       </form>
+
+      <SettingsModalFooter onDelete={onDelete} deleteAriaLabel={deleteAriaLabel}>
+        <button
+          type="submit"
+          form="role-form"
+          disabled={!name.trim()}
+          className="h-9 px-5 bg-text text-card text-sm font-medium rounded-(--radius-btn) hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {submitLabel || "Create role"}
+        </button>
+      </SettingsModalFooter>
+      </div>
   );
 }

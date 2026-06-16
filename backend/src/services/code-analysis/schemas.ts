@@ -1,16 +1,31 @@
 import { z } from "zod";
 
+export const findingSeveritySchema = z.enum(["error", "warning", "info"]);
+export type FindingSeverity = z.infer<typeof findingSeveritySchema>;
+
 export const findingSchema = z.object({
   id: z.string().uuid(),
   scanId: z.string().uuid(),
   ruleId: z.string(),
-  severity: z.enum(["error", "warning", "info"]),
+  severity: findingSeveritySchema,
   message: z.string(),
   filePath: z.string(),
   startLine: z.number().int().nonnegative(),
   endLine: z.number().int().nonnegative(),
   snippet: z.string(),
   createdAt: z.string(),
+});
+
+export const scanProgressSchema = z.object({
+  phase: z.string(),
+  filesScanned: z.number().int().nonnegative(),
+  filesInRepo: z.number().int().nonnegative(),
+  findingsCount: z.number().int().nonnegative(),
+  currentFile: z.string().optional(),
+  currentRule: z.string().optional(),
+  scanner: z.string().optional(),
+  rulesChecked: z.number().int().nonnegative().optional(),
+  rulesTotal: z.number().int().nonnegative().optional(),
 });
 
 export const summarySchema = z.object({
@@ -20,9 +35,13 @@ export const summarySchema = z.object({
   infos: z.number().int().nonnegative(),
   filesScanned: z.number().int().nonnegative(),
   filesInRepo: z.number().int().nonnegative(),
+  error: z.string().optional(),
+  progress: scanProgressSchema.optional(),
 });
 
 export const scanStatusSchema = z.enum(["pending", "running", "completed", "failed"]);
+
+export type ScanStatus = z.infer<typeof scanStatusSchema>;
 
 export const scanSchema = z.object({
   id: z.string().uuid(),

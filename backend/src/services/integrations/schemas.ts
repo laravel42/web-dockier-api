@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const pmIntegrationSchema = z.object({
+  id: z.string().uuid(),
+  type: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+  createdAt: z.string(),
+});
+
 export const pmItemSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -13,27 +21,53 @@ export const teamMemberSchema = z.object({
   avatarUrl: z.string().optional(),
 });
 
-export const integrationRequestSchema = z.object({
-  type: z.string().min(1),
-  config: z.record(z.string(), z.string()),
+const integrationRequestBaseSchema = z.object({
+  integrationId: z.string().uuid().optional(),
+  type: z.string().min(1).optional(),
+  config: z.record(z.string(), z.string()).optional(),
 });
 
-export const integrationWithTeamSchema = integrationRequestSchema.extend({
-  teamId: z.string(),
+function hasIntegrationCredentials(data: {
+  integrationId?: string;
+  type?: string;
+  config?: Record<string, string>;
+}) {
+  return !!data.integrationId || !!(data.type && data.config);
+}
+
+export const integrationRequestSchema = integrationRequestBaseSchema.refine(hasIntegrationCredentials, {
+  message: "Either integrationId or type+config is required",
 });
 
-export const integrationCreateTaskSchema = integrationRequestSchema.extend({
-  title: z.string(),
-  description: z.string().optional(),
-  assigneeId: z.string().optional(),
-});
+export const integrationWithTeamSchema = integrationRequestBaseSchema
+  .extend({ teamId: z.string() })
+  .refine(hasIntegrationCredentials, {
+    message: "Either integrationId or type+config is required",
+  });
 
-export const integrationCreateIssueSchema = integrationRequestSchema.extend({
-  teamId: z.string(),
-  projectId: z.string(),
-  title: z.string().min(1),
-  description: z.string().default(""),
-  priority: z.number().optional(),
-  estimateMinutes: z.number().optional(),
-  assigneeId: z.string().optional(),
-});
+export const integrationCreateTaskSchema = integrationRequestBaseSchema
+  .extend({
+    title: z.string(),
+    description: z.string().optional(),
+    assigneeId: z.string().optional(),
+  })
+  .refine(hasIntegrationCredentials, {
+    message: "Either integrationId or type+config is required",
+  });
+
+export const integrationCreateIssueSchema = z
+  .object({
+    integrationId: z.string().uuid().optional(),
+    type: z.string().min(1).optional(),
+    config: z.record(z.string(), z.string()).optional(),
+    teamId: z.string(),
+    projectId: z.string(),
+    title: z.string().min(1),
+    description: z.string().default(""),
+    priority: z.number().optional(),
+    estimateMinutes: z.number().optional(),
+    assigneeId: z.string().optional(),
+  })
+  .refine((data) => data.integrationId || (data.type && data.config), {
+    message: "Either integrationId or type+config is required",
+  });

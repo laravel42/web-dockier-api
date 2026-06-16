@@ -10,6 +10,7 @@ import { generateNodeDockerfile } from "./dockerfiles/node.js";
 import { generatePhpDockerfile } from "./dockerfiles/php.js";
 import { generatePythonDockerfile } from "./dockerfiles/python.js";
 import { generateGoDockerfile } from "./dockerfiles/go.js";
+import { finalizeNodeVersion } from "./utils.js";
 
 // Re-export everything for public API
 export type { DetectedStack, RepoConfig, NativeDep, DockerFix } from "./types.js";
@@ -62,6 +63,8 @@ export function analyzeRepoConfig(repoDir: string): RepoConfig {
     } catch {}
   }
 
+  finalizeNodeVersion(config);
+
   return config;
 }
 
@@ -76,7 +79,7 @@ export function toDetectedStack(config: RepoConfig): import("./types.js").Detect
         packageManagerVersion: config.packageManagerVersion,
         nodeVersion: config.nodeVersion || "20",
         hasStandalone: config.hasStandalone,
-        isStatic: config.features.has("static"),
+        isStatic: config.features.has("static-export"),
         subDir: config.subDir,
         port: config.port,
         nativeDeps: config.nativeDeps,
@@ -85,7 +88,7 @@ export function toDetectedStack(config: RepoConfig): import("./types.js").Detect
     case "php":
       return {
         runtime: "php",
-        framework: config.framework === "laravel" ? "laravel" : "generic",
+        framework: config.framework?.toLowerCase() === "laravel" ? "laravel" : "generic",
         phpVersion: config.phpVersion || "8.3",
         phpExtensions: config.phpExtensions,
         hasNodeAssets: config.features.has("node-assets") || false,
@@ -119,10 +122,22 @@ export function toDetectedStack(config: RepoConfig): import("./types.js").Detect
 function normalizeNodeFramework(
   framework: string,
 ): "nextjs" | "nuxt" | "sveltekit" | "spa" | "angular" | "astro" | "generic" {
-  switch (framework) {
-    case "nextjs": case "nuxt": case "sveltekit": case "spa":
-    case "angular": case "astro": case "generic":
-      return framework;
+  const normalized = framework.toLowerCase().replace(/\s+/g, "").replace(/\./g, "");
+  switch (normalized) {
+    case "nextjs":
+      return "nextjs";
+    case "nuxt":
+      return "nuxt";
+    case "sveltekit":
+      return "sveltekit";
+    case "spa":
+      return "spa";
+    case "angular":
+      return "angular";
+    case "astro":
+      return "astro";
+    case "generic":
+      return "generic";
     default:
       return "generic";
   }

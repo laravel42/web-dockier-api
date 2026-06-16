@@ -9,7 +9,7 @@ export async function listDeployments(tenantId: string, providerId?: string) {
     .from("deployments")
     .select("*")
     .eq("organization_id", tenantId)
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(50);
   if (providerId) query = query.eq("provider_id", providerId);
   const { data, error } = await query;

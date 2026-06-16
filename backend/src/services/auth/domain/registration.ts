@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
+import { throwOnError } from "../../../shared/supabase/query.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { listMembershipsForUser, type Membership } from "./membership.js";
 import { signTenantToken } from "./session.js";
+import { ensureDefaultInAppChannel } from "../../notifications/domain/notifications.js";
 
 export type RegistrationErrorCode = "unauthorized" | "forbidden" | "bad_request" | "internal";
 
@@ -83,29 +85,53 @@ export async function performDemoLogin(): Promise<DemoLoginResult> {
   const now = new Date().toISOString();
   const demoUserId = await resolveDemoAuthUser(demoEmail);
 
-  // Upsert user
-  await supabaseAdmin.from("users").upsert(
+  const { error: userError } = await supabaseAdmin.from("users").upsert(
     { id: demoUserId, email: demoEmail, name: demoName, organization_id: null, created_at: now },
     { onConflict: "id" },
   );
+  throwOnError(userError, RegistrationError, { internalMsg: "Failed to upsert demo user" });
 
-  // Upsert org
-  await supabaseAdmin.from("organizations").upsert(
+  const { error: orgError } = await supabaseAdmin.from("organizations").upsert(
     { id: demoTenantId, name: demoTenantName, slug: demoTenantSlug, created_by: demoUserId },
     { onConflict: "id" },
   );
+  throwOnError(orgError, RegistrationError, { internalMsg: "Failed to upsert demo organization" });
 
-  // Sync user org
-  await supabaseAdmin.from("users").update({ organization_id: demoTenantId, updated_at: now }).eq("id", demoUserId);
+  const { error: syncError } = await supabaseAdmin
+    .from("users")
+    .update({ organization_id: demoTenantId, updated_at: now })
+    .eq("id", demoUserId);
+  throwOnError(syncError, RegistrationError, { internalMsg: "Failed to sync demo user organization" });
 
-  // Seed roles
   const { adminRoleId } = await seedDefaultRoles(demoTenantId);
+  if (!adminRoleId) {
+    throw new RegistrationError("Failed to seed admin role for demo workspace", "internal");
+  }
 
-  // Upsert membership as owner
-  await supabaseAdmin.from("organization_memberships").upsert(
-    { organization_id: demoTenantId, user_id: demoUserId, role_id: adminRoleId, is_owner: true, status: "active" },
-    { onConflict: "organization_id,user_id" },
-  );
+  // Demo org enforces a single owner. Reset memberships when the auth user id changes.
+  const { error: clearError } = await supabaseAdmin
+    .from("organization_memberships")
+    .delete()
+    .eq("organization_id", demoTenantId);
+  throwOnError(clearError, RegistrationError, { internalMsg: "Failed to reset demo memberships" });
+
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from("organization_memberships")
+    .insert({
+      organization_id: demoTenantId,
+      user_id: demoUserId,
+      role_id: adminRoleId,
+      is_owner: true,
+      status: "active",
+    })
+    .select("id")
+    .single();
+  throwOnError(membershipError, RegistrationError, { internalMsg: "Failed to create demo membership" });
+  if (!membership) {
+    throw new RegistrationError("Failed to create demo membership", "internal");
+  }
+
+  await ensureDefaultInAppChannel(demoTenantId);
 
   return {
     session: {
@@ -114,7 +140,14 @@ export async function performDemoLogin(): Promise<DemoLoginResult> {
       tenantId: demoTenantId,
     },
     memberships: [
-      { id: "00000000-0000-4000-8000-000000000099", tenantId: demoTenantId, tenantName: demoTenantName, tenantSlug: demoTenantSlug, roleName: "Admin", isOwner: true },
+      {
+        id: membership.id,
+        tenantId: demoTenantId,
+        tenantName: demoTenantName,
+        tenantSlug: demoTenantSlug,
+        roleName: "Admin",
+        isOwner: true,
+      },
     ],
   };
 }
@@ -123,7 +156,7 @@ export interface PasswordLoginParams {
   email: string;
   password: string;
   supabaseUrl: string;
-  supabaseServiceRoleKey: string;
+  supabaseSecretKey: string;
 }
 
 export interface LoginResult {
@@ -137,7 +170,7 @@ export interface LoginResult {
  */
 export async function performPasswordLogin(params: PasswordLoginParams): Promise<LoginResult> {
   const { createClient } = await import("@supabase/supabase-js");
-  const authClient = createClient(params.supabaseUrl, params.supabaseServiceRoleKey, {
+  const authClient = createClient(params.supabaseUrl, params.supabaseSecretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
@@ -268,8 +301,8 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
       isOwner: true,
     };
     memberships = [selected];
+    await ensureDefaultInAppChannel(org.id);
   }
-  if (!selected) throw new RegistrationError("Unable to resolve tenant membership", "internal");
 
   // Sync user's active org
   const { error: syncError } = await supabaseAdmin

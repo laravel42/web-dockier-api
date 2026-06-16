@@ -11,6 +11,7 @@ import StepEnvironment from "./steps/StepEnvironment";
 import StepCompose from "./steps/StepCompose";
 import StepDeploy from "./steps/StepDeploy";
 import RocketIcon from "../icons/outlined/RocketIcon";
+import Spinner from "../Spinner";
 
 export default function DeployWizard({ open, onClose, project, analysis, analysisLoading, analysisError, providers, onDeployComplete }: DeployWizardProps) {
   const {
@@ -19,7 +20,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     canNext, handleNext, handleBack,
     startDeploy, generateScript,
     isDeploying, isFinished,
-  } = useDeployWizard({ open, project, analysis, analysisLoading, onDeployComplete });
+  } = useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete });
 
   return (
     <Modal
@@ -47,6 +48,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           <StepService
             state={state}
             templateId={project.sourceType === "template" ? project.template : undefined}
+            analysis={analysis}
             onChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}
           />
         )}
@@ -89,13 +91,21 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             loading={tofuLoading}
             error={tofuError}
             isTemplate={project.sourceType === "template"}
+            hasRepoDockerfile={analysis?.hasDocker ?? false}
             onToggleDocker={() => {
               const next = !state.useDocker;
               setState(prev => ({ ...prev, useDocker: next, tofuScript: "" }));
               generateScript({ useDocker: next });
             }}
             onBuildMethodChange={(method) => setState(prev => ({ ...prev, buildMethod: method }))}
+            onDockerfileSourceChange={(useRepoDockerfile) => {
+              setState(prev => ({ ...prev, useRepoDockerfile, tofuScript: "" }));
+            }}
             onPostDeployCommandsChange={(commands) => setState(prev => ({ ...prev, postDeployCommands: commands }))}
+            onRegenerateScript={() => {
+              setState(prev => ({ ...prev, tofuScript: "" }));
+              void generateScript();
+            }}
           />
         )}
         {step === 6 && <StepDeploy state={state} />}
@@ -128,9 +138,11 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           )}
           {step < 6 && !isDeploying && (
             <>
-              <button type="button" onClick={() => { if (!isDeploying) onClose(); }} className={btnSecondary}>
-                Cancel
-              </button>
+              {step === 0 && (
+                <button type="button" onClick={() => { if (!isDeploying) onClose(); }} className={btnSecondary}>
+                  Cancel
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleNext}
@@ -138,10 +150,19 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                 className={`${btnPrimary} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5`}
               >
                 {step === 5 ? (
-                  <>
-                    <RocketIcon />
-                    Deploy
-                  </>
+                  tofuLoading ? (
+                    <>
+                      <Spinner className="size-4" />
+                      Preparing deploy script…
+                    </>
+                  ) : !state.tofuScript ? (
+                    "Prepare deploy script"
+                  ) : (
+                    <>
+                      <RocketIcon />
+                      Deploy
+                    </>
+                  )
                 ) : (
                   "Next →"
                 )}

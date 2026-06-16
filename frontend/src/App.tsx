@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { PermissionsProvider } from "./context/PermissionsContext";
+import { ToastProvider } from "./context/ToastContext";
+import { ScanProgressProvider } from "./context/ScanProgressContext";
+import SessionHandler from "./components/SessionHandler";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -25,36 +28,41 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <ThemeProvider>
-    <AuthProvider>
-    <PermissionsProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/auth/callback/:provider" element={<AuthCallback />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:projectId" element={<ProjectDetail />} />
-            <Route path="/security" element={<SecurityScans />} />
-            <Route path="/security/project/:projectId" element={<ScanDetail />} />
-            <Route path="/security/:scanId" element={<ScanDetail />} />
-            <Route path="/deploy" element={<Deploy />} />
-            <Route path="/deploy/:deployId" element={<DeployDetail />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </PermissionsProvider>
-    </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <PermissionsProvider>
+            <ScanProgressProvider>
+            <BrowserRouter>
+              <SessionHandler />
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/auth/callback/:provider" element={<AuthCallback />} />
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/projects" element={<Projects />} />
+                  <Route path="/projects/:projectId" element={<ProjectDetail />} />
+                  <Route path="/security" element={<SecurityScans />} />
+                  <Route path="/security/project/:projectId" element={<ScanDetail />} />
+                  <Route path="/security/:scanId" element={<ScanDetail />} />
+                  <Route path="/deploy" element={<Deploy />} />
+                  <Route path="/deploy/:deployId" element={<DeployDetail />} />
+                  <Route path="/settings" element={<Settings />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </BrowserRouter>
+            </ScanProgressProvider>
+          </PermissionsProvider>
+        </AuthProvider>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

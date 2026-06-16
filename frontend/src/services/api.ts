@@ -1,6 +1,7 @@
 // Barrel re-export — all consumers can keep importing from "services/api"
 // while the implementation is split into domain-specific modules.
 export { authApi } from "./auth";
+export { billingApi } from "./billing";
 export { usersApi } from "./users";
 export { rolesApi } from "./roles";
 export { gitApi } from "./git";

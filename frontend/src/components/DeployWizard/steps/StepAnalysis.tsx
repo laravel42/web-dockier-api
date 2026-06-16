@@ -2,6 +2,7 @@ import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
 import WarningIcon from "../../icons/outlined/WarningIcon";
 import Spinner from "../../Spinner";
+import DockerfileIcon from "../../icons/filled/DockerfileIcon";
 
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
 const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
@@ -37,7 +38,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   if (!analysis) {
     return (
       <div className="flex flex-col items-center py-8 gap-3 text-center">
-        <WarningIcon className="w-10 h-10 text-warning-500" />
+        <WarningIcon className="size-10  text-warning-500" />
         {analysisError ? (
           <p className="text-sm text-danger-500">{analysisError}</p>
         ) : (
@@ -88,7 +89,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
     <div className="space-y-4">
       {/* AI Summary */}
       {analysis.aiAnalysis?.summary && (
-        <div className="flex items-start gap-2 p-3 bg-primary-50 border border-primary-200 rounded-lg">
+        <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary-200 rounded-lg">
           <span className="text-base mt-0.5">✨</span>
           <div className="text-xs text-text-secondary">
             <span className="font-semibold">AI Analysis:</span> {analysis.aiAnalysis.summary}
@@ -113,6 +114,16 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                 <span className="ml-1 text-text-muted">({t.category})</span>
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {analysis.hasDocker && (
+        <div className="flex items-start gap-2 p-3 bg-secondary-50 border border-border rounded-lg">
+          <DockerfileIcon className="size-4 text-blue-500 mt-0.5 shrink-0" />
+          <div className="text-xs text-text-secondary">
+            <span className="font-semibold text-text">Dockerfile detected.</span>{" "}
+            You can choose whether to use it or let Dockier generate one in the Deploy script step.
           </div>
         </div>
       )}

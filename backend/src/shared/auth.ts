@@ -19,6 +19,20 @@ declare module "fastify" {
   }
 }
 
+export function verifyAuthToken(token: string): AuthContext | null {
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as Partial<AuthContext>;
+    if (!decoded.userId || !decoded.email || !decoded.tenantId) return null;
+    return {
+      userId: decoded.userId,
+      email: decoded.email,
+      tenantId: decoded.tenantId,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const authPlugin = fp(async (app) => {
   app.decorate("requireAuth", async (request: FastifyRequest, reply: FastifyReply) => {
     const header = request.headers.authorization;
@@ -27,18 +41,10 @@ export const authPlugin = fp(async (app) => {
     }
 
     const token = header.slice("Bearer ".length);
-    try {
-      const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as Partial<AuthContext>;
-      if (!decoded.userId || !decoded.email || !decoded.tenantId) {
-        return reply.unauthorized("Invalid token payload");
-      }
-      request.auth = {
-        userId: decoded.userId,
-        email: decoded.email,
-        tenantId: decoded.tenantId,
-      };
-    } catch {
+    const auth = verifyAuthToken(token);
+    if (!auth) {
       return reply.unauthorized("Invalid or expired token");
     }
+    request.auth = auth;
   });
 });

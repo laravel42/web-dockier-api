@@ -10,17 +10,19 @@ import KpiDashboard from "./sections/KpiDashboard";
 import ContributorsGrid from "./sections/ContributorsGrid";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
+import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
-import LastDeployCard from "./sections/LastDeployCard";
 import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
-import Spinner from "../../components/Spinner";
+import PageLoading from "../../components/ui/PageLoading";
+import PageError from "../../components/ui/PageError";
 
 export default function ProjectDetail() {
   const {
     project, loading, error, navigate,
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
     handleDelete, handlePullOrigin, handleOpenBranchModal,
+    handleUpdateName, nameSaving, nameError,
     showDeployWizard, setShowDeployWizard,
     allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy, refreshAnalysis,
     stats, statsLoading, statsError,
@@ -31,21 +33,22 @@ export default function ProjectDetail() {
     pullLog, setPullLog, pullLoading,
     lastDeploy, destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
     recentDeploys,
+    recentScans,
   } = useProjectDetail();
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   if (error || !project) {
     return (
-      <div className="text-center py-16">
-        <p className="text-danger-500 text-sm mb-4">{error || "Project not found"}</p>
-        <button onClick={() => navigate("/projects")} className={btnSecondary}>Back to Projects</button>
+      <div>
+        <PageError message={error || "Project not found"} />
+        <div className="text-center mt-4">
+          <button type="button" onClick={() => navigate("/projects")} className={btnSecondary}>
+            Back to Projects
+          </button>
+        </div>
       </div>
     );
   }
@@ -53,7 +56,7 @@ export default function ProjectDetail() {
   return (
     <div>
       <button onClick={() => navigate("/projects")} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
-        <ChevronLeftIcon className="w-4 h-4" />
+        <ChevronLeftIcon className="size-4 " />
         Back to Projects
       </button>
 
@@ -66,14 +69,23 @@ export default function ProjectDetail() {
         onPull={handlePullOrigin}
         onSwitchBranch={handleOpenBranchModal}
         onDelete={() => setShowDelete(true)}
+        onNameSave={handleUpdateName}
+        nameSaving={nameSaving}
+        nameError={nameError}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 items-stretch">
         <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
         <ProjectDetailsCard project={project} lastCommitDate={stats?.lastCommitDate} />
       </div>
 
-      <ProjectDescription analysis={analysis} analysisLoading={analysisLoading} onRefresh={refreshAnalysis} projectId={project.id} />
+      <ProjectDescription
+        analysis={analysis}
+        analysisLoading={analysisLoading}
+        onRefresh={refreshAnalysis}
+        projectId={project.id}
+        project={project}
+      />
 
       {/* UserJourneyTree hidden for now */}
 
@@ -85,17 +97,15 @@ export default function ProjectDetail() {
 
       <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
 
-      <RecentDeploys deploys={recentDeploys} allProviders={allProviders} navigate={navigate} />
+      <RecentDeploys
+        deploys={recentDeploys}
+        allProviders={allProviders}
+        navigate={navigate}
+        destroying={destroying}
+        onDestroy={lastDeploy ? () => setShowDestroyConfirm(true) : undefined}
+      />
 
-      {lastDeploy && (
-        <LastDeployCard
-          lastDeploy={lastDeploy}
-          allProviders={allProviders}
-          destroying={destroying}
-          onDestroy={() => setShowDestroyConfirm(true)}
-          onViewDetails={() => navigate(`/deploy/${lastDeploy.id}`)}
-        />
-      )}
+      <RecentScans scans={recentScans} navigate={navigate} />
 
       <DeployWizard
         open={showDeployWizard}

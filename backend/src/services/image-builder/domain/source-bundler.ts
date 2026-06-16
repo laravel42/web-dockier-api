@@ -8,6 +8,7 @@
 
 import { join } from "node:path";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
+import { ensureS3Bucket } from "../../../lib/aws.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
 
 export async function bundleAndUploadSource(
@@ -22,6 +23,7 @@ export async function bundleAndUploadSource(
   gitProvider?: string,
   gitEndpoint?: string,
   deployTarget?: string,
+  options?: { skipExistingDockerfile?: boolean },
 ): Promise<{ s3Key: string; detectedRuntime: string; detectedPort: number }> {
   const { rmSync, writeFileSync, readdirSync, existsSync } = await import("node:fs");
   const { generateBuildspec, generateStaticBuildspec } = await import("../../../lib/buildspec-generator/index.js");
@@ -46,7 +48,7 @@ export async function bundleAndUploadSource(
     const { detectedStack, detectedPort } = await analyzeAndGenerate({
       repoDir,
       logger,
-      skipExistingDockerfile: true,
+      skipExistingDockerfile: options?.skipExistingDockerfile === true,
     });
 
     // ─── Inject Buildspec ──────────────────────────────────────────
@@ -113,6 +115,9 @@ for sf in sorted(pathlib.Path(".").rglob("settings.py")):
     const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
     const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
     const s3Key = `${buildId}.zip`;
+
+    await ensureS3Bucket(region, { accessKeyId, secretAccessKey }, bucketName);
+    await logger.info(`Ensured S3 source bucket: ${bucketName}`);
 
     await s3.send(new PutObjectCommand({
       Bucket: bucketName,

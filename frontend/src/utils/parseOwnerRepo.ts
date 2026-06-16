@@ -11,7 +11,9 @@ export function parseOwnerRepo(repoUrl: string): { owner: string; repo: string }
       const owner = parts.slice(0, parts.length - 1).join("/");
       return { owner, repo };
     }
-  } catch {}
+  } catch {
+    /* Invalid repo URL */
+  }
   return null;
 }
 

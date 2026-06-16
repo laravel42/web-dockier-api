@@ -2,7 +2,7 @@ import type {
   AdapterContext,
   ProvisionResult,
 } from "./types.js";
-import { AwsCloudFormationAdapter } from "./aws-cfn-base";
+import { AwsCloudFormationAdapter } from "./aws-cfn-base.js";
 import {
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
@@ -147,6 +147,8 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
       } catch (logErr: any) {
         if (logErr.name === "ResourceAlreadyExistsException") {
           await appendLog(`ℹ Log group ${logGroupName} already exists`);
+        } else {
+          await appendLog(`⚠ Failed to pre-create log group: ${logErr.message}`);
         }
       }
     } catch {

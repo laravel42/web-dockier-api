@@ -1,4 +1,4 @@
-// @ts-nocheck is removed — this file is now fully adapted to Supabase
+// Fully adapted to Supabase (no ts-nocheck).
 import { join } from "node:path";
 import { extractRegionFromScript } from "../gcp-helpers.js";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
@@ -59,8 +59,8 @@ export class GcpCloudRunAdapter implements DeployAdapter {
    * 3. Replaces `__DEPLOY_DB_*__` placeholders with user DB credentials (or defaults)
    */
   async injectEnvVars(
-    ctx: AdapterContext,
-    envVars: Array<{ name: string; value: string }>,
+    _ctx: AdapterContext,
+    _envVars: Array<{ name: string; value: string }>,
   ): Promise<void> {
     // For Cloud Run, env vars are baked into the Pulumi program's Cloud Run container `envs` array.
     // The Pulumi template already includes env var entries in the container spec.

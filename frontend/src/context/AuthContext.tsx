@@ -4,6 +4,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { getToken, getUserId, setSession } from "../services/session";
 
 interface UserProfile {
   name: string;
@@ -50,22 +51,19 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem("token")
-  );
-  const [userId, setUserId] = useState<string | null>(
-    localStorage.getItem("userId")
-  );
+  const [token, setToken] = useState<string | null>(getToken());
+  const [userId, setUserId] = useState<string | null>(getUserId());
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(loadProfile);
 
   const login = (newToken: string, newUserId: string) => {
-    localStorage.setItem("token", newToken);
-    localStorage.setItem("userId", newUserId);
+    setSession(newToken, newUserId);
     setToken(newToken);
     setUserId(newUserId);
   };
 
   const logout = () => {
+    // Full wipe on logout: clears the session plus any cached app state
+    // (theme, view prefs, badge cache, etc.).
     localStorage.clear();
     sessionStorage.clear();
     setToken(null);

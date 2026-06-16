@@ -13,6 +13,7 @@
 
 import { getAwsAccountId } from "../../../lib/aws.js";
 import type { ContextualLogger } from "../../../lib/logging.js";
+import { formatEnvFileContent } from "../../../shared/env/format-env-file.js";
 import type { RunCmdFn } from "./run-cmd.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -45,9 +46,6 @@ export interface PostDeployContext {
 
 /** Only allow safe characters in container names to prevent shell injection. */
 const SAFE_CONTAINER_NAME = /^[a-z0-9][a-z0-9._-]*$/i;
-
-/** Only allow valid env var names (POSIX portable). */
-const SAFE_ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function assertSafeContainerName(name: string): void {
   if (!SAFE_CONTAINER_NAME.test(name)) {
@@ -117,16 +115,7 @@ async function uploadEnvToS3(
   const { envVars, region, credentials } = ctx;
   if (envVars.length === 0) return "";
 
-  const envContent = envVars
-    .filter(v => SAFE_ENV_NAME.test(v.name))
-    .map(v => {
-      const val = v.value;
-      const needsQuotes = /[\s#"'\\]/.test(val) || val === "";
-      return needsQuotes
-        ? `${v.name}="${val.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
-        : `${v.name}=${val}`;
-    })
-    .join("\n");
+  const envContent = formatEnvFileContent(envVars);
 
   const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
   const accountId = await getAwsAccountId(region, {

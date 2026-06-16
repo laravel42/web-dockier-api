@@ -1,6 +1,8 @@
+import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { verifyAuthToken } from "../../shared/auth.js";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -11,8 +13,55 @@ import { listFindings } from "./domain/findings.js";
 import { listCustomRules, createCustomRule, updateCustomRule, deleteCustomRule } from "./domain/custom-rules.js";
 import { listSemgrepRules, getSemgrepRuleContent, updateSemgrepRuleContent } from "./domain/semgrep-rules.js";
 import { listRuleOverrides, upsertRuleOverride } from "./domain/rule-overrides.js";
+import {
+  listSonarProfiles,
+  listSonarRules,
+  SonarNotConfiguredError,
+  toggleSonarRule,
+} from "./domain/sonarqube.js";
+import {
+  subscribeToScan,
+  unsubscribeFromScan,
+  sendScanSnapshot,
+} from "./domain/scan-events.js";
 
 export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
+  await app.register(websocket);
+
+  app.get(
+    "/code-analysis/scans/:scanId/ws",
+    { websocket: true },
+    async (socket, request) => {
+      const scanId = (request.params as { scanId: string }).scanId;
+      const token = (request.query as { token?: string }).token;
+      if (!token) {
+        socket.close(1008, "Missing token");
+        return;
+      }
+
+      const auth = verifyAuthToken(token);
+      if (!auth) {
+        socket.close(1008, "Unauthorized");
+        return;
+      }
+
+      try {
+        const scan = await getScan(scanId, auth.tenantId);
+        subscribeToScan(scanId, socket);
+        sendScanSnapshot(
+          socket,
+          scanId,
+          scan.status,
+          scan.summary as unknown as Record<string, unknown>,
+        );
+
+        socket.on("close", () => unsubscribeFromScan(scanId, socket));
+      } catch {
+        socket.close(1008, "Scan not found");
+      }
+    },
+  );
+
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
   // ─── Scans ─────────────────────────────────────────────────────────────────
@@ -113,8 +162,10 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         body: z
           .object({
             enableSemgrep: z.boolean().optional(),
+            enableOpengrep: z.boolean().optional(),
             enableSonarqube: z.boolean().optional(),
             enableCustomRules: z.boolean().optional(),
+            enableSensitiveData: z.boolean().optional(),
           })
           .optional(),
         response: { 200: scanSchema },
@@ -122,7 +173,12 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = request.auth!;
-      return await runScan(request.params.scanId, auth.tenantId);
+      const body = request.body ?? {};
+      const enableSemgrep = body.enableOpengrep ?? body.enableSemgrep;
+      return await runScan(request.params.scanId, auth.tenantId, {
+        ...body,
+        enableSemgrep,
+      });
     },
   );
 
@@ -136,18 +192,60 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "List scan findings",
         params: z.object({ scanId: z.string().uuid() }),
-        querystring: z.object({ severity: z.string().optional() }),
-        response: { 200: z.object({ findings: z.array(findingSchema) }) },
+        querystring: z.object({
+          severity: z.string().optional(),
+          provider: z.enum(["semgrep", "sonar", "custom"]).optional(),
+          limit: z.coerce.number().int().positive().max(100).optional(),
+          offset: z.coerce.number().int().nonnegative().optional(),
+        }),
+        response: {
+          200: z.object({
+            findings: z.array(findingSchema),
+            total: z.number().int().nonnegative(),
+            hasMore: z.boolean(),
+            counts: z.object({
+              total: z.number().int().nonnegative(),
+              errors: z.number().int().nonnegative(),
+              warnings: z.number().int().nonnegative(),
+              infos: z.number().int().nonnegative(),
+              semgrep: z.number().int().nonnegative(),
+              sonar: z.number().int().nonnegative(),
+              custom: z.number().int().nonnegative(),
+              byProvider: z.object({
+                semgrep: z.object({
+                  total: z.number().int().nonnegative(),
+                  errors: z.number().int().nonnegative(),
+                  warnings: z.number().int().nonnegative(),
+                  infos: z.number().int().nonnegative(),
+                }),
+                sonar: z.object({
+                  total: z.number().int().nonnegative(),
+                  errors: z.number().int().nonnegative(),
+                  warnings: z.number().int().nonnegative(),
+                  infos: z.number().int().nonnegative(),
+                }),
+                custom: z.object({
+                  total: z.number().int().nonnegative(),
+                  errors: z.number().int().nonnegative(),
+                  warnings: z.number().int().nonnegative(),
+                  infos: z.number().int().nonnegative(),
+                }),
+              }),
+            }),
+          }),
+        },
       },
     },
     async (request) => {
       const auth = request.auth!;
-      const findings = await listFindings({
+      return await listFindings({
         scanId: request.params.scanId,
         tenantId: auth.tenantId,
         severity: request.query.severity,
+        provider: request.query.provider,
+        limit: request.query.limit,
+        offset: request.query.offset,
       });
-      return { findings };
     },
   );
 
@@ -324,7 +422,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
     },
   );
 
-  // ─── SonarQube Stubs ───────────────────────────────────────────────────────
+  // ─── SonarQube ─────────────────────────────────────────────────────────────
 
   typed.get(
     "/code-analysis/sonar/profiles",
@@ -332,11 +430,21 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
-        summary: "List SonarQube profiles (migration stub)",
+        summary: "List SonarQube quality profiles",
         response: { 200: z.object({ profiles: z.array(z.any()) }) },
       },
     },
-    async () => ({ profiles: [] }),
+    async () => {
+      try {
+        const profiles = await listSonarProfiles();
+        return { profiles };
+      } catch (err) {
+        if (err instanceof SonarNotConfiguredError) {
+          throw app.httpErrors.serviceUnavailable(err.message);
+        }
+        throw err;
+      }
+    },
   );
 
   typed.get(
@@ -345,12 +453,21 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
-        summary: "List SonarQube rules (migration stub)",
+        summary: "List SonarQube rules for a quality profile",
         querystring: z.object({ profileKey: z.string(), page: z.coerce.number().optional(), query: z.string().optional() }),
         response: { 200: z.object({ rules: z.array(z.any()), total: z.number().int().nonnegative() }) },
       },
     },
-    async () => ({ rules: [], total: 0 }),
+    async (request) => {
+      try {
+        return await listSonarRules(request.query);
+      } catch (err) {
+        if (err instanceof SonarNotConfiguredError) {
+          throw app.httpErrors.serviceUnavailable(err.message);
+        }
+        throw err;
+      }
+    },
   );
 
   typed.post(
@@ -359,12 +476,22 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
-        summary: "Toggle SonarQube rule activation (migration stub)",
+        summary: "Toggle SonarQube rule activation in a quality profile",
         body: z.object({ profileKey: z.string(), ruleKey: z.string(), activate: z.boolean() }),
         response: { 200: successResponseSchema },
       },
     },
-    async () => ({ success: true as const }),
+    async (request) => {
+      try {
+        await toggleSonarRule(request.body);
+        return { success: true as const };
+      } catch (err) {
+        if (err instanceof SonarNotConfiguredError) {
+          throw app.httpErrors.serviceUnavailable(err.message);
+        }
+        throw err;
+      }
+    },
   );
 
   // ─── Rule Overrides ────────────────────────────────────────────────────────

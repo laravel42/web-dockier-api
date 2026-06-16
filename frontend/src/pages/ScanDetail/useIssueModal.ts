@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { integrationsApi, gitApi } from "../../services/api";
+import { ApiError } from "../../services/api-error";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import { INTEGRATION_CATALOG } from "../../data/integrations";
 import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "../../types";
 
 export function useIssueModal(project: Project | null) {
@@ -31,16 +31,10 @@ export function useIssueModal(project: Project | null) {
   const [gitMembers, setGitMembers] = useState<Array<{ id: string; username: string; name: string; avatarUrl: string }>>([]);
   const [selectedGitAssignee, setSelectedGitAssignee] = useState("");
 
-  // Load integrations from localStorage
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("integrations");
-      if (stored) {
-        const all: PMIntegration[] = JSON.parse(stored);
-        const pmTypes = INTEGRATION_CATALOG.filter(c => c.category === "Project Management" || c.category === "DevOps").map(c => c.type);
-        setPmIntegrations(all.filter(i => i.enabled && pmTypes.includes(i.type)));
-      }
-    } catch {}
+    integrationsApi.listPMIntegrations()
+      .then((res) => setPmIntegrations(res.integrations.filter((i) => i.enabled)))
+      .catch(() => setPmIntegrations([]));
   }, []);
 
   // ── PM team/project/member cascading fetches ───────────────────
@@ -50,32 +44,38 @@ export function useIssueModal(project: Project | null) {
     setPmProjects([]); setSelectedPmProject(""); setPmSubProjects([]); setSelectedPmSubProject("");
     setPmMembers([]); setSelectedPmAssignee("");
     try {
-      const res = await integrationsApi.listPMTeams(pm.type, pm.config);
+      const res = await integrationsApi.listPMTeams(pm.id);
       setPmProjects(res.teams); setPmTeamLabel(res.teamLabel); setPmProjectLabel(res.projectLabel);
       if (res.teams.length > 0) {
         setSelectedPmProject(res.teams[0].id);
         if (res.projectLabel) fetchPmSubProjects(pm, res.teams[0].id);
         fetchPmMembers(pm, res.teams[0].id);
       }
-    } catch {}
+    } catch {
+      /* PM teams optional — leave lists empty */
+    }
     finally { setPmProjectsLoading(false); }
   };
 
   const fetchPmMembers = async (pm: PMIntegration, teamId: string) => {
     setPmMembers([]); setSelectedPmAssignee("");
     try {
-      const res = await integrationsApi.listPMTeamMembers(pm.type, pm.config, teamId);
+      const res = await integrationsApi.listPMTeamMembers(pm.id, teamId);
       setPmMembers(res.members);
-    } catch {}
+    } catch {
+      /* PM teams optional — leave lists empty */
+    }
   };
 
   const fetchPmSubProjects = async (pm: PMIntegration, teamId: string) => {
     setPmSubProjectsLoading(true); setPmSubProjects([]); setSelectedPmSubProject("");
     try {
-      const res = await integrationsApi.listPMTeamProjects(pm.type, pm.config, teamId);
+      const res = await integrationsApi.listPMTeamProjects(pm.id, teamId);
       setPmSubProjects(res.projects);
       if (res.projects.length > 0) setSelectedPmSubProject(res.projects[0].id);
-    } catch {}
+    } catch {
+      /* PM teams optional — leave lists empty */
+    }
     finally { setPmSubProjectsLoading(false); }
   };
 
@@ -134,20 +134,23 @@ export function useIssueModal(project: Project | null) {
     setIssueCreating(true); setIssueSuccess(""); setIssueSuccessUrl(""); setIssueError("");
     try {
       if (pm) {
-        // PM integration path (Jira, Linear, etc.)
         const severityToPriority: Record<string, number> = { error: 2, warning: 3, info: 4 };
         const priority = issueModal.finding ? severityToPriority[issueModal.finding.severity] : undefined;
         const estimateMinutes = aiEstimate || undefined;
         const result = await integrationsApi.createPMIssue({
-          type: pm.type, config: pm.config, teamId: selectedPmProject,
-          projectId: selectedPmSubProject, title: issueTitle, description: issueDescription,
-          priority, estimateMinutes, assigneeId: selectedPmAssignee || undefined,
+          integrationId: pm.id,
+          teamId: selectedPmProject,
+          projectId: selectedPmSubProject,
+          title: issueTitle,
+          description: issueDescription,
+          priority,
+          estimateMinutes,
+          assigneeId: selectedPmAssignee || undefined,
         });
         const label = result.issueKey || result.issueId;
         setIssueSuccess(result.issueUrl ? `Issue ${label} created` : `Issue created`);
         setIssueSuccessUrl(result.issueUrl || "");
       } else if (project?.connectionId && project?.repository) {
-        // Git provider fallback (GitHub/GitLab/Bitbucket issues)
         const parsed = parseOwnerRepo(project.repository);
         if (!parsed) throw new Error("Could not parse repository URL");
         const result = await gitApi.createGitIssue(
@@ -160,15 +163,17 @@ export function useIssueModal(project: Project | null) {
         throw new Error("No integration or git connection available");
       }
     } catch (err: unknown) {
-      const msg = (err as Error).message || "Unknown error";
-      let friendly = "Failed to create issue";
-      if (msg.includes("Timeout") || msg.includes("timeout")) friendly = "Connection timed out — the server may be unreachable. Check your network and try again.";
-      else if (msg.includes("fetch failed")) friendly = "Could not connect to the integration server. Check that the service is running and accessible.";
-      else if (msg.includes("401") || msg.includes("Unauthorized")) friendly = "Authentication failed — check your API key or token in the integration settings.";
-      else if (msg.includes("403") || msg.includes("Forbidden")) friendly = "Permission denied — your token may not have permission to create issues.";
-      else if (msg.includes("404") || msg.includes("Not Found")) friendly = "Project or resource not found — check the selected team/project exists.";
-      else if (msg.includes("429")) friendly = "Rate limited — too many requests. Wait a moment and try again.";
-      else friendly = msg;
+      let friendly: string;
+      if (err instanceof ApiError) {
+        if (err.isTimeout || err.isNetworkError) friendly = "Connection timed out — the server may be unreachable. Check your network and try again.";
+        else if (err.isUnauthorized) friendly = "Authentication failed — check your API key or token in the integration settings.";
+        else if (err.isForbidden) friendly = "Permission denied — your token may not have permission to create issues.";
+        else if (err.isNotFound) friendly = "Project or resource not found — check the selected team/project exists.";
+        else if (err.isRateLimit) friendly = "Rate limited — too many requests. Wait a moment and try again.";
+        else friendly = err.message || "Failed to create issue";
+      } else {
+        friendly = (err as Error).message || "Failed to create issue";
+      }
       setIssueError(friendly);
     } finally { setIssueCreating(false); }
   };

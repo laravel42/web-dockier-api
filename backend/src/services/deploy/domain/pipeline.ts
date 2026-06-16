@@ -10,6 +10,7 @@
  */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { logger as obsLogger } from "../../../shared/logger.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createDeployLogger, BuildError } from "../../../lib/logging.js";
 import { patchDockerfile, toDetectedStack } from "../../../lib/repo-analyzer/index.js";
@@ -21,6 +22,7 @@ import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
 import { executePostDeployCommands } from "./post-deploy.js";
+import { sendNotification } from "../../notifications/domain/notifications.js";
 
 const db = supabaseAdmin;
 
@@ -45,6 +47,7 @@ export interface PipelineInput {
   envVars?: Array<{ name: string; value: string }>;
   postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure?: boolean }>;
   services?: Array<{ type: string; name: string; mode: string }>;
+  useRepoDockerfile?: boolean;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -187,7 +190,11 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await db.from("deployments").update({ commit_hash: commitHash }).eq("id", deploymentId);
 
     // 3. Analyze and generate Dockerfile
-    const { repoConfig } = await analyzeAndGenerate({ repoDir, logger });
+    const { repoConfig } = await analyzeAndGenerate({
+      repoDir,
+      logger,
+      skipExistingDockerfile: event.useRepoDockerfile === true,
+    });
 
     // 4. Build Docker image (local or remote via CodeBuild)
     const isStaticDeploy = event.deployStrategy === "static";
@@ -240,7 +247,6 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
           appendLog,
         });
         actualImage = result.remoteImageUri;
-        skippedBuild = true; // Don't try local build after CodeBuild
       } else if (!skippedBuild) {
         await logger.section("Build Docker Image");
         const { readFile, writeFile } = await import("node:fs/promises");
@@ -385,6 +391,17 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       await logger.warn("Could not determine app URL — check cloud console");
       await updateStatus(deploymentId, "success");
     }
+
+    const deployMessage = finalUrl
+      ? `Deployment of ${event.repo} (${event.branch}) succeeded. App URL: ${finalUrl}`
+      : `Deployment of ${event.repo} (${event.branch}) succeeded.`;
+    void sendNotification({
+      tenantId: event.tenantId,
+      title: "Deployment succeeded",
+      message: deployMessage,
+    }).catch((err) => {
+      obsLogger.error({ err }, `[deploy] Failed to send deploy complete notification for ${deploymentId}`);
+    });
 
     // Cleanup work directory
     try { await rm(workDir, { recursive: true, force: true }); } catch {}

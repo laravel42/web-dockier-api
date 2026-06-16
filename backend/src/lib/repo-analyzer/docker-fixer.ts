@@ -226,7 +226,25 @@ export function patchDockerfile(buildOutput: string, currentDockerfile: string):
     }
   }
 
-  // ── 8. Memory issues ──
+  // ── 8. Node.js too old for modern deps (undici 7+, Next.js SSR) ──
+  const undiciOnOldNode =
+    buildOutput.includes("undici") &&
+    (buildOutput.includes("Node.js v18") || df.includes("node:18"));
+  const nextBuildOnNode18 =
+    df.includes("node:18") &&
+    (buildOutput.includes("ELIFECYCLE") || buildOutput.includes("next build"));
+  if (undiciOnOldNode || nextBuildOnNode18) {
+    df = df.replace(/node:18(-slim)?/g, "node:20$1");
+    fixes.push("Upgraded Node.js 18 → 20 (modern SSR deps require Node 20+)");
+  }
+
+  // ── 9. pnpm on Node 20 — node:sqlite requires Node 22+ ──
+  if (buildOutput.includes("node:sqlite") || buildOutput.includes("ERR_UNKNOWN_BUILTIN_MODULE")) {
+    df = df.replace(/node:20(-slim)?/g, "node:22$1");
+    fixes.push("Upgraded Node.js 20 → 22 for pnpm (node:sqlite built-in)");
+  }
+
+  // ── 10. Memory issues ──
   if (buildOutput.includes("ENOMEM") || buildOutput.includes("JavaScript heap out of memory")) {
     if (!df.includes("NODE_OPTIONS")) {
       df = df.replace(/(RUN (?:npm run|pnpm|yarn) build)/g, 'ENV NODE_OPTIONS="--max-old-space-size=4096"\n$1');

@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { logger } from "../../../shared/logger.js";
 import { bundleAndUploadSource } from "./source-bundler.js";
 import { getAwsAccountId } from "../../../lib/aws.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
@@ -72,6 +73,8 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     // 4. Bundle source (clone → analyze → zip → upload to S3)
     const codebuildProject = process.env.IMAGE_BUILDER_CODEBUILD_PROJECT || "image-builder";
     const bucketName = `${codebuildProject}-source-${accountId}`;
+    const useRepoDockerfile = input.deployParams?.useRepoDockerfile === true
+      || input.deployParams?.useRepoDockerfile === "true";
     const { s3Key, detectedRuntime, detectedPort } = await bundleAndUploadSource(
       input.sourceRepo,
       input.sourceRef,
@@ -84,6 +87,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
       gitProvider,
       gitEndpoint,
       input.deployTarget as "ecs" | "ec2" | "s3" | undefined,
+      { skipExistingDockerfile: useRepoDockerfile },
     );
 
     // 5. Publish to SNS to trigger CodeBuild via Lambda
@@ -125,7 +129,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
 
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error(`[image-build-worker] Failed to trigger CodeBuild for ${buildId}:`, message);
+    logger.error({ err: message }, `[image-build-worker] Failed to trigger CodeBuild for ${buildId}`);
     await db.from("builds").update({
       status: "failed",
       status_reason: `Failed to queue build: ${message}`,

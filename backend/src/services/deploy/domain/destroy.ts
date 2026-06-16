@@ -8,6 +8,7 @@
 
 import { getAdapter } from "./adapters/index.js";
 import type { DestroyContext } from "./adapters/types.js";
+import { logger } from "../../../shared/logger.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -21,14 +22,14 @@ export interface DestroyOpts {
 // ─── Main Orchestrator ─────────────────────────────────────────────
 
 export async function destroyDeployment(db: any, deploymentId: string): Promise<{ success: boolean; message: string }> {
-  console.log(`[destroy] Starting destroy for deployment ${deploymentId}`);
+  logger.info(`[destroy] Starting destroy for deployment ${deploymentId}`);
   const { data: deployment } = await db
     .from("deployments")
     .select("id,repo,provider_id,deploy_strategy,docker_image,logs,tofu_script")
     .eq("id", deploymentId)
     .single();
   if (!deployment) return { success: false, message: "Deployment not found" };
-  console.log(`[destroy] Found deployment: repo=${deployment.repo} strategy=${deployment.deploy_strategy} provider_id=${deployment.provider_id}`);
+  logger.info(`[destroy] Found deployment: repo=${deployment.repo} strategy=${deployment.deploy_strategy} provider_id=${deployment.provider_id}`);
 
   // Fetch provider credentials
   const { data: providerRow } = await db
@@ -36,16 +37,16 @@ export async function destroyDeployment(db: any, deploymentId: string): Promise<
     .select("provider,region,api_key,api_secret")
     .eq("id", deployment.provider_id)
     .single();
-  console.log(`[destroy] Provider: ${providerRow?.provider} region=${providerRow?.region}`);
+  logger.info(`[destroy] Provider: ${providerRow?.provider} region=${providerRow?.region}`);
 
   const repoName = deployment.repo.split("/").pop() || "app";
   const region = providerRow?.region || "us-east-1";
 
   // Clean up local Docker image
-  if (deployment.docker_image) {
+  if (deployment.docker_image && /^[a-zA-Z0-9_.:/@-]+$/.test(deployment.docker_image)) {
     try {
       const { execSync } = await import("node:child_process");
-      execSync(`docker rmi ${JSON.stringify(deployment.docker_image)} 2>/dev/null`, { timeout: 15_000, stdio: "pipe" });
+      execSync("docker rmi " + JSON.stringify(deployment.docker_image) + " 2>/dev/null", { timeout: 15_000, stdio: "pipe" });
     } catch {}
   }
 
@@ -79,7 +80,7 @@ export async function destroyDeployment(db: any, deploymentId: string): Promise<
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error(`[destroy] Adapter destroy failed for ${deploymentId}: ${errMsg}`);
+      logger.error(`[destroy] Adapter destroy failed for ${deploymentId}: ${errMsg}`);
       const t = new Date().toISOString().replace("T", " ").slice(0, 19);
       await markDestroyed(db, deploymentId, deployment.logs, `\n[${t}] ⚠ Destroy error: ${errMsg}`);
       return { success: false, message: `Destroy failed: ${errMsg}` };

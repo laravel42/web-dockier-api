@@ -39,6 +39,11 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
   // Framework detection from dependencies
   const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
 
+  const hasPayload = Object.keys(allDeps).some(
+    (dep) => dep === "payload" || dep.startsWith("@payloadcms/"),
+  );
+  if (hasPayload) config.features.add("payload");
+
   if (allDeps["next"]) {
     config.framework = "Next.js";
     config.frameworkVersion = cleanVersion(allDeps["next"]);

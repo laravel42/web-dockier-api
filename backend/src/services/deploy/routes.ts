@@ -234,6 +234,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           registryUrl: z.string().optional(),
           deployStrategy: z.string().optional(),
           buildMethod: z.enum(["dockerfile", "railpack", "nixpacks", "codebuild"]).optional(),
+          useRepoDockerfile: z.boolean().optional(),
           skipPipeline: z.boolean().optional(),
           templateId: z.string().optional(),
           envVars: z.array(envVarSchema).optional(),
@@ -266,6 +267,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           buildMethod: request.body.buildMethod,
           registryUrl: request.body.registryUrl,
           skipPipeline: request.body.skipPipeline,
+          useRepoDockerfile: request.body.useRepoDockerfile,
           services: request.body.services as ServiceEntry[] | undefined,
         },
         {
@@ -295,6 +297,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           envVars: request.body.envVars,
           postDeployCommands: request.body.postDeployCommands,
           services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
+          useRepoDockerfile: request.body.useRepoDockerfile,
         });
       }
 

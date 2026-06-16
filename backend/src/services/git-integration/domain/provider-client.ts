@@ -8,6 +8,17 @@ export type ConnectionLike = {
   endpoint?: string | null;
 };
 
+export type ListedRepo = {
+  name: string;
+  fullName: string;
+  url: string;
+  defaultBranch: string;
+  private: boolean;
+};
+
+const MAX_REPO_PAGES = 10;
+const REPOS_PER_PAGE = 100;
+
 function baseUrl(provider: GitProvider, endpoint?: string | null): string {
   if (provider === "github") return endpoint || "https://api.github.com";
   if (provider === "gitlab" || provider === "gitlab_self_hosted") return endpoint || "https://gitlab.com";
@@ -24,47 +35,140 @@ function authHeaders(connection: ConnectionLike): Record<string, string> {
   return { Authorization: `Bearer ${connection.personal_token}` };
 }
 
-export async function listRepos(connection: ConnectionLike) {
-  const headers = authHeaders(connection);
-  const origin = baseUrl(connection.provider, connection.endpoint);
-  if (connection.provider === "github") {
-    const response = await fetch(`${origin}/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member`, { headers });
+/** Parse GitHub Link header and return the URL for rel="next", if present. */
+export function parseGitHubLinkNext(linkHeader: string | null): string | null {
+  if (!linkHeader) return null;
+  for (const part of linkHeader.split(",")) {
+    const match = part.match(/<([^>]+)>;\s*rel="next"/);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function dedupeRepos(repos: ListedRepo[]): ListedRepo[] {
+  const byFullName = new Map<string, ListedRepo>();
+  for (const repo of repos) {
+    byFullName.set(repo.fullName, repo);
+  }
+  return [...byFullName.values()];
+}
+
+async function listGitHubRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+  const repos: ListedRepo[] = [];
+  let nextUrl: string | null =
+    `${origin}/user/repos?per_page=${REPOS_PER_PAGE}&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member`;
+
+  for (let page = 0; page < MAX_REPO_PAGES && nextUrl; page += 1) {
+    const response = await fetch(nextUrl, { headers });
     if (!response.ok) throw new Error(`GitHub API error ${response.status}`);
-    const data = (await response.json()) as Array<any>;
-    return data
-      .filter((repo) => !repo.archived)
-      .map((repo) => ({
+    const data = (await response.json()) as Array<{
+      archived?: boolean;
+      name: string;
+      full_name: string;
+      html_url: string;
+      default_branch?: string;
+      private?: boolean;
+    }>;
+
+    for (const repo of data) {
+      if (repo.archived) continue;
+      repos.push({
         name: repo.name,
         fullName: repo.full_name,
         url: repo.html_url,
         defaultBranch: repo.default_branch ?? "main",
         private: Boolean(repo.private),
-      }));
+      });
+    }
+
+    if (data.length < REPOS_PER_PAGE) break;
+    nextUrl = parseGitHubLinkNext(response.headers.get("Link"));
+  }
+
+  return dedupeRepos(repos);
+}
+
+async function listGitLabRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+  const repos: ListedRepo[] = [];
+
+  for (let page = 1; page <= MAX_REPO_PAGES; page += 1) {
+    const url =
+      `${origin}/api/v4/projects?membership=true&simple=true&per_page=${REPOS_PER_PAGE}` +
+      `&page=${page}&order_by=updated_at&archived=false`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`GitLab API error ${response.status}`);
+    const data = (await response.json()) as Array<{
+      name: string;
+      path_with_namespace: string;
+      web_url: string;
+      default_branch?: string;
+      visibility?: string;
+    }>;
+    if (data.length === 0) break;
+
+    for (const repo of data) {
+      repos.push({
+        name: repo.name,
+        fullName: repo.path_with_namespace,
+        url: repo.web_url,
+        defaultBranch: repo.default_branch ?? "main",
+        private: repo.visibility === "private",
+      });
+    }
+
+    const nextPage = response.headers.get("X-Next-Page");
+    if (!nextPage) break;
+  }
+
+  return dedupeRepos(repos);
+}
+
+async function listBitbucketRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+  const repos: ListedRepo[] = [];
+  let nextUrl: string | null = `${origin}/2.0/repositories?role=member&pagelen=${REPOS_PER_PAGE}`;
+
+  for (let page = 0; page < MAX_REPO_PAGES && nextUrl; page += 1) {
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) throw new Error(`Bitbucket API error ${response.status}`);
+    const data = (await response.json()) as {
+      values?: Array<{
+        name: string;
+        full_name: string;
+        links?: { html?: { href?: string } };
+        mainbranch?: { name?: string };
+        is_private?: boolean;
+      }>;
+      next?: string;
+    };
+
+    for (const repo of data.values ?? []) {
+      repos.push({
+        name: repo.name,
+        fullName: repo.full_name,
+        url: repo.links?.html?.href ?? "",
+        defaultBranch: repo.mainbranch?.name ?? "main",
+        private: Boolean(repo.is_private),
+      });
+    }
+
+    nextUrl = data.next ?? null;
+  }
+
+  return dedupeRepos(repos);
+}
+
+export async function listRepos(connection: ConnectionLike): Promise<ListedRepo[]> {
+  const headers = authHeaders(connection);
+  const origin = baseUrl(connection.provider, connection.endpoint);
+  if (connection.provider === "github") {
+    return listGitHubRepos(origin, headers);
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    const response = await fetch(`${origin}/api/v4/projects?membership=true&simple=true&per_page=100&order_by=updated_at&archived=false`, { headers });
-    if (!response.ok) throw new Error(`GitLab API error ${response.status}`);
-    const data = (await response.json()) as Array<any>;
-    return data.map((repo) => ({
-      name: repo.name,
-      fullName: repo.path_with_namespace,
-      url: repo.web_url,
-      defaultBranch: repo.default_branch ?? "main",
-      private: repo.visibility === "private",
-    }));
+    return listGitLabRepos(origin, headers);
   }
 
-  const response = await fetch(`${origin}/2.0/repositories?role=member&pagelen=100`, { headers });
-  if (!response.ok) throw new Error(`Bitbucket API error ${response.status}`);
-  const data = (await response.json()) as { values?: Array<any> };
-  return (data.values ?? []).map((repo) => ({
-    name: repo.name,
-    fullName: repo.full_name,
-    url: repo.links?.html?.href ?? "",
-    defaultBranch: repo.mainbranch?.name ?? "main",
-    private: Boolean(repo.is_private),
-  }));
+  return listBitbucketRepos(origin, headers);
 }
 
 export async function listBranches(connection: ConnectionLike, ref: RepoRef): Promise<string[]> {

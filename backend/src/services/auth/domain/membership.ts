@@ -267,7 +267,7 @@ export async function listTenantMemberships(tenantId: string) {
 export async function getAuthenticatedUser(userId: string, tenantId: string) {
   const { data: user, error: userError } = await supabaseAdmin
     .from("users")
-    .select("id,email,name")
+    .select("id,email,name,two_factor_enabled")
     .eq("id", userId)
     .maybeSingle();
 
@@ -290,5 +290,6 @@ export async function getAuthenticatedUser(userId: string, tenantId: string) {
     isOwner: resolved.isOwner,
     permissions: resolved.permissions,
     memberships,
+    twoFactorEnabled: user.two_factor_enabled ?? false,
   };
 }

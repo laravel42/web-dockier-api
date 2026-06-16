@@ -3,7 +3,11 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { rowToCustomRule } from "./mappers.js";
+import { seedCustomRules } from "./seed-custom-rules.js";
 import { CodeAnalysisError } from "./scans.js";
+
+const CUSTOM_RULE_COLUMNS =
+  "id,organization_id,rule_id,severity,message,pattern,extensions,enabled,type,yaml_content,created_at";
 
 export interface ListCustomRulesParams {
   tenantId: string;
@@ -13,14 +17,34 @@ export interface ListCustomRulesParams {
 export async function listCustomRules(params: ListCustomRulesParams) {
   const { tenantId } = params;
   const type = params.type ?? "custom";
-  const { data, error } = await supabaseAdmin
-    .from("custom_rules")
-    .select("id,organization_id,rule_id,severity,message,pattern,extensions,enabled,type,yaml_content,created_at")
-    .or(`organization_id.eq.,organization_id.eq.${tenantId}`)
-    .eq("type", type)
-    .order("rule_id", { ascending: true });
-  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list custom rules" });
-  return rows.map(rowToCustomRule);
+
+  if (type === "custom") {
+    await seedCustomRules();
+  }
+
+  const [systemResult, tenantResult] = await Promise.all([
+    supabaseAdmin
+      .from("custom_rules")
+      .select(CUSTOM_RULE_COLUMNS)
+      .eq("organization_id", "")
+      .eq("type", type)
+      .order("rule_id", { ascending: true }),
+    supabaseAdmin
+      .from("custom_rules")
+      .select(CUSTOM_RULE_COLUMNS)
+      .eq("organization_id", tenantId)
+      .eq("type", type)
+      .order("rule_id", { ascending: true }),
+  ]);
+
+  const systemRows = unwrapList(systemResult.data, systemResult.error, CodeAnalysisError, {
+    internalMsg: "Failed to list system custom rules",
+  });
+  const tenantRows = unwrapList(tenantResult.data, tenantResult.error, CodeAnalysisError, {
+    internalMsg: "Failed to list tenant custom rules",
+  });
+
+  return [...systemRows, ...tenantRows].map(rowToCustomRule);
 }
 
 export interface CreateCustomRuleParams {

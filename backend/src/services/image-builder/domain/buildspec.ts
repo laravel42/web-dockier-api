@@ -22,7 +22,7 @@ export function createBuildspecPreview(input: BuildspecInput): string {
     "phases:",
     "  install:",
     "    commands:",
-    `      - echo \"Preparing ${input.runtime} build for ref ${input.sourceRef}\"`,
+    `      - echo "Preparing ${input.runtime} build for ref ${input.sourceRef}"`,
     "      - docker --version",
     "  build:",
     "    commands:",

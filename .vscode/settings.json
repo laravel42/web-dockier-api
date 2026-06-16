@@ -4,5 +4,9 @@
             "viewType": "domViewer.editor",
             "filenamePattern": "*.dom"
         }
-    ]
+    ],
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    },
+    "tailwindCSS.lint.suggestCanonicalClasses": "ignore"
 }

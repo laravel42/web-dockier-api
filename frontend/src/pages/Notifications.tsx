@@ -1,46 +1,82 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "../services/api";
-import Spinner from "../components/Spinner";
+import { useAsyncData } from "../hooks/useAsyncData";
+import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
+import PageHeader from "../components/ui/PageHeader";
+import PageLoading from "../components/ui/PageLoading";
+import PageError, { EmptyMessage } from "../components/ui/PageError";
+import { btnLink, cardCls } from "../utils/styles";
+import type { Notification } from "../services/notifications";
+
+async function fetchNotifications(): Promise<Notification[]> {
+  const res = await notificationsApi.list();
+  return res.notifications;
+}
 
 export default function Notifications() {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const { enabled: inAppEnabled, loading: inAppLoading } = useInAppNotificationsEnabled();
+  const { data: notifications, loading, error, reload } = useAsyncData(fetchNotifications, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const res = await notificationsApi.list();
-      setNotifications(res.notifications);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+  useEffect(() => {
+    if (!inAppLoading && !inAppEnabled) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [inAppEnabled, inAppLoading, navigate]);
+
+  if (inAppLoading || !inAppEnabled) {
+    return <PageLoading />;
+  }
+
+  const markRead = async (id: string) => {
+    await notificationsApi.markRead(id);
+    reload();
   };
-
-  useEffect(() => { fetchData(); }, []);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-display font-semibold text-text tracking-tight">Notifications</h1>
-      </div>
+      <PageHeader
+        title="Notifications"
+        description={`${notifications?.length ?? 0} total · Activity from your projects and deployments`}
+      />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner /></div>
+        <PageLoading />
+      ) : error ? (
+        <PageError message={error} onRetry={reload} />
+      ) : !notifications?.length ? (
+        <EmptyMessage>No notifications</EmptyMessage>
       ) : (
-        <div className="space-y-2">
-          {notifications.map((n) => (
-            <div key={n.id} className={`bg-card rounded-[var(--radius-card)] shadow-[var(--shadow-card)] p-4 flex items-start justify-between border border-border/50 ${!n.read ? "border-l-4 border-l-primary-500" : ""}`}>
-              <div>
-                <h3 className={`text-sm font-medium ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
-                <p className="text-sm text-text-secondary mt-0.5">{n.message}</p>
-                <p className="text-xs text-text-muted mt-1">{new Date(n.createdAt).toLocaleString()}</p>
-              </div>
-              {!n.read && (
-                <button onClick={() => notificationsApi.markRead(n.id).then(fetchData)}
-                  className="text-xs text-primary-500 hover:text-primary-700 font-medium whitespace-nowrap transition-colors">Mark read</button>
-              )}
-            </div>
-          ))}
-          {notifications.length === 0 && <p className="text-text-muted text-center py-12 text-sm">No notifications</p>}
+        <div className={cardCls}>
+          <ul className="divide-y divide-border/40">
+            {notifications.map((n) => (
+              <li
+                key={n.id}
+                className={`px-5 py-4 flex items-start justify-between gap-4 ${!n.read ? "bg-primary-500/5" : ""}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <h3 className={`text-sm font-medium truncate min-w-0 ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
+                    <time className="text-[10px] leading-snug text-text-muted shrink-0 whitespace-nowrap">
+                      {new Date(n.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </time>
+                  </div>
+                  <p className="text-xs/snug text-text-muted mt-0.5 ">{n.message}</p>
+                </div>
+                {!n.read && (
+                  <button type="button" onClick={() => markRead(n.id)} className={`${btnLink} shrink-0 text-xs`}>
+                    Mark read
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

@@ -12,7 +12,7 @@ export const projectsApi = {
     request("/projects", { method: "POST", body: JSON.stringify(data) }),
 
   update: (projectId: string, data: { name?: string; repository?: string; branch?: string; connectionId?: string; platform?: string; sourceType?: string; template?: string; config?: ProjectConfig }) =>
-    request(`/projects/${projectId}`, { method: "PUT", body: JSON.stringify({ projectId, ...data }) }),
+    request<Project>(`/projects/${projectId}`, { method: "PUT", body: JSON.stringify({ projectId, ...data }) }),
 
   delete: (projectId: string) =>
     request(`/projects/${projectId}`, { method: "DELETE" }),

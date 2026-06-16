@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
+import { sendNotification } from "../../notifications/domain/notifications.js";
+import { logger } from "../../../shared/logger.js";
 import type { ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
@@ -20,6 +22,7 @@ type CreateDeploymentInput = {
   buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   registryUrl?: string;
   skipPipeline?: boolean;
+  useRepoDockerfile?: boolean;
   services?: ServiceEntry[];
   aiAnalysis?: {
     runtime?: string;
@@ -122,7 +125,11 @@ export async function applyDeploymentWebhookUpdate(
     updates.status = "deploying";
   }
 
-  const { data: current } = await db.from("deployments").select("logs").eq("id", buildId).maybeSingle();
+  const { data: current } = await db
+    .from("deployments")
+    .select("logs,organization_id,repo,branch")
+    .eq("id", buildId)
+    .maybeSingle();
   const lines = [payload.status === "success" ? "Deployment succeeded." : payload.status === "failed" ? "Deployment failed." : "Deployment in progress."];
   if (payload.stackName) lines.push(`stack=${payload.stackName}`);
   if (payload.cfnStatus) lines.push(`providerStatus=${payload.cfnStatus}`);
@@ -130,4 +137,18 @@ export async function applyDeploymentWebhookUpdate(
   updates.logs = addLogLine(current?.logs ?? "", lines.join(" "));
 
   await db.from("deployments").update(updates).eq("id", buildId);
+
+  if (payload.status === "success" && current?.organization_id) {
+    const appUrl = payload.appUrl ?? "";
+    const message = appUrl
+      ? `Deployment of ${current.repo} (${current.branch}) succeeded. App URL: ${appUrl}`
+      : `Deployment of ${current.repo} (${current.branch}) succeeded.`;
+    void sendNotification({
+      tenantId: current.organization_id,
+      title: "Deployment succeeded",
+      message,
+    }).catch((err) => {
+      logger.error({ err }, `[deploy] Failed to send deploy webhook notification for ${buildId}`);
+    });
+  }
 }

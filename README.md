@@ -59,7 +59,11 @@ pnpm backend:typecheck
 ```bash
 cd frontend
 pnpm dev
+pnpm lint       # ESLint (Tailwind canonical-class checks)
+pnpm lint:fix   # auto-fix canonical Tailwind classes
 ```
+
+See `frontend/README.md` for list-page UX, tech badge caching, and linting details.
 
 ### API docs
 
@@ -77,7 +81,32 @@ pnpm docs:dev
 pnpm docs:build
 ```
 
-### Cloudflare Pages workflow (frontend)
+### Publish to production (Railway + Cloudflare)
+
+Copy `.env.example` → `.env`, configure secrets, then:
+
+```bash
+# One-time Railway setup
+pnpm exec railway login
+pnpm exec railway link
+
+# Full production deploy (backend → Railway, frontend → Cloudflare Pages)
+pnpm publish:prod
+
+# Or deploy separately
+pnpm publish:railway      # backend only
+pnpm publish:cloudflare   # frontend only (set DOCKIER_API_URL first)
+```
+
+See `docs/operations/railway.mdx` and `docs/operations/cloudflare.mdx`.
+
+### Legacy AWS publish
+
+```bash
+pnpm publish:aws   # ECR image + optional S3 frontend
+```
+
+### Cloudflare Pages workflow (frontend only)
 
 ```bash
 cd frontend
@@ -88,18 +117,17 @@ pnpm cf:pages:deploy
 
 ## Environment Variables
 
-For the Fastify backend, copy `backend/.env.example` and set:
+Secrets are managed through **Cloudflare Secrets Store** (production), **gitignored local files** (dev), with optional Supabase Edge Function sync:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `JWT_SECRET`
-- `SERVICE_NAME`
-- `PORT`
-- `CORS_ORIGIN`
+1. **Local dev:** copy `.env.example` → `.env`, or use `.env.local` overrides.
+2. **Production:** `pnpm secrets:push` uploads `.env` to Cloudflare Secrets Store. See `docs/operations/cloudflare.mdx`.
+3. **Backend runtime:** Railway in production. Set `LOAD_SECRETS_FROM=cloudflare` with bridge vars on Railway, or `SYNC_RAILWAY_ENV=true pnpm publish:railway`. AWS Secrets Manager / SSM remain supported as fallback.
+4. **Edge Functions (optional):** `pnpm secrets:push:supabase`.
 
-Supabase Auth email OTP/magic-link must be enabled for passwordless sign-in flows.
+The backend calls `initConfig()` before startup, which loads local files then fetches Cloudflare or AWS secrets (without overwriting keys already in `process.env`).
 
 ## Database and Migrations
 
-- Add and run SQL migrations from root `migrations/` only.
-- Historical lineage is documented in `migrations/legacy-index.md`.
+- SQL migrations live in `supabase/migrations/`.
+- Apply to your remote database: `pnpm db:migrate` (reads `DIRECT_URL` or `DATABASE_URL` from `.env`, or uses a linked Supabase project via `pnpm db:link`).
+- Historical lineage is documented in `supabase/migrations/legacy-index.md`.

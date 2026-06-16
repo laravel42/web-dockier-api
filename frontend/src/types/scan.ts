@@ -5,6 +5,8 @@ export interface ScanSummary {
   infos: number;
   filesScanned: number;
   filesInRepo: number;
+  error?: string;
+  progress?: ScanProgress;
 }
 
 export interface Scan {
@@ -33,10 +35,32 @@ export interface Finding {
   snippet: string;
 }
 
+export interface ProviderSeverityCounts {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface SecurityFindingCounts {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+  semgrep: number;
+  sonar: number;
+  custom: number;
+  byProvider: Record<"semgrep" | "sonar" | "custom", ProviderSeverityCounts>;
+}
+
 export interface ScanProgress {
   phase: string;
   filesScanned: number;
   filesInRepo: number;
   findingsCount: number;
   currentFile?: string;
+  currentRule?: string;
+  scanner?: string;
+  rulesChecked?: number;
+  rulesTotal?: number;
 }

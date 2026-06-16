@@ -1,4 +1,22 @@
-import { summarySchema } from "../schemas.js";
+import { scanProgressSchema, summarySchema, type ScanStatus, type FindingSeverity } from "../schemas.js";
+import type { Database } from "../../../shared/supabase/types.js";
+
+type ScanRow = Database["public"]["Tables"]["scans"]["Row"];
+type FindingRow = Database["public"]["Tables"]["findings"]["Row"];
+type CustomRuleRow = Database["public"]["Tables"]["custom_rules"]["Row"];
+
+/**
+ * Accepts both full query rows and freshly-built insert payloads, which omit
+ * the commit_* fields (populated later by the scan worker) and are read here
+ * with `?? ""` fallbacks.
+ */
+type ScanRowInput = Partial<ScanRow> & Pick<ScanRow, "id" | "status" | "summary" | "created_at" | "updated_at">;
+
+/** The findings list query selects only the columns mapped below (no organization_id). */
+type FindingRowInput = Pick<
+  FindingRow,
+  "id" | "scan_id" | "rule_id" | "severity" | "message" | "file_path" | "start_line" | "end_line" | "snippet" | "created_at"
+>;
 
 export interface ScanSummary {
   totalFindings: number;
@@ -7,6 +25,19 @@ export interface ScanSummary {
   infos: number;
   filesScanned: number;
   filesInRepo: number;
+  error?: string;
+  progress?: ReturnType<typeof scanProgressSchema.parse>;
+}
+
+function normalizeSummaryRaw(raw: unknown): unknown {
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return raw;
 }
 
 export function defaultSummary(): ScanSummary {
@@ -20,29 +51,43 @@ export function defaultSummary(): ScanSummary {
   };
 }
 
+/** Parse scan summary JSON without dropping in-flight `progress` on validation errors. */
 export function parseSummary(raw: unknown): ScanSummary {
-  if (typeof raw === "string") {
-    try {
-      return summarySchema.parse(JSON.parse(raw));
-    } catch {
-      return defaultSummary();
-    }
+  const normalized = normalizeSummaryRaw(raw);
+  const parsed = summarySchema.safeParse(normalized);
+  if (parsed.success) {
+    return parsed.data;
   }
-  try {
-    return summarySchema.parse(raw);
-  } catch {
-    return defaultSummary();
+
+  const fallback = defaultSummary();
+  if (!normalized || typeof normalized !== "object") {
+    return fallback;
   }
+
+  const meta = normalized as Record<string, unknown>;
+  const progressParsed = scanProgressSchema.safeParse(meta.progress);
+
+  return {
+    ...fallback,
+    totalFindings: Number(meta.totalFindings ?? 0),
+    errors: Number(meta.errors ?? 0),
+    warnings: Number(meta.warnings ?? 0),
+    infos: Number(meta.infos ?? 0),
+    filesScanned: Number(meta.filesScanned ?? 0),
+    filesInRepo: Number(meta.filesInRepo ?? 0),
+    error: typeof meta.error === "string" ? meta.error : undefined,
+    progress: progressParsed.success ? progressParsed.data : undefined,
+  };
 }
 
-export function rowToScan(row: any) {
+export function rowToScan(row: ScanRowInput) {
   return {
     id: row.id,
     projectId: row.project_id ?? "",
     connectionId: row.connection_id ?? "",
     repo: row.repo ?? "",
     branch: row.branch ?? "",
-    status: row.status,
+    status: row.status as ScanStatus,
     summary: parseSummary(row.summary),
     commitSha: row.commit_sha ?? "",
     commitMessage: row.commit_message ?? "",
@@ -53,12 +98,12 @@ export function rowToScan(row: any) {
   };
 }
 
-export function rowToFinding(row: any) {
+export function rowToFinding(row: FindingRowInput) {
   return {
     id: row.id,
     scanId: row.scan_id,
     ruleId: row.rule_id,
-    severity: row.severity,
+    severity: row.severity as FindingSeverity,
     message: row.message,
     filePath: row.file_path,
     startLine: row.start_line,
@@ -68,7 +113,7 @@ export function rowToFinding(row: any) {
   };
 }
 
-export function rowToCustomRule(row: any) {
+export function rowToCustomRule(row: CustomRuleRow) {
   return {
     id: row.id,
     ruleId: row.rule_id,

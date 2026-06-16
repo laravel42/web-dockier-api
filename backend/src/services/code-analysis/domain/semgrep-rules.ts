@@ -1,8 +1,10 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, isAbsolute } from "node:path";
+import { getOpengrepRulesDir } from "../../../shared/paths.js";
+import { mapSemgrepSeverity } from "./scan-analysis.js";
 import { CodeAnalysisError } from "./scans.js";
 
-const RULES_DIR = join(process.cwd(), "code-analysis", "rules", "opengrep");
+const RULES_DIR = getOpengrepRulesDir();
 
 export interface SemgrepRule {
   id: string;
@@ -12,6 +14,23 @@ export interface SemgrepRule {
   severity: string;
   category: string;
   message: string;
+}
+
+function parseRuleFileMeta(content: string): { severity: "error" | "warning" | "info"; message: string } {
+  const severityMatch = content.match(/^\s+severity:\s+(\S+)/m);
+  let message = "";
+  const foldedMessage = content.match(/^\s+message:\s*>-?\s*\n((?:\s+.+\n?)+)/m);
+  if (foldedMessage) {
+    message = foldedMessage[1].replace(/^\s+/gm, " ").trim();
+  } else {
+    const inlineMessage = content.match(/^\s+message:\s*(.+)$/m);
+    message = inlineMessage?.[1]?.trim() ?? "";
+  }
+
+  return {
+    severity: mapSemgrepSeverity(severityMatch?.[1]),
+    message,
+  };
 }
 
 /**
@@ -27,14 +46,16 @@ export function listSemgrepRules(): { rules: SemgrepRule[]; languages: string[] 
       if (entry.isDirectory() && !entry.name.startsWith(".")) walk(join(dir, entry.name), rel);
       if (entry.isFile() && entry.name.endsWith(".yaml") && !entry.name.startsWith(".")) {
         const lang = rel.split("/")[0];
+        const content = readFileSync(join(dir, entry.name), "utf-8");
+        const meta = parseRuleFileMeta(content);
         rules.push({
           id: rel.replace(/\.yaml$/, "").replace(/\//g, "."),
           name: entry.name.replace(/\.yaml$/, "").replace(/-/g, " "),
           lang,
           path: rel,
-          severity: "info",
+          severity: meta.severity,
           category: rel.split("/")[1] ?? "general",
-          message: "",
+          message: meta.message,
         });
       }
     }
