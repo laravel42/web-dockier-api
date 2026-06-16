@@ -58,6 +58,17 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   const db = supabaseAdmin;
 
   /**
+   * Cache writes here are best-effort: a failure must not fail the user's
+   * request, but it must not be silently swallowed either. Log a warning so
+   * cache write failures are observable instead of disappearing.
+   */
+  function logCacheWriteError(table: string, error: { message: string } | null): void {
+    if (error) {
+      app.log.warn({ err: error, table }, `git-integration: failed to write cache table "${table}"`);
+    }
+  }
+
+  /**
    * Get connection for tenant, letting domain errors propagate to the global handler.
    */
   async function requireConnection(connectionId: string, tenantId: string) {
@@ -76,7 +87,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     let del = db.from(table).delete().eq("organization_id", tenantId);
     if (filters.repo) del = del.eq("repo", filters.repo);
     if (filters.branch) del = del.eq("branch", filters.branch);
-    await del;
+    const { error } = await del;
+    logCacheWriteError(table, error);
   }
 
   /**
@@ -86,7 +98,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     table: "stats_cache" | "stack_cache",
     params: { tenantId: string; repoKey: string; branch: string; projectId?: string; result: Json },
   ): Promise<void> {
-    await db.from(table).upsert(
+    const { error } = await db.from(table).upsert(
       {
         id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
         repo: params.repoKey,
@@ -98,6 +110,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
       { onConflict: "organization_id,repo,branch" },
     );
+    logCacheWriteError(table, error);
   }
 
   typed.post(
@@ -261,7 +274,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         throw app.httpErrors.badRequest((error as Error).message);
       }
 
-      await db.from("repo_cache").upsert(
+      const { error: repoCacheError } = await db.from("repo_cache").upsert(
         {
           id: request.params.connectionId,
           connection_id: request.params.connectionId,
@@ -271,6 +284,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         },
         { onConflict: "connection_id" },
       );
+      logCacheWriteError("repo_cache", repoCacheError);
       return { repos, cached: false };
     },
   );
@@ -764,7 +778,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const result = analyzeSensitiveDataFromText(request.body.schema);
       if (request.body.projectId) {
-        await db.from("sensitive_cache").upsert(
+        const { error: sensitiveCacheError } = await db.from("sensitive_cache").upsert(
           {
             id: request.body.projectId,
             project_id: request.body.projectId,
@@ -773,6 +787,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           },
           { onConflict: "project_id" },
         );
+        logCacheWriteError("sensitive_cache", sensitiveCacheError);
       }
       return result;
     },
@@ -831,7 +846,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           const repoName = parts[parts.length - 1]!;
           const conn = await requireConnection(request.query.connectionId, auth.tenantId);
           const result = await runRepoAnalysis(conn, { owner, repo: repoName, branch });
-          await db.from("analysis_cache").upsert(
+          const { error: analysisCacheError } = await db.from("analysis_cache").upsert(
             {
               id: auth.tenantId + ":" + repo + ":" + branch,
               repo,
@@ -843,6 +858,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
             },
             { onConflict: "organization_id,repo,branch" },
           );
+          logCacheWriteError("analysis_cache", analysisCacheError);
           return {
             badges: result.techStack.map((item) => ({
               name: item.name,
@@ -903,7 +919,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           );
           if (aiResult) {
             const updated = { ...parsed, aiAnalysis: aiResult };
-            await db.from("analysis_cache").update({ result: updated }).eq("repo", repoKey).eq("branch", branch);
+            const { error: analysisUpdateError } = await db.from("analysis_cache").update({ result: updated }).eq("repo", repoKey).eq("branch", branch);
+            logCacheWriteError("analysis_cache", analysisUpdateError);
             return updated;
           }
         }
@@ -942,7 +959,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const finalResult = aiAnalysis ? { ...result, aiAnalysis } : result;
 
-      await db.from("analysis_cache").upsert(
+      const { error: finalAnalysisCacheError } = await db.from("analysis_cache").upsert(
         {
           id: auth.tenantId + ":" + repoKey + ":" + branch,
           repo: repoKey,
@@ -955,6 +972,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         },
         { onConflict: "organization_id,repo,branch" },
       );
+      logCacheWriteError("analysis_cache", finalAnalysisCacheError);
       return finalResult;
     },
   );
