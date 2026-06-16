@@ -18,6 +18,7 @@
     "start:gateway": "SERVICE_NAME=gateway tsx src/server.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.107",
     "@aws-sdk/client-cloudformation": "^3.1030.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1030.0",
     "@aws-sdk/client-codebuild": "^3.1030.0",
@@ -28,6 +29,7 @@
     "@aws-sdk/client-sns": "^3.1030.0",
     "@aws-sdk/client-ssm": "^3.1045.0",
     "@aws-sdk/client-sts": "^3.1030.0",
+    "@blocknote/xl-ai": "0.51.4",
     "@fastify/cors": "^11.1.0",
     "@fastify/sensible": "^6.0.3",
     "@fastify/swagger": "^9.6.1",
@@ -35,6 +37,7 @@
     "@fastify/websocket": "^11.2.0",
     "@supabase/supabase-js": "^2.58.0",
     "adm-zip": "^0.5.17",
+    "ai": "^6.0.206",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "fastify": "^5.6.1",

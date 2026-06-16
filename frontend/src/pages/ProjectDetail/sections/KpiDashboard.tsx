@@ -26,7 +26,7 @@ export default function KpiDashboard({ stats, statsLoading, statsError }: Props)
     return (
       <div className="mb-8">
         <SectionHeader title="Repository KPIs" />
-        <div className="rounded-lg bg-danger-500/10 border border-danger-500/20 px-4 py-3 text-sm text-danger-500">{statsError}</div>
+        <div className="rounded-lg bg-danger-500/30 border border-danger-500/30 px-4 py-3 text-sm text-danger-500">{statsError}</div>
       </div>
     );
   }

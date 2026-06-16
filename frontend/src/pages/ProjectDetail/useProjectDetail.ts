@@ -342,7 +342,7 @@ export function useProjectDetail() {
   };
 
   return {
-    project, loading, error,
+    project, setProject, loading, error,
     navigate,
     // Header
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,

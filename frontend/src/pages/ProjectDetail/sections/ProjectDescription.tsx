@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "../../../components/DeployWizard";
 import MDEditor from "@uiw/react-md-editor";
@@ -6,27 +6,21 @@ import { cardCls } from "../../../utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "../../../components/badges/SensitivityBadge";
 import { gitApi } from "../../../services/api";
 import type { Project } from "../../../types";
+import OverviewEditor from "./OverviewEditor";
+import { usePermissions } from "../../../context/PermissionsContext";
 
 interface Props {
   analysis: RepoAnalysis | null;
   analysisLoading: boolean;
-  onRefresh?: () => void;
   projectId?: string;
-  project?: Pick<Project, "id" | "repository" | "branch" | "connectionId" | "platform">;
+  project: Project;
+  onProjectUpdate: (project: Project) => void;
 }
-
-const SECTION_TABS = [
-  { key: "overview",     label: "Overview" },
-  { key: "howItWorks",   label: "How It Works" },
-  { key: "architecture", label: "Architecture" },
-  { key: "dataStorage",  label: "Data & Storage" },
-  { key: "codeQuality",  label: "Code Quality" },
-  { key: "security",     label: "Security" },
-  { key: "deployment",   label: "Deployment" },
-] as const;
 
 const MAIN_TABS = [
   { key: "overview", label: "Overview" },
+  { key: "dependencies", label: "Dependencies" },
+  { key: "sensitiveData", label: "Sensitive Data" },
   { key: "deployments", label: "Deployments" },
   { key: "processes", label: "Processes" },
   { key: "commands", label: "Commands" },
@@ -37,7 +31,6 @@ const MAIN_TABS = [
 ] as const;
 
 type MainTabKey = typeof MAIN_TABS[number]["key"];
-type TabKey = typeof SECTION_TABS[number]["key"] | "sensitiveData" | "dependencies" | "techStack";
 
 // ─── SQL Schema Parser ───
 
@@ -163,7 +156,7 @@ function parseSqlSchema(sql: string): SensitiveField[] {
 
 function TabSpinner({ label }: { label?: string }) {
   return (
-    <div className="flex items-center gap-3 py-8 justify-center">
+    <div className="flex items-center gap-3 pb-8 justify-center">
       <div className="size-5  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       <span className="text-sm text-text-muted">{label || "Loading…"}</span>
     </div>
@@ -260,7 +253,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
   }, [handleFile]);
 
   return (
-    <div className="py-4">
+    <div>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -268,7 +261,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
         onClick={() => inputRef.current?.click()}
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
           dragOver
-            ? "border-primary-500 bg-primary-500/10"
+            ? "border-primary-500 bg-primary-500/30"
             : "border-border hover:border-primary-500/50 hover:bg-secondary-50/50"
         }`}
       >
@@ -301,10 +294,10 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
 // ─── AI Sensitive Data Tab ───
 
 const RISK_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/30" },
-  high: { bg: "bg-orange-500/15", text: "text-orange-400", border: "border-orange-500/30" },
-  medium: { bg: "bg-amber-500/15", text: "text-amber-400", border: "border-amber-500/30" },
-  low: { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30" },
+  critical: { bg: "bg-red-500/30", text: "text-red-400", border: "border-red-500/30" },
+  high: { bg: "bg-orange-500/30", text: "text-orange-400", border: "border-orange-500/30" },
+  medium: { bg: "bg-amber-500/30", text: "text-amber-400", border: "border-amber-500/30" },
+  low: { bg: "bg-emerald-500/30", text: "text-emerald-400", border: "border-emerald-500/30" },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -326,7 +319,7 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
     <div>
       {/* Summary */}
       {data.summary.criticalFindings.length > 0 && (
-        <div className="mb-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+        <div className="mb-3 p-3 rounded-lg bg-red-500/30 border border-red-500/30">
           <p className="text-xs font-semibold text-red-400 mb-1">Critical Findings</p>
           <ul className="space-y-0.5">
             {data.summary.criticalFindings.map((f, i) => (
@@ -465,10 +458,10 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
 // ─── Vulnerability Modal & Dependencies Tab ───
 
 const VULN_STYLES: Record<string, { bg: string; text: string }> = {
-  critical: { bg: "bg-red-500/20", text: "text-red-400" },
-  high:     { bg: "bg-orange-500/20", text: "text-orange-400" },
-  medium:   { bg: "bg-amber-500/20", text: "text-amber-400" },
-  low:      { bg: "bg-blue-500/15", text: "text-blue-400" },
+  critical: { bg: "bg-red-500/30", text: "text-red-400" },
+  high:     { bg: "bg-orange-500/30", text: "text-orange-400" },
+  medium:   { bg: "bg-amber-500/30", text: "text-amber-400" },
+  low:      { bg: "bg-blue-500/30", text: "text-blue-400" },
 };
 
 type VulnDetail = { id: string; severity: string; title: string; details: string; aliases: string[]; url: string; pkg: string };
@@ -577,9 +570,9 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
   const devCount = data.filter(d => d.type === "dev").length;
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Filter bar */}
-      <div className="flex items-center gap-1.5 mb-3">
+      <div className="mb-3 flex shrink-0 items-center gap-1.5">
         {([
           { key: "all", label: `All (${data.length})` },
           { key: "production", label: `Production (${prodCount})` },
@@ -591,7 +584,7 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
             onClick={() => setFilter(f.key)}
             className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${
               filter === f.key
-                ? f.key === "vulnerable" ? "bg-red-500/20 text-red-400" : "bg-primary-100 text-primary-700"
+                ? f.key === "vulnerable" ? "bg-red-500/30 text-red-400" : "bg-primary-100 text-primary-700"
                 : "text-text-muted hover:text-text hover:bg-secondary-50"
             }`}
           >
@@ -601,15 +594,15 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
       </div>
 
       {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
-        <div className="bg-secondary-50 px-3 py-1.5 border-b border-border flex items-center gap-3 text-[10px] font-semibold text-text-muted uppercase tracking-wide">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
+        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-secondary-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
           <span className="w-2/5">Package</span>
           <span className="w-[10%]">Version</span>
           <span className="w-[10%]">Latest</span>
           <span className="w-[12%]">Status</span>
           <span className="flex-1">Vulnerabilities</span>
         </div>
-        <div className="divide-y divide-border max-h-100 overflow-y-auto scrollbar-hide">
+        <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto scrollbar-hide">
           {filtered.map((d, i) => {
             const hasVulns = d.vulnerabilities.length > 0;
             return (
@@ -628,10 +621,10 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
                 </span>
                 <span className="w-[12%]">
                   <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                    d.status === "active" ? "bg-emerald-500/15 text-emerald-400" :
-                    d.status === "outdated" ? "bg-amber-500/20 text-amber-400" :
-                    d.status === "deprecated" ? "bg-red-500/20 text-red-400" :
-                    "bg-gray-500/15 text-gray-400"
+                    d.status === "active" ? "bg-emerald-500/30 text-emerald-400" :
+                    d.status === "outdated" ? "bg-amber-500/30 text-amber-400" :
+                    d.status === "deprecated" ? "bg-red-500/30 text-red-400" :
+                    "bg-gray-500/30 text-gray-400"
                   }`}>{d.status}</span>
                 </span>
                 <div className="flex-1 min-w-0">
@@ -669,9 +662,16 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
 
 // ─── Main Component ───
 
-export default function ProjectDescription({ analysis, analysisLoading, onRefresh, projectId }: Props) {
+export default function ProjectDescription({
+  analysis,
+  analysisLoading,
+  projectId,
+  project,
+  onProjectUpdate,
+}: Props) {
   const [activeMainTab, setActiveMainTab] = useState<MainTabKey>("overview");
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const { has, isOwner } = usePermissions();
+  const canEditOverview = isOwner || has("project:manage");
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
 
@@ -733,176 +733,121 @@ export default function ProjectDescription({ analysis, analysisLoading, onRefres
 
   const dependencies = analysis?.dependencies;
 
-  // Parse sections from AI response, or split description by ## headers as fallback
-  const description = analysis?.aiAnalysis?.description;
-  const rawSections = analysis?.aiAnalysis?.sections;
-  const sections = useMemo(() => {
-    if (rawSections) {
-      const valid: Record<string, string> = {};
-      for (const tab of SECTION_TABS) {
-        const val = (rawSections as Record<string, string>)[tab.key];
-        if (val && typeof val === "string" && val.length > 10) valid[tab.key] = val;
-      }
-      if (Object.keys(valid).length >= 3) return valid;
-    }
-    if (!description) return null;
-    const result: Record<string, string> = {};
-    const headerMap: Record<string, string> = {
-      "overview": "overview", "how it works": "howItWorks",
-      "architecture": "architecture", "data & storage": "dataStorage", "data and storage": "dataStorage",
-      "code quality": "codeQuality", "code quality & patterns": "codeQuality",
-      "security": "security", "security considerations": "security",
-      "deployment": "deployment",
-    };
-    const parts = description.split(/^## /m);
-    for (const part of parts) {
-      if (!part.trim()) continue;
-      const firstLine = part.split("\n")[0].trim().toLowerCase();
-      const key = headerMap[firstLine];
-      if (key) {
-        result[key] = part.split("\n").slice(1).join("\n").trim();
-      }
-    }
-    return Object.keys(result).length >= 2 ? result : null;
-  }, [rawSections, description]);
+  const renderDependenciesSection = () => (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {dependencies && dependencies.length > 0 ? (
+        <DependenciesTab data={dependencies} />
+      ) : analysisLoading ? (
+        <TabSpinner label="Scanning dependencies…" />
+      ) : (
+        <p className="text-sm text-text-muted pb-4 text-center">No dependencies detected.</p>
+      )}
+    </div>
+  );
 
-  // Always build the full tab list
-  const allTabs: Array<{ key: TabKey; label: string }> = [
-    ...SECTION_TABS.map(t => ({ key: t.key as TabKey, label: t.label })),
-    { key: "dependencies" as TabKey, label: "Dependencies" },
-    { key: "sensitiveData" as TabKey, label: "Sensitive Data" },
-  ];
-
-  // Render tab content with per-tab loading
-  const renderTabContent = () => {
-    // Dependencies tab
-    if (activeTab === "dependencies") {
-      if (dependencies && dependencies.length > 0) {
-        return <DependenciesTab data={dependencies} />;
-      }
-      if (analysisLoading) {
-        return <TabSpinner label="Scanning dependencies…" />;
-      }
-      return <p className="text-sm text-text-muted py-6 text-center">No dependencies detected.</p>;
-    }
-
-    // Sensitive Data tab
-    if (activeTab === "sensitiveData") {
-      if (aiSensitiveResult || (uploadedSensitiveData && uploadedSensitiveData.length > 0)) {
-        return (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                {aiSensitiveResult && (
-                  <span className="text-xs text-text-muted">
-                    {aiSensitiveResult.summary.totalTables} tables · {aiSensitiveResult.summary.highRiskTables} high risk
-                  </span>
-                )}
-                {!aiSensitiveResult && uploadedSensitiveData && (
-                  <span className="text-xs text-text-muted">{uploadedSensitiveData.length} sensitive fields detected</span>
-                )}
-              </div>
-              <button onClick={clearSensitiveData} className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
-                Upload another file
-              </button>
+  const renderSensitiveDataSection = () => (
+    <>
+      {aiSensitiveResult || (uploadedSensitiveData && uploadedSensitiveData.length > 0) ? (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              {aiSensitiveResult && (
+                <span className="text-xs text-text-muted">
+                  {aiSensitiveResult.summary.totalTables} tables · {aiSensitiveResult.summary.highRiskTables} high risk
+                </span>
+              )}
+              {!aiSensitiveResult && uploadedSensitiveData && (
+                <span className="text-xs text-text-muted">{uploadedSensitiveData.length} sensitive fields detected</span>
+              )}
             </div>
-            {aiSensitiveResult ? (
-              <AiSensitiveDataTab data={aiSensitiveResult} />
-            ) : uploadedSensitiveData ? (
-              <SensitiveDataTab data={uploadedSensitiveData} />
-            ) : null}
+            <button type="button" onClick={clearSensitiveData} className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
+              Upload another file
+            </button>
           </div>
-        );
-      }
-      return <SqlDropzone onParsed={handleSensitiveParsed} onAiResult={handleAiResult} projectId={projectId} />;
-    }
+          {aiSensitiveResult ? (
+            <AiSensitiveDataTab data={aiSensitiveResult} />
+          ) : uploadedSensitiveData ? (
+            <SensitiveDataTab data={uploadedSensitiveData} />
+          ) : null}
+        </div>
+      ) : (
+        <SqlDropzone onParsed={handleSensitiveParsed} onAiResult={handleAiResult} projectId={projectId} />
+      )}
+    </>
+  );
 
-    // AI section tabs
-    const sectionKey = activeTab as typeof SECTION_TABS[number]["key"];
-    const content = sections?.[sectionKey];
-    if (content) {
-      return <MDEditor.Markdown source={content} style={{ background: "transparent", color: "inherit", fontSize: "14px" }} />;
+  const renderMainTabContent = () => {
+    switch (activeMainTab) {
+      case "dependencies":
+        return renderDependenciesSection();
+      case "sensitiveData":
+        return renderSensitiveDataSection();
+      default:
+        return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTab)?.label ?? "");
     }
-    if (analysisLoading) {
-      return <TabSpinner label="Analyzing project…" />;
-    }
-    return <p className="text-sm text-text-muted py-6 text-center">No data available for this section yet.</p>;
   };
 
   const renderMainTabPlaceholder = (label: string) => (
-    <p className="text-sm text-text-muted py-10 text-center">{label} — coming soon.</p>
+    <p className="text-sm text-text-muted pb-10 text-center">{label} — coming soon.</p>
   );
 
   return (
     <div className={`${cardCls} mb-8 overflow-hidden`}>
       <div className="h-1 bg-linear-to-r from-primary-500 via-primary-400 to-primary-300" />
 
-      <div className="px-5 pt-4 pb-5">
+      <div className="flex max-h-[600px] flex-col overflow-hidden px-5 pt-4 pb-5">
         {/* Main tab nav */}
-        <div className="flex items-center gap-3 border-b border-border mb-4">
-          <div className="flex flex-1 gap-0.5 overflow-x-auto scrollbar-none">
+        <div className="flex min-h-11 shrink-0 items-center gap-3 border-b border-border mb-4">
+          <div className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none">
             {MAIN_TABS.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveMainTab(tab.key)}
-                className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                className={`flex shrink-0 items-center gap-1.5 px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                   activeMainTab === tab.key
-                    ? "border-primary-500 text-text"
+                    ? tab.key === "sensitiveData"
+                      ? "border-red-500 text-text"
+                      : tab.key === "dependencies"
+                        ? "border-blue-500 text-text"
+                        : "border-primary-500 text-text"
                     : "border-transparent text-text-muted hover:text-text"
                 }`}
               >
                 {tab.label}
+                {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
+                  <span className="text-[9px] bg-blue-500/30 text-blue-300 px-1 rounded-full">{dependencies.length}</span>
+                )}
+                {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
+                  <span className="text-[9px] bg-red-500/30 text-red-300 px-1 rounded-full">{uploadedSensitiveData.length}</span>
+                )}
               </button>
             ))}
           </div>
-          {onRefresh && activeMainTab === "overview" && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              className="shrink-0 p-1.5 rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors"
-              title="Re-analyze project"
-            >
-              <svg className={`size-4 ${analysisLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
-              </svg>
-            </button>
-          )}
         </div>
 
-        {activeMainTab === "overview" ? (
-          <div className="flex gap-5">
-            {/* Overview sub-tabs sidebar */}
-            <div className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border pr-3">
-              {allTabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-left transition-all ${
-                    activeTab === tab.key
-                      ? tab.key === "sensitiveData" ? "bg-red-500/15 text-red-700 dark:text-red-300"
-                      : tab.key === "dependencies" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
-                      : "bg-primary-500/15 text-primary-700 dark:text-white"
-                      : "text-text-muted hover:text-text hover:bg-secondary-50"
-                  }`}
-                >
-                  <span className="flex-1 truncate">{tab.label}</span>
-                  {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                    <span className="text-[9px] bg-red-200 text-red-700 px-1 rounded-full shrink-0">{uploadedSensitiveData.length}</span>
-                  )}
-                  {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                    <span className="text-[9px] bg-blue-200 text-blue-700 px-1 rounded-full shrink-0">{dependencies.length}</span>
-                  )}
-                </button>
-              ))}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <div
+              className={
+                activeMainTab === "overview"
+                  ? "flex min-h-0 flex-1 flex-col pl-0 pr-2"
+                  : "hidden"
+              }
+            >
+              <OverviewEditor
+                project={project}
+                editable={canEditOverview}
+                onProjectUpdate={onProjectUpdate}
+              />
             </div>
-
-            <div className="min-w-0 flex-1">{renderTabContent()}</div>
+            {activeMainTab !== "overview" && (
+              <div className="flex min-h-0 flex-1 flex-col">
+                {renderMainTabContent()}
+              </div>
+            )}
           </div>
-        ) : (
-          renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTab)?.label ?? "")
-        )}
+        </div>
       </div>
     </div>
   );

@@ -142,7 +142,7 @@ export default function ProjectHeader({
               </div>
             )}
             {isTemplate && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-600 text-xs font-medium">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-500/30 text-primary-600 text-xs font-medium">
                 Template
               </span>
             )}

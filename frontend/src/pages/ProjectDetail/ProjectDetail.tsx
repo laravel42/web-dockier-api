@@ -20,12 +20,12 @@ import PageError from "../../components/ui/PageError";
 
 export default function ProjectDetail() {
   const {
-    project, loading, error, navigate,
+    project, setProject, loading, error, navigate,
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
     handleDelete, handlePullOrigin,
     handleUpdateName, nameSaving, nameError,
     showDeployWizard, setShowDeployWizard,
-    allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy, refreshAnalysis,
+    allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy,
     stats, statsLoading, statsError,
     badges, allBadges,
     recentCommits, commitsLoading, commitsError,
@@ -100,9 +100,9 @@ export default function ProjectDetail() {
       <ProjectDescription
         analysis={analysis}
         analysisLoading={analysisLoading}
-        onRefresh={refreshAnalysis}
         projectId={project.id}
         project={project}
+        onProjectUpdate={setProject}
       />
 
       {/* UserJourneyTree hidden for now */}

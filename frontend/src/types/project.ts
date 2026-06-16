@@ -9,6 +9,7 @@ export interface PostDeployCommand {
 
 export interface ProjectConfig {
   postDeployCommands?: PostDeployCommand[];
+  overviewBlocks?: Record<string, unknown>[];
 }
 
 export interface Project {
