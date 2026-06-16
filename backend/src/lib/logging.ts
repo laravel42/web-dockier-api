@@ -61,22 +61,22 @@ export function createDeployLogger(
  * observability output matches the rest of the app.
  */
 export function createConsoleLogger(context?: string): ContextualLogger {
-  const prefix = context ? `[${context}]` : "";
+  const prefix = context ? `[${context}] ` : "";
   return {
     info(message: string) {
-      logger.info(`${prefix} ${message}`);
+      logger.info(`${prefix}${message}`);
     },
     success(message: string) {
-      logger.info(`${prefix} ✓ ${message}`);
+      logger.info(`${prefix}✓ ${message}`);
     },
     warn(message: string) {
-      logger.warn(`${prefix} ⚠ ${message}`);
+      logger.warn(`${prefix}⚠ ${message}`);
     },
     error(message: string) {
-      logger.error(`${prefix} ✗ ${message}`);
+      logger.error(`${prefix}✗ ${message}`);
     },
     section(title: string) {
-      logger.info(`${prefix} ── ${title} ──`);
+      logger.info(`${prefix}── ${title} ──`);
     },
   };
 }
