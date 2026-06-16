@@ -11,6 +11,7 @@ import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../lib/buildspec-generator/index.js";
 import { getAwsAccountId, ensureS3Bucket } from "../../../lib/aws.js";
+import { env } from "../../../shared/config.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -107,8 +108,8 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   const deployParams = buildDeployParams(repoName, opts.repoConfig, opts, deployTarget);
 
   // Callback URL from environment (optional — used by Lambda to notify completion)
-  const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
-  const webhookSecret = process.env.WEBHOOK_SECRET || "";
+  const callbackUrl = env.DEPLOY_CALLBACK_URL ?? "";
+  const webhookSecret = env.WEBHOOK_SECRET ?? "";
 
   const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
   const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });

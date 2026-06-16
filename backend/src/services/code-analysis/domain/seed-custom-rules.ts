@@ -23,7 +23,6 @@ export interface SystemCustomRuleSeed {
 
 /**
  * Built-in regex rules shipped with Dockier (organization_id = "" → isSystem).
- * Ported from the original Encore code-analysis service CUSTOM_RULES catalog.
  */
 export const DEFAULT_SYSTEM_CUSTOM_RULES: SystemCustomRuleSeed[] = [
   // SQL Injection

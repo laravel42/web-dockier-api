@@ -3,7 +3,6 @@ import type { RunCmdFn } from "../run-cmd.js";
 
 /**
  * Deploy event payload — the data needed to trigger a deployment.
- * Replaces the Encore pub/sub DeployEvent type.
  */
 export interface DeployEvent {
   deploymentId: string;

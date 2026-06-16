@@ -7,6 +7,8 @@
 
 // ─── Logger Interface ──────────────────────────────────────────────
 
+import { logger } from "../shared/logger.js";
+
 /**
  * A logger that can be threaded through pipeline steps.
  * Deploy service writes to DB (user-visible), image-builder writes to console.
@@ -55,25 +57,26 @@ export function createDeployLogger(
 
 /**
  * Console logger used by the image-builder service.
- * Writes structured messages to stdout for server-side observability.
+ * Routes structured messages through the shared pino logger so server-side
+ * observability output matches the rest of the app.
  */
 export function createConsoleLogger(context?: string): ContextualLogger {
   const prefix = context ? `[${context}]` : "";
   return {
     info(message: string) {
-      console.log(`${prefix} ${message}`);
+      logger.info(`${prefix} ${message}`);
     },
     success(message: string) {
-      console.log(`${prefix} ✓ ${message}`);
+      logger.info(`${prefix} ✓ ${message}`);
     },
     warn(message: string) {
-      console.warn(`${prefix} ⚠ ${message}`);
+      logger.warn(`${prefix} ⚠ ${message}`);
     },
     error(message: string) {
-      console.error(`${prefix} ✗ ${message}`);
+      logger.error(`${prefix} ✗ ${message}`);
     },
     section(title: string) {
-      console.log(`${prefix} ── ${title} ──`);
+      logger.info(`${prefix} ── ${title} ──`);
     },
   };
 }

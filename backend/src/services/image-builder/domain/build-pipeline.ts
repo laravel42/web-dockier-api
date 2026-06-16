@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { env } from "../../../shared/config.js";
 import { bundleAndUploadSource } from "./source-bundler.js";
 import { getAwsAccountId } from "../../../lib/aws.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
@@ -71,7 +72,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     }
 
     // 4. Bundle source (clone → analyze → zip → upload to S3)
-    const codebuildProject = process.env.IMAGE_BUILDER_CODEBUILD_PROJECT || "image-builder";
+    const codebuildProject = env.IMAGE_BUILDER_CODEBUILD_PROJECT;
     const bucketName = `${codebuildProject}-source-${accountId}`;
     const useRepoDockerfile = input.deployParams?.useRepoDockerfile === true
       || input.deployParams?.useRepoDockerfile === "true";
@@ -92,8 +93,8 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
 
     // 5. Publish to SNS to trigger CodeBuild via Lambda
     const deployParams = { ...input.deployParams, containerPort: detectedPort };
-    const callbackUrl = process.env.DEPLOY_CALLBACK_URL || "";
-    const webhookSecret = process.env.WEBHOOK_SECRET || "";
+    const callbackUrl = env.DEPLOY_CALLBACK_URL ?? "";
+    const webhookSecret = env.WEBHOOK_SECRET ?? "";
 
     const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
     const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;

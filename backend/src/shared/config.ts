@@ -41,6 +41,9 @@ const envSchema = z
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default("gpt-4o-mini"),
     WEBHOOK_SECRET: z.string().optional(),
+    DEPLOY_CALLBACK_URL: z.string().optional(),
+    IMAGE_BUILDER_CODEBUILD_PROJECT: z.string().min(1).default("image-builder"),
+    PGBOSS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(5),
     SONARQUBE_URL: z.string().url().optional(),
     SONARQUBE_TOKEN: z.string().min(1).optional(),
     RESEND_API_KEY: z.string().min(1).optional(),
@@ -64,6 +67,12 @@ export let env!: AppEnv;
 let initialized = false;
 
 function parseEnv(): AppEnv {
+  // Preserve the legacy PascalCase alias for the image-builder CodeBuild project
+  // name so existing deployments keep working after centralizing this read.
+  if (!process.env.IMAGE_BUILDER_CODEBUILD_PROJECT && process.env.ImageBuilderCodeBuildProject) {
+    process.env.IMAGE_BUILDER_CODEBUILD_PROJECT = process.env.ImageBuilderCodeBuildProject;
+  }
+
   const parsed = envSchema.parse(process.env);
 
   if (parsed.NODE_ENV === "production" && parsed.CORS_ORIGIN === "*") {

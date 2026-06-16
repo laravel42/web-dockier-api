@@ -3,9 +3,10 @@ import { CloudWatchLogsClient, GetLogEventsCommand } from "@aws-sdk/client-cloud
 import type { FastifyInstance } from "fastify";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
+import { env } from "../../../shared/config.js";
 
 function imageBuilderProjectName(): string {
-  return process.env.IMAGE_BUILDER_CODEBUILD_PROJECT || process.env.ImageBuilderCodeBuildProject || "image-builder";
+  return env.IMAGE_BUILDER_CODEBUILD_PROJECT;
 }
 
 export async function lookupCodeBuildId(credentials: { accessKeyId: string; secretAccessKey: string; region: string }, buildId: string): Promise<string | null> {
