@@ -6,6 +6,7 @@ import { verifyAuthToken } from "../../shared/auth.js";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { tenantRateLimit } from "../../shared/rate-limit.js";
 
 // Domain modules
 import { createScan, listScans, getScan, deleteScan, runScan } from "./domain/scans.js";
@@ -68,7 +69,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/scans",
     {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_RUN),
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_RUN), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "scan-create" })],
       schema: {
         tags: ["code-analysis"],
         summary: "Create scan",
@@ -153,7 +154,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
   typed.post(
     "/code-analysis/scans/:scanId/run",
     {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_RUN),
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_RUN), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "scan-run" })],
       schema: {
         tags: ["code-analysis"],
         summary: "Run scan asynchronously",

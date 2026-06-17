@@ -13,6 +13,7 @@ import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 import { rowToDeployment } from "./domain/mappers.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { tenantRateLimit } from "../../shared/rate-limit.js";
 import {
   createProvider,
   listProviders,
@@ -218,7 +219,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   typed.post(
     "/deploy/deployments",
     {
-      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
+      preHandler: [app.requirePermission(PERMISSIONS.DEPLOY_CREATE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "deploy-create" })],
       schema: {
         tags: ["deploy"],
         summary: "Create deployment",

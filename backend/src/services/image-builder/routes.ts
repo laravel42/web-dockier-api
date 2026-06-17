@@ -10,6 +10,7 @@ import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature } from "../../shared/security.js";
 import { rowToBuild } from "./domain/mappers.js";
+import { tenantRateLimit } from "../../shared/rate-limit.js";
 import { checkDeployStatus, deriveAppName, deriveStackName } from "./domain/cfn-deploy.js";
 import {
   createBuild,
@@ -27,7 +28,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
   typed.post(
     "/image-builder/builds",
     {
-      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
+      preHandler: [app.requirePermission(PERMISSIONS.DEPLOY_CREATE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "build-create" })],
       schema: {
         tags: ["image-builder"],
         summary: "Start image build",
