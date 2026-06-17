@@ -19,6 +19,21 @@ declare module "fastify" {
   }
 }
 
+/**
+ * Extract the authenticated context from a request, throwing if missing.
+ *
+ * Use this in route handlers that run after `requirePermission` / `requireAuth`
+ * middleware — it replaces the `request.auth!` non-null assertion with a
+ * runtime check that produces a clear error if auth middleware was skipped.
+ */
+export function getAuth(request: FastifyRequest): AuthContext {
+  const auth = request.auth;
+  if (!auth) {
+    throw new Error("Auth context missing — ensure requireAuth or requirePermission middleware runs before this handler");
+  }
+  return auth;
+}
+
 export function verifyAuthToken(token: string): AuthContext | null {
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as Partial<AuthContext>;

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
@@ -36,7 +37,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await listRoles(auth.tenantId);
     },
   );
@@ -53,7 +54,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getRole(request.params.roleId, auth.tenantId);
     },
   );
@@ -74,7 +75,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createRole({
         tenantId: auth.tenantId,
         name: request.body.name,
@@ -102,7 +103,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updateRole({
         roleId: request.params.roleId,
         tenantId: auth.tenantId,
@@ -126,7 +127,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteRole(request.params.roleId, auth.tenantId, request.resolvedAuth!);
       return { success: true as const };
     },

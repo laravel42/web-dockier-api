@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -32,7 +33,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createChannel({
         tenantId: auth.tenantId,
         type: request.body.type,
@@ -52,7 +53,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const channels = await listChannels(auth.tenantId);
       return { channels };
     },
@@ -71,7 +72,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await toggleChannel(request.params.channelId, auth.tenantId, request.body.enabled);
       return { success: true as const };
     },
@@ -89,7 +90,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteChannel(request.params.channelId, auth.tenantId);
       return { success: true as const };
     },
@@ -111,7 +112,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await sendNotification({
         tenantId: auth.tenantId,
         title: request.body.title,
@@ -133,7 +134,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const notifications = await listNotifications(auth.tenantId, request.query.unreadOnly);
       return { notifications };
     },
@@ -151,7 +152,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await markNotificationRead(request.params.notificationId, auth.tenantId);
       return { success: true as const };
     },

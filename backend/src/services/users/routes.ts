@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -35,7 +36,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createUser({
         tenantId: auth.tenantId,
         email: request.body.email,
@@ -62,7 +63,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getUser(request.params.userId, auth.tenantId);
     },
   );
@@ -83,7 +84,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await listUsers({
         tenantId: auth.tenantId,
         page: request.query.page,
@@ -115,7 +116,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updateUser({
         userId: request.params.userId,
         tenantId: auth.tenantId,
@@ -142,7 +143,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await removeUser({
         userId: request.params.userId,
         tenantId: auth.tenantId,

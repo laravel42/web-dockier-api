@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { deploymentSchema, deploymentStatusSchema, envVarSchema, postDeployCommandSchema, providerSchema, serviceEntrySchema } from "./schemas.js";
 import type { ServiceEntry } from "./types.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
@@ -47,7 +48,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createProvider({
         tenantId: auth.tenantId,
         provider: request.body.provider,
@@ -70,7 +71,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const providers = await listProviders(auth.tenantId);
       return { providers };
     },
@@ -89,7 +90,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updateProvider({
         providerId: request.params.providerId,
         tenantId: auth.tenantId,
@@ -111,7 +112,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteProvider(request.params.providerId, auth.tenantId);
       return { success: true as const };
     },
@@ -163,7 +164,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const keys = await listSshKeys(auth.tenantId);
       return { keys };
     },
@@ -189,7 +190,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createSshKey({
         tenantId: auth.tenantId,
         label: request.body.label,
@@ -210,7 +211,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteSshKey(request.params.keyId, auth.tenantId);
       return { success: true as const };
     },
@@ -246,7 +247,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
       const providerRow = { id: full.id, organization_id: full.organization_id, provider: full.provider, region: full.region };
 
@@ -318,7 +319,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const deployments = await listDeployments(auth.tenantId, request.query.providerId);
       return { deployments };
     },
@@ -336,7 +337,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getDeployment(request.params.deploymentId, auth.tenantId);
     },
   );
@@ -379,7 +380,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
       const result = await destroyDeployment(db, request.params.deploymentId);
       if (!result.success) throw app.httpErrors.badRequest(result.message);
@@ -423,7 +424,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
       const providerRow = { provider: full.provider, region: full.region, label: full.label };
 

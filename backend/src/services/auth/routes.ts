@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import {
   authMeSchema,
   authSessionSchema,
@@ -203,7 +204,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getAuthenticatedUser(auth.userId, auth.tenantId);
     },
   );
@@ -221,7 +222,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const memberships = await listMembershipsForUser(request.auth!.userId);
+      const memberships = await listMembershipsForUser(getAuth(request).userId);
       return { memberships };
     },
   );
@@ -244,7 +245,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await setupTwoFactor(auth.userId, auth.email);
     },
   );
@@ -263,7 +264,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await enableTwoFactor(auth.userId, request.body.token);
     },
   );
@@ -281,7 +282,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getBillingDetails(auth.tenantId);
     },
   );
@@ -298,7 +299,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updateBillingDetails(auth.tenantId, request.body);
     },
   );
@@ -317,7 +318,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createTenant({ name: request.body.name, userId: auth.userId, email: auth.email });
     },
   );
@@ -336,7 +337,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await switchTenant({ tenantId: request.params.tenantId, userId: auth.userId, email: auth.email });
     },
   );
@@ -368,7 +369,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant to view its memberships");
       }
@@ -394,7 +395,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
       }
@@ -422,7 +423,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
       }
@@ -450,7 +451,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       if (auth.tenantId !== request.params.tenantId) {
         throw app.httpErrors.forbidden("Switch to the tenant before transferring ownership");
       }

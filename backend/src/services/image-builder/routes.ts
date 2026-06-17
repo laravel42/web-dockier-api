@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
@@ -51,7 +52,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createBuild({
         tenantId: auth.tenantId,
         sourceRepo: request.body.sourceRepo,
@@ -82,7 +83,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       let row: any;
       row = await getBuild(request.params.buildId, auth.tenantId);
 
@@ -118,7 +119,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const { data, error } = await db
         .from("builds")
         .select("id,organization_id,provider_id,codebuild_id,status,status_reason,updated_at")
@@ -162,7 +163,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const builds = await listBuilds({
         tenantId: auth.tenantId,
         sourceRepo: request.query.sourceRepo,
@@ -185,7 +186,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await cancelBuild(request.params.buildId, auth.tenantId);
     },
   );
@@ -210,7 +211,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await resolveImageByRevision(request.params.revision, auth.tenantId);
     },
   );
@@ -227,7 +228,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
       if (error || !data) throw app.httpErrors.notFound("Build not found");
       if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
@@ -312,7 +313,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
       if (error || !data) throw app.httpErrors.notFound("Build not found");
       if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import {
   integrationCreateIssueSchema,
   integrationRequestSchema,
@@ -25,7 +26,7 @@ async function resolvePMConfig(
   request: FastifyRequest,
   body: { integrationId?: string; type?: string; config?: Record<string, string> },
 ) {
-  const auth = request.auth!;
+  const auth = getAuth(request);
   if (body.integrationId) {
     return getPMIntegrationConfig(body.integrationId, auth.tenantId);
   }
@@ -49,7 +50,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const integrations = await listPMIntegrations(auth.tenantId);
       return { integrations };
     },
@@ -72,7 +73,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createPMIntegration({
         tenantId: auth.tenantId,
         provider: request.body.provider,
@@ -100,7 +101,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updatePMIntegration({
         integrationId: request.params.integrationId,
         tenantId: auth.tenantId,
@@ -123,7 +124,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deletePMIntegration(request.params.integrationId, auth.tenantId);
       return { success: true as const };
     },

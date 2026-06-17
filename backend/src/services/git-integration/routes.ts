@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Json } from "../../shared/supabase/types.js";
@@ -82,7 +83,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createConnection({
         tenantId: auth.tenantId,
         provider: request.body.provider,
@@ -105,7 +106,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const connections = await listConnections(auth.tenantId);
       return { connections };
     },
@@ -123,7 +124,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteConnection(request.params.connectionId, auth.tenantId);
       return { success: true as const };
     },
@@ -142,7 +143,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updateConnection({
         connectionId: request.params.connectionId,
         tenantId: auth.tenantId,
@@ -195,7 +196,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
       const REPO_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -238,7 +239,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branches = await listBranches(conn, { owner: request.query.owner, repo: request.query.repo, branch: "main" });
       return { branches };
@@ -257,7 +258,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       if (!conn.repo_url) throw app.httpErrors.preconditionFailed("No repo URL configured");
       const parsed = parseRepoUrl(conn.repo_url);
@@ -279,7 +280,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("stats_cache", request.auth!.tenantId, request.query, log);
+      await invalidateCache("stats_cache", getAuth(request).tenantId, request.query, log);
       return { success: true as const };
     },
   );
@@ -296,7 +297,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("stack_cache", request.auth!.tenantId, request.query, log);
+      await invalidateCache("stack_cache", getAuth(request).tenantId, request.query, log);
       return { success: true as const };
     },
   );
@@ -313,7 +314,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("analysis_cache", request.auth!.tenantId, request.query, log);
+      await invalidateCache("analysis_cache", getAuth(request).tenantId, request.query, log);
       return { success: true as const };
     },
   );
@@ -337,7 +338,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const provider = getGitProvider(conn);
       if (!provider.createIssue) {
@@ -371,7 +372,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.body.branch || "main";
       const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
@@ -422,7 +423,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
@@ -444,7 +445,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const tree = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
@@ -466,7 +467,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const content = await fetchRepoFile(conn, request.query, request.query.path);
       if (content === null) throw app.httpErrors.notFound("File not found in repository");
@@ -493,7 +494,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const members = await getGitProvider(conn).listMembers({ owner: request.query.owner, repo: request.query.repo });
       return { members };
@@ -537,7 +538,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
       const repoKey = `${request.query.owner}/${request.query.repo}`;
@@ -589,7 +590,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
@@ -644,7 +645,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
@@ -721,7 +722,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const branch = request.query.branch || "main";
       const repo = request.query.repo;
 
@@ -801,7 +802,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
@@ -907,7 +908,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
       let body = request.body;

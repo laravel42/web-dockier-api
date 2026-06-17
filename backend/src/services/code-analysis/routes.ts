@@ -2,7 +2,7 @@ import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { verifyAuthToken } from "../../shared/auth.js";
+import { verifyAuthToken, getAuth } from "../../shared/auth.js";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -83,7 +83,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createScan({
         tenantId: auth.tenantId,
         projectId: request.body.projectId,
@@ -106,7 +106,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const scans = await listScans({
         tenantId: auth.tenantId,
         projectId: request.query.projectId,
@@ -128,7 +128,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getScan(request.params.scanId, auth.tenantId);
     },
   );
@@ -145,7 +145,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteScan(request.params.scanId, auth.tenantId);
       return { success: true as const };
     },
@@ -172,7 +172,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const body = request.body ?? {};
       const enableSemgrep = body.enableOpengrep ?? body.enableSemgrep;
       return await runScan(request.params.scanId, auth.tenantId, {
@@ -237,7 +237,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await listFindings({
         scanId: request.params.scanId,
         tenantId: auth.tenantId,
@@ -263,7 +263,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const rules = await listCustomRules({ tenantId: auth.tenantId, type: request.query.type });
       return { rules };
     },
@@ -289,7 +289,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createCustomRule({
         tenantId: auth.tenantId,
         ruleId: request.body.ruleId,
@@ -324,7 +324,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await updateCustomRule({
         ruleDbId: request.params.ruleDbId,
         tenantId: auth.tenantId,
@@ -352,7 +352,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteCustomRule(request.params.ruleDbId, auth.tenantId);
       return { success: true as const };
     },
@@ -491,7 +491,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const overrides = await listRuleOverrides(auth.tenantId, request.query.tool);
       return { overrides };
     },
@@ -513,7 +513,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await upsertRuleOverride({
         tenantId: auth.tenantId,
         tool: request.body.tool,

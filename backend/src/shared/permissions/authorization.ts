@@ -8,6 +8,7 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { supabaseAdmin } from "../supabase/client.js";
+import { getAuth } from "../auth.js";
 import type { PermissionKey } from "./constants.js";
 import { CRITICAL_PERMISSIONS } from "./constants.js";
 import { getHierarchyLevel } from "./role-templates.js";
@@ -156,7 +157,7 @@ export const authorizationPlugin = fp(async (app: FastifyInstance) => {
       await app.requireAuth(request, reply);
       if (reply.sent) return;
 
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const resolved = await resolvePermissions(auth.userId, auth.tenantId, auth.email);
 
       if (!resolved) {
@@ -179,7 +180,7 @@ export const authorizationPlugin = fp(async (app: FastifyInstance) => {
     await app.requireAuth(request, reply);
     if (reply.sent) return;
 
-    const auth = request.auth!;
+    const auth = getAuth(request);
     const resolved = await resolvePermissions(auth.userId, auth.tenantId, auth.email);
 
     if (!resolved) {

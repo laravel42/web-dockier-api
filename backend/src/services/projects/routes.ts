@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAuth } from "../../shared/auth.js";
 import { projectConfigSchema, projectSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -36,7 +37,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await createProject({
         tenantId: auth.tenantId,
         name: request.body.name,
@@ -63,7 +64,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await getProject(request.params.projectId, auth.tenantId);
     },
   );
@@ -79,7 +80,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       const projects = await listProjects(auth.tenantId);
       return { projects };
     },
@@ -107,7 +108,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       return await updateProject({
         projectId: request.params.projectId,
         tenantId: auth.tenantId,
@@ -135,7 +136,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = request.auth!;
+      const auth = getAuth(request);
       await deleteProject(request.params.projectId, auth.tenantId);
       return { success: true as const };
     },
