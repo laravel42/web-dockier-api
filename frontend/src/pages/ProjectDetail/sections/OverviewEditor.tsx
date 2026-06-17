@@ -240,7 +240,7 @@ export default function OverviewEditor({ project, editable, onProjectUpdate }: P
     };
   }, [initialContent, onOverviewLinkClick, aiTransport]);
 
-  const editor = useCreateBlockNote(editorOptions, [cacheKey, initialContent]);
+  const editor = useCreateBlockNote(editorOptions, [cacheKey, initialContent, editable]);
 
   editorRef.current = editor;
 

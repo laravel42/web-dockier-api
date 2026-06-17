@@ -109,6 +109,9 @@
   --color-text: var(--color-foreground);
   --color-text-secondary: oklch(0.78 0.012 60);
   --color-text-muted: var(--color-muted-foreground);
+  --color-weaker: oklch(0.19 0.008 50);
+  --color-weak: oklch(0.32 0.008 50 / 35%);
+  --color-strong: var(--color-foreground);
   --color-primary-500: var(--color-primary);
   --color-brand: var(--color-primary);
   --color-accent: var(--color-primary);
@@ -139,6 +142,8 @@
   --text-ui--line-height: 1.45;
   --text-ui-sm: 0.78125rem;
   --text-ui-sm--line-height: 1.4;
+  --text-xssm: 0.8125rem;
+  --text-xssm--line-height: 1.5;
   --heading-max-size: 22px;
   --leading-tight: 1.25;
   --leading-snug: 1.375;
@@ -161,6 +166,8 @@
   --radius-card: calc(var(--radius) + 4px);
   --radius-btn: var(--radius-md);
   --radius-input: var(--radius-md);
+
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 12%);
 }
 
 [data-theme="light"] {
@@ -177,6 +184,8 @@
   --color-sidebar: oklch(0.95 0.008 60);
   --color-sidebar-active: oklch(0.92 0.02 70);
   --color-text-secondary: oklch(0.45 0.012 55);
+  --color-weaker: oklch(0.94 0.008 60);
+  --color-weak: oklch(0.88 0.01 55 / 70%);
   --color-secondary-50: oklch(0.96 0.008 50);
   --color-secondary-100: oklch(0.90 0.008 50);
   --color-success-50: #ecfdf5;
@@ -617,6 +626,16 @@ textarea:focus-visible {
   box-shadow: var(--shadow-card-hover);
 }
 
+/* Link/format toolbars — closed toggles must use popover text, not accent-foreground */
+.overview-editor .bn-toolbar.bg-popover .bn-button[data-state="closed"] {
+  color: var(--popover-foreground);
+}
+
+.overview-editor .bn-toolbar.bg-popover .bn-button[data-state="open"] {
+  color: var(--accent-foreground);
+  background-color: var(--accent);
+}
+
 .overview-editor .bn-collaboration-cursor__label {
   font-size: 10px;
   font-weight: 600;
@@ -629,4 +648,71 @@ textarea:focus-visible {
 :is(h1, h2, h3, h4, h5, h6)[class*="text-4xl"],
 :is(h1, h2, h3, h4, h5, h6)[class*="text-5xl"] {
   font-size: var(--heading-max-size) !important;
+}
+
+/* Scan finding code preview — Prism token colors on Dockier surfaces */
+.code-preview pre,
+.code-preview code {
+  background: transparent !important;
+  text-shadow: none;
+}
+
+.code-preview .token.comment,
+.code-preview .token.prolog,
+.code-preview .token.doctype,
+.code-preview .token.cdata {
+  color: #8b949e;
+}
+
+.code-preview .token.punctuation {
+  color: #c9d1d9;
+}
+
+.code-preview .token.property,
+.code-preview .token.tag,
+.code-preview .token.boolean,
+.code-preview .token.number,
+.code-preview .token.constant,
+.code-preview .token.symbol,
+.code-preview .token.deleted {
+  color: #f97583;
+}
+
+.code-preview .token.selector,
+.code-preview .token.attr-name,
+.code-preview .token.string,
+.code-preview .token.char,
+.code-preview .token.builtin,
+.code-preview .token.inserted {
+  color: #7ee787;
+}
+
+.code-preview .token.operator,
+.code-preview .token.entity,
+.code-preview .token.url,
+.code-preview .language-css .token.string,
+.code-preview .style .token.string {
+  color: #d2a8ff;
+}
+
+.code-preview .token.atrule,
+.code-preview .token.attr-value,
+.code-preview .token.keyword {
+  color: #ff7b72;
+}
+
+.code-preview .token.function,
+.code-preview .token.class-name {
+  color: #d2a8ff;
+}
+
+.code-preview .token.regex,
+.code-preview .token.important,
+.code-preview .token.variable {
+  color: #ffa657;
+}
+
+/* Scan/deploy sidebar — branch+commit chip (size="sidebar") */
+.branch-badge--sidebar {
+  padding: 2px 2px 2px 4px;
 }

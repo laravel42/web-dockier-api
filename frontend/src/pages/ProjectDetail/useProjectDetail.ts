@@ -245,7 +245,7 @@ export function useProjectDetail() {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchLastDeploy(); }, [project]);
+  useEffect(() => { fetchLastDeploy(); }, [project?.id]);
 
   const fetchRecentScans = () => {
     if (!projectId) return;

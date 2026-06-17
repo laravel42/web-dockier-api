@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "../../../components/DeployWizard";
 import MDEditor from "@uiw/react-md-editor";
-import { cardCls } from "../../../utils/styles";
+import { cardCls, segmentActiveCls, segmentIdleCls } from "../../../utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "../../../components/badges/SensitivityBadge";
 import { gitApi } from "../../../services/api";
-import type { Project } from "../../../types";
+import type { Project, Provider } from "../../../types";
 import OverviewEditor from "./OverviewEditor";
+import ProjectDeploymentsTab from "./ProjectDeploymentsTab";
 import { usePermissions } from "../../../context/PermissionsContext";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   analysisLoading: boolean;
   projectId?: string;
   project: Project;
+  providers: Provider[];
   onProjectUpdate: (project: Project) => void;
 }
 
@@ -582,10 +584,12 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`text-[11px] px-2 py-1 rounded-md font-medium transition-colors ${
+            className={`text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${
               filter === f.key
-                ? f.key === "vulnerable" ? "bg-red-500/30 text-red-400" : "bg-primary-100 text-primary-700"
-                : "text-text-muted hover:text-text hover:bg-secondary-50"
+                ? f.key === "vulnerable"
+                  ? "border-danger-500/40 bg-danger-500/15 text-danger-400"
+                  : segmentActiveCls
+                : `${segmentIdleCls} hover:bg-secondary-50 hover:text-text`
             }`}
           >
             {f.label}
@@ -667,10 +671,11 @@ export default function ProjectDescription({
   analysisLoading,
   projectId,
   project,
+  providers,
   onProjectUpdate,
 }: Props) {
   const [activeMainTab, setActiveMainTab] = useState<MainTabKey>("overview");
-  const { has, isOwner } = usePermissions();
+  const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canEditOverview = isOwner || has("project:manage");
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
@@ -782,6 +787,8 @@ export default function ProjectDescription({
         return renderDependenciesSection();
       case "sensitiveData":
         return renderSensitiveDataSection();
+      case "deployments":
+        return <ProjectDeploymentsTab project={project} providers={providers} />;
       default:
         return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTab)?.label ?? "");
     }
@@ -804,7 +811,7 @@ export default function ProjectDescription({
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveMainTab(tab.key)}
-                className={`flex shrink-0 items-center gap-1.5 px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                className={`flex shrink-0 items-center gap-1.5 p-3  text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                   activeMainTab === tab.key
                     ? tab.key === "sensitiveData"
                       ? "border-red-500 text-text"
@@ -835,11 +842,15 @@ export default function ProjectDescription({
                   : "hidden"
               }
             >
-              <OverviewEditor
-                project={project}
-                editable={canEditOverview}
-                onProjectUpdate={onProjectUpdate}
-              />
+              {permissionsLoading ? (
+                <TabSpinner label="Loading overview…" />
+              ) : (
+                <OverviewEditor
+                  project={project}
+                  editable={canEditOverview}
+                  onProjectUpdate={onProjectUpdate}
+                />
+              )}
             </div>
             {activeMainTab !== "overview" && (
               <div className="flex min-h-0 flex-1 flex-col">

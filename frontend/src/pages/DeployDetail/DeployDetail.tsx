@@ -90,6 +90,7 @@ export default function DeployDetail() {
         providers={providers}
         activeDeployId={deployId}
         loading={allDeploysLoading}
+        fallbackCommitHash={project?.lastCommitHash}
         canLaunchDeploy={canLaunchDeploy}
         onNewDeploy={openDeployWizard}
         onSelect={(id) => navigate(`/deploy/${id}`)}

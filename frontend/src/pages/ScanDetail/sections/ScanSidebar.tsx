@@ -86,20 +86,20 @@ export default function ScanSidebar({
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className={`size-2 rounded-full shrink-0 ${getStatusDotClass(s.status)}`} />
-                      <span className={`${sidebarHistoryLabelCls(isActive)} truncate`}>
+                      <span className={`${sidebarHistoryLabelCls(isActive)} truncate min-w-0`}>
                         {new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                         {" · "}
                         {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      {isLive && (
-                        <span className="ml-auto shrink-0 text-[9px] font-medium text-primary">live</span>
-                      )}
-                    </div>
-                    <div className="mt-1 ml-3.5">
-                      <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} />
+                      <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 py-px px-0.5">
+                        {isLive && (
+                          <span className="text-[9px] font-medium text-primary">live</span>
+                        )}
+                        <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} size="sidebar" />
+                      </div>
                     </div>
                     {hasBadges && (
-                      <div className="mt-1 ml-3.5 flex flex-wrap items-center gap-1">
+                      <div className="mt-1.5 ml-3.5 flex flex-wrap items-center gap-1">
                         {s.summary!.errors > 0 && <SeverityBadge severity="error" count={s.summary!.errors} size="compact" />}
                         {s.summary!.warnings > 0 && <SeverityBadge severity="warning" count={s.summary!.warnings} size="compact" />}
                         {s.summary!.infos > 0 && <SeverityBadge severity="info" count={s.summary!.infos} size="compact" />}

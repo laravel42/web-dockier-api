@@ -102,6 +102,7 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         projectId={project.id}
         project={project}
+        providers={allProviders}
         onProjectUpdate={setProject}
       />
 
@@ -145,7 +146,7 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         analysisError={analysisError}
         providers={allProviders}
-        onDeployComplete={() => fetchLastDeploy()}
+        onDeployComplete={fetchLastDeploy}
       />
 
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />

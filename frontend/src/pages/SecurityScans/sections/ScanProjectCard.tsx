@@ -3,6 +3,7 @@ import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
+import { isScanSecurityClean, scanHasSecurityErrors } from "../../../utils/scanSummary";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 
@@ -20,13 +21,13 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
   const latest = sorted[0];
   const latestCompleted = sorted.find((s) => s.status === "completed");
   const summary = latestCompleted?.summary;
-  const isClean = summary && summary.totalFindings === 0;
+  const isClean = summary ? isScanSecurityClean(summary) : false;
 
   const statusDot =
     latest.status === "completed"
       ? isClean
         ? "bg-success-500"
-        : summary && summary.errors > 0
+        : summary && scanHasSecurityErrors(summary)
           ? "bg-danger-500"
           : "bg-warning-500"
       : latest.status === "failed"

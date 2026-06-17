@@ -128,7 +128,7 @@ export async function applyDeploymentWebhookUpdate(
 
   const { data: current } = await db
     .from("deployments")
-    .select("logs,organization_id,repo,branch")
+    .select("logs,organization_id,repo,branch,commit_hash")
     .eq("id", buildId)
     .maybeSingle();
   const lines = [payload.status === "success" ? "Deployment succeeded." : payload.status === "failed" ? "Deployment failed." : "Deployment in progress."];
@@ -148,6 +148,14 @@ export async function applyDeploymentWebhookUpdate(
       tenantId: current.organization_id,
       title: "Deployment succeeded",
       message,
+      metadata: {
+        kind: "deploy",
+        repo: current.repo,
+        branch: current.branch,
+        commit: current.commit_hash || undefined,
+        appUrl: appUrl || undefined,
+        deployId: buildId,
+      },
     }).catch((err) => {
       logger.error({ err }, `[deploy] Failed to send deploy webhook notification for ${buildId}`);
     });

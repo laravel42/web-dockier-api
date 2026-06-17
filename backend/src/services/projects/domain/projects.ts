@@ -164,7 +164,11 @@ export async function updateProject(params: UpdateProjectParams) {
   if (params.sourceType !== undefined) updates.source_type = params.sourceType;
   if (params.template !== undefined) updates.template = params.template;
   if (params.config !== undefined) {
-    updates.config = { ...(typeof verified.config === "object" ? (verified.config as object) : {}), ...params.config } as unknown as Json;
+    const existingConfig =
+      verified.config !== null && typeof verified.config === "object" && !Array.isArray(verified.config)
+        ? (verified.config as Record<string, unknown>)
+        : {};
+    updates.config = { ...existingConfig, ...params.config } as unknown as Json;
   }
 
   const { data, error } = await supabaseAdmin

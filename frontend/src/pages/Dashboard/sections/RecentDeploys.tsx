@@ -1,5 +1,5 @@
 import type { Deployment as Deploy, Provider, Project } from "../../../types";
-import { cardCls, btnLink, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
+import { cardCls, btnLink, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import ProviderBadge from "../../../components/ProviderBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
@@ -46,7 +46,7 @@ export default function RecentDeploys({ deploys, providers, projectMap, fallback
                       onViewDeploy(d.id);
                     }
                   }}
-                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-card/40 transition-colors text-left"
+                  className={dashboardActivityRowCls}
                 >
                   <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
                   <div className="min-w-0 flex-1">

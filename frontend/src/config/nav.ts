@@ -28,16 +28,12 @@ export const sidebarNavGroups: NavGroupConfig[] = [
     label: "Workspace",
     items: [
       { to: "/projects", label: "Projects", icon: "projects" },
-      { to: "/deploy", label: "Deployments", shortLabel: "Deploy", icon: "deploy" },
       { to: "/security", label: "Security", icon: "security" },
     ],
   },
   {
     label: "Account",
-    items: [
-      { to: "/settings", label: "Settings", icon: "settings" },
-      { to: "/notifications", label: "Notifications", icon: "notifications" },
-    ],
+    items: [{ to: "/settings", label: "Settings", icon: "settings" }],
   },
 ];
 
@@ -49,12 +45,4 @@ export function isNavItemActive(pathname: string, item: NavItemConfig): boolean 
     return pathname === item.to;
   }
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
-}
-
-/** Flat list for mobile tab bar */
-export const mobileNavItems: NavItemConfig[] = sidebarNavGroups.flatMap((g) => g.items);
-
-export function navItemsForInAppState(items: NavItemConfig[], inAppEnabled: boolean): NavItemConfig[] {
-  if (inAppEnabled) return items;
-  return items.filter((item) => item.to !== "/notifications");
 }

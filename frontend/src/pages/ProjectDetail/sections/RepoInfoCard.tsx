@@ -122,7 +122,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
         )}
 
         {displayBadges && displayBadges.length > 0 && (
-          <div className="mt-auto pt-3 border-t border-border min-h-[3.75rem]">
+          <div className="mt-auto pt-3 border-t border-border min-h-15">
             <p className={`${labelCls()} mb-2`}>Tech stack</p>
             <ProjectTechBadges badges={displayBadges} limit={8} />
           </div>

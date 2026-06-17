@@ -698,6 +698,20 @@ export async function executeScan(
       tenantId,
       title: "Security scan completed",
       message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${findings.length} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).`,
+      metadata: {
+        kind: "scan",
+        repo: scanRow.repo,
+        branch: scanRow.branch,
+        commit: cloneResult.commitHash || undefined,
+        projectId: scanRow.project_id || undefined,
+        scanId,
+        summary: {
+          errors: summary.errors,
+          warnings: summary.warnings,
+          infos: summary.infos,
+          totalFindings: summary.totalFindings,
+        },
+      },
     }).catch((err) => {
       obsLogger.error({ err }, `[scan] Failed to send scan complete notification for ${scanId}`);
     });

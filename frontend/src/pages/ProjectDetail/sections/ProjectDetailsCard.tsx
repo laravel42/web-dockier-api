@@ -59,7 +59,7 @@ export default function ProjectDetailsCard({ project, deployUrl }: Props) {
           </div>
         )}
         {deployUrl && (
-          <div className="mt-auto pt-3 border-t border-border min-h-[3.75rem]">
+          <div className="mt-auto pt-3 border-t border-border min-h-15">
             <p className="text-xs text-text-muted">Deployment URL</p>
             <a
               href={deployUrl}

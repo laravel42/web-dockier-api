@@ -1,8 +1,9 @@
 import type { Scan, Project } from "../../../types";
-import { cardCls, btnLink, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle } from "../../../utils/styles";
+import { cardCls, btnLink, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import SeverityBadge from "../../../components/SeverityBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import { isScanSecurityClean, scanHasSecurityErrors } from "../../../utils/scanSummary";
 
 interface Props {
   scans: Scan[];
@@ -30,11 +31,13 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
         <ul className="divide-y divide-border/40">
           {scans.map((s) => {
             const proj = projectMap[s.projectId];
+            const summary = s.summary;
+            const isClean = summary ? isScanSecurityClean(summary) : false;
             const statusDot =
               s.status === "completed"
-                ? s.summary?.totalFindings === 0
+                ? isClean
                   ? "bg-success-500"
-                  : s.summary?.errors > 0
+                  : summary && scanHasSecurityErrors(summary)
                     ? "bg-danger-500"
                     : "bg-warning-500"
                 : s.status === "failed"
@@ -52,7 +55,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
                       onViewScan(s.id);
                     }
                   }}
-                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-card/40 transition-colors text-left"
+                  className={dashboardActivityRowCls}
                 >
                   <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
                   <div className="min-w-0 flex-1">
@@ -71,7 +74,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
                       {s.summary.errors > 0 && <SeverityBadge severity="error" count={s.summary.errors} />}
                       {s.summary.warnings > 0 && <SeverityBadge severity="warning" count={s.summary.warnings} />}
                       {s.summary.infos > 0 && <SeverityBadge severity="info" count={s.summary.infos} />}
-                      {s.summary.totalFindings === 0 && <SeverityBadge severity="clean" label="Clean" />}
+                      {summary && isScanSecurityClean(summary) && <SeverityBadge severity="clean" label="Clean" />}
                     </div>
                   )}
                 </div>

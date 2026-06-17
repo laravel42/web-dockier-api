@@ -10,7 +10,7 @@ import {
 } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import ProviderBadge from "../../../components/ProviderBadge";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import BranchBadge from "../../../components/BranchBadge";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import Spinner from "../../../components/Spinner";
 
@@ -19,6 +19,7 @@ interface Props {
   providers: Provider[];
   activeDeployId: string | undefined;
   loading: boolean;
+  fallbackCommitHash?: string;
   canLaunchDeploy?: boolean;
   onNewDeploy?: () => void;
   onSelect: (id: string) => void;
@@ -29,6 +30,7 @@ export default function DeployHistory({
   providers,
   activeDeployId,
   loading,
+  fallbackCommitHash,
   canLaunchDeploy = false,
   onNewDeploy,
   onSelect,
@@ -94,10 +96,11 @@ export default function DeployHistory({
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 ml-3.5">
                       <ProviderBadge provider={dk} />
-                      <BranchCommitLabel
+                      <BranchBadge
                         branch={d.branch}
-                        commit={d.commitHash || undefined}
+                        commit={d.commitHash || fallbackCommitHash || undefined}
                         onClick={() => onSelect(d.id)}
+                        size="compact"
                       />
                     </div>
                   </div>

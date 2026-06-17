@@ -3,6 +3,7 @@ import { cardCls } from "../../../utils/styles";
 import StatusRingIcon from "../../../components/badges/StatusRingIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import { isScanSecurityClean } from "../../../utils/scanSummary";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 
 interface Props {
@@ -91,7 +92,7 @@ export default function RecentScans({ scans, navigate }: Props) {
                           {row.scan.summary.infos > 0 && (
                             <SeverityBadge severity="info" count={row.scan.summary.infos} size="compact" />
                           )}
-                          {row.scan.summary.totalFindings === 0 && (
+                          {isScanSecurityClean(row.scan.summary) && (
                             <SeverityBadge severity="clean" label="Clean" size="compact" />
                           )}
                         </div>

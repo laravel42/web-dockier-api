@@ -6,7 +6,7 @@ import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
 import { SearchableCombobox } from "../../components/ui/combobox";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import { inputCls, btnPrimary } from "../../utils/styles";
+import { inputCls, btnPrimary, segmentActiveCls, segmentIdleCls } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
 
@@ -167,7 +167,7 @@ export default function SecurityRulesTab() {
           <>
           <div className="flex items-center gap-2 mb-4">
             {enabled.map(s => (
-              <button key={s.key} onClick={() => setRuleSource(s.key)} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border text-text-muted hover:border-primary-300"}`}>
+              <button key={s.key} onClick={() => setRuleSource(s.key)} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? segmentActiveCls : segmentIdleCls}`}>
                 {s.label}
               </button>
             ))}

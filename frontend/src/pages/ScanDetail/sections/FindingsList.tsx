@@ -1,8 +1,9 @@
 import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
 import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
-import { cardCls } from "../../../utils/styles";
+import { cardCls, segmentActiveCls, segmentIdleCls } from "../../../utils/styles";
 import { displayFindingPath } from "../../../utils/scanPaths";
+import { buildCodePreviewRows, buildSnippetPreviewRow } from "../../../utils/codePreview";
 import { providerCount } from "../../../utils/findingCounts";
 import { usePermissions } from "../../../context/PermissionsContext";
 import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
@@ -104,10 +105,10 @@ export default function FindingsList({
               key={p.key}
               type="button"
               onClick={() => onProviderFilterChange(p.key)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
                 providerFilter === p.key
-                  ? "bg-primary-500 text-white"
-                  : "bg-secondary-50 text-text-muted hover:bg-secondary-100 hover:text-text"
+                  ? segmentActiveCls
+                  : `${segmentIdleCls} bg-secondary-50 hover:bg-secondary-100 hover:text-text`
               }`}
             >
               {p.label}
@@ -236,43 +237,68 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
 }
 
 function CodePreview({ finding: f, fileContent }: { finding: Finding; fileContent: string | undefined }) {
+  const relativePath = displayFindingPath(f.filePath);
+
   if (!fileContent) {
-    return f.snippet ? (
-      <pre className="p-1.5 rounded bg-gray-900 text-gray-300 text-[11px] font-mono overflow-x-auto leading-tight">
-        <code>{f.snippet}</code>
-      </pre>
-    ) : null;
+    const row = f.snippet ? buildSnippetPreviewRow(f.filePath, f.snippet, f.startLine) : null;
+    if (!row) return null;
+
+    return (
+      <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-secondary-800/40 px-3 py-2">
+          <span className="min-w-0 truncate text-[11px] font-mono text-text-muted">{relativePath}</span>
+          <span className="shrink-0 text-[11px] font-mono tabular-nums text-text-muted">L{row.lineNumber}</span>
+        </div>
+        <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
+          <div className="flex items-start bg-danger-50">
+            <span className="shrink-0 select-none border-r border-border/30 bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums  text-danger-500">
+              {row.lineNumber}
+            </span>
+            <code
+              className="min-w-0 flex-1 px-3 py-px whitespace-pre-wrap break-all leading-5 text-text language-markup"
+              dangerouslySetInnerHTML={{ __html: row.html }}
+            />
+          </div>
+        </pre>
+      </div>
+    );
   }
 
-  const allLines = fileContent.split("\n");
-  const ctxBefore = 5;
-  const ctxAfter = 5;
-  const start = Math.max(0, f.startLine - 1 - ctxBefore);
-  const end = Math.min(allLines.length, f.endLine + ctxAfter);
-  const visibleLines = allLines.slice(start, end);
-  const gutterWidth = String(end).length;
+  const { rows, truncated } = buildCodePreviewRows(
+    f.filePath,
+    fileContent.split("\n"),
+    f.startLine,
+    f.endLine,
+  );
+  if (rows.length === 0) return null;
+
+  const gutterWidth = String(rows[rows.length - 1]!.lineNumber).length;
+  const lineLabel =
+    rows.length === 1
+      ? `L${rows[0]!.lineNumber}`
+      : `L${rows[0]!.lineNumber}–${rows[rows.length - 1]!.lineNumber}${truncated ? "+" : ""}`;
 
   return (
-    <div className="rounded-lg overflow-hidden border border-gray-700/50 bg-[#1e1e2e]">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#181825] border-b border-gray-700/50">
-        <span className="text-[10px] text-gray-400 font-mono">{displayFindingPath(f.filePath)}</span>
-        <span className="text-[10px] text-gray-500">L{start + 1}–{end}</span>
+    <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
+      <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-secondary-800/40 px-3 py-2">
+        <span className="min-w-0 truncate text-[11px] font-mono text-text-muted">{relativePath}</span>
+        <span className="shrink-0 text-[11px] font-mono tabular-nums text-text-muted">{lineLabel}</span>
       </div>
-      <pre className="p-0 m-0 overflow-x-auto text-[11px] leading-[1.6] font-mono">
-        {visibleLines.map((line, i) => {
-          const lineNum = start + i + 1;
-          const isVulnerable = lineNum >= f.startLine && lineNum <= f.endLine;
-          return (
-            <div key={lineNum} className={`flex ${isVulnerable ? "bg-danger-500/15" : "hover:bg-white/3"}`}>
-              <span className={`shrink-0 select-none text-right px-3  ${isVulnerable ? "text-danger-400 bg-danger-500/10" : "text-gray-600"}`} style={{ width: `${gutterWidth + 3}ch` }}>
-                {lineNum}
-              </span>
-              <code className={`flex-1 pr-3 ${isVulnerable ? "text-gray-200" : "text-gray-400"}`}>
-                {line || " "}
-              </code>
-            </div>
-          );
-        })}
+      <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
+        {rows.map((row) => (
+          <div key={row.lineNumber} className="flex items-start bg-danger-50">
+            <span
+              className="shrink-0 select-none border-r border-border/30 bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums  text-danger-500"
+              style={{ width: `${gutterWidth + 3}ch` }}
+            >
+              {row.lineNumber}
+            </span>
+            <code
+              className="min-w-0 flex-1 px-3 py-px whitespace-pre-wrap break-all leading-5 text-text language-markup"
+              dangerouslySetInnerHTML={{ __html: row.html }}
+            />
+          </div>
+        ))}
       </pre>
     </div>
   );

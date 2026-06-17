@@ -1,19 +1,11 @@
 import type { Deployment as DeployInfo, Provider as ProviderInfo } from "../../../types";
-import { cardCls, strategyLabels } from "../../../utils/styles";
+import { cardCls } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
+import { getDeployServiceLabel } from "../../../utils/deployService";
 import { getProviderStyle } from "../../../data/providers";
 import ProviderBadge from "../../../components/ProviderBadge";
 import StatusRingIcon from "../../../components/badges/StatusRingIcon";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
-
-const serviceByProvider: Record<string, Record<string, string>> = {
-  aws: { managed: "ECS", vps: "EC2", static: "S3" },
-  gcp: { managed: "Cloud Run", vps: "Compute Engine", static: "Cloud Storage" },
-};
-
-function serviceLabel(provider: string, strategy: string): string {
-  return serviceByProvider[provider]?.[strategy] || strategyLabels[strategy] || strategy;
-}
 
 interface Props {
   deploys: DeployInfo[];
@@ -73,7 +65,7 @@ export default function RecentDeploys({
             const lineTop = row.type === "header" ? "top-6" : "top-9";
             const pk = row.type === "deploy" ? providerKey(row.deploy.providerId) : "";
             const providerName = pk ? getProviderStyle(pk).name || pk.toUpperCase() : "";
-            const service = row.type === "deploy" ? serviceLabel(pk, row.deploy.deployStrategy) : "";
+            const service = row.type === "deploy" ? getDeployServiceLabel(pk, row.deploy.deployStrategy) : "";
             return (
               <li key={row.key} className="relative flex gap-4 pb-4 last:pb-0">
                 {!isLast && (
