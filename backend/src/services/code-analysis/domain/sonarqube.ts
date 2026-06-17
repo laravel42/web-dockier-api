@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ScanFindingInput } from "./scan-analysis.js";
 import { sonarExclusionGlobs } from "./scan-skip-dirs.js";
 import { logger } from "../../../shared/logger.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 
 export interface SonarConfig {
   baseUrl: string;
@@ -53,9 +54,9 @@ export function isSonarConfigured(): boolean {
   return getSonarConfig() !== null;
 }
 
-export class SonarNotConfiguredError extends Error {
+export class SonarNotConfiguredError extends DomainError {
   constructor() {
-    super("SonarQube URL or token not configured");
+    super("SonarQube URL or token not configured", "service_unavailable");
     this.name = "SonarNotConfiguredError";
   }
 }

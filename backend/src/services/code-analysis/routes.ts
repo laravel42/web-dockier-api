@@ -16,7 +16,6 @@ import { listRuleOverrides, upsertRuleOverride } from "./domain/rule-overrides.j
 import {
   listSonarProfiles,
   listSonarRules,
-  SonarNotConfiguredError,
   toggleSonarRule,
 } from "./domain/sonarqube.js";
 import {
@@ -435,15 +434,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async () => {
-      try {
-        const profiles = await listSonarProfiles();
-        return { profiles };
-      } catch (err) {
-        if (err instanceof SonarNotConfiguredError) {
-          throw app.httpErrors.serviceUnavailable(err.message);
-        }
-        throw err;
-      }
+      const profiles = await listSonarProfiles();
+      return { profiles };
     },
   );
 
@@ -459,14 +451,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        return await listSonarRules(request.query);
-      } catch (err) {
-        if (err instanceof SonarNotConfiguredError) {
-          throw app.httpErrors.serviceUnavailable(err.message);
-        }
-        throw err;
-      }
+      return await listSonarRules(request.query);
     },
   );
 
@@ -482,15 +467,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      try {
-        await toggleSonarRule(request.body);
-        return { success: true as const };
-      } catch (err) {
-        if (err instanceof SonarNotConfiguredError) {
-          throw app.httpErrors.serviceUnavailable(err.message);
-        }
-        throw err;
-      }
+      await toggleSonarRule(request.body);
+      return { success: true as const };
     },
   );
 

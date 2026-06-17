@@ -44,6 +44,8 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
           return reply.unauthorized(msg);
         case "precondition_failed":
           return reply.preconditionFailed(msg);
+        case "service_unavailable":
+          return reply.serviceUnavailable(msg);
         case "internal":
           return reply.internalServerError("An internal server error occurred");
         default:

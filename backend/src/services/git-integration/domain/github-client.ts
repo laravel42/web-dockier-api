@@ -10,14 +10,15 @@
  */
 
 import type { ConnectionLike } from "./provider-client.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 
-export class GitHubApiError extends Error {
+export class GitHubApiError extends DomainError {
   constructor(
     message: string,
     public readonly status: number,
     public readonly statusText: string,
   ) {
-    super(message);
+    super(message, "bad_request");
     this.name = "GitHubApiError";
   }
 }

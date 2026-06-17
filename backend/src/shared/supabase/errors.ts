@@ -13,7 +13,8 @@ export type BaseDomainErrorCode =
   | "conflict"
   | "internal"
   | "unauthorized"
-  | "precondition_failed";
+  | "precondition_failed"
+  | "service_unavailable";
 
 export class DomainError extends Error {
   constructor(

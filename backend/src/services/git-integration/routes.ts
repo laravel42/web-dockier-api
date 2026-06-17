@@ -8,7 +8,6 @@ import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "./domain/mr-generator.js";
 import { getFindingById } from "../code-analysis/domain/findings.js";
-import { CodeAnalysisError } from "../code-analysis/domain/scans.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
@@ -22,8 +21,6 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "./domain/connections.js";
-import { GitHubApiError } from "./domain/github-client.js";
-import { GitLabApiError } from "./domain/gitlab-client.js";
 import { getGitProvider, type RepoStats } from "./domain/git-provider.js";
 
 function isPlaceholderStats(stats: RepoStats): boolean {
@@ -41,16 +38,6 @@ function needsContributorProfileRefresh(stats: RepoStats, provider: string): boo
   if (provider !== "gitlab" && provider !== "gitlab_self_hosted") return false;
   if (!stats.topContributors?.length) return false;
   return stats.topContributors.every((contributor) => !contributor.profileUrl);
-}
-
-function throwProviderError(app: FastifyInstance, error: unknown): never {
-  if (error instanceof GitHubApiError) {
-    throw app.httpErrors.badRequest(`GitHub API error ${error.status}: ${error.statusText}`);
-  }
-  if (error instanceof GitLabApiError) {
-    throw app.httpErrors.badRequest(`GitLab API error ${error.status}: ${error.statusText}`);
-  }
-  throw app.httpErrors.badRequest((error as Error).message);
 }
 
 export async function registerGitIntegrationRoutes(app: FastifyInstance) {
@@ -284,11 +271,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       }
 
       let repos: Array<{ name: string; fullName: string; url: string; defaultBranch: string; private: boolean }>;
-      try {
-        repos = await listRepos(conn);
-      } catch (error) {
-        throw app.httpErrors.badRequest((error as Error).message);
-      }
+      repos = await listRepos(conn);
 
       await runCacheWrite("repo_cache", () =>
         db.from("repo_cache").upsert(
@@ -424,17 +407,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       if (!provider.createIssue) {
         throw app.httpErrors.notImplemented(`Unsupported provider: ${conn.provider}`);
       }
-      try {
-        return await provider.createIssue({
-          owner: request.body.owner,
-          repo: request.body.repo,
-          title: request.body.title,
-          body: request.body.body,
-          assignee: request.body.assignee,
-        });
-      } catch (error) {
-        throwProviderError(app, error);
-      }
+      return await provider.createIssue({
+        owner: request.body.owner,
+        repo: request.body.repo,
+        title: request.body.title,
+        body: request.body.body,
+        assignee: request.body.assignee,
+      });
     },
   );
 
@@ -460,20 +439,16 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.body.branch || "main";
       const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
-      try {
-        const commits = await getGitProvider(conn).listCommits({
-          owner: request.body.owner,
-          repo: request.body.repo,
-          branch,
-          limit: 10,
-        });
-        if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
-          log.push("Already up to date.");
-        } else {
-          for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
-        }
-      } catch (error) {
-        throwProviderError(app, error);
+      const commits = await getGitProvider(conn).listCommits({
+        owner: request.body.owner,
+        repo: request.body.repo,
+        branch,
+        limit: 10,
+      });
+      if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
+        log.push("Already up to date.");
+      } else {
+        for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
       }
       return { log };
     },
@@ -515,12 +490,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
-      try {
-        const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit });
-        return { commits };
-      } catch (error) {
-        throwProviderError(app, error);
-      }
+      const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit });
+      return { commits };
     },
   );
 
@@ -647,15 +618,11 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       }
 
       let stats: RepoStats;
-      try {
-        stats = await getGitProvider(conn).getRepoStats({
-          owner: request.query.owner,
-          repo: request.query.repo,
-          branch,
-        });
-      } catch (error) {
-        throwProviderError(app, error);
-      }
+      stats = await getGitProvider(conn).getRepoStats({
+        owner: request.query.owner,
+        repo: request.query.repo,
+        branch,
+      });
 
       if (!isPlaceholderStats(stats)) {
         await writeRepoCache("stats_cache", {
@@ -1032,32 +999,25 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       let body = request.body;
       if (body.findingId) {
-        try {
-          const finding = await getFindingById(body.findingId, auth.tenantId);
-          if (finding.connectionId !== conn.id) {
-            throw app.httpErrors.badRequest("Finding belongs to a different git connection");
-          }
-          const { owner, repo } = parseRepoKey(finding.repo);
-          body = {
-            ...body,
-            owner,
-            repo,
-            branch: finding.branch,
-            filePath: finding.filePath,
-            startLine: finding.startLine,
-            endLine: finding.endLine,
-            ruleId: finding.ruleId,
-            severity: finding.severity,
-            message: finding.message,
-            snippet: finding.snippet,
-            aiType: body.aiType ?? "openai",
-          };
-        } catch (error) {
-          if (error instanceof CodeAnalysisError) {
-            throw app.httpErrors.createError(error.code === "not_found" ? 404 : 403, error.message);
-          }
-          throw error;
+        const finding = await getFindingById(body.findingId, auth.tenantId);
+        if (finding.connectionId !== conn.id) {
+          throw app.httpErrors.badRequest("Finding belongs to a different git connection");
         }
+        const { owner, repo } = parseRepoKey(finding.repo);
+        body = {
+          ...body,
+          owner,
+          repo,
+          branch: finding.branch,
+          filePath: finding.filePath,
+          startLine: finding.startLine,
+          endLine: finding.endLine,
+          ruleId: finding.ruleId,
+          severity: finding.severity,
+          message: finding.message,
+          snippet: finding.snippet,
+          aiType: body.aiType ?? "openai",
+        };
       }
 
       const required = ["owner", "repo", "branch", "filePath", "startLine", "endLine", "ruleId", "severity", "message"] as const;
@@ -1067,32 +1027,28 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         }
       }
 
-      try {
-        return await createMergeRequest(
-          conn,
-          {
-            owner: body.owner!,
-            repo: body.repo!,
-            branch: body.branch!,
-            filePath: body.filePath!,
-            startLine: body.startLine!,
-            endLine: body.endLine!,
-            ruleId: body.ruleId!,
-            severity: body.severity!,
-            message: body.message!,
-            snippet: body.snippet || "",
-            aiType: body.aiType,
-            assignee: body.assignee,
-            reviewer: body.reviewer,
-          },
-          {
-            openAiApiKey: env.OPENAI_API_KEY,
-            openAiModel: env.OPENAI_MODEL,
-          },
-        );
-      } catch (error) {
-        throw app.httpErrors.badRequest((error as Error).message);
-      }
+      return await createMergeRequest(
+        conn,
+        {
+          owner: body.owner!,
+          repo: body.repo!,
+          branch: body.branch!,
+          filePath: body.filePath!,
+          startLine: body.startLine!,
+          endLine: body.endLine!,
+          ruleId: body.ruleId!,
+          severity: body.severity!,
+          message: body.message!,
+          snippet: body.snippet || "",
+          aiType: body.aiType,
+          assignee: body.assignee,
+          reviewer: body.reviewer,
+        },
+        {
+          openAiApiKey: env.OPENAI_API_KEY,
+          openAiModel: env.OPENAI_MODEL,
+        },
+      );
     },
   );
 

@@ -2,6 +2,7 @@ import { fetchRepoFile } from "./provider-client.js";
 import type { ConnectionLike } from "./provider-client.js";
 import { generateCodeFix } from "./ai-fix.js";
 import { commitFixToBranch } from "./fix-branch.js";
+import { DomainError } from "../../../shared/supabase/errors.js";
 
 type CreateMergeRequestInput = {
   owner: string;
@@ -33,7 +34,7 @@ type MergeRequestResult = {
 export function parseRepoKey(repoKey: string): { owner: string; repo: string } {
   const parts = repoKey.split("/").filter(Boolean);
   if (parts.length < 2) {
-    throw new Error(`Invalid repository key: ${repoKey}`);
+    throw new DomainError(`Invalid repository key: ${repoKey}`, "bad_request");
   }
   const repo = parts[parts.length - 1]!;
   const owner = parts.slice(0, -1).join("/");
@@ -141,7 +142,7 @@ async function createProviderMergeRequest(
     }
 
     const err = (await createRes.json().catch(() => ({}))) as { message?: string };
-    throw new Error(err.message || `Failed to create pull request (${createRes.status})`);
+    throw new DomainError(err.message || `Failed to create pull request (${createRes.status})`, "bad_request");
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
@@ -169,10 +170,10 @@ async function createProviderMergeRequest(
       };
     }
     const err = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new Error(err.message || `Failed to create merge request (${response.status})`);
+    throw new DomainError(err.message || `Failed to create merge request (${response.status})`, "bad_request");
   }
 
-  throw new Error(`AI fix merge requests are not supported for provider: ${connection.provider}`);
+  throw new DomainError(`AI fix merge requests are not supported for provider: ${connection.provider}`, "bad_request");
 }
 
 async function createAiFixMergeRequest(
@@ -181,7 +182,7 @@ async function createAiFixMergeRequest(
   options: CreateMergeRequestOptions,
 ): Promise<MergeRequestResult> {
   if (!options.openAiApiKey) {
-    throw new Error("OpenAI API key is not configured");
+    throw new DomainError("OpenAI API key is not configured", "precondition_failed");
   }
 
   const fileContent = await fetchRepoFile(connection, {
@@ -190,7 +191,7 @@ async function createAiFixMergeRequest(
     branch: input.branch,
   }, input.filePath);
   if (!fileContent) {
-    throw new Error(`Could not read ${input.filePath} from ${input.branch}`);
+    throw new DomainError(`Could not read ${input.filePath} from ${input.branch}`, "not_found");
   }
 
   const fix = await generateCodeFix(options.openAiApiKey, options.openAiModel || "gpt-4o-mini", {
