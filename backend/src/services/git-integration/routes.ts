@@ -3,12 +3,14 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
-import type { Database, Json } from "../../shared/supabase/types.js";
+import type { Json } from "../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "./domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree, listBranches, listRepos } from "./domain/provider-client.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "./domain/mr-generator.js";
 import { getFindingById } from "../code-analysis/domain/findings.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
+import type { TechStackItem } from "./domain/tech-stack.js";
+import type { DetectedService } from "./domain/services.js";
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
@@ -23,6 +25,15 @@ import {
   parseRepoUrl,
 } from "./domain/connections.js";
 import { getGitProvider, type RepoStats } from "./domain/git-provider.js";
+import {
+  parseJsonField,
+  invalidateCache,
+  writeRepoCache,
+  writeAnalysisCache,
+  updateAnalysisCache,
+  writeRepoListCache,
+  writeSensitiveCache,
+} from "./domain/cache.js";
 
 function isPlaceholderStats(stats: RepoStats): boolean {
   return (
@@ -44,77 +55,13 @@ function needsContributorProfileRefresh(stats: RepoStats, provider: string): boo
 export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   const db = supabaseAdmin;
-
-  /**
-   * Cache writes here are best-effort: a failure must not fail the user's
-   * request, but it must not be silently swallowed either. Log a warning so
-   * cache write failures are observable instead of disappearing.
-   */
-  function logCacheWriteError(table: string, error: unknown): void {
-    if (error) {
-      app.log.warn({ err: error, table }, `git-integration: failed to write cache table "${table}"`);
-    }
-  }
-
-  /**
-   * Run a best-effort cache write. Logs (but does not throw on) both the
-   * returned Supabase error and any thrown rejection (network/connection
-   * failure), so a cache hiccup never fails an otherwise-successful request.
-   */
-  async function runCacheWrite(table: string, run: () => PromiseLike<{ error: unknown }>): Promise<void> {
-    try {
-      const { error } = await run();
-      logCacheWriteError(table, error);
-    } catch (err) {
-      logCacheWriteError(table, err);
-    }
-  }
+  const log = app.log;
 
   /**
    * Get connection for tenant, letting domain errors propagate to the global handler.
    */
   async function requireConnection(connectionId: string, tenantId: string) {
     return await getConnectionForTenant(connectionId, tenantId);
-  }
-
-  /**
-   * Delete cached rows for a tenant, optionally scoped to a repo and/or branch.
-   * Backs the cache-invalidation endpoints (stats/stack/analysis).
-   */
-  async function invalidateCache(
-    table: "stats_cache" | "stack_cache" | "analysis_cache",
-    tenantId: string,
-    filters: { repo?: string; branch?: string },
-  ): Promise<void> {
-    await runCacheWrite(table, () => {
-      let del = db.from(table).delete().eq("organization_id", tenantId);
-      if (filters.repo) del = del.eq("repo", filters.repo);
-      if (filters.branch) del = del.eq("branch", filters.branch);
-      return del;
-    });
-  }
-
-  /**
-   * Upsert a repo-scoped cache row (stats/stack) keyed by tenant + repo + branch.
-   */
-  async function writeRepoCache(
-    table: "stats_cache" | "stack_cache",
-    params: { tenantId: string; repoKey: string; branch: string; projectId?: string; result: Json },
-  ): Promise<void> {
-    await runCacheWrite(table, () =>
-      db.from(table).upsert(
-        {
-          id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
-          repo: params.repoKey,
-          branch: params.branch,
-          result: params.result,
-          created_at: new Date().toISOString(),
-          organization_id: params.tenantId,
-          project_id: params.projectId ?? "",
-        },
-        { onConflict: "organization_id,repo,branch" },
-      ),
-    );
   }
 
   typed.post(
@@ -264,28 +211,16 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           const isFresh = cachedAt > 0 && Date.now() - cachedAt < REPO_CACHE_TTL_MS;
           if (isFresh) {
             return {
-              repos: typeof cached.data.repos === "string" ? JSON.parse(cached.data.repos) : cached.data.repos,
+              repos: parseJsonField<Array<{ name: string; fullName: string; url: string; defaultBranch: string; private: boolean }>>(cached.data.repos)!,
               cached: true,
             };
           }
         }
       }
 
-      let repos: Array<{ name: string; fullName: string; url: string; defaultBranch: string; private: boolean }>;
-      repos = await listRepos(conn);
+      const repos = await listRepos(conn);
 
-      await runCacheWrite("repo_cache", () =>
-        db.from("repo_cache").upsert(
-          {
-            id: request.params.connectionId,
-            connection_id: request.params.connectionId,
-            organization_id: auth.tenantId,
-            repos,
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: "connection_id" },
-        ),
-      );
+      await writeRepoListCache(request.params.connectionId, auth.tenantId, repos, log);
       return { repos, cached: false };
     },
   );
@@ -344,7 +279,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("stats_cache", request.auth!.tenantId, request.query);
+      await invalidateCache("stats_cache", request.auth!.tenantId, request.query, log);
       return { success: true as const };
     },
   );
@@ -361,7 +296,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("stack_cache", request.auth!.tenantId, request.query);
+      await invalidateCache("stack_cache", request.auth!.tenantId, request.query, log);
       return { success: true as const };
     },
   );
@@ -378,7 +313,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("analysis_cache", request.auth!.tenantId, request.query);
+      await invalidateCache("analysis_cache", request.auth!.tenantId, request.query, log);
       return { success: true as const };
     },
   );
@@ -610,16 +545,14 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       if (!request.query.refresh) {
         const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
         if (cached.data?.result) {
-          const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
-          const cachedStats = parsed as RepoStats;
-          if (!isPlaceholderStats(cachedStats) && !needsContributorProfileRefresh(cachedStats, conn.provider)) {
+          const parsed = parseJsonField<RepoStats>(cached.data.result)!;
+          if (!isPlaceholderStats(parsed) && !needsContributorProfileRefresh(parsed, conn.provider)) {
             return parsed;
           }
         }
       }
 
-      let stats: RepoStats;
-      stats = await getGitProvider(conn).getRepoStats({
+      const stats = await getGitProvider(conn).getRepoStats({
         owner: request.query.owner,
         repo: request.query.repo,
         branch,
@@ -632,7 +565,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           branch,
           projectId: request.query.projectId,
           result: stats,
-        });
+        }, log);
       }
       return stats;
     },
@@ -662,7 +595,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const cached = await db.from("stack_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
       if (cached.data?.result) {
-        return { stack: typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result, cached: true };
+        return { stack: parseJsonField(cached.data.result), cached: true };
       }
 
       const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
@@ -693,7 +626,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         branch,
         projectId: request.query.projectId,
         result: stack,
-      });
+      }, log);
       return { stack, cached: false };
     },
   );
@@ -765,22 +698,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
     async (request) => {
       if (request.body.projectId && !request.body.schema.trim()) {
         const cached = await db.from("sensitive_cache").select("result").eq("project_id", request.body.projectId).maybeSingle();
-        if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+        if (cached.data?.result) return parseJsonField(cached.data.result)!;
       }
 
       const result = analyzeSensitiveDataFromText(request.body.schema);
       if (request.body.projectId) {
-        await runCacheWrite("sensitive_cache", () =>
-          db.from("sensitive_cache").upsert(
-            {
-              id: request.body.projectId!,
-              project_id: request.body.projectId!,
-              result,
-              created_at: new Date().toISOString(),
-            },
-            { onConflict: "project_id" },
-          ),
-        );
+        await writeSensitiveCache(request.body.projectId, result, log);
       }
       return result;
     },
@@ -804,7 +727,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const stackCached = await db.from("stack_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
       if (stackCached.data?.result) {
-        const parsed = typeof stackCached.data.result === "string" ? JSON.parse(stackCached.data.result) : stackCached.data.result;
+        const parsed = parseJsonField<{ components?: Array<{ techs?: string[] }> }>(stackCached.data.result)!;
         const techSet = new Set<string>();
         for (const component of parsed.components ?? []) {
           for (const tech of component.techs ?? []) techSet.add(tech);
@@ -818,8 +741,8 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const analysisCached = await db.from("analysis_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
       if (analysisCached.data?.result) {
-        const parsed = typeof analysisCached.data.result === "string" ? JSON.parse(analysisCached.data.result) : analysisCached.data.result;
-        const techStack: Array<{ name: string; category: string; confidence: number }> = parsed.techStack ?? [];
+        const parsed = parseJsonField<{ techStack?: Array<{ name: string; category: string; confidence: number }> }>(analysisCached.data.result)!;
+        const techStack = parsed.techStack ?? [];
         const hasFramework = techStack.some((item) => item.category === "framework");
         if (techStack.length > 0 && (hasFramework || !request.query.connectionId)) {
           return {
@@ -839,20 +762,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
           const repoName = parts[parts.length - 1]!;
           const conn = await requireConnection(request.query.connectionId, auth.tenantId);
           const result = await runRepoAnalysis(conn, { owner, repo: repoName, branch });
-          await runCacheWrite("analysis_cache", () =>
-            db.from("analysis_cache").upsert(
-              {
-                id: auth.tenantId + ":" + repo + ":" + branch,
-                repo,
-                branch,
-                commit_sha: "",
-                result: result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
-                created_at: new Date().toISOString(),
-                organization_id: auth.tenantId,
-              },
-              { onConflict: "organization_id,repo,branch" },
-            ),
-          );
+          await writeAnalysisCache({
+            tenantId: auth.tenantId,
+            repoKey: repo,
+            branch,
+            result: result as unknown as Json,
+          }, log);
           return {
             badges: result.techStack.map((item) => ({
               name: item.name,
@@ -892,7 +807,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const cached = await db.from("analysis_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
       if (cached.data?.result) {
-        const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+        const parsed = parseJsonField<Record<string, unknown>>(cached.data.result)!;
         // If AI analysis was requested but cache doesn't have it, run AI and update cache
         if (request.query.aiType && env.OPENAI_API_KEY && !parsed.aiAnalysis) {
           const ref = { owner: request.query.owner, repo: request.query.repo, branch };
@@ -908,14 +823,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
             env.OPENAI_API_KEY,
             files,
             configContents,
-            parsed.techStack ?? [],
-            parsed.detectedServices ?? [],
+            (parsed.techStack as TechStackItem[]) ?? [],
+            (parsed.detectedServices as DetectedService[]) ?? [],
           );
           if (aiResult) {
             const updated = { ...parsed, aiAnalysis: aiResult };
-            await runCacheWrite("analysis_cache", () =>
-              db.from("analysis_cache").update({ result: updated }).eq("repo", repoKey).eq("branch", branch),
-            );
+            await updateAnalysisCache(repoKey, branch, updated as unknown as Json, log);
             return updated;
           }
         }
@@ -954,21 +867,13 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
 
       const finalResult = aiAnalysis ? { ...result, aiAnalysis } : result;
 
-      await runCacheWrite("analysis_cache", () =>
-        db.from("analysis_cache").upsert(
-          {
-            id: auth.tenantId + ":" + repoKey + ":" + branch,
-            repo: repoKey,
-            branch,
-            commit_sha: "",
-            result: finalResult as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
-            created_at: new Date().toISOString(),
-            organization_id: auth.tenantId,
-            project_id: request.query.projectId ?? "",
-          },
-          { onConflict: "organization_id,repo,branch" },
-        ),
-      );
+      await writeAnalysisCache({
+        tenantId: auth.tenantId,
+        repoKey,
+        branch,
+        projectId: request.query.projectId,
+        result: finalResult as unknown as Json,
+      }, log);
       return finalResult;
     },
   );
