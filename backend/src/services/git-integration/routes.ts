@@ -11,6 +11,7 @@ import { getFindingById } from "../code-analysis/domain/findings.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "./domain/ai-analysis.js";
 import { env } from "../../shared/config.js";
 import { requireInternalToken } from "../../shared/security.js";
+import { tenantRateLimit } from "../../shared/rate-limit.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import {
   getConnection,
@@ -224,7 +225,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repos",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-repos" })],
       schema: {
         tags: ["git-integration"],
         summary: "List repos for connection",
@@ -385,7 +386,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/issues",
     {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE),
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-issues" })],
       schema: {
         tags: ["git-integration"],
         summary: "Create Git issue",
@@ -567,7 +568,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-stats",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-stats" })],
       schema: {
         tags: ["git-integration"],
         summary: "Get repository stats",
@@ -640,7 +641,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/stack-analysis",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-stack" })],
       schema: {
         tags: ["git-integration"],
         summary: "Get stack analysis",
@@ -700,7 +701,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/sensitive-data",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-sensitive" })],
       schema: {
         tags: ["git-integration"],
         summary: "Scan repository for sensitive schema fields",
@@ -744,7 +745,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/analyze-sensitive-data",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-analyze-sensitive" })],
       schema: {
         tags: ["git-integration"],
         summary: "Analyze SQL schema with AI",
@@ -788,7 +789,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/repo-badges",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 30, windowMs: 60_000, prefix: "git-badges" })],
       schema: {
         tags: ["git-integration"],
         summary: "Get technology badges",
@@ -869,7 +870,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repo-analyze",
     {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-repo-analyze" })],
       schema: {
         tags: ["git-integration"],
         summary: "Analyze repository stack and deploy options",
@@ -975,7 +976,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/create-mr",
     {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_CREATE_MR),
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_MR), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-create-mr" })],
       schema: {
         tags: ["git-integration"],
         summary: "Create fix MR/PR",
