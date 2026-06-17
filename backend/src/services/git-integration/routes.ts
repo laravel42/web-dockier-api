@@ -715,11 +715,18 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
       const schemaFiles = files.filter((file) => /migrations?.*\.sql$|schema\.sql$/i.test(file)).slice(0, 40);
-      let schemaText = "";
-      for (const file of schemaFiles) {
-        const content = await fetchRepoFile(conn, { owner: request.query.owner, repo: request.query.repo, branch }, file);
-        if (content) schemaText += `${content}\n`;
+      const BATCH_SIZE = 8;
+      const contents: string[] = [];
+      for (let i = 0; i < schemaFiles.length; i += BATCH_SIZE) {
+        const batch = schemaFiles.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map((file) => fetchRepoFile(conn, { owner: request.query.owner, repo: request.query.repo, branch }, file)),
+        );
+        for (const content of results) {
+          if (content) contents.push(content);
+        }
       }
+      const schemaText = contents.join("\n");
       const analyzed = analyzeSensitiveDataFromText(schemaText);
       return {
         sensitiveData: analyzed.tables.flatMap((table) =>
