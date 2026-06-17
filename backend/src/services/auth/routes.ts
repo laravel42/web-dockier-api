@@ -313,7 +313,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         tags: ["auth"],
         summary: "Create a new organization and make current user Primary Owner",
         body: z.object({ name: z.string().min(2).max(120) }),
-        response: { 200: z.object({ tenantId: z.string().uuid(), slug: z.string(), session: authSessionSchema }) },
+        response: { 200: z.object({ tenantId: z.uuid(), slug: z.string(), session: authSessionSchema }) },
       },
     },
     async (request) => {
@@ -331,7 +331,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       schema: {
         tags: ["auth"],
         summary: "Switch active tenant and issue a new JWT",
-        params: z.object({ tenantId: z.string().uuid() }),
+        params: z.object({ tenantId: z.uuid() }),
         response: { 200: authSessionSchema },
       },
     },
@@ -350,13 +350,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       schema: {
         tags: ["auth"],
         summary: "List tenant memberships",
-        params: z.object({ tenantId: z.string().uuid() }),
+        params: z.object({ tenantId: z.uuid() }),
         response: {
           200: z.object({
             memberships: z.array(
               z.object({
-                id: z.string().uuid(),
-                userId: z.string().uuid(),
+                id: z.uuid(),
+                userId: z.uuid(),
                 email: z.email(),
                 name: z.string(),
                 roleName: z.string(),
@@ -385,7 +385,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       schema: {
         tags: ["auth"],
         summary: "Add existing user to tenant",
-        params: z.object({ tenantId: z.string().uuid() }),
+        params: z.object({ tenantId: z.uuid() }),
         body: z.object({
           email: z.email(),
           roleId: z.string().min(1),
@@ -417,7 +417,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       schema: {
         tags: ["auth"],
         summary: "Remove a member from the tenant",
-        params: z.object({ tenantId: z.string().uuid(), userId: z.string().uuid() }),
+        params: z.object({ tenantId: z.uuid(), userId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -444,8 +444,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       schema: {
         tags: ["auth"],
         summary: "Transfer organization ownership to another member",
-        params: z.object({ tenantId: z.string().uuid() }),
-        body: z.object({ targetUserId: z.string().uuid() }),
+        params: z.object({ tenantId: z.uuid() }),
+        body: z.object({ targetUserId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },

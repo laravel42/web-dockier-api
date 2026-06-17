@@ -2,7 +2,7 @@ import { z } from "zod";
 import { postDeployCommandSchema } from "../../shared/schemas/post-deploy.js";
 
 export const providerSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   provider: z.string(),
   label: z.string(),
   region: z.string(),
@@ -12,7 +12,7 @@ export const providerSchema = z.object({
 export const deploymentStatusSchema = z.enum(["pending", "building", "deploying", "success", "failed", "destroyed"]);
 
 export const deploymentSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   providerId: z.string(),
   gitConnectionId: z.string(),
   projectId: z.string(),

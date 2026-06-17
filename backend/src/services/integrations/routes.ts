@@ -90,7 +90,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["integrations"],
         summary: "Update PM integration",
-        params: z.object({ integrationId: z.string().uuid() }),
+        params: z.object({ integrationId: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           config: z.record(z.string(), z.string()).optional(),
@@ -118,7 +118,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["integrations"],
         summary: "Delete PM integration",
-        params: z.object({ integrationId: z.string().uuid() }),
+        params: z.object({ integrationId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },

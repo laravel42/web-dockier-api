@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const pmIntegrationSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   type: z.string(),
   name: z.string(),
   enabled: z.boolean(),
@@ -22,7 +22,7 @@ export const teamMemberSchema = z.object({
 });
 
 const integrationRequestBaseSchema = z.object({
-  integrationId: z.string().uuid().optional(),
+  integrationId: z.uuid().optional(),
   type: z.string().min(1).optional(),
   config: z.record(z.string(), z.string()).optional(),
 });
@@ -57,7 +57,7 @@ export const integrationCreateTaskSchema = integrationRequestBaseSchema
 
 export const integrationCreateIssueSchema = z
   .object({
-    integrationId: z.string().uuid().optional(),
+    integrationId: z.uuid().optional(),
     type: z.string().min(1).optional(),
     config: z.record(z.string(), z.string()).optional(),
     teamId: z.string(),

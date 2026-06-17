@@ -83,7 +83,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Update provider label or secret",
-        params: z.object({ providerId: z.string().uuid() }),
+        params: z.object({ providerId: z.uuid() }),
         body: z.object({ label: z.string().optional(), apiSecret: z.string().optional() }),
         response: { 200: providerSchema },
       },
@@ -106,7 +106,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Delete provider and dependent deployments",
-        params: z.object({ providerId: z.string().uuid() }),
+        params: z.object({ providerId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -124,7 +124,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Get provider credentials (service-to-service)",
-        params: z.object({ providerId: z.string().uuid() }),
+        params: z.object({ providerId: z.uuid() }),
         response: {
           200: z.object({
             provider: z.string(),
@@ -151,7 +151,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           200: z.object({
             keys: z.array(
               z.object({
-                id: z.string().uuid(),
+                id: z.uuid(),
                 label: z.string(),
                 publicKey: z.string(),
                 fingerprint: z.string(),
@@ -179,7 +179,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         body: z.object({ label: z.string().min(1), publicKey: z.string().min(1) }),
         response: {
           200: z.object({
-            id: z.string().uuid(),
+            id: z.uuid(),
             label: z.string(),
             publicKey: z.string(),
             fingerprint: z.string(),
@@ -205,7 +205,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Delete SSH key",
-        params: z.object({ keyId: z.string().uuid() }),
+        params: z.object({ keyId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -224,8 +224,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         tags: ["deploy"],
         summary: "Create deployment",
         body: z.object({
-          providerId: z.string().uuid(),
-          gitConnectionId: z.string().uuid(),
+          providerId: z.uuid(),
+          gitConnectionId: z.uuid(),
           projectId: z.string().optional(),
           repo: z.string().min(1),
           branch: z.string().min(1),
@@ -313,7 +313,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "List deployments",
-        querystring: z.object({ providerId: z.string().uuid().optional() }),
+        querystring: z.object({ providerId: z.uuid().optional() }),
         response: { 200: z.object({ deployments: z.array(deploymentSchema) }) },
       },
     },
@@ -331,7 +331,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Get deployment",
-        params: z.object({ deploymentId: z.string().uuid() }),
+        params: z.object({ deploymentId: z.uuid() }),
         response: { 200: deploymentSchema },
       },
     },
@@ -348,7 +348,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Update deployment status/logs/url (internal)",
-        params: z.object({ deploymentId: z.string().uuid() }),
+        params: z.object({ deploymentId: z.uuid() }),
         body: z.object({
           status: deploymentStatusSchema.optional(),
           logs: z.string().optional(),
@@ -374,7 +374,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "Destroy deployment",
-        params: z.object({ deploymentId: z.string().uuid() }),
+        params: z.object({ deploymentId: z.uuid() }),
         response: { 200: z.object({ success: z.boolean(), message: z.string() }) },
       },
     },
@@ -395,7 +395,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         tags: ["deploy"],
         summary: "Generate IaC script preview",
         body: z.object({
-          providerId: z.string().uuid(),
+          providerId: z.uuid(),
           repo: z.string().min(1),
           branch: z.string().min(1),
           techStack: z.array(z.string()).default([]),
@@ -472,7 +472,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         tags: ["deploy"],
         summary: "Handle AWS deploy pipeline callback",
         body: z.object({
-          buildId: z.string().uuid(),
+          buildId: z.uuid(),
           status: z.enum(["deploying", "success", "failed"]),
           appUrl: z.string().optional(),
           stackName: z.string().optional(),

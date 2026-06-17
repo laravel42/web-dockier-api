@@ -232,7 +232,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "List branches for owner/repo",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({ owner: z.string(), repo: z.string() }),
         response: { 200: z.object({ branches: z.array(z.string()) }) },
       },
@@ -252,7 +252,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "List branches for configured repo URL",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         response: { 200: z.object({ branches: z.array(z.string()) }) },
       },
     },
@@ -325,7 +325,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Create Git issue",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         body: z.object({
           owner: z.string(),
           repo: z.string(),
@@ -360,7 +360,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Fetch latest commits as pull preview",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         body: z.object({
           owner: z.string(),
           repo: z.string(),
@@ -397,7 +397,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Get recent commits",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({
           owner: z.string(),
           repo: z.string(),
@@ -438,7 +438,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Get repository file tree",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
         response: { 200: z.object({ files: z.array(z.object({ path: z.string(), type: z.enum(["file", "dir"]), size: z.number() })) }) },
       },
@@ -460,7 +460,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Get file content from repository",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string(), path: z.string() }),
         response: { 200: z.object({ content: z.string() }) },
       },
@@ -481,7 +481,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "List repo members",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({ owner: z.string(), repo: z.string() }),
         response: {
           200: z.object({
@@ -507,7 +507,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Get repository stats",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({
           owner: z.string(),
           repo: z.string(),
@@ -578,7 +578,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Get stack analysis",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({
           owner: z.string(),
           repo: z.string(),
@@ -638,7 +638,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Scan repository for sensitive schema fields",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
         response: { 200: z.object({ sensitiveData: z.array(z.any()) }) },
       },
@@ -789,7 +789,7 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Analyze repository stack and deploy options",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({
           owner: z.string(),
           repo: z.string(),
@@ -885,9 +885,9 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["git-integration"],
         summary: "Create fix MR/PR",
-        params: z.object({ connectionId: z.string().uuid() }),
+        params: z.object({ connectionId: z.uuid() }),
         body: z.object({
-          findingId: z.string().uuid().optional(),
+          findingId: z.uuid().optional(),
           owner: z.string().optional(),
           repo: z.string().optional(),
           branch: z.string().optional(),

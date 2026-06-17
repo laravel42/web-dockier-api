@@ -14,13 +14,13 @@ export const registerStartResponseSchema = z.object({
 
 export const authSessionSchema = z.object({
   token: z.string(),
-  userId: z.string().uuid(),
-  tenantId: z.string().uuid(),
+  userId: z.uuid(),
+  tenantId: z.uuid(),
 });
 
 export const membershipSchema = z.object({
-  id: z.string().uuid(),
-  tenantId: z.string().uuid(),
+  id: z.uuid(),
+  tenantId: z.uuid(),
   tenantName: z.string(),
   tenantSlug: z.string(),
   roleName: z.string(),
@@ -28,10 +28,10 @@ export const membershipSchema = z.object({
 });
 
 export const authMeSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.uuid(),
   email: z.email(),
   name: z.string(),
-  tenantId: z.string().uuid(),
+  tenantId: z.uuid(),
   roleId: z.string(),
   roleName: z.string(),
   systemKey: z.string().nullable(),

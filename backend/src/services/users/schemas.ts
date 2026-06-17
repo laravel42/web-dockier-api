@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 export const userSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   email: z.email(),
   name: z.string(),
   avatarUrl: z.string().nullable(),
   country: z.string(),
   language: z.string(),
   timezone: z.string(),
-  tenantId: z.string().uuid().nullable(),
+  tenantId: z.uuid().nullable(),
   createdAt: z.string(),
 });
 

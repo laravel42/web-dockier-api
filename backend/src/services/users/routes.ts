@@ -29,7 +29,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
           country: z.string().optional(),
           language: z.string().optional(),
           timezone: z.string().optional(),
-          roleId: z.string().uuid().optional(),
+          roleId: z.uuid().optional(),
         }),
         response: { 200: userSchema },
       },
@@ -57,7 +57,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       schema: {
         tags: ["users"],
         summary: "Get user by ID",
-        params: z.object({ userId: z.string().uuid() }),
+        params: z.object({ userId: z.uuid() }),
         response: { 200: userSchema },
       },
     },
@@ -100,7 +100,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       schema: {
         tags: ["users"],
         summary: "Update user fields",
-        params: z.object({ userId: z.string().uuid() }),
+        params: z.object({ userId: z.uuid() }),
         body: z
           .object({
             name: z.string().optional(),
@@ -108,7 +108,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
             country: z.string().optional(),
             language: z.string().optional(),
             timezone: z.string().optional(),
-            roleId: z.string().uuid().optional(),
+            roleId: z.uuid().optional(),
           })
           .refine((value) => Object.keys(value).length > 0, "Provide at least one field"),
         response: { 200: userSchema },
@@ -137,7 +137,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       schema: {
         tags: ["users"],
         summary: "Remove user from organization",
-        params: z.object({ userId: z.string().uuid() }),
+        params: z.object({ userId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },

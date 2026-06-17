@@ -4,8 +4,8 @@ export const findingSeveritySchema = z.enum(["error", "warning", "info"]);
 export type FindingSeverity = z.infer<typeof findingSeveritySchema>;
 
 export const findingSchema = z.object({
-  id: z.string().uuid(),
-  scanId: z.string().uuid(),
+  id: z.uuid(),
+  scanId: z.uuid(),
   ruleId: z.string(),
   severity: findingSeveritySchema,
   message: z.string(),
@@ -44,7 +44,7 @@ export const scanStatusSchema = z.enum(["pending", "running", "completed", "fail
 export type ScanStatus = z.infer<typeof scanStatusSchema>;
 
 export const scanSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   projectId: z.string(),
   connectionId: z.string(),
   repo: z.string(),
@@ -60,7 +60,7 @@ export const scanSchema = z.object({
 });
 
 export const customRuleSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   ruleId: z.string(),
   severity: z.string(),
   message: z.string(),

@@ -123,7 +123,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "Get scan",
-        params: z.object({ scanId: z.string().uuid() }),
+        params: z.object({ scanId: z.uuid() }),
         response: { 200: scanSchema },
       },
     },
@@ -140,7 +140,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "Delete scan",
-        params: z.object({ scanId: z.string().uuid() }),
+        params: z.object({ scanId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -158,7 +158,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "Run scan asynchronously",
-        params: z.object({ scanId: z.string().uuid() }),
+        params: z.object({ scanId: z.uuid() }),
         body: z
           .object({
             enableSemgrep: z.boolean().optional(),
@@ -191,7 +191,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "List scan findings",
-        params: z.object({ scanId: z.string().uuid() }),
+        params: z.object({ scanId: z.uuid() }),
         querystring: z.object({
           severity: z.string().optional(),
           provider: z.enum(["semgrep", "sonar", "custom"]).optional(),
@@ -310,7 +310,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "Update custom/system rule",
-        params: z.object({ ruleDbId: z.string().uuid() }),
+        params: z.object({ ruleDbId: z.uuid() }),
         body: z.object({
           ruleId: z.string().optional(),
           severity: z.string().optional(),
@@ -347,7 +347,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "Delete custom rule",
-        params: z.object({ ruleDbId: z.string().uuid() }),
+        params: z.object({ ruleDbId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -485,7 +485,7 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         querystring: z.object({ tool: z.enum(["semgrep", "sonarqube"]) }),
         response: {
           200: z.object({
-            overrides: z.array(z.object({ id: z.string().uuid(), ruleId: z.string(), enabled: z.boolean() })),
+            overrides: z.array(z.object({ id: z.uuid(), ruleId: z.string(), enabled: z.boolean() })),
           }),
         },
       },

@@ -77,7 +77,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       schema: {
         tags: ["image-builder"],
         summary: "Get build status",
-        params: z.object({ buildId: z.string().uuid() }),
+        params: z.object({ buildId: z.uuid() }),
         response: { 200: buildSchema },
       },
     },
@@ -110,10 +110,10 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       schema: {
         tags: ["image-builder"],
         summary: "Get build logs",
-        params: z.object({ buildId: z.string().uuid() }),
+        params: z.object({ buildId: z.uuid() }),
         querystring: z.object({ nextToken: z.string().optional() }),
         response: {
-          200: z.object({ buildId: z.string().uuid(), logs: z.array(z.string()), nextToken: z.string().optional() }),
+          200: z.object({ buildId: z.uuid(), logs: z.array(z.string()), nextToken: z.string().optional() }),
         },
       },
     },
@@ -180,7 +180,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       schema: {
         tags: ["image-builder"],
         summary: "Cancel build",
-        params: z.object({ buildId: z.string().uuid() }),
+        params: z.object({ buildId: z.uuid() }),
         response: { 200: buildSchema },
       },
     },
@@ -201,7 +201,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         response: {
           200: z.object({
             imageUri: z.string(),
-            buildId: z.string().uuid(),
+            buildId: z.uuid(),
             commitSha: z.string(),
             status: z.string(),
             createdAt: z.string(),
@@ -222,7 +222,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       schema: {
         tags: ["image-builder"],
         summary: "Get deploy status for build",
-        params: z.object({ buildId: z.string().uuid() }),
+        params: z.object({ buildId: z.uuid() }),
         response: { 200: z.object({ status: z.string(), appUrl: z.string(), stackName: z.string() }) },
       },
     },
@@ -295,7 +295,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       schema: {
         tags: ["image-builder"],
         summary: "Run post-deploy commands on the deployed instance",
-        params: z.object({ buildId: z.string().uuid() }),
+        params: z.object({ buildId: z.uuid() }),
         body: z.object({
           commands: z.array(z.object({
             command: z.string().min(1).max(500),
@@ -345,7 +345,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         tags: ["image-builder"],
         summary: "Build/deploy callback webhook",
         body: z.object({
-          buildId: z.string().uuid(),
+          buildId: z.uuid(),
           stackName: z.string().optional(),
           status: z.enum(["deploying", "success", "failed"]),
           appUrl: z.string().optional(),

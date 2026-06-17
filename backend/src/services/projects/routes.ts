@@ -58,7 +58,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["projects"],
         summary: "Get project",
-        params: z.object({ projectId: z.string().uuid() }),
+        params: z.object({ projectId: z.uuid() }),
         response: { 200: projectSchema },
       },
     },
@@ -92,7 +92,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["projects"],
         summary: "Update project",
-        params: z.object({ projectId: z.string().uuid() }),
+        params: z.object({ projectId: z.uuid() }),
         body: z.object({
           name: z.string().optional(),
           repository: z.string().optional(),
@@ -130,7 +130,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["projects"],
         summary: "Delete project",
-        params: z.object({ projectId: z.string().uuid() }),
+        params: z.object({ projectId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },

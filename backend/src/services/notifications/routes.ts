@@ -65,7 +65,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["notifications"],
         summary: "Enable or disable channel",
-        params: z.object({ channelId: z.string().uuid() }),
+        params: z.object({ channelId: z.uuid() }),
         body: z.object({ enabled: z.boolean() }),
         response: { 200: successResponseSchema },
       },
@@ -84,7 +84,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["notifications"],
         summary: "Delete channel",
-        params: z.object({ channelId: z.string().uuid() }),
+        params: z.object({ channelId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -146,7 +146,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["notifications"],
         summary: "Mark notification as read",
-        params: z.object({ notificationId: z.string().uuid() }),
+        params: z.object({ notificationId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },

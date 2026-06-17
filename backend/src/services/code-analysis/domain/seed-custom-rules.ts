@@ -3,7 +3,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
 import { CodeAnalysisError } from "./scans.js";
 
-/** Stable UUID per rule_id — satisfies API schema (z.string().uuid()). */
+/** Stable UUID per rule_id — satisfies API schema (z.uuid()). */
 export function systemRuleUuid(ruleId: string): string {
   const hash = createHash("sha256").update(`dockier:custom-rule:${ruleId}`).digest();
   const bytes = Buffer.from(hash.subarray(0, 16));

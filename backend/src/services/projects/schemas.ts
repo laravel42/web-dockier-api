@@ -6,7 +6,7 @@ export const projectConfigSchema = z.object({
 });
 
 export const projectSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string(),
   repository: z.string(),
   branch: z.string(),

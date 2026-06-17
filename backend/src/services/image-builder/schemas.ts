@@ -5,7 +5,7 @@ export const buildStatusSchema = z.enum(["pending", "submitted", "in_progress", 
 export type BuildStatus = z.infer<typeof buildStatusSchema>;
 
 export const buildSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   codebuildId: z.string(),
   sourceRepo: z.string(),
   sourceRef: z.string(),
