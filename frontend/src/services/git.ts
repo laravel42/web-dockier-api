@@ -99,13 +99,13 @@ export const gitApi = {
     request<StackAnalysisResponse>(`/git/connections/${connectionId}/stack-analysis${buildQuery({ owner, repo, branch, projectId })}`),
 
   invalidateStackCache: (repo: string, branch?: string) =>
-    request<{ done: boolean }>(`/git/stack-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
+    request<{ success: boolean }>(`/git/stack-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
 
   invalidateStatsCache: (repo: string, branch?: string) =>
-    request<{ done: boolean }>(`/git/stats-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
+    request<{ success: boolean }>(`/git/stats-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
 
   invalidateAnalysisCache: (repo: string, branch?: string) =>
-    request<{ deleted: boolean }>(`/git/analysis-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
+    request<{ success: boolean }>(`/git/analysis-cache${buildQuery({ repo, branch })}`, { method: "DELETE" }),
 
   createGitIssue: (connectionId: string, owner: string, repo: string, title: string, body: string, assignee?: string) =>
     request<{ issueId: string; issueUrl: string; issueNumber: number }>(`/git/connections/${connectionId}/issues`, {

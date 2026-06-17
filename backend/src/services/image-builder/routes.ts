@@ -352,7 +352,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           deployTarget: z.string().optional(),
           codebuildId: z.string().optional(),
         }),
-        response: { 200: z.object({ ok: z.boolean() }) },
+        response: { 200: z.object({ success: z.boolean() }) },
       },
     },
     async (request) => {
@@ -361,7 +361,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         app.log.error(fetchError);
         throw app.httpErrors.internalServerError("Database error fetching build");
       }
-      if (!data) return { ok: false };
+      if (!data) return { success: false };
       const updates: Database["public"]["Tables"]["builds"]["Update"] = { updated_at: new Date().toISOString() };
       if (request.body.codebuildId) updates.codebuild_id = request.body.codebuildId;
       if (request.body.status === "success") {
@@ -381,7 +381,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         app.log.error(updateError);
         throw app.httpErrors.internalServerError("Database error updating build");
       }
-      return { ok: true };
+      return { success: true };
     },
   );
 }

@@ -581,7 +581,7 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().ok).toBe(true);
+    expect(res.json().success).toBe(true);
     expect(mockApplyDeploymentWebhookUpdate).toHaveBeenCalledWith(
       expect.anything(),
       TEST_DEPLOYMENT_ID,
@@ -589,7 +589,7 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
     );
   });
 
-  it("returns ok:false for non-existent deployment", async () => {
+  it("returns success:false for non-existent deployment", async () => {
     const { computeWebhookSignature } = await import("../../../shared/security.js");
     const payload = { buildId: "d0e1f2a3-0123-4345-abcd-eeeeeeeeeeee", status: "success" };
     const body = JSON.stringify(payload);
@@ -610,9 +610,9 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
       payload,
     });
 
-    // Route returns { ok: false } when record not found via PGRST116
+    // Route returns { success: false } when record not found via PGRST116
     expect(res.statusCode).toBe(200);
-    expect(res.json().ok).toBe(false);
+    expect(res.json().success).toBe(false);
   });
 });
 

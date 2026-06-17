@@ -68,7 +68,7 @@ export const deployApi = {
     logs?: string;
     appUrl?: string;
   }) =>
-    request<{ ok: boolean }>(`/deploy/deployments/${deploymentId}`, {
+    request<{ success: boolean }>(`/deploy/deployments/${deploymentId}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),

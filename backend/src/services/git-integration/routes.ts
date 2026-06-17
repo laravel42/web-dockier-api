@@ -339,12 +339,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         tags: ["git-integration"],
         summary: "Invalidate stats cache",
         querystring: z.object({ repo: z.string(), branch: z.string().optional() }),
-        response: { 200: z.object({ done: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
       await invalidateCache("stats_cache", request.auth!.tenantId, request.query);
-      return { done: true as const };
+      return { success: true as const };
     },
   );
 
@@ -356,12 +356,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         tags: ["git-integration"],
         summary: "Invalidate stack cache",
         querystring: z.object({ repo: z.string(), branch: z.string().optional() }),
-        response: { 200: z.object({ done: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
       await invalidateCache("stack_cache", request.auth!.tenantId, request.query);
-      return { done: true as const };
+      return { success: true as const };
     },
   );
 
@@ -373,12 +373,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         tags: ["git-integration"],
         summary: "Invalidate analysis cache",
         querystring: z.object({ repo: z.string().optional(), branch: z.string().optional() }),
-        response: { 200: z.object({ deleted: z.literal(true) }) },
+        response: { 200: successResponseSchema },
       },
     },
     async (request) => {
       await invalidateCache("analysis_cache", request.auth!.tenantId, request.query);
-      return { deleted: true as const };
+      return { success: true as const };
     },
   );
 

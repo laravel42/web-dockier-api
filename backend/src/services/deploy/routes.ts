@@ -353,7 +353,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           logs: z.string().optional(),
           appUrl: z.string().optional(),
         }),
-        response: { 200: z.object({ ok: z.literal(true) }) },
+        response: { 200: z.object({ success: z.literal(true) }) },
       },
     },
     async (request) => {
@@ -362,7 +362,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         logs: request.body.logs,
         appUrl: request.body.appUrl,
       });
-      return { ok: true as const };
+      return { success: true as const };
     },
   );
 
@@ -479,19 +479,19 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           deployTarget: z.string().optional(),
           codebuildId: z.string().optional(),
         }),
-        response: { 200: z.object({ ok: z.boolean() }) },
+        response: { 200: z.object({ success: z.boolean() }) },
       },
     },
     async (request) => {
       const { data: row, error: fetchError } = await db.from("deployments").select("id").eq("id", request.body.buildId).single();
       if (fetchError) {
-        if (fetchError.code === "PGRST116") return { ok: false };
+        if (fetchError.code === "PGRST116") return { success: false };
         app.log.error(fetchError);
         throw app.httpErrors.internalServerError("Database error fetching deployment");
       }
-      if (!row) return { ok: false };
+      if (!row) return { success: false };
       await applyDeploymentWebhookUpdate(db, request.body.buildId, request.body);
-      return { ok: true };
+      return { success: true };
     },
   );
 }
