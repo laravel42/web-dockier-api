@@ -324,7 +324,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         return await runPostDeployCommands({
           buildRow: {
             source_repo: data.source_repo || "",
-            build_metadata: data.build_metadata as string | null,
+            build_metadata: data.build_metadata,
             provider_id: data.provider_id,
           },
           commands: request.body.commands,

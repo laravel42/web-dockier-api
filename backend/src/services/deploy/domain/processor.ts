@@ -4,7 +4,7 @@ import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { logger } from "../../../shared/logger.js";
-import type { ServiceEntry } from "../types.js";
+import type { DeploymentRow, ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
   tenantId: string;
@@ -83,12 +83,12 @@ export function buildDeploymentPreview(input: CreateDeploymentInput, provider: P
   return { template, preview, region };
 }
 
-export async function createDeploymentRecord(db: any, input: CreateDeploymentInput, provider: ProviderSummary) {
+export async function createDeploymentRecord(db: any, input: CreateDeploymentInput, provider: ProviderSummary): Promise<DeploymentRow> {
   const createdAt = nowIso();
   const id = randomUUID();
   const { template, preview } = buildDeploymentPreview(input, provider);
 
-  const deploymentPayload = {
+  const deploymentPayload: DeploymentRow = {
     id,
     organization_id: input.tenantId,
     provider_id: input.providerId,
@@ -100,6 +100,9 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
     logs: addLogLine("", `Deployment queued using template "${template.label}".`),
     tofu_script: input.tofuScript?.trim() || preview.script,
     deploy_strategy: input.deployStrategy ?? "managed",
+    app_url: "",
+    commit_hash: "",
+    docker_image: "",
     created_at: createdAt,
     updated_at: createdAt,
   };

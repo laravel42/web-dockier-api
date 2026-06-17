@@ -80,16 +80,17 @@ function parseDeployParams(metadata: Record<string, unknown>): Record<string, un
   return raw as Record<string, unknown>;
 }
 
-function normalizeEnvVars(rawEnvVars: any): Array<{ name: string; value: string }> {
+function normalizeEnvVars(rawEnvVars: unknown): Array<{ name: string; value: string }> {
   if (!Array.isArray(rawEnvVars)) return [];
   return rawEnvVars
-    .map((v: any) => {
+    .map((v: unknown) => {
       if (typeof v === "string") {
         const idx = v.indexOf("=");
         return idx > 0 ? { name: v.slice(0, idx), value: v.slice(idx + 1) } : { name: v, value: "" };
       }
-      if (v && typeof v === "object" && typeof v.name === "string") {
-        return { name: v.name, value: String(v.value ?? "") };
+      if (v && typeof v === "object" && "name" in v && typeof (v as Record<string, unknown>).name === "string") {
+        const obj = v as Record<string, unknown>;
+        return { name: obj.name as string, value: String(obj.value ?? "") };
       }
       return null;
     })
@@ -418,7 +419,7 @@ async function appendEnvVarsParameter(
   buildId: string,
   logger: Logger,
 ): Promise<void> {
-  const rawEnvVars: any[] = (deployParams.envVars as any[]) || [];
+  const rawEnvVars: unknown[] = Array.isArray(deployParams.envVars) ? deployParams.envVars : [];
   const envVars = normalizeEnvVars(rawEnvVars);
 
   if (envVars.length === 0) return;

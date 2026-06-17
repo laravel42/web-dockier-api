@@ -302,7 +302,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         });
       }
 
-      return rowToDeployment(payload as any);
+      return rowToDeployment(payload);
     },
   );
 

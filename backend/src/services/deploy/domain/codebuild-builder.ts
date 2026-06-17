@@ -259,7 +259,7 @@ async function pollCodeBuild(opts: {
     if (codebuildId) {
       try {
         const batchResult = await cbClient.send(new BatchGetBuildsCommand({ ids: [codebuildId] }));
-        const cbBuild = (batchResult.builds || [])[0] as any;
+        const cbBuild = (batchResult.builds || [])[0];
         if (cbBuild) {
           const cbStatus = cbBuild.buildStatus || "";
           if (cbStatus === "SUCCEEDED") {
@@ -268,7 +268,7 @@ async function pollCodeBuild(opts: {
             const shortTag = commitHash.slice(0, 12);
             return `${ecrUri}/${imageRepoName}:${shortTag}`;
           } else if (["FAILED", "FAULT", "TIMED_OUT", "STOPPED"].includes(cbStatus)) {
-            const reason = cbBuild.phases?.find((p: any) => p.phaseStatus === "FAILED")?.contexts?.[0]?.message || cbStatus;
+            const reason = cbBuild.phases?.find((p) => p.phaseStatus === "FAILED")?.contexts?.[0]?.message || cbStatus;
             throw new Error(`CodeBuild failed: ${reason}`);
           } else if (attempt % 4 === 0) {
             await logFn(deploymentId, `[${ts()}] ℹ CodeBuild: ${cbBuild.currentPhase || "QUEUED"}...`);
