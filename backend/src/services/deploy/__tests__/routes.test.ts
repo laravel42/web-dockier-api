@@ -71,12 +71,14 @@ vi.mock("../domain/providers.js", async (importOriginal) => {
 const mockListDeployments = vi.fn();
 const mockGetDeployment = vi.fn();
 const mockGetDeploymentForDestroy = vi.fn();
+const mockGetDeploymentForWebhook = vi.fn();
 const mockUpdateDeploymentStatus = vi.fn();
 
 vi.mock("../domain/deployments.js", () => ({
   listDeployments: (...args: unknown[]) => mockListDeployments(...args),
   getDeployment: (...args: unknown[]) => mockGetDeployment(...args),
   getDeploymentForDestroy: (...args: unknown[]) => mockGetDeploymentForDestroy(...args),
+  getDeploymentForWebhook: (...args: unknown[]) => mockGetDeploymentForWebhook(...args),
   updateDeploymentStatus: (...args: unknown[]) => mockUpdateDeploymentStatus(...args),
 }));
 
@@ -558,19 +560,8 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
     const body = JSON.stringify(payload);
     const signature = computeWebhookSignature(body, "test-webhook-secret-for-testing");
 
-    // Mock the DB lookup for the deployment
-    mockFrom.mockImplementation((table: string) => {
-      if (table === "deployments") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({ data: { id: TEST_DEPLOYMENT_ID }, error: null }),
-            }),
-          }),
-        };
-      }
-      return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: null, error: null }) };
-    });
+    // Mock the domain lookup for the deployment
+    mockGetDeploymentForWebhook.mockResolvedValue({ id: TEST_DEPLOYMENT_ID });
     mockApplyDeploymentWebhookUpdate.mockResolvedValue(undefined);
 
     const res = await app.inject({
@@ -595,13 +586,7 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
     const body = JSON.stringify(payload);
     const signature = computeWebhookSignature(body, "test-webhook-secret-for-testing");
 
-    mockFrom.mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST116", message: "not found" } }),
-        }),
-      }),
-    }));
+    mockGetDeploymentForWebhook.mockResolvedValue(null);
 
     const res = await app.inject({
       method: "POST",
@@ -610,7 +595,7 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
       payload,
     });
 
-    // Route returns { success: false } when record not found via PGRST116
+    // Route returns { success: false } when deployment not found
     expect(res.statusCode).toBe(200);
     expect(res.json().success).toBe(false);
   });

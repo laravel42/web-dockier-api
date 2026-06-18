@@ -24,7 +24,7 @@ import {
   getProviderCredentials,
 } from "./domain/providers.js";
 import { listSshKeys, createSshKey, deleteSshKey } from "./domain/ssh-keys.js";
-import { listDeployments, getDeployment, getDeploymentForDestroy, updateDeploymentStatus } from "./domain/deployments.js";
+import { listDeployments, getDeployment, getDeploymentForDestroy, getDeploymentForWebhook, updateDeploymentStatus } from "./domain/deployments.js";
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -485,13 +485,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data: row, error: fetchError } = await db.from("deployments").select("id").eq("id", request.body.buildId).single();
-      if (fetchError) {
-        if (fetchError.code === "PGRST116") return { success: false };
-        app.log.error(fetchError);
-        throw app.httpErrors.internalServerError("Database error fetching deployment");
-      }
-      if (!row) return { success: false };
+      const deployment = await getDeploymentForWebhook(request.body.buildId);
+      if (!deployment) return { success: false };
       await applyDeploymentWebhookUpdate(db, request.body.buildId, request.body);
       return { success: true };
     },
