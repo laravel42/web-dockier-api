@@ -15,7 +15,7 @@ export const buildSchema = z.object({
   statusReason: z.string(),
   logsUrl: z.string(),
   tags: z.array(z.string()),
-  buildMetadata: z.record(z.string(), z.string()),
+  buildMetadata: z.record(z.string(), z.string().optional()),
   startedAt: z.string(),
   finishedAt: z.string(),
   createdAt: z.string(),

@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { getAwsAccountId } from "../../../lib/aws.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import type { BuildMetadata } from "./mappers.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ export interface BuildRecord {
   sourceRepo: string;
   commitSha: string;
   status: string;
-  buildMetadata: Record<string, any>;
+  buildMetadata: BuildMetadata;
   imageUri: string;
 }
 
