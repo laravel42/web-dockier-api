@@ -6,16 +6,16 @@ import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import type { Database } from "../../shared/supabase/types.js";
 import { composeDeployingReason } from "./domain/orchestrator.js";
-import { fetchBuildLogs, lookupCodeBuildId, refreshBuildStatus } from "./domain/aws-runtime.js";
+import { fetchBuildLogs } from "./domain/aws-runtime.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature } from "../../shared/security.js";
-import { rowToBuild } from "./domain/mappers.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
-import { checkDeployStatus, deriveAppName, deriveStackName } from "./domain/cfn-deploy.js";
 import {
   createBuild,
-  getBuild,
+  getBuildWithStatus,
+  getBuildForLogs,
+  getDeployStatus,
   listBuilds,
   cancelBuild,
   resolveImageByRevision,
@@ -84,23 +84,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      let row: any;
-      row = await getBuild(request.params.buildId, auth.tenantId);
-
-      if (!row.codebuild_id && row.provider_id) {
-        const credentials = await resolveAwsCredentials(row.provider_id);
-        if (credentials) {
-          const codebuildId = await lookupCodeBuildId(credentials, request.params.buildId);
-          if (codebuildId) {
-            await db.from("builds").update({ codebuild_id: codebuildId, updated_at: new Date().toISOString() }).eq("id", request.params.buildId);
-            row = { ...row, codebuild_id: codebuildId };
-          }
-        }
-      }
-      if (row.codebuild_id && ["submitted", "in_progress", "pending"].includes(row.status)) {
-        row = await refreshBuildStatus(row);
-      }
-      return rowToBuild(row);
+      return await getBuildWithStatus(request.params.buildId, auth.tenantId);
     },
   );
 
@@ -120,24 +104,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      const { data, error } = await db
-        .from("builds")
-        .select("id,organization_id,provider_id,codebuild_id,status,status_reason,updated_at")
-        .eq("id", request.params.buildId)
-        .single();
-      if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
-      let row = data;
-      if (!row.codebuild_id && row.provider_id) {
-        const credentials = await resolveAwsCredentials(row.provider_id);
-        if (credentials) {
-          const codebuildId = await lookupCodeBuildId(credentials, request.params.buildId);
-          if (codebuildId) {
-            await db.from("builds").update({ codebuild_id: codebuildId, updated_at: new Date().toISOString() }).eq("id", request.params.buildId);
-            row = { ...row, codebuild_id: codebuildId };
-          }
-        }
-      }
+      const row = await getBuildForLogs(request.params.buildId, auth.tenantId);
       const cloudwatch = await fetchBuildLogs(app, row, request.query.nextToken);
       return {
         buildId: request.params.buildId,
@@ -229,63 +196,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
-
-      const build = rowToBuild(data);
-
-      // If we already have the appUrl cached, return immediately
-      if (build.buildMetadata.appUrl) {
-        return {
-          status: "success",
-          appUrl: build.buildMetadata.appUrl,
-          stackName: build.buildMetadata.stackName ?? "",
-        };
-      }
-      if (build.status === "failed") return { status: "failed", appUrl: "", stackName: "" };
-
-      const appName = deriveAppName(build.sourceRepo);
-      const stackName = deriveStackName(appName);
-
-      // Without credentials we can only report based on DB status
-      const credentials = await resolveAwsCredentials(data.provider_id || "");
-      if (!credentials) {
-        if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
-        return { status: "deploying", appUrl: "", stackName };
-      }
-
-      // Delegate CloudFormation polling and fallback creation to the orchestrator
-      try {
-        return await checkDeployStatus({
-          buildId: request.params.buildId,
-          buildRow: {
-            id: data.id,
-            source_repo: data.source_repo,
-            commit_sha: data.commit_sha,
-            image_uri: data.image_uri,
-            status: data.status,
-            build_metadata: data.build_metadata,
-            provider_id: data.provider_id,
-            finished_at: data.finished_at,
-          },
-          build: {
-            id: build.id,
-            sourceRepo: build.sourceRepo,
-            commitSha: build.commitSha,
-            status: build.status,
-            buildMetadata: build.buildMetadata,
-            imageUri: build.imageUri,
-          },
-          credentials,
-          logger: { debug: (msg: string) => app.log.debug(msg) },
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        app.log.debug(`deploy-status error: ${message}`);
-        if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
-        return { status: "deploying", appUrl: "", stackName };
-      }
+      return await getDeployStatus(
+        request.params.buildId,
+        auth.tenantId,
+        { debug: (msg: string) => app.log.debug(msg) },
+      );
     },
   );
 

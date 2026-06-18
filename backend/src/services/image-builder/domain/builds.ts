@@ -7,6 +7,9 @@ import { createBuildspecPreview } from "./buildspec.js";
 import { enqueueBuild } from "./worker.js";
 import { escapePostgrestFilter } from "../../../shared/security.js";
 import { rowToBuild } from "./mappers.js";
+import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
+import { lookupCodeBuildId, refreshBuildStatus } from "./aws-runtime.js";
+import { checkDeployStatus, deriveAppName, deriveStackName, type DeployStatusResult } from "./cfn-deploy.js";
 
 export type ImageBuilderErrorCode = "not_found" | "forbidden" | "bad_request" | "internal" | "precondition_failed";
 
@@ -186,4 +189,160 @@ export async function resolveImageByRevision(revision: string, tenantId: string)
     status: build.status,
     createdAt: build.createdAt,
   };
+}
+
+// ─── Build Status with CodeBuild Backfill ──────────────────────────────────
+
+/**
+ * Fetches a build and ensures its CodeBuild ID and status are up-to-date.
+ *
+ * If the build lacks a codebuild_id but has a provider, attempts to look it up
+ * from CodeBuild. If the build is still in a pending/running state, refreshes
+ * the status from the CodeBuild API.
+ *
+ * Returns the mapped build object ready for API response.
+ */
+export async function getBuildWithStatus(buildId: string, tenantId: string) {
+  let row = await getBuild(buildId, tenantId);
+
+  if (!row.codebuild_id && row.provider_id) {
+    const credentials = await resolveAwsCredentials(row.provider_id);
+    if (credentials) {
+      const codebuildId = await lookupCodeBuildId(credentials, buildId);
+      if (codebuildId) {
+        await supabaseAdmin.from("builds").update({
+          codebuild_id: codebuildId,
+          updated_at: new Date().toISOString(),
+        }).eq("id", buildId);
+        row = { ...row, codebuild_id: codebuildId };
+      }
+    }
+  }
+
+  if (row.codebuild_id && ["submitted", "in_progress", "pending"].includes(row.status)) {
+    row = await refreshBuildStatus(row);
+  }
+
+  return rowToBuild(row);
+}
+
+// ─── Build Row for Logs ────────────────────────────────────────────────────
+
+/** Minimal row shape needed for log fetching. */
+export interface BuildLogRow {
+  id: string;
+  provider_id: string;
+  codebuild_id: string;
+  status: string;
+  status_reason: string;
+  updated_at: string;
+}
+
+/**
+ * Fetches a build row with the fields needed for log retrieval, performing
+ * ownership validation and CodeBuild ID backfill if necessary.
+ */
+export async function getBuildForLogs(buildId: string, tenantId: string): Promise<BuildLogRow> {
+  const { data, error } = await supabaseAdmin
+    .from("builds")
+    .select("id,organization_id,provider_id,codebuild_id,status,status_reason,updated_at")
+    .eq("id", buildId)
+    .single();
+
+  if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
+  if (data.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+
+  let row = data;
+
+  if (!row.codebuild_id && row.provider_id) {
+    const credentials = await resolveAwsCredentials(row.provider_id);
+    if (credentials) {
+      const codebuildId = await lookupCodeBuildId(credentials, buildId);
+      if (codebuildId) {
+        await supabaseAdmin.from("builds").update({
+          codebuild_id: codebuildId,
+          updated_at: new Date().toISOString(),
+        }).eq("id", buildId);
+        row = { ...row, codebuild_id: codebuildId };
+      }
+    }
+  }
+
+  return row;
+}
+
+// ─── Deploy Status ─────────────────────────────────────────────────────────
+
+export interface DeployStatusLogger {
+  debug(msg: string): void;
+}
+
+/**
+ * Resolves the deploy status for a build, coordinating metadata checks,
+ * credential resolution, and CloudFormation stack polling.
+ *
+ * Returns the deploy status result ready for API response.
+ */
+export async function getDeployStatus(
+  buildId: string,
+  tenantId: string,
+  logger: DeployStatusLogger,
+): Promise<DeployStatusResult> {
+  const { data, error } = await supabaseAdmin.from("builds").select("*").eq("id", buildId).single();
+  if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
+  if (data.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+
+  const build = rowToBuild(data);
+
+  // If we already have the appUrl cached, return immediately
+  if (build.buildMetadata.appUrl) {
+    return {
+      status: "success",
+      appUrl: build.buildMetadata.appUrl,
+      stackName: build.buildMetadata.stackName ?? "",
+    };
+  }
+  if (build.status === "failed") return { status: "failed", appUrl: "", stackName: "" };
+
+  const appName = deriveAppName(build.sourceRepo);
+  const stackName = deriveStackName(appName);
+
+  // Without credentials we can only report based on DB status
+  const credentials = await resolveAwsCredentials(data.provider_id || "");
+  if (!credentials) {
+    if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
+    return { status: "deploying", appUrl: "", stackName };
+  }
+
+  // Delegate CloudFormation polling and fallback creation to the orchestrator
+  try {
+    return await checkDeployStatus({
+      buildId,
+      buildRow: {
+        id: data.id,
+        source_repo: data.source_repo,
+        commit_sha: data.commit_sha,
+        image_uri: data.image_uri,
+        status: data.status,
+        build_metadata: data.build_metadata,
+        provider_id: data.provider_id,
+        finished_at: data.finished_at,
+      },
+      build: {
+        id: build.id,
+        sourceRepo: build.sourceRepo,
+        commitSha: build.commitSha,
+        status: build.status,
+        buildMetadata: build.buildMetadata,
+        imageUri: build.imageUri,
+      },
+      credentials,
+      logger,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.debug(`deploy-status error: ${message}`);
+    if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
+    return { status: "deploying", appUrl: "", stackName };
+  }
 }
