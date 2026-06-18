@@ -4,9 +4,6 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { buildCredentialsSchema, buildSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
-import type { Database } from "../../shared/supabase/types.js";
-import { composeDeployingReason } from "./domain/orchestrator.js";
-import { fetchBuildLogs } from "./domain/aws-runtime.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
 import { requireWebhookSignature } from "../../shared/security.js";
@@ -24,6 +21,8 @@ import {
 import { runPostDeployCommands } from "./domain/post-deploy.js";
 import { assertOwnership } from "../../shared/supabase/query.js";
 import { deployParamsSchema } from "./domain/deploy-params.js";
+import { processImageBuilderWebhook } from "./domain/webhook.js";
+import { fetchBuildLogs } from "./domain/aws-runtime.js";
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -276,32 +275,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const { data, error: fetchError } = await db.from("builds").select("*").eq("id", request.body.buildId).maybeSingle();
-      if (fetchError) {
-        app.log.error(fetchError);
-        throw app.httpErrors.internalServerError("Database error fetching build");
-      }
-      if (!data) return { success: false };
-      const updates: Database["public"]["Tables"]["builds"]["Update"] = { updated_at: new Date().toISOString() };
-      if (request.body.codebuildId) updates.codebuild_id = request.body.codebuildId;
-      if (request.body.status === "success") {
-        updates.status = "succeeded";
-        const existingMeta: Record<string, unknown> = typeof data.build_metadata === "string" && data.build_metadata
-          ? JSON.parse(data.build_metadata) : {};
-        updates.build_metadata = JSON.stringify({ ...existingMeta, appUrl: request.body.appUrl ?? "", stackName: request.body.stackName ?? "" });
-      } else if (request.body.status === "failed") {
-        updates.status = "failed";
-        updates.status_reason = `Deploy failed: ${request.body.cfnStatus ?? "unknown"}`;
-      } else {
-        updates.status = "in_progress";
-        updates.status_reason = composeDeployingReason(request.body.deployTarget);
-      }
-      const { error: updateError } = await db.from("builds").update(updates).eq("id", request.body.buildId);
-      if (updateError) {
-        app.log.error(updateError);
-        throw app.httpErrors.internalServerError("Database error updating build");
-      }
-      return { success: true };
+      return await processImageBuilderWebhook(request.body);
     },
   );
 }
