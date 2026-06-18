@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildMetadataSchema } from "./domain/deploy-params.js";
 
 export const buildStatusSchema = z.enum(["pending", "submitted", "in_progress", "succeeded", "failed", "stopped"]);
 
@@ -15,7 +16,7 @@ export const buildSchema = z.object({
   statusReason: z.string(),
   logsUrl: z.string(),
   tags: z.array(z.string()),
-  buildMetadata: z.record(z.string(), z.string().optional()),
+  buildMetadata: buildMetadataSchema,
   startedAt: z.string(),
   finishedAt: z.string(),
   createdAt: z.string(),

@@ -10,6 +10,7 @@ import { rowToBuild } from "./mappers.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 import { lookupCodeBuildId, refreshBuildStatus } from "./aws-runtime.js";
 import { checkDeployStatus, deriveAppName, deriveStackName, type DeployStatusResult } from "./cfn-deploy.js";
+import type { DeployParams } from "./deploy-params.js";
 
 export type ImageBuilderErrorCode = "not_found" | "forbidden" | "bad_request" | "internal" | "precondition_failed";
 
@@ -37,7 +38,7 @@ export interface CreateBuildParams {
   gitConnectionId?: string;
   deployTarget?: "ecs" | "ec2" | "s3";
   providerId?: string;
-  deployParams?: Record<string, any>;
+  deployParams?: DeployParams;
 }
 
 export async function createBuild(params: CreateBuildParams) {

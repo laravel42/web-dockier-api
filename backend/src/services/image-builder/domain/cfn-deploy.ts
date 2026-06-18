@@ -15,7 +15,8 @@ import { join } from "node:path";
 import { getAwsAccountId } from "../../../lib/aws.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import type { BuildMetadata } from "./mappers.js";
+import type { ParsedBuildMetadata as BuildMetadata } from "./deploy-params.js";
+import { parseBuildMetadata, parseDeployParamsFromMetadata } from "./deploy-params.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -59,27 +60,6 @@ export function deriveStackName(appName: string): string {
   return `image-builder-app-${appName}`;
 }
 
-function parseBuildMetadata(raw: string | null | undefined): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function parseDeployParams(metadata: Record<string, unknown>): Record<string, unknown> {
-  const raw = metadata.deployParams;
-  if (!raw) return {};
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return {};
-    }
-  }
-  return raw as Record<string, unknown>;
-}
 
 function normalizeEnvVars(rawEnvVars: unknown): Array<{ name: string; value: string }> {
   if (!Array.isArray(rawEnvVars)) return [];
@@ -231,7 +211,7 @@ async function attemptFallbackStackCreation(params: FallbackParams): Promise<voi
 
   const metadata = parseBuildMetadata(buildRow.build_metadata);
   const containerPort = (metadata.containerPort as string) || "3000";
-  const deployParams = parseDeployParams(metadata);
+  const deployParams = parseDeployParamsFromMetadata(metadata);
 
   logger.debug(`deployParams keys: ${Object.keys(deployParams).join(",")}, envVars count: ${((deployParams.envVars as unknown[]) || []).length}, raw deployParams field: ${metadata.deployParams ? "present" : "MISSING"}`);
 

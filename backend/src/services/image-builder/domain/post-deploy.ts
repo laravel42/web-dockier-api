@@ -15,6 +15,7 @@ import { ensureS3Bucket, getAwsAccountId } from "../../../lib/aws.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { formatEnvFileContent } from "../../../shared/env/format-env-file.js";
 import { deriveAppName, deriveStackName } from "./cfn-deploy.js";
+import { parseBuildMetadata, parseDeployParamsFromMetadata } from "./deploy-params.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,28 +41,6 @@ export interface PostDeployResult {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function parseBuildMetadata(raw: string | null | undefined): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-function parseDeployParams(metadata: Record<string, unknown>): Record<string, unknown> {
-  const raw = metadata.deployParams;
-  if (!raw) return {};
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return {};
-    }
-  }
-  return raw as Record<string, unknown>;
-}
 
 function normalizeEnvVars(rawEnvVars: unknown): Array<{ name: string; value: string }> {
   if (!Array.isArray(rawEnvVars)) return [];
@@ -332,7 +311,7 @@ export async function runPostDeployCommands(params: PostDeployParams): Promise<P
   const stackName = deriveStackName(appName);
   const containerName = appName;
   const metadata = parseBuildMetadata(buildRow.build_metadata);
-  const deployParams = parseDeployParams(metadata);
+  const deployParams = parseDeployParamsFromMetadata(metadata);
   const envVars = normalizeEnvVars(deployParams.envVars);
   const selfHostedServices = Array.isArray(deployParams.selfHostedServices)
     ? deployParams.selfHostedServices.filter((s): s is string => typeof s === "string")

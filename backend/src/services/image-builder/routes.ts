@@ -23,6 +23,7 @@ import {
 } from "./domain/builds.js";
 import { runPostDeployCommands } from "./domain/post-deploy.js";
 import { assertOwnership } from "../../shared/supabase/query.js";
+import { deployParamsSchema } from "./domain/deploy-params.js";
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -48,7 +49,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
           deployTarget: z.enum(["ecs", "ec2", "s3"]).optional(),
           providerId: z.string().optional(),
           credentials: buildCredentialsSchema.optional(),
-          deployParams: z.record(z.string(), z.any()).optional(),
+          deployParams: deployParamsSchema.optional(),
         }),
         response: { 200: buildSchema },
       },
