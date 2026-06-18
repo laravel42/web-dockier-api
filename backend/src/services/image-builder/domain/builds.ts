@@ -194,6 +194,34 @@ export async function resolveImageByRevision(revision: string, tenantId: string)
 // ─── Build Status with CodeBuild Backfill ──────────────────────────────────
 
 /**
+ * Ensures a build row has its CodeBuild ID populated.
+ *
+ * If the row lacks a `codebuild_id` but has a `provider_id`, resolves AWS
+ * credentials and looks up the CodeBuild build ID. If found, persists it
+ * back to the database and returns the updated row.
+ *
+ * Returns the row unchanged if it already has a codebuild_id or if lookup fails.
+ */
+async function ensureCodeBuildId<T extends { id: string; provider_id: string; codebuild_id: string }>(
+  row: T,
+): Promise<T> {
+  if (row.codebuild_id || !row.provider_id) return row;
+
+  const credentials = await resolveAwsCredentials(row.provider_id);
+  if (!credentials) return row;
+
+  const codebuildId = await lookupCodeBuildId(credentials, row.id);
+  if (!codebuildId) return row;
+
+  await supabaseAdmin.from("builds").update({
+    codebuild_id: codebuildId,
+    updated_at: new Date().toISOString(),
+  }).eq("id", row.id);
+
+  return { ...row, codebuild_id: codebuildId };
+}
+
+/**
  * Fetches a build and ensures its CodeBuild ID and status are up-to-date.
  *
  * If the build lacks a codebuild_id but has a provider, attempts to look it up
@@ -204,20 +232,7 @@ export async function resolveImageByRevision(revision: string, tenantId: string)
  */
 export async function getBuildWithStatus(buildId: string, tenantId: string) {
   let row = await getBuild(buildId, tenantId);
-
-  if (!row.codebuild_id && row.provider_id) {
-    const credentials = await resolveAwsCredentials(row.provider_id);
-    if (credentials) {
-      const codebuildId = await lookupCodeBuildId(credentials, buildId);
-      if (codebuildId) {
-        await supabaseAdmin.from("builds").update({
-          codebuild_id: codebuildId,
-          updated_at: new Date().toISOString(),
-        }).eq("id", buildId);
-        row = { ...row, codebuild_id: codebuildId };
-      }
-    }
-  }
+  row = await ensureCodeBuildId(row);
 
   if (row.codebuild_id && ["submitted", "in_progress", "pending"].includes(row.status)) {
     row = await refreshBuildStatus(row);
@@ -252,23 +267,7 @@ export async function getBuildForLogs(buildId: string, tenantId: string): Promis
   if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
   assertOwnership(data, tenantId, ImageBuilderError, "Not your build");
 
-  let row = data;
-
-  if (!row.codebuild_id && row.provider_id) {
-    const credentials = await resolveAwsCredentials(row.provider_id);
-    if (credentials) {
-      const codebuildId = await lookupCodeBuildId(credentials, buildId);
-      if (codebuildId) {
-        await supabaseAdmin.from("builds").update({
-          codebuild_id: codebuildId,
-          updated_at: new Date().toISOString(),
-        }).eq("id", buildId);
-        row = { ...row, codebuild_id: codebuildId };
-      }
-    }
-  }
-
-  return row;
+  return await ensureCodeBuildId(data);
 }
 
 // ─── Deploy Status ─────────────────────────────────────────────────────────
