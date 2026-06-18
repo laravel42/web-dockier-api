@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { encryptJson, decryptJson } from "../../../shared/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { rowToSummary } from "./mappers.js";
 
@@ -66,7 +66,7 @@ export async function getPMIntegrationForTenant(integrationId: string, tenantId:
     notFoundMsg: "Integration not found",
     internalMsg: "Failed to fetch integration",
   }) as PMIntegrationRow;
-  if (row.organization_id !== tenantId) throw new IntegrationsError("Not your integration", "forbidden");
+  assertOwnership(row, tenantId, IntegrationsError, "Not your integration");
   return row;
 }
 

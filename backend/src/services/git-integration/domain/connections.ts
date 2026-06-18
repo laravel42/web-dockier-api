@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 
 export type GitIntegrationErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "precondition_failed";
@@ -48,9 +48,7 @@ export async function getConnection(connectionId: string): Promise<ConnectionRow
  */
 export async function getConnectionForTenant(connectionId: string, tenantId: string): Promise<ConnectionRow> {
   const conn = await getConnection(connectionId);
-  if (conn.organization_id !== tenantId) {
-    throw new GitIntegrationError("Not your connection", "forbidden");
-  }
+  assertOwnership(conn, tenantId, GitIntegrationError, "Not your connection");
   return conn;
 }
 

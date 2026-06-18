@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 
@@ -71,7 +71,7 @@ export async function getProviderForTenant(providerId: string, tenantId: string)
     notFoundMsg: "Provider not found",
     internalMsg: "Failed to fetch provider",
   });
-  if (provider.organization_id !== tenantId) throw new DeployError("Not your provider", "forbidden");
+  assertOwnership(provider, tenantId, DeployError, "Not your provider");
   return provider;
 }
 

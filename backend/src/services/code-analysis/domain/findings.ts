@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import { findingProvider, isSensitiveDataFinding, type FindingProvider } from "./finding-filters.js";
 import { rowToFinding } from "./mappers.js";
 import { CodeAnalysisError } from "./scans.js";
@@ -158,7 +158,7 @@ export async function getFindingById(findingId: string, tenantId: string): Promi
     .maybeSingle();
   throwOnError(findingError, CodeAnalysisError, { internalMsg: "Failed to load finding" });
   if (!findingRow) throw new CodeAnalysisError("Finding not found", "not_found");
-  if (findingRow.organization_id !== tenantId) throw new CodeAnalysisError("Not your finding", "forbidden");
+  assertOwnership(findingRow, tenantId, CodeAnalysisError, "Not your finding");
 
   const { data: scanRow, error: scanError } = await supabaseAdmin
     .from("scans")
@@ -167,7 +167,7 @@ export async function getFindingById(findingId: string, tenantId: string): Promi
     .maybeSingle();
   throwOnError(scanError, CodeAnalysisError, { internalMsg: "Failed to load scan for finding" });
   if (!scanRow) throw new CodeAnalysisError("Scan not found for finding", "not_found");
-  if (scanRow.organization_id !== tenantId) throw new CodeAnalysisError("Not your finding", "forbidden");
+  assertOwnership(scanRow, tenantId, CodeAnalysisError, "Not your finding");
 
   return {
     id: findingRow.id,
@@ -209,7 +209,7 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
     .maybeSingle();
   throwOnError(scanError, CodeAnalysisError, { internalMsg: "Failed to verify scan ownership" });
   if (!scan) throw new CodeAnalysisError("Scan not found", "not_found");
-  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
 
   let query = supabaseAdmin
     .from("findings")

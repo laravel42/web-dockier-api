@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
 import { enqueueScan } from "./worker.js";
@@ -111,7 +111,7 @@ export async function getScan(scanId: string, tenantId: string) {
     notFoundMsg: "Scan not found",
     internalMsg: "Failed to fetch scan",
   });
-  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
   const mapped = rowToScan(scan);
   if (mapped.status === "completed" || mapped.status === "failed") {
     const counts = await getSecurityFindingCounts(scanId);
@@ -133,7 +133,7 @@ export async function deleteScan(scanId: string, tenantId: string) {
     .eq("id", scanId)
     .single();
   const scan = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Scan not found" });
-  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
 
   const { error: findingsError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
   throwOnError(findingsError, CodeAnalysisError, { internalMsg: "Failed to delete scan findings" });
@@ -147,7 +147,7 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
 
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
-  if (scan.organization_id !== tenantId) throw new CodeAnalysisError("Not your scan", "forbidden");
+  assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
 
   if (scan.status === "running") {
     throw new CodeAnalysisError("A scan is already running for this record. Wait for it to finish or start a new scan.", "bad_request");

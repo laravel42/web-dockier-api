@@ -19,8 +19,10 @@ import {
   listBuilds,
   cancelBuild,
   resolveImageByRevision,
+  ImageBuilderError,
 } from "./domain/builds.js";
 import { runPostDeployCommands } from "./domain/post-deploy.js";
+import { assertOwnership } from "../../shared/supabase/query.js";
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -230,11 +232,11 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) throw app.httpErrors.notFound("Build not found");
-      if (data.organization_id !== auth.tenantId) throw app.httpErrors.forbidden("Not your build");
+      if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
+      assertOwnership(data, auth.tenantId, ImageBuilderError, "Not your build");
 
       const credentials = await resolveAwsCredentials(data.provider_id || "");
-      if (!credentials) throw app.httpErrors.preconditionFailed("AWS credentials not available");
+      if (!credentials) throw new ImageBuilderError("AWS credentials not available", "precondition_failed");
 
       try {
         return await runPostDeployCommands({

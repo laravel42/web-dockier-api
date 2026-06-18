@@ -155,3 +155,30 @@ export function throwOnMutationError<E extends Error>(
 ): void {
   throwOnError(error, ErrorClass, opts);
 }
+
+// ─── Tenant Ownership Validation ───────────────────────────────────
+
+/**
+ * Assert that a database row belongs to the authenticated tenant.
+ *
+ * Compares `row.organization_id` against `tenantId` and throws a
+ * "forbidden" domain error if they don't match. Returns the row
+ * unchanged for convenient chaining.
+ *
+ * @example
+ * ```ts
+ * const build = unwrapQuery(data, error, ImageBuilderError, { notFoundMsg: "Build not found" });
+ * assertOwnership(build, tenantId, ImageBuilderError, "Not your build");
+ * ```
+ */
+export function assertOwnership<T extends { organization_id: string }, E extends Error>(
+  row: T,
+  tenantId: string,
+  ErrorClass: DomainErrorConstructor<E>,
+  message = "Access denied",
+): T {
+  if (row.organization_id !== tenantId) {
+    throw new ErrorClass(message, "forbidden");
+  }
+  return row;
+}

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { rowToCustomRule } from "./mappers.js";
 import { seedCustomRules } from "./seed-custom-rules.js";
@@ -177,7 +177,7 @@ export async function deleteCustomRule(ruleDbId: string, tenantId: string) {
     .single();
   const rule = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Rule not found" });
   if (rule.organization_id === "") throw new CodeAnalysisError("Cannot delete system rules", "forbidden");
-  if (rule.organization_id !== tenantId) throw new CodeAnalysisError("Not your rule", "forbidden");
+  assertOwnership(rule, tenantId, CodeAnalysisError, "Not your rule");
 
   const { error } = await supabaseAdmin.from("custom_rules").delete().eq("id", ruleDbId);
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete custom rule" });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
 import { enqueueBuild } from "./worker.js";
@@ -114,7 +114,7 @@ export async function getBuild(buildId: string, tenantId: string) {
     notFoundMsg: "Build not found",
     internalMsg: "Failed to fetch build",
   });
-  if (build.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+  assertOwnership(build, tenantId, ImageBuilderError, "Not your build");
   return build;
 }
 
@@ -147,7 +147,7 @@ export async function cancelBuild(buildId: string, tenantId: string) {
     notFoundMsg: "Build not found",
     internalMsg: "Failed to fetch build",
   });
-  if (build.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+  assertOwnership(build, tenantId, ImageBuilderError, "Not your build");
   if (!["submitted", "in_progress", "pending"].includes(build.status)) {
     throw new ImageBuilderError(`Cannot cancel build in status: ${build.status}`, "precondition_failed");
   }
@@ -250,7 +250,7 @@ export async function getBuildForLogs(buildId: string, tenantId: string): Promis
     .single();
 
   if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
-  if (data.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+  assertOwnership(data, tenantId, ImageBuilderError, "Not your build");
 
   let row = data;
 
@@ -290,7 +290,7 @@ export async function getDeployStatus(
 ): Promise<DeployStatusResult> {
   const { data, error } = await supabaseAdmin.from("builds").select("*").eq("id", buildId).single();
   if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
-  if (data.organization_id !== tenantId) throw new ImageBuilderError("Not your build", "forbidden");
+  assertOwnership(data, tenantId, ImageBuilderError, "Not your build");
 
   const build = rowToBuild(data);
 

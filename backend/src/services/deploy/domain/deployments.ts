@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { DeploymentRow } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError } from "./providers.js";
@@ -27,7 +27,7 @@ export async function getDeployment(deploymentId: string, tenantId: string) {
     notFoundMsg: "Deployment not found",
     internalMsg: "Failed to fetch deployment",
   });
-  if (deployment.organization_id !== tenantId) throw new DeployError("Not your deployment", "forbidden");
+  assertOwnership(deployment, tenantId, DeployError, "Not your deployment");
   return rowToDeployment(deployment);
 }
 
@@ -41,7 +41,7 @@ export async function getDeploymentForDestroy(deploymentId: string, tenantId: st
     notFoundMsg: "Deployment not found",
     internalMsg: "Failed to fetch deployment",
   });
-  if (deployment.organization_id !== tenantId) throw new DeployError("Not your deployment", "forbidden");
+  assertOwnership(deployment, tenantId, DeployError, "Not your deployment");
   return deployment;
 }
 
