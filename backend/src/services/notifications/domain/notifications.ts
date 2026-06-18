@@ -1,21 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { sendEmailNotification } from "./email-dispatch.js";
 
-export type NotificationsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class NotificationsError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: NotificationsErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "NotificationsError";
-  }
-}
+export const NotificationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("NotificationsError");
+export type NotificationsError = InstanceType<typeof NotificationsError>;
 
 // ─── Channels ────────────────────────────────────────────────────────────────
 

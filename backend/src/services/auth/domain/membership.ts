@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { getHierarchyLevel } from "../../../shared/permissions/role-templates.js";
@@ -215,18 +215,8 @@ export async function removeMemberFromTenant(params: RemoveMemberParams): Promis
   invalidatePermissionCache(targetUserId, tenantId);
 }
 
-export type MembershipErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class MembershipError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: MembershipErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "MembershipError";
-  }
-}
+export const MembershipError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("MembershipError");
+export type MembershipError = InstanceType<typeof MembershipError>;
 
 /**
  * List memberships for a specific tenant (admin view with user details).

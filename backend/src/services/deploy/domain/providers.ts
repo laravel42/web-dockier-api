@@ -1,22 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 
-export type DeployErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class DeployError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: DeployErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "DeployError";
-  }
-}
+export const DeployError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("DeployError");
+export type DeployError = InstanceType<typeof DeployError>;
 
 export interface CreateProviderParams {
   tenantId: string;

@@ -1,21 +1,11 @@
 import QRCode from "qrcode";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
 import { buildOtpAuthUrl, generateTotpSecret, verifyTotpToken } from "../../../shared/totp.js";
 
-export type TwoFactorErrorCode = "bad_request" | "not_found" | "internal";
-
-export class TwoFactorError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: TwoFactorErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "TwoFactorError";
-  }
-}
+export const TwoFactorError = createDomainErrorClass<"bad_request" | "not_found" | "internal">("TwoFactorError");
+export type TwoFactorError = InstanceType<typeof TwoFactorError>;
 
 export async function setupTwoFactor(userId: string, email: string) {
   const { data: user, error } = await supabaseAdmin

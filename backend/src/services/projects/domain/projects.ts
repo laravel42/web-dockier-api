@@ -1,23 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { rowToProject } from "./mappers.js";
 
-export type ProjectsErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class ProjectsError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: ProjectsErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "ProjectsError";
-  }
-}
+export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("ProjectsError");
+export type ProjectsError = InstanceType<typeof ProjectsError>;
 
 export interface CreateProjectParams {
   tenantId: string;

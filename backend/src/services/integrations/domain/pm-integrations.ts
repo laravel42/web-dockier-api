@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { encryptJson, decryptJson } from "../../../shared/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { rowToSummary } from "./mappers.js";
@@ -9,18 +9,8 @@ import { rowToSummary } from "./mappers.js";
 export const PM_PROVIDERS = ["linear", "jira"] as const;
 export type PMProvider = (typeof PM_PROVIDERS)[number];
 
-export type IntegrationsErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal";
-
-export class IntegrationsError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: IntegrationsErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "IntegrationsError";
-  }
-}
+export const IntegrationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal">("IntegrationsError");
+export type IntegrationsError = InstanceType<typeof IntegrationsError>;
 
 export interface PMIntegrationRow {
   id: string;

@@ -1,21 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 
-export type GitIntegrationErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "precondition_failed";
-
-export class GitIntegrationError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: GitIntegrationErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "GitIntegrationError";
-  }
-}
+export const GitIntegrationError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "precondition_failed">("GitIntegrationError");
+export type GitIntegrationError = InstanceType<typeof GitIntegrationError>;
 
 export interface ConnectionRow {
   id: string;

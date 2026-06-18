@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
 import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
@@ -11,18 +11,8 @@ function resolveIsDeletable(systemKey: string | null, isDeletable: boolean): boo
   return systemKey !== SYSTEM_ROLE_KEYS.ADMIN && isDeletable;
 }
 
-export type RolesErrorCode = "not_found" | "forbidden" | "bad_request" | "conflict" | "internal";
-
-export class RolesError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: RolesErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "RolesError";
-  }
-}
+export const RolesError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal">("RolesError");
+export type RolesError = InstanceType<typeof RolesError>;
 
 export interface RoleResponse {
   id: string;

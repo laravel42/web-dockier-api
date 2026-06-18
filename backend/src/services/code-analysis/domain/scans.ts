@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
@@ -12,18 +12,8 @@ import { getSecurityFindingCounts, getSecurityFindingCountsForScans } from "./fi
 
 export type { RunScanOptions };
 
-export type CodeAnalysisErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class CodeAnalysisError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: CodeAnalysisErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "CodeAnalysisError";
-  }
-}
+export const CodeAnalysisError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("CodeAnalysisError");
+export type CodeAnalysisError = InstanceType<typeof CodeAnalysisError>;
 
 export interface CreateScanParams {
   tenantId: string;

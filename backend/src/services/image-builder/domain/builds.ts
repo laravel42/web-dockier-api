@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
@@ -12,18 +12,8 @@ import { lookupCodeBuildId, refreshBuildStatus } from "./aws-runtime.js";
 import { checkDeployStatus, deriveAppName, deriveStackName, type DeployStatusResult } from "./cfn-deploy.js";
 import type { DeployParams } from "./deploy-params.js";
 
-export type ImageBuilderErrorCode = "not_found" | "forbidden" | "bad_request" | "internal" | "precondition_failed";
-
-export class ImageBuilderError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: ImageBuilderErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "ImageBuilderError";
-  }
-}
+export const ImageBuilderError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal" | "precondition_failed">("ImageBuilderError");
+export type ImageBuilderError = InstanceType<typeof ImageBuilderError>;
 
 export interface CreateBuildParams {
   tenantId: string;

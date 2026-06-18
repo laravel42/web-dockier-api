@@ -1,23 +1,13 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { listMembershipsForUser, type Membership } from "./membership.js";
 import { signTenantToken } from "./session.js";
 import { ensureDefaultInAppChannel } from "../../notifications/domain/notifications.js";
 
-export type RegistrationErrorCode = "unauthorized" | "forbidden" | "bad_request" | "internal";
-
-export class RegistrationError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: RegistrationErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "RegistrationError";
-  }
-}
+export const RegistrationError = createDomainErrorClass<"unauthorized" | "forbidden" | "bad_request" | "internal">("RegistrationError");
+export type RegistrationError = InstanceType<typeof RegistrationError>;
 
 /**
  * Classify Supabase auth errors into user-friendly messages.

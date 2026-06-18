@@ -1,23 +1,13 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/security.js";
 import { rowToUser } from "./mappers.js";
 
-export type UsersErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class UsersError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: UsersErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "UsersError";
-  }
-}
+export const UsersError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("UsersError");
+export type UsersError = InstanceType<typeof UsersError>;
 
 export interface CreateUserParams {
   tenantId: string;

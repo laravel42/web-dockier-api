@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { signTenantToken } from "./session.js";
@@ -124,15 +124,5 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
   invalidatePermissionCache(targetUserId, tenantId);
 }
 
-export type TenantErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class TenantError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: TenantErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "TenantError";
-  }
-}
+export const TenantError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("TenantError");
+export type TenantError = InstanceType<typeof TenantError>;

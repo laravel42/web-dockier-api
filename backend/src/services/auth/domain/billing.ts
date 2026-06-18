@@ -1,20 +1,10 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
 
-export type BillingErrorCode = "not_found" | "forbidden" | "bad_request" | "internal";
-
-export class BillingError extends DomainError {
-  constructor(
-    message: string,
-    public readonly code: BillingErrorCode,
-    cause?: unknown,
-  ) {
-    super(message, code, cause);
-    this.name = "BillingError";
-  }
-}
+export const BillingError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("BillingError");
+export type BillingError = InstanceType<typeof BillingError>;
 
 export interface BillingDetails {
   companyName: string;
