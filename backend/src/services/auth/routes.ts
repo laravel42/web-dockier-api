@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth.js";
+import { getAuth, getResolvedAuth } from "../../shared/auth.js";
 import {
   authMeSchema,
   authSessionSchema,
@@ -403,7 +403,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         tenantId: auth.tenantId,
         email: request.body.email,
         roleId: request.body.roleId,
-        actorHierarchyLevel: request.resolvedAuth!.hierarchyLevel,
+        actorHierarchyLevel: getResolvedAuth(request).hierarchyLevel,
       });
       return { success: true as const };
     },

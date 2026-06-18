@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth.js";
+import { getAuth, getResolvedAuth } from "../../shared/auth.js";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import {
@@ -81,7 +81,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         name: request.body.name,
         description: request.body.description,
         permissions: request.body.permissions,
-        resolvedAuth: request.resolvedAuth!,
+        resolvedAuth: getResolvedAuth(request),
       });
     },
   );
@@ -110,7 +110,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         name: request.body.name,
         description: request.body.description,
         permissions: request.body.permissions,
-        resolvedAuth: request.resolvedAuth!,
+        resolvedAuth: getResolvedAuth(request),
       });
     },
   );
@@ -128,7 +128,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      await deleteRole(request.params.roleId, auth.tenantId, request.resolvedAuth!);
+      await deleteRole(request.params.roleId, auth.tenantId, getResolvedAuth(request));
       return { success: true as const };
     },
   );

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth.js";
+import { getAuth, getResolvedAuth } from "../../shared/auth.js";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -46,7 +46,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         language: request.body.language,
         timezone: request.body.timezone,
         roleId: request.body.roleId,
-        resolvedAuth: request.resolvedAuth!,
+        resolvedAuth: getResolvedAuth(request),
       });
     },
   );
@@ -126,7 +126,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         language: request.body.language,
         timezone: request.body.timezone,
         roleId: request.body.roleId,
-        resolvedAuth: request.resolvedAuth!,
+        resolvedAuth: getResolvedAuth(request),
       });
     },
   );
@@ -148,7 +148,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         userId: request.params.userId,
         tenantId: auth.tenantId,
         actorUserId: auth.userId,
-        resolvedAuth: request.resolvedAuth!,
+        resolvedAuth: getResolvedAuth(request),
       });
       return { success: true as const };
     },
