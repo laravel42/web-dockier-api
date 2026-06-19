@@ -35,8 +35,6 @@ export default function DeployHeader({ deploy, project, onNavigateProject, canDe
               </button>
             )}
             <span className={`${typeCaption} font-mono`}>{deploy.repo}</span>
-            <span className={typeCaption}>{deploy.branch}</span>
-            <span className={typeCaption}>{new Date(deploy.createdAt).toLocaleString()}</span>
           </div>
         </div>
       </div>
