@@ -3,7 +3,7 @@ import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { inputCls, btnPrimary, readonlyFieldCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, btnPrimary, readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -148,7 +148,7 @@ export default function SshKeysTab() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-text truncate">{k.label}</p>
-                  <span className="inline-flex mt-1 items-center px-2 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600">
+                  <span className={`mt-1 ${settingsBadgeCls.primary}`}>
                     {keyType(k.publicKey)}
                   </span>
                 </div>

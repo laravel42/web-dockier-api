@@ -5,7 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";
@@ -195,16 +195,18 @@ export default function SourceControlTab() {
         <div className={settingsCardGridCls}>
           {connectionList.map((conn) => (
             <div key={conn.id} onClick={() => canManage && openEdit(conn)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="size-8  flex items-center justify-center shrink-0">
-                  <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="size-8  flex items-center justify-center shrink-0">
+                    <SourceControlBadge provider={conn.provider} showName={false} iconSize="w-7 h-7" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
+                    <p className="text-xs text-text-muted truncate">{conn.label}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-text capitalize truncate">{conn.provider.replace("_", " ")}</p>
-                  <p className="text-xs text-text-muted truncate">{conn.label}</p>
-                </div>
+                <span className={`shrink-0 ${settingsBadgeCls.success}`}>Connected</span>
               </div>
-              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-success-50 text-success-500">Connected</span>
               <span className={`block text-xs text-text-muted text-left px-2 py-0.5 `}>{getSourceControl(conn.provider).description}</span>
             </div>
           ))}

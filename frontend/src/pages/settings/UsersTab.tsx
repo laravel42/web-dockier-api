@@ -5,7 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
 import ComboBox from "../../components/ComboBox";
-import { inputCls, btnPrimary, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -258,12 +258,12 @@ export default function UsersTab() {
                 <div className="grid grid-cols-2 items-center gap-2">
                   <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                     {u.roleName ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600">{u.roleName}</span>
+                      <span className={settingsBadgeCls.primary}>{u.roleName}</span>
                     ) : (
                       <span className="text-[10px] text-text-muted">No role</span>
                     )}
                     {u.isOwner && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">Owner</span>
+                      <span className={settingsBadgeCls.warning}>Owner</span>
                     )}
                   </div>
                   <span className={`${typeCardDateCls} text-xs text-text-muted text-right`}>

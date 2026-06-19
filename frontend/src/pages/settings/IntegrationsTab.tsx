@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { INTEGRATION_CATALOG, CATEGORY_COLORS } from "../../data/integrations";
+import { INTEGRATION_CATALOG, CATEGORY_COLORS, categoryBadgeCls } from "../../data/integrations";
 import { INTEGRATION_ICONS } from "../../data/integration-icons";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
@@ -232,7 +232,7 @@ export default function IntegrationsTab() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-text">{cat.name}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CATEGORY_COLORS[cat.category] || "bg-secondary-100 text-text-muted"}`}>{cat.category}</span>
+                        <span className={categoryBadgeCls(cat.category)}>{cat.category}</span>
                       </div>
                       <p className="text-xs text-text-muted mt-0.5 truncate">{cat.description}</p>
                     </div>
@@ -316,7 +316,9 @@ export default function IntegrationsTab() {
               <div className="flex items-center gap-6 py-3 px-4 rounded-lg bg-secondary-50 border border-border text-xs">
                 <div>
                   <span className="uppercase tracking-wide text-text-muted font-semibold">Category</span>
-                  <p className="text-text font-medium mt-0.5">{editCat.category}</p>
+                  <div className="mt-1">
+                    <span className={categoryBadgeCls(editCat.category)}>{editCat.category}</span>
+                  </div>
                 </div>
                 <div className="w-px h-8 bg-border" />
                 <div>
