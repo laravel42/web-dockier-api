@@ -40,9 +40,46 @@ declare module "fastify" {
  * Key: `${userId}:${tenantId}`, Value: { resolvedAuth, expiresAt }
  *
  * TTL is short (30s) so role changes propagate quickly.
+ * A periodic sweep runs every 60s to evict expired entries and prevent
+ * unbounded memory growth on long-running instances.
  */
 const permissionCache = new Map<string, { resolved: ResolvedAuth; expiresAt: number }>();
 const CACHE_TTL_MS = 30_000;
+
+/** Maximum entries before forced eviction of oldest items. */
+const MAX_CACHE_SIZE = 5_000;
+
+/** Sweep interval for removing expired entries (60s). */
+const SWEEP_INTERVAL_MS = 60_000;
+
+let sweepTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureSweepTimer() {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of permissionCache) {
+      if (entry.expiresAt <= now) permissionCache.delete(key);
+    }
+  }, SWEEP_INTERVAL_MS);
+  // Allow Node to exit even if this timer is running
+  if (sweepTimer.unref) sweepTimer.unref();
+}
+
+/**
+ * Evict oldest entries when the cache exceeds MAX_CACHE_SIZE.
+ * Map iteration order is insertion order, so the first entries are oldest.
+ */
+function evictIfNeeded() {
+  if (permissionCache.size <= MAX_CACHE_SIZE) return;
+  const excess = permissionCache.size - MAX_CACHE_SIZE;
+  let removed = 0;
+  for (const key of permissionCache.keys()) {
+    if (removed >= excess) break;
+    permissionCache.delete(key);
+    removed++;
+  }
+}
 
 function getCacheKey(userId: string, tenantId: string): string {
   return `${userId}:${tenantId}`;
@@ -115,6 +152,8 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
   };
 
   permissionCache.set(cacheKey, { resolved, expiresAt: Date.now() + CACHE_TTL_MS });
+  evictIfNeeded();
+  ensureSweepTimer();
   return resolved;
 }
 
