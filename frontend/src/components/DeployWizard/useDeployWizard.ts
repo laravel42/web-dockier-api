@@ -5,7 +5,7 @@
  * Delegates actual deployment execution to useCodeBuildPipeline or useStandardDeploy.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { deployApi, projectsApi } from "../../services/api";
 import type { WizardState, RepoAnalysis, Provider } from "./types";
 import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
@@ -54,6 +54,13 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const codeBuild = useCodeBuildPipeline();
   const standardDeploy = useStandardDeploy();
 
+  // Keep stable refs for cleanup so the "Reset on Open" effect doesn't
+  // depend on the hook return objects (which are new references each render).
+  const codeBuildRef = useRef(codeBuild);
+  codeBuildRef.current = codeBuild;
+  const standardDeployRef = useRef(standardDeploy);
+  standardDeployRef.current = standardDeploy;
+
   // ─── Reset on Open ───────────────────────────────────────────────
 
   useEffect(() => {
@@ -76,10 +83,10 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       }
     }
     return () => {
-      codeBuild.cleanup();
-      standardDeploy.cleanup();
+      codeBuildRef.current.cleanup();
+      standardDeployRef.current.cleanup();
     };
-  }, [open, providers, project.id, codeBuild, standardDeploy]);
+  }, [open, providers, project.id]);
 
   // ─── Sync Analysis ───────────────────────────────────────────────
 

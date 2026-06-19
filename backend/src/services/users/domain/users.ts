@@ -37,18 +37,7 @@ export async function createUser(params: CreateUserParams) {
 
   // Validate role upfront if provided to prevent orphaned auth/user records on failure
   if (roleId) {
-    const { data: targetRole, error: roleLookupError } = await supabaseAdmin
-      .from("roles")
-      .select("id,system_key")
-      .eq("id", roleId)
-      .eq("organization_id", tenantId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (roleLookupError) throw new UsersError("Failed to look up role", "internal");
-    if (!targetRole) throw new UsersError("Role not found", "bad_request");
-    if (!canManageRole(resolvedAuth, targetRole.system_key)) {
-      throw new UsersError("Cannot assign a role at or above your own level", "forbidden");
-    }
+    await validateRoleAssignment(roleId, tenantId, resolvedAuth);
   }
 
   // Create user in Supabase Auth
@@ -265,9 +254,37 @@ export async function removeUser(params: RemoveUserParams) {
     .eq("organization_id", tenantId)
     .eq("user_id", userId);
   throwOnError(error, UsersError, { internalMsg: "Failed to remove user" });
+
+  // Remove the user from the tenant's users table so they no longer appear in listings
+  const { error: userDeleteError } = await supabaseAdmin
+    .from("users")
+    .delete()
+    .eq("id", userId)
+    .eq("organization_id", tenantId);
+  throwOnError(userDeleteError, UsersError, { internalMsg: "Failed to remove user record" });
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
+
+/**
+ * Validate that a role exists in the tenant, is not soft-deleted, and that the
+ * actor has sufficient hierarchy level to assign it. Returns the role row on success.
+ */
+async function validateRoleAssignment(roleId: string, tenantId: string, actor: ResolvedAuth) {
+  const { data: role, error } = await supabaseAdmin
+    .from("roles")
+    .select("id,system_key")
+    .eq("id", roleId)
+    .eq("organization_id", tenantId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new UsersError("Failed to look up role", "internal");
+  if (!role) throw new UsersError("Role not found", "bad_request");
+  if (!canManageRole(actor, role.system_key)) {
+    throw new UsersError("Cannot assign a role at or above your own level", "forbidden");
+  }
+  return role;
+}
 
 async function assignRoleToUser(
   userId: string,
@@ -275,18 +292,7 @@ async function assignRoleToUser(
   roleId: string,
   resolvedAuth: ResolvedAuth,
 ) {
-  const { data: targetRole, error: roleLookupError } = await supabaseAdmin
-    .from("roles")
-    .select("id,system_key")
-    .eq("id", roleId)
-    .eq("organization_id", tenantId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (roleLookupError) throw new UsersError("Failed to look up role", "internal");
-  if (!targetRole) throw new UsersError("Role not found", "bad_request");
-  if (!canManageRole(resolvedAuth, targetRole.system_key)) {
-    throw new UsersError("Cannot assign a role at or above your own level", "forbidden");
-  }
+  await validateRoleAssignment(roleId, tenantId, resolvedAuth);
 
   const { error: membershipError } = await supabaseAdmin.from("organization_memberships").insert({
     organization_id: tenantId,
@@ -330,18 +336,7 @@ async function updateUserRole(
   }
 
   // Validate target role
-  const { data: targetRole, error: roleLookupErr } = await supabaseAdmin
-    .from("roles")
-    .select("id,system_key")
-    .eq("id", roleId)
-    .eq("organization_id", tenantId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (roleLookupErr) throw new UsersError("Failed to look up role", "internal");
-  if (!targetRole) throw new UsersError("Role not found", "bad_request");
-  if (!canManageRole(resolvedAuth, targetRole.system_key)) {
-    throw new UsersError("Cannot assign a role at or above your own level", "forbidden");
-  }
+  await validateRoleAssignment(roleId, tenantId, resolvedAuth);
 
   const { error: updateError } = await supabaseAdmin
     .from("organization_memberships")
