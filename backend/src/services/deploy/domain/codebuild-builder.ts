@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * CodeBuild Builder — remote image build via AWS CodeBuild.
  *

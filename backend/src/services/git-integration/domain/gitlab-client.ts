@@ -44,9 +44,12 @@ export interface GitLabCommit {
   shortHash: string;
   message: string;
   author: string;
+  authorLogin: string;
   authorAvatar: string;
   date: string;
   url: string;
+  additions: number;
+  deletions: number;
 }
 
 export interface GitLabRepoStats {
@@ -63,33 +66,127 @@ export interface GitLabContributor {
   avatarUrl: string;
   commits: number;
   profileUrl: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface GitLabIssue {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  comments: number;
+  labels: Array<{ name: string; color: string }>;
+}
+
+export interface GitLabPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  draft: boolean;
 }
 
 export async function listCommits(
   connection: ConnectionLike,
-  params: { owner: string; repo: string; branch: string; limit: number },
+  params: { owner: string; repo: string; branch: string; limit: number; includeStats?: boolean },
 ): Promise<GitLabCommit[]> {
   const baseUrl = getBaseUrl(connection);
   const headers = getHeaders(connection);
   const project = encodeProjectPath(params.owner, params.repo);
-  const { branch, limit } = params;
+  const { branch, limit, includeStats } = params;
 
+  const statsParam = includeStats ? "&with_stats=true" : "";
   const res = await fetch(
-    `${baseUrl}/api/v4/projects/${project}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=${limit}`,
+    `${baseUrl}/api/v4/projects/${project}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=${limit}${statsParam}`,
     { headers },
   );
   assertOk(res, `listCommits ${params.owner}/${params.repo}`);
 
   const data = (await res.json()) as Array<Record<string, unknown>>;
-  return data.map((commit) => ({
-    hash: String(commit.id ?? ""),
-    shortHash: String(commit.short_id ?? "").slice(0, 7) || String(commit.id ?? "").slice(0, 7),
-    message: String(commit.title ?? "").split("\n")[0],
-    author: String(commit.author_name ?? ""),
-    authorAvatar: "",
-    date: String(commit.committed_date ?? commit.authored_date ?? ""),
-    url: String(commit.web_url ?? ""),
-  }));
+  return data.map((commit) => {
+    const stats = (commit.stats ?? {}) as { additions?: number; deletions?: number };
+    return {
+      hash: String(commit.id ?? ""),
+      shortHash: String(commit.short_id ?? "").slice(0, 7) || String(commit.id ?? "").slice(0, 7),
+      message: String(commit.title ?? "").split("\n")[0],
+      author: String(commit.author_name ?? ""),
+      authorLogin: String(commit.author_username ?? ""),
+      authorAvatar: "",
+      date: String(commit.committed_date ?? commit.authored_date ?? ""),
+      url: String(commit.web_url ?? ""),
+      additions: Number(stats.additions ?? 0),
+      deletions: Number(stats.deletions ?? 0),
+    };
+  });
+}
+
+export async function listIssues(
+  connection: ConnectionLike,
+  params: { owner: string; repo: string; limit?: number },
+): Promise<GitLabIssue[]> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const project = encodeProjectPath(params.owner, params.repo);
+  const { limit = 10 } = params;
+
+  const res = await fetch(
+    `${baseUrl}/api/v4/projects/${project}/issues?state=opened&per_page=${limit}&order_by=created_at&sort=desc`,
+    { headers },
+  );
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as Array<Record<string, unknown>>;
+  return data.map((issue) => {
+    const author = (issue.author ?? {}) as Record<string, unknown>;
+    return {
+      number: Number(issue.iid ?? 0),
+      title: String(issue.title ?? ""),
+      url: String(issue.web_url ?? ""),
+      author: String(author.name ?? author.username ?? ""),
+      authorAvatar: String(author.avatar_url ?? ""),
+      createdAt: String(issue.created_at ?? ""),
+      comments: Number(issue.user_notes_count ?? 0),
+      labels: (Array.isArray(issue.labels) ? (issue.labels as string[]) : []).map((name) => ({
+        name: String(name),
+        color: "",
+      })),
+    };
+  });
+}
+
+export async function listPullRequests(
+  connection: ConnectionLike,
+  params: { owner: string; repo: string; limit?: number },
+): Promise<GitLabPullRequest[]> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const project = encodeProjectPath(params.owner, params.repo);
+  const { limit = 10 } = params;
+
+  const res = await fetch(
+    `${baseUrl}/api/v4/projects/${project}/merge_requests?state=opened&per_page=${limit}&order_by=created_at&sort=desc`,
+    { headers },
+  );
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as Array<Record<string, unknown>>;
+  return data.map((mr) => {
+    const author = (mr.author ?? {}) as Record<string, unknown>;
+    return {
+      number: Number(mr.iid ?? 0),
+      title: String(mr.title ?? ""),
+      url: String(mr.web_url ?? ""),
+      author: String(author.name ?? author.username ?? ""),
+      authorAvatar: String(author.avatar_url ?? ""),
+      createdAt: String(mr.created_at ?? ""),
+      draft: Boolean(mr.draft ?? mr.work_in_progress ?? false),
+    };
+  });
 }
 
 export async function getRepoInfo(
@@ -210,6 +307,8 @@ export async function getContributors(
       avatarUrl: resolvedMember?.avatar_url ?? "",
       commits: Number(contributor.commits ?? 0),
       profileUrl,
+      additions: Number(contributor.additions ?? 0),
+      deletions: Number(contributor.deletions ?? 0),
     };
   });
 }

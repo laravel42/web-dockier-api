@@ -2,6 +2,7 @@ import type { Project, RepoStats } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import { timeAgo } from "../../../utils/timeAgo";
 import GitCommitIcon from "../../../components/icons/outlined/GitCommitIcon";
+import SourceControlBadge from "../../../components/SourceControlBadge";
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 
 interface Props {
@@ -17,6 +18,14 @@ const templateDescriptions: Record<string, string> = {
 
 function labelCls() {
   return "text-xs text-text-muted";
+}
+
+function detectProvider(repo: string): string {
+  if (!repo) return "git";
+  if (repo.includes("github")) return "github";
+  if (repo.includes("gitlab")) return "gitlab";
+  if (repo.includes("bitbucket")) return "bitbucket";
+  return "git";
 }
 
 function valueLinkCls() {
@@ -62,38 +71,19 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
         <div>
           <p className={labelCls()}>Remote</p>
           {project.repository ? (
-            <a href={project.repository} target="_blank" rel="noopener noreferrer" className={valueLinkCls()}>
-              {project.repository}
+            <a
+              href={project.repository}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-700 transition-colors min-w-0"
+            >
+              <SourceControlBadge provider={detectProvider(project.repository)} showName={false} />
+              <span className="truncate">{project.repository}</span>
             </a>
           ) : (
             <p className="text-sm text-text-muted mt-0.5">No repository linked</p>
           )}
         </div>
-
-        <div>
-          <p className={labelCls()}>Branch</p>
-          {project.branch && project.repository ? (
-            <a
-              href={`${project.repository}/-/tree/${project.branch}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`${valueLinkCls()} w-fit`}
-            >
-              {project.branch}
-            </a>
-          ) : project.branch ? (
-            <p className="text-sm text-text-secondary mt-0.5">{project.branch}</p>
-          ) : (
-            <p className="text-sm text-text-muted mt-0.5">No branch selected</p>
-          )}
-        </div>
-
-        {stats?.language && (
-          <div>
-            <p className={labelCls()}>Primary language</p>
-            <p className="text-sm text-text-secondary mt-0.5">{stats.language}</p>
-          </div>
-        )}
 
         {stats?.lastCommitHash && (
           <div>
@@ -113,8 +103,18 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
                 )}
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted mt-0.5">
                   <span className="font-mono text-primary-500">{stats.lastCommitHash.substring(0, 7)}</span>
-                  {stats.lastCommitAuthor && <span>{stats.lastCommitAuthor}</span>}
-                  {stats.lastCommitDate && <span>{timeAgo(stats.lastCommitDate)}</span>}
+                  {stats.lastCommitAuthor && (
+                    <>
+                      <span>·</span>
+                      <span>{stats.lastCommitAuthor}</span>
+                    </>
+                  )}
+                  {stats.lastCommitDate && (
+                    <>
+                      <span>·</span>
+                      <span>{timeAgo(stats.lastCommitDate)}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -122,7 +122,7 @@ export default function RepoInfoCard({ project, stats, badges, allBadges }: Prop
         )}
 
         {displayBadges && displayBadges.length > 0 && (
-          <div className="mt-auto pt-3 border-t border-border">
+          <div className="mt-auto pt-3 border-t border-border min-h-15">
             <p className={`${labelCls()} mb-2`}>Tech stack</p>
             <ProjectTechBadges badges={displayBadges} limit={8} />
           </div>

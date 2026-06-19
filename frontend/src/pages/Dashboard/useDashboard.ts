@@ -43,6 +43,20 @@ export function useDashboard() {
   const projectMap: Record<string, Project> = {};
   for (const p of projects) projectMap[p.id] = p;
 
+  // Most recent known commit per project, derived from loaded deploys/scans.
+  // Used as a fallback for records that have no commit of their own (e.g. queued/failed).
+  const commitByProject: Record<string, { commit: string; ts: number }> = {};
+  const considerCommit = (projectId: string, commit: string, when: string) => {
+    if (!projectId || !commit) return;
+    const ts = Date.parse(when) || 0;
+    const existing = commitByProject[projectId];
+    if (!existing || ts > existing.ts) commitByProject[projectId] = { commit, ts };
+  };
+  for (const d of deploys) considerCommit(d.projectId, d.commitHash, d.updatedAt || d.createdAt);
+  for (const s of scans) considerCommit(s.projectId, s.commitSha, s.updatedAt || s.createdAt);
+  const fallbackCommitByProject: Record<string, string> = {};
+  for (const [pid, v] of Object.entries(commitByProject)) fallbackCommitByProject[pid] = v.commit;
+
   return {
     navigate,
     projects,
@@ -58,5 +72,6 @@ export function useDashboard() {
     recentDeploys,
     recentScans,
     projectMap,
+    fallbackCommitByProject,
   };
 }

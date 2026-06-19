@@ -34,7 +34,14 @@ export interface RepoStats {
   lastCommitHash: string;
   totalCommits: number;
   contributors: number;
-  topContributors: Array<{ name: string; avatarUrl: string; commits: number; profileUrl: string }>;
+  topContributors: Array<{
+    name: string;
+    avatarUrl: string;
+    commits: number;
+    profileUrl: string;
+    additions: number;
+    deletions: number;
+  }>;
 }
 
 export interface RepoMember {
@@ -55,9 +62,33 @@ export interface CommitInfo {
   shortHash: string;
   message: string;
   author: string;
+  authorLogin?: string;
   authorAvatar?: string;
   date: string;
   url?: string;
+  additions?: number;
+  deletions?: number;
+}
+
+export interface RepoIssue {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  comments: number;
+  labels: Array<{ name: string; color: string }>;
+}
+
+export interface RepoPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  draft: boolean;
 }
 
 // ─── Repo analysis (GET /git/connections/:id/repo-analyze) ───

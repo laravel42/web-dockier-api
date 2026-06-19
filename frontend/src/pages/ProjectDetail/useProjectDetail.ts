@@ -10,7 +10,7 @@ import {
 } from "../../utils/projectBadgeCache";
 import { getErrorMessage } from "../../utils/errors";
 import { parseApiTimestamp } from "../../utils/timeAgo";
-import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo, Scan } from "../../types";
+import type { Project, Deployment as DeployInfo, Provider as ProviderInfo, RepoStats, CommitInfo, Scan, RepoIssue, RepoPullRequest } from "../../types";
 import type { RepoAnalysis } from "../../components/DeployWizard";
 
 // ─── Analysis cache (survives navigation within session) ───
@@ -83,8 +83,7 @@ export function useProjectDetail() {
   const [pullLog, setPullLog] = useState<string[] | null>(null);
   const [pullLoading, setPullLoading] = useState(false);
 
-  // Branch modal
-  const [showBranchModal, setShowBranchModal] = useState(false);
+  // Branch selector
   const [branchList, setBranchList] = useState<string[]>([]);
   const [branchLoading, setBranchLoading] = useState(false);
   const [branchSearch, setBranchSearch] = useState("");
@@ -106,18 +105,21 @@ export function useProjectDetail() {
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsError, setCommitsError] = useState("");
 
+  // Open issues
+  const [openIssues, setOpenIssues] = useState<RepoIssue[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+  const [issuesError, setIssuesError] = useState("");
+
+  // Pull requests
+  const [pullRequests, setPullRequests] = useState<RepoPullRequest[]>([]);
+  const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
+  const [pullRequestsError, setPullRequestsError] = useState("");
+
   // Providers
   const [allProviders, setAllProviders] = useState<ProviderInfo[]>([]);
 
   // Deploy wizard
   const [showDeployWizard, setShowDeployWizard] = useState(false);
-
-  // Destroy
-  const [destroying, setDestroying] = useState(false);
-  const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
-
-  // Last deploy
-  const [lastDeploy, setLastDeploy] = useState<DeployInfo | null>(null);
 
   // Recent deploys
   const [recentDeploys, setRecentDeploys] = useState<DeployInfo[]>([]);
@@ -194,6 +196,20 @@ export function useProjectDetail() {
               .catch((err: unknown) => setCommitsError(getErrorMessage(err, "Failed to load commits")))
               .finally(() => setCommitsLoading(false));
 
+            setIssuesLoading(true);
+            setIssuesError("");
+            gitApi.getOpenIssues(p.connectionId, parsed.owner, parsed.repo, 10)
+              .then((res) => setOpenIssues(res.issues))
+              .catch((err: unknown) => setIssuesError(getErrorMessage(err, "Failed to load issues")))
+              .finally(() => setIssuesLoading(false));
+
+            setPullRequestsLoading(true);
+            setPullRequestsError("");
+            gitApi.getPullRequests(p.connectionId, parsed.owner, parsed.repo, 10)
+              .then((res) => setPullRequests(res.pullRequests))
+              .catch((err: unknown) => setPullRequestsError(getErrorMessage(err, "Failed to load pull requests")))
+              .finally(() => setPullRequestsLoading(false));
+
             setAnalysisLoading(true);
             setAnalysisError("");
             const cacheKey = `${parsed.owner}/${parsed.repo}:${p.branch || "main"}`;
@@ -223,14 +239,13 @@ export function useProjectDetail() {
         const match = res.deployments
           .filter((d: DeployInfo) => d.projectId === project.id)
           .sort((a, b) => parseApiTimestamp(b.createdAt).getTime() - parseApiTimestamp(a.createdAt).getTime());
-        setLastDeploy(match.length > 0 ? match[0] : null);
         setRecentDeploys(match.slice(0, 5));
       })
       .catch(() => {});
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchLastDeploy(); }, [project]);
+  useEffect(() => { fetchLastDeploy(); }, [project?.id]);
 
   const fetchRecentScans = () => {
     if (!projectId) return;
@@ -294,9 +309,8 @@ export function useProjectDetail() {
     }
   };
 
-  const handleOpenBranchModal = async () => {
+  const loadBranches = async () => {
     if (!project) return;
-    setShowBranchModal(true);
     setBranchSearch("");
     setBranchLoading(true);
     try {
@@ -324,33 +338,15 @@ export function useProjectDetail() {
       gitApi.invalidateStatsCache(repoKey).catch(() => {});
     }
     await projectsApi.update(projectId, { branch });
-    setShowBranchModal(false);
     window.location.reload();
   };
 
-  const handleDestroy = async () => {
-    if (!lastDeploy) return;
-    setDestroying(true);
-    try {
-      const res = await deployApi.destroyDeployment(lastDeploy.id);
-      if (res.success) {
-        setLastDeploy({ ...lastDeploy, status: "destroyed", appUrl: "" });
-        fetchLastDeploy();
-      } else {
-        setError(res.message);
-      }
-    } catch (e: unknown) {
-      setError((e as Error).message || "Failed to destroy deployment");
-    }
-    setDestroying(false);
-  };
-
   return {
-    project, loading, error,
+    project, setProject, loading, error,
     navigate,
     // Header
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
-    handleDelete, handlePullOrigin, handleOpenBranchModal,
+    handleDelete, handlePullOrigin,
     handleUpdateName, nameSaving, nameError,
     // Deploy wizard
     showDeployWizard, setShowDeployWizard,
@@ -371,11 +367,26 @@ export function useProjectDetail() {
         gitApi.invalidateStackCache(repoKey, project.branch || "main").catch(() => {}),
         gitApi.invalidateStatsCache(repoKey, project.branch || "main").catch(() => {}),
       ]);
-      // Re-run analysis
+      // Re-run analysis. Merge over the previous result so a degraded re-run
+      // (e.g. AI sections or dependencies missing from the response) doesn't
+      // wipe content that other tabs are already showing.
       setAnalysisLoading(true);
       setAnalysisError("");
       gitApi.analyzeRepo(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, "openai", project.id)
-        .then((res) => { setCachedAnalysis(cacheKey, res); setAnalysis(res); })
+        .then((res) => {
+          setAnalysis((prev) => {
+            const merged: RepoAnalysis = prev
+              ? {
+                  ...prev,
+                  ...res,
+                  aiAnalysis: res.aiAnalysis ?? prev.aiAnalysis,
+                  dependencies: res.dependencies ?? prev.dependencies,
+                }
+              : res;
+            setCachedAnalysis(cacheKey, merged);
+            return merged;
+          });
+        })
         .catch((err: unknown) => setAnalysisError((err as Error).message || "Failed to analyze repo"))
         .finally(() => setAnalysisLoading(false));
       // Re-run stack analysis in background
@@ -387,17 +398,18 @@ export function useProjectDetail() {
     badges, allBadges,
     // Recent commits
     recentCommits, commitsLoading, commitsError,
-    // Branch modal
-    showBranchModal, setShowBranchModal,
+    // Open issues
+    openIssues, issuesLoading, issuesError,
+    // Pull requests
+    pullRequests, pullRequestsLoading, pullRequestsError,
+    // Branch selector
+    loadBranches,
     branchList, branchLoading, branchSearch, setBranchSearch,
     handleSwitchBranch,
     // Pull log
     pullLog, setPullLog, pullLoading,
-    // Last deploy
-    lastDeploy,
     // Recent deploys
     recentDeploys,
     recentScans,
-    destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
   };
 }

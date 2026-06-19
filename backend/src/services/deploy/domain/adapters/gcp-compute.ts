@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { join } from "node:path";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import {

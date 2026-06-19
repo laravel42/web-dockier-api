@@ -3,7 +3,7 @@ import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { inputCls, btnPrimary, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, btnPrimary, readonlyFieldCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -105,11 +105,13 @@ export default function SshKeysTab() {
               <p className="text-sm text-text">{keyType(viewingKey.publicKey)}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
+              <label htmlFor="ssh-view-pubkey" className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
               <textarea
+                id="ssh-view-pubkey"
                 readOnly
+                aria-readonly="true"
                 value={viewingKey.publicKey}
-                className={`${inputCls} h-28 py-2.5 font-mono text-xs resize-none bg-secondary-50 text-text-muted cursor-default`}
+                className={`${inputCls} ${readonlyFieldCls} h-28 py-2.5 font-mono text-xs resize-none`}
               />
             </div>
             {canManage && (

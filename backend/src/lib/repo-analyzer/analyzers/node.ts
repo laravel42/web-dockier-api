@@ -4,8 +4,17 @@ import type { RepoConfig } from "../types.js";
 import { NATIVE_DEPS_MAP } from "../constants.js";
 import { cleanVersion } from "../utils.js";
 
+interface NodePackageJson {
+  engines?: { node?: string };
+  packageManager?: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  scripts?: { start?: string; build?: string; serve?: string };
+  main?: string;
+}
+
 export function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig) {
-  let pkg: Record<string, any>;
+  let pkg: NodePackageJson;
   try {
     pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf-8"));
   } catch { return; }
@@ -37,7 +46,7 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
   }
 
   // Framework detection from dependencies
-  const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
+  const allDeps: Record<string, string> = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
 
   const hasPayload = Object.keys(allDeps).some(
     (dep) => dep === "payload" || dep.startsWith("@payloadcms/"),

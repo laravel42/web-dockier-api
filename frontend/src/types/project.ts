@@ -9,6 +9,7 @@ export interface PostDeployCommand {
 
 export interface ProjectConfig {
   postDeployCommands?: PostDeployCommand[];
+  overviewBlocks?: Record<string, unknown>[];
 }
 
 export interface Project {
@@ -21,6 +22,7 @@ export interface Project {
   sourceType?: ProjectSourceType;
   template?: string;
   config?: ProjectConfig;
+  lastCommitHash?: string;
   createdAt: string;
 }
 

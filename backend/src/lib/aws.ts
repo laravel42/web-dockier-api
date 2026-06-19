@@ -51,16 +51,18 @@ export async function ensureS3Bucket(
     }
   }
 
-  const createParams: { Bucket: string; CreateBucketConfiguration?: { LocationConstraint: string } } = {
+  const createParams: import("@aws-sdk/client-s3").CreateBucketCommandInput = {
     Bucket: bucketName,
   };
   if (region !== "us-east-1") {
-    createParams.CreateBucketConfiguration = { LocationConstraint: region };
+    createParams.CreateBucketConfiguration = {
+      LocationConstraint: region as import("@aws-sdk/client-s3").BucketLocationConstraint,
+    };
   }
 
   try {
      
-    await s3.send(new CreateBucketCommand(createParams as any));
+    await s3.send(new CreateBucketCommand(createParams));
   } catch (err: unknown) {
     if (!isS3BucketAlreadyOwnedError(err)) {
       throw err;

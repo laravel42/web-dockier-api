@@ -1,6 +1,6 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import { cardInteractiveCls, chipCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import { cardInteractiveCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import type { Project, TechBadgeInfo } from "../../../types";
 
@@ -34,12 +34,7 @@ export default function EmptyProjectCard({ project, projectId, badges, badgeLoad
           <span className="size-2 rounded-full shrink-0 bg-secondary-400" />
           <span className="text-xs text-text-muted">Not scanned yet</span>
         </div>
-        {project?.branch && (
-          <span className={chipCls}>
-            <LinkIcon className="size-3" strokeWidth={2} />
-            {project.branch}
-          </span>
-        )}
+        {project?.branch && <BranchCommitLabel branch={project.branch} onClick={onSelect} />}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -41,6 +42,15 @@ function needsContributorProfileRefresh(stats: RepoStats, provider: string): boo
   if (provider !== "gitlab" && provider !== "gitlab_self_hosted") return false;
   if (!stats.topContributors?.length) return false;
   return stats.topContributors.every((contributor) => !contributor.profileUrl);
+}
+
+/** Older cache entries predate the additions/deletions fields; refetch them. */
+function needsContributorStatsRefresh(stats: RepoStats): boolean {
+  if (!stats.topContributors?.length) return false;
+  return stats.topContributors.some(
+    (contributor) =>
+      typeof contributor.additions !== "number" || typeof contributor.deletions !== "number",
+  );
 }
 
 function throwProviderError(app: FastifyInstance, error: unknown): never {
@@ -470,9 +480,12 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
                 shortHash: z.string(),
                 message: z.string(),
                 author: z.string(),
+                authorLogin: z.string(),
                 authorAvatar: z.string(),
                 date: z.string(),
                 url: z.string(),
+                additions: z.number(),
+                deletions: z.number(),
               }),
             ),
           }),
@@ -485,8 +498,95 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       const limit = request.query.limit ?? 5;
       try {
-        const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit });
+        const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit, includeStats: true });
         return { commits };
+      } catch (error) {
+        throwProviderError(app, error);
+      }
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/open-issues",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get open issues",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          limit: z.coerce.number().int().positive().max(30).optional(),
+        }),
+        response: {
+          200: z.object({
+            issues: z.array(
+              z.object({
+                number: z.number(),
+                title: z.string(),
+                url: z.string(),
+                author: z.string(),
+                authorAvatar: z.string(),
+                createdAt: z.string(),
+                comments: z.number(),
+                labels: z.array(z.object({ name: z.string(), color: z.string() })),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const limit = request.query.limit ?? 10;
+      try {
+        const issues = await getGitProvider(conn).listIssues({ owner: request.query.owner, repo: request.query.repo, limit });
+        return { issues };
+      } catch (error) {
+        throwProviderError(app, error);
+      }
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/pull-requests",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get open pull/merge requests",
+        params: z.object({ connectionId: z.string().uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          limit: z.coerce.number().int().positive().max(30).optional(),
+        }),
+        response: {
+          200: z.object({
+            pullRequests: z.array(
+              z.object({
+                number: z.number(),
+                title: z.string(),
+                url: z.string(),
+                author: z.string(),
+                authorAvatar: z.string(),
+                createdAt: z.string(),
+                draft: z.boolean(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.auth!;
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const limit = request.query.limit ?? 10;
+      try {
+        const pullRequests = await getGitProvider(conn).listPullRequests({ owner: request.query.owner, repo: request.query.repo, limit });
+        return { pullRequests };
       } catch (error) {
         throwProviderError(app, error);
       }
@@ -592,7 +692,14 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
             totalCommits: z.number(),
             contributors: z.number(),
             topContributors: z.array(
-              z.object({ name: z.string(), avatarUrl: z.string(), commits: z.number(), profileUrl: z.string() }),
+              z.object({
+                name: z.string(),
+                avatarUrl: z.string(),
+                commits: z.number(),
+                profileUrl: z.string(),
+                additions: z.number(),
+                deletions: z.number(),
+              }),
             ),
           }),
         },
@@ -609,7 +716,11 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
         if (cached.data?.result) {
           const parsed = typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
           const cachedStats = parsed as RepoStats;
-          if (!isPlaceholderStats(cachedStats) && !needsContributorProfileRefresh(cachedStats, conn.provider)) {
+          if (
+            !isPlaceholderStats(cachedStats) &&
+            !needsContributorProfileRefresh(cachedStats, conn.provider) &&
+            !needsContributorStatsRefresh(cachedStats)
+          ) {
             return parsed;
           }
         }

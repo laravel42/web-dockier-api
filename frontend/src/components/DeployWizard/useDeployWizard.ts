@@ -33,6 +33,11 @@ function getRepoString(repository: string): string {
   return parsed ? `${parsed.owner}/${parsed.repo}` : repository;
 }
 
+function analysisSyncKey(analysis: RepoAnalysis | null): string | null {
+  if (!analysis?.detectedServices?.length) return null;
+  return analysis.detectedServices.map((s) => s.type).join(",");
+}
+
 // ─── Hook ──────────────────────────────────────────────────────────
 
 interface UseDeployWizardParams {
@@ -51,78 +56,114 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const [tofuError, setTofuError] = useState("");
   const [deployError, setDeployError] = useState("");
 
-  const codeBuild = useCodeBuildPipeline();
-  const standardDeploy = useStandardDeploy();
+  const { start: startCodeBuild, cleanup: cleanupCodeBuild } = useCodeBuildPipeline();
+  const { start: startStandardDeploy, cleanup: cleanupStandardDeploy } = useStandardDeploy();
 
-  // Keep stable refs for cleanup so the "Reset on Open" effect doesn't
-  // depend on the hook return objects (which are new references each render).
-  const codeBuildRef = useRef(codeBuild);
-  codeBuildRef.current = codeBuild;
-  const standardDeployRef = useRef(standardDeploy);
-  standardDeployRef.current = standardDeploy;
+  const prevOpenRef = useRef(false);
+  const configLoadedRef = useRef(false);
+  const analysisSyncedKeyRef = useRef<string | null>(null);
+  const cleanupCodeBuildRef = useRef(cleanupCodeBuild);
+  const cleanupStandardDeployRef = useRef(cleanupStandardDeploy);
+  cleanupCodeBuildRef.current = cleanupCodeBuild;
+  cleanupStandardDeployRef.current = cleanupStandardDeploy;
 
-  // ─── Reset on Open ───────────────────────────────────────────────
+  // ─── Reset on open (rising edge only) ────────────────────────────
 
   useEffect(() => {
-    if (open) {
-      setStep(0);
-      const defaultProvider = getDefaultProviderSelection(providers);
-      setState({ ...INITIAL_WIZARD_STATE, ...(defaultProvider ?? {}) });
-      setTofuLoading(false);
-      setTofuError("");
-      setDeployError("");
+    const justOpened = open && !prevOpenRef.current;
+    const justClosed = !open && prevOpenRef.current;
+    prevOpenRef.current = open;
 
-      // Load saved post-deploy commands from project config
-      if (project.id) {
-        projectsApi.get(project.id).then(p => {
-          const saved = p.config?.postDeployCommands;
-          if (saved?.length) {
-            setState(prev => ({ ...prev, postDeployCommands: saved }));
-          }
-        }).catch((err) => console.warn("[deploy] Failed to load project config:", err));
-      }
+    if (justClosed) {
+      configLoadedRef.current = false;
+      analysisSyncedKeyRef.current = null;
+      cleanupCodeBuildRef.current();
+      cleanupStandardDeployRef.current();
+      return;
     }
-    return () => {
-      codeBuildRef.current.cleanup();
-      standardDeployRef.current.cleanup();
-    };
-  }, [open, providers, project.id]);
+
+    if (!justOpened) return;
+
+    setStep(0);
+    setTofuLoading(false);
+    setTofuError("");
+    setDeployError("");
+    configLoadedRef.current = false;
+    analysisSyncedKeyRef.current = null;
+
+    const defaultProvider = getDefaultProviderSelection(providers);
+    setState({ ...INITIAL_WIZARD_STATE, ...(defaultProvider ?? {}) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only on open; providers load in separate effect
+  }, [open]);
+
+  // ─── Default provider when providers load after open ─────────────
+
+  useEffect(() => {
+    if (!open) return;
+    const defaultProvider = getDefaultProviderSelection(providers);
+    if (!defaultProvider) return;
+    setState((prev) => {
+      if (prev.selectedProviderId) return prev;
+      return { ...prev, ...defaultProvider };
+    });
+  }, [open, providers]);
+
+  // ─── Load saved post-deploy commands (once per open) ─────────────
+
+  useEffect(() => {
+    if (!open || !project.id || configLoadedRef.current) return;
+    configLoadedRef.current = true;
+
+    projectsApi.get(project.id)
+      .then((p) => {
+        const saved = p.config?.postDeployCommands;
+        if (saved?.length) {
+          setState((prev) => ({ ...prev, postDeployCommands: saved }));
+        }
+      })
+      .catch((err) => console.warn("[deploy] Failed to load project config:", err));
+  }, [open, project.id]);
 
   // ─── Sync Analysis ───────────────────────────────────────────────
 
   useEffect(() => {
-    if (open && analysis?.detectedServices?.length) {
-      setState(prev => {
-        if (Object.keys(prev.servicesModes).length > 0) return prev;
+    if (!open) return;
 
-        const envVars = prev.envVars.length > 0
-          ? prev.envVars
-          : normalizeEnvVars(analysis.aiAnalysis?.envVars).map(entry => {
-              const eqIdx = entry.indexOf("=");
-              return eqIdx >= 0
-                ? { name: entry.slice(0, eqIdx), value: entry.slice(eqIdx + 1) }
-                : { name: entry, value: "" };
-            });
+    const syncKey = analysisSyncKey(analysis);
+    if (!syncKey || syncKey === analysisSyncedKeyRef.current) return;
+    analysisSyncedKeyRef.current = syncKey;
 
-        const serviceTypes = analysis.detectedServices.map(s => s.type);
-        const detection = detectServiceModes(envVars, serviceTypes);
-        const modes: Record<string, "vps" | "managed"> = {};
-        const hints: Record<string, string> = {};
-        for (const svc of analysis.detectedServices) {
-          const result = detection[svc.type];
-          modes[svc.type] = result?.mode || "vps";
-          if (result?.hint) hints[svc.type] = result.hint;
-        }
+    setState((prev) => {
+      if (Object.keys(prev.servicesModes).length > 0) return prev;
+      if (!analysis?.detectedServices?.length) return prev;
 
-        const rawCommands = analysis.aiAnalysis?.postDeployCommands;
-        const commandsList = Array.isArray(rawCommands) ? rawCommands.filter((c): c is string => typeof c === "string") : [];
-        const postDeployCommands = prev.postDeployCommands.length > 0
-          ? prev.postDeployCommands
-          : commandsList.map(cmd => ({ command: cmd, enabled: true, continueOnFailure: false }));
+      const envVars = prev.envVars.length > 0
+        ? prev.envVars
+        : normalizeEnvVars(analysis.aiAnalysis?.envVars).map((entry) => {
+            const eqIdx = entry.indexOf("=");
+            return eqIdx >= 0
+              ? { name: entry.slice(0, eqIdx), value: entry.slice(eqIdx + 1) }
+              : { name: entry, value: "" };
+          });
 
-        return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars, postDeployCommands };
-      });
-    }
+      const serviceTypes = analysis.detectedServices.map((s) => s.type);
+      const detection = detectServiceModes(envVars, serviceTypes);
+      const modes: Record<string, "vps" | "managed"> = {};
+      const hints: Record<string, string> = {};
+      for (const svc of analysis.detectedServices) {
+        const result = detection[svc.type];
+        modes[svc.type] = result?.mode || "vps";
+        if (result?.hint) hints[svc.type] = result.hint;
+      }
+
+      const rawCommands = analysis.aiAnalysis?.postDeployCommands;
+      const commandsList = Array.isArray(rawCommands) ? rawCommands.filter((c): c is string => typeof c === "string") : [];
+      const postDeployCommands = prev.postDeployCommands.length > 0
+        ? prev.postDeployCommands
+        : commandsList.map((cmd) => ({ command: cmd, enabled: true, continueOnFailure: false }));
+
+      return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars, postDeployCommands };
+    });
   }, [open, analysis]);
 
   // ─── Generate Script ─────────────────────────────────────────────
@@ -173,6 +214,9 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
   // ─── Start Deployment ────────────────────────────────────────────
 
+  const onDeployCompleteRef = useRef(onDeployComplete);
+  onDeployCompleteRef.current = onDeployComplete;
+
   const startDeploy = useCallback(async () => {
     if (!project || !state.selectedProviderId) return;
     // Guard against double-click: if already deploying, skip
@@ -194,31 +238,31 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       const isCodeBuild = state.buildMethod === "codebuild" && project.sourceType !== "template";
 
       if (isCodeBuild) {
-        await codeBuild.start({
+        await startCodeBuild({
           state,
           project,
           analysis,
           repo,
           onStateUpdate: setState,
           onError: setDeployError,
-          onComplete: onDeployComplete,
+          onComplete: () => onDeployCompleteRef.current?.(),
         });
       } else {
-        await standardDeploy.start({
+        await startStandardDeploy({
           state,
           project,
           analysis,
           repo,
           onStateUpdate: setState,
           onError: setDeployError,
-          onComplete: onDeployComplete,
+          onComplete: () => onDeployCompleteRef.current?.(),
         });
       }
     } catch (err: unknown) {
       setDeployError(err instanceof Error ? err.message : "Failed to start deployment");
       setState(prev => ({ ...prev, deployStatus: "failed" }));
     }
-  }, [state, project, analysis, onDeployComplete, codeBuild, standardDeploy]);
+  }, [state, project, analysis, startCodeBuild, startStandardDeploy]);
 
   // ─── Step Navigation ─────────────────────────────────────────────
 

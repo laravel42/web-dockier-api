@@ -35,7 +35,11 @@ export interface QueryErrorOptions {
  * service-specific error code unions that are subsets of BaseDomainErrorCode.
  */
  
-type DomainErrorConstructor<E extends Error> = new (message: string, code: any, cause?: unknown) => E;
+type DomainErrorConstructor<E extends Error, C extends string = string> = new (
+  message: string,
+  code: C,
+  cause?: unknown,
+) => E;
 
 /**
  * Throw a domain error if a Supabase query returned an error.
@@ -51,9 +55,9 @@ type DomainErrorConstructor<E extends Error> = new (message: string, code: any, 
  * throwOnError(error, ProjectsError, { notFoundMsg: "Project not found" });
  * ```
  */
-export function throwOnError<E extends Error>(
+export function throwOnError<E extends Error, C extends string>(
   error: PostgrestError | null,
-  ErrorClass: DomainErrorConstructor<E>,
+  ErrorClass: DomainErrorConstructor<E, C>,
   opts: QueryErrorOptions = {},
 ): void {
   if (!error) return;
@@ -61,12 +65,12 @@ export function throwOnError<E extends Error>(
   const { notFoundMsg = "Resource not found", internalMsg = "Database query failed", duplicateMsg } = opts;
 
   if (error.code === "PGRST116") {
-    throw new ErrorClass(notFoundMsg, "not_found", error);
+    throw new ErrorClass(notFoundMsg, "not_found" as C, error);
   }
   if (error.code === "23505" && duplicateMsg) {
-    throw new ErrorClass(duplicateMsg, "bad_request", error);
+    throw new ErrorClass(duplicateMsg, "bad_request" as C, error);
   }
-  throw new ErrorClass(internalMsg, "internal", error);
+  throw new ErrorClass(internalMsg, "internal" as C, error);
 }
 
 /**
@@ -81,13 +85,13 @@ export function throwOnError<E extends Error>(
  * const project = assertFound(data, ProjectsError, "Project not found");
  * ```
  */
-export function assertFound<T, E extends Error>(
+export function assertFound<T, E extends Error, C extends string>(
   data: T | null | undefined,
-  ErrorClass: DomainErrorConstructor<E>,
+  ErrorClass: DomainErrorConstructor<E, C>,
   notFoundMsg = "Resource not found",
 ): T {
   if (data === null || data === undefined) {
-    throw new ErrorClass(notFoundMsg, "not_found");
+    throw new ErrorClass(notFoundMsg, "not_found" as C);
   }
   return data;
 }
@@ -105,10 +109,10 @@ export function assertFound<T, E extends Error>(
  * });
  * ```
  */
-export function unwrapQuery<T, E extends Error>(
+export function unwrapQuery<T, E extends Error, C extends string>(
   data: T | null | undefined,
   error: PostgrestError | null,
-  ErrorClass: DomainErrorConstructor<E>,
+  ErrorClass: DomainErrorConstructor<E, C>,
   opts: QueryErrorOptions = {},
 ): T {
   throwOnError(error, ErrorClass, opts);
@@ -125,10 +129,10 @@ export function unwrapQuery<T, E extends Error>(
  * const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
  * ```
  */
-export function unwrapList<T, E extends Error>(
+export function unwrapList<T, E extends Error, C extends string>(
   data: T[] | null,
   error: PostgrestError | null,
-  ErrorClass: DomainErrorConstructor<E>,
+  ErrorClass: DomainErrorConstructor<E, C>,
   opts: QueryErrorOptions = {},
 ): T[] {
   throwOnError(error, ErrorClass, opts);
@@ -148,9 +152,9 @@ export function unwrapList<T, E extends Error>(
  * });
  * ```
  */
-export function throwOnMutationError<E extends Error>(
+export function throwOnMutationError<E extends Error, C extends string>(
   error: PostgrestError | null,
-  ErrorClass: DomainErrorConstructor<E>,
+  ErrorClass: DomainErrorConstructor<E, C>,
   opts: QueryErrorOptions = {},
 ): void {
   throwOnError(error, ErrorClass, opts);

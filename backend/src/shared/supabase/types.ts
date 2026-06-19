@@ -308,6 +308,7 @@ export type Database = {
           channel: string;
           title: string;
           message: string;
+          metadata: Record<string, unknown> | null;
           read: boolean;
           created_at: string;
         };
