@@ -202,6 +202,85 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
   );
 
   typed.get(
+    "/git/connections/:connectionId/open-issues",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get open issues",
+        params: z.object({ connectionId: z.uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          limit: z.coerce.number().int().positive().max(30).optional(),
+        }),
+        response: {
+          200: z.object({
+            issues: z.array(
+              z.object({
+                number: z.number(),
+                title: z.string(),
+                url: z.string(),
+                author: z.string(),
+                authorAvatar: z.string(),
+                createdAt: z.string(),
+                comments: z.number(),
+                labels: z.array(z.object({ name: z.string(), color: z.string() })),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const limit = request.query.limit ?? 10;
+      const issues = await getGitProvider(conn).listIssues({ owner: request.query.owner, repo: request.query.repo, limit });
+      return { issues };
+    },
+  );
+
+  typed.get(
+    "/git/connections/:connectionId/pull-requests",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get open pull/merge requests",
+        params: z.object({ connectionId: z.uuid() }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          limit: z.coerce.number().int().positive().max(30).optional(),
+        }),
+        response: {
+          200: z.object({
+            pullRequests: z.array(
+              z.object({
+                number: z.number(),
+                title: z.string(),
+                url: z.string(),
+                author: z.string(),
+                authorAvatar: z.string(),
+                createdAt: z.string(),
+                draft: z.boolean(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const limit = request.query.limit ?? 10;
+      const pullRequests = await getGitProvider(conn).listPullRequests({ owner: request.query.owner, repo: request.query.repo, limit });
+      return { pullRequests };
+    },
+  );
+
+  typed.get(
     "/git/connections/:connectionId/repo-stats",
     {
       preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-stats" })],
