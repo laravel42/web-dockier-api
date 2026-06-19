@@ -73,6 +73,7 @@ const mockGetDeployment = vi.fn();
 const mockGetDeploymentForDestroy = vi.fn();
 const mockGetDeploymentForWebhook = vi.fn();
 const mockUpdateDeploymentStatus = vi.fn();
+const mockCreateAndEnqueueDeployment = vi.fn();
 
 vi.mock("../domain/deployments.js", () => ({
   listDeployments: (...args: unknown[]) => mockListDeployments(...args),
@@ -80,6 +81,7 @@ vi.mock("../domain/deployments.js", () => ({
   getDeploymentForDestroy: (...args: unknown[]) => mockGetDeploymentForDestroy(...args),
   getDeploymentForWebhook: (...args: unknown[]) => mockGetDeploymentForWebhook(...args),
   updateDeploymentStatus: (...args: unknown[]) => mockUpdateDeploymentStatus(...args),
+  createAndEnqueueDeployment: (...args: unknown[]) => mockCreateAndEnqueueDeployment(...args),
 }));
 
 const mockCreateDeploymentRecord = vi.fn();
@@ -326,12 +328,23 @@ describe("POST /deploy/deployments", () => {
   it("creates deployment and enqueues job", async () => {
     setupPermissionMocks({ permissions: Object.values(PERMISSIONS) });
 
-    const providerRow = makeProviderRow();
-    mockGetProviderForTenant.mockResolvedValue(providerRow);
-
-    const deploymentRow = makeDeploymentRow();
-    mockCreateDeploymentRecord.mockResolvedValue(deploymentRow);
-    mockEnqueueDeployment.mockResolvedValue(undefined);
+    const deploymentResponse = {
+      id: TEST_DEPLOYMENT_ID,
+      providerId: TEST_PROVIDER_ID,
+      gitConnectionId: TEST_GIT_CONNECTION_ID,
+      projectId: "",
+      repo: "acme/my-app",
+      branch: "main",
+      status: "pending",
+      logs: "",
+      appUrl: "",
+      commitHash: "",
+      dockerImage: "",
+      deployStrategy: "managed",
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+    };
+    mockCreateAndEnqueueDeployment.mockResolvedValue(deploymentResponse);
 
     const res = await app.inject({
       method: "POST",
@@ -346,20 +359,35 @@ describe("POST /deploy/deployments", () => {
     expect(body.repo).toBe("acme/my-app");
     expect(body.status).toBe("pending");
 
-    // Verify tenant ownership check happened
-    expect(mockGetProviderForTenant).toHaveBeenCalledWith(TEST_PROVIDER_ID, TEST_TENANT_ID);
-
-    // Verify job was enqueued
-    expect(mockEnqueueDeployment).toHaveBeenCalledOnce();
-    const enqueueArg = mockEnqueueDeployment.mock.calls[0][0];
-    expect(enqueueArg.deploymentId).toBe(TEST_DEPLOYMENT_ID);
-    expect(enqueueArg.tenantId).toBe(TEST_TENANT_ID);
+    // Verify domain function was called with correct params
+    expect(mockCreateAndEnqueueDeployment).toHaveBeenCalledOnce();
+    const callArg = mockCreateAndEnqueueDeployment.mock.calls[0][0];
+    expect(callArg.tenantId).toBe(TEST_TENANT_ID);
+    expect(callArg.providerId).toBe(TEST_PROVIDER_ID);
+    expect(callArg.repo).toBe("acme/my-app");
+    expect(callArg.branch).toBe("main");
   });
 
   it("skips enqueue when skipPipeline is true", async () => {
     setupPermissionMocks({ permissions: Object.values(PERMISSIONS) });
-    mockGetProviderForTenant.mockResolvedValue(makeProviderRow());
-    mockCreateDeploymentRecord.mockResolvedValue(makeDeploymentRow());
+
+    const deploymentResponse = {
+      id: TEST_DEPLOYMENT_ID,
+      providerId: TEST_PROVIDER_ID,
+      gitConnectionId: TEST_GIT_CONNECTION_ID,
+      projectId: "",
+      repo: "acme/my-app",
+      branch: "main",
+      status: "pending",
+      logs: "",
+      appUrl: "",
+      commitHash: "",
+      dockerImage: "",
+      deployStrategy: "managed",
+      createdAt: "2025-01-01T00:00:00Z",
+      updatedAt: "2025-01-01T00:00:00Z",
+    };
+    mockCreateAndEnqueueDeployment.mockResolvedValue(deploymentResponse);
 
     const res = await app.inject({
       method: "POST",
@@ -369,7 +397,10 @@ describe("POST /deploy/deployments", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockEnqueueDeployment).not.toHaveBeenCalled();
+    // skipPipeline is passed to the domain function which handles the logic
+    expect(mockCreateAndEnqueueDeployment).toHaveBeenCalledOnce();
+    const callArg = mockCreateAndEnqueueDeployment.mock.calls[0][0];
+    expect(callArg.skipPipeline).toBe(true);
   });
 
   it("returns 400 for missing required fields", async () => {

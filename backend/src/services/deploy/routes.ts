@@ -7,12 +7,10 @@ import type { ServiceEntry } from "./types.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domain/planner.js";
 import { destroyDeployment } from "./domain/destroy.js";
-import { applyDeploymentWebhookUpdate, createDeploymentRecord } from "./domain/processor.js";
+import { applyDeploymentWebhookUpdate } from "./domain/processor.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveDeployTemplate } from "./domain/templates.js";
-import { enqueueDeployment } from "./domain/worker.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
-import { rowToDeployment } from "./domain/mappers.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
 import {
@@ -24,7 +22,7 @@ import {
   getProviderCredentials,
 } from "./domain/providers.js";
 import { listSshKeys, createSshKey, deleteSshKey } from "./domain/ssh-keys.js";
-import { listDeployments, getDeployment, getDeploymentForDestroy, getDeploymentForWebhook, updateDeploymentStatus } from "./domain/deployments.js";
+import { listDeployments, getDeployment, getDeploymentForDestroy, getDeploymentForWebhook, updateDeploymentStatus, createAndEnqueueDeployment } from "./domain/deployments.js";
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -248,62 +246,26 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      const full = await getProviderForTenant(request.body.providerId, auth.tenantId);
-      const providerRow = { id: full.id, organization_id: full.organization_id, provider: full.provider, region: full.region };
-
-      const payload = await createDeploymentRecord(
-        db,
-        {
-          tenantId: auth.tenantId,
-          providerId: request.body.providerId,
-          gitConnectionId: request.body.gitConnectionId,
-          projectId: request.body.projectId,
-          repo: request.body.repo,
-          branch: request.body.branch,
-          tofuScript: request.body.tofuScript,
-          techStack: request.body.techStack,
-          primaryLanguage: request.body.primaryLanguage,
-          hasDocker: request.body.buildMethod === "dockerfile",
-          deployStrategy: (request.body.deployStrategy as "vps" | "managed" | "static" | undefined) ?? "managed",
-          templateId: request.body.templateId,
-          buildMethod: request.body.buildMethod,
-          registryUrl: request.body.registryUrl,
-          skipPipeline: request.body.skipPipeline,
-          useRepoDockerfile: request.body.useRepoDockerfile,
-          services: request.body.services as ServiceEntry[] | undefined,
-        },
-        {
-          provider: providerRow.provider,
-          region: providerRow.region ?? null,
-        },
-      );
-
-      // Enqueue the deploy pipeline for background processing
-      if (!request.body.skipPipeline) {
-        await enqueueDeployment({
-          deploymentId: payload.id,
-          tenantId: auth.tenantId,
-          providerId: request.body.providerId,
-          gitConnectionId: request.body.gitConnectionId,
-          projectId: request.body.projectId,
-          repo: request.body.repo,
-          branch: request.body.branch,
-          tofuScript: payload.tofu_script || "",
-          techStack: request.body.techStack,
-          primaryLanguage: request.body.primaryLanguage,
-          hasDocker: request.body.buildMethod === "dockerfile",
-          deployStrategy: payload.deploy_strategy || "managed",
-          templateId: request.body.templateId,
-          buildMethod: request.body.buildMethod,
-          registryUrl: request.body.registryUrl,
-          envVars: request.body.envVars,
-          postDeployCommands: request.body.postDeployCommands,
-          services: request.body.services as Array<{ type: string; name: string; mode: string }> | undefined,
-          useRepoDockerfile: request.body.useRepoDockerfile,
-        });
-      }
-
-      return rowToDeployment(payload);
+      return await createAndEnqueueDeployment({
+        tenantId: auth.tenantId,
+        providerId: request.body.providerId,
+        gitConnectionId: request.body.gitConnectionId,
+        projectId: request.body.projectId,
+        repo: request.body.repo,
+        branch: request.body.branch,
+        tofuScript: request.body.tofuScript,
+        techStack: request.body.techStack,
+        primaryLanguage: request.body.primaryLanguage,
+        registryUrl: request.body.registryUrl,
+        deployStrategy: request.body.deployStrategy,
+        buildMethod: request.body.buildMethod,
+        useRepoDockerfile: request.body.useRepoDockerfile,
+        skipPipeline: request.body.skipPipeline,
+        templateId: request.body.templateId,
+        envVars: request.body.envVars,
+        services: request.body.services as ServiceEntry[] | undefined,
+        postDeployCommands: request.body.postDeployCommands,
+      });
     },
   );
 

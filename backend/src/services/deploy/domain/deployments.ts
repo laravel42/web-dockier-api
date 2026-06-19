@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
-import type { DeploymentRow } from "../types.js";
+import type { DeploymentRow, ServiceEntry } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
-import { DeployError } from "./providers.js";
+import { DeployError, getProviderForTenant } from "./providers.js";
+import { createDeploymentRecord } from "./processor.js";
+import { enqueueDeployment } from "./worker.js";
 
 export async function listDeployments(tenantId: string, providerId?: string) {
   let query = supabaseAdmin
@@ -76,4 +78,114 @@ export async function getDeploymentForWebhook(deploymentId: string): Promise<{ i
   }
 
   return data;
+}
+
+// ─── Create & Enqueue ──────────────────────────────────────────────
+
+export interface CreateDeploymentParams {
+  tenantId: string;
+  providerId: string;
+  gitConnectionId: string;
+  projectId?: string;
+  repo: string;
+  branch: string;
+  tofuScript?: string;
+  techStack?: string[];
+  primaryLanguage?: string;
+  registryUrl?: string;
+  deployStrategy?: string;
+  buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+  useRepoDockerfile?: boolean;
+  skipPipeline?: boolean;
+  templateId?: string;
+  envVars?: Array<{ name: string; value: string }>;
+  services?: ServiceEntry[];
+  postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure: boolean }>;
+}
+
+/**
+ * Orchestrates the full deployment creation flow:
+ * 1. Validates provider belongs to tenant
+ * 2. Creates the deployment record
+ * 3. Enqueues the deploy pipeline (unless skipPipeline is set)
+ *
+ * Returns the mapped deployment response object.
+ */
+export async function createAndEnqueueDeployment(params: CreateDeploymentParams) {
+  const {
+    tenantId,
+    providerId,
+    gitConnectionId,
+    projectId,
+    repo,
+    branch,
+    tofuScript,
+    techStack,
+    primaryLanguage,
+    registryUrl,
+    deployStrategy,
+    buildMethod,
+    useRepoDockerfile,
+    skipPipeline,
+    templateId,
+    envVars,
+    services,
+    postDeployCommands,
+  } = params;
+
+  // Validate provider ownership
+  const full = await getProviderForTenant(providerId, tenantId);
+  const providerRow = { provider: full.provider, region: full.region ?? null };
+
+  // Create the DB record
+  const payload = await createDeploymentRecord(
+    supabaseAdmin,
+    {
+      tenantId,
+      providerId,
+      gitConnectionId,
+      projectId,
+      repo,
+      branch,
+      tofuScript,
+      techStack,
+      primaryLanguage,
+      hasDocker: buildMethod === "dockerfile",
+      deployStrategy: (deployStrategy as "vps" | "managed" | "static" | undefined) ?? "managed",
+      templateId,
+      buildMethod,
+      registryUrl,
+      skipPipeline,
+      useRepoDockerfile,
+      services,
+    },
+    providerRow,
+  );
+
+  // Enqueue background pipeline
+  if (!skipPipeline) {
+    await enqueueDeployment({
+      deploymentId: payload.id,
+      tenantId,
+      providerId,
+      gitConnectionId,
+      projectId,
+      repo,
+      branch,
+      tofuScript: payload.tofu_script || "",
+      techStack,
+      primaryLanguage,
+      hasDocker: buildMethod === "dockerfile",
+      deployStrategy: payload.deploy_strategy || "managed",
+      templateId,
+      buildMethod,
+      registryUrl,
+      envVars,
+      postDeployCommands,
+      services: services as Array<{ type: string; name: string; mode: string }> | undefined,
+      useRepoDockerfile,
+    });
+  }
+
+  return rowToDeployment(payload);
 }
