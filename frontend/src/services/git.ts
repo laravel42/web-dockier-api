@@ -120,6 +120,27 @@ export const gitApi = {
       body: JSON.stringify({ connectionId, owner, repo, title, body, ...(assignee ? { assignee } : {}) }),
     }),
 
+  closeIssue: (connectionId: string, owner: string, repo: string, issueNumber: number) =>
+    request<{ success: boolean }>(`/git/connections/${connectionId}/issues/${issueNumber}/close`, {
+      method: "PATCH",
+      body: JSON.stringify({ owner, repo }),
+    }),
+
+  createBranch: (connectionId: string, owner: string, repo: string, branchName: string, baseBranch?: string) =>
+    request<{ ref: string; sha: string }>(`/git/connections/${connectionId}/branches`, {
+      method: "POST",
+      body: JSON.stringify({ owner, repo, branchName, ...(baseBranch ? { baseBranch } : {}) }),
+    }),
+
+  fixIssue: (connectionId: string, data: {
+    owner: string; repo: string; baseBranch: string;
+    issueNumber: number; issueTitle: string; issueBody: string;
+  }) =>
+    request<{ prUrl: string; prNumber: number; branchName: string; filesChanged: number; summary: string }>(
+      `/git/connections/${connectionId}/fix-issue`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
   getSensitiveData: (connectionId: string, owner: string, repo: string, branch?: string) =>
     request<{ sensitiveData: Array<{ entity: string; field: string; sensitivity: "personal" | "sensitive" | "secret"; reason: string }> }>(
       `/git/connections/${connectionId}/sensitive-data${buildQuery({ owner, repo, branch })}`

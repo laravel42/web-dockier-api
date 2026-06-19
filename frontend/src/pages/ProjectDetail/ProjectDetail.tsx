@@ -15,8 +15,13 @@ import RecentDeploys from "./sections/RecentDeploys";
 import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
 import PullLogModal from "./modals/PullLogModal";
+import IssueDetailModal from "./modals/IssueDetailModal";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
+import { useState } from "react";
+import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
+import { gitApi } from "../../services/api";
+import type { RepoIssue } from "../../types";
 
 export default function ProjectDetail() {
   const {
@@ -29,7 +34,7 @@ export default function ProjectDetail() {
     stats, statsLoading, statsError,
     badges, allBadges,
     recentCommits, commitsLoading, commitsError,
-    openIssues, issuesLoading, issuesError,
+    openIssues, setOpenIssues, issuesLoading, issuesError,
     pullRequests, pullRequestsLoading, pullRequestsError,
     loadBranches,
     branchList, branchLoading, branchSearch, setBranchSearch, handleSwitchBranch,
@@ -44,6 +49,35 @@ export default function ProjectDetail() {
       nameByLogin[c.authorLogin.toLowerCase()] = c.author;
     }
   }
+
+  // Issue detail modal state
+  const [selectedIssue, setSelectedIssue] = useState<RepoIssue | null>(null);
+  const [fixResult, setFixResult] = useState<{ prUrl: string; prNumber: number; summary: string; filesChanged: number } | null>(null);
+
+  const handleCloseIssue = async (issueNumber: number) => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    await gitApi.closeIssue(project.connectionId, parsed.owner, parsed.repo, issueNumber);
+    // Remove the closed issue from the list
+    setOpenIssues((prev) => prev.filter((i) => i.number !== issueNumber));
+  };
+
+  const handleFixWithAI = async (issue: RepoIssue) => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) return;
+    const baseBranch = project.branch || "main";
+    const result = await gitApi.fixIssue(project.connectionId, {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      baseBranch,
+      issueNumber: issue.number,
+      issueTitle: issue.title,
+      issueBody: issue.body,
+    });
+    setFixResult(result);
+  };
 
   const lastSuccessfulDeployUrl = recentDeploys.find(
     (d) => (d.status === "success" || d.status === "completed") && d.appUrl,
@@ -116,7 +150,7 @@ export default function ProjectDetail() {
 
       {project.connectionId && project.repository && (
         <>
-          <OpenIssues issues={openIssues} issuesLoading={issuesLoading} issuesError={issuesError} />
+          <OpenIssues issues={openIssues} issuesLoading={issuesLoading} issuesError={issuesError} onIssueClick={setSelectedIssue} />
           <PullRequests
             pullRequests={pullRequests}
             pullRequestsLoading={pullRequestsLoading}
@@ -152,6 +186,14 @@ export default function ProjectDetail() {
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />
 
       <PullLogModal pullLog={pullLog} pullLoading={pullLoading} onClose={() => setPullLog(null)} />
+
+      <IssueDetailModal
+        issue={selectedIssue}
+        onClose={() => { setSelectedIssue(null); setFixResult(null); }}
+        onCloseIssue={handleCloseIssue}
+        onFixWithAI={handleFixWithAI}
+        fixResult={fixResult}
+      />
     </div>
   );
 }

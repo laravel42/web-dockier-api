@@ -23,6 +23,8 @@ import {
   listIssues as ghListIssues,
   listPullRequests as ghListPullRequests,
   createIssue as ghCreateIssue,
+  closeIssue as ghCloseIssue,
+  createBranch as ghCreateBranch,
 } from "./github-client.js";
 import {
   listCommits as glListCommits,
@@ -83,6 +85,7 @@ export type RepoStats = {
 export interface RepoIssue {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;
@@ -153,6 +156,10 @@ export interface GitProviderClient {
   listPullRequests(query: ListQuery): Promise<RepoPullRequest[]>;
   /** Present only on providers that support issue creation. */
   createIssue?(input: IssueInput): Promise<IssueResult>;
+  /** Close an issue. Present only on providers that support issue management. */
+  closeIssue?(params: { owner: string; repo: string; issueNumber: number }): Promise<void>;
+  /** Create a branch from a base branch. Present only on providers that support branch creation. */
+  createBranch?(params: { owner: string; repo: string; branchName: string; baseBranch?: string }): Promise<{ ref: string; sha: string }>;
 }
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────────
@@ -236,6 +243,14 @@ class GitHubProvider implements GitProviderClient {
 
   createIssue(input: IssueInput): Promise<IssueResult> {
     return ghCreateIssue(this.conn, input);
+  }
+
+  closeIssue(params: { owner: string; repo: string; issueNumber: number }): Promise<void> {
+    return ghCloseIssue(this.conn, params);
+  }
+
+  createBranch(params: { owner: string; repo: string; branchName: string; baseBranch?: string }): Promise<{ ref: string; sha: string }> {
+    return ghCreateBranch(this.conn, params);
   }
 }
 

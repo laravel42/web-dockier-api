@@ -399,7 +399,7 @@ export function useProjectDetail() {
     // Recent commits
     recentCommits, commitsLoading, commitsError,
     // Open issues
-    openIssues, issuesLoading, issuesError,
+    openIssues, setOpenIssues, issuesLoading, issuesError,
     // Pull requests
     pullRequests, pullRequestsLoading, pullRequestsError,
     // Branch selector

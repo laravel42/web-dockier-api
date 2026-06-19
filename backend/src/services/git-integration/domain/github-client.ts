@@ -86,6 +86,7 @@ export interface GitHubCollaborator {
 export interface GitHubIssue {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;
@@ -345,6 +346,7 @@ export async function getContributors(
 interface GitHubIssueListApiItem {
   number?: number;
   title?: string;
+  body?: string | null;
   html_url?: string;
   created_at?: string;
   comments?: number;
@@ -378,6 +380,7 @@ export async function listIssues(
     .map((item) => ({
       number: item.number ?? 0,
       title: item.title ?? "",
+      body: item.body ?? "",
       url: item.html_url ?? "",
       author: item.user?.login ?? "",
       authorAvatar: item.user?.avatar_url ?? "",
@@ -470,4 +473,57 @@ export async function createIssue(
     issueUrl: data.html_url ?? "",
     issueNumber: data.number ?? 0,
   };
+}
+
+/**
+ * Close a GitHub issue by setting its state to "closed".
+ */
+export async function closeIssue(
+  connection: ConnectionLike,
+  params: { owner: string; repo: string; issueNumber: number },
+): Promise<void> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const { owner, repo, issueNumber } = params;
+
+  const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ state: "closed" }),
+  });
+  assertOk(res, `closeIssue ${owner}/${repo}#${issueNumber}`);
+}
+
+/**
+ * Create a branch from a given base (defaults to the repo's default branch HEAD).
+ */
+export async function createBranch(
+  connection: ConnectionLike,
+  params: { owner: string; repo: string; branchName: string; baseBranch?: string },
+): Promise<{ ref: string; sha: string }> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const { owner, repo, branchName, baseBranch } = params;
+
+  // Get the SHA of the base branch (default: main)
+  const base = baseBranch || "main";
+  const refRes = await fetch(`${baseUrl}/repos/${owner}/${repo}/git/ref/heads/${base}`, {
+    headers,
+  });
+  assertOk(refRes, `getBranchRef ${owner}/${repo}:${base}`);
+  const refData = (await refRes.json()) as { object: { sha: string } };
+  const sha = refData.object.sha;
+
+  // Create the new branch
+  const createRes = await fetch(`${baseUrl}/repos/${owner}/${repo}/git/refs`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ref: `refs/heads/${branchName}`,
+      sha,
+    }),
+  });
+  assertOk(createRes, `createBranch ${owner}/${repo}:${branchName}`);
+  const createData = (await createRes.json()) as { ref: string; object: { sha: string } };
+  return { ref: createData.ref, sha: createData.object.sha };
 }

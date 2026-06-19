@@ -13,6 +13,8 @@ import { fetchRepoFile, getRepoFileTree } from "../domain/provider-client.js";
 import { getGitProvider, type RepoStats } from "../domain/git-provider.js";
 import { parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
+import { fixIssueWithAI } from "../domain/fix-issue-ai.js";
+import { env } from "../../../shared/config.js";
 
 export async function registerRepositoryRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -220,6 +222,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
               z.object({
                 number: z.number(),
                 title: z.string(),
+                body: z.string(),
                 url: z.string(),
                 author: z.string(),
                 authorAvatar: z.string(),
@@ -348,6 +351,122 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         }, log);
       }
       return stats;
+    },
+  );
+
+  typed.patch(
+    "/git/connections/:connectionId/issues/:issueNumber/close",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-close-issue" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Close a Git issue",
+        params: z.object({ connectionId: z.uuid(), issueNumber: z.coerce.number().int() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+        response: { 200: z.object({ success: z.boolean() }) },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const provider = getGitProvider(conn);
+      if (!provider.closeIssue) {
+        throw app.httpErrors.notImplemented(`Close issue not supported for provider: ${conn.provider}`);
+      }
+      await provider.closeIssue({
+        owner: request.body.owner,
+        repo: request.body.repo,
+        issueNumber: request.params.issueNumber,
+      });
+      return { success: true };
+    },
+  );
+
+  typed.post(
+    "/git/connections/:connectionId/branches",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-create-branch" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Create a new branch from a base branch",
+        params: z.object({ connectionId: z.uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          branchName: z.string().min(1),
+          baseBranch: z.string().optional(),
+        }),
+        response: { 200: z.object({ ref: z.string(), sha: z.string() }) },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const provider = getGitProvider(conn);
+      if (!provider.createBranch) {
+        throw app.httpErrors.notImplemented(`Branch creation not supported for provider: ${conn.provider}`);
+      }
+      return await provider.createBranch({
+        owner: request.body.owner,
+        repo: request.body.repo,
+        branchName: request.body.branchName,
+        baseBranch: request.body.baseBranch,
+      });
+    },
+  );
+
+  typed.post(
+    "/git/connections/:connectionId/fix-issue",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-fix-issue" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Fix a Git issue using AI (creates branch, commits fix, opens PR)",
+        params: z.object({ connectionId: z.uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          baseBranch: z.string().default("main"),
+          issueNumber: z.number().int(),
+          issueTitle: z.string().min(1),
+          issueBody: z.string().default(""),
+        }),
+        response: {
+          200: z.object({
+            prUrl: z.string(),
+            prNumber: z.number(),
+            branchName: z.string(),
+            filesChanged: z.number(),
+            summary: z.string(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+
+      if (!env.OPENAI_API_KEY) {
+        throw app.httpErrors.serviceUnavailable("AI is not configured on this server");
+      }
+
+      try {
+        return await fixIssueWithAI(conn, {
+          owner: request.body.owner,
+          repo: request.body.repo,
+          baseBranch: request.body.baseBranch,
+          issueNumber: request.body.issueNumber,
+          issueTitle: request.body.issueTitle,
+          issueBody: request.body.issueBody,
+        }, env.OPENAI_API_KEY, env.OPENAI_MODEL);
+      } catch (err: unknown) {
+        request.log.error({ err }, "[AI-FixIssue] Pipeline failed");
+        const message = err instanceof Error ? err.message : "AI fix pipeline failed";
+        throw app.httpErrors.badRequest(message);
+      }
     },
   );
 }

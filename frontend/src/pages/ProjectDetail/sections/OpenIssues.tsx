@@ -9,6 +9,7 @@ interface Props {
   issues: RepoIssue[];
   issuesLoading: boolean;
   issuesError: string;
+  onIssueClick: (issue: RepoIssue) => void;
 }
 
 function Label({ name, color }: { name: string; color: string }) {
@@ -29,7 +30,7 @@ function Label({ name, color }: { name: string; color: string }) {
   );
 }
 
-export default function OpenIssues({ issues, issuesLoading, issuesError }: Props) {
+export default function OpenIssues({ issues, issuesLoading, issuesError, onIssueClick }: Props) {
   if (issuesLoading) {
     return (
       <div className="mb-8">
@@ -65,12 +66,11 @@ export default function OpenIssues({ issues, issuesLoading, issuesError }: Props
       ) : (
         <div className="space-y-2">
           {issues.map((issue) => (
-            <a
+            <button
               key={issue.number}
-              href={issue.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-start gap-3 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors"
+              type="button"
+              onClick={() => onIssueClick(issue)}
+              className="w-full text-left flex items-start gap-3 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors cursor-pointer"
             >
               <AlertCircleIcon className="size-4 text-emerald-500 mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1">
@@ -93,7 +93,7 @@ export default function OpenIssues({ issues, issuesLoading, issuesError }: Props
                   {issue.comments}
                 </span>
               )}
-            </a>
+            </button>
           ))}
         </div>
       )}
