@@ -115,23 +115,37 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border/40 rounded-lg border border-border/50">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/50 p-2 scrollbar-hide">
+        <div className="space-y-2">
         {deployments.map((deploy) => {
           const pk = providerKey(deploy.providerId);
+          const isInactive = deploy.status === "destroyed" || deploy.status === "failed";
+          const openDeploy = () => navigate(`/deploy/${deploy.id}`);
           return (
-          <button
+          <div
             key={deploy.id}
-            type="button"
-            onClick={() => navigate(`/deploy/${deploy.id}`)}
-            className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-card/60"
+            role="button"
+            tabIndex={0}
+            onClick={openDeploy}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openDeploy();
+              }
+            }}
+            className={`flex w-full cursor-pointer gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+              isInactive
+                ? "border-border/30 bg-secondary-50/20 hover:border-border/50 hover:bg-secondary-50/40"
+                : "border-border/40 bg-card/30 hover:border-border hover:bg-card/50"
+            }`}
           >
-            <span className={`size-2 shrink-0 rounded-full ${getStatusDotClass(deploy.status)}`} />
+            <span className={`mt-1.5 size-2 shrink-0 rounded-full ${getStatusDotClass(deploy.status)}`} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <BranchCommitLabel
                   branch={deploy.branch}
                   commit={deploy.commitHash || project.lastCommitHash || undefined}
-                  size="compact"
+                  onClick={openDeploy}
                 />
                 <span
                   className={`rounded px-1.5 py-px text-[10px] font-medium capitalize ${statusBadgeColors[deploy.status] || "bg-secondary-100 text-text-muted"}`}
@@ -139,19 +153,20 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
                   {deploy.status}
                 </span>
               </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {pk && <ProviderBadge provider={pk} />}
+                {deploy.deployStrategy && (
+                  <ServiceBadge provider={pk} strategy={deploy.deployStrategy} />
+                )}
+                <time className="ml-auto text-[11px] text-text-muted whitespace-nowrap">
+                  {formatCardDateTime(deploy.createdAt)}
+                </time>
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {pk && <ProviderBadge provider={pk} />}
-              {deploy.deployStrategy && (
-                <ServiceBadge provider={pk} strategy={deploy.deployStrategy} />
-              )}
-            </div>
-            <time className="shrink-0 text-[11px] text-text-muted whitespace-nowrap">
-              {formatCardDateTime(deploy.createdAt)}
-            </time>
-          </button>
+          </div>
           );
         })}
+        </div>
       </div>
 
       {totalPages > 1 && (

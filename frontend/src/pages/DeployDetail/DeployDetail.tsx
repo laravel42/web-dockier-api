@@ -40,8 +40,8 @@ export default function DeployDetail() {
       <div>
         <PageError message={error || "Deployment not found"} />
         <div className="text-center mt-4">
-          <button type="button" onClick={() => navigate("/deploy")} className={btnSecondary}>
-            Back to Deployments
+          <button type="button" onClick={() => navigate("/projects")} className={btnSecondary}>
+            Back to Project
           </button>
         </div>
       </div>
@@ -54,11 +54,11 @@ export default function DeployDetail() {
     <div className="flex gap-6">
       <div className="flex-1 min-w-0">
         <button
-          onClick={() => navigate("/deploy")}
+          onClick={() => project ? navigate(`/projects/${project.id}`) : navigate("/projects")}
           className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6"
         >
           <ChevronLeftIcon className="size-4 " />
-          Back to Deployments
+          Back to Project
         </button>
 
         <DeployHeader

@@ -14,6 +14,7 @@ export default function InfoCards({ deploy, provKey, deployUrl }: Props) {
   const providerName = getProviderStyle(provKey).name || provKey.toUpperCase();
   const strategyLabel = strategyLabels[deploy.deployStrategy] || deploy.deployStrategy;
   const hasDocker = Boolean(deploy.dockerImage);
+  const infrastructureActive = deploy.status === "success";
 
   const metricCardCls = `${cardCls} px-3 py-2 flex flex-col justify-center text-center min-h-0`;
 
@@ -63,12 +64,16 @@ export default function InfoCards({ deploy, provKey, deployUrl }: Props) {
           href={deployUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex max-w-full items-center justify-center gap-1.5 text-sm font-semibold text-primary-500 transition-colors hover:text-primary-700 break-all"
+          className={`inline-flex max-w-full items-center justify-center gap-1.5 text-sm font-semibold transition-colors break-all ${
+            infrastructureActive
+              ? "text-primary-500 hover:text-primary-700"
+              : "text-text-muted line-through"
+          }`}
         >
           <ExternalLinkIcon className="size-3.5 shrink-0" />
           {deployUrl}
         </a>
-        {deploy.status !== "success" && (
+        {!infrastructureActive && (
           <p className="text-[10px] text-text-muted mt-1">Infrastructure no longer active.</p>
         )}
       </div>

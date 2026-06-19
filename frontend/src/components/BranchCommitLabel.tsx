@@ -8,7 +8,7 @@ interface Props {
 }
 
 const labelBaseCls =
-  "inline-flex items-center border border-border/60 bg-secondary-50/50 min-w-0 max-w-full shrink-0";
+  "inline-flex items-center border border-border/60 bg-secondary-50/50 min-w-0 max-w-full";
 const labelInteractiveCls =
   "hover:border-primary/30 hover:bg-primary/5 transition-colors";
 

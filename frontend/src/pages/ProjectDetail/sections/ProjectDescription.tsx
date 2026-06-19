@@ -51,11 +51,18 @@ const SKIP_FIELDS = new Set([
   "remember_token", "email_verified_at",
 ]);
 
+/** One-way password hashes — storing these does not expose recoverable credentials. */
+const HASHED_CREDENTIAL_FIELDS =
+  /^(password|passwd|passphrase|encrypted_password|password_hash|hashed_password|password_digest|passwd_hash|pass_hash|bcrypt)$/i;
+
+const PLAINTEXT_CREDENTIAL_FIELDS =
+  /plain(_)?password|password_(plain|raw|cleartext)|raw_password|cleartext_password/i;
+
 type SensitivityLevel = "personal" | "sensitive" | "secret";
 
 const FIELD_PATTERNS: Array<{ pattern: RegExp; sensitivity: SensitivityLevel; reason: string }> = [
-  // Secret
-  { pattern: /password/i,        sensitivity: "secret",    reason: "Password field" },
+  // Secret (plaintext / recoverable credentials only — hashed passwords are excluded above)
+  { pattern: /plain(_)?password|password_(plain|raw|cleartext)|raw_password|cleartext_password/i, sensitivity: "secret", reason: "Plaintext credential storage" },
   { pattern: /secret/i,          sensitivity: "secret",    reason: "Secret value" },
   { pattern: /token/i,           sensitivity: "secret",    reason: "Authentication token" },
   { pattern: /api_key/i,         sensitivity: "secret",    reason: "API key" },
@@ -105,6 +112,11 @@ const FIELD_PATTERNS: Array<{ pattern: RegExp; sensitivity: SensitivityLevel; re
 ];
 
 function classifyField(field: string): { sensitivity: SensitivityLevel; reason: string } | null {
+  if (SKIP_FIELDS.has(field)) return null;
+  if (HASHED_CREDENTIAL_FIELDS.test(field)) return null;
+  if (PLAINTEXT_CREDENTIAL_FIELDS.test(field)) {
+    return { sensitivity: "secret", reason: "Plaintext credential storage" };
+  }
   for (const { pattern, sensitivity, reason } of FIELD_PATTERNS) {
     if (pattern.test(field)) return { sensitivity, reason };
   }
@@ -214,8 +226,6 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
       setAiLoading(true);
       gitApi.analyzeSensitiveData(text, projectId)
         .then((res) => {
-          onAiResult(res);
-          // Also convert AI results to SensitiveField format
           const fields: SensitiveField[] = [];
           for (const t of res.tables) {
             for (const c of t.columns) {
@@ -225,7 +235,15 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
               }
             }
           }
-          if (fields.length > 0) onParsed(fields);
+
+          if (res.tables.length > 0) {
+            onAiResult(res);
+            if (fields.length > 0) onParsed(fields);
+          } else if (staticResults.length > 0) {
+            onParsed(staticResults);
+          } else {
+            setError("No sensitive fields were detected in the schema.");
+          }
         })
         .catch((err: unknown) => {
           console.error("[sensitive-ai]", err);
@@ -296,11 +314,23 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
 // ─── AI Sensitive Data Tab ───
 
 const RISK_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: "bg-red-500/30", text: "text-red-400", border: "border-red-500/30" },
-  high: { bg: "bg-orange-500/30", text: "text-orange-400", border: "border-orange-500/30" },
-  medium: { bg: "bg-amber-500/30", text: "text-amber-400", border: "border-amber-500/30" },
-  low: { bg: "bg-emerald-500/30", text: "text-emerald-400", border: "border-emerald-500/30" },
+  critical: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
+  high: { bg: "bg-orange-500/30", text: "text-orange-300", border: "border-orange-500/45" },
+  medium: { bg: "bg-amber-500/30", text: "text-amber-300", border: "border-amber-500/45" },
+  low: { bg: "bg-emerald-500/30", text: "text-emerald-300", border: "border-emerald-500/45" },
 };
+
+function riskLevelFromScore(score: number): keyof typeof RISK_COLORS {
+  if (score > 80) return "critical";
+  if (score > 60) return "high";
+  if (score > 30) return "medium";
+  return "low";
+}
+
+function riskBadgeCls(level: string): string {
+  const rc = RISK_COLORS[level] ?? RISK_COLORS.low;
+  return `rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   credentials: "🔑 Credentials",
@@ -318,10 +348,10 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
   const table = data.tables.find(t => t.name === selectedTable);
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {/* Summary */}
       {data.summary.criticalFindings.length > 0 && (
-        <div className="mb-3 p-3 rounded-lg bg-red-500/30 border border-red-500/30">
+        <div className="mb-3 shrink-0 p-3 rounded-lg bg-red-500/30 border border-red-500/30">
           <p className="text-xs font-semibold text-red-400 mb-1">Critical Findings</p>
           <ul className="space-y-0.5">
             {data.summary.criticalFindings.map((f, i) => (
@@ -331,52 +361,49 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
         </div>
       )}
 
-      <div className="flex gap-3 min-h-30">
+      <div className="flex h-0 min-h-0 flex-1 overflow-hidden gap-3">
         {/* Left nav — tables */}
-        <div className="w-48 shrink-0 border-r border-border pr-3 space-y-0.5">
+        <div className="w-48 shrink-0 min-h-0 self-stretch overflow-y-auto overscroll-contain scrollbar-hide border-r border-border pr-3 space-y-0.5">
           {data.tables.map((t) => {
-            const risk = t.riskScore > 80 ? "critical" : t.riskScore > 60 ? "high" : t.riskScore > 30 ? "medium" : "low";
-            const rc = RISK_COLORS[risk];
+            const risk = riskLevelFromScore(t.riskScore);
             return (
               <button
                 key={t.name}
                 onClick={() => setSelectedTable(t.name)}
                 className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs transition-colors flex items-center justify-between gap-1 ${
                   selectedTable === t.name
-                    ? "bg-primary-100 text-primary-700 font-medium"
-                    : "text-text-muted hover:text-text hover:bg-secondary-50"
+                    ? "bg-primary/10 text-foreground font-medium"
+                    : "text-text-muted hover:text-foreground hover:bg-card/60"
                 }`}
               >
                 <span className="truncate">{t.name}</span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-semibold ${rc.bg} ${rc.text}`}>{t.riskScore}</span>
+                <span className={riskBadgeCls(risk)}>{t.riskScore}</span>
               </button>
             );
           })}
         </div>
 
         {/* Right — columns */}
-        <div className="flex-1 min-w-0">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide">
           {table && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="bg-secondary-50 px-3 py-1.5 border-b border-border flex items-center justify-between">
                 <span className="text-xs font-semibold text-text">{table.name}</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    RISK_COLORS[table.riskScore > 80 ? "critical" : table.riskScore > 60 ? "high" : table.riskScore > 30 ? "medium" : "low"].bg
-                  } ${
-                    RISK_COLORS[table.riskScore > 80 ? "critical" : table.riskScore > 60 ? "high" : table.riskScore > 30 ? "medium" : "low"].text
-                  }`}>Risk: {table.riskScore}</span>
+                  <span className={riskBadgeCls(riskLevelFromScore(table.riskScore))}>
+                    Risk: {table.riskScore}
+                  </span>
                   <span className="text-[10px] text-text-muted">{table.columns.length} columns</span>
                 </div>
               </div>
               <div className="divide-y divide-border">
                 {table.columns.map((c, i) => {
-                  const sevColor = RISK_COLORS[c.sensitivity] || RISK_COLORS.low;
+                  const severity = c.sensitivity in RISK_COLORS ? c.sensitivity : "low";
                   return (
                     <div key={i} className="flex items-center px-3 py-1.5 gap-2">
                       <span className="text-xs font-mono text-text w-1/4 truncate">{c.name}</span>
                       <span className="text-[10px] text-text-muted w-16 truncate">{c.type}</span>
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sevColor.bg} ${sevColor.text}`}>{c.sensitivity}</span>
+                      <span className={riskBadgeCls(severity)}>{c.sensitivity}</span>
                       <span className="text-[10px] text-text-muted">{CATEGORY_LABELS[c.category] || c.category}</span>
                       <span className="text-[10px] text-text-muted flex-1 truncate text-right">{c.reason}</span>
                     </div>
@@ -405,10 +432,10 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
   const fields = grouped[selected] || [];
 
   return (
-    <div>
-      <div className="flex gap-3 min-h-30">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex h-0 min-h-0 flex-1 overflow-hidden gap-3">
         {/* Left nav */}
-        <div className="w-44 shrink-0 border-r border-border pr-3 space-y-0.5">
+        <div className="w-44 shrink-0 min-h-0 self-stretch overflow-y-auto overscroll-contain scrollbar-hide border-r border-border pr-3 space-y-0.5">
           {entities.map((entity) => {
             const count = grouped[entity].length;
             const hasSecret = grouped[entity].some((f: { sensitivity: string; }) => f.sensitivity === "secret");
@@ -421,8 +448,8 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
                 onClick={() => setSelected(entity)}
                 className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs transition-colors flex items-center justify-between gap-1 ${
                   selected === entity
-                    ? "bg-primary-100 text-primary-700 font-medium"
-                    : "text-text-muted hover:text-text hover:bg-secondary-50"
+                    ? "bg-primary/10 text-foreground font-medium"
+                    : "text-text-muted hover:text-foreground hover:bg-card/60"
                 }`}
               >
                 <span className="truncate">{entity}</span>
@@ -433,7 +460,7 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
         </div>
 
         {/* Right content */}
-        <div className="flex-1 min-w-0">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hide">
           {selected && (
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="bg-secondary-50 px-3 py-1.5 border-b border-border flex items-center justify-between">
@@ -459,12 +486,28 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
 
 // ─── Vulnerability Modal & Dependencies Tab ───
 
-const VULN_STYLES: Record<string, { bg: string; text: string }> = {
-  critical: { bg: "bg-red-500/30", text: "text-red-400" },
-  high:     { bg: "bg-orange-500/30", text: "text-orange-400" },
-  medium:   { bg: "bg-amber-500/30", text: "text-amber-400" },
-  low:      { bg: "bg-blue-500/30", text: "text-blue-400" },
+const VULN_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  critical: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
+  high: { bg: "bg-orange-500/30", text: "text-orange-300", border: "border-orange-500/45" },
+  medium: { bg: "bg-amber-500/30", text: "text-amber-300", border: "border-amber-500/45" },
+  low: { bg: "bg-blue-500/30", text: "text-blue-300", border: "border-blue-500/45" },
 };
+
+const DEP_STATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  active: { bg: "bg-emerald-500/30", text: "text-emerald-300", border: "border-emerald-500/45" },
+  outdated: { bg: "bg-amber-500/30", text: "text-amber-300", border: "border-amber-500/45" },
+  deprecated: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
+};
+
+const DEFAULT_TONE_BADGE = { bg: "bg-gray-500/30", text: "text-gray-300", border: "border-gray-500/45" };
+
+function toneBadgeCls(
+  styles: { bg: string; text: string; border: string },
+  size: "sm" | "xs" = "sm",
+): string {
+  const textSize = size === "xs" ? "text-[9px]" : "text-[10px]";
+  return `rounded-full border px-1.5 py-0.5 font-semibold shrink-0 ${textSize} ${styles.bg} ${styles.text} ${styles.border}`;
+}
 
 type VulnDetail = { id: string; severity: string; title: string; details: string; aliases: string[]; url: string; pkg: string };
 
@@ -507,7 +550,7 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
           <div className="px-5 pt-4 pb-3 border-b border-border flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${vs.bg} ${vs.text}`}>{vuln.severity}</span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
                 <span className="text-[11px] font-mono text-text-muted">{vuln.id}</span>
               </div>
               <h3 className="text-sm/snug font-semibold text-text ">{vuln.title}</h3>
@@ -553,6 +596,72 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
       </div>
     </div>,
     document.body,
+  );
+}
+
+function DependencyRow({
+  dependency,
+  onSelectVuln,
+}: {
+  dependency: Dependency;
+  onSelectVuln: (vuln: VulnDetail) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasVulns = dependency.vulnerabilities.length > 0;
+  const hiddenVulnCount = Math.max(0, dependency.vulnerabilities.length - 3);
+  const visibleVulns = expanded ? dependency.vulnerabilities : dependency.vulnerabilities.slice(0, 3);
+
+  return (
+    <div className="px-3 py-1.5 flex items-start gap-3 hover:bg-secondary-50/50 transition-colors">
+      <div className="w-2/5 min-w-0">
+        <a href={dependency.repoUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-primary-500 hover:text-primary-400 truncate block">{dependency.name}</a>
+        <span className="text-[10px] text-text-muted">{dependency.ecosystem} · {dependency.type}</span>
+      </div>
+      <span className="text-xs font-mono text-text w-[10%] truncate">{dependency.version}</span>
+      <span className="text-xs font-mono w-[10%] truncate">
+        {dependency.latestVersion ? (
+          dependency.latestVersion === dependency.version
+            ? <span className="text-emerald-400">{dependency.latestVersion}</span>
+            : <span className="text-amber-400">{dependency.latestVersion}</span>
+        ) : <span className="text-text-muted">—</span>}
+      </span>
+      <span className="w-[12%]">
+        <span className={toneBadgeCls(DEP_STATUS_STYLES[dependency.status] ?? DEFAULT_TONE_BADGE)}>
+          {dependency.status}
+        </span>
+      </span>
+      <div className="flex-1 min-w-0">
+        {hasVulns ? (
+          <div className="flex flex-wrap items-center gap-1">
+            {visibleVulns.map((v, vi) => {
+              const vs = VULN_STYLES[v.severity] || VULN_STYLES.medium;
+              return (
+                <button
+                  key={`${v.id}-${vi}`}
+                  type="button"
+                  onClick={() => onSelectVuln({ ...v, pkg: dependency.name })}
+                  className={`${toneBadgeCls(vs, "xs")} hover:brightness-110 transition-[filter] truncate max-w-35 text-left cursor-pointer`}
+                >
+                  {v.title || v.id}
+                </button>
+              );
+            })}
+            {hiddenVulnCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setExpanded((prev) => !prev)}
+                className="inline-flex h-5 shrink-0 items-center px-1 text-[10px] font-bold leading-none text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
+                aria-expanded={expanded}
+              >
+                {expanded ? "Show less" : `+${hiddenVulnCount} more`}
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="text-[10px] text-text-muted">—</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -607,53 +716,13 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
           <span className="flex-1">Vulnerabilities</span>
         </div>
         <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto scrollbar-hide">
-          {filtered.map((d, i) => {
-            const hasVulns = d.vulnerabilities.length > 0;
-            return (
-              <div key={i} className="px-3 py-1.5 flex items-start gap-3 hover:bg-secondary-50/50 transition-colors">
-                <div className="w-2/5 min-w-0">
-                  <a href={d.repoUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-primary-500 hover:text-primary-400 truncate block">{d.name}</a>
-                  <span className="text-[10px] text-text-muted">{d.ecosystem} · {d.type}</span>
-                </div>
-                <span className="text-xs font-mono text-text w-[10%] truncate">{d.version}</span>
-                <span className="text-xs font-mono w-[10%] truncate">
-                  {d.latestVersion ? (
-                    d.latestVersion === d.version
-                      ? <span className="text-emerald-400">{d.latestVersion}</span>
-                      : <span className="text-amber-400">{d.latestVersion}</span>
-                  ) : <span className="text-text-muted">—</span>}
-                </span>
-                <span className="w-[12%]">
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                    d.status === "active" ? "bg-emerald-500/30 text-emerald-400" :
-                    d.status === "outdated" ? "bg-amber-500/30 text-amber-400" :
-                    d.status === "deprecated" ? "bg-red-500/30 text-red-400" :
-                    "bg-gray-500/30 text-gray-400"
-                  }`}>{d.status}</span>
-                </span>
-                <div className="flex-1 min-w-0">
-                  {hasVulns ? (
-                    <div className="flex flex-wrap gap-1">
-                      {d.vulnerabilities.slice(0, 3).map((v, vi) => {
-                        const vs = VULN_STYLES[v.severity] || VULN_STYLES.medium;
-                        return (
-                          <button key={vi} onClick={() => setSelectedVuln({ ...v, pkg: d.name })}
-                            className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${vs.bg} ${vs.text} hover:opacity-80 transition-opacity truncate max-w-35 text-left cursor-pointer`}>
-                            {v.title || v.id}
-                          </button>
-                        );
-                      })}
-                      {d.vulnerabilities.length > 3 && (
-                        <span className="text-[9px] text-text-muted">+{d.vulnerabilities.length - 3}</span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-text-muted">—</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {filtered.map((d) => (
+            <DependencyRow
+              key={`${d.name}@${d.version}@${d.type}`}
+              dependency={d}
+              onSelectVuln={setSelectedVuln}
+            />
+          ))}
           {filtered.length === 0 && (
             <div className="px-3 py-4 text-xs text-text-muted text-center">No dependencies match this filter.</div>
           )}
@@ -751,34 +820,34 @@ export default function ProjectDescription({
   );
 
   const renderSensitiveDataSection = () => (
-    <>
-      {aiSensitiveResult || (uploadedSensitiveData && uploadedSensitiveData.length > 0) ? (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              {aiSensitiveResult && (
-                <span className="text-xs text-text-muted">
-                  {aiSensitiveResult.summary.totalTables} tables · {aiSensitiveResult.summary.highRiskTables} high risk
-                </span>
-              )}
-              {!aiSensitiveResult && uploadedSensitiveData && (
-                <span className="text-xs text-text-muted">{uploadedSensitiveData.length} sensitive fields detected</span>
-              )}
-            </div>
-            <button type="button" onClick={clearSensitiveData} className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
-              Upload another file
-            </button>
+    ((aiSensitiveResult?.tables.length ?? 0) > 0) || (uploadedSensitiveData && uploadedSensitiveData.length > 0) ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            {aiSensitiveResult && (
+              <span className="text-xs text-text-muted">
+                {aiSensitiveResult.summary.totalTables} tables · {aiSensitiveResult.summary.highRiskTables} high risk
+              </span>
+            )}
+            {!aiSensitiveResult && uploadedSensitiveData && (
+              <span className="text-xs text-text-muted">{uploadedSensitiveData.length} sensitive fields detected</span>
+            )}
           </div>
-          {aiSensitiveResult ? (
+          <button type="button" onClick={clearSensitiveData} className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
+            Upload another file
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {aiSensitiveResult && aiSensitiveResult.tables.length > 0 ? (
             <AiSensitiveDataTab data={aiSensitiveResult} />
           ) : uploadedSensitiveData ? (
             <SensitiveDataTab data={uploadedSensitiveData} />
           ) : null}
         </div>
-      ) : (
-        <SqlDropzone onParsed={handleSensitiveParsed} onAiResult={handleAiResult} projectId={projectId} />
-      )}
-    </>
+      </div>
+    ) : (
+      <SqlDropzone onParsed={handleSensitiveParsed} onAiResult={handleAiResult} projectId={projectId} />
+    )
   );
 
   const renderMainTabContent = () => {
@@ -802,7 +871,7 @@ export default function ProjectDescription({
     <div className={`${cardCls} mb-8 overflow-hidden`}>
       <div className="h-1 bg-linear-to-r from-primary-500 via-primary-400 to-primary-300" />
 
-      <div className="flex max-h-[600px] flex-col overflow-hidden px-5 pt-4 pb-5">
+      <div className="flex h-[600px] flex-col overflow-hidden px-5 pt-4 pb-5">
         {/* Main tab nav */}
         <div className="flex min-h-11 shrink-0 items-center gap-3 border-b border-border mb-4">
           <div className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none">
@@ -823,10 +892,14 @@ export default function ProjectDescription({
               >
                 {tab.label}
                 {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                  <span className="text-[9px] bg-blue-500/30 text-blue-300 px-1 rounded-full">{dependencies.length}</span>
+                  <span className="rounded-full border border-blue-500/40 bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
+                    {dependencies.length}
+                  </span>
                 )}
                 {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                  <span className="text-[9px] bg-red-500/30 text-red-300 px-1 rounded-full">{uploadedSensitiveData.length}</span>
+                  <span className="rounded-full border border-red-500/40 bg-red-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                    {uploadedSensitiveData.length}
+                  </span>
                 )}
               </button>
             ))}

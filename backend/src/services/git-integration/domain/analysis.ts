@@ -4,6 +4,9 @@ import { scanDependencies, type Dependency } from "./dependency-scanner.js";
 import { suggestDeployOptions } from "./deploy-options.js";
 import { detectServices, type DetectedService } from "./services.js";
 import { detectTechStack, type TechStackItem } from "./tech-stack.js";
+import { scanSensitiveData, type SensitiveField } from "./sensitive-data-scanner.js";
+
+export type { SensitiveField } from "./sensitive-data-scanner.js";
 
 type SensitiveTable = {
   name: string;
@@ -19,37 +22,25 @@ type SensitiveTable = {
 };
 
 export function analyzeSensitiveDataFromText(schema: string): { tables: SensitiveTable[]; summary: { totalTables: number; highRiskTables: number; criticalFindings: string[] } } {
-  const findings: SensitiveField[] = [];
-  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)["`]?\s*\(([\s\S]*?)\);/gi;
-  const sensitiveTokens = [
-    { pattern: /password|token|secret|api_key|private_key/i, sensitivity: "secret" as const, reason: "Credential or secret material" },
-    { pattern: /email|phone|address|name|birth|ip/i, sensitivity: "personal" as const, reason: "Personally identifiable data" },
-    { pattern: /card|iban|ssn|tax|passport|salary|bank/i, sensitivity: "sensitive" as const, reason: "Financial or regulated identifier" },
-  ];
-
-  let tableMatch: RegExpExecArray | null;
-  while ((tableMatch = tableRegex.exec(schema)) !== null) {
-    const tableName = tableMatch[1];
-    const body = tableMatch[2];
-    const columnRegex = /^\s*["`]?(\w+)["`]?\s+[A-Z]/gim;
-    let columnMatch: RegExpExecArray | null;
-    while ((columnMatch = columnRegex.exec(body)) !== null) {
-      const field = columnMatch[1];
-      for (const token of sensitiveTokens) {
-        if (token.pattern.test(field)) {
-          findings.push({ entity: tableName, field, sensitivity: token.sensitivity, reason: token.reason });
-          break;
-        }
-      }
-    }
+  if (!schema.trim()) {
+    return { tables: [], summary: { totalTables: 0, highRiskTables: 0, criticalFindings: [] } };
   }
 
+  const fields = scanSensitiveData({ "schema.sql": schema }, {});
+  return sensitiveFieldsToAnalysisResult(fields);
+}
+
+function sensitiveFieldsToAnalysisResult(fields: SensitiveField[]): {
+  tables: SensitiveTable[];
+  summary: { totalTables: number; highRiskTables: number; criticalFindings: string[] };
+} {
   const grouped = new Map<string, SensitiveField[]>();
-  for (const finding of findings) {
+  for (const finding of fields) {
     const bucket = grouped.get(finding.entity) ?? [];
     bucket.push(finding);
     grouped.set(finding.entity, bucket);
   }
+
   const tables: SensitiveTable[] = Array.from(grouped.entries()).map(([name, columns]) => ({
     name,
     riskScore: Math.min(100, columns.length * 20 + (columns.some((c) => c.sensitivity === "secret") ? 40 : 0)),
@@ -84,13 +75,6 @@ export type RepoAnalysisResult = {
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
   _scannersRan: boolean;
-};
-
-export type SensitiveField = {
-  entity: string;
-  field: string;
-  sensitivity: "personal" | "sensitive" | "secret";
-  reason: string;
 };
 
 const DEPENDENCY_FRAMEWORKS: Record<string, TechStackItem> = {

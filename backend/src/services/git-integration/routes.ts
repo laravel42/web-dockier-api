@@ -871,10 +871,14 @@ export async function registerGitIntegrationRoutes(app: FastifyInstance) {
       if (request.body.projectId && !request.body.schema.trim()) {
         const cached = await db.from("sensitive_cache").select("result").eq("project_id", request.body.projectId).maybeSingle();
         if (cached.data?.result) return typeof cached.data.result === "string" ? JSON.parse(cached.data.result) : cached.data.result;
+        return {
+          tables: [],
+          summary: { totalTables: 0, highRiskTables: 0, criticalFindings: [] },
+        };
       }
 
       const result = analyzeSensitiveDataFromText(request.body.schema);
-      if (request.body.projectId) {
+      if (request.body.projectId && result.tables.length > 0) {
         await db.from("sensitive_cache").upsert(
           {
             id: request.body.projectId,
