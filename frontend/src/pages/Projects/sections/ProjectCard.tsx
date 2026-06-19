@@ -1,10 +1,10 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import SourceControlBadge from "../../../components/SourceControlBadge";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { cardInteractiveCls, chipCls, typeCardDateCls, typeCardTitle } from "../../../utils/styles";
+import { cardInteractiveCls, typeCardDateCls, typeCardTitle } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import type { Project, TechBadgeInfo } from "../../../types";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
 interface Props {
   project: Project;
@@ -44,10 +44,7 @@ export default function ProjectCard({ project: p, badges, badgeLoading, onSelect
         <span className={typeCardDateCls}>
           Created: {formatCardDateTime(p.createdAt)}
         </span>
-        <span className={chipCls}>
-          <LinkIcon className="size-3" strokeWidth={2} />
-          {p.branch || "main"}
-        </span>
+        <BranchCommitLabel branch={p.branch || "main"} commit={p.lastCommitHash || undefined} onClick={() => onSelect(p.id)} />
       </div>
     </div>
   );

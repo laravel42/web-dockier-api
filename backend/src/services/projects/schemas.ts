@@ -3,6 +3,7 @@ import { postDeployCommandSchema } from "../../shared/schemas/post-deploy.js";
 
 export const projectConfigSchema = z.object({
   postDeployCommands: z.array(postDeployCommandSchema).max(20).optional(),
+  overviewBlocks: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export const projectSchema = z.object({
@@ -15,5 +16,6 @@ export const projectSchema = z.object({
   sourceType: z.string(),
   template: z.string(),
   config: projectConfigSchema,
+  lastCommitHash: z.string(),
   createdAt: z.string(),
 });

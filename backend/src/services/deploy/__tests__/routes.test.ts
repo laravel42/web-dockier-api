@@ -433,7 +433,8 @@ describe("POST /deploy/deployments", () => {
 describe("GET /deploy/deployments", () => {
   it("lists deployments for tenant", async () => {
     setupPermissionMocks({ permissions: [PERMISSIONS.DEPLOY_VIEW] });
-    mockListDeployments.mockResolvedValue([
+    mockListDeployments.mockResolvedValue({
+      deployments: [
       {
         id: TEST_DEPLOYMENT_ID,
         providerId: TEST_PROVIDER_ID,
@@ -450,7 +451,9 @@ describe("GET /deploy/deployments", () => {
         createdAt: "2025-01-01T00:00:00Z",
         updatedAt: "2025-01-01T00:00:00Z",
       },
-    ]);
+      ],
+      total: 1,
+    });
 
     const res = await app.inject({
       method: "GET",
@@ -460,12 +463,18 @@ describe("GET /deploy/deployments", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().deployments).toHaveLength(1);
-    expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, undefined);
+    expect(res.json().total).toBe(1);
+    expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, {
+      providerId: undefined,
+      projectId: undefined,
+      limit: undefined,
+      offset: undefined,
+    });
   });
 
   it("filters by providerId", async () => {
     setupPermissionMocks({ permissions: [PERMISSIONS.DEPLOY_VIEW] });
-    mockListDeployments.mockResolvedValue([]);
+    mockListDeployments.mockResolvedValue({ deployments: [], total: 0 });
 
     const res = await app.inject({
       method: "GET",
@@ -474,7 +483,9 @@ describe("GET /deploy/deployments", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, TEST_PROVIDER_ID);
+    expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, {
+      providerId: TEST_PROVIDER_ID,
+    });
   });
 });
 

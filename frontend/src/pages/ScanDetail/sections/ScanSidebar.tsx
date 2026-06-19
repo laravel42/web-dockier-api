@@ -12,7 +12,7 @@ import {
 import { usePermissions } from "../../../context/PermissionsContext";
 import type { Scan } from "../../../types";
 import Spinner from "../../../components/Spinner";
-import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 
 interface Props {
   scanId: string | undefined;
@@ -71,38 +71,41 @@ export default function ScanSidebar({
                 const isLive = s.status === "running" || s.status === "pending";
                 const hasBadges = s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0);
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectScan(s.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectScan(s.id);
+                      }
+                    }}
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className={`size-2 rounded-full shrink-0 ${getStatusDotClass(s.status)}`} />
-                      <span className={`${sidebarHistoryLabelCls(isActive)} truncate`}>
+                      <span className={`${sidebarHistoryLabelCls(isActive)} truncate min-w-0`}>
                         {new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                         {" · "}
                         {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      {isLive && (
-                        <span className="ml-auto shrink-0 text-[9px] font-medium text-primary">live</span>
-                      )}
-                    </div>
-                    <div className="mt-1 ml-3.5 flex items-center gap-1.5 min-w-0 text-[10px]">
-                      <GitBranchIcon className="size-3 shrink-0 text-text-muted" />
-                      <span className="truncate font-mono text-text-secondary">{s.branch}</span>
-                      {s.commitSha && (
-                        <span className="shrink-0 font-mono text-text-muted">{s.commitSha.slice(0, 7)}</span>
-                      )}
+                      <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 py-px px-0.5">
+                        {isLive && (
+                          <span className="text-[9px] font-medium text-primary">live</span>
+                        )}
+                        <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} size="sidebar" />
+                      </div>
                     </div>
                     {hasBadges && (
-                      <div className="mt-1 ml-3.5 flex flex-wrap items-center gap-1">
+                      <div className="mt-1.5 ml-3.5 flex flex-wrap items-center gap-1">
                         {s.summary!.errors > 0 && <SeverityBadge severity="error" count={s.summary!.errors} size="compact" />}
                         {s.summary!.warnings > 0 && <SeverityBadge severity="warning" count={s.summary!.warnings} size="compact" />}
                         {s.summary!.infos > 0 && <SeverityBadge severity="info" count={s.summary!.infos} size="compact" />}
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>

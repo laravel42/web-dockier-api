@@ -399,6 +399,14 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       tenantId: event.tenantId,
       title: "Deployment succeeded",
       message: deployMessage,
+      metadata: {
+        kind: "deploy",
+        repo: event.repo,
+        branch: event.branch,
+        commit: commitHash || undefined,
+        appUrl: finalUrl || undefined,
+        deployId: deploymentId,
+      },
     }).catch((err) => {
       obsLogger.error({ err }, `[deploy] Failed to send deploy complete notification for ${deploymentId}`);
     });

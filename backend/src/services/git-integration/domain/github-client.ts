@@ -51,9 +51,12 @@ export interface GitHubCommit {
   shortHash: string;
   message: string;
   author: string;
+  authorLogin: string;
   authorAvatar: string;
   date: string;
   url: string;
+  additions: number;
+  deletions: number;
 }
 
 export interface GitHubRepoStats {
@@ -69,6 +72,8 @@ export interface GitHubContributor {
   avatarUrl: string;
   commits: number;
   profileUrl: string;
+  additions: number;
+  deletions: number;
 }
 
 export interface GitHubCollaborator {
@@ -78,24 +83,101 @@ export interface GitHubCollaborator {
   avatarUrl: string;
 }
 
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  comments: number;
+  labels: Array<{ name: string; color: string }>;
+}
+
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  authorAvatar: string;
+  createdAt: string;
+  draft: boolean;
+}
+
 export interface GitHubIssueResult {
   issueId: string;
   issueUrl: string;
   issueNumber: number;
 }
 
+interface GitHubCommitApiItem {
+  sha?: string;
+  html_url?: string;
+  author?: { login?: string; avatar_url?: string };
+  commit?: { message?: string; author?: { name?: string }; committer?: { date?: string } };
+}
+
+interface GitHubRepoInfoApiItem {
+  stargazers_count?: number;
+  forks_count?: number;
+  open_issues_count?: number;
+  subscribers_count?: number;
+  language?: string;
+}
+
+interface GitHubContributorApiItem {
+  login?: string;
+  avatar_url?: string;
+  contributions?: number;
+  html_url?: string;
+}
+
+interface GitHubContributorStatsApiItem {
+  total?: number;
+  weeks?: Array<{ a?: number; d?: number; c?: number }>;
+  author?: { login?: string; avatar_url?: string; html_url?: string };
+}
+
+interface GitHubIssueApiItem {
+  id?: string | number;
+  html_url?: string;
+  number?: number;
+}
+
 // ─── Client Methods ──────────────────────────────────────────────────────────
 
 /**
- * List recent commits for a branch.
+ * Fetch per-commit line stats (additions/deletions). The commits list endpoint
+ * omits these, so each commit must be fetched individually.
+ */
+async function getCommitStats(
+  baseUrl: string,
+  headers: Record<string, string>,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<{ additions: number; deletions: number }> {
+  try {
+    const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/commits/${sha}`, { headers });
+    if (!res.ok) return { additions: 0, deletions: 0 };
+    const data = (await res.json()) as { stats?: { additions?: number; deletions?: number } };
+    return { additions: data.stats?.additions ?? 0, deletions: data.stats?.deletions ?? 0 };
+  } catch {
+    return { additions: 0, deletions: 0 };
+  }
+}
+
+/**
+ * List recent commits for a branch. When `includeStats` is set, each commit's
+ * line additions/deletions are fetched (one extra request per commit).
  */
 export async function listCommits(
   connection: ConnectionLike,
-  params: { owner: string; repo: string; branch: string; limit: number },
+  params: { owner: string; repo: string; branch: string; limit: number; includeStats?: boolean },
 ): Promise<GitHubCommit[]> {
   const baseUrl = getBaseUrl(connection);
   const headers = getHeaders(connection);
-  const { owner, repo, branch, limit } = params;
+  const { owner, repo, branch, limit, includeStats } = params;
 
   const res = await fetch(
     `${baseUrl}/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`,
@@ -103,16 +185,32 @@ export async function listCommits(
   );
   assertOk(res, `listCommits ${owner}/${repo}`);
 
-  const data = (await res.json()) as any[];
-  return data.map((c) => ({
+  const data = (await res.json()) as GitHubCommitApiItem[];
+  const commits = data.map((c) => ({
     hash: c.sha ?? "",
     shortHash: c.sha?.substring(0, 7) ?? "",
     message: c.commit?.message?.split("\n")[0] ?? "",
     author: c.commit?.author?.name ?? c.author?.login ?? "",
+    authorLogin: c.author?.login ?? "",
     authorAvatar: c.author?.avatar_url ?? "",
     date: c.commit?.committer?.date ?? "",
     url: c.html_url ?? "",
+    additions: 0,
+    deletions: 0,
   }));
+
+  if (includeStats) {
+    await Promise.all(
+      commits.map(async (commit) => {
+        if (!commit.hash) return;
+        const stats = await getCommitStats(baseUrl, headers, owner, repo, commit.hash);
+        commit.additions = stats.additions;
+        commit.deletions = stats.deletions;
+      }),
+    );
+  }
+
+  return commits;
 }
 
 /**
@@ -129,7 +227,7 @@ export async function getRepoInfo(
   const res = await fetch(`${baseUrl}/repos/${owner}/${repo}`, { headers });
   assertOk(res, `getRepoInfo ${owner}/${repo}`);
 
-  const data = (await res.json()) as any;
+  const data = (await res.json()) as GitHubRepoInfoApiItem;
   return {
     stars: data.stargazers_count ?? 0,
     forks: data.forks_count ?? 0,
@@ -163,7 +261,55 @@ export async function getLanguages(
 }
 
 /**
- * Get repository contributors.
+ * Fetch per-contributor stats (commits + lines added/deleted) from the
+ * `stats/contributors` endpoint. GitHub computes these asynchronously and may
+ * respond with 202 while generating; we retry briefly, then signal the caller
+ * to fall back by returning `null`.
+ */
+async function getContributorStats(
+  baseUrl: string,
+  headers: Record<string, string>,
+  owner: string,
+  repo: string,
+  host: string,
+): Promise<GitHubContributor[] | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/stats/contributors`, { headers });
+    if (res.status === 202) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
+    if (!res.ok || res.status === 204) return null;
+
+    const data = (await res.json()) as GitHubContributorStatsApiItem[];
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    return data
+      .map((item) => {
+        const login = String(item.author?.login ?? "");
+        let additions = 0;
+        let deletions = 0;
+        for (const week of item.weeks ?? []) {
+          additions += week.a ?? 0;
+          deletions += week.d ?? 0;
+        }
+        return {
+          name: login,
+          avatarUrl: item.author?.avatar_url ?? "",
+          commits: item.total ?? 0,
+          profileUrl: item.author?.html_url ?? (login ? `${host}/${login}` : ""),
+          additions,
+          deletions,
+        };
+      })
+      .filter((contributor) => contributor.name);
+  }
+  return null;
+}
+
+/**
+ * Get repository contributors. Prefers the richer `stats/contributors` data
+ * (includes lines added/deleted); falls back to the basic contributors list.
  */
 export async function getContributors(
   connection: ConnectionLike,
@@ -172,12 +318,17 @@ export async function getContributors(
   const baseUrl = getBaseUrl(connection);
   const headers = getHeaders(connection);
   const { owner, repo, limit = 20 } = params;
+  const host = baseUrl.replace(/\/api\.github\.com$/, "https://github.com");
+
+  const stats = await getContributorStats(baseUrl, headers, owner, repo, host);
+  if (stats) {
+    return stats.sort((a, b) => b.commits - a.commits).slice(0, limit);
+  }
 
   const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/contributors?per_page=${limit}`, { headers });
   if (!res.ok || res.status === 204) return [];
 
-  const data = (await res.json()) as any[];
-  const host = baseUrl.replace(/\/api\.github\.com$/, "https://github.com");
+  const data = (await res.json()) as GitHubContributorApiItem[];
   return data.map((contributor) => {
     const login = String(contributor.login ?? "");
     return {
@@ -185,8 +336,87 @@ export async function getContributors(
       avatarUrl: contributor.avatar_url ?? "",
       commits: contributor.contributions ?? 0,
       profileUrl: contributor.html_url ?? (login ? `${host}/${login}` : ""),
+      additions: 0,
+      deletions: 0,
     };
   });
+}
+
+interface GitHubIssueListApiItem {
+  number?: number;
+  title?: string;
+  html_url?: string;
+  created_at?: string;
+  comments?: number;
+  draft?: boolean;
+  pull_request?: unknown;
+  user?: { login?: string; avatar_url?: string };
+  labels?: Array<{ name?: string; color?: string }>;
+}
+
+/**
+ * List open issues for a repository. The GitHub issues endpoint also returns
+ * pull requests, so entries with a `pull_request` field are filtered out.
+ */
+export async function listIssues(
+  connection: ConnectionLike,
+  params: { owner: string; repo: string; limit?: number },
+): Promise<GitHubIssue[]> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const { owner, repo, limit = 10 } = params;
+
+  const res = await fetch(
+    `${baseUrl}/repos/${owner}/${repo}/issues?state=open&per_page=${limit}&sort=created&direction=desc`,
+    { headers },
+  );
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as GitHubIssueListApiItem[];
+  return data
+    .filter((item) => !item.pull_request)
+    .map((item) => ({
+      number: item.number ?? 0,
+      title: item.title ?? "",
+      url: item.html_url ?? "",
+      author: item.user?.login ?? "",
+      authorAvatar: item.user?.avatar_url ?? "",
+      createdAt: item.created_at ?? "",
+      comments: item.comments ?? 0,
+      labels: (item.labels ?? []).map((label) => ({
+        name: label.name ?? "",
+        color: label.color ? `#${label.color}` : "",
+      })),
+    }));
+}
+
+/**
+ * List open pull requests for a repository.
+ */
+export async function listPullRequests(
+  connection: ConnectionLike,
+  params: { owner: string; repo: string; limit?: number },
+): Promise<GitHubPullRequest[]> {
+  const baseUrl = getBaseUrl(connection);
+  const headers = getHeaders(connection);
+  const { owner, repo, limit = 10 } = params;
+
+  const res = await fetch(
+    `${baseUrl}/repos/${owner}/${repo}/pulls?state=open&per_page=${limit}&sort=created&direction=desc`,
+    { headers },
+  );
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as GitHubIssueListApiItem[];
+  return data.map((item) => ({
+    number: item.number ?? 0,
+    title: item.title ?? "",
+    url: item.html_url ?? "",
+    author: item.user?.login ?? "",
+    authorAvatar: item.user?.avatar_url ?? "",
+    createdAt: item.created_at ?? "",
+    draft: item.draft ?? false,
+  }));
 }
 
 /**
@@ -234,10 +464,10 @@ export async function createIssue(
   });
   assertOk(res, `createIssue ${owner}/${repo}`);
 
-  const data = (await res.json()) as any;
+  const data = (await res.json()) as GitHubIssueApiItem;
   return {
     issueId: String(data.id),
-    issueUrl: data.html_url,
-    issueNumber: data.number,
+    issueUrl: data.html_url ?? "",
+    issueNumber: data.number ?? 0,
   };
 }

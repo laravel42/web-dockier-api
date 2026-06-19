@@ -8,6 +8,8 @@ import PageLoading from "../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../components/ui/PageError";
 import { btnLink, cardCls } from "../utils/styles";
 import type { Notification } from "../services/notifications";
+import NotificationContent from "../components/NotificationContent";
+import NotificationTitleLink from "../components/NotificationTitleLink";
 
 async function fetchNotifications(): Promise<Notification[]> {
   const res = await notificationsApi.list();
@@ -53,12 +55,16 @@ export default function Notifications() {
             {notifications.map((n) => (
               <li
                 key={n.id}
-                className={`px-5 py-4 flex items-start justify-between gap-4 ${!n.read ? "bg-primary-500/5" : ""}`}
+                className={`px-5 py-3 flex items-start justify-between gap-3 ${!n.read ? "bg-primary-500/5" : ""}`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3 min-w-0">
-                    <h3 className={`text-sm font-medium truncate min-w-0 ${!n.read ? "text-text" : "text-text-muted"}`}>{n.title}</h3>
-                    <time className="text-[10px] leading-snug text-text-muted shrink-0 whitespace-nowrap">
+                    <NotificationTitleLink
+                      notification={n}
+                      unread={!n.read}
+                      className="text-sm/snug "
+                    />
+                    <time className="text-xs/snug  text-text-muted shrink-0 whitespace-nowrap">
                       {new Date(n.createdAt).toLocaleString(undefined, {
                         month: "short",
                         day: "numeric",
@@ -67,7 +73,7 @@ export default function Notifications() {
                       })}
                     </time>
                   </div>
-                  <p className="text-xs/snug text-text-muted mt-0.5 ">{n.message}</p>
+                  <NotificationContent notification={n} />
                 </div>
                 {!n.read && (
                   <button type="button" onClick={() => markRead(n.id)} className={`${btnLink} shrink-0 text-xs`}>

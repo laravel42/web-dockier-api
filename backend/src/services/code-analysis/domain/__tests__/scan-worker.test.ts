@@ -223,7 +223,7 @@ describe("runSensitiveDataScan", () => {
       "CREATE TABLE users (",
       "  id UUID PRIMARY KEY,",
       "  email VARCHAR(255),",
-      "  password_hash VARCHAR(255)",
+      "  api_key VARCHAR(255)",
       ");",
     ].join("\n");
 
@@ -245,7 +245,7 @@ describe("runSensitiveDataScan", () => {
       filePath: "migrations/001_users.sql",
       startLine: 4,
     });
-    expect(secretFinding?.message).toContain("users.password_hash");
+    expect(secretFinding?.message).toContain("users.api_key");
   });
 
   it("detects sensitive fields in TypeScript model files", () => {

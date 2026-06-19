@@ -59,8 +59,8 @@ export function createDomainErrorClass<
   // Preserve the class name for stack traces and error handler logging
   Object.defineProperty(ServiceError, "name", { value: className });
 
-  return ServiceError as {
-    new (message: string, code: TCode, cause?: unknown): DomainError & { readonly code: TCode };
+  return ServiceError as unknown as {
+    new (message: string, code: string, cause?: unknown): DomainError & { readonly code: TCode };
     prototype: DomainError;
   };
 }

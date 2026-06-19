@@ -26,9 +26,14 @@ export const deployApi = {
   updateProvider: (providerId: string, data: { label?: string; apiSecret?: string }) =>
     request(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
 
-  listDeployments: (providerId?: string) =>
-    request<{ deployments: Deployment[] }>(
-      `/deploy/deployments${buildQuery({ providerId })}`
+  listDeployments: (params?: {
+    providerId?: string;
+    projectId?: string;
+    limit?: number;
+    offset?: number;
+  }) =>
+    request<{ deployments: Deployment[]; total: number }>(
+      `/deploy/deployments${buildQuery(params)}`,
     ),
 
   createDeployment: (data: {

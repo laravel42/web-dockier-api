@@ -14,9 +14,9 @@ export default function DeployLogs({ logs }: Props) {
         <TerminalIcon className="size-4  text-text-muted" />
         <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Deploy Logs</span>
       </div>
-      <div className="bg-taupe-950 px-4 py-3 max-h-[calc(100vh-380px)] overflow-y-auto">
-        <pre className="text-xs/relaxed text-gray-300 font-mono whitespace-pre-wrap ">{logs}</pre>
-      </div>
+      <pre className="grid grid-cols-1 bg-weaker border-weak text-ui/6 text-strong relative rounded-md border p-4  font-mono shadow-xs  break-all whitespace-break-spaces max-h-[calc(100vh-380px)] overflow-y-auto">
+        {logs}
+      </pre>
     </div>
   );
 }

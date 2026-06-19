@@ -53,16 +53,16 @@
     "publish:aws": "bash scripts/publish.sh aws",
     "railway": "railway"
   },
-  "packageManager": "pnpm@11.6.0+sha512.9a36518224080c6fe5165afdcfe79bfa118c29be703f3f462b1e32efe1e98e47e8750b148e08286250aad4113cc7993ca413c4e2cd447752708c2ee5751bc95f",
+  "packageManager": "pnpm@11.8.0+sha512.c1f5e7c4cb241c8f174b743851d82f42b802324afc8b0f116b96adb15aa06664948dde36960a3ba1079ba5b4b29dd0140135b94b5b5f5263592249d68e555f26",
   "devDependencies": {
-    "@railway/cli": "^5.8.0",
-    "@types/node": "^25.6.0",
-    "@vitest/coverage-v8": "4.1.4",
-    "supabase": "^2.105.0",
-    "tsx": "^4.20.6",
-    "typescript": "~5.9.3",
-    "vitest": "^4.1.4",
-    "wrangler": "^4.46.0"
+    "@railway/cli": "^5.15.0",
+    "@types/node": "^25.9.3",
+    "@vitest/coverage-v8": "4.1.9",
+    "supabase": "^2.107.0",
+    "tsx": "^4.22.4",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.9",
+    "wrangler": "^4.102.0"
   },
   "dependencies": {
     "dotenv": "^17.4.2"

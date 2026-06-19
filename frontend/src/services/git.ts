@@ -3,6 +3,7 @@ import { buildQuery } from "./query";
 import type {
   Connection, Repo, TechBadgeInfo, RepoStats, RepoMember, FixResult,
   RepoAnalysisResponse, StackAnalysisResponse, SensitiveDataAnalysis,
+  RepoIssue, RepoPullRequest,
 } from "../types";
 
 export const gitApi = {
@@ -60,6 +61,12 @@ export const gitApi = {
     request<{
       commits: Array<{ hash: string; shortHash: string; message: string; author: string; authorAvatar: string; date: string; url: string }>;
     }>(`/git/connections/${connectionId}/recent-commits${buildQuery({ owner, repo, branch, limit })}`),
+
+  getOpenIssues: (connectionId: string, owner: string, repo: string, limit?: number) =>
+    request<{ issues: RepoIssue[] }>(`/git/connections/${connectionId}/open-issues${buildQuery({ owner, repo, limit })}`),
+
+  getPullRequests: (connectionId: string, owner: string, repo: string, limit?: number) =>
+    request<{ pullRequests: RepoPullRequest[] }>(`/git/connections/${connectionId}/pull-requests${buildQuery({ owner, repo, limit })}`),
 
   pullOrigin: (connectionId: string, owner: string, repo: string, branch: string, currentHash?: string) =>
     request<{ log: string[] }>(`/git/connections/${connectionId}/pull`, {

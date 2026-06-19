@@ -31,11 +31,15 @@ export interface QueryErrorOptions {
 
 /**
  * DomainError constructor type — matches all service error classes.
- * Uses a loose type for the code parameter to accommodate
- * service-specific error code unions that are subsets of BaseDomainErrorCode.
+ * Uses `string` for the code parameter to accommodate service-specific
+ * error code unions that are subsets of BaseDomainErrorCode.
  */
  
-type DomainErrorConstructor<E extends Error> = new (message: string, code: any, cause?: unknown) => E;
+type DomainErrorConstructor<E extends Error = Error> = new (
+  message: string,
+  code: string,
+  cause?: unknown,
+) => E;
 
 /**
  * Throw a domain error if a Supabase query returned an error.

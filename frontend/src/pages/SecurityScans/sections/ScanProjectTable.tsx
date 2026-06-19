@@ -1,9 +1,11 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { chipCls, tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
+import { isScanSecurityClean, scanHasSecurityErrors, scanSecurityFindingCount } from "../../../utils/scanSummary";
 
 interface Props {
   sortedProjectIds: string[];
@@ -17,8 +19,8 @@ interface Props {
 
 function getScanStatusDot(latest: Scan, summary: Scan["summary"] | undefined): string {
   if (latest.status === "completed") {
-    if (summary && summary.totalFindings === 0) return "bg-success-500";
-    if (summary && summary.errors > 0) return "bg-danger-500";
+    if (summary && isScanSecurityClean(summary)) return "bg-success-500";
+    if (summary && scanHasSecurityErrors(summary)) return "bg-danger-500";
     return "bg-warning-500";
   }
   if (latest.status === "failed") return "bg-danger-500";
@@ -59,7 +61,11 @@ export default function ScanProjectTable({
               <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
               <td>{techCell}</td>
               <td>
-                {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-ui-sm text-text-muted">—</span>}
+                {project?.branch ? (
+                  <BranchCommitLabel branch={project.branch} onClick={() => onSelectEmpty(projectId)} />
+                ) : (
+                  <span className="text-ui-sm text-text-muted">—</span>
+                )}
               </td>
               <td className={tableCellMutedCls}>0</td>
               <td>
@@ -82,11 +88,19 @@ export default function ScanProjectTable({
             <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
             <td>{techCell}</td>
             <td>
-              {project?.branch ? <span className={chipCls}>{project.branch}</span> : <span className="text-ui-sm text-text-muted">—</span>}
+              {project?.branch ? (
+                <BranchCommitLabel
+                  branch={project.branch}
+                  commit={latest.commitSha || undefined}
+                  onClick={() => onSelectScan(latest.id)}
+                />
+              ) : (
+                <span className="text-ui-sm text-text-muted">—</span>
+              )}
             </td>
             <td className={tableCellMutedCls}>{sorted.length}</td>
             <td className={`${tableCellMutedCls} tabular-nums`}>
-              {summary != null ? summary.totalFindings : "—"}
+              {summary != null ? scanSecurityFindingCount(summary) : "—"}
             </td>
             <td>
               <div className="flex items-center gap-1.5">

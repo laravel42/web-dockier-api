@@ -8,33 +8,46 @@ import RepoInfoCard from "./sections/RepoInfoCard";
 import ProjectDetailsCard from "./sections/ProjectDetailsCard";
 import KpiDashboard from "./sections/KpiDashboard";
 import ContributorsGrid from "./sections/ContributorsGrid";
+import OpenIssues from "./sections/OpenIssues";
+import PullRequests from "./sections/PullRequests";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
 import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
-import BranchModal from "./modals/BranchModal";
 import PullLogModal from "./modals/PullLogModal";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 
 export default function ProjectDetail() {
   const {
-    project, loading, error, navigate,
+    project, setProject, loading, error, navigate,
     showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
-    handleDelete, handlePullOrigin, handleOpenBranchModal,
+    handleDelete, handlePullOrigin,
     handleUpdateName, nameSaving, nameError,
     showDeployWizard, setShowDeployWizard,
-    allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy, refreshAnalysis,
+    allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy,
     stats, statsLoading, statsError,
     badges, allBadges,
     recentCommits, commitsLoading, commitsError,
-    showBranchModal, setShowBranchModal,
+    openIssues, issuesLoading, issuesError,
+    pullRequests, pullRequestsLoading, pullRequestsError,
+    loadBranches,
     branchList, branchLoading, branchSearch, setBranchSearch, handleSwitchBranch,
     pullLog, setPullLog, pullLoading,
-    lastDeploy, destroying, showDestroyConfirm, setShowDestroyConfirm, handleDestroy,
     recentDeploys,
     recentScans,
   } = useProjectDetail();
+
+  const nameByLogin: Record<string, string> = {};
+  for (const c of recentCommits) {
+    if (c.authorLogin && c.author && c.author !== c.authorLogin) {
+      nameByLogin[c.authorLogin.toLowerCase()] = c.author;
+    }
+  }
+
+  const lastSuccessfulDeployUrl = recentDeploys.find(
+    (d) => (d.status === "success" || d.status === "completed") && d.appUrl,
+  )?.appUrl;
 
   if (loading) {
     return <PageLoading />;
@@ -67,24 +80,30 @@ export default function ProjectDetail() {
         onCloseMenu={() => setHeaderMenuOpen(false)}
         onDeploy={() => setShowDeployWizard(true)}
         onPull={handlePullOrigin}
-        onSwitchBranch={handleOpenBranchModal}
         onDelete={() => setShowDelete(true)}
         onNameSave={handleUpdateName}
         nameSaving={nameSaving}
         nameError={nameError}
+        branchList={branchList}
+        branchLoading={branchLoading}
+        branchSearch={branchSearch}
+        onBranchSearchChange={setBranchSearch}
+        onLoadBranches={loadBranches}
+        onSwitchBranch={handleSwitchBranch}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 items-stretch">
         <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
-        <ProjectDetailsCard project={project} lastCommitDate={stats?.lastCommitDate} />
+        <ProjectDetailsCard project={project} deployUrl={lastSuccessfulDeployUrl} />
       </div>
 
       <ProjectDescription
         analysis={analysis}
         analysisLoading={analysisLoading}
-        onRefresh={refreshAnalysis}
         projectId={project.id}
         project={project}
+        providers={allProviders}
+        onProjectUpdate={setProject}
       />
 
       {/* UserJourneyTree hidden for now */}
@@ -93,19 +112,31 @@ export default function ProjectDetail() {
         <KpiDashboard stats={stats} statsLoading={statsLoading} statsError={statsError} />
       )}
 
-      <ContributorsGrid stats={stats} />
+      <ContributorsGrid stats={stats} nameByLogin={nameByLogin} />
+
+      {project.connectionId && project.repository && (
+        <>
+          <OpenIssues issues={openIssues} issuesLoading={issuesLoading} issuesError={issuesError} />
+          <PullRequests
+            pullRequests={pullRequests}
+            pullRequestsLoading={pullRequestsLoading}
+            pullRequestsError={pullRequestsError}
+          />
+        </>
+      )}
 
       <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
 
-      <RecentDeploys
-        deploys={recentDeploys}
-        allProviders={allProviders}
-        navigate={navigate}
-        destroying={destroying}
-        onDestroy={lastDeploy ? () => setShowDestroyConfirm(true) : undefined}
-      />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8 items-stretch">
+        <RecentDeploys
+          deploys={recentDeploys}
+          allProviders={allProviders}
+          navigate={navigate}
+          fallbackCommitHash={stats?.lastCommitHash}
+        />
 
-      <RecentScans scans={recentScans} navigate={navigate} />
+        <RecentScans scans={recentScans} navigate={navigate} />
+      </div>
 
       <DeployWizard
         open={showDeployWizard}
@@ -115,32 +146,12 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         analysisError={analysisError}
         providers={allProviders}
-        onDeployComplete={() => fetchLastDeploy()}
+        onDeployComplete={fetchLastDeploy}
       />
 
       <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />
 
-      <ConfirmModal
-        open={showDestroyConfirm}
-        onClose={() => setShowDestroyConfirm(false)}
-        title="Destroy Deployment"
-        message="This will destroy all cloud infrastructure for this deployment (servers, firewall rules, static IPs, etc). This action cannot be undone."
-        confirmLabel="Destroy"
-        onConfirm={handleDestroy}
-      />
-
       <PullLogModal pullLog={pullLog} pullLoading={pullLoading} onClose={() => setPullLog(null)} />
-
-      <BranchModal
-        open={showBranchModal}
-        onClose={() => setShowBranchModal(false)}
-        branchList={branchList}
-        branchLoading={branchLoading}
-        branchSearch={branchSearch}
-        onSearchChange={setBranchSearch}
-        currentBranch={project.branch}
-        onSwitchBranch={handleSwitchBranch}
-      />
     </div>
   );
 }

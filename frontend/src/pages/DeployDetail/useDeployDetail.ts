@@ -19,6 +19,7 @@ export function useDeployDetail() {
 
   const [allDeploys, setAllDeploys] = useState<Deployment[]>([]);
   const [allDeploysLoading, setAllDeploysLoading] = useState(false);
+  const [destroying, setDestroying] = useState(false);
 
   const [showDeployWizard, setShowDeployWizard] = useState(false);
   const [analysis, setAnalysis] = useState<RepoAnalysis | null>(null);
@@ -112,6 +113,24 @@ export function useDeployDetail() {
     if (deploy) refreshAllDeploys(deploy);
   }, [deploy, refreshAllDeploys]);
 
+  const handleDestroy = useCallback(async () => {
+    if (!deploy) return { success: false as const, message: "Deployment not found" };
+    setDestroying(true);
+    try {
+      const res = await deployApi.destroyDeployment(deploy.id);
+      if (res.success) {
+        const updated: Deployment = { ...deploy, status: "destroyed", appUrl: "" };
+        setDeploy(updated);
+        refreshAllDeploys(updated);
+      }
+      return res;
+    } catch (err: unknown) {
+      return { success: false as const, message: getErrorMessage(err, "Failed to destroy deployment") };
+    } finally {
+      setDestroying(false);
+    }
+  }, [deploy, refreshAllDeploys]);
+
   const prov = deploy ? providers.find(p => p.id === deploy.providerId) : undefined;
   const provKey = prov?.provider || "";
   const canLaunchDeploy = Boolean(project?.connectionId || project?.sourceType === "template");
@@ -121,10 +140,12 @@ export function useDeployDetail() {
     deploy, project, providers,
     loading, error,
     allDeploys, allDeploysLoading,
+    destroying,
     prov, provKey,
     showDeployWizard, setShowDeployWizard,
     openDeployWizard, canLaunchDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
+    handleDestroy,
   };
 }

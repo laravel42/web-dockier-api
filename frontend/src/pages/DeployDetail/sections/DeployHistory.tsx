@@ -10,6 +10,7 @@ import {
 } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import ProviderBadge from "../../../components/ProviderBadge";
+import BranchBadge from "../../../components/BranchBadge";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import Spinner from "../../../components/Spinner";
 
@@ -18,6 +19,7 @@ interface Props {
   providers: Provider[];
   activeDeployId: string | undefined;
   loading: boolean;
+  fallbackCommitHash?: string;
   canLaunchDeploy?: boolean;
   onNewDeploy?: () => void;
   onSelect: (id: string) => void;
@@ -28,6 +30,7 @@ export default function DeployHistory({
   providers,
   activeDeployId,
   loading,
+  fallbackCommitHash,
   canLaunchDeploy = false,
   onNewDeploy,
   onSelect,
@@ -70,10 +73,17 @@ export default function DeployHistory({
                 const dp = providers.find((p) => p.id === d.providerId);
                 const dk = dp?.provider || "";
                 return (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     key={d.id}
-                    type="button"
                     onClick={() => onSelect(d.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelect(d.id);
+                      }
+                    }}
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -86,9 +96,14 @@ export default function DeployHistory({
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 ml-3.5">
                       <ProviderBadge provider={dk} />
-                      <span className="text-[10px] text-text-muted truncate">{d.branch}</span>
+                      <BranchBadge
+                        branch={d.branch}
+                        commit={d.commitHash || fallbackCommitHash || undefined}
+                        onClick={() => onSelect(d.id)}
+                        size="compact"
+                      />
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

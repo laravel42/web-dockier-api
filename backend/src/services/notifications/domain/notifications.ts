@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { sendEmailNotification } from "./email-dispatch.js";
+import { notificationMetadataSchema, type NotificationMetadata } from "../schemas.js";
 
 export const NotificationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("NotificationsError");
 export type NotificationsError = InstanceType<typeof NotificationsError>;
@@ -12,6 +13,70 @@ export type NotificationsError = InstanceType<typeof NotificationsError>;
 export type ChannelType = "email" | "slack" | "webhook" | "in_app";
 
 const IN_APP_CHANNEL_TYPE: ChannelType = "in_app";
+
+const NOTIFICATION_LIST_COLUMNS_BASE = "id,channel,title,message,read,created_at";
+const NOTIFICATION_LIST_COLUMNS_WITH_METADATA = `${NOTIFICATION_LIST_COLUMNS_BASE},metadata`;
+
+let notificationsMetadataSupported: boolean | null = null;
+
+function isMissingNotificationsMetadataColumn(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const row = error as { code?: string; message?: string };
+  return row.code === "42703" && (row.message?.includes("notifications.metadata") ?? false);
+}
+
+async function notificationsMetadataColumnExists(): Promise<boolean> {
+  if (notificationsMetadataSupported !== null) return notificationsMetadataSupported;
+
+  const { error } = await supabaseAdmin.from("notifications").select("metadata").limit(0);
+  if (!error) {
+    notificationsMetadataSupported = true;
+    return true;
+  }
+  if (isMissingNotificationsMetadataColumn(error)) {
+    notificationsMetadataSupported = false;
+    return false;
+  }
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to check notifications schema" });
+  return false;
+}
+
+async function insertInAppNotification(params: {
+  tenantId: string;
+  title: string;
+  message: string;
+  metadata?: NotificationMetadata;
+}) {
+  const { tenantId, title, message, metadata } = params;
+  const basePayload = {
+    id: randomUUID(),
+    organization_id: tenantId,
+    channel: IN_APP_CHANNEL_TYPE,
+    title,
+    message,
+    read: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const supportsMetadata = await notificationsMetadataColumnExists();
+  if (!supportsMetadata) {
+    const { error } = await supabaseAdmin.from("notifications").insert(basePayload);
+    throwOnError(error, NotificationsError, { internalMsg: "Failed to store notification" });
+    return;
+  }
+
+  const { error } = await supabaseAdmin.from("notifications").insert({
+    ...basePayload,
+    metadata: metadata ?? null,
+  });
+  if (isMissingNotificationsMetadataColumn(error)) {
+    notificationsMetadataSupported = false;
+    const { error: retryError } = await supabaseAdmin.from("notifications").insert(basePayload);
+    throwOnError(retryError, NotificationsError, { internalMsg: "Failed to store notification" });
+    return;
+  }
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to store notification" });
+}
 
 export async function ensureDefaultInAppChannel(tenantId: string) {
   const { data, error } = await supabaseAdmin
@@ -128,11 +193,12 @@ export interface SendNotificationParams {
   tenantId: string;
   title: string;
   message: string;
+  metadata?: NotificationMetadata;
   channels?: string[];
 }
 
 export async function sendNotification(params: SendNotificationParams): Promise<{ sent: number }> {
-  const { tenantId, title, message, channels: filterChannels } = params;
+  const { tenantId, title, message, metadata, channels: filterChannels } = params;
   if (!tenantId) throw new NotificationsError("Tenant ID is required", "bad_request");
 
   await ensureDefaultInAppChannel(tenantId);
@@ -149,16 +215,7 @@ export async function sendNotification(params: SendNotificationParams): Promise<
   const wantsInApp = !filterChannels || filterChannels.includes(IN_APP_CHANNEL_TYPE);
 
   if (inAppEnabled && wantsInApp) {
-    const { error: insertError } = await supabaseAdmin.from("notifications").insert({
-      id: randomUUID(),
-      organization_id: tenantId,
-      channel: IN_APP_CHANNEL_TYPE,
-      title,
-      message,
-      read: false,
-      created_at: new Date().toISOString(),
-    });
-    throwOnError(insertError, NotificationsError, { internalMsg: "Failed to store notification" });
+    await insertInAppNotification({ tenantId, title, message, metadata });
   }
 
   // Fetch enabled external channels
@@ -220,10 +277,46 @@ export async function sendNotification(params: SendNotificationParams): Promise<
 
 // ─── In-App Notifications ────────────────────────────────────────────────────
 
+function parseNotificationMetadata(value: unknown): NotificationMetadata | null {
+  const parsed = notificationMetadataSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export async function listNotifications(tenantId: string, unreadOnly?: boolean) {
+  const supportsMetadata = await notificationsMetadataColumnExists();
+
+  if (supportsMetadata) {
+    let query = supabaseAdmin
+      .from("notifications")
+      .select(NOTIFICATION_LIST_COLUMNS_WITH_METADATA)
+      .eq("organization_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (unreadOnly) query = query.eq("read", false);
+    const { data, error } = await query;
+    if (isMissingNotificationsMetadataColumn(error)) {
+      notificationsMetadataSupported = false;
+      return listNotificationsWithoutMetadata(tenantId, unreadOnly);
+    }
+    const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
+    return rows.map((row) => ({
+      id: row.id,
+      channel: row.channel,
+      title: row.title,
+      message: row.message,
+      metadata: parseNotificationMetadata(row.metadata),
+      read: row.read,
+      createdAt: row.created_at,
+    }));
+  }
+
+  return listNotificationsWithoutMetadata(tenantId, unreadOnly);
+}
+
+async function listNotificationsWithoutMetadata(tenantId: string, unreadOnly?: boolean) {
   let query = supabaseAdmin
     .from("notifications")
-    .select("id,channel,title,message,read,created_at")
+    .select(NOTIFICATION_LIST_COLUMNS_BASE)
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -235,6 +328,7 @@ export async function listNotifications(tenantId: string, unreadOnly?: boolean) 
     channel: row.channel,
     title: row.title,
     message: row.message,
+    metadata: null,
     read: row.read,
     createdAt: row.created_at,
   }));

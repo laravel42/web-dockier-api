@@ -4,8 +4,14 @@ import type { RepoConfig } from "../types.js";
 import { NATIVE_DEPS_MAP } from "../constants.js";
 import { cleanVersion } from "../utils.js";
 
+interface PhpComposerPackage {
+  require?: Record<string, string>;
+  "require-dev"?: Record<string, string>;
+  scripts?: Record<string, string>;
+}
+
 export function analyzePhpProject(appDir: string, config: RepoConfig) {
-  let composer: Record<string, any>;
+  let composer: PhpComposerPackage;
   try {
     composer = JSON.parse(readFileSync(join(appDir, "composer.json"), "utf-8"));
   } catch { return; }
@@ -43,7 +49,10 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
   }
 
   try {
-    const lock = JSON.parse(readFileSync(join(appDir, "composer.lock"), "utf-8"));
+    const lock = JSON.parse(readFileSync(join(appDir, "composer.lock"), "utf-8")) as {
+      packages?: Array<{ require?: Record<string, string> }>;
+      "packages-dev"?: Array<{ require?: Record<string, string> }>;
+    };
     for (const pkg of [...(lock.packages || []), ...(lock["packages-dev"] || [])]) {
       if (!pkg.require) continue;
       for (const dep of Object.keys(pkg.require)) {

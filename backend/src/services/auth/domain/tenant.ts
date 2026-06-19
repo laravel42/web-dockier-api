@@ -113,7 +113,11 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
   if (targetMembership.status !== "active") throw new TenantError("Target member is not active", "bad_request");
 
   // Atomic ownership transfer via RPC
-  const { error: rpcError } = await (supabaseAdmin.rpc as any)("transfer_ownership", {
+  const transferOwnershipRpc = supabaseAdmin.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ error: unknown }>;
+  const { error: rpcError } = await transferOwnershipRpc("transfer_ownership", {
     _organization_id: tenantId,
     _current_owner_id: currentOwnerId,
     _new_owner_id: targetUserId,

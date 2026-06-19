@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { BatchGetBuildsCommand, CodeBuildClient, ListBuildsForProjectCommand } from "@aws-sdk/client-codebuild";
 import { CloudWatchLogsClient, GetLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import type { FastifyInstance } from "fastify";

@@ -2,14 +2,23 @@ import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
 
 const API = "https://api.monday.com/v2";
 
-async function graphql(token: string, query: string): Promise<any> {
+interface MondayGraphQLResponse {
+  data?: {
+    workspaces?: Array<{ id: string | number; name: string }>;
+    boards?: Array<{ id: string | number; name: string }>;
+    users?: Array<{ id: string | number; name: string; email?: string; photo_thumb?: string }>;
+    create_item?: { id?: string | number };
+  };
+}
+
+async function graphql(token: string, query: string): Promise<MondayGraphQLResponse | null> {
   const res = await fetch(API, {
     method: "POST",
     headers: { Authorization: token, "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
   });
   if (!res.ok) return null;
-  return res.json();
+  return (await res.json()) as MondayGraphQLResponse;
 }
 
 export const mondayProvider: PMProvider = {
@@ -19,7 +28,7 @@ export const mondayProvider: PMProvider = {
     if (!config.apiKey) return { teams: [], teamLabel: this.teamLabel, projectLabel: this.projectLabel };
     const data = await graphql(config.apiKey, "{ workspaces { id name } }");
     return {
-      teams: (data?.data?.workspaces ?? []).map((w: any) => ({ id: String(w.id), name: w.name })),
+      teams: (data?.data?.workspaces ?? []).map((w) => ({ id: String(w.id), name: w.name })),
       teamLabel: this.teamLabel,
       projectLabel: this.projectLabel,
     };
@@ -27,13 +36,13 @@ export const mondayProvider: PMProvider = {
   async listTeamProjects(config) {
     if (!config.apiKey) return { projects: [] };
     const data = await graphql(config.apiKey, "{ boards (limit: 100) { id name } }");
-    return { projects: (data?.data?.boards ?? []).map((b: any) => ({ id: String(b.id), name: b.name })) };
+    return { projects: (data?.data?.boards ?? []).map((b) => ({ id: String(b.id), name: b.name })) };
   },
   async listTeamMembers(config): Promise<{ members: TeamMember[] }> {
     if (!config.apiKey) return { members: [] };
     const data = await graphql(config.apiKey, "{ users { id name email photo_thumb } }");
     return {
-      members: (data?.data?.users ?? []).map((u: any) => ({ id: String(u.id), name: u.name, email: u.email, avatarUrl: u.photo_thumb })),
+      members: (data?.data?.users ?? []).map((u) => ({ id: String(u.id), name: u.name, email: u.email, avatarUrl: u.photo_thumb })),
     };
   },
   async createIssue(req): Promise<CreateIssueResponse> {

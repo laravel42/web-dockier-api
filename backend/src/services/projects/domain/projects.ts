@@ -9,6 +9,47 @@ import { rowToProject } from "./mappers.js";
 export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("ProjectsError");
 export type ProjectsError = InstanceType<typeof ProjectsError>;
 
+/**
+ * Resolves the most recent known commit per project for a tenant, derived from
+ * the latest deployment (`commit_hash`) or security scan (`commit_sha`). Used to
+ * surface a `lastCommitHash` on the project entity so list/detail pages can show
+ * a branch · commit label even when the project itself stores no commit.
+ */
+async function latestCommitByProject(tenantId: string, projectId?: string): Promise<Record<string, string>> {
+  let deployQuery = supabaseAdmin
+    .from("deployments")
+    .select("project_id,commit_hash,updated_at")
+    .eq("organization_id", tenantId)
+    .neq("commit_hash", "")
+    .order("updated_at", { ascending: false });
+  let scanQuery = supabaseAdmin
+    .from("scans")
+    .select("project_id,commit_sha,updated_at")
+    .eq("organization_id", tenantId)
+    .neq("commit_sha", "")
+    .order("updated_at", { ascending: false });
+  if (projectId) {
+    deployQuery = deployQuery.eq("project_id", projectId);
+    scanQuery = scanQuery.eq("project_id", projectId);
+  }
+
+  const [deployRes, scanRes] = await Promise.all([deployQuery, scanQuery]);
+
+  const best: Record<string, { commit: string; ts: number }> = {};
+  const consider = (pid: string | null, commit: string | null, when: string | null) => {
+    if (!pid || !commit) return;
+    const ts = when ? Date.parse(when) || 0 : 0;
+    const existing = best[pid];
+    if (!existing || ts > existing.ts) best[pid] = { commit, ts };
+  };
+  for (const row of deployRes.data ?? []) consider(row.project_id, row.commit_hash, row.updated_at);
+  for (const row of scanRes.data ?? []) consider(row.project_id, row.commit_sha, row.updated_at);
+
+  const out: Record<string, string> = {};
+  for (const [pid, value] of Object.entries(best)) out[pid] = value.commit;
+  return out;
+}
+
 export interface CreateProjectParams {
   tenantId: string;
   name: string;
@@ -59,7 +100,8 @@ export async function getProject(projectId: string, tenantId: string) {
     notFoundMsg: "Project not found",
     internalMsg: "Failed to fetch project",
   });
-  return rowToProject(project);
+  const commits = await latestCommitByProject(tenantId, projectId);
+  return rowToProject(project, commits[project.id] ?? "");
 }
 
 export async function listProjects(tenantId: string) {
@@ -69,7 +111,8 @@ export async function listProjects(tenantId: string) {
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
-  return rows.map(rowToProject);
+  const commits = await latestCommitByProject(tenantId);
+  return rows.map((row) => rowToProject(row, commits[row.id] ?? ""));
 }
 
 export interface UpdateProjectParams {
@@ -111,7 +154,11 @@ export async function updateProject(params: UpdateProjectParams) {
   if (params.sourceType !== undefined) updates.source_type = params.sourceType;
   if (params.template !== undefined) updates.template = params.template;
   if (params.config !== undefined) {
-    updates.config = { ...(typeof verified.config === "object" ? (verified.config as object) : {}), ...params.config } as unknown as Json;
+    const existingConfig =
+      verified.config !== null && typeof verified.config === "object" && !Array.isArray(verified.config)
+        ? (verified.config as Record<string, unknown>)
+        : {};
+    updates.config = { ...existingConfig, ...params.config } as unknown as Json;
   }
 
   const { data, error } = await supabaseAdmin

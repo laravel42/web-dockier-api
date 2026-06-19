@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Job queue powered by pg-boss (PostgreSQL-backed).
  *

@@ -107,17 +107,29 @@ export const btnAccent = btnPrimary;
 
 /** Sidebar nav link */
 export const navLinkCls =
-  "flex items-center gap-2 rounded-md px-3 py-1.5 text-ui font-medium leading-snug transition-colors";
+  "flex items-center gap-2 rounded-md px-3 py-1.5 text-[14px] font-medium leading-snug transition-colors";
 /** Sidebar nav link — active */
 export const navLinkActiveCls = "bg-primary/10 text-foreground";
 /** Sidebar nav link — idle hover */
 export const navLinkIdleCls = "text-muted-foreground hover:bg-card hover:text-foreground";
 
+/** Segmented control / tab chip — active */
+export const segmentActiveCls = "border-primary bg-primary/10 text-foreground";
+/** Segmented control / tab chip — idle */
+export const segmentIdleCls = "border-border text-text-muted hover:border-primary/30";
+
 /** @deprecated Prefer `<Input />` from `@/components/ui/input` or field helpers in `@/components/ui/fields` */
 export const inputCls =
   "w-full h-9 px-3 rounded-md border border-border bg-background text-ui text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30";
+/** Read-only inputs/textareas — muted surface, no focus ring */
+export const readonlyFieldCls =
+  "bg-secondary-50 text-text-muted cursor-default focus:border-border focus:ring-0";
 export const cardCls = panelCls;
 export const cardInteractiveCls = `${panelCls} hover:bg-card/60 transition-colors cursor-pointer`;
+
+/** Dashboard recent deploy/scan list row */
+export const dashboardActivityRowCls =
+  "w-full cursor-pointer px-5 py-3 flex items-center gap-3 hover:bg-card/40 transition-colors text-left";
 
 /** Settings tab card — static */
 export const settingsCardCls =
@@ -154,8 +166,8 @@ export const sidebarPanelHeadTitleCls =
 
 export function sidebarHistoryItemCls(active: boolean): string {
   return active
-    ? "w-full text-left bg-primary/10 transition-colors"
-    : "w-full text-left transition-colors hover:bg-card/60";
+    ? "w-full cursor-pointer text-left bg-primary/10 transition-colors"
+    : "w-full cursor-pointer text-left transition-colors hover:bg-card/60";
 }
 
 export function sidebarHistoryLabelCls(active: boolean, size: "sm" | "xs" = "sm"): string {

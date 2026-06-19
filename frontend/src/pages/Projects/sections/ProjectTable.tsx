@@ -1,6 +1,7 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { chipCls, tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import type { Project, TechBadgeInfo } from "../../../types";
@@ -22,7 +23,7 @@ export default function ProjectTable({ projects, projectLangs, projectBadgeLoadi
             <td className={`${tableCellCls} font-medium`}>{p.name}</td>
             <td className={`${tableCellMutedCls} lowercase`}>{p.repository ? getRepoSlug(p.repository) : "—"}</td>
             <td>
-              <span className={chipCls}>{p.branch || "main"}</span>
+              <BranchCommitLabel branch={p.branch || "main"} commit={p.lastCommitHash || undefined} onClick={() => onSelect(p.id)} />
             </td>
             <td>
               <ProjectTechBadges

@@ -7,8 +7,8 @@ import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon";
 import DownloadIcon from "../../../components/icons/outlined/DownloadIcon";
-import ShareIcon from "../../../components/icons/outlined/ShareIcon";
 import TrashIcon from "../../../components/icons/outlined/TrashIcon";
+import BranchSelector from "./BranchSelector";
 
 interface Props {
   project: Project;
@@ -17,11 +17,16 @@ interface Props {
   onCloseMenu: () => void;
   onDeploy: () => void;
   onPull: () => void;
-  onSwitchBranch: () => void;
   onDelete: () => void;
   onNameSave: (name: string) => Promise<void>;
   nameSaving?: boolean;
   nameError?: string;
+  branchList: string[];
+  branchLoading: boolean;
+  branchSearch: string;
+  onBranchSearchChange: (value: string) => void;
+  onLoadBranches: () => void;
+  onSwitchBranch: (branch: string) => void;
 }
 
 export default function ProjectHeader({
@@ -31,11 +36,16 @@ export default function ProjectHeader({
   onCloseMenu,
   onDeploy,
   onPull,
-  onSwitchBranch,
   onDelete,
   onNameSave,
   nameSaving = false,
   nameError = "",
+  branchList,
+  branchLoading,
+  branchSearch,
+  onBranchSearchChange,
+  onLoadBranches,
+  onSwitchBranch,
 }: Props) {
   const isTemplate = project.sourceType === "template";
   const hasGitActions = !isTemplate && !!project.connectionId;
@@ -87,12 +97,12 @@ export default function ProjectHeader({
   };
 
   return (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-4 mb-8">
+      <div className="flex items-center gap-3 min-w-0">
         <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
           <FolderIcon className="size-6 " />
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {editing ? (
               <input
@@ -132,7 +142,7 @@ export default function ProjectHeader({
               </div>
             )}
             {isTemplate && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-600 text-xs font-medium">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-500/30 text-primary-600 text-xs font-medium">
                 Template
               </span>
             )}
@@ -144,7 +154,18 @@ export default function ProjectHeader({
           </p>
         </div>
       </div>
-      <div className="relative flex items-center gap-4">
+      <div className="relative flex shrink-0 items-center gap-4">
+        {hasGitActions && (
+          <BranchSelector
+            currentBranch={project.branch}
+            branchList={branchList}
+            branchLoading={branchLoading}
+            branchSearch={branchSearch}
+            onSearchChange={onBranchSearchChange}
+            onOpen={onLoadBranches}
+            onSwitch={onSwitchBranch}
+          />
+        )}
         {canDeploy && (
           <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
             <RocketIcon className="size-4 " />
@@ -172,14 +193,6 @@ export default function ProjectHeader({
                   >
                     <DownloadIcon className="size-4  text-text-muted" />
                     Pull from origin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { onCloseMenu(); onSwitchBranch(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-secondary-50 transition-colors"
-                  >
-                    <ShareIcon className="size-4  text-text-muted" />
-                    Switch branch
                   </button>
                 </>
               )}

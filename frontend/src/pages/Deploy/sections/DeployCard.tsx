@@ -1,10 +1,10 @@
 import type { Deployment, Project, TechBadgeInfo } from "../../../types";
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import { cardInteractiveCls, chipCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
+import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 
 interface Props {
   repo: string;
@@ -54,10 +54,11 @@ export default function DeployCard({ repo, deploys, project, badges, badgeLoadin
             {formatCardDateTime(getSortTimestamp(latest, "updated"))}
           </span>
         </div>
-        <span className={chipCls}>
-          <LinkIcon className="size-3" />
-          {latest.branch}
-        </span>
+        <BranchCommitLabel
+          branch={latest.branch}
+          commit={latest.commitHash || project?.lastCommitHash || undefined}
+          onClick={onClick}
+        />
       </div>
     </div>
   );

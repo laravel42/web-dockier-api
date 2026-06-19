@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -276,14 +277,28 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "List deployments",
-        querystring: z.object({ providerId: z.uuid().optional() }),
-        response: { 200: z.object({ deployments: z.array(deploymentSchema) }) },
+        querystring: z.object({
+          providerId: z.string().uuid().optional(),
+          projectId: z.string().uuid().optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+          offset: z.coerce.number().int().min(0).optional(),
+        }),
+        response: {
+          200: z.object({
+            deployments: z.array(deploymentSchema),
+            total: z.number().int().nonnegative(),
+          }),
+        },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      const deployments = await listDeployments(auth.tenantId, request.query.providerId);
-      return { deployments };
+      return await listDeployments(auth.tenantId, {
+        providerId: request.query.providerId,
+        projectId: request.query.projectId,
+        limit: request.query.limit,
+        offset: request.query.offset,
+      });
     },
   );
 
