@@ -1,58 +1,121 @@
-# Dockier
+# Dockier — Product Overview
 
-Dockier is a developer platform that connects your source code repositories to automated security scanning, AI-powered project analysis, deployment pipelines, and project management — all from a single dashboard.
+Dockier is a developer platform that connects source code repositories to automated security scanning, AI-powered project analysis, deployment automation, and team management — all from a single dashboard.
 
-## What It Does
+Built for small-to-mid-size teams that need to ship secure code without a dedicated AppSec function or a patchwork of disconnected tools.
 
-Dockier brings together the tools developers need to ship secure code faster:
+---
 
-- **Project Management** — Connect GitHub, GitLab, or Bitbucket repositories and organize them as projects with branch tracking, tech stack detection, recent commits, recent deploys, and deployment status at a glance. List pages for **Projects**, **Deployments**, and **Security Scans** support card and table views with a shared toggle UX; view preference is remembered per page.
+## Core capabilities
 
-- **AI-Powered Project Analysis** — Automatically generates a comprehensive project overview using OpenAI (gpt-5.4-mini), including architecture documentation, tech stack breakdown, deployment guides, security considerations, and code quality insights — organized in a tabbed Notion-style interface with 8 sections (Overview, How It Works, Tech Stack, Architecture, Data & Storage, Code Quality, Security, Deployment). Analysis is cached per commit and refreshable on demand.
+### Project & repository management
 
-- **Sensitive Data Scanner** — Code-based scanner (no AI) that parses SQL migrations, Prisma schemas, PHP Eloquent models, TypeScript interfaces, and Python classes to detect personal, sensitive, and secret data fields. Classifies fields by sensitivity level (personal, sensitive, secret) and groups them by entity in an interactive sidebar view.
+- Connect **GitHub**, **GitLab** (cloud + self-hosted), and **Bitbucket** via personal access tokens.
+- Create **projects** linked to a repo and branch; view tech stack badges (top 4 by confidence), recent commits, scans, and deploys.
+- **Projects**, **Deployments** (`/deploy`), and **Security Scans** list pages support **card/table toggle**; view preference is stored in `localStorage`.
 
-- **Dependency Vulnerability Scanner** — Parses `package.json`, `composer.json`, `requirements.txt`, and `Gemfile` to extract all dependencies. Checks each against the [OSV.dev](https://osv.dev) vulnerability database (free, no API key). Lists dependencies with version, status, ecosystem, repository link, and vulnerabilities grouped by severity (critical, high, medium, low). Filterable by production/dev/vulnerable.
+### AI-powered project analysis
 
-- **Security Scanning** — Run automated code analysis powered by Semgrep, SonarQube, and a built-in custom rules engine. Scans detect SQL injection, XSS, command injection, weak cryptography, path traversal, and dozens of other vulnerability classes across PHP, JavaScript, TypeScript, Python, Go, Java, Ruby, and more.
+- Generates an eight-section overview using **OpenAI gpt-5.4-mini**: Overview, How It Works, Tech Stack, Architecture, Data & Storage, Code Quality, Security, Deployment.
+- Tabbed editor on the project detail page; results cached in Postgres keyed by repo + branch + commit SHA.
+- Refresh on demand when the branch advances.
 
-- **AI-Assisted Remediation** — Generate fix merge requests directly from scan findings using OpenAI-powered code suggestions. Assign reviewers and track fixes without leaving the platform.
+### Sensitive data detection
 
-- **Issue Tracking Integration** — Create issues in Jira, Linear, or other project management tools directly from security findings, with AI-generated titles, severity-based priority mapping, and effort estimates.
+- **Code-based scanner** (no AI): SQL migrations, Prisma schemas, Eloquent models, TypeScript interfaces, Python classes.
+- Classifies fields as personal, sensitive, or secret; interactive sidebar on the project detail page.
 
-- **Deployment Automation** — Configure server providers (AWS, GCP) and trigger deployments tied to specific branches and commits. Track deployment history per project with recent deploys list showing status, provider, strategy, app URL, and docker image.
+### Dependency vulnerability scanning
 
-- **Notifications** — Multi-channel alerting via email, Slack, webhooks, and in-app notifications for scan results, deployments, and other events.
+- Parses `package.json`, `composer.json`, `requirements.txt`, and `Gemfile`.
+- Checks versions against the [OSV.dev](https://osv.dev) batch API (free, no API key).
+- Filterable by production / dev / vulnerable; severity-grouped findings.
 
-- **Authentication & Access Control** — Supabase passwordless auth (email OTP/magic link), tenant-scoped API JWT sessions, and app-managed RBAC with fixed `admin` / `member` roles.
+### Security scanning (SAST)
 
-## Project Detail Page
+- **Semgrep** community rules (30+ languages).
+- Optional **SonarQube** integration.
+- Built-in **custom regex rules engine** (30+ rules): SQLi, XSS, command injection, weak crypto, path traversal, and more.
+- Scan detail view with findings list, severity badges, Fix-with-AI flow, and issue/MR creation.
 
-Each project has a rich detail page featuring:
+### AI-assisted remediation
 
-- **Repository info** with branch, last commit (hash, author, time ago), and tech stack badges (top 4 detected technologies by confidence — frameworks, languages, runtimes, tools)
-- **Project Overview** — Tabbed AI-generated documentation with 8 sections, plus pattern-based Sensitive Data and Dependencies tabs
-- **KPI Dashboard** — Stars, forks, open issues, watchers, commits, contributors, and language breakdown with percentage bars
-- **Contributors Grid** — Top contributors with avatars and commit counts
-- **Recent Commits** — Last 5 commits with author, message, hash, and relative time
-- **Recent Deploys** — Last 5 deployments with status badge, provider badge, strategy, docker image, app URL link, and view details
-- **Last Deploy Card** — Detailed view of the most recent deployment with destroy capability
+- Generate fix suggestions from findings via OpenAI.
+- Preview diffs and open **merge requests** (GitHub PR / GitLab MR / Bitbucket PR) with reviewer assignment.
+- Create **issues** in connected PM tools from findings with AI-generated titles and severity-mapped priority.
 
-## Architecture
+### Issue tracking integrations
 
-Dockier is built as microservices, with an active migration to a Fastify + TypeScript backend foundation while preserving existing domain boundaries.
+Supported PM adapters include **Jira**, **Linear**, **Asana**, **GitHub Issues**, **GitLab Issues**, **ClickUp**, **Monday.com**, **Notion**, **Todoist**, and **Basecamp**.
 
-**Backend foundation now:** `backend/` runs Fastify + TypeScript with OpenAPI-first route schemas (Zod), Swagger UI, and a typed Supabase storage adapter. In this migration pass, `auth`, `users`, and `projects` are implemented; other domains are scaffolded with migration-status endpoints and continue to be migrated incrementally.
+Configure integrations in **Settings → Integrations** (catalog grouped by category: Database, Storage, Mail, CRM, DevOps, etc.).
 
-**Frontend:** Single-page React app (Vite + React 19 + Tailwind CSS v4) with dark mode default, portal-based dropdown selects, session-cached analysis, `localStorage`-cached project tech badges, card/table list views on Projects/Deployments/Security Scans, ESLint enforcement of canonical Tailwind classes (`eslint-plugin-better-tailwindcss`), shared badge components (SensitivityBadge, StatusBadge, TechBadge, ProviderBadge, SourceControlBadge), and Cloudflare Pages deployment support.
+### Deployment automation
 
-**AI Integration:** OpenAI API (gpt-5.4-mini) with a server-side API key (`OpenAIApiKey`). Used for project analysis (sections, deploy options) and security fix generation. Response format enforced as `json_object`. Results cached in PostgreSQL `analysis_cache` table keyed by repo + branch + commit SHA.
+- **Repo analyzer** detects runtime, framework, and package manager; generates optimized multi-stage **Dockerfiles** (Node, PHP, Python, Go — with framework-specific handling).
+- Failed builds can be auto-patched and retried (up to 3 attempts).
+- **AWS:** ECS (managed) via CodeBuild → ECR → CloudFormation.
+- **GCP:** Cloud Run (managed), Compute Engine (VPS), Cloud Storage + CDN (static) via Pulumi + Artifact Registry.
+- Deploy wizard: provider selection, env vars, post-deploy commands, strategy selection.
+- Status tracking: pending → building → deploying → success / failed / destroyed.
+- One-click infrastructure teardown (Pulumi state for GCP; CloudFormation stack deletion for AWS).
 
-**Vulnerability Scanning:** Dependencies checked against [OSV.dev](https://osv.dev) batch API. Sensitive data detected via pattern matching on field names from migrations and models — no AI credits consumed.
+### Notifications
 
-**Docs and contracts:** API contracts are exposed through runtime Swagger/OpenAPI endpoints and Mintlify documentation in `docs/`.
+- Channels: **email**, **Slack**, **webhook**, **in-app** (default channel seeded).
+- In-app dropdown with rich metadata (branch, commit, deploy/scan context); mark-as-read with slide-away animation.
+- Full notifications page at `/notifications`.
 
-**Migration and schema direction:** Root `migrations/` is the single SQL migration source of truth, with historical lineage captured in `migrations/legacy-index.md`.
+### Authentication & access control
+
+- **Supabase Auth** passwordless sign-up and sign-in (email OTP / magic link).
+- Backend issues a **tenant-scoped JWT** after verification; API protected via Fastify auth pre-handler.
+- Optional **TOTP 2FA** (`/auth/2fa/setup`, `/auth/2fa/enable`).
+- **Multi-tenant organizations** with membership management, tenant switch, and ownership transfer.
+- **Custom roles** per organization (default Admin/Member seeded) with **30+ granular permissions** (`project:view`, `deploy:create`, `scan:run`, `credential:manage`, …).
+- Organization **owner** has elevated capabilities (billing, org delete, ownership transfer) enforced separately from role permissions.
+- Dev-only helpers: password login and demo login (disabled in production).
+
+### Dashboard & navigation
+
+- **Top navbar** layout (Dashboard, Projects, Security, Settings) with theme toggle and notification bell.
+- KPI cards and recent deploys / recent scans panels.
+- **Settings** tabs: Profile, Users, Roles, Providers, SSH Keys, Source Control, Notification Channels, Integrations, Security Tools — visibility gated by permissions.
+
+---
+
+## Project detail page
+
+- Repository header with branch, commit, tech badges, and branch switcher.
+- **Overview** tabs: AI sections, Sensitive Data, Dependencies, Deployments.
+- KPI strip: stars, forks, issues, watchers, commits, contributors, languages.
+- Recent commits, recent deploys, recent scans, contributors grid, last deploy card with destroy action.
+
+---
+
+## Technical architecture
+
+| Layer | Stack |
+| ----- | ----- |
+| Backend | Fastify + TypeScript, modular services under `backend/src/services/*` |
+| Frontend | Vite, React 19, Tailwind CSS v4, react-router-dom, shadcn/ui primitives |
+| Database | Supabase Postgres; typed access via `@supabase/supabase-js` |
+| Auth | Supabase Auth (passwordless) + app JWT + RLS on tenant tables |
+| AI | OpenAI API (gpt-5.4-mini), server-side only, JSON response format |
+| Scanning | Semgrep + optional SonarQube + custom regex engine |
+| Vulnerabilities | OSV.dev batch API |
+| Builds | Auto-generated Dockerfiles; Railpack/Nixpacks available as alternatives |
+| Infrastructure | Pulumi (GCP), CodeBuild + CloudFormation (AWS) |
+| Jobs | pg-boss (Postgres-backed queue) for deploy/scan/notification workers |
+| Hosting | Railway (API), Cloudflare Pages (SPA), Cloudflare Secrets Store |
+
+**Backend services (gateway):** `auth`, `users`, `projects`, `roles`, `deploy`, `notifications`, `integrations`, `code-analysis`, `git-integration`, `image-builder`.
+
+**API contracts:** Runtime OpenAPI at `/docs` and `/docs/json`; Mintlify docs in `docs/`.
+
+**Migrations:** Single source of truth in `supabase/migrations/` (see `legacy-index.md` for historical mapping).
+
+---
 
 ## License
 

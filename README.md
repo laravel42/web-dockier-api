@@ -1,133 +1,152 @@
 # Dockier
 
-Dockier is a full-stack developer platform with a Fastify + TypeScript backend in `backend/`, Supabase-backed persistence, and OpenAPI-first contracts.
+Dockier is a developer platform that connects Git repositories to security scanning, AI-powered project analysis, deployment automation, and team management — from a single dashboard.
 
-## Backend Status
+**Audience:** Small-to-mid-size engineering teams (roughly 2–15 engineers) who need to ship secure code without juggling separate AppSec, CI, and deployment tools.
 
-All active backend domains are implemented under `backend/src/services/*` and run via the Fastify runtime.
+**License:** MPL-2.0
 
-## Architecture Snapshot
+See [`PRODUCT.md`](PRODUCT.md) for the feature overview and [`DESCRIPTION.md`](DESCRIPTION.md) for goals, scope, non-goals, and success criteria. See [`AGENTS.md`](AGENTS.md) for AI coding agent conventions.
+
+---
+
+## What Dockier does
+
+| Area | Summary |
+| ---- | ------- |
+| **Git** | Connect GitHub, GitLab (cloud + self-hosted), and Bitbucket via PATs. Browse repos, branches, files, and stats. |
+| **Projects** | Link a repo + branch; track tech stack badges, commits, scans, and deploys. |
+| **AI analysis** | Eight-section project overview (OpenAI gpt-5.4-mini), cached per commit SHA. |
+| **Sensitive data** | Pattern-based scanner for migrations, ORM schemas, and model files — no AI credits. |
+| **Dependencies** | Parses npm, Composer, pip, and Bundler manifests; checks OSV.dev. |
+| **Security scans** | Semgrep, optional SonarQube, and 30+ custom regex rules. |
+| **Remediation** | AI fix suggestions, merge-request drafts, and PM issue creation from findings. |
+| **Deploy** | Auto-generated Dockerfiles, AWS (ECS via CodeBuild/CloudFormation) and GCP (Cloud Run, GCE, static CDN via Pulumi). |
+| **Notifications** | Email, Slack, webhooks, and in-app alerts with structured metadata for deploys and scans. |
+| **Access control** | Multi-tenant organizations, custom roles, 30+ granular permissions, optional TOTP 2FA. |
+
+---
+
+## Architecture
 
 ```text
-backend/ (Fastify + TypeScript runtime)
-├── src/services/*           → service route modules
-├── src/shared/supabase      → typed Supabase client/types
-└── src/shared/openapi       → route schemas -> OpenAPI/Swagger
+backend/                    Fastify + TypeScript (single gateway binary)
+├── src/services/           Domain route modules (auth, deploy, git, scans, …)
+├── src/shared/             Auth, config, OpenAPI, Supabase client, pg-boss queue
+└── package.json            @dockier/backend-fastify
 
-frontend/ (React 19 + Vite + Tailwind CSS)
-├── src/services             → API client layer
-└── wrangler.toml            → Cloudflare Pages config
+frontend/                   React 19 + Vite + Tailwind CSS v4 (dark mode default)
+├── src/pages/              Dashboard, Projects, Security, Deploy, Settings, …
+├── src/services/           Typed API clients
+└── wrangler.toml           Cloudflare Pages deployment
 
-docs/                        → Mintlify docs
-migrations/                  → unified SQL migration source of truth
+supabase/migrations/        Canonical SQL schema (apply with pnpm db:migrate)
+code-analysis/rules/        Semgrep / OpenGrep rule assets
+docs/                       Mintlify documentation
+infra/                      DB setup scripts, Pulumi/AWS helpers
 ```
 
-## Developer Workflow
+**Runtime:** Backend on [Railway](docs/operations/railway.mdx); frontend on Cloudflare Pages. Secrets via Cloudflare Secrets Store in production (`pnpm secrets:push`).
 
-### Prerequisites
+**Database:** Supabase Postgres (Postgres + Supabase Auth). Background jobs use **pg-boss** on the same database when `DATABASE_URL` is configured.
+
+**API:** OpenAPI-first routes (Zod schemas). Swagger UI at `/docs` when the backend is running.
+
+---
+
+## Prerequisites
 
 - Node.js 18+
-- `pnpm` 10+
+- pnpm 10+ (repo pins pnpm 11 via `packageManager`)
 
-### Install dependencies
+---
+
+## Quick start
 
 ```bash
+# Install
 pnpm install
 cd frontend && pnpm install
-```
 
-### Run backend (Fastify)
+# Configure (copy and fill in Supabase + JWT keys)
+cp .env.example .env
 
-From repo root:
+# Apply schema
+pnpm db:migrate
 
-```bash
+# Terminal 1 — API gateway (all services)
 pnpm backend:dev
+
+# Terminal 2 — SPA
+pnpm frontend:dev
 ```
 
-Useful service-specific commands:
+- Frontend: http://localhost:5173  
+- Backend: http://localhost:4000  
+- Swagger: http://localhost:4000/docs  
+
+Seed an admin user (optional):
 
 ```bash
-pnpm backend:start:gateway
-pnpm --filter @dockier/backend-fastify start:auth
-pnpm --filter @dockier/backend-fastify start:users
-pnpm --filter @dockier/backend-fastify start:projects
+pnpm backend:seed:admin
+```
+
+---
+
+## Common commands
+
+```bash
+# Quality
+pnpm test                  # Root Vitest suite
+pnpm typecheck             # Backend + frontend
+pnpm lint                  # Backend + frontend ESLint
+
+# Backend
 pnpm backend:typecheck
-```
+pnpm backend:start:gateway
 
-### Run frontend (Vite)
+# Frontend
+pnpm frontend:build
+pnpm frontend:lint:fix     # Includes Tailwind canonical-class fixes
 
-```bash
-cd frontend
-pnpm dev
-pnpm lint       # ESLint (Tailwind canonical-class checks)
-pnpm lint:fix   # auto-fix canonical Tailwind classes
-```
-
-See `frontend/README.md` for list-page UX, tech badge caching, and linting details.
-
-### API docs
-
-When backend is running:
-
-- Swagger UI: `http://localhost:4000/docs`
-- OpenAPI JSON: `http://localhost:4000/docs/json`
-
-### Mintlify docs
-
-From repo root:
-
-```bash
+# Docs
 pnpm docs:dev
 pnpm docs:build
+
+# Production deploy
+pnpm publish:prod          # Railway backend + Cloudflare Pages frontend
+pnpm publish:railway
+pnpm publish:cloudflare
 ```
 
-### Publish to production (Railway + Cloudflare)
+---
 
-Copy `.env.example` → `.env`, configure secrets, then:
+## Environment
+
+Copy [`.env.example`](.env.example) → `.env` (gitignored). Required keys include `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `JWT_SECRET`. Optional: `OPENAI_API_KEY`, `DATABASE_URL` (pg-boss), cloud provider credentials for deploy flows.
+
+Production secrets: `pnpm secrets:push` → Cloudflare Secrets Store; Railway loads them when `LOAD_SECRETS_FROM=cloudflare`. See `docs/operations/cloudflare.mdx` and `docs/operations/railway.mdx`.
+
+---
+
+## Database migrations
+
+All schema changes belong in **`supabase/migrations/`** with monotonic numeric prefixes (`0046_*.sql`, …). Do not edit migrations that have already been applied — add new files instead.
 
 ```bash
-# One-time Railway setup
-pnpm exec railway login
-pnpm exec railway link
-
-# Full production deploy (backend → Railway, frontend → Cloudflare Pages)
-pnpm publish:prod
-
-# Or deploy separately
-pnpm publish:railway      # backend only
-pnpm publish:cloudflare   # frontend only (set DOCKIER_API_URL first)
+pnpm db:migrate    # Uses MIGRATE_URL or pooler URLs from .env
+pnpm db:link       # Link Supabase CLI project (optional)
 ```
 
-See `docs/operations/railway.mdx` and `docs/operations/cloudflare.mdx`.
+Historical migration lineage: [`supabase/migrations/legacy-index.md`](supabase/migrations/legacy-index.md).
 
-### Legacy AWS publish
+---
 
-```bash
-pnpm publish:aws   # ECR image + optional S3 frontend
-```
+## Repository map
 
-### Cloudflare Pages workflow (frontend only)
-
-```bash
-cd frontend
-pnpm build
-pnpm cf:pages:dev
-pnpm cf:pages:deploy
-```
-
-## Environment Variables
-
-Secrets are managed through **Cloudflare Secrets Store** (production), **gitignored local files** (dev), with optional Supabase Edge Function sync:
-
-1. **Local dev:** copy `.env.example` → `.env`, or use `.env.local` overrides.
-2. **Production:** `pnpm secrets:push` uploads `.env` to Cloudflare Secrets Store. See `docs/operations/cloudflare.mdx`.
-3. **Backend runtime:** Railway in production. Set `LOAD_SECRETS_FROM=cloudflare` with bridge vars on Railway, or `SYNC_RAILWAY_ENV=true pnpm publish:railway`. AWS Secrets Manager / SSM remain supported as fallback.
-4. **Edge Functions (optional):** `pnpm secrets:push:supabase`.
-
-The backend calls `initConfig()` before startup, which loads local files then fetches Cloudflare or AWS secrets (without overwriting keys already in `process.env`).
-
-## Database and Migrations
-
-- SQL migrations live in `supabase/migrations/`.
-- Apply to your remote database: `pnpm db:migrate` (reads `DIRECT_URL` or `DATABASE_URL` from `.env`, or uses a linked Supabase project via `pnpm db:link`).
-- Historical lineage is documented in `supabase/migrations/legacy-index.md`.
+| Path | Purpose |
+| ---- | ------- |
+| [`backend/README.md`](backend/README.md) | Backend services, auth model, run modes |
+| [`frontend/README.md`](frontend/README.md) | UI structure, design tokens, linting |
+| [`AGENTS.md`](AGENTS.md) | Conventions for AI agents |
+| [`.kiro/specs/`](.kiro/specs/) | Historical feature design docs (not product source of truth) |

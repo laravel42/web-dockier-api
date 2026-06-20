@@ -1,8 +1,8 @@
 # Legacy migration mapping
 
-Historical source migrations were consolidated into root `migrations/`.
+Historical source migrations were consolidated into `supabase/migrations/`.
 
-## Service migrations -> root files
+## Service migrations -> canonical files
 
 - `auth/migrations/1_create_auth_tables.up.sql` -> `0005_users.sql`, `0006_social_connections.sql`
 - `users/migrations/1_create_users.up.sql` -> `0005_users.sql`

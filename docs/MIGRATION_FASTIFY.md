@@ -1,55 +1,37 @@
-# Encore -> Fastify Migration Scaffold
+# Encore → Fastify migration (completed)
 
-This repository now includes a practical migration foundation in `backend/` to replace Encore with Fastify + TypeScript while preserving microservice boundaries.
+Dockier’s backend previously used Encore. It now runs on **Fastify + TypeScript** in `backend/`, preserving domain boundaries as route modules in a single deployable gateway.
 
-## Delivered in this pass
+**Status:** Complete for runtime-critical paths. This document is retained for historical context.
 
-- Fastify runtime with service selector (`SERVICE_NAME`)
-- Supabase typed storage adapter (`@supabase/supabase-js`)
-- Passwordless Supabase auth flow (`/auth/passwordless/start`, `/auth/passwordless/verify`)
-- Multitenancy (`organizations`, `organization_memberships`) with strict `admin`/`member` RBAC
-- OpenAPI-first route definitions via Zod
-- Swagger UI + JSON docs endpoints
-- Mintlify-compatible docs in `docs/`
-- Cloudflare Pages config for static frontend deployment
-- Root-level migration folder (`migrations/`) as the single SQL migration source
+## What shipped
 
-## Fully migrated services
+- Fastify gateway with `SERVICE_NAME` selector (monolith or per-service dev mode)
+- Supabase typed storage adapter
+- Passwordless Supabase Auth + tenant-scoped JWT
+- Multi-tenant `organizations` / `organization_memberships` + custom RBAC
+- OpenAPI (Zod) + Swagger UI at `/docs`
+- All ten domain services implemented under `backend/src/services/*`
+- Canonical SQL in `supabase/migrations/` (not a root `migrations/` folder)
+- Frontend on Cloudflare Pages; backend on Railway; secrets via Cloudflare Secrets Store
 
-- `auth`
-- `users`
-- `projects`
-- `roles`
-- `deploy`
-- `notifications`
-- `integrations`
-- `code-analysis`
-- `git-integration`
-- `image-builder`
+## Migrated services
 
-## Notes on best-effort parity
+`auth`, `users`, `projects`, `roles`, `deploy`, `notifications`, `integrations`, `code-analysis`, `git-integration`, `image-builder`
 
-- All scaffolded service endpoints are now implemented under `backend/src/services/*/routes.ts` with Fastify + Zod schemas and OpenAPI metadata.
-- Restored service-internal logic modules now include:
-  - `git-integration/domain`: tech-stack detection, deploy-option analysis, service detection, dependency vulnerability scanner.
-  - `integrations/domain/providers`: parity adapters for Jira, Linear, GitHub, GitLab, Asana, ClickUp, Monday, Notion, Todoist, Basecamp.
-  - `image-builder/domain/aws-runtime`: CodeBuild status refresh + CloudWatch log streaming.
-  - `deploy/domain`: runtime planner, deploy template resolution, pipeline processor, and destroy orchestration helpers.
-  - `image-builder/domain/buildspec`: buildspec preview generation for runtime build metadata.
-  - `git-integration/domain/mr-generator`: MR/PR draft generation and finding summarization utilities.
+## Parity notes
 
-## Completion state
-
-- Runtime-critical restoration items from the prior audit are implemented in Fastify architecture for deploy/image-builder/git-integration/integrations flows.
-- `TODO(restoration)` markers are removed from active runtime paths.
-- Remaining stubs are non-critical external integrations (for example SonarQube profile/rule proxy endpoints) and return safe defaults.
+- Domain helpers restored under each service’s `domain/` directory (deploy planner/processor, git analysis, PM adapters, image build pipeline, MR generator, etc.).
+- Remaining gaps are non-critical optional integrations (e.g. some SonarQube proxy endpoints return safe defaults).
+- Background work uses **pg-boss** on Postgres when `DATABASE_URL` is configured (replaces Encore pub/sub for deploy/notification jobs).
 
 ## Required environment variables
 
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_...`)
-- `SUPABASE_SECRET_KEY` (`sb_secret_...`, server-side; replaces legacy `service_role` JWT)
-- `JWT_SECRET`
-- `SERVICE_NAME` (gateway/auth/users/projects/etc.)
-- `PORT`
-- `CORS_ORIGIN`
+See repo-root `.env.example`. Minimum: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `JWT_SECRET`, `PORT`, `CORS_ORIGIN`.
+
+## Do not reintroduce
+
+- `encore.service.ts`, `encore.app`, or `encore.dev` imports
+- Encore-specific runtime configuration
+
+For current architecture, see [`README.md`](../README.md) and [`PRODUCT.md`](../PRODUCT.md).

@@ -1,79 +1,81 @@
-# Dockier Fastify Backend Migration
+# Dockier Backend
 
-This package is the Encore replacement scaffold for Dockier's backend while preserving the existing microservice boundaries.
+Fastify + TypeScript API for Dockier. A single `@dockier/backend-fastify` package runs either the full **gateway** (all domains) or individual service entrypoints for local debugging.
 
-## What is migrated now
+## Services
 
-- `auth` service: passwordless OTP/magic-link start+verify, tenant membership flows, and `GET /auth/me`
-- `users` service: create/get/list/update/delete
-- `projects` service: create/get/list/update/delete
-- `roles` service: create/get/list/update/delete
-- `deploy` service: providers, deployments, SSH keys, IaC generation, webhook updates
-- `notifications` service: channels, send flow, inbox/read tracking
-- `integrations` service: PM teams/projects/members + issue creation
-- `code-analysis` service: scans/findings/custom rules/rule overrides (+ best-effort async stubs)
-- `git-integration` service: connections/repos/branches/tree/content/stats/analysis endpoints
-- `image-builder` service: builds, logs, cancel, image lookup, deploy status, webhook
-- Restored domain helper modules under Fastify services:
-  - `deploy/domain/planner.ts`: runtime detection, IaC preview generation, resource estimation
-  - `deploy/domain/templates.ts`: provider/strategy template selection
-  - `deploy/domain/processor.ts`: deployment creation + webhook status/log processing
-  - `image-builder/domain/orchestrator.ts`: build input normalization + orchestration metadata
-  - `image-builder/domain/buildspec.ts`: buildspec preview synthesis for build metadata
-  - `git-integration/domain/provider-client.ts`: provider API adapters for repos/branches/tree/files
-  - `git-integration/domain/analysis.ts`: stack detection, deploy option inference, service/sensitive/dependency analyzers
-  - `git-integration/domain/mr-generator.ts`: finding title/effort estimation + MR/PR draft creation helpers
-- Shared Supabase admin client with strict typing (`src/shared/supabase/types.ts`)
-- Shared JWT auth guard (`src/shared/auth.ts`)
-- OpenAPI/Swagger generation + docs UI (`/docs`, `/docs/json`)
+| Service | Path prefix / domain | Responsibility |
+| ------- | -------------------- | -------------- |
+| `auth` | `/auth/*` | Passwordless OTP, sessions, 2FA, tenants, memberships, billing details |
+| `users` | `/users/*` | User CRUD |
+| `projects` | `/projects/*` | Project CRUD |
+| `roles` | `/roles/*` | Custom roles and permission assignment |
+| `deploy` | `/deploy/*`, providers, SSH keys | Deployments, providers, destroy, webhooks |
+| `notifications` | `/notifications/*` | Channels, inbox, send |
+| `integrations` | `/integrations/*` | PM tool connections and issue creation |
+| `code-analysis` | `/scans/*`, rules | Scans, findings, custom rules |
+| `git-integration` | `/git/*` | Git connections, repos, analysis caches |
+| `image-builder` | `/builds/*` | Image builds, logs, deploy pipeline hooks |
 
-## Auth and tenancy model
+Domain logic lives under each service’s `domain/` folder (planner, processor, analyzers, PM adapters, etc.).
 
-- Registration flow: `POST /auth/register/start` then `POST /auth/passwordless/verify` (`type=signup`).
-- Existing-user passwordless sign-in: `POST /auth/passwordless/start` then `POST /auth/passwordless/verify`.
-- Tenants live in `organizations`, and membership lives in `organization_memberships`.
-- Roles are fixed and app-managed: `admin` and `member`.
-- New self-registered users default to `member` unless explicitly provisioned as `admin` (seed/admin tooling).
-- The backend issues a tenant-scoped JWT for API access after OTP verification.
-- Authorization is enforced in API handlers and backed by RLS policies for tenant tables.
+## Auth and tenancy
 
-Supabase Auth must have the Email provider (OTP/magic-link) and email signups enabled for registration to work.
+- **Sign-up:** `POST /auth/register/start` → `POST /auth/passwordless/verify` (`type=signup`).
+- **Sign-in:** `POST /auth/passwordless/start` → `POST /auth/passwordless/verify`.
+- **Session:** `GET /auth/me` returns user, active tenant, role, and resolved permission keys.
+- **Tenants:** `organizations` + `organization_memberships`; switch via `POST /auth/tenants/:id/switch`.
+- **Roles:** Per-tenant custom roles in `roles` / `role_permissions`; default Admin/Member seeded on org creation.
+- **Owner:** Organization owner flag for billing, org delete, and ownership transfer (separate from role permissions).
+- **2FA:** TOTP setup/enable on authenticated routes.
+- **Dev only:** `POST /auth/demo-login`, `POST /auth/password/login` (disabled in production).
 
-## Microservice run modes
+Supabase Auth must have the Email provider enabled for OTP/magic-link flows.
 
-One binary can boot each service independently:
+## Shared infrastructure
+
+- **Supabase admin client** — `src/shared/supabase/client.ts` + generated types in `types.ts`
+- **JWT guard** — `src/shared/auth.ts` + permission checks in `src/shared/permissions/`
+- **OpenAPI** — Zod route schemas; Swagger UI at `/docs`, JSON at `/docs/json`
+- **Job queue** — pg-boss (`src/shared/queue.ts`) when `DATABASE_URL` is set
+
+## Run modes
 
 ```bash
+pnpm backend:dev                              # gateway (from repo root)
+pnpm --filter @dockier/backend-fastify dev
+
+pnpm backend:start:gateway
 pnpm --filter @dockier/backend-fastify start:auth
-pnpm --filter @dockier/backend-fastify start:users
-pnpm --filter @dockier/backend-fastify start:projects
-pnpm --filter @dockier/backend-fastify start:gateway
+pnpm --filter @dockier/backend-fastify start:deploy
+# … other start:* scripts
 ```
 
-`gateway` mounts all migrated services and still exposes migration status endpoints for observability.
+`SERVICE_NAME=gateway` mounts all services on one port (default `4000`).
 
-## API documentation
+## Environment
 
-- Swagger UI: `http://localhost:4000/docs`
-- OpenAPI JSON: `http://localhost:4000/docs/json`
+Copy repo-root `.env.example` → `.env`. Required: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `JWT_SECRET`. See `.env.example` for OpenAI, cloud deploy keys, and pooler URLs.
 
-## Environment variables
-
-Copy `.env.example` to `.env` at the repo root and provide values via your deployment platform or local env.
+Production: Railway with secrets from Cloudflare Secrets Store (`LOAD_SECRETS_FROM=cloudflare`). See `docs/operations/railway.mdx`.
 
 ## Admin seeder
-
-Use the admin seeder to create/link a Supabase auth user and synchronize tenant RBAC/app rows:
 
 ```bash
 pnpm backend:seed:admin
 ```
 
-It is safe to run multiple times. The seeder:
+Idempotent: creates/links Supabase auth user, organization membership, admin role, and app `users` / `profiles` rows. Optional env: `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_DISPLAY_NAME`, `ADMIN_SEED_ORG_NAME`, `ADMIN_SEED_ORG_SLUG`.
 
-- creates the auth identity if missing (or reuses existing),
-- ensures `organizations` + `organization_memberships` admin role,
-- ensures `user_roles` includes `admin`,
-- ensures app-side `users` and `profiles` rows are synchronized.
+## Tests
 
-Optional env overrides live in root `.env` (`ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_DISPLAY_NAME`, `ADMIN_SEED_ORG_NAME`, `ADMIN_SEED_ORG_SLUG`).
+Service tests live in `backend/src/services/*/__tests__/*.test.ts`. Run from repo root:
+
+```bash
+pnpm test
+pnpm backend:typecheck
+```
+
+## Migration note
+
+This backend replaced the former Encore runtime. Historical migration details: [`docs/MIGRATION_FASTIFY.md`](../docs/MIGRATION_FASTIFY.md).
