@@ -8,9 +8,10 @@ interface Props {
   pullRequests: RepoPullRequest[];
   pullRequestsLoading: boolean;
   pullRequestsError: string;
+  onPRClick: (pr: RepoPullRequest) => void;
 }
 
-export default function PullRequests({ pullRequests, pullRequestsLoading, pullRequestsError }: Props) {
+export default function PullRequests({ pullRequests, pullRequestsLoading, pullRequestsError, onPRClick }: Props) {
   if (pullRequestsLoading) {
     return (
       <div className="mb-8">
@@ -46,12 +47,11 @@ export default function PullRequests({ pullRequests, pullRequestsLoading, pullRe
       ) : (
         <div className="space-y-2">
           {pullRequests.map((pr) => (
-            <a
+            <button
               key={pr.number}
-              href={pr.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-start gap-3 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors"
+              type="button"
+              onClick={() => onPRClick(pr)}
+              className="w-full text-left flex items-start gap-3 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors cursor-pointer"
             >
               <GitBranchIcon className="size-4 text-primary-500 mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1">
@@ -66,7 +66,7 @@ export default function PullRequests({ pullRequests, pullRequestsLoading, pullRe
                   Draft
                 </span>
               )}
-            </a>
+            </button>
           ))}
         </div>
       )}

@@ -86,6 +86,7 @@ export interface GitLabIssue {
 export interface GitLabPullRequest {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;
@@ -183,6 +184,7 @@ export async function listPullRequests(
     return {
       number: Number(mr.iid ?? 0),
       title: String(mr.title ?? ""),
+      body: String(mr.description ?? ""),
       url: String(mr.web_url ?? ""),
       author: String(author.name ?? author.username ?? ""),
       authorAvatar: String(author.avatar_url ?? ""),

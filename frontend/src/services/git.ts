@@ -141,6 +141,20 @@ export const gitApi = {
       { method: "POST", body: JSON.stringify(data) },
     ),
 
+  reviewPR: (connectionId: string, data: {
+    owner: string; repo: string;
+    prNumber: number; prTitle: string; prBody: string;
+  }) =>
+    request<{
+      summary: string;
+      comments: Array<{ path: string; line: number; body: string; severity: "critical" | "warning" | "suggestion" | "praise" }>;
+      approved: boolean;
+      reviewUrl: string;
+    }>(
+      `/git/connections/${connectionId}/review-pr`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
   getSensitiveData: (connectionId: string, owner: string, repo: string, branch?: string) =>
     request<{ sensitiveData: Array<{ entity: string; field: string; sensitivity: "personal" | "sensitive" | "secret"; reason: string }> }>(
       `/git/connections/${connectionId}/sensitive-data${buildQuery({ owner, repo, branch })}`

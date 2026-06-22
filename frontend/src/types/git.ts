@@ -85,6 +85,7 @@ export interface RepoIssue {
 export interface RepoPullRequest {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;
