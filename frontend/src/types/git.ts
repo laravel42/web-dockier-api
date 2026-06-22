@@ -73,6 +73,7 @@ export interface CommitInfo {
 export interface RepoIssue {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;

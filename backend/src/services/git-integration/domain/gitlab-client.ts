@@ -74,6 +74,7 @@ export interface GitLabContributor {
 export interface GitLabIssue {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;
@@ -147,6 +148,7 @@ export async function listIssues(
     return {
       number: Number(issue.iid ?? 0),
       title: String(issue.title ?? ""),
+      body: String(issue.description ?? ""),
       url: String(issue.web_url ?? ""),
       author: String(author.name ?? author.username ?? ""),
       authorAvatar: String(author.avatar_url ?? ""),
