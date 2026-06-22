@@ -51,7 +51,7 @@ interface AIFixPlan {
 // ─── OpenAI helpers ──────────────────────────────────────────────────────────
 
 const MAX_FILES_TO_FIX = 5;
-const MAX_FILE_SIZE = 15_000; // chars — skip very large files
+const MAX_FILE_SIZE = 50_000; // chars — skip very large files
 
 /**
  * Fetch the repo tree including blob SHAs — used both for AI file identification
@@ -103,9 +103,19 @@ async function fetchBlobBySha(
   repo: string,
   sha: string,
 ): Promise<string | null> {
+  const result = await fetchBlobByShaWithError(connection, owner, repo, sha);
+  return result.content;
+}
+
+async function fetchBlobByShaWithError(
+  connection: ConnectionLike,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<{ content: string | null; error: string }> {
   // Only GitHub supports the Git Blobs API in this way
   const provider = connection.provider?.toLowerCase() || "";
-  if (!provider.includes("github")) return null;
+  if (!provider.includes("github")) return { content: null, error: `provider "${connection.provider}" not github` };
 
   const origin = connection.endpoint || "https://api.github.com";
   const headers = {
@@ -114,30 +124,30 @@ async function fetchBlobBySha(
   };
 
   const url = `${origin}/repos/${owner}/${repo}/git/blobs/${sha}`;
-  logger.info(`[AI-FixIssue] Fetching blob: ${url}`);
 
   try {
     const res = await fetch(url, { headers });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      logger.error(`[AI-FixIssue] Blob fetch failed (SHA: ${sha}): ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
-      return null;
+      const errMsg = `HTTP ${res.status} ${res.statusText}: ${body.slice(0, 200)}`;
+      logger.error(`[AI-FixIssue] Blob fetch failed (SHA: ${sha}): ${errMsg}`);
+      return { content: null, error: errMsg };
     }
     const data = (await res.json()) as { content?: string; encoding?: string; size?: number };
-    logger.info(`[AI-FixIssue] Blob response: encoding=${data.encoding}, size=${data.size}, contentLength=${data.content?.length ?? 0}`);
     if (data.content && data.encoding === "base64") {
       const cleaned = data.content.replace(/\n/g, "");
-      return Buffer.from(cleaned, "base64").toString("utf-8");
+      return { content: Buffer.from(cleaned, "base64").toString("utf-8"), error: "" };
     }
     if (data.content && data.encoding === "utf-8") {
-      return data.content;
+      return { content: data.content, error: "" };
     }
-    // If we get here with no content, the blob might be too large for the API
-    logger.warn(`[AI-FixIssue] Blob had no content. encoding=${data.encoding}, size=${data.size}`);
-    return null;
+    const errMsg = `No content. encoding=${data.encoding}, size=${data.size}`;
+    logger.warn(`[AI-FixIssue] ${errMsg}`);
+    return { content: null, error: errMsg };
   } catch (err) {
-    logger.error(`[AI-FixIssue] Blob fetch exception: ${(err as Error).message}`);
-    return null;
+    const errMsg = `Exception: ${(err as Error).message}`;
+    logger.error(`[AI-FixIssue] Blob fetch: ${errMsg}`);
+    return { content: null, error: errMsg };
   }
 }
 
@@ -178,6 +188,25 @@ async function callOpenAI(
 
 // ─── Step 1: Identify relevant files ─────────────────────────────────────────
 
+/**
+ * Extract file paths explicitly mentioned in the issue title or body.
+ * Matches patterns like `src/foo/bar.ts`, `./lib/utils.js`, `path/to/file.tsx`, etc.
+ */
+function extractMentionedFiles(issueTitle: string, issueBody: string, fileTreeSet: Set<string>): string[] {
+  const text = `${issueTitle}\n${issueBody}`;
+  // Match file-path-like strings (must contain a / and end with an extension)
+  const pathRegex = /(?:^|[\s`"'(,])([.\w/-]+\.\w{1,10})(?:[\s`"'),:]|$)/gm;
+  const found: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pathRegex.exec(text)) !== null) {
+    const candidate = match[1].replace(/^\.?\//, "");
+    if (fileTreeSet.has(candidate)) {
+      found.push(candidate);
+    }
+  }
+  return [...new Set(found)];
+}
+
 async function identifyRelevantFiles(
   apiKey: string,
   model: string,
@@ -185,6 +214,23 @@ async function identifyRelevantFiles(
   issueBody: string,
   fileTree: string[],
 ): Promise<AIFileIdentification> {
+  const fileTreeSet = new Set(fileTree);
+
+  // Always include files explicitly mentioned in the issue
+  const mentionedFiles = extractMentionedFiles(issueTitle, issueBody, fileTreeSet);
+  if (mentionedFiles.length > 0) {
+    logger.info(`[AI-FixIssue] Files mentioned in issue: ${mentionedFiles.join(", ")}`);
+  }
+
+  // If the issue explicitly mentions files and they exist, use those directly
+  // (skip the AI call — it's unreliable for this)
+  if (mentionedFiles.length > 0 && mentionedFiles.length <= MAX_FILES_TO_FIX) {
+    return {
+      files: mentionedFiles,
+      reasoning: "Files explicitly mentioned in the issue",
+    };
+  }
+
   // Filter tree to source files only (skip node_modules, dist, etc.)
   const relevantTree = fileTree.filter((f) => {
     if (f.includes("node_modules/") || f.includes("dist/") || f.includes(".git/")) return false;
@@ -280,6 +326,7 @@ Return ONLY valid JSON:
 }
 
 CRITICAL RULES:
+- You can ONLY edit the files shown above — do not reference any other file paths
 - The resulting code MUST be syntactically valid — no functions declared inside object literals, no broken structure
 - Preserve the structure and indentation of the surrounding code
 - Line numbers reference the numbered lines shown above
@@ -310,17 +357,32 @@ CRITICAL RULES:
     const fileMap = new Map(fileContents.map((f) => [f.path, f.content]));
     const fixedFiles = new Map<string, string>();
 
+    // Helper to resolve AI-returned paths to actual file paths
+    const resolveEditPath = (editPath: string): string | null => {
+      if (fileMap.has(editPath)) return editPath;
+      const normalized = editPath.replace(/^\.?\//, "");
+      if (fileMap.has(normalized)) return normalized;
+      // Case-insensitive fallback
+      for (const key of fileMap.keys()) {
+        if (key.toLowerCase() === normalized.toLowerCase()) return key;
+      }
+      return null;
+    };
+
     // Group edits by file
     const editsByFile = new Map<string, Array<{ startLine: number; endLine: number; newCode: string }>>();
     for (const edit of parsed.edits) {
-      if (!fileMap.has(edit.path)) {
-        logger.warn(`[AI-FixIssue] Edit references unknown file: ${edit.path}`);
+      const resolvedPath = resolveEditPath(edit.path);
+      if (!resolvedPath) {
+        logger.warn(`[AI-FixIssue] Edit references unknown file: "${edit.path}" (available: ${[...fileMap.keys()].join(", ")})`);
         continue;
       }
-      const existing = editsByFile.get(edit.path) || [];
+      const existing = editsByFile.get(resolvedPath) || [];
       existing.push({ startLine: edit.startLine, endLine: edit.endLine, newCode: edit.newCode });
-      editsByFile.set(edit.path, existing);
+      editsByFile.set(resolvedPath, existing);
     }
+
+    logger.info(`[AI-FixIssue] Edits grouped into ${editsByFile.size} file(s) from ${parsed.edits.length} edit(s)`);
 
     for (const [path, edits] of editsByFile) {
       const originalContent = fixedFiles.get(path) ?? fileMap.get(path)!;
@@ -340,7 +402,9 @@ CRITICAL RULES:
     }
 
     if (fixedFiles.size === 0) {
-      throw new Error("AI edits could not be applied to any file");
+      const editPaths = parsed.edits.map((e) => e.path).join(", ");
+      const availablePaths = [...fileMap.keys()].join(", ");
+      throw new Error(`AI edits could not be applied. Edit paths: [${editPaths}]. Available: [${availablePaths}]`);
     }
 
     // Verify at least one file actually changed
@@ -382,8 +446,9 @@ function buildBranchName(issueNumber: number, issueTitle: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 50);
-  return `fix/${issueNumber}-${slug}`;
+    .slice(0, 40);
+  const suffix = Date.now().toString(36).slice(-5);
+  return `fix/${issueNumber}-${slug}-${suffix}`;
 }
 
 async function commitMultipleFiles(
@@ -602,6 +667,7 @@ export async function fixIssueWithAI(
   // 3. Validate AI file paths against the actual tree and fetch contents
   const fileTreeSet = new Set(fileTree);
   const fileContents: Array<{ path: string; content: string }> = [];
+  const fetchErrors: string[] = [];
   for (const filePath of identification.files) {
     // Normalize: strip leading slash or ./ if AI added one
     const normalized = filePath.replace(/^\.?\//, "");
@@ -621,6 +687,7 @@ export async function fixIssueWithAI(
 
     // Try fetching with retries (GitHub can rate-limit or flake)
     let content: string | null = null;
+    let lastFetchError = "";
     for (let attempt = 1; attempt <= 3 && !content; attempt++) {
       if (attempt > 1) {
         logger.info(`[AI-FixIssue] Retry ${attempt} for "${resolvedPath}"`);
@@ -637,9 +704,11 @@ export async function fixIssueWithAI(
       if (!content) {
         const blobSha = blobShaMap.get(resolvedPath);
         if (blobSha) {
-          content = await fetchBlobBySha(connection, owner, repo, blobSha);
+          const result = await fetchBlobByShaWithError(connection, owner, repo, blobSha);
+          content = result.content;
+          if (!content) lastFetchError = result.error;
         } else {
-          logger.warn(`[AI-FixIssue] No blob SHA for "${resolvedPath}" — this shouldn't happen`);
+          lastFetchError = "no blob SHA in map";
         }
       }
     }
@@ -647,9 +716,11 @@ export async function fixIssueWithAI(
     if (content && content.length <= MAX_FILE_SIZE) {
       fileContents.push({ path: resolvedPath, content });
     } else if (content && content.length > MAX_FILE_SIZE) {
-      logger.warn(`[AI-FixIssue] Skipping ${resolvedPath} (${content.length} chars, exceeds limit)`);
+      logger.warn(`[AI-FixIssue] Skipping ${resolvedPath} (${content.length} chars, exceeds limit of ${MAX_FILE_SIZE})`);
+      fetchErrors.push(`${resolvedPath}: file too large (${content.length} chars, max ${MAX_FILE_SIZE})`);
     } else {
-      logger.warn(`[AI-FixIssue] All fetch methods failed for "${resolvedPath}" on branch "${baseBranch}" after 3 attempts`);
+      logger.warn(`[AI-FixIssue] All fetch methods failed for "${resolvedPath}" on branch "${baseBranch}" after 3 attempts. Last error: ${lastFetchError}`);
+      fetchErrors.push(`${resolvedPath}: ${lastFetchError}`);
     }
   }
 
@@ -661,7 +732,8 @@ export async function fixIssueWithAI(
       const hasSha = blobShaMap.has(norm) || blobShaMap.has(f);
       return `${f}(inTree:${inTree},sha:${hasSha})`;
     }).join("; ");
-    throw new Error(`Could not read any of the identified files (${tried}) from branch "${baseBranch}". Debug: ${debugInfo}. Tree size: ${fileTree.length}, SHAs: ${blobShaMap.size}`);
+    const errors = fetchErrors.length > 0 ? ` Errors: ${fetchErrors.join("; ")}` : "";
+    throw new Error(`Could not read any of the identified files (${tried}) from branch "${baseBranch}". Debug: ${debugInfo}. Tree size: ${fileTree.length}, SHAs: ${blobShaMap.size}.${errors}`);
   }
 
   // 4. Generate fixes (use a stronger model for code generation if available)
