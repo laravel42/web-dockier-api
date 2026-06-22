@@ -377,8 +377,14 @@ CRITICAL RULES:
         logger.warn(`[AI-FixIssue] Edit references unknown file: "${edit.path}" (available: ${[...fileMap.keys()].join(", ")})`);
         continue;
       }
+      const startLine = Number(edit.startLine);
+      const endLine = Number(edit.endLine);
+      if (isNaN(startLine) || isNaN(endLine) || startLine < 1 || endLine < 1 || startLine > endLine) {
+        logger.warn(`[AI-FixIssue] Skipping invalid edit line range: ${edit.startLine}-${edit.endLine} for file ${resolvedPath}`);
+        continue;
+      }
       const existing = editsByFile.get(resolvedPath) || [];
-      existing.push({ startLine: edit.startLine, endLine: edit.endLine, newCode: edit.newCode });
+      existing.push({ startLine, endLine, newCode: edit.newCode });
       editsByFile.set(resolvedPath, existing);
     }
 
@@ -695,9 +701,13 @@ export async function fixIssueWithAI(
       }
 
       // Try primary fetch method
-      content = await fetchRepoFile(connection, ref, resolvedPath);
-      if (!content && attempt === 1) {
-        logger.info(`[AI-FixIssue] fetchRepoFile returned null for "${resolvedPath}" (provider: "${connection.provider}", endpoint: "${connection.endpoint || "default"}")`);
+      try {
+        content = await fetchRepoFile(connection, ref, resolvedPath);
+        if (!content && attempt === 1) {
+          logger.info(`[AI-FixIssue] fetchRepoFile returned null for "${resolvedPath}" (provider: "${connection.provider}", endpoint: "${connection.endpoint || "default"}")`);
+        }
+      } catch (err) {
+        lastFetchError = err instanceof Error ? err.message : String(err);
       }
 
       // Fallback: fetch via Git Blobs API

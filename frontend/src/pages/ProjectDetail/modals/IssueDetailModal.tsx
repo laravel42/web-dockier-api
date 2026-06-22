@@ -149,7 +149,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-2 pt-4 border-t border-border/50">
             <button
               type="button"
               onClick={handleFixWithAI}
@@ -163,7 +163,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
               type="button"
               onClick={handleClose}
               disabled={closing || fixing}
-              className={btnDanger + " inline-flex items-center gap-1.5 h-8 px-3 text-ui font-medium rounded-md border border-danger-500/30 hover:bg-danger-500/10 transition-colors"}
+              className={`${btnDanger} h-8 px-3 inline-flex items-center gap-1.5`}
             >
               {closing ? <Spinner className="size-3.5" /> : null}
               Close Issue
