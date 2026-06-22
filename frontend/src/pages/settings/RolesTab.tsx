@@ -2,7 +2,7 @@ import { useState } from "react";
 import { rolesApi } from "../../services/api";
 import RoleFormModal from "../../components/RoleFormModal";
 import ConfirmModal from "../../components/ConfirmModal";
-import { btnPrimary, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
+import { btnPrimary, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useTabList } from "../../hooks/useTabList";
@@ -124,7 +124,9 @@ export default function RolesTab() {
                   <p className="text-xs text-text-muted truncate">{r.description || "No description"}</p>
                 </div>
               </div>
-              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600">{r.permissions?.length || 0} permissions</span>
+              <span className={settingsBadgeCls.primary}>
+                {r.permissions?.length || 0} permissions
+              </span>
             </div>
           ))}
           {roleList.length === 0 && (

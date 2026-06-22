@@ -5,7 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -194,19 +194,23 @@ export default function NotificationChannelsTab() {
             };
             return (
             <div key={ch.id} onClick={() => canManage && openEditChannel(ch)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="size-8  flex items-center justify-center shrink-0 text-text-secondary">
-                  {channelIcons[ch.type] || channelIcons.in_app}
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="size-8  flex items-center justify-center shrink-0 text-text-secondary">
+                    {channelIcons[ch.type] || channelIcons.in_app}
+                  </div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-text">{channelNames[ch.type] || ch.type}</p>
+                    {ch.type === "in_app" && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-text-muted">Default</span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm font-semibold text-text">{channelNames[ch.type] || ch.type}</p>
-                {ch.type === "in_app" && (
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-text-muted">Default</span>
-                )}
+                <span className={`shrink-0 ${ch.enabled ? settingsBadgeCls.success : settingsBadgeCls.muted}`}>
+                  {ch.enabled ? "Enabled" : "Disabled"}
+                </span>
               </div>
-              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${ch.enabled ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>
-                {ch.enabled ? "Enabled" : "Disabled"}
-              </span>
-              <p className="text-xs text-text-muted mt-2">{channelDescriptions[ch.type] || "Notification channel."}</p>
+              <p className="text-xs text-text-muted">{channelDescriptions[ch.type] || "Notification channel."}</p>
             </div>
             );
           })}

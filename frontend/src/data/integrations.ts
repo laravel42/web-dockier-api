@@ -81,15 +81,26 @@ export const INTEGRATION_CATALOG: IntegrationDef[] = [
 
 ];
 
+const categoryBadgeBase =
+  "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium shrink-0";
+
+/** Dark-mode-friendly tone badges for integration catalog categories. */
 export const CATEGORY_COLORS: Record<string, string> = {
-  Database: "bg-amber-50 text-amber-600",
-  Storage: "bg-blue-50 text-blue-600",
-  Cache: "bg-red-50 text-red-600",
-  Queue: "bg-purple-50 text-purple-600",
-  Mail: "bg-green-50 text-green-600",
-  Communication: "bg-indigo-50 text-indigo-600",
-  CRM: "bg-orange-50 text-orange-600",
-  "Project Management": "bg-violet-50 text-violet-600",
-  Payments: "bg-emerald-50 text-emerald-600",
-  DevOps: "bg-slate-100 text-slate-600",
+  Database: `${categoryBadgeBase} border-amber-500/45 bg-amber-500/30 text-amber-300`,
+  Storage: `${categoryBadgeBase} border-blue-500/45 bg-blue-500/30 text-blue-300`,
+  Cache: `${categoryBadgeBase} border-red-500/45 bg-red-500/30 text-red-300`,
+  Queue: `${categoryBadgeBase} border-purple-500/45 bg-purple-500/30 text-purple-300`,
+  Mail: `${categoryBadgeBase} border-green-500/45 bg-green-500/30 text-green-300`,
+  Communication: `${categoryBadgeBase} border-indigo-500/45 bg-indigo-500/30 text-indigo-300`,
+  CRM: `${categoryBadgeBase} border-orange-500/45 bg-orange-500/30 text-orange-300`,
+  "Project Management": `${categoryBadgeBase} border-violet-500/45 bg-violet-500/30 text-violet-300`,
+  Payments: `${categoryBadgeBase} border-emerald-500/45 bg-emerald-500/30 text-emerald-300`,
+  DevOps: `${categoryBadgeBase} border-slate-500/45 bg-slate-500/30 text-slate-300`,
 };
+
+export function categoryBadgeCls(category: string): string {
+  return (
+    CATEGORY_COLORS[category] ??
+    `${categoryBadgeBase} border-border/60 bg-secondary-50/30 text-text-muted`
+  );
+}

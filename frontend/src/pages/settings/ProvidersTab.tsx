@@ -6,7 +6,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
+import { inputCls, btnPrimary, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -203,16 +203,18 @@ export default function ProvidersTab() {
         <div className={settingsCardGridCls}>
           {providerList.map((p) => (
             <div key={p.id} onClick={() => canManage && openEdit(p)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="size-8  flex items-center justify-center shrink-0">
-                  <ProviderBadge provider={p.provider} showName={false} iconSize="w-7 h-7" />
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="size-8  flex items-center justify-center shrink-0">
+                    <ProviderBadge provider={p.provider} showName={false} iconSize="w-7 h-7" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-text truncate">{getProviderStyle(p.provider).name || p.provider}</p>
+                    <p className="text-xs text-text-muted truncate">{p.label}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-text truncate">{getProviderStyle(p.provider).name || p.provider}</p>
-                  <p className="text-xs text-text-muted truncate">{p.label}</p>
-                </div>
+                <span className={`shrink-0 ${settingsBadgeCls.success}`}>Connected</span>
               </div>
-              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-success-50 text-success-500`}>Connected</span>
               <span className={`block text-xs text-text-muted text-left px-2 py-0.5`}>{getProviderStyle(p.provider).description}</span>
             </div>
           ))}

@@ -12,7 +12,7 @@ Dockier is a developer platform that connects source code repositories to securi
 
 - **Backend:** Fastify + TypeScript (modular service routes in `backend/src/services`)
 - **Frontend:** React 19 + Vite + Tailwind CSS v4 (in `frontend/`)
-- **Database:** Supabase Postgres (canonical schema via root `migrations/`)
+- **Database:** Supabase Postgres (canonical schema via `supabase/migrations/`)
 - **Package manager:** pnpm (v10) — do NOT use npm or yarn
 - **Language:** TypeScript (strict mode, ES2022 target, bundler module resolution)
 - **Testing:** Vitest — tests live in `__tests__/` directories, files named `*.test.ts`
@@ -29,7 +29,7 @@ Dockier is a developer platform that connects source code repositories to securi
 ├── code-analysis/     → Security rule assets (`rules/opengrep`)
 ├── infra/             → Infrastructure configuration
 ├── frontend/          → React SPA (separate package.json)
-└── migrations/        → Canonical SQL migrations (root-only)
+└── supabase/migrations/ → Canonical SQL migrations
 ```
 
 ## Service conventions
@@ -40,14 +40,14 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 
 - **Database access:** Use Supabase via `backend/src/shared/supabase/client.ts` with typed payloads and explicit row-to-response mapping.
 - **Secrets:** Local fallback in gitignored root `.env`. Production: Cloudflare Secrets Store (`pnpm secrets:push`, `LOAD_SECRETS_FROM=cloudflare`). Backend hosted on Railway — see `docs/operations/railway.mdx`.
-- **Auth:** JWT-based. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`.
+- **Auth:** Supabase passwordless (OTP) → tenant-scoped JWT for API calls. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`. Optional TOTP 2FA.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 
 ## Database
 
-- The active runtime uses root migrations as the canonical schema source.
-- Migrations are plain SQL files in root `migrations/`, with monotonic numeric prefixes (`0001_*.sql`, `0002_*.sql`, etc.).
-- The database is Neon Serverless Postgres. Connection strings include SSL configuration automatically.
+- The active runtime uses `supabase/migrations/` as the canonical schema source.
+- Migrations are plain SQL files with monotonic numeric prefixes (`0001_*.sql`, `0046_*.sql`, etc.).
+- Postgres is hosted on Supabase; use Supavisor pooler URLs from the dashboard when IPv6 direct connections fail locally (`MIGRATE_URL` for DDL, `DATABASE_URL` for runtime/pg-boss).
 - When writing migrations, always use `IF NOT EXISTS` for CREATE TABLE and `CREATE INDEX CONCURRENTLY` where possible.
 
 ## Frontend conventions
@@ -59,6 +59,8 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 - API calls go through `frontend/src/services/` — one file per backend service.
 - Auth state managed via React Context (`frontend/src/context/`).
 - Shared components in `frontend/src/components/`, page components in `frontend/src/pages/`.
+- Shell layout uses `TopNavbar` (not a sidebar); main nav items in `frontend/src/config/nav.ts`.
+- Settings pages use `settingsBadgeCls` from `frontend/src/utils/styles.ts` for status/category pills.
 - Use TypeScript types from `frontend/src/types/`.
 
 ### List pages (Projects, Deployments, Security Scans)

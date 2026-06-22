@@ -44,8 +44,8 @@ Built with a Fastify + TypeScript backend and a React + Tailwind CSS frontend, D
   - *Additional providers may be added in the future.*
   
   Deployments include environment variable configuration, status tracking (pending → building → deploying → success/failed), and one-click infrastructure teardown (Pulumi state-based cleanup for GCP, direct API teardown for AWS).
-- **Notifications** — Multi-channel alerting via email, Slack, webhooks, and in-app. Pub/sub-based async delivery.
-- **Auth & access control** — Registration, JWT auth (7-day expiry), 2FA (TOTP), social login (GitHub, GitLab, Bitbucket), and role-based permissions with nine granular permission types.
+- **Notifications** — Multi-channel alerting via email, Slack, webhooks, and in-app. Async delivery via pg-boss job queue when `DATABASE_URL` is configured.
+- **Auth & access control** — Supabase passwordless sign-up/sign-in (email OTP), tenant-scoped JWT sessions, optional TOTP 2FA, multi-tenant organizations with custom roles and 30+ granular permissions (`resource:action` keys).
 - **Dashboard** — KPI cards (projects, deploys, scans, findings), recent deploys panel, recent scans panel.
 
 ### Architecture highlights
@@ -53,14 +53,14 @@ Built with a Fastify + TypeScript backend and a React + Tailwind CSS frontend, D
 | Layer | Stack |
 | ----- | ----- |
 | Backend | Fastify + TypeScript service modules (`backend/src/services/*`) |
-| Frontend | Vite + React 19 + Tailwind CSS v4, dark mode default |
+| Frontend | Vite + React 19 + Tailwind CSS v4, dark mode default, top navbar shell |
 | AI | OpenAI API (gpt-5.4-mini), server-side key, JSON response format |
 | Scanning | Semgrep + SonarQube (optional) + custom regex engine |
 | Vulnerability DB | OSV.dev batch API (free, no key) |
 | Build | Auto-generated Dockerfiles (per-runtime: Node, PHP, Python, Go), Railpack, Nixpacks (available as alternatives) |
 | Infrastructure | Pulumi (GCP), CodeBuild + CloudFormation (AWS) — extensible to additional providers |
-| Data | Supabase Postgres |
-| Messaging | Pub/sub for deploys and notifications |
+| Data | Supabase Postgres (Supabase Auth + RLS) |
+| Messaging | pg-boss job queue (Postgres-backed, optional via `DATABASE_URL`) |
 
 ---
 
@@ -73,7 +73,8 @@ These are explicitly out of scope and require a deliberate decision to bring in:
 - **Scheduled or event-driven scanning** — Scans are manual. No cron, no webhook triggers, no scan-on-deploy gates.
 - **Runtime security monitoring** — No SIEM, no intrusion detection, no runtime telemetry, no agents.
 - **Compliance and audit** — No SOC 2 / ISO 27001 / HIPAA mapping, no audit trails, no policy-as-code.
-- **Billing and subscriptions** — No payment processing, no plan-based feature gating, no usage metering.
+- **Billing and payment processing** — Organization billing *contact details* may be stored for invoicing context; there is no Stripe subscription flow, plan-based feature gating, or usage metering.
+- **OAuth social login for Dockier accounts** — Sign-in is passwordless via Supabase email OTP. Git provider tokens are used for repository connections (PATs), not as the primary Dockier login flow in the current API.
 - **Cloud providers beyond AWS and GCP** — Deployment automation currently supports AWS and GCP. Additional providers may be added later but are not in the current scope.
 - **DAST, IAST, or container image scanning** — Static analysis (SAST) and dependency scanning (SCA) only.
 - **Multi-tenancy / org hierarchy** — Flat app_id model. No SSO/SAML, no cross-org sharing.
@@ -108,14 +109,14 @@ These are explicitly out of scope and require a deliberate decision to bring in:
 ### Visibility and control
 
 - The dashboard surfaces KPIs (projects, deploys, scans, findings) and recent activity across all projects.
-- Role-based access control enforces nine permission types, with UI elements hidden for unauthorized actions.
+- Role-based access control enforces granular permissions on API routes and hides Settings UI tabs when unauthorized.
 - Multi-channel notifications (email, Slack, webhook, in-app) fire on scan completions and deployment events.
 
 ### Reliability
 
 - Scans degrade gracefully when Semgrep or SonarQube are unavailable — custom regex rules still run.
 - AI features return fallback states (not crashes) when the OpenAI API key is missing or the API fails after retries.
-- Pub/sub delivery for deploys and notifications is at-least-once with idempotent processing.
+- pg-boss delivery for deploys and notifications is at-least-once with idempotent processing when the job queue is enabled.
 
 ---
 

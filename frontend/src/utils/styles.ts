@@ -198,6 +198,17 @@ export const statusBadgeColors: Record<string, string> = {
   running: "bg-primary-500/10 text-primary-500",
 };
 
+const settingsBadgeBase =
+  "inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium";
+
+/** Bordered tone badges for settings cards and metadata pills (dark-mode friendly). */
+export const settingsBadgeCls = {
+  primary: `${settingsBadgeBase} border-primary-500/45 bg-primary-500/30 text-primary-300`,
+  success: `${settingsBadgeBase} border-success-500/45 bg-success-500/30 text-success-300`,
+  warning: `${settingsBadgeBase} border-amber-500/45 bg-amber-500/30 text-amber-300`,
+  muted: `${settingsBadgeBase} border-border/60 bg-secondary-50/30 text-text-muted`,
+} as const;
+
 export const strategyLabels: Record<string, string> = {
   vps: "VPS",
   managed: "ECS Fargate",

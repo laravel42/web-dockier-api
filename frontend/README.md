@@ -17,14 +17,27 @@ pnpm preview    # preview production build
 
 ```text
 src/
-├── components/     # shared UI
+├── components/     # shared UI (TopNavbar, badges, DeployWizard, …)
+├── config/         # nav items (nav.ts)
 ├── context/        # React context (auth, permissions, toast, theme)
 ├── hooks/          # shared hooks (e.g. useProjectBadges)
 ├── pages/          # route-level pages and sections/
 ├── services/       # API client modules
 ├── types/          # shared TypeScript types
-└── utils/          # helpers (e.g. projectBadgeCache)
+└── utils/          # helpers (styles, projectBadgeCache, …)
 ```
+
+## Shell & routes
+
+- **Layout:** `TopNavbar` + main content (no sidebar).
+- **Nav:** Dashboard, Projects, Security, Settings — see `src/config/nav.ts`.
+- **Also routed:** `/deploy`, `/deploy/:id`, `/notifications`, project and scan detail pages.
+
+## Settings UI
+
+Settings (`/settings`) uses permission-gated tabs: Profile, Users, Roles, Providers, SSH Keys, Source Control, Notification Channels, Integrations, Security Tools.
+
+Status and category pills use **`settingsBadgeCls`** from `src/utils/styles.ts` (`primary`, `success`, `warning`, `muted`). Integration catalog categories use **`categoryBadgeCls()`** from `src/data/integrations.ts`.
 
 ## List pages
 
@@ -123,6 +136,7 @@ Shared Tailwind class strings live in `src/utils/styles.ts`. Prefer these over o
 | `signinLogoCls` | 52px brand symbol block on auth pages |
 | `cardCls` | Static panels and sections — border, card shadow, hover elevation |
 | `cardInteractiveCls` | Clickable list/grid cards — primary border accent on hover |
+| `settingsBadgeCls` | Settings status pills (Connected, Enabled, role badges) — dark-mode bordered tones |
 
 ## Linting
 
