@@ -82,7 +82,7 @@ async function fetchPRFiles(
   repo: string,
   prNumber: number,
 ): Promise<PRFile[]> {
-  if (connection.provider === "github" || connection.provider?.toLowerCase().includes("github")) {
+  if (connection.provider === "github" || connection.provider?.toLowerCase()?.includes("github")) {
     const origin = connection.endpoint || "https://api.github.com";
     const headers = {
       Authorization: `Bearer ${connection.personal_token}`,
@@ -232,13 +232,13 @@ export async function reviewPRWithAI(
   const diffSections: string[] = [];
   for (const file of files) {
     const section = `### ${file.filename} (${file.status}, +${file.additions}/-${file.deletions})\n\`\`\`diff\n${file.patch}\n\`\`\``;
-    if (totalSize + section.length > MAX_DIFF_SIZE) break;
+    if (totalSize + section.length > MAX_DIFF_SIZE) continue;
     diffSections.push(section);
     totalSize += section.length;
   }
 
   // 3. AI review
-  const fixModel = model.includes("mini") ? model.replace("-mini", "") : model;
+  const fixModel = model || "gpt-4o-mini";
   const prompt = `You are a senior code reviewer. Review this pull request thoroughly.
 
 **PR: ${prTitle} (#${prNumber})**
@@ -284,7 +284,7 @@ Rules:
   let parsed: { summary: string; approved: boolean; comments: ReviewComment[] };
   try {
     parsed = JSON.parse(result) as typeof parsed;
-    if (!parsed.summary || !Array.isArray(parsed.comments)) {
+    if (!parsed.summary || !Array.isArray(parsed.comments) || typeof parsed.approved !== "boolean") {
       throw new Error("Invalid response structure");
     }
     // Validate and sanitize comments
@@ -305,7 +305,7 @@ Rules:
   // 4. Post review to GitHub/GitLab
   let reviewUrl = "";
   try {
-    if (connection.provider === "github" || connection.provider?.toLowerCase().includes("github")) {
+    if (connection.provider === "github" || connection.provider?.toLowerCase()?.includes("github")) {
       reviewUrl = await postGitHubReview(connection, owner, repo, prNumber, parsed.summary, parsed.comments, parsed.approved);
     }
     // GitLab review posting can be added later
