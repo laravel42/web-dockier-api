@@ -432,6 +432,24 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
         Relationships: [];
       };
+      commands: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          user_id: string;
+          command: string;
+          status: string;
+          output: string;
+          started_at: string;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["commands"]["Row"]> &
+          Pick<Database["public"]["Tables"]["commands"]["Row"], "organization_id" | "project_id" | "user_id" | "command">;
+        Update: Partial<Database["public"]["Tables"]["commands"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
