@@ -98,6 +98,7 @@ export interface GitHubIssue {
 export interface GitHubPullRequest {
   number: number;
   title: string;
+  body: string;
   url: string;
   author: string;
   authorAvatar: string;
@@ -414,6 +415,7 @@ export async function listPullRequests(
   return data.map((item) => ({
     number: item.number ?? 0,
     title: item.title ?? "",
+    body: item.body ?? "",
     url: item.html_url ?? "",
     author: item.user?.login ?? "",
     authorAvatar: item.user?.avatar_url ?? "",

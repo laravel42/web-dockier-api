@@ -16,12 +16,13 @@ import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
 import PullLogModal from "./modals/PullLogModal";
 import IssueDetailModal from "./modals/IssueDetailModal";
+import PRDetailModal from "./modals/PRDetailModal";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import { useState } from "react";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { gitApi } from "../../services/api";
-import type { RepoIssue } from "../../types";
+import type { RepoIssue, RepoPullRequest } from "../../types";
 
 export default function ProjectDetail() {
   const {
@@ -77,6 +78,22 @@ export default function ProjectDetail() {
       issueBody: issue.body,
     });
     setFixResult(result);
+  };
+
+  // PR detail modal state
+  const [selectedPR, setSelectedPR] = useState<RepoPullRequest | null>(null);
+
+  const handleReviewWithAI = async (pr: RepoPullRequest) => {
+    if (!project) throw new Error("Project not loaded");
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) throw new Error("Invalid repository URL");
+    return await gitApi.reviewPR(project.connectionId, {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prBody: pr.body,
+    });
   };
 
   const lastSuccessfulDeployUrl = recentDeploys.find(
@@ -155,6 +172,7 @@ export default function ProjectDetail() {
             pullRequests={pullRequests}
             pullRequestsLoading={pullRequestsLoading}
             pullRequestsError={pullRequestsError}
+            onPRClick={setSelectedPR}
           />
         </>
       )}
@@ -193,6 +211,12 @@ export default function ProjectDetail() {
         onCloseIssue={handleCloseIssue}
         onFixWithAI={handleFixWithAI}
         fixResult={fixResult}
+      />
+
+      <PRDetailModal
+        pr={selectedPR}
+        onClose={() => setSelectedPR(null)}
+        onReviewWithAI={handleReviewWithAI}
       />
     </div>
   );

@@ -14,6 +14,7 @@ import { getGitProvider, type RepoStats } from "../domain/git-provider.js";
 import { parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
 import { fixIssueWithAI } from "../domain/fix-issue-ai.js";
+import { reviewPRWithAI } from "../domain/review-pr-ai.js";
 import { env } from "../../../shared/config.js";
 
 export async function registerRepositoryRoutes(app: FastifyInstance) {
@@ -263,6 +264,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
               z.object({
                 number: z.number(),
                 title: z.string(),
+                body: z.string(),
                 url: z.string(),
                 author: z.string(),
                 authorAvatar: z.string(),
@@ -465,6 +467,61 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       } catch (err: unknown) {
         request.log.error({ err }, "[AI-FixIssue] Pipeline failed");
         const message = err instanceof Error ? err.message : "AI fix pipeline failed";
+        throw app.httpErrors.badRequest(message);
+      }
+    },
+  );
+
+
+  typed.post(
+    "/git/connections/:connectionId/review-pr",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-review-pr" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Review a pull request using AI",
+        params: z.object({ connectionId: z.uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          prNumber: z.number().int(),
+          prTitle: z.string().min(1),
+          prBody: z.string().default(""),
+        }),
+        response: {
+          200: z.object({
+            summary: z.string(),
+            comments: z.array(z.object({
+              path: z.string(),
+              line: z.number(),
+              body: z.string(),
+              severity: z.enum(["critical", "warning", "suggestion", "praise"]),
+            })),
+            approved: z.boolean(),
+            reviewUrl: z.string(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+
+      if (!env.OPENAI_API_KEY) {
+        throw app.httpErrors.serviceUnavailable("AI is not configured on this server");
+      }
+
+      try {
+        return await reviewPRWithAI(conn, {
+          owner: request.body.owner,
+          repo: request.body.repo,
+          prNumber: request.body.prNumber,
+          prTitle: request.body.prTitle,
+          prBody: request.body.prBody,
+        }, env.OPENAI_API_KEY, env.OPENAI_MODEL);
+      } catch (err: unknown) {
+        request.log.error({ err }, "[AI-ReviewPR] Pipeline failed");
+        const message = err instanceof Error ? err.message : "AI review pipeline failed";
         throw app.httpErrors.badRequest(message);
       }
     },
