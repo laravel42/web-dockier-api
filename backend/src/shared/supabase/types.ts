@@ -365,6 +365,7 @@ export type Database = {
           commit_hash: string;
           docker_image: string;
           deploy_strategy: string;
+          infra: Record<string, unknown>;
           created_at: string;
           updated_at: string;
         };

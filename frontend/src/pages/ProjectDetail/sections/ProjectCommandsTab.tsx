@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { commandsApi } from "../../../services/commands";
+import { deployApi } from "../../../services/api";
 import type { Command } from "../../../services/commands";
 import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
@@ -66,11 +67,15 @@ export default function ProjectCommandsTab({ project }: Props) {
 
   const [commandInput, setCommandInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [hasDeployment, setHasDeployment] = useState(false);
+  const [deployCheckDone, setDeployCheckDone] = useState(false);
 
   const [outputModal, setOutputModal] = useState<Command | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const canRunCommands = hasDeployment && canManage;
 
   const fetchCommands = useCallback(async (pageNum: number, silent = false) => {
     if (!project.id || !canView) return;
@@ -102,6 +107,18 @@ export default function ProjectCommandsTab({ project }: Props) {
     }
     void fetchCommands(page);
   }, [permissionsLoading, canView, fetchCommands, page]);
+
+  // Check if the project has an active (successful) deployment
+  useEffect(() => {
+    if (!project.id || !canView) return;
+    deployApi.listDeployments({ projectId: project.id, limit: 5 })
+      .then((res) => {
+        const hasActive = res.deployments.some((d) => d.status === "success");
+        setHasDeployment(hasActive);
+      })
+      .catch(() => setHasDeployment(false))
+      .finally(() => setDeployCheckDone(true));
+  }, [project.id, canView]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -149,7 +166,7 @@ export default function ProjectCommandsTab({ project }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commandInput.trim() || submitting || !canManage) return;
+    if (!commandInput.trim() || submitting || !canRunCommands) return;
     setSubmitting(true);
     try {
       await commandsApi.run(project.id, commandInput.trim());
@@ -220,19 +237,24 @@ export default function ProjectCommandsTab({ project }: Props) {
           the site&apos;s root directory. Commands will be executed as the <code className="rounded border border-border/60 bg-card/60 px-1 py-0.5 text-[11px] font-mono">dockier</code> user
           and may run for two minutes before timing out.
         </p>
+        {deployCheckDone && !hasDeployment && (
+          <p className="mt-2 text-xs text-amber-400">
+            Deploy your project first to enable command execution.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="mt-3 flex items-center gap-2">
           <input
             type="text"
             value={commandInput}
             onChange={(e) => setCommandInput(e.target.value)}
-            placeholder="Enter command…"
-            disabled={!canManage || submitting}
+            placeholder={hasDeployment ? "Enter command…" : "Deploy project to run commands…"}
+            disabled={!canRunCommands || submitting}
             aria-label="Command to execute"
             className="h-9 flex-1 rounded-md border border-border bg-background px-3 font-mono text-sm text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={!commandInput.trim() || submitting || !canManage}
+            disabled={!commandInput.trim() || submitting || !canRunCommands}
             className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
           >
             {submitting ? <Spinner className="size-3.5" /> : (
@@ -309,7 +331,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                           </svg>
                           View output
                         </button>
-                        {canManage && (
+                        {canManage && hasDeployment && (
                           <button
                             type="button"
                             role="menuitem"

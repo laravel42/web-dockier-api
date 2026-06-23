@@ -346,12 +346,13 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     // Run post-deploy steps
     await adapter.runPostDeploy(adapterCtx, provision);
 
+    // Container name derivation (used by post-deploy commands and infra metadata)
+    const containerName = provider === "aws"
+      ? repoName
+      : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
     // Execute user-defined post-deploy commands
     if (deployStrategy !== "static") {
-      const containerName = provider === "aws"
-        ? repoName
-        : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-
       await executePostDeployCommands(
         {
           containerName,
@@ -383,13 +384,32 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       await logger.warn(`Instance type was changed from ${adapterCtx.state.originalMachineType} to ${adapterCtx.state.machineTypeFallback} due to capacity constraints in ${region}.`);
     }
 
+    // Build infrastructure metadata for downstream use (commands, scaling, etc.)
+    const infra: Record<string, unknown> = {
+      adapter: adapter.id,
+      provider,
+      region,
+      containerName,
+      stackName: `image-builder-app-${repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+    };
+    if (provision.outputs.InstanceId) infra.instanceId = provision.outputs.InstanceId;
+    if (provision.serverIp) infra.serverIp = provision.serverIp;
+    if (provision.outputs.PublicIp) infra.serverIp = provision.outputs.PublicIp;
+    if (deployStrategy === "managed" && provider === "aws") {
+      infra.ecsCluster = repoName;
+      infra.ecsTaskFamily = repoName;
+    }
+    if (deployStrategy === "managed" && provider === "gcp") {
+      infra.cloudRunService = containerName;
+    }
+
     if (finalUrl) {
       await waitForAppReady(deploymentId, finalUrl);
       await logger.success(`Application URL: ${finalUrl}`);
-      await updateStatus(deploymentId, "success", { app_url: finalUrl });
+      await updateStatus(deploymentId, "success", { app_url: finalUrl, infra });
     } else {
       await logger.warn("Could not determine app URL — check cloud console");
-      await updateStatus(deploymentId, "success");
+      await updateStatus(deploymentId, "success", { infra });
     }
 
     const deployMessage = finalUrl

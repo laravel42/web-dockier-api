@@ -18,6 +18,7 @@ import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/queue.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
+import { stackNameFor } from "../../deploy/domain/aws-helpers.js";
 
 export interface CommandJobInput {
   commandId: string;
@@ -33,6 +34,7 @@ interface DeploymentInfo {
   app_url: string;
   docker_image: string;
   repo: string;
+  infra: Record<string, unknown> | null;
 }
 
 interface ProviderInfo {
@@ -53,7 +55,7 @@ async function resolveExecutionTarget(
   // Find the latest successful deployment for this project
   const { data: deployment } = await supabaseAdmin
     .from("deployments")
-    .select("id, provider_id, deploy_strategy, app_url, docker_image, repo")
+    .select("id, provider_id, deploy_strategy, app_url, docker_image, repo, infra")
     .eq("project_id", projectId)
     .eq("organization_id", tenantId)
     .eq("status", "success")
@@ -81,13 +83,20 @@ async function resolveExecutionTarget(
     return { target: null, errorMessage: "Server provider not found. The provider may have been deleted." };
   }
 
-  // Derive container name from the deployment's docker image or repo
+  // ── Fast path: use stored infra metadata (populated on deploys after migration 0047)
+  const infra = (deployment.infra || {}) as Record<string, string>;
+  if (infra.adapter && infra.region && infra.containerName) {
+    return resolveFromInfra(infra, provider, deployment);
+  }
+
+  // ── Fallback: infer from deployment data (legacy deployments before infra column)
+  logger.info(`[command-exec] No infra metadata on deployment ${deployment.id}, using legacy resolution`);
+
   const containerName = deriveContainerName(deployment.docker_image, deployment.repo, projectId);
   if (!containerName) {
     return { target: null, errorMessage: "Cannot determine container name from deployment." };
   }
 
-  // Route based on provider + strategy
   if (deployment.deploy_strategy === "vps") {
     return resolveVpsTarget(deployment, provider, containerName, tenantId);
   }
@@ -99,6 +108,64 @@ async function resolveExecutionTarget(
   return { target: null, errorMessage: `Unsupported deploy strategy: ${deployment.deploy_strategy}` };
 }
 
+// ─── Infra-based resolution (preferred) ────────────────────────────
+
+function resolveFromInfra(
+  infra: Record<string, string>,
+  provider: ProviderInfo,
+  deployment: DeploymentInfo,
+): { target: ExecutionTarget | null; errorMessage?: string } {
+  const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
+  const region = infra.region;
+  const containerName = infra.containerName;
+
+  // AWS EC2 (VPS) → SSM
+  if (infra.instanceId) {
+    return {
+      target: { instanceId: infra.instanceId, containerName, credentials, region },
+    };
+  }
+
+  // AWS ECS (managed) → ECS RunTask
+  if (infra.ecsCluster) {
+    return {
+      target: {
+        containerName,
+        credentials,
+        region,
+        ecsCluster: infra.ecsCluster,
+        ecsTaskFamily: infra.ecsTaskFamily || containerName,
+        dockerImage: deployment.docker_image,
+      },
+    };
+  }
+
+  // GCP Cloud Run (managed) → Cloud Run Jobs
+  if (infra.cloudRunService) {
+    return {
+      target: {
+        containerName,
+        credentials,
+        region,
+        cloudRunService: infra.cloudRunService,
+        gcpProjectId: infra.gcpProjectId,
+        dockerImage: deployment.docker_image,
+      },
+    };
+  }
+
+  // GCP Compute (VPS) → SSH
+  if (infra.serverIp) {
+    // GCP VPS — SSH keys are ephemeral, not currently supported post-deploy
+    return {
+      target: null,
+      errorMessage: "GCP Compute VPS command execution requires a persistent SSH key. Re-deploy to regenerate access or use the GCP console.",
+    };
+  }
+
+  return { target: null, errorMessage: `Infra metadata present but no supported execution path found. adapter="${infra.adapter}"` };
+}
+
 // ─── VPS Resolution (EC2 / GCP Compute) ────────────────────────────
 
 async function resolveVpsTarget(
@@ -108,28 +175,42 @@ async function resolveVpsTarget(
   tenantId: string,
 ): Promise<{ target: ExecutionTarget | null; errorMessage?: string }> {
   if (provider.provider === "aws") {
-    // AWS EC2: resolve instance ID from CloudFormation stack
-    const instanceId = await resolveEc2InstanceId(deployment, provider);
+    // AWS EC2 always uses SSM — SSH is not viable because we don't store private keys
+    // Resolve region: provider may have empty region, infer from app_url if needed
+    const region = provider.region || inferAwsRegionFromUrl(deployment.app_url) || "us-east-1";
+
+    const instanceId = await resolveEc2InstanceId(deployment, { ...provider, region });
     if (instanceId) {
       return {
         target: {
           instanceId,
           containerName,
           credentials: { apiKey: provider.api_key, apiSecret: provider.api_secret },
-          region: provider.region,
+          region,
         },
       };
     }
-    // Fallback: try to extract IP from app_url and use SSH
+
+    // SSM resolution failed — provide diagnostic info
+    const extractedIp = extractIpFromUrl(deployment.app_url);
+    return {
+      target: null,
+      errorMessage: `Could not resolve EC2 instance ID. CFN stack lookup and EC2 IP lookup both failed. app_url="${deployment.app_url}", extracted_ip="${extractedIp || "none"}", repo="${deployment.repo}", region="${region}". Check server logs for details.`,
+    };
   }
 
-  // GCP Compute or fallback: use SSH via server IP
+  // GCP Compute: use SSH via server IP
   const serverIp = extractIpFromUrl(deployment.app_url);
   if (!serverIp) {
-    return { target: null, errorMessage: "Cannot determine server IP from deployment URL. The deployment may not have a publicly accessible IP." };
+    return {
+      target: null,
+      errorMessage: `Cannot determine server IP from deployment URL "${deployment.app_url}". The deployment may not have a publicly accessible IP.`,
+    };
   }
 
-  // Look for a deploy key for SSH access
+  // For GCP, the deploy key was generated during provisioning and stored in
+  // the Pulumi state. We need to retrieve it. Check if the deploy key file
+  // exists from a recent deployment, or fall back to error.
   const { data: keys } = await supabaseAdmin
     .from("ssh_keys")
     .select("id")
@@ -137,17 +218,17 @@ async function resolveVpsTarget(
     .limit(1);
 
   if (!keys || keys.length === 0) {
-    return { target: null, errorMessage: "No SSH key configured. Add an SSH key in Settings → SSH Keys to enable remote command execution on VPS deployments." };
+    return { target: null, errorMessage: "No SSH key configured. Add an SSH key in Settings → SSH Keys to enable remote command execution on GCP VPS deployments." };
   }
 
+  // Note: For GCP Compute, the deploy pipeline generates an ephemeral key pair
+  // and stores it in the Pulumi workspace dir. Since we don't persist private keys
+  // in the DB (correct security practice), GCP VPS commands require the original
+  // deploy workspace to still be available or a re-deploy to regenerate keys.
+  // TODO: Implement persistent secure key storage for GCP VPS command execution.
   return {
-    target: {
-      serverIp,
-      deployKeyPath: `/tmp/deploy-key-${keys[0].id}`,
-      containerName,
-      credentials: { apiKey: provider.api_key, apiSecret: provider.api_secret },
-      region: provider.region,
-    },
+    target: null,
+    errorMessage: "SSH key for GCP VPS command execution is not currently persisted between deployments. Re-deploy the project or use the GCP console to run commands.",
   };
 }
 
@@ -195,51 +276,110 @@ async function resolveEc2InstanceId(
   deployment: DeploymentInfo,
   provider: ProviderInfo,
 ): Promise<string | undefined> {
+  const credentials = { accessKeyId: provider.api_key, secretAccessKey: provider.api_secret };
+
+  // Strategy 1: Look up the CloudFormation stack by name
   try {
     const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
-    const cfn = new CloudFormationClient({
-      region: provider.region,
-      credentials: { accessKeyId: provider.api_key, secretAccessKey: provider.api_secret },
-    });
+    const cfn = new CloudFormationClient({ region: provider.region, credentials });
 
-    // Stack name follows the same convention as the deploy adapter
-    const repoName = deployment.repo.split("/").pop()?.replace(/[^a-z0-9-]/gi, "-") || "";
-    const stackName = `image-builder-app-${repoName.toLowerCase()}`;
+    const repoName = (deployment.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
+    const stackName = stackNameFor(repoName);
+
+    logger.info(`[command-exec] Looking up CFN stack: ${stackName}`);
 
     const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
     const stack = result.Stacks?.[0];
-    if (!stack || !stack.Outputs) return undefined;
-
-    const instanceOutput = stack.Outputs.find((o) => o.OutputKey === "InstanceId");
-    return instanceOutput?.OutputValue || undefined;
-  } catch {
-    // Stack doesn't exist or CFN call failed — fall through
-    return undefined;
+    if (stack?.Outputs) {
+      const instanceOutput = stack.Outputs.find((o) => o.OutputKey === "InstanceId");
+      if (instanceOutput?.OutputValue) {
+        logger.info(`[command-exec] Resolved EC2 instance from CFN: ${instanceOutput.OutputValue}`);
+        return instanceOutput.OutputValue;
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.info(`[command-exec] CFN lookup failed: ${msg}`);
   }
+
+  // Strategy 2: Look up instance by public IP using EC2 API
+  const serverIp = extractIpFromUrl(deployment.app_url);
+  if (serverIp) {
+    try {
+      const { EC2Client, DescribeInstancesCommand } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region: provider.region, credentials });
+
+      const descResult = await ec2.send(new DescribeInstancesCommand({
+        Filters: [{ Name: "ip-address", Values: [serverIp] }],
+      }));
+
+      const instance = descResult.Reservations?.[0]?.Instances?.[0];
+      if (instance?.InstanceId) {
+        logger.info(`[command-exec] Resolved EC2 instance from IP ${serverIp}: ${instance.InstanceId}`);
+        return instance.InstanceId;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.info(`[command-exec] EC2 IP lookup failed: ${msg}`);
+    }
+  }
+
+  return undefined;
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────
 
 /**
- * Extract an IP address from a URL (e.g. http://12.34.56.78:3000 → 12.34.56.78)
+ * Extract an IP address from a URL.
+ * Handles both dotted IP (http://12.34.56.78:3000) and
+ * AWS EC2 dashed format (http://ec2-12-34-56-78.compute-1.amazonaws.com).
  */
 function extractIpFromUrl(url: string): string | null {
   if (!url) return null;
-  const ipMatch = url.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
-  if (!ipMatch) return null;
-  // Validate each octet is 0-255
-  const octets = ipMatch[1].split(".");
-  if (octets.some((o) => Number(o) > 255)) return null;
-  return ipMatch[1];
+
+  // Try dotted IP first (e.g. http://12.34.56.78:3000)
+  const dottedMatch = url.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+  if (dottedMatch) {
+    const octets = dottedMatch[1].split(".");
+    if (octets.every((o) => Number(o) <= 255)) return dottedMatch[1];
+  }
+
+  // Try AWS EC2 DNS format (ec2-12-34-56-78.region.compute.amazonaws.com)
+  const ec2Match = url.match(/ec2-(\d{1,3})-(\d{1,3})-(\d{1,3})-(\d{1,3})/);
+  if (ec2Match) {
+    const octets = [ec2Match[1], ec2Match[2], ec2Match[3], ec2Match[4]];
+    if (octets.every((o) => Number(o) <= 255)) return octets.join(".");
+  }
+
+  return null;
+}
+
+/**
+ * Infer AWS region from an EC2 public DNS hostname.
+ * e.g. ec2-54-159-143-79.compute-1.amazonaws.com → us-east-1
+ *      ec2-3-21-100-50.us-east-2.compute.amazonaws.com → us-east-2
+ */
+function inferAwsRegionFromUrl(url: string): string | null {
+  if (!url) return null;
+
+  // Format: ec2-X-X-X-X.<region>.compute.amazonaws.com (most regions)
+  const regionalMatch = url.match(/ec2-[\d-]+\.([a-z0-9-]+)\.compute\.amazonaws\.com/);
+  if (regionalMatch) return regionalMatch[1];
+
+  // Format: ec2-X-X-X-X.compute-1.amazonaws.com (us-east-1 legacy format)
+  if (url.includes(".compute-1.amazonaws.com")) return "us-east-1";
+
+  return null;
 }
 
 /**
  * Derive a safe container name from deployment metadata.
+ * Must match the pipeline's logic: for AWS it's repo.split("/").pop().replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase()
  */
 function deriveContainerName(dockerImage: string, repo: string, projectId: string): string | null {
-  const imageName = dockerImage || repo || projectId;
-  const rawName = imageName.split("/").pop()?.split(":")[0] || projectId;
-  const containerName = rawName.replace(/[^a-z0-9._-]/gi, "-").toLowerCase();
+  // Use the same derivation as the deploy pipeline
+  const rawName = (repo.split("/").pop() || projectId);
+  const containerName = rawName.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
 
   if (!containerName || containerName.length > 64) {
     return null;

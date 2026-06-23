@@ -65,7 +65,7 @@ export async function runServer(): Promise<void> {
     host: "0.0.0.0",
   });
 
-  logger.info(`\n🚀 Backend v2025-05-18-C — server running on port ${env.PORT} (service: ${serviceName})\n`);
+  logger.info(`\n🚀 Backend v2026-06-23 — server running on port ${env.PORT} (service: ${serviceName})\n`);
 
   const shutdown = async () => {
     await app.close();

@@ -385,7 +385,7 @@ Resources:
                 def needs_quotes(val):
                   if val == '': return True
                   for ch in val:
-                    if ch in ' \t#\"\\\'' or ord(ch) < 33:
+                    if ch in ' \t#\"\\\\' + chr(39) or ord(ch) < 33:
                       return True
                   return False
                 def fmt(name, val):
