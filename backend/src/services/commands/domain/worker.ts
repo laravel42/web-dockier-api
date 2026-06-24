@@ -425,11 +425,16 @@ async function updateCommandStatus(
   status: string,
   output: string,
 ): Promise<void> {
+  const maxLen = 65536;
+  const cappedOutput = output.length > maxLen
+    ? `... [truncated] ...\n${output.slice(-maxLen)}`
+    : output;
+
   const { error } = await supabaseAdmin
     .from("commands")
     .update({
       status,
-      output: output.slice(0, 65536), // Cap output at 64KB
+      output: cappedOutput,
       finished_at: new Date().toISOString(),
     })
     .eq("id", commandId);

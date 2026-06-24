@@ -247,10 +247,10 @@ async function executeViaCloudRunJob(
 
     if (createResponse.status === 404) {
       // Job doesn't exist yet — create it
-      createResponse = await fetch(jobsBaseUrl, {
+      createResponse = await fetch(`${jobsBaseUrl}?jobId=${jobName}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...jobBody, name: `projects/${projectId}/locations/${region}/jobs/${jobName}` }),
+        body: JSON.stringify(jobBody),
       });
     }
 
@@ -409,8 +409,7 @@ async function executeLocal(
   command: string,
 ): Promise<ExecutionResult> {
   const { containerName } = target;
-  const escaped = command.replace(/'/g, "'\\''");
-  return runCmdWithTimeout("docker", ["exec", containerName, "sh", "-c", escaped]);
+  return runCmdWithTimeout("docker", ["exec", containerName, "sh", "-c", command]);
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────

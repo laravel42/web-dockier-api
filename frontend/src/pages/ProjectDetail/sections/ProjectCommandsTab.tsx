@@ -73,7 +73,6 @@ export default function ProjectCommandsTab({ project }: Props) {
   const [outputModal, setOutputModal] = useState<Command | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const canRunCommands = hasDeployment && canManage;
 
@@ -142,26 +141,13 @@ export default function ProjectCommandsTab({ project }: Props) {
   const hasRunning = commands.some((cmd) => cmd.status === "running");
 
   useEffect(() => {
-    if (!hasRunning) {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      return;
-    }
+    if (!hasRunning) return;
 
-    if (pollRef.current) return; // already polling
-
-    pollRef.current = setInterval(() => {
+    const interval = setInterval(() => {
       void fetchCommands(pageRef.current, true);
     }, POLL_INTERVAL_MS);
 
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
+    return () => clearInterval(interval);
   }, [hasRunning, fetchCommands]);
 
   const handleSubmit = async (e: React.FormEvent) => {

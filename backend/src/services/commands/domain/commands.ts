@@ -107,15 +107,9 @@ export async function listCommands(params: {
 }): Promise<{ commands: CommandResponse[]; total: number }> {
   const { tenantId, projectId, limit = 20, offset = 0 } = params;
 
-  const { count } = await supabaseAdmin
+  const { data, error, count } = await supabaseAdmin
     .from("commands")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  const { data, error } = await supabaseAdmin
-    .from("commands")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .order("created_at", { ascending: false })

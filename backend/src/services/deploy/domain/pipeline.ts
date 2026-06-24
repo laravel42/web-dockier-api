@@ -392,9 +392,9 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       containerName,
       stackName: `image-builder-app-${repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
     };
-    if (provision.outputs.InstanceId) infra.instanceId = provision.outputs.InstanceId;
+    if (provision.outputs?.InstanceId) infra.instanceId = provision.outputs.InstanceId;
     if (provision.serverIp) infra.serverIp = provision.serverIp;
-    if (provision.outputs.PublicIp) infra.serverIp = provision.outputs.PublicIp;
+    if (provision.outputs?.PublicIp) infra.serverIp = provision.outputs.PublicIp;
     if (deployStrategy === "managed" && provider === "aws") {
       infra.ecsCluster = repoName;
       infra.ecsTaskFamily = repoName;
