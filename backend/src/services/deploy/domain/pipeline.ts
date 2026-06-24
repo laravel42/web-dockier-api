@@ -23,6 +23,7 @@ import { getTemplateConfig } from "./project-templates.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
 import { executePostDeployCommands } from "./post-deploy.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
+import { ADAPTER_TO_SERVICE, type InfraMetadata } from "../types.js";
 
 const db = supabaseAdmin;
 
@@ -374,6 +375,24 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       );
     }
 
+    // Apply network rules (security + redirects) if the project has any configured
+    if (event.projectId && deployStrategy === "vps") {
+      try {
+        const { applyNetworkRules } = await import("../../network/domain/applier.js");
+        const networkResult = await applyNetworkRules({
+          tenantId: event.tenantId,
+          projectId: event.projectId,
+        });
+        if (networkResult.success && networkResult.generatedConfig) {
+          await logger.info("Network rules applied to nginx configuration");
+        }
+      } catch (networkErr) {
+        // Non-fatal: log and continue
+        const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
+        await logger.warn(`Could not apply network rules: ${msg}`);
+      }
+    }
+
     // Health check and finalize
     const finalUrl = provision.appUrl || "";
     await logger.section("Complete");
@@ -385,9 +404,10 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     }
 
     // Build infrastructure metadata for downstream use (commands, scaling, etc.)
-    const infra: Record<string, unknown> = {
-      adapter: adapter.id,
-      provider,
+    const service = ADAPTER_TO_SERVICE[adapter.id] || adapter.id;
+    const infra: InfraMetadata = {
+      provider: provider as InfraMetadata["provider"],
+      service: service as InfraMetadata["service"],
       region,
       containerName,
       stackName: `image-builder-app-${repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,

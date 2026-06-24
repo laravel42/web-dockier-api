@@ -27,4 +27,56 @@ export type WebhookPayload = {
   cfnStatus?: string;
   deployTarget?: string;
   codebuildId?: string;
+  region?: string;
+  instanceId?: string;
+  serverIp?: string;
+  containerName?: string;
+};
+
+// ─── Infrastructure Metadata ───────────────────────────────────────
+
+/**
+ * Structured infrastructure metadata stored in the `infra` JSONB column
+ * of the deployments table after a successful deploy.
+ *
+ * Consumers can branch on `provider` + `service` without probing optional fields.
+ */
+export type InfraMetadata = {
+  /** Cloud provider: aws | gcp */
+  provider: "aws" | "gcp";
+  /** Compute service used for this deployment */
+  service: "ec2" | "ecs" | "s3" | "gce" | "cloud-run" | "gcs";
+  /** Cloud region (e.g. "us-east-1", "europe-west1") */
+  region: string;
+  /** Docker container name on the host */
+  containerName: string;
+
+  /** CloudFormation / Pulumi stack name */
+  stackName?: string;
+
+  // ── EC2 / GCE (VPS) ──
+  instanceId?: string;
+  serverIp?: string;
+
+  // ── ECS (managed) ──
+  ecsCluster?: string;
+  ecsTaskFamily?: string;
+
+  // ── Cloud Run (managed) ──
+  cloudRunService?: string;
+
+  // ── GCP common ──
+  gcpProjectId?: string;
+};
+
+/**
+ * Map from adapter IDs to the InfraMetadata `service` field.
+ */
+export const ADAPTER_TO_SERVICE: Record<string, InfraMetadata["service"]> = {
+  "aws-ec2": "ec2",
+  "aws-ecs": "ecs",
+  "aws-s3": "s3",
+  "gcp-compute": "gce",
+  "gcp-cloudrun": "cloud-run",
+  "gcp-storage": "gcs",
 };

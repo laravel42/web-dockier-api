@@ -5,7 +5,7 @@ import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { logger } from "../../../shared/logger.js";
-import type { DeploymentRow, ServiceEntry } from "../types.js";
+import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
   tenantId: string;
@@ -118,7 +118,17 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
 export async function applyDeploymentWebhookUpdate(
   db: any,
   buildId: string,
-  payload: { status: "deploying" | "success" | "failed"; appUrl?: string; cfnStatus?: string; deployTarget?: string; stackName?: string },
+  payload: {
+    status: "deploying" | "success" | "failed";
+    appUrl?: string;
+    cfnStatus?: string;
+    deployTarget?: string;
+    stackName?: string;
+    region?: string;
+    instanceId?: string;
+    serverIp?: string;
+    containerName?: string;
+  },
 ) {
   const updates: Record<string, unknown> = { updated_at: nowIso() };
   if (payload.status === "success") {
@@ -132,9 +142,55 @@ export async function applyDeploymentWebhookUpdate(
 
   const { data: current } = await db
     .from("deployments")
-    .select("logs,organization_id,repo,branch,commit_hash")
+    .select("logs,organization_id,repo,branch,commit_hash,deploy_strategy,provider_id")
     .eq("id", buildId)
     .maybeSingle();
+
+  // Build infra metadata on success
+  if (payload.status === "success") {
+    const repoName = (current?.repo?.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
+    const deployStrategy = current?.deploy_strategy || "vps";
+
+    // Derive region from provider if not in payload
+    let region = payload.region || "";
+    if (!region && current?.provider_id) {
+      const { data: provRow } = await db
+        .from("server_providers")
+        .select("region, provider")
+        .eq("id", current.provider_id)
+        .maybeSingle();
+      if (provRow?.region) region = provRow.region;
+    }
+
+    // Derive serverIp from appUrl if not provided (e.g. http://ec2-1-2-3-4.compute-1.amazonaws.com → 1.2.3.4)
+    let serverIp = payload.serverIp || "";
+    if (!serverIp && payload.appUrl) {
+      const ec2Match = payload.appUrl.match(/ec2-([\d-]+)\./);
+      if (ec2Match) serverIp = ec2Match[1].replace(/-/g, ".");
+    }
+
+    // Determine service from deployTarget or deployStrategy
+    const serviceMap: Record<string, InfraMetadata["service"]> = { ec2: "ec2", ecs: "ecs" };
+    const service: InfraMetadata["service"] = serviceMap[payload.deployTarget || ""] || (deployStrategy === "managed" ? "ecs" : "ec2");
+
+    const containerName = payload.containerName || repoName;
+    const infra: InfraMetadata = {
+      provider: "aws",
+      service,
+      region: region || "us-east-1",
+      containerName,
+      stackName: payload.stackName || `image-builder-app-${repoName}`,
+    };
+    if (payload.instanceId) infra.instanceId = payload.instanceId;
+    if (serverIp) infra.serverIp = serverIp;
+    if (service === "ecs") {
+      infra.ecsCluster = repoName;
+      infra.ecsTaskFamily = repoName;
+    }
+
+    updates.infra = infra;
+  }
+
   const lines = [payload.status === "success" ? "Deployment succeeded." : payload.status === "failed" ? "Deployment failed." : "Deployment in progress."];
   if (payload.stackName) lines.push(`stack=${payload.stackName}`);
   if (payload.cfnStatus) lines.push(`providerStatus=${payload.cfnStatus}`);

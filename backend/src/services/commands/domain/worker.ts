@@ -19,6 +19,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { stackNameFor } from "../../deploy/domain/aws-helpers.js";
+import type { InfraMetadata } from "../../deploy/types.js";
 
 export interface CommandJobInput {
   commandId: string;
@@ -84,9 +85,9 @@ async function resolveExecutionTarget(
   }
 
   // ── Fast path: use stored infra metadata (populated on deploys after migration 0047)
-  const infra = (deployment.infra || {}) as Record<string, string>;
-  if (infra.adapter && infra.region && infra.containerName) {
-    return resolveFromInfra(infra, provider, deployment);
+  const infra = (deployment.infra || {}) as Partial<InfraMetadata>;
+  if (infra.provider && infra.service && infra.region && infra.containerName) {
+    return resolveFromInfra(infra as InfraMetadata, provider, deployment);
   }
 
   // ── Fallback: infer from deployment data (legacy deployments before infra column)
@@ -111,59 +112,63 @@ async function resolveExecutionTarget(
 // ─── Infra-based resolution (preferred) ────────────────────────────
 
 function resolveFromInfra(
-  infra: Record<string, string>,
+  infra: InfraMetadata,
   provider: ProviderInfo,
   deployment: DeploymentInfo,
 ): { target: ExecutionTarget | null; errorMessage?: string } {
   const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
-  const region = infra.region;
-  const containerName = infra.containerName;
+  const { region, containerName } = infra;
 
-  // AWS EC2 (VPS) → SSM
-  if (infra.instanceId) {
-    return {
-      target: { instanceId: infra.instanceId, containerName, credentials, region },
-    };
+  switch (infra.service) {
+    case "ec2":
+      if (!infra.instanceId) {
+        return { target: null, errorMessage: "EC2 deployment missing instanceId in infra metadata. Re-deploy to populate." };
+      }
+      return {
+        target: { instanceId: infra.instanceId, containerName, credentials, region },
+      };
+
+    case "ecs":
+      return {
+        target: {
+          containerName,
+          credentials,
+          region,
+          ecsCluster: infra.ecsCluster || containerName,
+          ecsTaskFamily: infra.ecsTaskFamily || containerName,
+          dockerImage: deployment.docker_image,
+        },
+      };
+
+    case "cloud-run":
+      return {
+        target: {
+          containerName,
+          credentials,
+          region,
+          cloudRunService: infra.cloudRunService || containerName,
+          gcpProjectId: infra.gcpProjectId,
+          dockerImage: deployment.docker_image,
+        },
+      };
+
+    case "gce":
+      if (!infra.serverIp) {
+        return { target: null, errorMessage: "GCP Compute deployment missing serverIp in infra metadata." };
+      }
+      // GCP VPS — SSH keys are ephemeral, not currently supported post-deploy
+      return {
+        target: null,
+        errorMessage: "GCP Compute VPS command execution requires a persistent SSH key. Re-deploy to regenerate access or use the GCP console.",
+      };
+
+    case "s3":
+    case "gcs":
+      return { target: null, errorMessage: "Commands are not supported for static site deployments." };
+
+    default:
+      return { target: null, errorMessage: `Unknown infra service: "${infra.service}" (provider: ${infra.provider})` };
   }
-
-  // AWS ECS (managed) → ECS RunTask
-  if (infra.ecsCluster) {
-    return {
-      target: {
-        containerName,
-        credentials,
-        region,
-        ecsCluster: infra.ecsCluster,
-        ecsTaskFamily: infra.ecsTaskFamily || containerName,
-        dockerImage: deployment.docker_image,
-      },
-    };
-  }
-
-  // GCP Cloud Run (managed) → Cloud Run Jobs
-  if (infra.cloudRunService) {
-    return {
-      target: {
-        containerName,
-        credentials,
-        region,
-        cloudRunService: infra.cloudRunService,
-        gcpProjectId: infra.gcpProjectId,
-        dockerImage: deployment.docker_image,
-      },
-    };
-  }
-
-  // GCP Compute (VPS) → SSH
-  if (infra.serverIp) {
-    // GCP VPS — SSH keys are ephemeral, not currently supported post-deploy
-    return {
-      target: null,
-      errorMessage: "GCP Compute VPS command execution requires a persistent SSH key. Re-deploy to regenerate access or use the GCP console.",
-    };
-  }
-
-  return { target: null, errorMessage: `Infra metadata present but no supported execution path found. adapter="${infra.adapter}"` };
 }
 
 // ─── VPS Resolution (EC2 / GCP Compute) ────────────────────────────
