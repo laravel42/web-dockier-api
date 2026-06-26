@@ -63,7 +63,7 @@ async function resolveNginxTarget(
     .eq("status", "success")
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (!deployment) {
     return { target: null, appName: "", errorMessage: "No active deployment found. Deploy the project first." };
@@ -81,7 +81,7 @@ async function resolveNginxTarget(
     .from("server_providers")
     .select("provider, api_key, api_secret, region")
     .eq("id", deployment.provider_id)
-    .single();
+    .maybeSingle();
 
   if (!provider) {
     return { target: null, appName: "", errorMessage: "Server provider not found." };
@@ -370,10 +370,12 @@ export async function applyNetworkRules(params: {
 
     // 4. Build htpasswd contents from DB
     const htpasswdContents = new Map<string, string>();
-    for (const htFile of config.htpasswdFiles) {
-      const content = await buildHtpasswdContent(htFile.ruleId);
-      htpasswdContents.set(htFile.ruleId, content);
-    }
+    await Promise.all(
+      config.htpasswdFiles.map(async (htFile) => {
+        const content = await buildHtpasswdContent(htFile.ruleId);
+        htpasswdContents.set(htFile.ruleId, content);
+      }),
+    );
 
     // 5. Build and execute script
     const script = buildApplyScript(appName, config, htpasswdContents);

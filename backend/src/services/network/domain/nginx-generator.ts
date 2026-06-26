@@ -51,10 +51,10 @@ function generateRedirectDirectives(rules: RedirectRuleResponse[]): string[] {
   const lines: string[] = [];
   lines.push("    # ── Redirect Rules ──");
   for (const rule of rules) {
-    const code = rule.type === "permanent" ? "301" : "302";
-    // Use exact match rewrite for simple paths
-    const from = rule.fromPath.replace(/[^a-zA-Z0-9/_\-.*^$]/g, "\\$&");
-    lines.push(`    rewrite ^${from}$ ${rule.toPath} redirect; # ${code}`);
+    const flag = rule.type === "permanent" ? "permanent" : "redirect";
+    // Escape regex special characters to ensure exact path matching
+    const from = rule.fromPath.replace(/[^a-zA-Z0-9/_\-]/g, "\\$&");
+    lines.push(`    rewrite ^${from}$ ${rule.toPath} ${flag};`);
   }
   lines.push("");
   return lines;
@@ -68,6 +68,7 @@ function generateRedirectDirectives(rules: RedirectRuleResponse[]): string[] {
 function generateSecurityLocations(
   rules: SecurityRuleResponse[],
   appName: string,
+  containerPort: number,
 ): { locationBlocks: string[]; htpasswdFiles: Array<{ ruleId: string; path: string; content: string }> } {
   const locationBlocks: string[] = [];
   const htpasswdFiles: Array<{ ruleId: string; path: string; content: string }> = [];
@@ -104,11 +105,14 @@ function generateSecurityLocations(
       locationBlocks.push(`    location ${locationPath} {`);
       locationBlocks.push(`        auth_basic "${rule.name}";`);
       locationBlocks.push(`        auth_basic_user_file ${htpasswdPath};`);
-      locationBlocks.push(`        proxy_pass http://127.0.0.1:8080;`);
+      locationBlocks.push(`        proxy_pass http://127.0.0.1:${containerPort};`);
       locationBlocks.push(`        proxy_set_header Host $host;`);
       locationBlocks.push(`        proxy_set_header X-Real-IP $remote_addr;`);
       locationBlocks.push(`        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`);
       locationBlocks.push(`        proxy_set_header X-Forwarded-Proto $scheme;`);
+      locationBlocks.push(`        proxy_http_version 1.1;`);
+      locationBlocks.push('        proxy_set_header Upgrade $http_upgrade;');
+      locationBlocks.push('        proxy_set_header Connection "upgrade";');
       locationBlocks.push(`    }`);
       locationBlocks.push("");
     }
@@ -128,7 +132,7 @@ function generateSecurityLocations(
 export function generateNginxConfig(input: NginxGeneratorInput): NginxGeneratorOutput {
   const { appName, containerPort = 8080, securityRules, redirectRules } = input;
 
-  const { locationBlocks, htpasswdFiles } = generateSecurityLocations(securityRules, appName);
+  const { locationBlocks, htpasswdFiles } = generateSecurityLocations(securityRules, appName, containerPort);
   const redirectLines = generateRedirectDirectives(redirectRules);
 
   // Determine if root location needs auth_basic
