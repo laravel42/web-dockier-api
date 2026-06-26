@@ -104,6 +104,7 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
     app_url: "",
     commit_hash: "",
     docker_image: "",
+    infra: {},
     created_at: createdAt,
     updated_at: createdAt,
   };

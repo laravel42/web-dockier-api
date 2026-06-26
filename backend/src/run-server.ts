@@ -5,6 +5,7 @@ import { startQueue, stopQueue } from "./shared/queue.js";
 import { registerDeployWorker } from "./services/deploy/domain/worker.js";
 import { registerImageBuildWorker } from "./services/image-builder/domain/worker.js";
 import { registerScanWorker } from "./services/code-analysis/domain/worker.js";
+import { registerCommandWorker } from "./services/commands/domain/worker.js";
 import { seedCustomRules } from "./services/code-analysis/domain/seed-custom-rules.js";
 import { reconcileAllStaleScans } from "./services/code-analysis/domain/scan-reconcile.js";
 import { reconcileStaleScanJobs } from "./services/code-analysis/domain/scan-queue-reconcile.js";
@@ -19,7 +20,8 @@ export async function runServer(): Promise<void> {
   const runDeploy = serviceName === "gateway" || serviceName === "deploy";
   const runImageBuilder = serviceName === "gateway" || serviceName === "image-builder";
   const runCodeAnalysis = serviceName === "gateway" || serviceName === "code-analysis";
-  const needsQueue = runDeploy || runImageBuilder || runCodeAnalysis;
+  const runCommands = serviceName === "gateway" || serviceName === "commands";
+  const needsQueue = runDeploy || runImageBuilder || runCodeAnalysis || runCommands;
 
   const queueReady = needsQueue ? await startQueue() : false;
   if (needsQueue && !queueReady) {
@@ -36,6 +38,7 @@ export async function runServer(): Promise<void> {
     if (runDeploy) await registerDeployWorker();
     if (runImageBuilder) await registerImageBuildWorker();
     if (runCodeAnalysis) await registerScanWorker();
+    if (runCommands) await registerCommandWorker();
   }
 
   if (runCodeAnalysis) {
@@ -62,7 +65,7 @@ export async function runServer(): Promise<void> {
     host: "0.0.0.0",
   });
 
-  logger.info(`\n🚀 Backend v2025-05-18-C — server running on port ${env.PORT} (service: ${serviceName})\n`);
+  logger.info(`\n🚀 Backend v2026-06-23 — server running on port ${env.PORT} (service: ${serviceName})\n`);
 
   const shutdown = async () => {
     await app.close();

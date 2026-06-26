@@ -365,6 +365,7 @@ export type Database = {
           commit_hash: string;
           docker_image: string;
           deploy_strategy: string;
+          infra: Record<string, unknown>;
           created_at: string;
           updated_at: string;
         };
@@ -430,6 +431,24 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["profiles"]["Row"]> &
           Pick<Database["public"]["Tables"]["profiles"]["Row"], "id">;
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
+        Relationships: [];
+      };
+      commands: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          user_id: string;
+          command: string;
+          status: string;
+          output: string;
+          started_at: string;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["commands"]["Row"]> &
+          Pick<Database["public"]["Tables"]["commands"]["Row"], "organization_id" | "project_id" | "user_id" | "command">;
+        Update: Partial<Database["public"]["Tables"]["commands"]["Row"]>;
         Relationships: [];
       };
     };
