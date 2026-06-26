@@ -383,8 +383,12 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
           tenantId: event.tenantId,
           projectId: event.projectId,
         });
-        if (networkResult.success && networkResult.generatedConfig) {
-          await logger.info("Network rules applied to nginx configuration");
+        if (networkResult.success) {
+          if (networkResult.generatedConfig) {
+            await logger.info("Network rules applied to nginx configuration");
+          }
+        } else {
+          await logger.warn(`Could not apply network rules: ${networkResult.message}`);
         }
       } catch (networkErr) {
         // Non-fatal: log and continue

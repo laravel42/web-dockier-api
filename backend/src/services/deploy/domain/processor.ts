@@ -171,7 +171,7 @@ export async function applyDeploymentWebhookUpdate(
 
     // Determine service from deployTarget or deployStrategy
     const serviceMap: Record<string, InfraMetadata["service"]> = { ec2: "ec2", ecs: "ecs" };
-    const service: InfraMetadata["service"] = serviceMap[payload.deployTarget || ""] || (deployStrategy === "managed" ? "ecs" : "ec2");
+    const service: InfraMetadata["service"] = serviceMap[payload.deployTarget || ""] || (deployStrategy === "managed" ? "ecs" : deployStrategy === "static" ? "s3" : "ec2");
 
     const containerName = payload.containerName || repoName;
     const infra: InfraMetadata = {
