@@ -12,3 +12,4 @@ export { codeAnalysisApi } from "./code-analysis";
 export { imageBuilderApi } from "./image-builder";
 export { integrationsApi } from "./integrations";
 export { commandsApi } from "./commands";
+export { networkApi } from "./network";

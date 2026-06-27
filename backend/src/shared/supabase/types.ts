@@ -451,6 +451,50 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["commands"]["Row"]>;
         Relationships: [];
       };
+      security_rules: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          name: string;
+          path: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["security_rules"]["Row"]> &
+          Pick<Database["public"]["Tables"]["security_rules"]["Row"], "organization_id" | "project_id" | "name">;
+        Update: Partial<Database["public"]["Tables"]["security_rules"]["Row"]>;
+        Relationships: [];
+      };
+      security_rule_credentials: {
+        Row: {
+          id: string;
+          security_rule_id: string;
+          username: string;
+          password_hash: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["security_rule_credentials"]["Row"]> &
+          Pick<Database["public"]["Tables"]["security_rule_credentials"]["Row"], "security_rule_id" | "username" | "password_hash">;
+        Update: Partial<Database["public"]["Tables"]["security_rule_credentials"]["Row"]>;
+        Relationships: [];
+      };
+      redirect_rules: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          from_path: string;
+          to_path: string;
+          type: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["redirect_rules"]["Row"]> &
+          Pick<Database["public"]["Tables"]["redirect_rules"]["Row"], "organization_id" | "project_id" | "from_path" | "to_path">;
+        Update: Partial<Database["public"]["Tables"]["redirect_rules"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
