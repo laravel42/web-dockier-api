@@ -137,21 +137,36 @@ export async function deleteHeartbeat(params: {
  * No authentication required (used by external cron jobs).
  */
 export async function pingHeartbeat(heartbeatId: string): Promise<void> {
-  const { data, error } = await supabaseAdmin
+  const { data: current, error: fetchError } = await supabaseAdmin
+    .from("heartbeats")
+    .select("status, organization_id, project_id, name")
+    .eq("id", heartbeatId)
+    .single();
+
+  if (fetchError || !current) {
+    throw httpError(404, "Heartbeat not found");
+  }
+
+  const { error: updateError } = await supabaseAdmin
     .from("heartbeats")
     .update({
       status: "healthy",
       last_pinged_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", heartbeatId)
-    .select("id");
+    .eq("id", heartbeatId);
 
-  if (error) {
-    throw httpError(500, error.message);
+  if (updateError) {
+    throw httpError(500, updateError.message);
   }
 
-  if (!data || data.length === 0) {
-    throw httpError(404, "Heartbeat not found");
+  if (current.status === "missed") {
+    const { recordActivity } = await import("./activity.js");
+    await recordActivity({
+      tenantId: current.organization_id,
+      projectId: current.project_id,
+      eventType: "heartbeat_recovered",
+      description: `Heartbeat "${current.name}" recovered`,
+    });
   }
 }
