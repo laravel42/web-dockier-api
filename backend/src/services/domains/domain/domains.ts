@@ -163,6 +163,17 @@ export async function deleteDomain(params: {
 }): Promise<void> {
   const { tenantId, projectId, domainId } = params;
 
+  // Check if the domain being deleted is currently the primary domain
+  const { data: domain } = await supabaseAdmin
+    .from("domains")
+    .select("is_primary")
+    .eq("id", domainId)
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (!domain) throw httpError(404, "Domain not found");
+
   const { error, count } = await supabaseAdmin
     .from("domains")
     .delete({ count: "exact" })
@@ -172,6 +183,25 @@ export async function deleteDomain(params: {
 
   if (error) throw httpError(500, error.message);
   if (count === 0) throw httpError(404, "Domain not found");
+
+  // If the deleted domain was primary, promote the oldest remaining domain
+  if (domain.is_primary) {
+    const { data: nextDomain } = await supabaseAdmin
+      .from("domains")
+      .select("id")
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (nextDomain) {
+      await supabaseAdmin
+        .from("domains")
+        .update({ is_primary: true, updated_at: new Date().toISOString() })
+        .eq("id", nextDomain.id);
+    }
+  }
 }
 
 // ─── SSL Certificates ───
@@ -208,7 +238,7 @@ export async function createCertificate(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .eq("name", domainName)
-    .single();
+    .maybeSingle();
 
   const { data, error } = await supabaseAdmin
     .from("ssl_certificates")

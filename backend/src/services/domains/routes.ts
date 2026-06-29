@@ -193,6 +193,8 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
           certificateId: cert.id,
           domainName: request.body.domainName,
         }).catch(() => { /* logged inside */ });
+      } else {
+        scheduleApply(auth.tenantId, request.params.projectId);
       }
       return cert;
     },

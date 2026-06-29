@@ -656,6 +656,7 @@ function NginxConfigModal({
 function formatExpiry(dateStr: string): string {
   const now = new Date();
   const expires = new Date(dateStr);
+  if (isNaN(expires.getTime())) return "Invalid date";
   const diffMs = expires.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 

@@ -60,7 +60,7 @@ async function resolveDomainTarget(
   projectId: string,
   tenantId: string,
 ): Promise<{ target: ExecutionTarget | null; appName: string; errorMessage?: string }> {
-  const { data: deployment } = await supabaseAdmin
+  const { data: deployment, error: deployError } = await supabaseAdmin
     .from("deployments")
     .select("id, provider_id, deploy_strategy, docker_image, repo, infra")
     .eq("project_id", projectId)
@@ -69,6 +69,11 @@ async function resolveDomainTarget(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (deployError) {
+    logger.error(`[domains] Error fetching deployment: ${deployError.message}`);
+    return { target: null, appName: "", errorMessage: "Failed to fetch deployment details." };
+  }
 
   if (!deployment) {
     return { target: null, appName: "", errorMessage: "No active deployment found. Deploy the project first." };
@@ -215,8 +220,11 @@ async function executeOnHost(target: ExecutionTarget, script: string): Promise<H
           const stdOut = invocation.StandardOutputContent?.trim() || "";
           return { exitCode: 1, output: [stdOut, errOut].filter(Boolean).join("\n") };
         }
-      } catch {
-        // Not ready yet
+      } catch (err) {
+        // InvocationDoesNotExist is expected while SSM registers the command
+        if (err instanceof Error && err.name !== "InvocationDoesNotExist") {
+          throw err;
+        }
       }
     }
 
@@ -294,7 +302,14 @@ function generateDomainNginxConfig(params: {
     lines.push("server {");
     lines.push("    listen 80;");
     lines.push(`    server_name ${serverNames.join(" ")};`);
-    lines.push(`    return 301 https://$host$request_uri;`);
+    lines.push("");
+    lines.push("    location /.well-known/acme-challenge/ {");
+    lines.push("        root /var/www/acme-challenge;");
+    lines.push("    }");
+    lines.push("");
+    lines.push("    location / {");
+    lines.push("        return 301 https://$host$request_uri;");
+    lines.push("    }");
     lines.push("}");
     lines.push("");
   }
@@ -333,6 +348,10 @@ function generateDomainNginxConfig(params: {
   lines.push(`    server_name ${serverNames.join(" ")};`);
   lines.push("    server_tokens off;");
   lines.push("    client_max_body_size 100M;");
+  lines.push("");
+  lines.push("    location /.well-known/acme-challenge/ {");
+  lines.push("        root /var/www/acme-challenge;");
+  lines.push("    }");
   lines.push("");
   lines.push("    location / {");
   lines.push(`        proxy_pass http://127.0.0.1:${containerPort};`);
@@ -426,13 +445,6 @@ function buildCertbotScript(params: {
     "",
     "# Ensure the ACME challenge directory exists",
     "mkdir -p /var/www/acme-challenge",
-    "",
-    "# Add a location block for ACME challenges if not present",
-    `NGINX_CONF=$(find /etc/nginx/sites-enabled/ -type l -o -type f 2>/dev/null | head -1)`,
-    `if [ -n "$NGINX_CONF" ] && ! grep -q "acme-challenge" "$NGINX_CONF" 2>/dev/null; then`,
-    `  sed -i '/location \\//i\\    location /.well-known/acme-challenge/ { root /var/www/acme-challenge; }' "$NGINX_CONF"`,
-    `  reload_nginx || true`,
-    "fi",
     "",
     "# Request certificate using webroot method",
     `if certbot certonly --webroot -w /var/www/acme-challenge ${domainArgs} --non-interactive --agree-tos --email ${email} --expand 2>&1; then`,
