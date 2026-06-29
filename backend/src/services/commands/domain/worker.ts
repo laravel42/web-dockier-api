@@ -49,7 +49,7 @@ interface ProviderInfo {
  * Resolve the execution target for a project by finding its active deployment
  * and looking up the server connection details.
  */
-async function resolveExecutionTarget(
+export async function resolveExecutionTarget(
   projectId: string,
   tenantId: string,
 ): Promise<{ target: ExecutionTarget | null; errorMessage?: string }> {
