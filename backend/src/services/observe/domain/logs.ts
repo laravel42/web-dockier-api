@@ -165,8 +165,14 @@ export async function clearLog(params: {
   const truncateCmd = buildLogClearCommand(paths);
 
   try {
-    await executeCommand(target, truncateCmd);
-  } catch {
+    const result = await executeCommand(target, truncateCmd);
+    if (result.exitCode !== 0) {
+      throw httpError(500, `Failed to clear ${LOG_TYPE_LABELS[logType]}: ${result.output}`);
+    }
+  } catch (err) {
+    if (err && typeof err === "object" && "statusCode" in err) {
+      throw err;
+    }
     throw httpError(500, `Failed to clear ${LOG_TYPE_LABELS[logType]}`);
   }
 

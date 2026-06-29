@@ -73,7 +73,7 @@ export async function recordActivity(params: {
 }): Promise<void> {
   const { tenantId, projectId, userId, eventType, description, metadata } = params;
 
-  await supabaseAdmin.from("project_activity").insert({
+  const { error } = await supabaseAdmin.from("project_activity").insert({
     organization_id: tenantId,
     project_id: projectId,
     user_id: userId ?? null,
@@ -81,4 +81,8 @@ export async function recordActivity(params: {
     description,
     metadata: (metadata ?? {}) as unknown as import("../../../shared/supabase/types.js").Json,
   });
+
+  if (error) {
+    throw httpError(500, error.message);
+  }
 }

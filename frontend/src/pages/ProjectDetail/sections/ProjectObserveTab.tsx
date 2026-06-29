@@ -349,8 +349,10 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
     const a = document.createElement("a");
     a.href = url;
     a.download = `${activeLogType}-${project.id}.log`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   };
 
   return (
