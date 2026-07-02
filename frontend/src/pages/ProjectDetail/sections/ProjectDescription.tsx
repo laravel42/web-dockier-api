@@ -10,6 +10,7 @@ import OverviewEditor from "./OverviewEditor";
 import ProjectDeploymentsTab from "./ProjectDeploymentsTab";
 import ProjectCommandsTab from "./ProjectCommandsTab";
 import ProjectNetworkTab from "./ProjectNetworkTab";
+import ProjectObserveTab from "./ProjectObserveTab";
 import { usePermissions } from "../../../context/PermissionsContext";
 
 interface Props {
@@ -864,6 +865,8 @@ export default function ProjectDescription({
         return <ProjectCommandsTab project={project} />;
       case "network":
         return <ProjectNetworkTab project={project} />;
+      case "observe":
+        return <ProjectObserveTab project={project} />;
       default:
         return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTab)?.label ?? "");
     }

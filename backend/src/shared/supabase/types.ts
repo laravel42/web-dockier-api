@@ -495,6 +495,40 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["redirect_rules"]["Row"]>;
         Relationships: [];
       };
+      heartbeats: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          name: string;
+          frequency: string;
+          grace_period: string;
+          status: string;
+          last_pinged_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["heartbeats"]["Row"]> &
+          Pick<Database["public"]["Tables"]["heartbeats"]["Row"], "organization_id" | "project_id" | "name">;
+        Update: Partial<Database["public"]["Tables"]["heartbeats"]["Row"]>;
+        Relationships: [];
+      };
+      project_activity: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          user_id: string | null;
+          event_type: string;
+          description: string;
+          metadata: Json | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_activity"]["Row"]> &
+          Pick<Database["public"]["Tables"]["project_activity"]["Row"], "organization_id" | "project_id" | "event_type" | "description">;
+        Update: Partial<Database["public"]["Tables"]["project_activity"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
