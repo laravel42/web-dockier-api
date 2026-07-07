@@ -1,7 +1,6 @@
 import { useProjectDetail } from "./useProjectDetail";
 import { btnSecondary } from "../../utils/styles";
 import DeployWizard from "../../components/DeployWizard";
-import ConfirmModal from "../../components/ConfirmModal";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
 import ProjectHeader from "./sections/ProjectHeader";
 import RepoInfoCard from "./sections/RepoInfoCard";
@@ -27,8 +26,6 @@ import type { RepoIssue, RepoPullRequest } from "../../types";
 export default function ProjectDetail() {
   const {
     project, setProject, loading, error, navigate,
-    showDelete, setShowDelete, headerMenuOpen, setHeaderMenuOpen,
-    handleDelete, handlePullOrigin,
     handleUpdateName, nameSaving, nameError,
     showDeployWizard, setShowDeployWizard,
     allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy,
@@ -126,12 +123,7 @@ export default function ProjectDetail() {
 
       <ProjectHeader
         project={project}
-        headerMenuOpen={headerMenuOpen}
-        onToggleMenu={() => setHeaderMenuOpen(!headerMenuOpen)}
-        onCloseMenu={() => setHeaderMenuOpen(false)}
         onDeploy={() => setShowDeployWizard(true)}
-        onPull={handlePullOrigin}
-        onDelete={() => setShowDelete(true)}
         onNameSave={handleUpdateName}
         nameSaving={nameSaving}
         nameError={nameError}
@@ -200,8 +192,6 @@ export default function ProjectDetail() {
         providers={allProviders}
         onDeployComplete={fetchLastDeploy}
       />
-
-      <ConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} message={`Are you sure you want to delete "${project.name}"?`} />
 
       <PullLogModal pullLog={pullLog} pullLoading={pullLoading} onClose={() => setPullLog(null)} />
 

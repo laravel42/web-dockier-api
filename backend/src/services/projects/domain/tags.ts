@@ -44,6 +44,38 @@ export async function listTags(tenantId: string): Promise<TagResponse[]> {
   return rows.map((r) => rowToTag(r as TagRow));
 }
 
+export interface TagWithCountResponse extends TagResponse {
+  projectCount: number;
+}
+
+export async function listTagsWithCounts(tenantId: string): Promise<TagWithCountResponse[]> {
+  const { data, error } = await supabaseAdmin
+    .from("project_tags")
+    .select("*")
+    .eq("organization_id", tenantId)
+    .order("name", { ascending: true });
+
+  const rows = unwrapList(data, error, TagsError, { internalMsg: "Failed to list tags" });
+
+  // Get assignment counts per tag
+  const { data: assignments, error: assignError } = await supabaseAdmin
+    .from("project_tag_assignments")
+    .select("tag_id")
+    .eq("organization_id", tenantId);
+
+  if (assignError) throw new TagsError("Failed to fetch tag counts", "internal", assignError);
+
+  const countMap: Record<string, number> = {};
+  for (const a of assignments ?? []) {
+    countMap[a.tag_id] = (countMap[a.tag_id] ?? 0) + 1;
+  }
+
+  return rows.map((r) => {
+    const tag = rowToTag(r as TagRow);
+    return { ...tag, projectCount: countMap[r.id] ?? 0 };
+  });
+}
+
 export async function createTag(params: {
   tenantId: string;
   name: string;

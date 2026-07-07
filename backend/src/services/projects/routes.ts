@@ -17,6 +17,7 @@ import {
 import { createOverviewAiStream } from "./domain/overview-ai.js";
 import {
   listTags,
+  listTagsWithCounts,
   createTag,
   updateTag,
   deleteTag,
@@ -214,6 +215,27 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       const tags = await listTags(auth.tenantId);
+      return { tags };
+    },
+  );
+
+  typed.get(
+    "/projects/tags/manage",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      schema: {
+        tags: ["projects"],
+        summary: "List all organization tags with project counts",
+        response: {
+          200: z.object({
+            tags: z.array(tagResponseSchema.extend({ projectCount: z.number() })),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const tags = await listTagsWithCounts(auth.tenantId);
       return { tags };
     },
   );

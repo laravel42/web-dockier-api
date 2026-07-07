@@ -5,7 +5,19 @@ import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
 import Modal from "../../../components/Modal";
 import Spinner from "../../../components/Spinner";
-import { tagsApi, type Tag } from "../../../services/tags";
+import SourceControlSelect from "../../../components/SourceControlSelect";
+import RepoSelect from "../../../components/RepoSelect";
+import BranchSelect from "../../../components/BranchSelect";
+import TrashIcon from "../../../components/icons/outlined/TrashIcon";
+import CheckIcon from "../../../components/icons/outlined/CheckIcon";
+import SearchIcon from "../../../components/icons/outlined/SearchIcon";
+import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon";
+import EyeIcon from "../../../components/icons/outlined/EyeIcon";
+import XIcon from "../../../components/icons/outlined/XIcon";
+import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
+import { tagsApi, type Tag, type TagWithCount } from "../../../services/tags";
+import { gitApi } from "../../../services/git";
+import type { Connection, Repo } from "../../../types";
 import { btnPrimary, btnOutline, inputCls, textareaCls } from "../../../utils/styles";
 
 interface Props {
@@ -133,9 +145,7 @@ function CopyableField({ value }: { value: string }) {
         title="Copy"
       >
         {copied ? (
-          <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-          </svg>
+          <CheckIcon className="size-4" />
         ) : (
           <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
@@ -164,6 +174,7 @@ function TagPicker({
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showManage, setShowManage] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -192,7 +203,7 @@ function TagPicker({
     setSelectedIds(next);
     try {
       await tagsApi.setProjectTags(projectId, next);
-    } catch { /* silent — revert on failure */ }
+    } catch { /* silent */ }
   };
 
   const removeTag = async (tagId: string) => {
@@ -213,6 +224,11 @@ function TagPicker({
       await tagsApi.setProjectTags(projectId, next);
       setInputValue("");
     } catch { /* silent */ }
+  };
+
+  const handleManageDone = () => {
+    setShowManage(false);
+    void fetchData();
   };
 
   if (loading) return <span className="text-xs text-text-muted">Loading…</span>;
@@ -238,9 +254,7 @@ function TagPicker({
                 onClick={(e) => { e.stopPropagation(); void removeTag(tag.id); }}
                 className="text-primary-400 hover:text-primary-300"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
+                <XIcon className="size-3" />
               </button>
             )}
           </span>
@@ -271,9 +285,7 @@ function TagPicker({
                 >
                   <span>{tag.name}</span>
                   {selectedIds.includes(tag.id) && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="size-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
+                    <CheckIcon className="size-4 text-primary-500" />
                   )}
                 </button>
               ))}
@@ -293,9 +305,8 @@ function TagPicker({
             <div className="border-t border-border px-3 py-2">
               <button
                 type="button"
-                onClick={() => void handleCreateTag()}
-                disabled={!inputValue.trim()}
-                className="flex items-center gap-1.5 text-xs font-medium text-primary-500 hover:text-primary-400 transition-colors disabled:opacity-50"
+                onClick={() => { setOpen(false); setShowManage(true); }}
+                className="flex items-center gap-1.5 text-xs font-medium text-primary-500 hover:text-primary-400 transition-colors"
               >
                 <span className="inline-flex items-center justify-center size-4 rounded border border-primary-500/40 text-[10px]">+</span>
                 Manage tags
@@ -304,7 +315,223 @@ function TagPicker({
           </div>
         </>
       )}
+
+      {/* Manage Tags Modal */}
+      <ManageTagsModal open={showManage} onClose={handleManageDone} />
     </div>
+  );
+}
+
+// ─── Manage Tags Modal ───
+
+function ManageTagsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [tags, setTags] = useState<TagWithCount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newTagName, setNewTagName] = useState("");
+  const [search, setSearch] = useState("");
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const fetchTags = useCallback(async () => {
+    try {
+      const res = await tagsApi.listWithCounts();
+      setTags(res.tags);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (open) { setLoading(true); void fetchTags(); }
+  }, [open, fetchTags]);
+
+  const handleAdd = async () => {
+    if (!newTagName.trim()) return;
+    try {
+      await tagsApi.create({ name: newTagName.trim() });
+      setNewTagName("");
+      void fetchTags();
+    } catch { /* silent */ }
+  };
+
+  const handleDelete = async (tagId: string) => {
+    setDeleting(tagId);
+    try {
+      await tagsApi.delete(tagId);
+      setTags(tags.filter((t) => t.id !== tagId));
+    } catch { /* silent */ }
+    finally { setDeleting(null); setMenuOpenId(null); }
+  };
+
+  const handleStartRename = (tag: TagWithCount) => {
+    setRenamingId(tag.id);
+    setRenameValue(tag.name);
+    setMenuOpenId(null);
+  };
+
+  const handleRename = async () => {
+    if (!renamingId || !renameValue.trim()) return;
+    try {
+      await tagsApi.update(renamingId, { name: renameValue.trim() });
+      setTags(tags.map((t) => t.id === renamingId ? { ...t, name: renameValue.trim() } : t));
+    } catch { /* silent */ }
+    finally { setRenamingId(null); setRenameValue(""); }
+  };
+
+  const filteredTags = tags.filter(
+    (t) => t.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <Modal open={open} onClose={onClose} title="Manage tags">
+      <div className="flex flex-col gap-5">
+        <p className="text-sm text-text-muted">Manage tags used across your organization.</p>
+
+        {/* Add tag */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-text">Add tag</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); }}
+              className={`${inputCls} flex-1`}
+              placeholder=""
+            />
+            <button
+              type="button"
+              onClick={() => void handleAdd()}
+              disabled={!newTagName.trim()}
+              className="inline-flex items-center justify-center h-9 px-4 text-sm font-medium rounded-md border border-border bg-background text-text hover:bg-card/60 transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
+            >
+              Add tag
+            </button>
+          </div>
+        </div>
+
+        {/* Tags list */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-text">Tags</label>
+          <div className="rounded-lg border border-border">
+            {/* Search */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
+              <SearchIcon className="size-4 text-text-muted" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 bg-transparent text-sm text-text outline-none placeholder:text-text-muted"
+                placeholder="Search"
+              />
+            </div>
+
+            {/* Tag rows */}
+            <div>
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Spinner className="size-4" />
+                </div>
+              ) : filteredTags.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-text-muted text-center">No tags found</p>
+              ) : (
+                filteredTags.map((tag) => (
+                  <div key={tag.id} className="flex items-center justify-between p-3 border-b border-border/50 last:border-b-0">
+                    <div className="flex items-baseline gap-2 flex-1 min-w-0">
+                      {renamingId === tag.id ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void handleRename();
+                              if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
+                            }}
+                            className={`${inputCls} h-7 text-xs flex-1`}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleRename()}
+                            disabled={!renameValue.trim()}
+                            className="text-xs text-primary-500 hover:text-primary-400 font-medium transition-colors disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setRenamingId(null); setRenameValue(""); }}
+                            className="text-xs text-text-muted hover:text-text font-medium transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium text-text">{tag.name}</span>
+                          {tag.projectCount > 0 && (
+                            <span className="text-xs text-text-muted">
+                              {tag.projectCount} {tag.projectCount === 1 ? "project" : "projects"}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Actions menu */}
+                    {renamingId !== tag.id && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMenuOpenId(menuOpenId === tag.id ? null : tag.id)}
+                          className="flex size-7 items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-secondary-50/50 transition-colors"
+                        >
+                          <DotsVerticalIcon className="size-4" />
+                        </button>
+                        {menuOpenId === tag.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                            <div className="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg border border-border bg-card shadow-lg py-1">
+                              <button
+                                type="button"
+                                onClick={() => handleStartRename(tag)}
+                                className="flex w-full items-center px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors"
+                              >
+                                Rename
+                              </button>
+                              <div className="my-0.5 border-t border-border/50" />
+                              <button
+                                type="button"
+                                onClick={() => void handleDelete(tag.id)}
+                                disabled={deleting === tag.id}
+                                className="flex w-full items-center px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors disabled:opacity-50"
+                              >
+                                {deleting === tag.id ? "Deleting…" : "Delete"}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Done button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full mt-4 h-10 rounded-md bg-white text-black text-sm font-semibold hover:bg-gray-100 transition-colors"
+        >
+          Done
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -329,6 +556,7 @@ function GeneralSection({
   const [showNotes, setShowNotes] = useState(!!project.settings?.notes);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
   const [savingNote, setSavingNote] = useState(false);
+  const [showGitModal, setShowGitModal] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -526,20 +754,29 @@ function GeneralSection({
         </div>
 
         <SettingsRow label="Repository" description="Configure the Git repository that should be deployed.">
-          <span className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-text font-mono max-w-[200px] truncate">
-            {project.repository || "—"}
-          </span>
+          <button
+            type="button"
+            onClick={() => canManage && setShowGitModal(true)}
+            disabled={!canManage}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-text font-mono max-w-3xs truncate hover:border-primary-500/30 transition-colors disabled:hover:border-border"
+          >
+            {project.repository || "Select repository…"}
+            <ChevronDownIcon className="size-3 text-text-muted shrink-0" />
+          </button>
         </SettingsRow>
 
         <SettingsRow label="Branch" description="Configure the Git branch that should be deployed." border={false}>
-          <span className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-text">
-            {project.branch || "main"}
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-            </svg>
-          </span>
+          <BranchPickerInline project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
         </SettingsRow>
       </div>
+
+      {/* Git repository modal */}
+      <GitRepositoryModal
+        open={showGitModal}
+        onClose={() => setShowGitModal(false)}
+        project={project}
+        onProjectUpdate={onProjectUpdate}
+      />
 
       {/* Danger zone */}
       <div className="rounded-lg border border-danger-500/30 bg-danger-500/5 p-4">
@@ -559,6 +796,7 @@ function GeneralSection({
               onClick={() => setShowDeleteModal(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border border-danger-500/40 bg-danger-500/10 text-danger-500 hover:bg-danger-500/20 transition-colors"
             >
+              <TrashIcon className="size-3.5" />
               Delete project
             </button>
           )}
@@ -576,45 +814,40 @@ function GeneralSection({
       )}
 
       {/* Delete modal */}
-      {showDeleteModal && (
-        <Modal onClose={() => setShowDeleteModal(false)}>
-          <div className="flex flex-col gap-4 p-5">
-            <div>
-              <h3 className="text-sm font-semibold text-text">Delete project</h3>
-              <p className="mt-2 text-xs/relaxed text-text-muted">
-                This action is permanent. All deployments, environment files, domains, and configuration for{" "}
-                <span className="font-semibold text-text">{project.name}</span> will be permanently deleted.
-              </p>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Type <span className="font-mono text-text">{project.name}</span> to confirm
-              </label>
-              <input
-                type="text"
-                value={confirmName}
-                onChange={(e) => setConfirmName(e.target.value)}
-                className={inputCls}
-                placeholder={project.name}
-                autoFocus
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <button type="button" onClick={() => setShowDeleteModal(false)} className={btnOutline}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={confirmName !== project.name || deleting}
-                className="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md bg-danger-500 text-white hover:bg-danger-600 transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              >
-                {deleting ? "Deleting…" : "Delete permanently"}
-              </button>
-            </div>
+      <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete project">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-text-muted">
+            This action is permanent. All deployments, environment files, domains, and configuration for{" "}
+            <span className="font-semibold text-text">{project.name}</span> will be permanently deleted.
+          </p>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-muted">
+              Type <span className="font-mono text-text">{project.name}</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              className={inputCls}
+              placeholder={project.name}
+              autoFocus
+            />
           </div>
-        </Modal>
-      )}
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setShowDeleteModal(false)} className={btnOutline}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={confirmName !== project.name || deleting}
+              className="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md bg-danger-500 text-white hover:bg-danger-600 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {deleting ? "Deleting…" : "Delete permanently"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -804,10 +1037,7 @@ function EnvironmentSection({
                 Environment variables should not be shared publicly.
               </p>
               <button type="button" onClick={() => setRevealed(true)} className={btnOutline}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                </svg>
+                <EyeIcon className="size-3.5" />
                 Reveal
               </button>
             </div>
@@ -981,10 +1211,7 @@ function ComposerSection({ canManage }: { canManage: boolean }) {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                  </svg>
+                  <EyeIcon className="size-4" />
                 </button>
               </div>
             </div>
@@ -1114,10 +1341,7 @@ function NpmSection({ canManage }: { canManage: boolean }) {
                   onClick={() => setShowToken(!showToken)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                  </svg>
+                  <EyeIcon className="size-4" />
                 </button>
               </div>
             </div>
@@ -1216,6 +1440,206 @@ function NotificationsSection({ canManage }: { canManage: boolean }) {
         </SettingsRow>
       </div>
     </div>
+  );
+}
+
+// ─── Branch Picker Inline ───
+
+function BranchPickerInline({
+  project,
+  onProjectUpdate,
+}: {
+  project: Project;
+  canManage: boolean;
+  onProjectUpdate?: (project: Project) => void;
+}) {
+  const [branches, setBranches] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBranches = useCallback(async () => {
+    if (!project.connectionId || !project.repository) return;
+    setLoading(true);
+
+    // Strip URL prefix if repository is stored as a full URL
+    let repoPath = project.repository;
+    try {
+      const url = new URL(repoPath);
+      repoPath = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
+    } catch {
+      // Not a URL, use as-is (already in owner/repo format)
+    }
+
+    const parts = repoPath.split("/");
+    if (parts.length < 2) { setLoading(false); return; }
+    const repoName = parts.pop()!;
+    const owner = parts.join("/");
+    try {
+      const res = await gitApi.listBranches(project.connectionId, owner, repoName);
+      setBranches(res.branches);
+    } catch {
+      // If fetch fails, at least show the current branch as an option
+      if (project.branch) setBranches([project.branch]);
+    }
+    finally { setLoading(false); }
+  }, [project.connectionId, project.repository, project.branch]);
+
+  // Fetch branches immediately on mount
+  useEffect(() => { void fetchBranches(); }, [fetchBranches]);
+
+  const handleChange = async (branch: string) => {
+    if (branch === project.branch) return;
+    try {
+      const updated = await projectsApi.update(project.id, { branch });
+      onProjectUpdate?.(updated);
+    } catch { /* silent */ }
+  };
+
+  if (!project.connectionId || !project.repository) {
+    return (
+      <span className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-text-muted">
+        {project.branch || "main"}
+      </span>
+    );
+  }
+
+  return (
+    <div className="w-3xs">
+      <BranchSelect
+        value={project.branch || ""}
+        onChange={(b) => void handleChange(b)}
+        branches={branches}
+        loading={loading}
+        onReload={fetchBranches}
+      />
+    </div>
+  );
+}
+
+// ─── Git Repository Modal ───
+
+function GitRepositoryModal({
+  open,
+  onClose,
+  project,
+  onProjectUpdate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  project: Project;
+  onProjectUpdate?: (project: Project) => void;
+}) {
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [loadingConnections, setLoadingConnections] = useState(true);
+  const [selectedConnectionId, setSelectedConnectionId] = useState(project.connectionId || "");
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState(project.repository || "");
+  const [saving, setSaving] = useState(false);
+
+  // Fetch connections on open
+  useEffect(() => {
+    if (!open) return;
+    const load = async () => {
+      setLoadingConnections(true);
+      try {
+        const res = await gitApi.listConnections();
+        setConnections(res.connections);
+      } catch { /* silent */ }
+      finally { setLoadingConnections(false); }
+    };
+    void load();
+  }, [open]);
+
+  // Fetch repos when connection changes
+  useEffect(() => {
+    if (!selectedConnectionId) { setRepos([]); return; }
+    let cancelled = false;
+    const load = async () => {
+      setLoadingRepos(true);
+      setRepos([]);
+      try {
+        const res = await gitApi.listRepos(selectedConnectionId, false);
+        if (!cancelled) {
+          setRepos(res.repos);
+          // Try to match the stored repository to pre-select it
+          if (project.repository && selectedConnectionId === project.connectionId) {
+            let repoPath = project.repository;
+            try {
+              const url = new URL(repoPath);
+              repoPath = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
+            } catch { /* not a URL */ }
+            const match = res.repos.find(
+              (r) => r.fullName === repoPath || r.fullName === project.repository || r.url === project.repository,
+            );
+            if (match) setSelectedRepo(match.fullName);
+          }
+        }
+      } catch { /* silent */ }
+      finally { if (!cancelled) setLoadingRepos(false); }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [selectedConnectionId, project.connectionId, project.repository]);
+
+  const handleSubmit = async () => {
+    if (!selectedRepo) return;
+    setSaving(true);
+    try {
+      const updated = await projectsApi.update(project.id, {
+        repository: selectedRepo,
+        connectionId: selectedConnectionId,
+      });
+      onProjectUpdate?.(updated);
+      onClose();
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Git repository">
+      <div className="flex flex-col gap-5">
+        <p className="text-sm text-text-muted">Configure the Git repository that should be deployed.</p>
+
+        {/* Source control */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-text-muted">Source control</label>
+          <SourceControlSelect
+            value={selectedConnectionId}
+            onChange={(id) => { setSelectedConnectionId(id); setSelectedRepo(""); }}
+            connections={connections}
+            loading={loadingConnections}
+          />
+        </div>
+
+        {/* Repository */}
+        {selectedConnectionId && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-text-muted">Repository</label>
+            <RepoSelect
+              value={selectedRepo}
+              onChange={setSelectedRepo}
+              repos={repos}
+              loading={loadingRepos}
+            />
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className={btnOutline}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={!selectedRepo || saving}
+            className="inline-flex items-center justify-center h-9 px-4 text-sm font-semibold rounded-md bg-white text-black hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {saving ? "Saving…" : "Set repository"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

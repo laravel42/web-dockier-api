@@ -8,9 +8,10 @@ interface Props {
   onChange: (branch: string) => void;
   branches: string[];
   loading?: boolean;
+  onReload?: () => void;
 }
 
-export default function BranchSelect({ value, onChange, branches, loading }: Props) {
+export default function BranchSelect({ value, onChange, branches, loading, onReload }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -115,6 +116,17 @@ export default function BranchSelect({ value, onChange, branches, loading }: Pro
               ))
             )}
           </div>
+          {onReload && (
+            <div className="border-t border-border px-3 py-2">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onReload(); }}
+                className="text-sm font-medium text-primary-500 hover:text-primary-400 transition-colors"
+              >
+                Reload branches
+              </button>
+            </div>
+          )}
         </div>,
         document.body
       )}

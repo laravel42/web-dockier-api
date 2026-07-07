@@ -7,10 +7,18 @@ export interface Tag {
   createdAt: string;
 }
 
+export interface TagWithCount extends Tag {
+  projectCount: number;
+}
+
 export const tagsApi = {
   /** List all organization tags */
   list: () =>
     request<{ tags: Tag[] }>("/projects/tags"),
+
+  /** List all organization tags with project usage counts */
+  listWithCounts: () =>
+    request<{ tags: TagWithCount[] }>("/projects/tags/manage"),
 
   /** Create a new tag */
   create: (data: { name: string; color?: string }) =>
