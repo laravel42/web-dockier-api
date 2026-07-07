@@ -33,10 +33,8 @@ export default function Projects() {
     setDeleteId,
     viewMode,
     changeViewMode,
-    sourceType,
-    setSourceType,
-    selectedTemplate,
-    setSelectedTemplate,
+    platform,
+    setPlatform,
     connections,
     selectedConnectionId,
     setSelectedConnectionId,
@@ -94,10 +92,8 @@ export default function Projects() {
         onFormChange={setForm}
         onClose={closeForm}
         onSubmit={handleSubmit}
-        sourceType={sourceType}
-        onSourceTypeChange={setSourceType}
-        selectedTemplate={selectedTemplate}
-        onTemplateChange={setSelectedTemplate}
+        platform={platform}
+        onPlatformChange={setPlatform}
         connections={connections}
         selectedConnectionId={selectedConnectionId}
         onConnectionChange={setSelectedConnectionId}

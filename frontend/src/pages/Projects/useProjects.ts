@@ -5,8 +5,7 @@ import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useToast } from "../../context/useToast";
-import type { Connection, Repo, Project, ProjectSourceType } from "../../types";
-import { PROJECT_TEMPLATES } from "./templates";
+import type { Connection, Repo, Project } from "../../types";
 import { compareByTime } from "../../utils/sortByTime";
 
 export function useProjects() {
@@ -26,8 +25,7 @@ export function useProjects() {
   );
 
   // Source type: "repository" (existing) or "template" (new)
-  const [sourceType, setSourceType] = useState<ProjectSourceType>("repository");
-  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [platform, setPlatform] = useState("");
 
   // Multi-step selection state
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -144,7 +142,7 @@ export function useProjects() {
   const resetSelections = () => {
     setSelectedConnectionId(""); setRepos([]); setSelectedRepo("");
     setBranches([]); setSelectedBranch(""); setConnections([]); setError("");
-    setSourceType("repository"); setSelectedTemplate("");
+    setPlatform("");
   };
 
   const openCreate = useCallback(() => {
@@ -167,26 +165,14 @@ export function useProjects() {
     e.preventDefault();
     setSubmitting(true);
     try {
-
-    if (sourceType === "template") {
-      const tpl = PROJECT_TEMPLATES.find((t) => t.id === selectedTemplate);
-      if (!tpl) return;
-      await projectsApi.create({
-        name: form.name,
-        repository: tpl.defaultRepo,
-        branch: tpl.defaultBranch,
-        connectionId: "",
-        sourceType: "template",
-        template: tpl.id,
-      });
-    } else {
       const repo = repos.find((r) => r.fullName === selectedRepo);
       const submitData = {
         name: form.name,
-        repository: editing ? form.repository : (repo?.url || form.repository),
-        branch: editing ? form.branch : (selectedBranch || form.branch),
+        repository: editing ? form.repository : (repo?.url || form.repository || ""),
+        branch: editing ? form.branch : (selectedBranch || form.branch || ""),
         connectionId: editing ? editing.connectionId : selectedConnectionId,
         sourceType: "repository" as const,
+        platform,
       };
       if (editing) {
         await projectsApi.update(editing.id, submitData);
@@ -199,14 +185,12 @@ export function useProjects() {
           if (parsed) {
             const br = selectedBranch || form.branch || "main";
             await gitApi.getStackAnalysis(selectedConnectionId, parsed.owner, parsed.repo, br);
-            // AI analysis in background (takes longer)
             gitApi.analyzeRepo(selectedConnectionId, parsed.owner, parsed.repo, br, "openai").catch(() => {});
           }
         } catch { /* don't block on failure */ }
       }
-    }
 
-    setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
+      setShowForm(false); setEditing(null); resetSelections(); fetchProjects();
     } finally {
       setSubmitting(false);
     }
@@ -233,9 +217,8 @@ export function useProjects() {
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,
-    // source type
-    sourceType, setSourceType,
-    selectedTemplate, setSelectedTemplate,
+    // platform
+    platform, setPlatform,
     // form / modal
     connections, selectedConnectionId, setSelectedConnectionId,
     repos, selectedRepo, setSelectedRepo,
