@@ -159,7 +159,7 @@ function CopyableField({ value }: { value: string }) {
 }
 
 const PROJECT_COLORS = [
-  "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#d9af7f", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
   "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
 ];
 
@@ -625,7 +625,10 @@ function GeneralSection({
         {/* Avatar */}
         <SettingsRow label="Avatar" description="Click on the avatar to upload a custom one.">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-full bg-primary-500/20 text-primary-500 text-sm font-semibold">
+            <div
+              className="flex size-10 items-center justify-center rounded-md text-sm font-semibold"
+              style={{ backgroundColor: `${selectedColor}33`, color: selectedColor }}
+            >
               {project.name.charAt(0).toUpperCase()}
             </div>
             {canManage && (
@@ -719,7 +722,7 @@ function GeneralSection({
           <div>
             <label className="mb-1 block text-xs font-medium text-text-muted">Root directory</label>
             <div className="flex items-center gap-0">
-              <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono">
+              <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}
               </span>
               <input
@@ -734,7 +737,7 @@ function GeneralSection({
           <div>
             <label className="mb-1 block text-xs font-medium text-text-muted">Web directory</label>
             <div className="flex items-center gap-0">
-              <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono">
+              <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}
               </span>
               <input

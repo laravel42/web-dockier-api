@@ -3,8 +3,8 @@ import type { Project } from "../../../types";
 import { btnPrimary, typePageDesc, typePageTitle } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import PencilIcon from "../../../components/icons/outlined/PencilIcon";
-import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
+import ProjectAvatar from "../../../components/ProjectAvatar";
 
 interface Props {
   project: Project;
@@ -71,9 +71,7 @@ export default function ProjectHeader({
   return (
     <div className="flex items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
-          <FolderIcon className="size-6 " />
-        </div>
+        <ProjectAvatar project={project} size="lg" />
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {editing ? (
