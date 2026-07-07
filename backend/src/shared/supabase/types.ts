@@ -592,6 +592,22 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["project_tag_assignments"]["Row"]>;
         Relationships: [];
       };
+      project_env_files: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          encrypted_content: string;
+          iv: string;
+          auth_tag: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_env_files"]["Row"]> &
+          Pick<Database["public"]["Tables"]["project_env_files"]["Row"], "organization_id" | "project_id" | "encrypted_content" | "iv" | "auth_tag">;
+        Update: Partial<Database["public"]["Tables"]["project_env_files"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

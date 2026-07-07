@@ -34,8 +34,6 @@ export default function ProjectDetail() {
     recentCommits, commitsLoading, commitsError,
     openIssues, setOpenIssues, issuesLoading, issuesError,
     pullRequests, pullRequestsLoading, pullRequestsError,
-    loadBranches,
-    branchList, branchLoading, branchSearch, setBranchSearch, handleSwitchBranch,
     pullLog, setPullLog, pullLoading,
     recentDeploys,
     recentScans,
@@ -127,12 +125,6 @@ export default function ProjectDetail() {
         onNameSave={handleUpdateName}
         nameSaving={nameSaving}
         nameError={nameError}
-        branchList={branchList}
-        branchLoading={branchLoading}
-        branchSearch={branchSearch}
-        onBranchSearchChange={setBranchSearch}
-        onLoadBranches={loadBranches}
-        onSwitchBranch={handleSwitchBranch}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 items-stretch">

@@ -5,7 +5,6 @@ import { usePermissions } from "../../../context/PermissionsContext";
 import PencilIcon from "../../../components/icons/outlined/PencilIcon";
 import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import BranchSelector from "./BranchSelector";
 
 interface Props {
   project: Project;
@@ -13,12 +12,6 @@ interface Props {
   onNameSave: (name: string) => Promise<void>;
   nameSaving?: boolean;
   nameError?: string;
-  branchList: string[];
-  branchLoading: boolean;
-  branchSearch: string;
-  onBranchSearchChange: (value: string) => void;
-  onLoadBranches: () => void;
-  onSwitchBranch: (branch: string) => void;
 }
 
 export default function ProjectHeader({
@@ -27,18 +20,11 @@ export default function ProjectHeader({
   onNameSave,
   nameSaving = false,
   nameError = "",
-  branchList,
-  branchLoading,
-  branchSearch,
-  onBranchSearchChange,
-  onLoadBranches,
-  onSwitchBranch,
 }: Props) {
-  const isTemplate = project.sourceType === "template";
-  const hasGitActions = !isTemplate && !!project.connectionId;
   const { has, isOwner } = usePermissions();
   const canDeploy = has("deploy:create");
   const canEditName = isOwner || has("project:manage");
+  const isTemplate = project.sourceType === "template";
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.name);
@@ -141,17 +127,6 @@ export default function ProjectHeader({
         </div>
       </div>
       <div className="relative flex shrink-0 items-center gap-4">
-        {hasGitActions && (
-          <BranchSelector
-            currentBranch={project.branch}
-            branchList={branchList}
-            branchLoading={branchLoading}
-            branchSearch={branchSearch}
-            onSearchChange={onBranchSearchChange}
-            onOpen={onLoadBranches}
-            onSwitch={onSwitchBranch}
-          />
-        )}
         {canDeploy && (
           <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
             <RocketIcon className="size-4 " />

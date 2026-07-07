@@ -8,6 +8,7 @@ import Spinner from "../../../components/Spinner";
 import SourceControlSelect from "../../../components/SourceControlSelect";
 import RepoSelect from "../../../components/RepoSelect";
 import BranchSelect from "../../../components/BranchSelect";
+import EnvEditor from "../../../components/EnvEditor";
 import TrashIcon from "../../../components/icons/outlined/TrashIcon";
 import CheckIcon from "../../../components/icons/outlined/CheckIcon";
 import SearchIcon from "../../../components/icons/outlined/SearchIcon";
@@ -16,6 +17,7 @@ import EyeIcon from "../../../components/icons/outlined/EyeIcon";
 import XIcon from "../../../components/icons/outlined/XIcon";
 import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
 import { tagsApi, type Tag, type TagWithCount } from "../../../services/tags";
+import { envApi } from "../../../services/env";
 import { gitApi } from "../../../services/git";
 import type { Connection, Repo } from "../../../types";
 import { btnPrimary, btnOutline, inputCls, textareaCls } from "../../../utils/styles";
@@ -873,8 +875,6 @@ function DeploymentsSection({
       <SectionTitle
         title="Deployments"
         description="Manage build and deployment settings."
-        linkText="Learn more"
-        linkHref="#"
       />
 
       {/* Push to deploy */}
@@ -996,21 +996,55 @@ function EnvironmentSection({
   canManage: boolean;
 }) {
   const [envContent, setEnvContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
   const [revealed, setRevealed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [cacheEnabled, setCacheEnabled] = useState(true);
   const [queuesEnabled, setQueuesEnabled] = useState(true);
   const [encryptionKey, setEncryptionKey] = useState("");
 
+  // Fetch masked env on mount
   useEffect(() => {
-    const content = `APP_NAME=${project.name}\nAPP_ENV=production\nAPP_DEBUG=false\nAPP_URL=https://${project.name}.dockier.dev\n\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=${project.name.replace(/-/g, "_")}\nDB_USERNAME=dockier\nDB_PASSWORD=********`;
-    setEnvContent(content);
-  }, [project.id, project.name]);
+    const load = async () => {
+      try {
+        const res = await envApi.getMasked(project.id);
+        setEnvContent(res.content);
+        setOriginalContent(res.content);
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    };
+    void load();
+  }, [project.id]);
+
+  const handleReveal = async () => {
+    try {
+      const res = await envApi.reveal(project.id);
+      setEnvContent(res.content);
+      setOriginalContent(res.content);
+      setRevealed(true);
+    } catch { /* silent */ }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await envApi.save(project.id, envContent);
+      setOriginalContent(envContent);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  };
+
+  const hasChanges = revealed && envContent !== originalContent;
 
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
         title="Environment"
-        description={`Below you may edit the .env file for your application, which is a standard default environment file typically loaded by applications. If the application is uninstalled, the environment file will also be removed.`}
+        description="Below you may edit the .env file for your application, which is a standard default environment file typically loaded by applications. If the application is uninstalled, the environment file will also be removed."
       />
 
       {/* Environment variables */}
@@ -1020,36 +1054,61 @@ function EnvironmentSection({
           <p className="text-xs text-text-muted mt-0.5">Your application's environment variables.</p>
         </div>
 
-        <div className="relative">
-          <textarea
-            value={envContent}
-            onChange={(e) => setEnvContent(e.target.value)}
-            disabled={!canManage || !revealed}
-            rows={10}
-            className={`w-full rounded-md border border-border bg-[#1a1a2e] px-3 py-2 font-mono text-xs/relaxed text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 resize-none ${
-              !revealed ? "blur-sm select-none" : ""
-            }`}
-            spellCheck={false}
-          />
-          {!revealed && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-              <p className="text-sm text-text-muted font-medium">
-                Environment variables should not be shared publicly.
-              </p>
-              <button type="button" onClick={() => setRevealed(true)} className={btnOutline}>
-                <EyeIcon className="size-3.5" />
-                Reveal
-              </button>
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="size-4" />
+          </div>
+        ) : (
+          <div className="relative">
+            <div className={!revealed ? "blur-sm select-none pointer-events-none" : ""}>
+              <EnvEditor
+                value={envContent}
+                onChange={revealed ? setEnvContent : () => {}}
+                height="280px"
+                placeholder="# Add your environment variables here&#10;APP_ENV=production&#10;DB_HOST=127.0.0.1"
+              />
             </div>
-          )}
-        </div>
+            {!revealed && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
+                <p className="text-sm text-text-muted font-medium">
+                  Environment variables should not be shared publicly.
+                </p>
+                <button type="button" onClick={() => void handleReveal()} className={btnOutline}>
+                  <EyeIcon className="size-3.5" />
+                  Reveal
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {revealed && canManage && hasChanges && (
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className={btnPrimary}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEnvContent(originalContent)}
+              className="text-xs text-text-muted hover:text-text font-medium transition-colors"
+            >
+              Reset
+            </button>
+            {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
+          </div>
+        )}
       </div>
 
       {/* Cache toggle */}
       <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
         <SettingsRow
           label="Cache"
-          description={`Run cache clearing commands after updating environment variables.`}
+          description="Run cache clearing commands after updating environment variables."
           border={false}
         >
           <ToggleSwitch checked={cacheEnabled} onChange={setCacheEnabled} disabled={!canManage} />
