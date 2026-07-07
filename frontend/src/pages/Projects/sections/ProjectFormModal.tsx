@@ -58,7 +58,7 @@ export default function ProjectFormModal({
   const selectedFramework = FRAMEWORK_CATEGORIES.flatMap((c) => c.frameworks).find((fw) => fw.id === platform);
 
   return (
-    <Modal open={open} onClose={onClose} title={editing ? "Edit Project" : "New Project"} size="xl">
+    <Modal open={open} onClose={onClose} title={editing ? "Edit Project" : "New Project"} size="lg">
       <form onSubmit={onSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
         {/* Framework/Platform selector — first step */}
         {!editing && (
