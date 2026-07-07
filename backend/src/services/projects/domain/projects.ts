@@ -60,6 +60,7 @@ export interface CreateProjectParams {
   sourceType?: string;
   template?: string;
   config?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
 }
 
 export async function createProject(params: CreateProjectParams) {
@@ -79,6 +80,7 @@ export async function createProject(params: CreateProjectParams) {
     source_type: params.sourceType ?? "repository",
     template: params.template ?? "",
     config: (params.config ?? {}) as unknown as Json,
+    settings: (params.settings ?? {}) as unknown as Json,
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("projects").insert(payload);
@@ -92,7 +94,7 @@ export async function createProject(params: CreateProjectParams) {
 export async function getProject(projectId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("projects")
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
     .eq("id", projectId)
     .eq("organization_id", tenantId)
     .single();
@@ -107,7 +109,7 @@ export async function getProject(projectId: string, tenantId: string) {
 export async function listProjects(tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("projects")
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
@@ -126,6 +128,7 @@ export interface UpdateProjectParams {
   sourceType?: string;
   template?: string;
   config?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
 }
 
 export async function updateProject(params: UpdateProjectParams) {
@@ -134,7 +137,7 @@ export async function updateProject(params: UpdateProjectParams) {
   // Verify project exists and belongs to tenant
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("projects")
-    .select("organization_id,config")
+    .select("organization_id,config,settings")
     .eq("id", projectId)
     .eq("organization_id", tenantId)
     .single();
@@ -160,13 +163,20 @@ export async function updateProject(params: UpdateProjectParams) {
         : {};
     updates.config = { ...existingConfig, ...params.config } as unknown as Json;
   }
+  if (params.settings !== undefined) {
+    const existingSettings =
+      verified.settings !== null && typeof verified.settings === "object" && !Array.isArray(verified.settings)
+        ? (verified.settings as Record<string, unknown>)
+        : {};
+    updates.settings = { ...existingSettings, ...params.settings } as unknown as Json;
+  }
 
   const { data, error } = await supabaseAdmin
     .from("projects")
     .update(updates)
     .eq("id", projectId)
     .eq("organization_id", tenantId)
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,created_at")
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
     .single();
   const updated = unwrapQuery(data, error, ProjectsError, {
     notFoundMsg: "Project not found",

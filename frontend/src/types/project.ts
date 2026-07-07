@@ -12,6 +12,16 @@ export interface ProjectConfig {
   overviewBlocks?: Record<string, unknown>[];
 }
 
+export interface ProjectSettings {
+  color?: string;
+  avatar?: string;
+  notes?: string;
+  frameworkVersion?: string;
+  rootDirectory?: string;
+  webDirectory?: string;
+  [key: string]: unknown;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -22,6 +32,7 @@ export interface Project {
   sourceType?: ProjectSourceType;
   template?: string;
   config?: ProjectConfig;
+  settings?: ProjectSettings;
   lastCommitHash?: string;
   createdAt: string;
 }

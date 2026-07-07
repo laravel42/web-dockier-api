@@ -6,6 +6,15 @@ export const projectConfigSchema = z.object({
   overviewBlocks: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
+export const projectSettingsSchema = z.object({
+  color: z.string().optional(),
+  avatar: z.string().optional(),
+  notes: z.string().optional(),
+  frameworkVersion: z.string().optional(),
+  rootDirectory: z.string().optional(),
+  webDirectory: z.string().optional(),
+}).passthrough();
+
 export const projectSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -16,6 +25,7 @@ export const projectSchema = z.object({
   sourceType: z.string(),
   template: z.string(),
   config: projectConfigSchema,
+  settings: projectSettingsSchema,
   lastCommitHash: z.string(),
   createdAt: z.string(),
 });
