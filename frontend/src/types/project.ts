@@ -19,6 +19,7 @@ export interface ProjectSettings {
   frameworkVersion?: string;
   rootDirectory?: string;
   webDirectory?: string;
+  deployScript?: string;
   [key: string]: unknown;
 }
 

@@ -19,6 +19,7 @@ import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIco
 import { tagsApi, type Tag, type TagWithCount } from "../../../services/tags";
 import { envApi } from "../../../services/env";
 import { gitApi } from "../../../services/git";
+import { getDefaultDeployScript } from "../../../config/frameworks";
 import type { Connection, Repo } from "../../../types";
 import { btnPrimary, btnOutline, inputCls, textareaCls } from "../../../utils/styles";
 
@@ -862,14 +863,34 @@ function GeneralSection({
 function DeploymentsSection({
   project,
   canManage,
+  onProjectUpdate,
 }: {
   project: Project;
   canManage: boolean;
+  onProjectUpdate?: (project: Project) => void;
 }) {
   const [pushToDeploy, setPushToDeploy] = useState(true);
   const [healthChecks, setHealthChecks] = useState(false);
   const [envInScript, setEnvInScript] = useState(false);
-  const [deployScript, setDeployScript] = useState(getDefaultDeployScript(project));
+  const [deployScript, setDeployScript] = useState(
+    project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other"),
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const originalScript = project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other");
+  const hasScriptChanges = deployScript !== originalScript;
+
+  const handleSaveScript = async () => {
+    setSaving(true);
+    try {
+      const updated = await projectsApi.update(project.id, { settings: { deployScript } });
+      onProjectUpdate?.(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  };
 
   const deployHookUrl = `https://dockier.dev/api/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;
 
@@ -892,17 +913,17 @@ function DeploymentsSection({
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">Deploy script</p>
           <p className="text-xs text-text-muted mt-0.5">
-            The commands that will be run to deploy your application. Deployments are limited to 10 minutes. If a deployment takes longer, it will fail automatically.
+            Commands that run inside the container after deployment. These execute after the container starts and is healthy.
           </p>
         </div>
 
         {/* Code editor area with line numbers */}
-        <div className="relative rounded-md border border-border bg-[#1a1a2e] overflow-hidden">
+        <div className="relative rounded-md border border-border bg-background overflow-hidden">
           <div className="flex">
             {/* Line numbers */}
-            <div className="flex flex-col items-end p-2  select-none border-r border-border/30 bg-[#12121f]">
+            <div className="flex flex-col items-end p-2 select-none border-r border-border/50 bg-card/60">
               {deployScript.split("\n").map((_, i) => (
-                <span key={i} className="text-[11px]/5  text-text-muted/50 font-mono">
+                <span key={i} className="text-[11px]/5 text-text-muted/50 font-mono">
                   {i + 1}
                 </span>
               ))}
@@ -913,25 +934,47 @@ function DeploymentsSection({
               onChange={(e) => setDeployScript(e.target.value)}
               disabled={!canManage}
               rows={deployScript.split("\n").length}
-              className="flex-1 bg-transparent px-3 py-2 font-mono text-[12px]/5  text-green-400 outline-none resize-none placeholder:text-text-muted"
+              className="flex-1 bg-transparent px-3 py-2 font-mono text-[12px]/5 text-text outline-none resize-none placeholder:text-text-muted"
               spellCheck={false}
             />
           </div>
         </div>
 
-        {/* .env checkbox */}
-        <label className="mt-3 flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={envInScript}
-            onChange={(e) => setEnvInScript(e.target.checked)}
-            disabled={!canManage}
-            className="size-3.5 rounded border-border accent-primary-500"
-          />
-          <span className="text-xs text-text-muted">
-            Make <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-[10px] font-mono">.env</code> variables available to deployment script
-          </span>
-        </label>
+        {/* .env checkbox and save */}
+        <div className="mt-3 flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={envInScript}
+              onChange={(e) => setEnvInScript(e.target.checked)}
+              disabled={!canManage}
+              className="size-3.5 rounded border-border accent-primary-500"
+            />
+            <span className="text-xs text-text-muted">
+              Make <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-[10px] font-mono">.env</code> variables available to deployment script
+            </span>
+          </label>
+          {canManage && hasScriptChanges && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDeployScript(originalScript)}
+                className="text-xs text-text-muted hover:text-text font-medium transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveScript()}
+                disabled={saving}
+                className={btnPrimary}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+              {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Deploy hook */}
@@ -973,20 +1016,6 @@ function DeploymentsSection({
       </div>
     </div>
   );
-}
-
-function getDefaultDeployScript(project: Project): string {
-  const platform = project.platform?.toLowerCase() ?? "";
-  if (platform.includes("laravel") || platform.includes("php")) {
-    return `cd /home/dockier/${project.name}\n\ngit pull origin $DOCKIER_SITE_BRANCH\n  $DOCKIER_COMPOSER install --no-dev --no-interaction --prefer-dist --optimize-autoloader\n\n# Prevent concurrent php-fpm reloads...\ntouch /tmp/fpm-reload 2>/dev/null || true\n( flock -w 10 9 || exit 1`;
-  }
-  if (platform.includes("node") || platform.includes("next") || platform.includes("react")) {
-    return `cd /home/dockier/${project.name}\n\ngit pull origin $DOCKIER_SITE_BRANCH\n\nnpm ci\nnpm run build\n\npm2 restart all`;
-  }
-  if (platform.includes("python") || platform.includes("django") || platform.includes("flask")) {
-    return `cd /home/dockier/${project.name}\n\ngit pull origin $DOCKIER_SITE_BRANCH\n\npip install -r requirements.txt\n\npython manage.py migrate\npython manage.py collectstatic --noinput\n\nsudo systemctl restart gunicorn`;
-  }
-  return `cd /home/dockier/${project.name}\n\ngit pull origin $DOCKIER_SITE_BRANCH\n\n# Add your build commands here`;
 }
 
 // ─── Environment Section ───
@@ -1749,7 +1778,7 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
           <GeneralSection project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
         )}
         {activeSection === "deployments" && (
-          <DeploymentsSection project={project} canManage={canManage} />
+          <DeploymentsSection project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
         )}
         {activeSection === "environment" && (
           <EnvironmentSection project={project} canManage={canManage} />

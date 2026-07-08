@@ -13,6 +13,7 @@ export const projectSettingsSchema = z.object({
   frameworkVersion: z.string().optional(),
   rootDirectory: z.string().optional(),
   webDirectory: z.string().optional(),
+  deployScript: z.string().optional(),
 }).passthrough();
 
 export const projectSchema = z.object({

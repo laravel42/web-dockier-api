@@ -7,6 +7,7 @@ import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project } from "../../types";
 import { compareByTime } from "../../utils/sortByTime";
+import { getDefaultDeployScript } from "../../config/frameworks";
 
 export function useProjects() {
   const navigate = useNavigate();
@@ -173,6 +174,7 @@ export function useProjects() {
         connectionId: editing ? editing.connectionId : selectedConnectionId,
         sourceType: "repository" as const,
         platform,
+        settings: { deployScript: getDefaultDeployScript(platform) },
       };
       if (editing) {
         await projectsApi.update(editing.id, submitData);
