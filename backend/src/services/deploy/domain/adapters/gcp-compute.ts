@@ -224,7 +224,7 @@ export class GcpComputeAdapter implements DeployAdapter {
     {
       const indexPath = join(pulumiDir, "index.ts");
       let program = await readFs(indexPath, "utf-8");
-      const envVars = ctx.state.pendingEnvVars || event.envVars || [];
+      const envVars = ctx.state.pendingEnvVars || ctx.state.pendingEnvVars || [];
       program = replacePulumiPlaceholders(program, envVars);
       await writeFs(indexPath, program, "utf-8");
     }
@@ -822,7 +822,7 @@ export class GcpComputeAdapter implements DeployAdapter {
             const portMapping = `127.0.0.1:\${HOST_PORT}:${containerPort}`;
 
             // Build env flags from wizard-provided env vars (user vars first, then infra overrides)
-            const userEnvFlags = (event.envVars || [])
+            const userEnvFlags = (ctx.state.pendingEnvVars || [])
               .filter((e) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(e.name))
               .map((e) => "-e " + e.name + "='" + e.value.replace(/'/g, "'\\''") + "'")
               .join(" ");
@@ -838,7 +838,7 @@ export class GcpComputeAdapter implements DeployAdapter {
               event.tofuScript?.includes("mysql-server") ||
               event.tofuScript?.includes("postgresql") ||
               event.tofuScript?.includes("apt-get install -y mysql") ||
-              event.envVars?.some(e => e.name === "DB_HOST");
+              ctx.state.pendingEnvVars?.some(e => e.name === "DB_HOST");
             if (hasVpsDb) {
               infraEnvFlags.push("-e DB_HOST=host.docker.internal");
             }
@@ -859,7 +859,7 @@ export class GcpComputeAdapter implements DeployAdapter {
               await appendLog("ℹ Waiting for database to be ready...");
               const needsMysql = event.techStack?.some(s => s.toLowerCase().includes("mysql")) ||
                 vpsSvcs.some(s => s.type === "database" && s.name.toLowerCase().includes("mysql")) ||
-                event.envVars?.some(e => e.name === "DB_CONNECTION" && e.value === "mysql");
+                ctx.state.pendingEnvVars?.some(e => e.name === "DB_CONNECTION" && e.value === "mysql");
               const dbCheckCmd = needsMysql
                 ? "mysqladmin ping -h localhost --silent 2>/dev/null && echo DB_READY || echo DB_WAITING"
                 : "pg_isready -h localhost 2>/dev/null && echo DB_READY || echo DB_WAITING";

@@ -1,14 +1,6 @@
 export type ProjectSourceType = "repository" | "template";
 
-export interface PostDeployCommand {
-  command: string;
-  enabled: boolean;
-  continueOnFailure: boolean;
-  timeout?: number;
-}
-
 export interface ProjectConfig {
-  postDeployCommands?: PostDeployCommand[];
   overviewBlocks?: Record<string, unknown>[];
 }
 

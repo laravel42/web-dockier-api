@@ -193,7 +193,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
     {
       const indexPath = join(pulumiDir, "index.ts");
       let program = await readFs(indexPath, "utf-8");
-      program = replacePulumiPlaceholders(program, event.envVars || []);
+      program = replacePulumiPlaceholders(program, ctx.state.pendingEnvVars || []);
       await writeFs(indexPath, program, "utf-8");
     }
 

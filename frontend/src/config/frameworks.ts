@@ -51,6 +51,18 @@ const FLASK_DEPLOY = `# Flask post-deploy commands
 
 const HTML_DEPLOY = `# Static site — no post-deploy commands needed`;
 
+const REACT_DEPLOY = `# React SPA — static output, no post-deploy commands needed`;
+
+const VUE_DEPLOY = `# Vue.js SPA — static output, no post-deploy commands needed`;
+
+const REMIX_DEPLOY = `# Remix post-deploy commands
+# Container starts automatically via remix-serve or custom server`;
+
+const SVELTE_DEPLOY = `# SvelteKit post-deploy commands
+# Container starts automatically via node build`;
+
+const ASTRO_DEPLOY = `# Astro — static output, no post-deploy commands needed`;
+
 const OTHER_DEPLOY = `# Post-deploy commands
 # Add commands to run inside the container after it starts`;
 
@@ -65,6 +77,10 @@ export const FRAMEWORKS: Framework[] = [
   // JavaScript
   { id: "nextjs", name: "Next.js", category: "JavaScript", icon: "/devicons/nextjs-dark.svg", defaultDeployScript: NEXTJS_DEPLOY },
   { id: "nuxtjs", name: "Nuxt.js", category: "JavaScript", icon: "/devicons/nuxtjs.svg", defaultDeployScript: NUXTJS_DEPLOY },
+  { id: "react", name: "React", category: "JavaScript", icon: "/devicons/react.svg", defaultDeployScript: REACT_DEPLOY },
+  { id: "vuejs", name: "Vue.js", category: "JavaScript", icon: "/devicons/vuejs.svg", defaultDeployScript: VUE_DEPLOY },
+  { id: "remix", name: "Remix", category: "JavaScript", icon: "/devicons/remix.svg", defaultDeployScript: REMIX_DEPLOY },
+  { id: "svelte", name: "SvelteKit", category: "JavaScript", icon: "/devicons/svelte.svg", defaultDeployScript: SVELTE_DEPLOY },
   { id: "nodejs", name: "Node.js", category: "JavaScript", icon: "/devicons/nodejs.svg", defaultDeployScript: NODEJS_DEPLOY },
 
   // Python
@@ -72,6 +88,7 @@ export const FRAMEWORKS: Framework[] = [
   { id: "flask", name: "Flask", category: "Python", icon: "/devicons/flask-dark.svg", defaultDeployScript: FLASK_DEPLOY },
 
   // Static
+  { id: "astro", name: "Astro", category: "Static", icon: "/devicons/astro-dark.svg", defaultDeployScript: ASTRO_DEPLOY },
   { id: "html", name: "HTML", category: "Static", icon: "/devicons/html5.svg", defaultDeployScript: HTML_DEPLOY },
 
   // Other

@@ -6,10 +6,9 @@ const ALGORITHM = "aes-256-gcm";
 function getEncryptionKey(): Buffer {
   const key = env.ENV_ENCRYPTION_KEY;
   if (!key) throw new Error("ENV_ENCRYPTION_KEY is not configured. Add a 64-char hex key to your .env file and restart the server.");
-  // Accept either a 64-char hex string (32 bytes) or a 32-byte raw string
-  if (key.length === 64) return Buffer.from(key, "hex");
-  if (key.length === 32) return Buffer.from(key, "utf8");
-  throw new Error("ENV_ENCRYPTION_KEY must be 32 bytes (64 hex chars or 32 ASCII chars)");
+  // Only accept 64-char hex string (32 bytes of entropy)
+  if (key.length === 64 && /^[0-9a-f]+$/i.test(key)) return Buffer.from(key, "hex");
+  throw new Error("ENV_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes). Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
 }
 
 export interface EncryptedPayload {
@@ -60,7 +59,12 @@ export function encryptJson(data: unknown): string {
  * Decrypt a string produced by encryptJson back into the original value.
  */
 export function decryptJson(encoded: string): unknown {
-  const [iv, authTag, encrypted] = encoded.split(":");
+  const firstColon = encoded.indexOf(":");
+  const secondColon = encoded.indexOf(":", firstColon + 1);
+  if (firstColon === -1 || secondColon === -1) throw new Error("Invalid encrypted payload format");
+  const iv = encoded.slice(0, firstColon);
+  const authTag = encoded.slice(firstColon + 1, secondColon);
+  const encrypted = encoded.slice(secondColon + 1);
   if (!iv || !authTag || !encrypted) throw new Error("Invalid encrypted payload format");
   const plaintext = decrypt({ encrypted, iv, authTag });
   return JSON.parse(plaintext);

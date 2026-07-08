@@ -1,10 +1,9 @@
 export const STEPS = [
   { label: "Provider", icon: "☁️" },
   { label: "Service", icon: "⚙️" },
-  { label: "Env Vars", icon: "🔑" },
   { label: "Analysis", icon: "🔍" },
   { label: "Plan", icon: "📋" },
-  { label: "Deploy script", icon: "📜" },
+  { label: "Build", icon: "📜" },
   { label: "Deploy", icon: "🚀" },
 ];
 
@@ -129,7 +128,6 @@ export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   useDocker: true,
   useRepoDockerfile: false,
   buildMethod: "dockerfile",
-  postDeployCommands: [],
   deploymentId: "",
   deployStatus: "",
   deployLogs: [],

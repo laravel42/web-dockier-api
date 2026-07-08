@@ -5,9 +5,8 @@ import DockerfileIcon from "../../icons/filled/DockerfileIcon";
 import RailpackIcon from "../../icons/outlined/RailpackIcon";
 import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
-import StepPostDeployCommands from "./StepPostDeployCommands";
 
-export default function StepCompose({ state, loading, error, hasRepoDockerfile, onToggleDocker, onBuildMethodChange, onDockerfileSourceChange, onPostDeployCommandsChange, onRegenerateScript, isTemplate }: {
+export default function StepCompose({ state, loading, error, hasRepoDockerfile, onToggleDocker, onBuildMethodChange, onDockerfileSourceChange, onRegenerateScript, isTemplate }: {
   state: WizardState;
   loading: boolean;
   error: string;
@@ -15,7 +14,6 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
   onToggleDocker: () => void;
   onBuildMethodChange: (method: "dockerfile" | "railpack" | "nixpacks" | "codebuild") => void;
   onDockerfileSourceChange: (useRepoDockerfile: boolean) => void;
-  onPostDeployCommandsChange: (commands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>) => void;
   onRegenerateScript?: () => void;
   isTemplate?: boolean;
 }) {
@@ -161,14 +159,6 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
             ))}
           </div>
         </div>
-      )}
-
-      {/* Post-Deploy Commands — hidden for static deploys */}
-      {state.deployStrategy !== "static" && (
-        <StepPostDeployCommands
-          state={state}
-          onChange={onPostDeployCommandsChange}
-        />
       )}
 
       {/* Deploy script preview */}

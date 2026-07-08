@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { postDeployCommandSchema } from "../../shared/schemas/post-deploy.js";
 
 export const providerSchema = z.object({
   id: z.uuid(),
@@ -41,4 +40,3 @@ export const envVarSchema = z.object({
   value: z.string(),
 });
 
-export { postDeployCommandSchema };

@@ -59,7 +59,6 @@ const TEMPLATE_ANALYSIS: Record<string, RepoAnalysis> = {
         "WORDPRESS_DB_PASSWORD=wordpress",
         "WORDPRESS_DB_NAME=wordpress",
       ],
-      postDeployCommands: [],
       nginxConfig: "reverse-proxy",
       summary: "WordPress CMS with MySQL database, served via Apache on port 80.",
     },

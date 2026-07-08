@@ -35,7 +35,6 @@ export interface DeployParams {
     needsQueueWorker: boolean;
     needsWebsockets: boolean;
     envVars: string[];
-    postDeployCommands: string[];
     nginxConfig: "php-fpm" | "reverse-proxy" | "static";
     summary: string;
   };

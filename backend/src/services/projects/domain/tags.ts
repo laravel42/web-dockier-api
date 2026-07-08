@@ -185,6 +185,18 @@ export async function setProjectTags(params: {
 }): Promise<TagResponse[]> {
   const { tenantId, projectId, tagIds } = params;
 
+  // Verify all tag IDs belong to this tenant
+  if (tagIds.length > 0) {
+    const { count } = await supabaseAdmin
+      .from("project_tags")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", tenantId)
+      .in("id", tagIds);
+    if (count !== tagIds.length) {
+      throw new TagsError("One or more tags not found", "bad_request");
+    }
+  }
+
   // Remove all existing assignments for this project
   const { error: deleteError } = await supabaseAdmin
     .from("project_tag_assignments")

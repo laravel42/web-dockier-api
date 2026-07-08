@@ -128,9 +128,7 @@ export interface CreateDeploymentParams {
   useRepoDockerfile?: boolean;
   skipPipeline?: boolean;
   templateId?: string;
-  envVars?: Array<{ name: string; value: string }>;
   services?: ServiceEntry[];
-  postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure: boolean }>;
 }
 
 /**
@@ -158,9 +156,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
     useRepoDockerfile,
     skipPipeline,
     templateId,
-    envVars,
     services,
-    postDeployCommands,
   } = params;
 
   // Validate provider ownership
@@ -210,8 +206,6 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
       templateId,
       buildMethod,
       registryUrl,
-      envVars,
-      postDeployCommands,
       services: services as Array<{ type: string; name: string; mode: string }> | undefined,
       useRepoDockerfile,
     });

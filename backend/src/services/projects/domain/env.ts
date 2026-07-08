@@ -101,6 +101,10 @@ export async function saveEnv(params: {
 }): Promise<void> {
   const { tenantId, projectId, content } = params;
 
+  if (content.length > 64_000) {
+    throw new EnvError("Environment file too large (max 64KB)", "bad_request");
+  }
+
   const { encrypted, iv, authTag } = encrypt(content);
 
   const { data: existing } = await supabaseAdmin

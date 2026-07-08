@@ -18,12 +18,6 @@ import type { RunCmdFn } from "./run-cmd.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
-export interface PostDeployCommand {
-  command: string;
-  enabled: boolean;
-  continueOnFailure?: boolean;
-}
-
 export interface PostDeployContext {
   containerName: string;
   region: string;
@@ -54,20 +48,6 @@ function assertSafeContainerName(name: string): void {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
-
-/**
- * Build a chain of `docker exec` commands joined by `&&`,
- * respecting `continueOnFailure` per command.
- */
-function buildCommandChain(commands: PostDeployCommand[], containerName: string): string {
-  return commands
-    .map(cmd => {
-      const escaped = cmd.command.replace(/'/g, "'\\''");
-      const exec = `docker exec ${containerName} sh -c '${escaped}'`;
-      return cmd.continueOnFailure ? `(${exec} || true)` : exec;
-    })
-    .join(" && ");
-}
 
 /**
  * Build Laravel-specific env override commands for self-hosted services.
@@ -133,208 +113,195 @@ async function uploadEnvToS3(
   return `aws s3 cp s3://${envBucket}/${envKey} /tmp/${containerName}.env --region ${region}`;
 }
 
-// ─── SSM Execution (AWS EC2) ───────────────────────────────────────
-
-async function executeViaSSM(
-  ctx: PostDeployContext,
-  commands: PostDeployCommand[],
-  logger: ContextualLogger,
-): Promise<void> {
-  const { containerName, region, credentials, instanceId, techStack, services, envVars } = ctx;
-
-  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
-  const ssm = new SSMClient({
-    region,
-    credentials: { accessKeyId: credentials.apiKey, secretAccessKey: credentials.apiSecret },
-  });
-
-  const cmdChain = buildCommandChain(commands, containerName);
-  const isLaravel = techStack.some(s => s.toLowerCase() === "laravel");
-  const envOverrides = buildEnvOverrides(containerName, services);
-
-  // Upload .env to S3 for Laravel projects
-  let envDownloadCmd = "";
-  if (isLaravel && envVars.length > 0) {
-    envDownloadCmd = await uploadEnvToS3(ctx, containerName);
-  }
-
-  const envSetup = isLaravel
-    ? buildEnvSetupCommand(containerName, envOverrides)
-    : "";
-
-  const script = [
-    "#!/bin/bash",
-    "CONTAINER_READY=0",
-    "for i in $(seq 1 90); do",
-    `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
-    "  sleep 2",
-    "done",
-    `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
-    envDownloadCmd,
-    `${envSetup}${cmdChain}`,
-  ].filter(Boolean).join("\n");
-
-  await logger.info("Executing via AWS SSM SendCommand...");
-
-  try {
-    const sendResult = await ssm.send(new SendCommandCommand({
-      InstanceIds: [instanceId!],
-      DocumentName: "AWS-RunShellScript",
-      Parameters: { commands: [script] },
-      TimeoutSeconds: 300,
-    }));
-
-    const commandId = sendResult.Command?.CommandId;
-    if (commandId) {
-      let done = false;
-      for (let i = 0; i < 65; i++) {
-        await new Promise(r => setTimeout(r, 5000));
-        try {
-          const invocation = await ssm.send(new GetCommandInvocationCommand({
-            CommandId: commandId,
-            InstanceId: instanceId!,
-          }));
-          const status = invocation.Status;
-          if (status === "Success") {
-            await logger.success("All post-deploy commands executed successfully");
-            if (invocation.StandardOutputContent?.trim()) {
-              const lines = invocation.StandardOutputContent.trim().split("\n").slice(0, 20);
-              for (const line of lines) await logger.info(line);
-            }
-            done = true;
-            break;
-          } else if (status === "Failed" || status === "Cancelled" || status === "TimedOut") {
-            await logger.warn(`SSM command ${status}`);
-            if (invocation.StandardErrorContent?.trim()) {
-              await logger.info(invocation.StandardErrorContent.trim().slice(0, 500));
-            }
-            if (invocation.StandardOutputContent?.trim()) {
-              const lines = invocation.StandardOutputContent.trim().split("\n").slice(-20);
-              for (const line of lines) await logger.info(line);
-            }
-            done = true;
-            break;
-          }
-        } catch {
-          // InvocationDoesNotExist — agent hasn't picked it up yet
-        }
-      }
-      if (!done) {
-        await logger.warn("SSM command still running after timeout — commands may complete in background");
-      }
-    }
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    await logger.warn(`SSM SendCommand failed: ${errMsg}`);
-    await logger.info("The instance may not have SSM agent ready yet — commands will run via cfn-init instead");
-  }
-}
-
-// ─── SSH Execution (GCP / other VPS) ───────────────────────────────
-
-async function executeViaSSH(
-  ctx: PostDeployContext,
-  commands: PostDeployCommand[],
-  logger: ContextualLogger,
-  runCmd: RunCmdFn,
-): Promise<void> {
-  const { containerName, serverIp, deployKeyPath, workDir, techStack, services } = ctx;
-
-  const sshOpts = [
-    "-i", deployKeyPath!,
-    "-o", "StrictHostKeyChecking=no",
-    "-o", "UserKnownHostsFile=/dev/null",
-    "-o", "ConnectTimeout=30",
-    "-o", "LogLevel=ERROR",
-  ];
-
-  const cmdChain = buildCommandChain(commands, containerName);
-  const isLaravel = techStack.some(s => s.toLowerCase() === "laravel");
-  const envOverrides = buildEnvOverrides(containerName, services);
-  const envSetup = isLaravel
-    ? buildEnvSetupCommand(containerName, envOverrides)
-    : "";
-
-  const remoteCmd = [
-    "CONTAINER_READY=0;",
-    "for i in $(seq 1 60); do",
-    `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi;`,
-    "  sleep 2;",
-    "done;",
-    `[ "$CONTAINER_READY" = "1" ]`,
-    `&& ${envSetup}${cmdChain}`,
-    "&& echo POST_DEPLOY_DONE",
-  ].join(" ");
-
-  await logger.info("Commands will execute once container is ready...");
-  const result = await runCmd("ssh", [...sshOpts, `root@${serverIp}`, remoteCmd], { cwd: workDir });
-
-  if (result.output.includes("POST_DEPLOY_DONE")) {
-    await logger.success("All post-deploy commands executed successfully");
-    const outputLines = result.output.split("\n").filter(l =>
-      l.trim() && !l.includes("POST_DEPLOY_DONE") && !l.includes("Warning:")
-    );
-    for (const line of outputLines.slice(0, 20)) {
-      await logger.info(line.trim());
-    }
-  } else {
-    await logger.warn("Post-deploy commands may not have completed successfully");
-    const output = result.output.trim().replace(/Warning:.*\n?/g, "").slice(0, 500);
-    if (output) await logger.info(output);
-  }
-}
-
-// ─── Public API ────────────────────────────────────────────────────
+// ─── Script-based Execution ────────────────────────────────────────
 
 /**
- * Execute user-defined post-deploy commands on the deployed container.
+ * Execute a deploy script (bash) inside the deployed container.
  *
- * Routes to the appropriate execution method based on available context:
- * - AWS EC2 with instance ID → SSM SendCommand
- * - VPS with server IP + deploy key → SSH
- * - Managed deploys → logs a "not yet supported" warning
- *
- * For static deploys, this function is a no-op (caller should skip).
+ * This is the new approach: instead of individual PostDeployCommand objects,
+ * the user writes a single bash script in Settings → Deployments.
+ * The script runs inside the container via `docker exec ... bash -c '<script>'`.
  */
-export async function executePostDeployCommands(
+export async function executePostDeployScript(
   ctx: PostDeployContext,
-  commands: PostDeployCommand[],
+  script: string,
   logger: ContextualLogger,
   runCmd: RunCmdFn,
   deployStrategy: string,
 ): Promise<void> {
-  const enabled = commands.filter(c => c.enabled);
-  if (enabled.length === 0) return;
+  const trimmed = script.trim();
+  if (!trimmed) return;
 
-  // Defense-in-depth: validate container name before interpolating into shell scripts
+  // Safety: limit script size to prevent abuse
+  if (trimmed.length > 10_000) {
+    await logger.warn("Deploy script exceeds maximum length (10KB) — skipping execution");
+    return;
+  }
+
+  // Filter out comment-only lines to check if there's actual work to do
+  const hasCommands = trimmed.split("\n").some(line => {
+    const l = line.trim();
+    return l && !l.startsWith("#");
+  });
+  if (!hasCommands) return;
+
   assertSafeContainerName(ctx.containerName);
 
   if (deployStrategy === "managed") {
-    await logger.section("Post-Deploy Commands");
-    await logger.warn(`Post-deploy commands are not yet supported for managed deploys`);
-    await logger.info("Commands configured: " + enabled.map(c => c.command).join(", "));
-    await logger.info("These will be supported via ECS RunTask / Cloud Run Jobs in a future update");
+    await logger.section("Deploy Script");
+    await logger.warn("Deploy script execution is not yet supported for managed deploys (ECS Fargate / Cloud Run)");
+    await logger.info("The script will be supported via ECS RunTask / Cloud Run Jobs in a future update");
     return;
   }
 
   if (deployStrategy !== "vps") return;
 
-  await logger.section("Post-Deploy Commands");
-  await logger.info(`Running ${enabled.length} command(s)...`);
+  await logger.section("Deploy Script");
+  await logger.info("Executing deploy script inside container...");
 
-  const { instanceId, provider, serverIp, deployKeyPath } = ctx;
+  const { containerName, instanceId, provider, serverIp, deployKeyPath, workDir, region, credentials, techStack, services, envVars } = ctx;
 
-  // AWS EC2: use SSM SendCommand
+  // Build the docker exec command that runs the full script
+  const escapedScript = trimmed.replace(/'/g, "'\\''");
+  const dockerExecCmd = `docker exec ${containerName} bash -c '${escapedScript}'`;
+
   if (instanceId && provider === "aws") {
-    await executeViaSSM(ctx, enabled, logger);
+    // AWS EC2: execute via SSM
+    const isLaravel = techStack.some(s => s.toLowerCase() === "laravel");
+    const envOverrides = buildEnvOverrides(containerName, services);
+
+    let envDownloadCmd = "";
+    if (isLaravel && envVars.length > 0) {
+      envDownloadCmd = await uploadEnvToS3(ctx, containerName);
+    }
+
+    const envSetup = isLaravel ? buildEnvSetupCommand(containerName, envOverrides) : "";
+
+    const ssmScript = [
+      "#!/bin/bash",
+      "set -e",
+      "CONTAINER_READY=0",
+      "for i in $(seq 1 90); do",
+      `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi`,
+      "  sleep 2",
+      "done",
+      `if [ "$CONTAINER_READY" != "1" ]; then echo "ERROR: Container '${containerName}' not running after 180s"; exit 1; fi`,
+      envDownloadCmd,
+      envSetup ? `${envSetup}` : "",
+      dockerExecCmd,
+    ].filter(Boolean).join("\n");
+
+    const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await import("@aws-sdk/client-ssm");
+    const ssm = new SSMClient({
+      region,
+      credentials: { accessKeyId: credentials.apiKey, secretAccessKey: credentials.apiSecret },
+    });
+
+    // Wait for SSM agent to register (instance needs time after creation)
+    await logger.info("Waiting for instance to register with SSM...");
+    let ssmReady = false;
+    for (let i = 0; i < 30; i++) {
+      try {
+        const info = await ssm.send(new DescribeInstanceInformationCommand({
+          Filters: [{ Key: "InstanceIds", Values: [instanceId] }],
+        }));
+        if (info.InstanceInformationList && info.InstanceInformationList.length > 0) {
+          const status = info.InstanceInformationList[0].PingStatus;
+          if (status === "Online") {
+            ssmReady = true;
+            break;
+          }
+        }
+      } catch { /* not registered yet */ }
+      await new Promise(r => setTimeout(r, 10_000));
+    }
+
+    if (!ssmReady) {
+      await logger.warn("Instance did not register with SSM after 5 minutes — deploy script may fail");
+    }
+
+    try {
+      const sendResult = await ssm.send(new SendCommandCommand({
+        InstanceIds: [instanceId],
+        DocumentName: "AWS-RunShellScript",
+        Parameters: { commands: [ssmScript] },
+        TimeoutSeconds: 600,
+      }));
+
+      const commandId = sendResult.Command?.CommandId;
+      if (commandId) {
+        for (let i = 0; i < 125; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const invocation = await ssm.send(new GetCommandInvocationCommand({
+              CommandId: commandId,
+              InstanceId: instanceId,
+            }));
+            if (invocation.Status === "Success") {
+              await logger.success("Deploy script completed successfully");
+              if (invocation.StandardOutputContent?.trim()) {
+                for (const line of invocation.StandardOutputContent.trim().split("\n").slice(-15)) {
+                  await logger.info(line);
+                }
+              }
+              return;
+            }
+            if (invocation.Status === "Failed" || invocation.Status === "Cancelled" || invocation.Status === "TimedOut") {
+              await logger.warn(`Deploy script ${invocation.Status}`);
+              if (invocation.StandardErrorContent?.trim()) {
+                await logger.info(invocation.StandardErrorContent.trim().slice(0, 500));
+              }
+              return;
+            }
+          } catch { /* not ready yet */ }
+        }
+        await logger.warn("Deploy script still running after timeout");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await logger.warn(`SSM execution failed: ${msg}`);
+    }
     return;
   }
 
-  // GCP / other VPS: use SSH
+  // GCP / other VPS: execute via SSH
   if (serverIp && deployKeyPath) {
-    await executeViaSSH(ctx, enabled, logger, runCmd);
+    const sshOpts = [
+      "-i", deployKeyPath,
+      "-o", "StrictHostKeyChecking=no",
+      "-o", "UserKnownHostsFile=/dev/null",
+      "-o", "ConnectTimeout=30",
+      "-o", "LogLevel=ERROR",
+    ];
+
+    const remoteCmd = [
+      "CONTAINER_READY=0;",
+      "for i in $(seq 1 60); do",
+      `  if docker ps --filter "name=^${containerName}$" --filter "status=running" -q 2>/dev/null | grep -q .; then CONTAINER_READY=1; break; fi;`,
+      "  sleep 2;",
+      "done;",
+      `[ "$CONTAINER_READY" = "1" ]`,
+      `&& ${dockerExecCmd}`,
+      "&& echo DEPLOY_SCRIPT_DONE",
+    ].join(" ");
+
+    const result = await runCmd("ssh", [...sshOpts, `root@${serverIp}`, remoteCmd], { cwd: workDir });
+
+    if (result.output.includes("DEPLOY_SCRIPT_DONE")) {
+      await logger.success("Deploy script completed successfully");
+      const outputLines = result.output.split("\n").filter(l =>
+        l.trim() && !l.includes("DEPLOY_SCRIPT_DONE") && !l.includes("Warning:")
+      );
+      for (const line of outputLines.slice(-15)) {
+        await logger.info(line.trim());
+      }
+    } else {
+      await logger.warn("Deploy script may not have completed successfully");
+      const output = result.output.trim().replace(/Warning:.*\n?/g, "").slice(0, 500);
+      if (output) await logger.info(output);
+    }
     return;
   }
 
-  await logger.warn("Cannot execute post-deploy commands — no SSH key or SSM instance available");
+  await logger.warn("Cannot execute deploy script — no SSH key or SSM instance available");
 }

@@ -5,7 +5,6 @@ import Modal from "../Modal";
 import Stepper from "./steps/Stepper";
 import StepProvider from "./steps/StepProvider";
 import StepService from "./steps/StepService";
-import StepEnvVars from "./steps/StepEnvVars";
 import StepAnalysis from "./steps/StepAnalysis";
 import StepEnvironment from "./steps/StepEnvironment";
 import StepCompose from "./steps/StepCompose";
@@ -26,7 +25,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     <Modal
       open={open}
       onClose={() => { if (!isDeploying) onClose(); }}
-      title={step === 6 ? "Deploying…" : `Deploy — ${STEPS[step].icon} ${STEPS[step].label}`}
+      title={step === 5 ? "Deploying…" : `Deploy — ${STEPS[step].icon} ${STEPS[step].label}`}
       size="xl"
     >
       <Stepper current={step} steps={STEPS} />
@@ -53,13 +52,6 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           />
         )}
         {step === 2 && (
-          <StepEnvVars
-            state={state}
-            analysis={analysis}
-            onChange={(envVars) => setState(prev => ({ ...prev, envVars }))}
-          />
-        )}
-        {step === 3 && (
           <StepAnalysis
             state={state}
             analysis={analysis}
@@ -67,7 +59,6 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             analysisError={analysisError}
             detectionHints={state.envDetectionHints || {}}
             onChange={(modes) => {
-              // Track which services the user manually changed
               const changed = Object.keys(modes).filter(k => modes[k] !== state.servicesModes[k]);
               setState(prev => ({
                 ...prev,
@@ -77,7 +68,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             }}
           />
         )}
-        {step === 4 && (
+        {step === 3 && (
           <StepEnvironment
             state={state}
             templateId={project.sourceType === "template" ? project.template : undefined}
@@ -85,7 +76,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
           />
         )}
-        {step === 5 && (
+        {step === 4 && (
           <StepCompose
             state={state}
             loading={tofuLoading}
@@ -101,18 +92,17 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             onDockerfileSourceChange={(useRepoDockerfile) => {
               setState(prev => ({ ...prev, useRepoDockerfile, tofuScript: "" }));
             }}
-            onPostDeployCommandsChange={(commands) => setState(prev => ({ ...prev, postDeployCommands: commands }))}
             onRegenerateScript={() => {
               setState(prev => ({ ...prev, tofuScript: "" }));
               void generateScript();
             }}
           />
         )}
-        {step === 6 && <StepDeploy state={state} />}
+        {step === 5 && <StepDeploy state={state} />}
       </div>
 
       {/* Errors */}
-      {deployError && step === 6 && (
+      {deployError && step === 5 && (
         <div className="mt-3 rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{deployError}</div>
       )}
 

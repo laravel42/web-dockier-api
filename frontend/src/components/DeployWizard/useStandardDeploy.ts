@@ -6,7 +6,7 @@
  */
 
 import { useRef, useCallback } from "react";
-import { deployApi, projectsApi } from "../../services/api";
+import { deployApi } from "../../services/api";
 import type { WizardState, RepoAnalysis } from "./types";
 
 interface StandardDeployParams {
@@ -41,12 +41,6 @@ export function useStandardDeploy() {
     onComplete,
   }: StandardDeployParams) => {
     mountedRef.current = true;
-    // Persist post-deploy commands to project config (best-effort)
-    if (state.postDeployCommands.length > 0 && project.id) {
-      projectsApi.update(project.id, {
-        config: { postDeployCommands: state.postDeployCommands },
-      }).catch((err) => console.warn("[deploy] Failed to save post-deploy commands:", err));
-    }
 
     const deployment = await deployApi.createDeployment({
       providerId: state.selectedProviderId,
@@ -61,11 +55,9 @@ export function useStandardDeploy() {
       buildMethod: state.buildMethod,
       useRepoDockerfile: state.useRepoDockerfile || undefined,
       templateId: project.sourceType === "template" ? project.template : undefined,
-      envVars: state.envVars.length > 0 ? state.envVars : undefined,
       services: analysis?.detectedServices?.length
         ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: state.servicesModes[svc.type] || "vps" as const }))
         : undefined,
-      postDeployCommands: state.postDeployCommands.length > 0 ? state.postDeployCommands : undefined,
     });
 
     onStateUpdate(prev => ({ ...prev, deploymentId: deployment.id }));

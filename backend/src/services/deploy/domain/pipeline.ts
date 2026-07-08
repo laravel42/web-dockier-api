@@ -21,11 +21,76 @@ import { pollUntil } from "./poll-until.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
-import { executePostDeployCommands } from "./post-deploy.js";
+import { executePostDeployScript } from "./post-deploy.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { ADAPTER_TO_SERVICE, type InfraMetadata } from "../types.js";
+import { revealEnv } from "../../projects/domain/env.js";
 
 const db = supabaseAdmin;
+
+// ─── Env Parser ────────────────────────────────────────────────────
+
+/** Parse .env file content into key-value pairs */
+function parseEnvContent(content: string): Array<{ name: string; value: string }> {
+  const vars: Array<{ name: string; value: string }> = [];
+  let currentKey = "";
+  let currentValue = "";
+  let inMultiLine = false;
+  let quoteChar = "";
+
+  for (const line of content.split("\n")) {
+    if (inMultiLine) {
+      // Continue accumulating multi-line value
+      if (line.endsWith(quoteChar)) {
+        currentValue += "\n" + line.slice(0, -1);
+        vars.push({ name: currentKey, value: currentValue });
+        inMultiLine = false;
+      } else {
+        currentValue += "\n" + line;
+      }
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+
+    const name = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1);
+
+    // Handle quoted values (may be multi-line)
+    const stripped = value.trimStart();
+    if ((stripped.startsWith('"') || stripped.startsWith("'")) && !stripped.endsWith(stripped[0])) {
+      // Multi-line value: opening quote without matching close
+      quoteChar = stripped[0];
+      currentKey = name;
+      currentValue = stripped.slice(1);
+      inMultiLine = true;
+      continue;
+    }
+
+    // Single-line: strip surrounding quotes
+    value = value.trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    // Remove inline comments (unquoted)
+    if (!value.startsWith('"') && !value.startsWith("'")) {
+      const commentIdx = value.indexOf(" #");
+      if (commentIdx > -1) value = value.slice(0, commentIdx).trimEnd();
+    }
+
+    if (name) vars.push({ name, value });
+  }
+
+  // If we were still in a multi-line value, push what we have
+  if (inMultiLine && currentKey) {
+    vars.push({ name: currentKey, value: currentValue });
+  }
+
+  return vars;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -45,8 +110,6 @@ export interface PipelineInput {
   templateId?: string;
   buildMethod?: string;
   registryUrl?: string;
-  envVars?: Array<{ name: string; value: string }>;
-  postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure?: boolean }>;
   services?: Array<{ type: string; name: string; mode: string }>;
   useRepoDockerfile?: boolean;
 }
@@ -190,11 +253,51 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
 
     await db.from("deployments").update({ commit_hash: commitHash }).eq("id", deploymentId);
 
+    // 2b. Fetch project env vars and deploy script
+    let projectEnvVars: Array<{ name: string; value: string }> = [];
+    let deployScript = "";
+    let knownPlatform = "";
+    if (event.projectId && event.tenantId) {
+      try {
+        const envResult = await revealEnv({ tenantId: event.tenantId, projectId: event.projectId });
+        if (envResult.exists && envResult.content) {
+          projectEnvVars = parseEnvContent(envResult.content);
+          await logger.info(`Loaded ${projectEnvVars.length} env vars from project settings`);
+        } else {
+          await logger.info("No environment file configured for this project");
+        }
+      } catch (envErr) {
+        const msg = envErr instanceof Error ? envErr.message : String(envErr);
+        await logger.warn(`Could not load project environment file: ${msg}`);
+      }
+      try {
+        const { data: projectRow } = await db
+          .from("projects")
+          .select("settings,platform")
+          .eq("id", event.projectId)
+          .maybeSingle();
+        if (projectRow?.settings && typeof projectRow.settings === "object" && !Array.isArray(projectRow.settings)) {
+          deployScript = (projectRow.settings as Record<string, unknown>).deployScript as string ?? "";
+        }
+        if (projectRow?.platform) {
+          knownPlatform = projectRow.platform as string;
+        }
+        if (deployScript) {
+          await logger.info("Deploy script loaded from project settings");
+        }
+      } catch (settingsErr) {
+        obsLogger.warn({ err: settingsErr, projectId: event.projectId }, "[deploy] Failed to load project settings");
+      }
+    } else {
+      await logger.info("No projectId/tenantId — skipping env/script fetch");
+    }
+
     // 3. Analyze and generate Dockerfile
     const { repoConfig } = await analyzeAndGenerate({
       repoDir,
       logger,
       skipExistingDockerfile: event.useRepoDockerfile === true,
+      knownPlatform,
     });
 
     // 4. Build Docker image (local or remote via CodeBuild)
@@ -243,7 +346,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
           deployStrategy: event.deployStrategy,
           repo: event.repo,
           branch: event.branch,
-          envVars: event.envVars,
+          envVars: projectEnvVars,
           techStack: event.techStack,
           appendLog,
         });
@@ -312,8 +415,6 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
         templateId: event.templateId,
         buildMethod: event.buildMethod,
         registryUrl: event.registryUrl,
-        envVars: event.envVars,
-        postDeployCommands: event.postDeployCommands,
         services: event.services,
       },
       detectedStack,
@@ -326,7 +427,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     };
 
     // Inject environment variables
-    await adapter.injectEnvVars(adapterCtx, event.envVars || []);
+    await adapter.injectEnvVars(adapterCtx, projectEnvVars);
 
     // Push image to provider registry
     await updateStatus(deploymentId, "deploying");
@@ -352,23 +453,23 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       ? repoName
       : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 
-    // Execute user-defined post-deploy commands
-    if (deployStrategy !== "static") {
-      await executePostDeployCommands(
+    // Execute deploy script (post-deploy commands)
+    if (deployStrategy !== "static" && deployScript.trim()) {
+      await executePostDeployScript(
         {
           containerName,
           region,
           provider,
           techStack: event.techStack || [],
           services: event.services || [],
-          envVars: event.envVars || [],
+          envVars: projectEnvVars,
           credentials: { apiKey: adapterCtx.providerCredentials.apiKey, apiSecret: adapterCtx.providerCredentials.apiSecret },
           instanceId: provision.outputs.InstanceId || "",
           serverIp: provision.serverIp || "",
           deployKeyPath: adapterCtx.state.deployKeyPath || "",
           workDir,
         },
-        event.postDeployCommands || [],
+        deployScript,
         logger,
         runCmd,
         deployStrategy,

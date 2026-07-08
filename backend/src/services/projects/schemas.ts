@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { postDeployCommandSchema } from "../../shared/schemas/post-deploy.js";
 
 export const projectConfigSchema = z.object({
-  postDeployCommands: z.array(postDeployCommandSchema).max(20).optional(),
   overviewBlocks: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 

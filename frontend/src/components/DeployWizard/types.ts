@@ -21,7 +21,6 @@ export interface AIAnalysis {
   needsQueueWorker: boolean;
   needsWebsockets: boolean;
   envVars: string[];
-  postDeployCommands: string[];
   nginxConfig: string;
   summary: string;
   description?: string;
@@ -126,7 +125,6 @@ export interface WizardState {
   /** When true, keep the repo's Dockerfile instead of Dockier generating one. */
   useRepoDockerfile: boolean;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
-  postDeployCommands: Array<{ command: string; enabled: boolean; continueOnFailure: boolean; timeout?: number }>;
   // Step 7 (Deploy)
   deploymentId: string;
   deployStatus: string;

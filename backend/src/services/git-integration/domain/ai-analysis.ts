@@ -26,7 +26,6 @@ export interface AIRepoAnalysis {
   needsQueueWorker: boolean;
   needsWebsockets: boolean;
   envVars: string[];
-  postDeployCommands: string[];
   nginxConfig: "php-fpm" | "reverse-proxy" | "static";
   summary: string;
   description: string;
@@ -145,7 +144,7 @@ async function fetchSection(apiKey: string, def: SectionDef, context: string, fi
 // ─── Core analysis ───
 
 async function fetchCoreAnalysis(apiKey: string, context: string): Promise<Partial<AIRepoAnalysis> | null> {
-  const prompt = `You are a DevOps architect. Analyze this repository and return deployment configuration.\n\n${context}\n\nReturn ONLY valid JSON with: runtime, runtimeVersion, framework, frameworkVersion, phpExtensions, nodeVersion, buildCommand, startCommand, port, needsScheduler, needsQueueWorker, needsWebsockets, envVars, postDeployCommands, nginxConfig, summary, description, deployOptions (3-6 for AWS and GCP).`;
+  const prompt = `You are a DevOps architect. Analyze this repository and return deployment configuration.\n\n${context}\n\nReturn ONLY valid JSON with: runtime, runtimeVersion, framework, frameworkVersion, phpExtensions, nodeVersion, buildCommand, startCommand, port, needsScheduler, needsQueueWorker, needsWebsockets, envVars, nginxConfig, summary, description, deployOptions (3-6 for AWS and GCP).`;
 
   return callOpenAI(apiKey, prompt, 4096) as Promise<Partial<AIRepoAnalysis> | null>;
 }

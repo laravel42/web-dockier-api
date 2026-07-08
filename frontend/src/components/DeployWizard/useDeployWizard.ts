@@ -2,17 +2,16 @@
  * Deploy Wizard Orchestrator
  *
  * Slim hook that manages wizard state, step navigation, and script generation.
- * Delegates actual deployment execution to useCodeBuildPipeline or useStandardDeploy.
+ * Delegates actual deployment execution to useStandardDeploy (backend pipeline).
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { deployApi, projectsApi } from "../../services/api";
+import { deployApi } from "../../services/api";
 import type { WizardState, RepoAnalysis, Provider } from "./types";
 import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
 import { getPlans } from "./plans";
 import { parseOwnerRepo } from "./utils";
 import { detectServiceModes } from "./envDetection";
-import { useCodeBuildPipeline } from "./useCodeBuildPipeline";
 import { useStandardDeploy } from "./useStandardDeploy";
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -56,15 +55,12 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const [tofuError, setTofuError] = useState("");
   const [deployError, setDeployError] = useState("");
 
-  const { start: startCodeBuild, cleanup: cleanupCodeBuild } = useCodeBuildPipeline();
   const { start: startStandardDeploy, cleanup: cleanupStandardDeploy } = useStandardDeploy();
 
   const prevOpenRef = useRef(false);
   const configLoadedRef = useRef(false);
   const analysisSyncedKeyRef = useRef<string | null>(null);
-  const cleanupCodeBuildRef = useRef(cleanupCodeBuild);
   const cleanupStandardDeployRef = useRef(cleanupStandardDeploy);
-  cleanupCodeBuildRef.current = cleanupCodeBuild;
   cleanupStandardDeployRef.current = cleanupStandardDeploy;
 
   // ─── Reset on open (rising edge only) ────────────────────────────
@@ -77,7 +73,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     if (justClosed) {
       configLoadedRef.current = false;
       analysisSyncedKeyRef.current = null;
-      cleanupCodeBuildRef.current();
       cleanupStandardDeployRef.current();
       return;
     }
@@ -113,15 +108,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   useEffect(() => {
     if (!open || !project.id || configLoadedRef.current) return;
     configLoadedRef.current = true;
-
-    projectsApi.get(project.id)
-      .then((p) => {
-        const saved = p.config?.postDeployCommands;
-        if (saved?.length) {
-          setState((prev) => ({ ...prev, postDeployCommands: saved }));
-        }
-      })
-      .catch((err) => console.warn("[deploy] Failed to load project config:", err));
   }, [open, project.id]);
 
   // ─── Sync Analysis ───────────────────────────────────────────────
@@ -156,13 +142,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         if (result?.hint) hints[svc.type] = result.hint;
       }
 
-      const rawCommands = analysis.aiAnalysis?.postDeployCommands;
-      const commandsList = Array.isArray(rawCommands) ? rawCommands.filter((c): c is string => typeof c === "string") : [];
-      const postDeployCommands = prev.postDeployCommands.length > 0
-        ? prev.postDeployCommands
-        : commandsList.map((cmd) => ({ command: cmd, enabled: true, continueOnFailure: false }));
 
-      return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars, postDeployCommands };
+      return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars };
     });
   }, [open, analysis]);
 
@@ -235,34 +216,22 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
     try {
       const repo = getRepoString(project.repository);
-      const isCodeBuild = state.buildMethod === "codebuild" && project.sourceType !== "template";
 
-      if (isCodeBuild) {
-        await startCodeBuild({
-          state,
-          project,
-          analysis,
-          repo,
-          onStateUpdate: setState,
-          onError: setDeployError,
-          onComplete: () => onDeployCompleteRef.current?.(),
-        });
-      } else {
-        await startStandardDeploy({
-          state,
-          project,
-          analysis,
-          repo,
-          onStateUpdate: setState,
-          onError: setDeployError,
-          onComplete: () => onDeployCompleteRef.current?.(),
-        });
-      }
+      // All deploy paths go through the backend pipeline
+      await startStandardDeploy({
+        state,
+        project,
+        analysis,
+        repo,
+        onStateUpdate: setState,
+        onError: setDeployError,
+        onComplete: () => onDeployCompleteRef.current?.(),
+      });
     } catch (err: unknown) {
       setDeployError(err instanceof Error ? err.message : "Failed to start deployment");
       setState(prev => ({ ...prev, deployStatus: "failed" }));
     }
-  }, [state, project, analysis, startCodeBuild, startStandardDeploy]);
+  }, [state, project, analysis, startStandardDeploy]);
 
   // ─── Step Navigation ─────────────────────────────────────────────
 
@@ -270,31 +239,31 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     switch (step) {
       case 0: return !!state.selectedProvider && !!state.selectedProviderId;
       case 1: return !!state.deployStrategy;
-      case 2: return true;
-      case 3: return !analysisLoading;
-      case 4: return state.selectedPlan >= 0;
-      case 5: return !tofuLoading;
+      case 2: return !analysisLoading;
+      case 3: return state.selectedPlan >= 0;
+      case 4: return !tofuLoading;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (step === 5) {
+    if (step === 4) {
       if (tofuLoading) return;
       if (!state.tofuScript) {
         await generateScript();
         return;
       }
-      setStep(6);
+      setStep(5);
       startDeploy();
       return;
     }
-    if (step === 4) {
-      setStep(5);
+    if (step === 3) {
+      setStep(4);
       if (!state.tofuScript) void generateScript();
       return;
     }
-    if (step === 2) {
+    if (step === 1) {
+      // After service selection, detect service modes from analysis
       const serviceTypes = analysis?.detectedServices?.map(s => s.type) || [];
       if (serviceTypes.length > 0) {
         const detection = detectServiceModes(state.envVars, serviceTypes);
@@ -310,14 +279,14 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
           return { ...prev, servicesModes: newModes, envDetectionHints: newHints };
         });
       }
-      setStep(3);
+      setStep(2);
       return;
     }
-    setStep(prev => Math.min(prev + 1, 6));
+    setStep(prev => Math.min(prev + 1, 5));
   };
 
   const handleBack = () => {
-    if (step === 6) return;
+    if (step === 5) return;
     setStep(prev => Math.max(prev - 1, 0));
   };
 
