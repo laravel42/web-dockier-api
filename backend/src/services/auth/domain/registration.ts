@@ -23,20 +23,32 @@ export function classifyAuthError(message: string): { status: "rate_limit" | "fo
 }
 
 /**
- * Find a Supabase auth user by email (paginated search).
+ * Find a Supabase auth user by email.
+ *
+ * Strategy (fast path first):
+ * 1. Check the public.users table (single indexed query, O(1))
+ * 2. Fall back to a single-page auth.admin.listUsers scan if not in public.users
+ *    (covers edge cases where auth user exists but public record doesn't yet)
  */
 export async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const lowerEmail = email.toLowerCase();
-  let page = 1;
-  while (page <= 20) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw new RegistrationError("Failed to search auth users", "internal", error);
-    const matched = data.users.find((user) => (user.email ?? "").toLowerCase() === lowerEmail);
-    if (matched?.id) return matched.id;
-    if (data.users.length < 200) break;
-    page += 1;
-  }
-  return null;
+
+  // Fast path: check public.users table (indexed by email)
+  const { data: publicUser } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("email", lowerEmail)
+    .maybeSingle();
+  if (publicUser?.id) return publicUser.id;
+
+  // Fallback: single-page lookup via Supabase auth admin API.
+  // The admin listUsers API doesn't support email filtering natively,
+  // but a single page of 1000 covers the demo/seed scenarios where this
+  // function is actually needed (public.users miss = very few auth users).
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw new RegistrationError("Failed to search auth users", "internal", error);
+  const matched = data.users.find((user) => (user.email ?? "").toLowerCase() === lowerEmail);
+  return matched?.id ?? null;
 }
 
 /**
