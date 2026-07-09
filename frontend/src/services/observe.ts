@@ -52,6 +52,7 @@ export type ActivityEventType =
   | "deploy_failed"
   | "command_run"
   | "config_changed"
+  | "env_updated"
   | "heartbeat_missed"
   | "heartbeat_recovered"
   | "log_cleared"
@@ -65,6 +66,7 @@ export interface ActivityEntry {
   id: string;
   projectId: string;
   userId: string | null;
+  actorName: string | null;
   eventType: ActivityEventType;
   description: string;
   metadata?: Record<string, unknown>;
@@ -106,8 +108,13 @@ export const observeApi = {
     }),
 
   // Activity
-  listActivity: (projectId: string, params?: { limit?: number; offset?: number }) =>
-    request<{ activity: ActivityEntry[]; total: number }>(
-      `/projects/${encodeURIComponent(projectId)}/activity?limit=${params?.limit ?? 50}&offset=${params?.offset ?? 0}`,
-    ),
+  listActivity: (projectId: string, params?: { limit?: number; offset?: number; search?: string }) => {
+    const searchParams = new URLSearchParams();
+    searchParams.set("limit", String(params?.limit ?? 50));
+    searchParams.set("offset", String(params?.offset ?? 0));
+    if (params?.search) searchParams.set("search", params.search);
+    return request<{ activity: ActivityEntry[]; total: number }>(
+      `/projects/${encodeURIComponent(projectId)}/activity?${searchParams.toString()}`,
+    );
+  },
 };

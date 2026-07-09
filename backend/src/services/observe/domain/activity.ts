@@ -9,17 +9,19 @@ export interface ActivityResponse {
   id: string;
   projectId: string;
   userId: string | null;
+  actorName: string | null;
   eventType: ActivityEventType;
   description: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
 }
 
-function rowToActivity(row: ActivityRow): ActivityResponse {
+function rowToActivity(row: ActivityRow & { actor_name?: string | null }): ActivityResponse {
   return {
     id: row.id,
     projectId: row.project_id,
     userId: row.user_id,
+    actorName: row.actor_name ?? null,
     eventType: row.event_type as ActivityEventType,
     description: row.description,
     metadata: row.metadata ?? undefined,
@@ -38,23 +40,37 @@ export async function listActivity(params: {
   projectId: string;
   limit?: number;
   offset?: number;
+  search?: string;
 }): Promise<{ activity: ActivityResponse[]; total: number }> {
-  const { tenantId, projectId, limit = 50, offset = 0 } = params;
+  const { tenantId, projectId, limit = 50, offset = 0, search } = params;
 
-  const { data, error, count } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("project_activity")
-    .select("*", { count: "exact" })
+    .select("*, users!project_activity_user_id_fkey(name)", { count: "exact" })
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
+
+  if (search) {
+    query = query.ilike("description", `%${search}%`);
+  }
+
+  const { data, error, count } = await query;
 
   if (error) {
     throw httpError(500, error.message);
   }
 
   return {
-    activity: (data || []).map((row) => rowToActivity(row as ActivityRow)),
+    activity: (data || []).map((row) => {
+      const userJoin = (row as Record<string, unknown>).users as { name?: string } | null;
+      const activityRow: ActivityRow & { actor_name?: string | null } = {
+        ...(row as unknown as ActivityRow),
+        actor_name: userJoin?.name ?? null,
+      };
+      return rowToActivity(activityRow);
+    }),
     total: count ?? 0,
   };
 }

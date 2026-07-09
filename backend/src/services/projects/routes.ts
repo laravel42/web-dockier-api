@@ -25,6 +25,7 @@ import {
   setProjectTags,
 } from "./domain/tags.js";
 import { getMaskedEnv, revealEnv, saveEnv } from "./domain/env.js";
+import { recordActivity } from "../observe/domain/activity.js";
 
 export async function registerProjectsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -416,6 +417,19 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         content: request.body.content,
       });
+
+      try {
+        await recordActivity({
+          tenantId: auth.tenantId,
+          projectId: request.params.projectId,
+          userId: auth.userId,
+          eventType: "env_updated",
+          description: "Updated environment file",
+        });
+      } catch {
+        // Activity logging is non-critical
+      }
+
       return { success: true as const };
     },
   );

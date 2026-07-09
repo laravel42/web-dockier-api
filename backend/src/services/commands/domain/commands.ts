@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { enqueueCommand } from "./worker.js";
+import { recordActivity } from "../../observe/domain/activity.js";
 import type { CommandRow } from "../schemas.js";
 
 export type CommandStatus = "running" | "finished" | "failed" | "timed_out";
@@ -94,6 +95,20 @@ export async function runCommand(params: {
       .update({ status: "failed", output: "Failed to dispatch command for execution.", finished_at: new Date().toISOString() })
       .eq("id", data.id);
     throw httpError(500, "Failed to dispatch command for execution");
+  }
+
+  // Record activity for this command execution
+  try {
+    await recordActivity({
+      tenantId,
+      projectId,
+      userId,
+      eventType: "command_run",
+      description: "Running custom command",
+      metadata: { commandId: data.id, command },
+    });
+  } catch {
+    // Activity logging is non-critical — don't fail the command if it errors
   }
 
   return rowToCommand(data as CommandRow);
