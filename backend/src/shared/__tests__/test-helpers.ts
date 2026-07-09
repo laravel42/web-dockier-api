@@ -2,7 +2,8 @@
  * Shared Test Helpers
  *
  * Provides utilities for building a Fastify app in test mode,
- * generating valid JWTs, and mocking Supabase queries.
+ * generating valid JWTs, mocking Supabase queries, and setting up
+ * permission resolution mocks.
  */
 
 import { vi } from "vitest";
@@ -38,6 +39,33 @@ export function signTestToken(opts: TestTokenOptions = {}): string {
 
 export function authHeader(opts: TestTokenOptions = {}): string {
   return `Bearer ${signTestToken(opts)}`;
+}
+
+// ─── Config Mock Factory ───────────────────────────────────────────
+
+/**
+ * Create a test environment config object.
+ * Use this in `vi.mock("../../../shared/config.js", ...)` blocks.
+ *
+ * @example
+ * ```ts
+ * vi.mock("../../../shared/config.js", () => ({
+ *   env: createTestEnv({ WEBHOOK_SECRET: "test-secret" }),
+ * }));
+ * ```
+ */
+export function createTestEnv(overrides: Record<string, unknown> = {}) {
+  return {
+    NODE_ENV: "test",
+    PORT: 4000,
+    SERVICE_NAME: "gateway",
+    SUPABASE_URL: "https://test.supabase.co",
+    SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_key_minimum_length",
+    SUPABASE_SECRET_KEY: "sb_secret_test_key_minimum_length_value",
+    JWT_SECRET: TEST_JWT_SECRET,
+    CORS_ORIGIN: "*",
+    ...overrides,
+  };
 }
 
 // ─── Supabase Mock Builder ─────────────────────────────────────────
@@ -76,6 +104,85 @@ export function createMockSupabaseChain(result: { data: unknown; error: unknown 
   });
 
   return proxy;
+}
+
+// ─── Permission Mock Setup ─────────────────────────────────────────
+
+export interface PermissionMockOptions {
+  /** Organization membership row. Defaults to ADMIN_MEMBERSHIP. */
+  membership?: Record<string, unknown> | null;
+  /** Role row. Defaults to ADMIN_ROLE. */
+  role?: Record<string, unknown> | null;
+  /** Array of permission strings. Defaults to all PERMISSIONS. */
+  permissions?: string[];
+}
+
+/**
+ * Set up the permission resolution chain on a mockFrom function.
+ *
+ * This simulates the authorization middleware's DB queries:
+ *   organization_memberships → roles → role_permissions
+ *
+ * Call this in each test that needs authenticated/authorized access.
+ *
+ * @param mockFrom - The vi.fn() that replaces supabaseAdmin.from()
+ * @param opts - Override membership, role, or permissions
+ *
+ * @example
+ * ```ts
+ * const mockFrom = vi.fn();
+ * vi.mock("../../../shared/supabase/client.js", () => ({
+ *   supabaseAdmin: { from: (...args: unknown[]) => mockFrom(...args) },
+ * }));
+ *
+ * // Grant all permissions:
+ * setupPermissionMocks(mockFrom, { permissions: Object.values(PERMISSIONS) });
+ *
+ * // Grant specific permissions:
+ * setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.DEPLOY_VIEW] });
+ * ```
+ */
+export function setupPermissionMocks(
+  mockFrom: ReturnType<typeof vi.fn>,
+  opts: PermissionMockOptions = {},
+): void {
+  const membership = opts.membership ?? ADMIN_MEMBERSHIP;
+  const role = opts.role ?? ADMIN_ROLE;
+  const permissions = opts.permissions ?? [];
+
+  mockFrom.mockImplementation((table: string) => {
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+
+    if (table === "organization_memberships") {
+      chain.maybeSingle.mockResolvedValue({ data: membership, error: null });
+      return chain;
+    }
+    if (table === "roles") {
+      chain.maybeSingle.mockResolvedValue({ data: role, error: null });
+      return chain;
+    }
+    if (table === "role_permissions") {
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockResolvedValue({
+            data: permissions.map((p) => ({ permission_id: p })),
+            error: null,
+          }),
+        }),
+      };
+    }
+    // Default for other tables
+    return chain;
+  });
 }
 
 // ─── Permission Mock Helpers ───────────────────────────────────────
