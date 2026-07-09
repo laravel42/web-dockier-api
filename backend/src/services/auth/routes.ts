@@ -26,10 +26,10 @@ import {
   listTenantMemberships,
 } from "./domain/membership.js";
 import {
-  classifyAuthError,
   performDemoLogin,
   performPasswordLogin,
   verifyOtpAndProvision,
+  throwAuthError,
 } from "./domain/registration.js";
 import {
   createTenant,
@@ -123,12 +123,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           data: { display_name: request.body.displayName, tenant_name: request.body.tenantName },
         },
       });
-      if (error) {
-        const classified = classifyAuthError(error.message);
-        if (classified.status === "rate_limit") throw app.httpErrors.tooManyRequests(classified.userMessage);
-        if (classified.status === "forbidden") throw app.httpErrors.forbidden(classified.userMessage);
-        throw app.httpErrors.badRequest(classified.userMessage);
-      }
+      if (error) throwAuthError(error.message);
       return { success: true as const, message: "Signup started. Check your email for OTP or magic link." };
     },
   );
@@ -151,12 +146,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         email: request.body.email,
         options: { shouldCreateUser: false, emailRedirectTo: request.body.redirectTo },
       });
-      if (error) {
-        const classified = classifyAuthError(error.message);
-        if (classified.status === "rate_limit") throw app.httpErrors.tooManyRequests(classified.userMessage);
-        if (classified.status === "forbidden") throw app.httpErrors.forbidden(classified.userMessage);
-        throw app.httpErrors.badRequest(classified.userMessage);
-      }
+      if (error) throwAuthError(error.message);
       return { success: true as const, message: "Passwordless sign-in started. Check your email for OTP or magic link." };
     },
   );

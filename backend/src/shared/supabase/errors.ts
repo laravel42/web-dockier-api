@@ -14,6 +14,7 @@ export type BaseDomainErrorCode =
   | "internal"
   | "unauthorized"
   | "precondition_failed"
+  | "too_many_requests"
   | "service_unavailable";
 
 export class DomainError extends Error {

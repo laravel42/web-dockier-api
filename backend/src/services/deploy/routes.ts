@@ -14,6 +14,7 @@ import { resolveDeployTemplate } from "./domain/templates.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
+import { DomainError } from "../../shared/supabase/errors.js";
 import {
   createProvider,
   listProviders,
@@ -356,7 +357,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
       const result = await destroyDeployment(db, request.params.deploymentId);
-      if (!result.success) throw app.httpErrors.badRequest(result.message);
+      if (!result.success) throw new DomainError(result.message, "bad_request");
       return { success: true, message: result.message };
     },
   );

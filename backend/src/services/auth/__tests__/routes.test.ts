@@ -48,13 +48,13 @@ vi.mock("../../../shared/supabase/client.js", () => ({
 // Mock domain modules to isolate route-level behavior
 const mockPerformDemoLogin = vi.fn();
 const mockPerformPasswordLogin = vi.fn();
-const mockClassifyAuthError = vi.fn();
+const mockThrowAuthError = vi.fn();
 const mockVerifyOtpAndProvision = vi.fn();
 
 vi.mock("../domain/registration.js", () => ({
   performDemoLogin: (...args: unknown[]) => mockPerformDemoLogin(...args),
   performPasswordLogin: (...args: unknown[]) => mockPerformPasswordLogin(...args),
-  classifyAuthError: (...args: unknown[]) => mockClassifyAuthError(...args),
+  throwAuthError: (...args: unknown[]) => mockThrowAuthError(...args),
   verifyOtpAndProvision: (...args: unknown[]) => mockVerifyOtpAndProvision(...args),
 }));
 
@@ -158,7 +158,10 @@ describe("POST /auth/passwordless/start", () => {
 
   it("returns 429 when rate limited by Supabase", async () => {
     mockAuth.signInWithOtp.mockResolvedValue({ error: { message: "rate limit exceeded" } });
-    mockClassifyAuthError.mockReturnValue({ status: "rate_limit", userMessage: "Too many attempts" });
+    const { DomainError } = await import("../../../shared/supabase/errors.js");
+    mockThrowAuthError.mockImplementation((msg: string) => {
+      throw new DomainError("Too many attempts", "too_many_requests");
+    });
 
     const res = await app.inject({
       method: "POST",

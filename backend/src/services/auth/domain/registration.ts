@@ -6,7 +6,7 @@ import { listMembershipsForUser, type Membership } from "./membership.js";
 import { signTenantToken } from "./session.js";
 import { ensureDefaultInAppChannel } from "../../notifications/domain/notifications.js";
 
-export const RegistrationError = createDomainErrorClass<"unauthorized" | "forbidden" | "bad_request" | "internal">("RegistrationError");
+export const RegistrationError = createDomainErrorClass<"unauthorized" | "forbidden" | "bad_request" | "too_many_requests" | "internal">("RegistrationError");
 export type RegistrationError = InstanceType<typeof RegistrationError>;
 
 /**
@@ -20,6 +20,18 @@ export function classifyAuthError(message: string): { status: "rate_limit" | "fo
     return { status: "forbidden", userMessage: "Signups are disabled in Supabase Auth. Enable email signups to allow registration." };
   }
   return { status: "bad_request", userMessage: message };
+}
+
+/**
+ * Classify a Supabase auth error and throw the corresponding domain error.
+ * Maps rate_limit → too_many_requests, forbidden → forbidden, bad_request → bad_request.
+ *
+ * Use in route handlers instead of inline classification + app.httpErrors.
+ */
+export function throwAuthError(message: string): never {
+  const classified = classifyAuthError(message);
+  const codeMap = { rate_limit: "too_many_requests", forbidden: "forbidden", bad_request: "bad_request" } as const;
+  throw new RegistrationError(classified.userMessage, codeMap[classified.status]);
 }
 
 /**
