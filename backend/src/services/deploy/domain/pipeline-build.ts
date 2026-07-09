@@ -5,7 +5,6 @@
  * auto-retry/patch, or remote build via AWS CodeBuild.
  */
 
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { BuildError } from "../../../lib/logging.js";
 import { patchDockerfile } from "../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
@@ -13,8 +12,7 @@ import { buildViaCodeBuild } from "./codebuild-builder.js";
 import type { RunCmdFn } from "./run-cmd.js";
 import type { ContextualLogger } from "../../../lib/logging.js";
 import { appendLog, ts } from "./pipeline-helpers.js";
-
-const db = supabaseAdmin;
+import { findCachedImage, patchDeployment } from "./deployments.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -81,24 +79,13 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
   let skippedBuild = false;
 
   // ── Check for cached image ──
-  const { data: cachedRow } = await db
-    .from("deployments")
-    .select("docker_image")
-    .eq("repo", repo)
-    .eq("branch", branch)
-    .eq("commit_hash", commitHash)
-    .neq("docker_image", "")
-    .neq("id", deploymentId)
-    .not("status", "in", '("destroyed","failed")')
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const cachedDockerImage = await findCachedImage(repo, branch, commitHash, deploymentId);
 
-  if (cachedRow?.docker_image) {
+  if (cachedDockerImage) {
     try {
       const { execSync } = await import("node:child_process");
-      execSync(`docker image inspect ${JSON.stringify(cachedRow.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
-      actualImage = cachedRow.docker_image;
+      execSync(`docker image inspect ${JSON.stringify(cachedDockerImage)}`, { timeout: 10_000, stdio: "pipe" });
+      actualImage = cachedDockerImage;
       skippedBuild = true;
       await logger.info(`Reusing cached image: ${actualImage}`);
     } catch { /* not cached locally — proceed to build */ }
@@ -158,7 +145,7 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
   }
 
   // Persist the image name
-  await db.from("deployments").update({ docker_image: actualImage }).eq("id", deploymentId);
+  await patchDeployment(deploymentId, { docker_image: actualImage });
 
   return { actualImage, skippedBuild };
 }

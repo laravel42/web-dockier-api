@@ -3,11 +3,16 @@
  *
  * Low-level utilities used across all pipeline stages: timestamp formatting,
  * deployment log appending, status updates, and .env content parsing.
+ *
+ * DB writes delegate to domain functions in deployments.ts — this module
+ * provides the pipeline-specific calling conventions (e.g. appendLog signature
+ * expected by createDeployLogger and createStreamingRunCmd).
  */
 
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
-
-const db = supabaseAdmin;
+import {
+  appendDeploymentLog,
+  setDeploymentStatus,
+} from "./deployments.js";
 
 // ─── Timestamp ─────────────────────────────────────────────────────
 
@@ -18,16 +23,13 @@ export function ts(): string {
 // ─── Deployment Log ────────────────────────────────────────────────
 
 export async function appendLog(deploymentId: string, line: string): Promise<void> {
-  const sanitized = line.replace(/\0/g, "");
-  const { data: current } = await db.from("deployments").select("logs").eq("id", deploymentId).maybeSingle();
-  const updatedLogs = (current?.logs || "") + sanitized + "\n";
-  await db.from("deployments").update({ logs: updatedLogs }).eq("id", deploymentId);
+  await appendDeploymentLog(deploymentId, line);
 }
 
 // ─── Status Update ─────────────────────────────────────────────────
 
 export async function updateStatus(deploymentId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
-  await db.from("deployments").update({ status, updated_at: new Date().toISOString(), ...extra }).eq("id", deploymentId);
+  await setDeploymentStatus(deploymentId, status, extra);
 }
 
 // ─── Env Parser ────────────────────────────────────────────────────

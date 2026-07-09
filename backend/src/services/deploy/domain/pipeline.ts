@@ -36,6 +36,7 @@ import { revealEnv } from "../../projects/domain/env.js";
 import { ts, appendLog, updateStatus, parseEnvContent } from "./pipeline-helpers.js";
 import { buildImage } from "./pipeline-build.js";
 import { waitForAppReady } from "./pipeline-health.js";
+import { getDeploymentCurrentStatus, patchDeployment } from "./deployments.js";
 
 const db = supabaseAdmin;
 
@@ -157,8 +158,8 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
   const { deploymentId } = event;
 
   // Idempotency guard
-  const { data: current } = await db.from("deployments").select("status").eq("id", deploymentId).maybeSingle();
-  if (current?.status === "building" || current?.status === "deploying") return;
+  const currentStatus = await getDeploymentCurrentStatus(deploymentId);
+  if (currentStatus === "building" || currentStatus === "deploying") return;
 
   const repoName = (event.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
   const shortId = deploymentId.slice(0, 8);
@@ -219,7 +220,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       logger,
     });
 
-    await db.from("deployments").update({ commit_hash: commitHash }).eq("id", deploymentId);
+    await patchDeployment(deploymentId, { commit_hash: commitHash });
 
     // 3. Load project context (env vars, deploy script, platform)
     const projectCtx = await loadProjectContext(event, logger);

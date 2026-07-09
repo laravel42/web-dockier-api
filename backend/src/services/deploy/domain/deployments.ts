@@ -86,6 +86,79 @@ export async function updateDeploymentStatus(deploymentId: string, updates: { st
   throwOnError(error, DeployError, { internalMsg: "Failed to update deployment" });
 }
 
+// ─── Pipeline Domain Functions ─────────────────────────────────────
+
+/**
+ * Get the current status of a deployment (used for idempotency guards).
+ */
+export async function getDeploymentCurrentStatus(deploymentId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("deployments")
+    .select("status")
+    .eq("id", deploymentId)
+    .maybeSingle();
+  return data?.status ?? null;
+}
+
+/**
+ * Append a line to the deployment logs column.
+ * Reads the current logs, appends the new line, and writes back.
+ */
+export async function appendDeploymentLog(deploymentId: string, line: string): Promise<void> {
+  const sanitized = line.replace(/\0/g, "");
+  const { data: current } = await supabaseAdmin
+    .from("deployments")
+    .select("logs")
+    .eq("id", deploymentId)
+    .maybeSingle();
+  const updatedLogs = (current?.logs || "") + sanitized + "\n";
+  await supabaseAdmin.from("deployments").update({ logs: updatedLogs }).eq("id", deploymentId);
+}
+
+/**
+ * Update deployment status and optional extra fields (app_url, infra, etc.).
+ * Used by the pipeline to transition between building → deploying → success/failed.
+ */
+export async function setDeploymentStatus(deploymentId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
+  await supabaseAdmin
+    .from("deployments")
+    .update({ status, updated_at: new Date().toISOString(), ...extra })
+    .eq("id", deploymentId);
+}
+
+/**
+ * Update specific fields on a deployment record (commit_hash, docker_image, etc.).
+ */
+export async function patchDeployment(deploymentId: string, fields: Partial<DeploymentRow>): Promise<void> {
+  const { error } = await supabaseAdmin.from("deployments").update(fields).eq("id", deploymentId);
+  throwOnError(error, DeployError, { internalMsg: "Failed to update deployment" });
+}
+
+/**
+ * Find a cached Docker image from a previous deployment of the same commit.
+ * Returns the docker_image string if found, null otherwise.
+ */
+export async function findCachedImage(
+  repo: string,
+  branch: string,
+  commitHash: string,
+  excludeDeploymentId: string,
+): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("deployments")
+    .select("docker_image")
+    .eq("repo", repo)
+    .eq("branch", branch)
+    .eq("commit_hash", commitHash)
+    .neq("docker_image", "")
+    .neq("id", excludeDeploymentId)
+    .not("status", "in", '("destroyed","failed")')
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.docker_image ?? null;
+}
+
 
 /**
  * Look up a deployment by ID for webhook processing.
