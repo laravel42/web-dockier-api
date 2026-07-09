@@ -12,6 +12,7 @@ import { getAuth } from "../auth.js";
 import type { PermissionKey } from "./constants.js";
 import { CRITICAL_PERMISSIONS } from "./constants.js";
 import { getHierarchyLevel } from "./role-templates.js";
+import { MemoryCache } from "../memory-cache.js";
 
 export interface ResolvedAuth {
   userId: string;
@@ -36,57 +37,14 @@ declare module "fastify" {
 }
 
 /**
- * Simple in-memory cache for permission resolution.
- * Key: `${userId}:${tenantId}`, Value: { resolvedAuth, expiresAt }
- *
- * TTL is short (30s) so role changes propagate quickly.
- * A periodic sweep runs every 60s to evict expired entries and prevent
- * unbounded memory growth on long-running instances.
+ * In-memory cache for permission resolution.
+ * Key: `${userId}:${tenantId}`, TTL: 30s so role changes propagate quickly.
  */
-const permissionCache = new Map<string, { resolved: ResolvedAuth; expiresAt: number }>();
+const permissionCache = new MemoryCache<ResolvedAuth>({ maxSize: 5_000, sweepIntervalMs: 60_000 });
 const CACHE_TTL_MS = 30_000;
 
-/** Maximum entries before forced eviction of oldest items. */
-const MAX_CACHE_SIZE = 5_000;
-
-/** Sweep interval for removing expired entries (60s). */
-const SWEEP_INTERVAL_MS = 60_000;
-
-let sweepTimer: ReturnType<typeof setInterval> | null = null;
-
-function ensureSweepTimer() {
-  if (sweepTimer) return;
-  sweepTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of permissionCache) {
-      if (entry.expiresAt <= now) permissionCache.delete(key);
-    }
-  }, SWEEP_INTERVAL_MS);
-  // Allow Node to exit even if this timer is running
-  if (sweepTimer.unref) sweepTimer.unref();
-}
-
-/**
- * Evict oldest entries when the cache exceeds MAX_CACHE_SIZE.
- * Map iteration order is insertion order, so the first entries are oldest.
- */
-function evictIfNeeded() {
-  if (permissionCache.size <= MAX_CACHE_SIZE) return;
-  const excess = permissionCache.size - MAX_CACHE_SIZE;
-  let removed = 0;
-  for (const key of permissionCache.keys()) {
-    if (removed >= excess) break;
-    permissionCache.delete(key);
-    removed++;
-  }
-}
-
-function getCacheKey(userId: string, tenantId: string): string {
-  return `${userId}:${tenantId}`;
-}
-
 export function invalidatePermissionCache(userId: string, tenantId: string): void {
-  permissionCache.delete(getCacheKey(userId, tenantId));
+  permissionCache.delete(`${userId}:${tenantId}`);
 }
 
 export function clearPermissionCache(): void {
@@ -99,10 +57,10 @@ export function clearPermissionCache(): void {
  * via .single() on roles filtered by membership's role_id, then permissions.
  */
 async function resolvePermissions(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
-  const cacheKey = getCacheKey(userId, tenantId);
+  const cacheKey = `${userId}:${tenantId}`;
   const cached = permissionCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.resolved;
+  if (cached) {
+    return cached;
   }
 
   // Query 1: Fetch membership (validates user belongs to tenant and is active)
@@ -151,9 +109,7 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
     hierarchyLevel: getHierarchyLevel(role.system_key ?? null),
   };
 
-  permissionCache.set(cacheKey, { resolved, expiresAt: Date.now() + CACHE_TTL_MS });
-  evictIfNeeded();
-  ensureSweepTimer();
+  permissionCache.set(cacheKey, resolved, CACHE_TTL_MS);
   return resolved;
 }
 
