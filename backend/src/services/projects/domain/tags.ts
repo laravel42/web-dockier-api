@@ -51,28 +51,17 @@ export interface TagWithCountResponse extends TagResponse {
 export async function listTagsWithCounts(tenantId: string): Promise<TagWithCountResponse[]> {
   const { data, error } = await supabaseAdmin
     .from("project_tags")
-    .select("*")
+    .select("*, project_tag_assignments(count)")
     .eq("organization_id", tenantId)
+    .eq("project_tag_assignments.organization_id", tenantId)
     .order("name", { ascending: true });
 
   const rows = unwrapList(data, error, TagsError, { internalMsg: "Failed to list tags" });
 
-  // Get assignment counts per tag
-  const { data: assignments, error: assignError } = await supabaseAdmin
-    .from("project_tag_assignments")
-    .select("tag_id")
-    .eq("organization_id", tenantId);
-
-  if (assignError) throw new TagsError("Failed to fetch tag counts", "internal", assignError);
-
-  const countMap: Record<string, number> = {};
-  for (const a of assignments ?? []) {
-    countMap[a.tag_id] = (countMap[a.tag_id] ?? 0) + 1;
-  }
-
-  return rows.map((r) => {
+  return rows.map((r: any) => {
     const tag = rowToTag(r as TagRow);
-    return { ...tag, projectCount: countMap[r.id] ?? 0 };
+    const projectCount = r.project_tag_assignments?.[0]?.count ?? 0;
+    return { ...tag, projectCount };
   });
 }
 
@@ -186,13 +175,14 @@ export async function setProjectTags(params: {
   const { tenantId, projectId, tagIds } = params;
 
   // Verify all tag IDs belong to this tenant
-  if (tagIds.length > 0) {
+  const uniqueTagIds = [...new Set(tagIds)];
+  if (uniqueTagIds.length > 0) {
     const { count } = await supabaseAdmin
       .from("project_tags")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", tenantId)
-      .in("id", tagIds);
-    if (count !== tagIds.length) {
+      .in("id", uniqueTagIds);
+    if (count !== uniqueTagIds.length) {
       throw new TagsError("One or more tags not found", "bad_request");
     }
   }
@@ -207,8 +197,8 @@ export async function setProjectTags(params: {
   if (deleteError) throw new TagsError("Failed to update project tags", "internal", deleteError);
 
   // Insert new assignments
-  if (tagIds.length > 0) {
-    const rows = tagIds.map((tagId) => ({
+  if (uniqueTagIds.length > 0) {
+    const rows = uniqueTagIds.map((tagId) => ({
       organization_id: tenantId,
       project_id: projectId,
       tag_id: tagId,

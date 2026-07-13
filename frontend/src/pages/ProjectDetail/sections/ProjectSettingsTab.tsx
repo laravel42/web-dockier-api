@@ -22,6 +22,7 @@ import { gitApi } from "../../../services/git";
 import { getDefaultDeployScript } from "../../../config/frameworks";
 import type { Connection, Repo } from "../../../types";
 import { btnPrimary, btnOutline, inputCls, textareaCls } from "../../../utils/styles";
+import { parseOwnerRepo } from "../../../utils/parseOwnerRepo";
 
 interface Props {
   project: Project;
@@ -1552,18 +1553,9 @@ function BranchPickerInline({
     setLoading(true);
 
     // Strip URL prefix if repository is stored as a full URL
-    let repoPath = project.repository;
-    try {
-      const url = new URL(repoPath);
-      repoPath = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
-    } catch {
-      // Not a URL, use as-is (already in owner/repo format)
-    }
-
-    const parts = repoPath.split("/");
-    if (parts.length < 2) { setLoading(false); return; }
-    const repoName = parts.pop()!;
-    const owner = parts.join("/");
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) { setLoading(false); return; }
+    const { owner, repo: repoName } = parsed;
     try {
       const res = await gitApi.listBranches(project.connectionId, owner, repoName);
       setBranches(res.branches);

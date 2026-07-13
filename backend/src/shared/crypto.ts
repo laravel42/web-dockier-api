@@ -19,7 +19,7 @@ export interface EncryptedPayload {
 
 export function encrypt(plaintext: string): EncryptedPayload {
   const key = getEncryptionKey();
-  const iv = randomBytes(16);
+  const iv = randomBytes(12);
   const cipher = createCipheriv(ALGORITHM, key, iv);
 
   let encrypted = cipher.update(plaintext, "utf8", "base64");

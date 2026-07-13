@@ -34,6 +34,20 @@ export async function updateStatus(deploymentId: string, status: string, extra?:
 
 // ─── Env Parser ────────────────────────────────────────────────────
 
+/** Check whether a line ends with an unescaped quote character. */
+function endsWithUnescapedQuote(line: string, quote: string): boolean {
+  const trimmed = line.trimEnd();
+  if (!trimmed.endsWith(quote)) return false;
+  // Count consecutive backslashes before the quote
+  let backslashes = 0;
+  for (let i = trimmed.length - 2; i >= 0; i--) {
+    if (trimmed[i] === "\\") backslashes++;
+    else break;
+  }
+  // The quote is escaped if preceded by an odd number of backslashes
+  return backslashes % 2 === 0;
+}
+
 /** Parse .env file content into key-value pairs, supporting multi-line quoted values. */
 export function parseEnvContent(content: string): Array<{ name: string; value: string }> {
   const vars: Array<{ name: string; value: string }> = [];
@@ -44,8 +58,9 @@ export function parseEnvContent(content: string): Array<{ name: string; value: s
 
   for (const line of content.split("\n")) {
     if (inMultiLine) {
-      if (line.endsWith(quoteChar)) {
-        currentValue += "\n" + line.slice(0, -1);
+      if (endsWithUnescapedQuote(line, quoteChar)) {
+        const trimmed = line.trimEnd();
+        currentValue += "\n" + trimmed.slice(0, -1);
         vars.push({ name: currentKey, value: currentValue });
         inMultiLine = false;
       } else {

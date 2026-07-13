@@ -224,7 +224,7 @@ export class GcpComputeAdapter implements DeployAdapter {
     {
       const indexPath = join(pulumiDir, "index.ts");
       let program = await readFs(indexPath, "utf-8");
-      const envVars = ctx.state.pendingEnvVars || ctx.state.pendingEnvVars || [];
+      const envVars = ctx.state.pendingEnvVars || [];
       program = replacePulumiPlaceholders(program, envVars);
       await writeFs(indexPath, program, "utf-8");
     }

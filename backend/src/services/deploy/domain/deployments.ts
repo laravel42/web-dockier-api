@@ -102,17 +102,16 @@ export async function getDeploymentCurrentStatus(deploymentId: string): Promise<
 
 /**
  * Append a line to the deployment logs column.
- * Reads the current logs, appends the new line, and writes back.
+ * Uses a Postgres RPC for atomic concatenation — avoids the read-modify-write
+ * race condition that loses log lines under concurrent appends.
  */
 export async function appendDeploymentLog(deploymentId: string, line: string): Promise<void> {
   const sanitized = line.replace(/\0/g, "");
-  const { data: current } = await supabaseAdmin
-    .from("deployments")
-    .select("logs")
-    .eq("id", deploymentId)
-    .maybeSingle();
-  const updatedLogs = (current?.logs || "") + sanitized + "\n";
-  await supabaseAdmin.from("deployments").update({ logs: updatedLogs }).eq("id", deploymentId);
+  const { error } = await supabaseAdmin.rpc("append_deployment_log", {
+    p_deployment_id: deploymentId,
+    p_line: sanitized,
+  });
+  throwOnError(error, DeployError, { internalMsg: "Failed to append deployment log" });
 }
 
 /**

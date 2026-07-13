@@ -369,7 +369,7 @@ export async function executePostDeployScript(
 
   // Build the docker exec command
   const escapedScript = trimmed.replace(/'/g, "'\\''");
-  const dockerExecCmd = `docker exec ${ctx.containerName} bash -c '${escapedScript}'`;
+  const dockerExecCmd = `docker exec ${ctx.containerName} sh -c '${escapedScript}'`;
 
   // Route to the appropriate execution path
   if (ctx.instanceId && ctx.provider === "aws") {

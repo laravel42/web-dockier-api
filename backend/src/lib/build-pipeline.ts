@@ -146,7 +146,7 @@ function applyKnownPlatform(config: RepoConfig, platform: string): void {
   const mapped = PLATFORM_MAP[platform];
   if (!mapped) return;
   config.runtime = mapped.runtime;
-  if (mapped.framework) config.framework = mapped.framework;
+  config.framework = mapped.framework;
 }
 
 // ─── Analyze & Generate Dockerfile ─────────────────────────────────

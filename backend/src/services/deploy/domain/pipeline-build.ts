@@ -83,8 +83,10 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
 
   if (cachedDockerImage) {
     try {
-      const { execSync } = await import("node:child_process");
-      execSync(`docker image inspect ${JSON.stringify(cachedDockerImage)}`, { timeout: 10_000, stdio: "pipe" });
+      const { exec } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(exec);
+      await execAsync(`docker image inspect ${JSON.stringify(cachedDockerImage)}`, { timeout: 10_000 });
       actualImage = cachedDockerImage;
       skippedBuild = true;
       await logger.info(`Reusing cached image: ${actualImage}`);
