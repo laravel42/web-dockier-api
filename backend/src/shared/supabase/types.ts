@@ -495,6 +495,42 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["redirect_rules"]["Row"]>;
         Relationships: [];
       };
+      domains: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          name: string;
+          is_primary: boolean;
+          redirect_www: boolean;
+          wildcard: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["domains"]["Row"]> &
+          Pick<Database["public"]["Tables"]["domains"]["Row"], "organization_id" | "project_id" | "name">;
+        Update: Partial<Database["public"]["Tables"]["domains"]["Row"]>;
+        Relationships: [];
+      };
+      ssl_certificates: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          domain_id: string | null;
+          type: string;
+          status: string;
+          domain_name: string;
+          expires_at: string | null;
+          issued_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["ssl_certificates"]["Row"]> &
+          Pick<Database["public"]["Tables"]["ssl_certificates"]["Row"], "organization_id" | "project_id" | "domain_name">;
+        Update: Partial<Database["public"]["Tables"]["ssl_certificates"]["Row"]>;
+        Relationships: [];
+      };
       heartbeats: {
         Row: {
           id: string;

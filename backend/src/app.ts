@@ -16,6 +16,7 @@ import { registerRolesRoutes } from "./services/roles/routes.js";
 import { registerCommandsRoutes } from "./services/commands/routes.js";
 import { registerNetworkRoutes } from "./services/network/routes.js";
 import { registerObserveRoutes } from "./services/observe/routes.js";
+import { registerDomainsRoutes } from "./services/domains/routes.js";
 import { registerUsersRoutes } from "./services/users/routes.js";
 
 export type ServiceName =
@@ -27,6 +28,7 @@ export type ServiceName =
   | "deploy"
   | "commands"
   | "network"
+  | "domains"
   | "observe"
   | "notifications"
   | "integrations"
@@ -46,6 +48,7 @@ const serviceRegistry: Record<MigratedServiceName, RegisterFn> = {
   deploy: registerDeployRoutes,
   commands: registerCommandsRoutes,
   network: registerNetworkRoutes,
+  domains: registerDomainsRoutes,
   observe: registerObserveRoutes,
   notifications: registerNotificationsRoutes,
   integrations: registerIntegrationsRoutes,

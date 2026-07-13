@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Project } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import { getRepoKey } from "../../../utils/parseOwnerRepo";
 import ClipboardIcon from "../../../components/icons/outlined/ClipboardIcon";
 import CheckIcon from "../../../components/icons/outlined/CheckIcon";
 import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
+import { domainsApi } from "../../../services/domains";
 
 interface Props {
   project: Project;
@@ -43,6 +44,21 @@ function CopyableMonoValue({ value, label }: { value: string; label: string }) {
 
 export default function ProjectDetailsCard({ project, deployUrl }: Props) {
   const repoKey = project.repository ? getRepoKey(project.repository) : null;
+  const [siteUrl, setSiteUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    domainsApi.listDomains(project.id).then((res) => {
+      if (cancelled) return;
+      const primary = res.domains.find((d) => d.isPrimary) || res.domains[0];
+      if (primary) {
+        setSiteUrl(`https://${primary.name}`);
+      }
+    }).catch(() => { /* silent — fall back to deployUrl */ });
+    return () => { cancelled = true; };
+  }, [project.id]);
+
+  const viewUrl = siteUrl || deployUrl;
 
   return (
     <div className={`${cardCls} p-5 h-full flex flex-col`}>
@@ -58,16 +74,16 @@ export default function ProjectDetailsCard({ project, deployUrl }: Props) {
             <CopyableMonoValue value={repoKey} label="repository path" />
           </div>
         )}
-        {deployUrl && (
-          <div className="mt-auto pt-3 border-t border-border min-h-15">
-            <p className="text-xs text-text-muted">Deployment URL</p>
+        {viewUrl && (
+          <div className="mt-auto pt-3 border-t border-border">
+            <p className="text-xs text-text-muted">Site URL</p>
             <a
-              href={deployUrl}
+              href={viewUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-0.5 inline-flex items-center gap-1.5 text-[12px] text-primary-500 hover:text-primary-700 transition-colors break-all"
+              className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-400 transition-colors break-all"
             >
-              {deployUrl}
+              {viewUrl.replace(/^https?:\/\//, "")}
               <ExternalLinkIcon className="size-3.5 shrink-0" />
             </a>
           </div>
