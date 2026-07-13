@@ -52,6 +52,7 @@ const envSchema = z
     RESEND_API_KEY: z.string().min(1).optional(),
     RESEND_FROM_EMAIL: z.string().optional(),
     DATABASE_URL: z.string().min(1).optional(),
+    ENV_ENCRYPTION_KEY: z.string().min(32).optional(),
   })
   .superRefine((data, ctx) => {
     if (!data.SUPABASE_SECRET_KEY && !data.SUPABASE_SERVICE_ROLE_KEY) {

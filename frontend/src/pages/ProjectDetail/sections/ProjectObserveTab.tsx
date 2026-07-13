@@ -49,22 +49,6 @@ const LOG_TYPES: { value: LogType; label: string }[] = [
   { value: "nginx_error", label: "Nginx Error Log" },
 ];
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  deploy_started: "Deployment started",
-  deploy_completed: "Deployment completed",
-  deploy_failed: "Deployment failed",
-  command_run: "Command executed",
-  config_changed: "Configuration changed",
-  heartbeat_missed: "Heartbeat missed",
-  heartbeat_recovered: "Heartbeat recovered",
-  log_cleared: "Log cleared",
-  project_updated: "Project updated",
-  domain_added: "Domain added",
-  domain_removed: "Domain removed",
-  security_rule_added: "Security rule added",
-  security_rule_removed: "Security rule removed",
-};
-
 // ─── Helpers ───
 
 function TabSpinner({ label }: { label: string }) {
@@ -85,6 +69,7 @@ function formatRelativeTime(dateStr: string): string {
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
+  if (days > 7) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? "s" : ""} ago`;
   if (days > 0) return `${days}d ago`;
   if (hours > 0) return `${hours}h ago`;
   if (minutes > 0) return `${minutes}m ago`;
@@ -429,10 +414,24 @@ function ActivitySection({ project }: { project: Project }) {
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedEntry, setSelectedEntry] = useState<ActivityEntry | null>(null);
+  const [detailOutput, setDetailOutput] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchActivity = useCallback(async () => {
     try {
-      const res = await observeApi.listActivity(project.id, { limit: 50 });
+      const res = await observeApi.listActivity(project.id, {
+        limit: 50,
+        search: debouncedSearch || undefined,
+      });
       setActivity(res.activity);
       setTotal(res.total);
     } catch {
@@ -440,44 +439,215 @@ function ActivitySection({ project }: { project: Project }) {
     } finally {
       setLoading(false);
     }
-  }, [project.id]);
+  }, [project.id, debouncedSearch]);
 
   useEffect(() => {
+    setLoading(true);
     fetchActivity();
   }, [fetchActivity]);
 
+  const handleEntryClick = async (entry: ActivityEntry) => {
+    setSelectedEntry(entry);
+    setDetailOutput(null);
+
+    // If this is a command_run event, fetch the command output
+    if (entry.eventType === "command_run" && entry.metadata?.commandId) {
+      setDetailLoading(true);
+      try {
+        const { commandsApi } = await import("../../../services/commands");
+        const cmd = await commandsApi.get(
+          project.id,
+          entry.metadata.commandId as string,
+        );
+        setDetailOutput(cmd.output || "No output available.");
+      } catch {
+        setDetailOutput("Failed to load command output.");
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+  };
+
   if (loading) return <TabSpinner label="Loading activity…" />;
 
-  if (activity.length === 0) {
-    return (
-      <div className="rounded-lg border border-border flex flex-col items-center justify-center py-14 gap-3">
-        <svg xmlns="http://www.w3.org/2000/svg" className="size-12 text-text-muted/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m6 4.125 2.25 2.25m0 0 2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
-        </svg>
-        <p className="text-sm font-medium text-text">No recent events</p>
-        <p className="text-xs text-text-muted">Dockier retains 14 days of events.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-lg border border-border divide-y divide-border overflow-auto">
-      {activity.map((entry) => (
-        <div key={entry.id} className="flex items-start gap-3 px-4 py-3">
-          <ActivityEventIcon eventType={entry.eventType} />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-text">{entry.description}</p>
-            <p className="text-xs text-text-muted mt-0.5">
-              {EVENT_TYPE_LABELS[entry.eventType] ?? entry.eventType} · {formatRelativeTime(entry.createdAt)}
-            </p>
-          </div>
+    <div className="flex flex-col gap-3">
+      {/* Search bar */}
+      <div className="relative">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+        </svg>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search"
+          className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30"
+        />
+      </div>
+
+      {/* Activity list */}
+      {activity.length === 0 ? (
+        <div className="rounded-lg border border-border flex flex-col items-center justify-center py-14 gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" className="size-12 text-text-muted/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m6 4.125 2.25 2.25m0 0 2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+          </svg>
+          <p className="text-sm font-medium text-text">No recent events</p>
+          <p className="text-xs text-text-muted">Dockier retains 14 days of events.</p>
         </div>
-      ))}
-      {total > activity.length && (
-        <div className="px-4 py-3 text-center">
-          <p className="text-xs text-text-muted">Showing {activity.length} of {total} events</p>
+      ) : (
+        <div className="rounded-lg border border-border divide-y divide-border overflow-auto">
+          {activity.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => void handleEntryClick(entry)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-card/50"
+            >
+              <ActivityEventIcon eventType={entry.eventType} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-text">{entry.description}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-xs text-text-muted">
+                  {formatRelativeTime(entry.createdAt)}
+                  {entry.actorName && (
+                    <> by <span className="font-medium text-text">{entry.actorName}</span></>
+                  )}
+                </p>
+              </div>
+            </button>
+          ))}
+          {total > activity.length && (
+            <div className="px-4 py-3 text-center">
+              <p className="text-xs text-text-muted">Showing {activity.length} of {total} events</p>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Event detail modal */}
+      {selectedEntry && (
+        <ActivityDetailModal
+          entry={selectedEntry}
+          output={detailOutput}
+          loading={detailLoading}
+          onClose={() => setSelectedEntry(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ActivityDetailModal({
+  entry,
+  output,
+  loading,
+  onClose,
+}: {
+  entry: ActivityEntry;
+  output: string | null;
+  loading: boolean;
+  onClose: () => void;
+}) {
+  const EVENT_DESCRIPTIONS: Record<string, string> = {
+    deploy_started: "Deploying pushed code",
+    deploy_completed: "Deploying pushed code",
+    deploy_failed: "Deploying pushed code",
+    command_run: "Running custom command",
+    config_changed: "Configuration changed",
+    heartbeat_missed: "Heartbeat missed",
+    heartbeat_recovered: "Heartbeat recovered",
+    log_cleared: "Log cleared",
+    project_updated: "Project updated",
+    domain_added: "Domain added",
+    domain_removed: "Domain removed",
+    security_rule_added: "Security rule added",
+    security_rule_removed: "Security rule removed",
+  };
+
+  const subtitle = EVENT_DESCRIPTIONS[entry.eventType] ?? entry.description;
+  const timestamp = new Date(entry.createdAt).toLocaleString();
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Event details"
+      tabIndex={-1}
+    >
+      <div
+        className="mx-4 flex w-full max-w-2xl flex-col rounded-xl border border-border bg-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between border-b border-border px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-text">Event details</h3>
+            <p className="mt-0.5 text-sm text-text-muted">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-card/60 hover:text-text"
+            aria-label="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="size-5" aria-hidden="true">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-5">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Spinner className="size-4" />
+            </div>
+          ) : output ? (
+            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-[#0d1117] p-4 font-mono text-xs/relaxed text-[#c9d1d9] whitespace-pre-wrap break-all">
+              {output}
+            </pre>
+          ) : entry.metadata && Object.keys(entry.metadata).length > 0 ? (
+            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-[#0d1117] p-4 font-mono text-xs/relaxed text-[#c9d1d9] whitespace-pre-wrap break-all">
+              {JSON.stringify(entry.metadata, null, 2)}
+            </pre>
+          ) : (
+            <p className="text-sm text-text-muted text-center py-6">No additional details available for this event.</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-border px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded border border-border bg-background px-2 py-0.5 font-mono text-xs text-text">
+              {timestamp}
+            </span>
+            <span className="text-xs text-text-muted">
+              {formatRelativeTime(entry.createdAt)}
+              {entry.actorName && <> by {entry.actorName}</>}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border bg-background px-4 py-1.5 text-sm font-medium text-text transition-colors hover:bg-card"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

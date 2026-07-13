@@ -33,14 +33,7 @@ CREATE TABLE IF NOT EXISTS project_activity (
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   user_id         TEXT REFERENCES users(id) ON DELETE SET NULL,
-  event_type      TEXT NOT NULL
-                  CHECK (event_type IN (
-                    'deploy_started', 'deploy_completed', 'deploy_failed',
-                    'command_run', 'config_changed', 'heartbeat_missed',
-                    'heartbeat_recovered', 'log_cleared', 'project_updated',
-                    'domain_added', 'domain_removed', 'security_rule_added',
-                    'security_rule_removed'
-                  )),
+  event_type      TEXT NOT NULL,
   description     TEXT NOT NULL,
   metadata        JSONB DEFAULT '{}',
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()

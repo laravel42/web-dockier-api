@@ -19,7 +19,6 @@ import {
   resolveImageByRevision,
   ImageBuilderError,
 } from "./domain/builds.js";
-import { runPostDeployCommands } from "./domain/post-deploy.js";
 import { assertOwnership } from "../../shared/supabase/query.js";
 import { deployParamsSchema } from "./domain/deploy-params.js";
 import { processImageBuilderWebhook } from "./domain/webhook.js";
@@ -204,55 +203,6 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         auth.tenantId,
         { debug: (msg: string) => app.log.debug(msg) },
       );
-    },
-  );
-
-  typed.post(
-    "/image-builder/builds/:buildId/run-post-deploy",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
-      schema: {
-        tags: ["image-builder"],
-        summary: "Run post-deploy commands on the deployed instance",
-        params: z.object({ buildId: z.uuid() }),
-        body: z.object({
-          commands: z.array(z.object({
-            command: z.string().min(1).max(500),
-            enabled: z.boolean(),
-            continueOnFailure: z.boolean(),
-          })).max(20),
-        }),
-        response: {
-          200: z.object({
-            success: z.boolean(),
-            output: z.array(z.string()),
-          }),
-        },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const { data, error } = await db.from("builds").select("*").eq("id", request.params.buildId).single();
-      if (error || !data) throw new ImageBuilderError("Build not found", "not_found");
-      assertOwnership(data, auth.tenantId, ImageBuilderError, "Not your build");
-
-      const credentials = await resolveAwsCredentials(data.provider_id || "");
-      if (!credentials) throw new ImageBuilderError("AWS credentials not available", "precondition_failed");
-
-      try {
-        return await runPostDeployCommands({
-          buildRow: {
-            source_repo: data.source_repo || "",
-            build_metadata: data.build_metadata,
-            provider_id: data.provider_id,
-          },
-          commands: request.body.commands,
-          credentials,
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw app.httpErrors.preconditionFailed(message);
-      }
     },
   );
 

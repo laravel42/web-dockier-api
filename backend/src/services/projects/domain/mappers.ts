@@ -1,4 +1,4 @@
-import { projectConfigSchema } from "../schemas.js";
+import { projectConfigSchema, projectSettingsSchema } from "../schemas.js";
 
 export function rowToProject(
   row: {
@@ -11,6 +11,7 @@ export function rowToProject(
     source_type: string | null;
     template: string | null;
     config: unknown;
+    settings: unknown;
     created_at: string;
   },
   lastCommitHash = "",
@@ -25,6 +26,7 @@ export function rowToProject(
     sourceType: row.source_type ?? "repository",
     template: row.template ?? "",
     config: projectConfigSchema.parse(row.config ?? {}),
+    settings: projectSettingsSchema.parse(row.settings ?? {}),
     lastCommitHash,
     createdAt: row.created_at,
   };

@@ -106,6 +106,7 @@ export type Database = {
           source_type: string;
           template: string;
           config: Json;
+          settings: Json;
           created_at: string;
           updated_at: string | null;
         };
@@ -565,9 +566,56 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["project_activity"]["Row"]>;
         Relationships: [];
       };
+      project_tags: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          color: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_tags"]["Row"]> &
+          Pick<Database["public"]["Tables"]["project_tags"]["Row"], "organization_id" | "name">;
+        Update: Partial<Database["public"]["Tables"]["project_tags"]["Row"]>;
+        Relationships: [];
+      };
+      project_tag_assignments: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          tag_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_tag_assignments"]["Row"]> &
+          Pick<Database["public"]["Tables"]["project_tag_assignments"]["Row"], "organization_id" | "project_id" | "tag_id">;
+        Update: Partial<Database["public"]["Tables"]["project_tag_assignments"]["Row"]>;
+        Relationships: [];
+      };
+      project_env_files: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          encrypted_content: string;
+          iv: string;
+          auth_tag: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_env_files"]["Row"]> &
+          Pick<Database["public"]["Tables"]["project_env_files"]["Row"], "organization_id" | "project_id" | "encrypted_content" | "iv" | "auth_tag">;
+        Update: Partial<Database["public"]["Tables"]["project_env_files"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      append_deployment_log: {
+        Args: { p_deployment_id: string; p_line: string };
+        Returns: undefined;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

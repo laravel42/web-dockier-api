@@ -9,7 +9,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
-  TEST_JWT_SECRET,
   TEST_TENANT_ID,
   TEST_USER_ID,
   TEST_EMAIL,
@@ -18,8 +17,9 @@ import {
   authHeader,
   ADMIN_MEMBERSHIP,
   OWNER_MEMBERSHIP,
-  ADMIN_ROLE,
   MEMBER_ROLE,
+  createTestEnv,
+  setupPermissionMocks as setupPerms,
 } from "../../../shared/__tests__/test-helpers.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 
@@ -27,16 +27,7 @@ import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 
 // Mock environment before anything else
 vi.mock("../../../shared/config.js", () => ({
-  env: {
-    NODE_ENV: "test",
-    PORT: 4000,
-    SERVICE_NAME: "gateway",
-    SUPABASE_URL: "https://test.supabase.co",
-    SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_key_minimum_length",
-    SUPABASE_SECRET_KEY: "sb_secret_test_key_minimum_length_value",
-    JWT_SECRET: TEST_JWT_SECRET,
-    CORS_ORIGIN: "*",
-  },
+  env: createTestEnv(),
 }));
 
 // Mock Supabase client
@@ -57,13 +48,13 @@ vi.mock("../../../shared/supabase/client.js", () => ({
 // Mock domain modules to isolate route-level behavior
 const mockPerformDemoLogin = vi.fn();
 const mockPerformPasswordLogin = vi.fn();
-const mockClassifyAuthError = vi.fn();
+const mockThrowAuthError = vi.fn();
 const mockVerifyOtpAndProvision = vi.fn();
 
 vi.mock("../domain/registration.js", () => ({
   performDemoLogin: (...args: unknown[]) => mockPerformDemoLogin(...args),
   performPasswordLogin: (...args: unknown[]) => mockPerformPasswordLogin(...args),
-  classifyAuthError: (...args: unknown[]) => mockClassifyAuthError(...args),
+  throwAuthError: (...args: unknown[]) => mockThrowAuthError(...args),
   verifyOtpAndProvision: (...args: unknown[]) => mockVerifyOtpAndProvision(...args),
 }));
 
@@ -104,44 +95,9 @@ function setupPermissionMocks(opts: {
   role?: Record<string, unknown> | null;
   permissions?: string[];
 }) {
-  const membership = opts.membership ?? ADMIN_MEMBERSHIP;
-  const role = opts.role ?? ADMIN_ROLE;
-  const permissions = opts.permissions ?? Object.values(PERMISSIONS);
-
-  mockFrom.mockImplementation((table: string) => {
-    const chain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      is: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn(),
-      single: vi.fn(),
-    };
-
-    if (table === "organization_memberships") {
-      chain.maybeSingle.mockResolvedValue({ data: membership, error: null });
-      return chain;
-    }
-    if (table === "roles") {
-      chain.maybeSingle.mockResolvedValue({ data: role, error: null });
-      return chain;
-    }
-    if (table === "role_permissions") {
-      chain.eq.mockReturnValue({
-        ...chain,
-        then: (resolve: (v: unknown) => void) =>
-          resolve({ data: permissions.map((p) => ({ permission_id: p })), error: null }),
-      });
-      // Return the resolved value for select().eq()
-      return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({
-            data: permissions.map((p) => ({ permission_id: p })),
-            error: null,
-          }),
-        }),
-      };
-    }
-    return chain;
+  setupPerms(mockFrom, {
+    ...opts,
+    permissions: opts.permissions ?? Object.values(PERMISSIONS),
   });
 }
 
@@ -202,7 +158,10 @@ describe("POST /auth/passwordless/start", () => {
 
   it("returns 429 when rate limited by Supabase", async () => {
     mockAuth.signInWithOtp.mockResolvedValue({ error: { message: "rate limit exceeded" } });
-    mockClassifyAuthError.mockReturnValue({ status: "rate_limit", userMessage: "Too many attempts" });
+    const { DomainError } = await import("../../../shared/supabase/errors.js");
+    mockThrowAuthError.mockImplementation((msg: string) => {
+      throw new DomainError("Too many attempts", "too_many_requests");
+    });
 
     const res = await app.inject({
       method: "POST",

@@ -44,6 +44,8 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
           return reply.unauthorized(msg);
         case "precondition_failed":
           return reply.preconditionFailed(msg);
+        case "too_many_requests":
+          return reply.tooManyRequests(msg);
         case "service_unavailable":
           return reply.serviceUnavailable(msg);
         case "internal":

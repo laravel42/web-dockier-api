@@ -1,29 +1,42 @@
 /**
- * Deploy pipeline executor.
+ * Deploy pipeline orchestrator.
  *
- * When a deployment is created, this module is called to execute the full
- * pipeline asynchronously:
- * clone → analyze → build → push → provision → post-deploy.
+ * Coordinates the full deployment lifecycle by delegating to focused stage modules:
+ *   pipeline-helpers  → logging, status updates, env parsing
+ *   pipeline-build    → Docker image construction (cache, local, CodeBuild)
+ *   pipeline-health   → post-deploy health check polling
  *
- * The pipeline runs in the background (fire-and-forget from the HTTP handler)
- * and updates the deployment record in the DB as it progresses.
+ * Pipeline stages:
+ *   1. Validate & fetch credentials
+ *   2. Clone repository
+ *   3. Load project env vars & deploy script
+ *   4. Analyze repo & generate Dockerfile
+ *   5. Build Docker image
+ *   6. Push image & provision infrastructure (via adapter)
+ *   7. Execute post-deploy script
+ *   8. Apply network rules
+ *   9. Health check & finalize
  */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
-import { createDeployLogger, BuildError } from "../../../lib/logging.js";
-import { patchDockerfile, toDetectedStack } from "../../../lib/repo-analyzer/index.js";
+import { createDeployLogger } from "../../../lib/logging.js";
+import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { getAdapter } from "./adapters/index.js";
 import type { AdapterContext } from "./adapters/types.js";
 import { createStreamingRunCmd } from "./run-cmd.js";
-import { pollUntil } from "./poll-until.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
-import { buildViaCodeBuild } from "./codebuild-builder.js";
-import { executePostDeployCommands } from "./post-deploy.js";
+import { executePostDeployScript } from "./post-deploy.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { ADAPTER_TO_SERVICE, type InfraMetadata } from "../types.js";
+import { revealEnv } from "../../projects/domain/env.js";
+
+import { ts, appendLog, updateStatus, parseEnvContent } from "./pipeline-helpers.js";
+import { buildImage } from "./pipeline-build.js";
+import { waitForAppReady } from "./pipeline-health.js";
+import { getDeploymentCurrentStatus, patchDeployment } from "./deployments.js";
 
 const db = supabaseAdmin;
 
@@ -45,91 +58,113 @@ export interface PipelineInput {
   templateId?: string;
   buildMethod?: string;
   registryUrl?: string;
-  envVars?: Array<{ name: string; value: string }>;
-  postDeployCommands?: Array<{ command: string; enabled: boolean; continueOnFailure?: boolean }>;
   services?: Array<{ type: string; name: string; mode: string }>;
   useRepoDockerfile?: boolean;
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────
+// ─── Project Context Loader ────────────────────────────────────────
 
-function ts(): string {
-  return new Date().toISOString().replace("T", " ").slice(0, 19);
+interface ProjectContext {
+  envVars: Array<{ name: string; value: string }>;
+  deployScript: string;
+  knownPlatform: string;
 }
 
-async function appendLog(deploymentId: string, line: string): Promise<void> {
-  const sanitized = line.replace(/\0/g, "");
-  const { data: current } = await db.from("deployments").select("logs").eq("id", deploymentId).maybeSingle();
-  const updatedLogs = (current?.logs || "") + sanitized + "\n";
-  await db.from("deployments").update({ logs: updatedLogs }).eq("id", deploymentId);
+async function loadProjectContext(
+  event: PipelineInput,
+  logger: ReturnType<typeof createDeployLogger>,
+): Promise<ProjectContext> {
+  let envVars: Array<{ name: string; value: string }> = [];
+  let deployScript = "";
+  let knownPlatform = "";
+
+  if (!event.projectId || !event.tenantId) {
+    await logger.info("No projectId/tenantId — skipping env/script fetch");
+    return { envVars, deployScript, knownPlatform };
+  }
+
+  // Load env vars
+  try {
+    const envResult = await revealEnv({ tenantId: event.tenantId, projectId: event.projectId });
+    if (envResult.exists && envResult.content) {
+      envVars = parseEnvContent(envResult.content);
+      await logger.info(`Loaded ${envVars.length} env vars from project settings`);
+    } else {
+      await logger.info("No environment file configured for this project");
+    }
+  } catch (envErr) {
+    const msg = envErr instanceof Error ? envErr.message : String(envErr);
+    await logger.warn(`Could not load project environment file: ${msg}`);
+  }
+
+  // Load deploy script and platform
+  try {
+    const { data: projectRow } = await db
+      .from("projects")
+      .select("settings,platform")
+      .eq("id", event.projectId)
+      .maybeSingle();
+    if (projectRow?.settings && typeof projectRow.settings === "object" && !Array.isArray(projectRow.settings)) {
+      deployScript = (projectRow.settings as Record<string, unknown>).deployScript as string ?? "";
+    }
+    if (projectRow?.platform) {
+      knownPlatform = projectRow.platform as string;
+    }
+    if (deployScript) {
+      await logger.info("Deploy script loaded from project settings");
+    }
+  } catch (settingsErr) {
+    obsLogger.warn({ err: settingsErr, projectId: event.projectId }, "[deploy] Failed to load project settings");
+  }
+
+  return { envVars, deployScript, knownPlatform };
 }
 
-async function updateStatus(deploymentId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
-  await db.from("deployments").update({ status, updated_at: new Date().toISOString(), ...extra }).eq("id", deploymentId);
-}
+// ─── Network Rules ─────────────────────────────────────────────────
 
-// ─── Health Check ──────────────────────────────────────────────────
+async function applyNetworkRulesIfNeeded(
+  event: PipelineInput,
+  deployStrategy: string,
+  logger: ReturnType<typeof createDeployLogger>,
+): Promise<void> {
+  if (!event.projectId || deployStrategy !== "vps") return;
 
-async function waitForAppReady(deploymentId: string, appUrl: string): Promise<boolean> {
-  if (!appUrl) return false;
-
-  await appendLog(deploymentId, `[${ts()}]`);
-  await appendLog(deploymentId, `[${ts()}] ── Health Check ──────────────────`);
-  await appendLog(deploymentId, `[${ts()}] ℹ Waiting for application to become reachable...`);
-
-  const result = await pollUntil({
-    check: async (attempt) => {
-      try {
-        const response = await fetch(appUrl, {
-          method: "GET",
-          signal: AbortSignal.timeout(10_000),
-          redirect: "follow",
-          headers: { "User-Agent": "Dockier-HealthCheck/1.0" },
-        });
-
-        if (response.ok) {
-          const body = await response.text();
-          const isNginxDefault = body.includes("Welcome to nginx") && body.includes("nginx.org");
-          if (isNginxDefault) {
-            await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: nginx default page (app still starting...)`);
-            return null;
-          }
-          await appendLog(deploymentId, `[${ts()}] ✓ Health check passed — application is live`);
-          return true;
-        }
-        await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: HTTP ${response.status} (retrying...)`);
-      } catch {
-        await appendLog(deploymentId, `[${ts()}] ℹ Health check #${attempt}: not reachable yet (retrying...)`);
+  try {
+    const { applyNetworkRules } = await import("../../network/domain/applier.js");
+    const networkResult = await applyNetworkRules({
+      tenantId: event.tenantId,
+      projectId: event.projectId,
+    });
+    if (networkResult.success) {
+      if (networkResult.generatedConfig) {
+        await logger.info("Network rules applied to nginx configuration");
       }
-      return null;
-    },
-    intervalMs: 15_000,
-    timeoutMs: 150_000,
-    onTimeout: async () => {
-      await appendLog(deploymentId, `[${ts()}] ⚠ Health check timed out after 150s — the app may still need a moment`);
-    },
-  });
-
-  return result.success;
+    } else {
+      await logger.warn(`Could not apply network rules: ${networkResult.message}`);
+    }
+  } catch (networkErr) {
+    const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
+    await logger.warn(`Could not apply network rules: ${msg}`);
+  }
 }
 
 // ─── Main Pipeline ─────────────────────────────────────────────────
 
 /**
  * Execute the full deployment pipeline.
- * This runs asynchronously — the caller should fire-and-forget.
+ * This runs asynchronously via the pg-boss job queue.
  */
 export async function executePipeline(event: PipelineInput): Promise<void> {
   const { deploymentId } = event;
 
   // Idempotency guard
-  const { data: current } = await db.from("deployments").select("status").eq("id", deploymentId).maybeSingle();
-  if (current?.status === "building" || current?.status === "deploying") return;
+  const currentStatus = await getDeploymentCurrentStatus(deploymentId);
+  if (currentStatus === "building" || currentStatus === "deploying") return;
 
   const repoName = (event.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
   const shortId = deploymentId.slice(0, 8);
 
-  // Fetch provider credentials
+  // 1. Fetch provider credentials
   const { data: providerRow } = await db
     .from("server_providers")
     .select("provider, region, api_key, api_secret")
@@ -149,19 +184,17 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     if (scriptRegion) region = scriptRegion;
   }
 
-  // ── Template deploy path ──
+  // Template deploy path (early exit)
   if (event.templateId) {
     const templateConfig = getTemplateConfig(event.templateId);
     if (templateConfig) {
-      // Template deploys are handled separately (skip clone/analyze, use Docker image directly)
-      // TODO: wire handleTemplateDeploy when needed
       await appendLog(deploymentId, `[${ts()}] ℹ Template deploy: ${templateConfig.name} (not yet wired in Fastify pipeline)`);
       await updateStatus(deploymentId, "failed");
       return;
     }
   }
 
-  // ── Standard deploy path ──
+  // Standard deploy path
   const runCmd = createStreamingRunCmd(deploymentId, appendLog, ts);
 
   try {
@@ -171,7 +204,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await appendLog(deploymentId, `[${ts()}] ℹ Strategy: ${event.deployStrategy || "managed (default)"}`);
     await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
 
-    // 1. Fetch git connection for clone
+    // 2. Clone repository
     const { data: connRow } = await db
       .from("git_connections")
       .select("provider, personal_token, endpoint")
@@ -179,7 +212,6 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       .maybeSingle();
     if (!connRow) throw new Error("Git connection not found");
 
-    // 2. Clone repository
     const logger = createDeployLogger(appendLog, deploymentId);
     const { repoDir, workDir, commitHash } = await cloneRepo({
       git: { provider: connRow.provider, token: connRow.personal_token, repo: event.repo, endpoint: connRow.endpoint || "" },
@@ -188,98 +220,52 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       logger,
     });
 
-    await db.from("deployments").update({ commit_hash: commitHash }).eq("id", deploymentId);
+    await patchDeployment(deploymentId, { commit_hash: commitHash });
 
-    // 3. Analyze and generate Dockerfile
+    // 3. Load project context (env vars, deploy script, platform)
+    const projectCtx = await loadProjectContext(event, logger);
+
+    // 4. Analyze and generate Dockerfile
     const { repoConfig } = await analyzeAndGenerate({
       repoDir,
       logger,
       skipExistingDockerfile: event.useRepoDockerfile === true,
+      knownPlatform: projectCtx.knownPlatform,
     });
 
-    // 4. Build Docker image (local or remote via CodeBuild)
+    // 5. Build Docker image
     const isStaticDeploy = event.deployStrategy === "static";
-    const imageName = `${repoName}:${shortId}`;
-    let actualImage = imageName;
-    let skippedBuild = isStaticDeploy;
+    let actualImage: string;
+    let skippedBuild: boolean;
 
-    if (!isStaticDeploy) {
-      // Check for cached image
-      const { data: cachedRow } = await db
-        .from("deployments")
-        .select("docker_image")
-        .eq("repo", event.repo)
-        .eq("branch", event.branch)
-        .eq("commit_hash", commitHash)
-        .neq("docker_image", "")
-        .neq("id", deploymentId)
-        .not("status", "in", '("destroyed","failed")')
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (cachedRow?.docker_image) {
-        try {
-          const { execSync } = await import("node:child_process");
-          execSync(`docker image inspect ${JSON.stringify(cachedRow.docker_image)}`, { timeout: 10_000, stdio: "pipe" });
-          actualImage = cachedRow.docker_image;
-          skippedBuild = true;
-          await logger.info(`Reusing cached image: ${actualImage}`);
-        } catch { /* not cached locally */ }
-      }
-
-      if (!skippedBuild && event.buildMethod === "codebuild") {
-        // Remote build via AWS CodeBuild
-        const result = await buildViaCodeBuild({
-          deploymentId,
-          repoName,
-          shortId,
-          region,
-          providerRow: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
-          repoDir,
-          workDir,
-          commitHash,
-          repoConfig,
-          deployStrategy: event.deployStrategy,
-          repo: event.repo,
-          branch: event.branch,
-          envVars: event.envVars,
-          techStack: event.techStack,
-          appendLog,
-        });
-        actualImage = result.remoteImageUri;
-      } else if (!skippedBuild) {
-        await logger.section("Build Docker Image");
-        const { readFile, writeFile } = await import("node:fs/promises");
-        const { join } = await import("node:path");
-        const MAX_BUILD_ATTEMPTS = 3;
-
-        for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
-          const buildArgs = ["build", "--platform", "linux/amd64", "-t", imageName];
-          if (attempt > 1) buildArgs.push("--no-cache");
-          buildArgs.push(".");
-          const buildResult = await runCmd("docker", buildArgs, { cwd: repoDir });
-          if (buildResult.code === 0) {
-            await logger.success(`Docker image built: ${imageName}`);
-            break;
-          }
-          if (attempt < MAX_BUILD_ATTEMPTS) {
-            const currentDf = await readFile(join(repoDir, "Dockerfile"), "utf-8");
-            const fix = patchDockerfile(buildResult.output, currentDf);
-            if (fix) {
-              await logger.warn(`Build failed — auto-fixing: ${fix.description}`);
-              await writeFile(join(repoDir, "Dockerfile"), fix.patched, "utf-8");
-              continue;
-            }
-          }
-          throw new BuildError(`docker build failed (exit code ${buildResult.code})`, "docker-build");
-        }
-      }
-
-      await db.from("deployments").update({ docker_image: actualImage }).eq("id", deploymentId);
+    if (isStaticDeploy) {
+      actualImage = `${repoName}:${shortId}`;
+      skippedBuild = true;
+    } else {
+      const buildResult = await buildImage({
+        deploymentId,
+        repoName,
+        shortId,
+        region,
+        repoDir,
+        workDir,
+        commitHash,
+        repoConfig,
+        repo: event.repo,
+        branch: event.branch,
+        deployStrategy: event.deployStrategy,
+        buildMethod: event.buildMethod,
+        providerRow: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
+        projectEnvVars: projectCtx.envVars,
+        techStack: event.techStack,
+        runCmd,
+        logger,
+      });
+      actualImage = buildResult.actualImage;
+      skippedBuild = buildResult.skippedBuild;
     }
 
-    // 5. Dispatch to adapter (push + provision + post-deploy)
+    // 6. Push image & provision infrastructure (via adapter)
     const deployStrategy = event.deployStrategy || "managed";
     const adapter = getAdapter(provider, deployStrategy);
     await logger.info(`Using adapter: ${adapter.id}`);
@@ -312,8 +298,6 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
         templateId: event.templateId,
         buildMethod: event.buildMethod,
         registryUrl: event.registryUrl,
-        envVars: event.envVars,
-        postDeployCommands: event.postDeployCommands,
         services: event.services,
       },
       detectedStack,
@@ -326,7 +310,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     };
 
     // Inject environment variables
-    await adapter.injectEnvVars(adapterCtx, event.envVars || []);
+    await adapter.injectEnvVars(adapterCtx, projectCtx.envVars);
 
     // Push image to provider registry
     await updateStatus(deploymentId, "deploying");
@@ -344,70 +328,43 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     const imageUri = pushResult.skipped ? "" : pushResult.remoteImageUri;
     const provision = await adapter.provisionInfrastructure(adapterCtx, imageUri || actualImage);
 
-    // Run post-deploy steps
+    // Run adapter post-deploy steps
     await adapter.runPostDeploy(adapterCtx, provision);
 
-    // Container name derivation (used by post-deploy commands and infra metadata)
+    // 7. Execute deploy script (user-defined post-deploy commands)
     const containerName = provider === "aws"
       ? repoName
       : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 
-    // Execute user-defined post-deploy commands
-    if (deployStrategy !== "static") {
-      await executePostDeployCommands(
+    if (deployStrategy !== "static" && projectCtx.deployScript.trim()) {
+      await executePostDeployScript(
         {
           containerName,
           region,
           provider,
           techStack: event.techStack || [],
           services: event.services || [],
-          envVars: event.envVars || [],
+          envVars: projectCtx.envVars,
           credentials: { apiKey: adapterCtx.providerCredentials.apiKey, apiSecret: adapterCtx.providerCredentials.apiSecret },
           instanceId: provision.outputs.InstanceId || "",
           serverIp: provision.serverIp || "",
           deployKeyPath: adapterCtx.state.deployKeyPath || "",
           workDir,
         },
-        event.postDeployCommands || [],
+        projectCtx.deployScript,
         logger,
         runCmd,
         deployStrategy,
       );
     }
 
-    // Apply network rules (security + redirects) if the project has any configured
-    if (event.projectId && deployStrategy === "vps") {
-      try {
-        const { applyNetworkRules } = await import("../../network/domain/applier.js");
-        const networkResult = await applyNetworkRules({
-          tenantId: event.tenantId,
-          projectId: event.projectId,
-        });
-        if (networkResult.success) {
-          if (networkResult.generatedConfig) {
-            await logger.info("Network rules applied to nginx configuration");
-          }
-        } else {
-          await logger.warn(`Could not apply network rules: ${networkResult.message}`);
-        }
-      } catch (networkErr) {
-        // Non-fatal: log and continue
-        const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
-        await logger.warn(`Could not apply network rules: ${msg}`);
-      }
-    }
+    // 8. Apply network rules
+    await applyNetworkRulesIfNeeded(event, deployStrategy, logger);
 
-    // Health check and finalize
+    // 9. Finalize: health check, status update, notification
     const finalUrl = provision.appUrl || "";
-    await logger.section("Complete");
-    await logger.success(isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`);
-    await logger.success(`Infrastructure provisioned via ${adapter.id}`);
 
-    if (adapterCtx.state.machineTypeFallback) {
-      await logger.warn(`Instance type was changed from ${adapterCtx.state.originalMachineType} to ${adapterCtx.state.machineTypeFallback} due to capacity constraints in ${region}.`);
-    }
-
-    // Build infrastructure metadata for downstream use (commands, scaling, etc.)
+    // Build infra metadata
     const service = ADAPTER_TO_SERVICE[adapter.id] || adapter.id;
     const infra: InfraMetadata = {
       provider: provider as InfraMetadata["provider"],
@@ -427,6 +384,14 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       infra.cloudRunService = containerName;
     }
 
+    await logger.section("Complete");
+    await logger.success(isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`);
+    await logger.success(`Infrastructure provisioned via ${adapter.id}`);
+
+    if (adapterCtx.state.machineTypeFallback) {
+      await logger.warn(`Instance type was changed from ${adapterCtx.state.originalMachineType} to ${adapterCtx.state.machineTypeFallback} due to capacity constraints in ${region}.`);
+    }
+
     if (finalUrl) {
       await waitForAppReady(deploymentId, finalUrl);
       await logger.success(`Application URL: ${finalUrl}`);
@@ -436,6 +401,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       await updateStatus(deploymentId, "success", { infra });
     }
 
+    // Non-blocking notification
     const deployMessage = finalUrl
       ? `Deployment of ${event.repo} (${event.branch}) succeeded. App URL: ${finalUrl}`
       : `Deployment of ${event.repo} (${event.branch}) succeeded.`;

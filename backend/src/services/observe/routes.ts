@@ -182,6 +182,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         querystring: z.object({
           limit: z.coerce.number().min(1).max(100).default(50),
           offset: z.coerce.number().min(0).default(0),
+          search: z.string().optional(),
         }),
         response: {
           200: z.object({
@@ -198,6 +199,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         limit: request.query.limit,
         offset: request.query.offset,
+        search: request.query.search,
       });
     },
   );

@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
-import { deploymentSchema, deploymentStatusSchema, envVarSchema, postDeployCommandSchema, providerSchema, serviceEntrySchema } from "./schemas.js";
+import { deploymentSchema, deploymentStatusSchema, providerSchema, serviceEntrySchema } from "./schemas.js";
 import type { ServiceEntry } from "./types.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domain/planner.js";
@@ -14,6 +14,7 @@ import { resolveDeployTemplate } from "./domain/templates.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
+import { DomainError } from "../../shared/supabase/errors.js";
 import {
   createProvider,
   listProviders,
@@ -238,9 +239,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
           useRepoDockerfile: z.boolean().optional(),
           skipPipeline: z.boolean().optional(),
           templateId: z.string().optional(),
-          envVars: z.array(envVarSchema).optional(),
           services: z.array(serviceEntrySchema).optional(),
-          postDeployCommands: z.array(postDeployCommandSchema).max(20).optional(),
         }),
         response: { 200: deploymentSchema },
       },
@@ -263,9 +262,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         useRepoDockerfile: request.body.useRepoDockerfile,
         skipPipeline: request.body.skipPipeline,
         templateId: request.body.templateId,
-        envVars: request.body.envVars,
         services: request.body.services as ServiceEntry[] | undefined,
-        postDeployCommands: request.body.postDeployCommands,
       });
     },
   );
@@ -360,7 +357,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
       const result = await destroyDeployment(db, request.params.deploymentId);
-      if (!result.success) throw app.httpErrors.badRequest(result.message);
+      if (!result.success) throw new DomainError(result.message, "bad_request");
       return { success: true, message: result.message };
     },
   );

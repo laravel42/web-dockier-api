@@ -51,6 +51,8 @@ export interface AnalyzeOptions {
   logger: ContextualLogger;
   /** If true, skip Dockerfile generation when one already exists */
   skipExistingDockerfile?: boolean;
+  /** User-selected platform from project creation (e.g. "laravel", "nextjs"). Overrides auto-detection of framework. */
+  knownPlatform?: string;
 }
 
 export interface AnalyzeResult {
@@ -113,6 +115,40 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
   return { repoDir, workDir, commitHash };
 }
 
+// ─── Platform Override ──────────────────────────────────────────────
+
+/** Map user-selected platform IDs to runtime/framework values used by the analyzer */
+const PLATFORM_MAP: Record<string, { runtime: "php" | "node" | "python" | "go" | "unknown"; framework: string }> = {
+  laravel: { runtime: "php", framework: "laravel" },
+  symfony: { runtime: "php", framework: "symfony" },
+  wordpress: { runtime: "php", framework: "wordpress" },
+  statamic: { runtime: "php", framework: "laravel" },
+  php: { runtime: "php", framework: "" },
+  nextjs: { runtime: "node", framework: "next" },
+  nuxtjs: { runtime: "node", framework: "nuxt" },
+  react: { runtime: "node", framework: "react" },
+  vuejs: { runtime: "node", framework: "vue" },
+  remix: { runtime: "node", framework: "remix" },
+  svelte: { runtime: "node", framework: "svelte" },
+  nodejs: { runtime: "node", framework: "" },
+  django: { runtime: "python", framework: "django" },
+  flask: { runtime: "python", framework: "flask" },
+  astro: { runtime: "node", framework: "astro" },
+  html: { runtime: "node", framework: "" },
+};
+
+/**
+ * Apply the user-selected platform to the detected config.
+ * Overrides runtime and framework but preserves everything else
+ * (extensions, versions, features, etc.) that the analyzer found.
+ */
+function applyKnownPlatform(config: RepoConfig, platform: string): void {
+  const mapped = PLATFORM_MAP[platform];
+  if (!mapped) return;
+  config.runtime = mapped.runtime;
+  config.framework = mapped.framework;
+}
+
 // ─── Analyze & Generate Dockerfile ─────────────────────────────────
 
 /**
@@ -126,7 +162,7 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
  * - .dockerignore generation
  */
 export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeResult> {
-  const { repoDir, logger, skipExistingDockerfile } = opts;
+  const { repoDir, logger, skipExistingDockerfile, knownPlatform } = opts;
   const { existsSync } = await import("node:fs");
   const { readFile, writeFile, copyFile } = await import("node:fs/promises");
 
@@ -134,6 +170,12 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
 
   // Detect tech stack
   const repoConfig = analyzeRepoConfig(repoDir);
+
+  // Override framework/runtime if user explicitly selected a platform
+  if (knownPlatform && knownPlatform !== "other") {
+    applyKnownPlatform(repoConfig, knownPlatform);
+  }
+
   for (const line of configSummary(repoConfig)) {
     await logger.info(line);
   }

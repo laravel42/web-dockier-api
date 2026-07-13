@@ -1,15 +1,18 @@
 export type ProjectSourceType = "repository" | "template";
 
-export interface PostDeployCommand {
-  command: string;
-  enabled: boolean;
-  continueOnFailure: boolean;
-  timeout?: number;
+export interface ProjectConfig {
+  overviewBlocks?: Record<string, unknown>[];
 }
 
-export interface ProjectConfig {
-  postDeployCommands?: PostDeployCommand[];
-  overviewBlocks?: Record<string, unknown>[];
+export interface ProjectSettings {
+  color?: string;
+  avatar?: string;
+  notes?: string;
+  frameworkVersion?: string;
+  rootDirectory?: string;
+  webDirectory?: string;
+  deployScript?: string;
+  [key: string]: unknown;
 }
 
 export interface Project {
@@ -22,6 +25,7 @@ export interface Project {
   sourceType?: ProjectSourceType;
   template?: string;
   config?: ProjectConfig;
+  settings?: ProjectSettings;
   lastCommitHash?: string;
   createdAt: string;
 }

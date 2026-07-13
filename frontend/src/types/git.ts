@@ -127,7 +127,6 @@ export interface RepoAiAnalysis {
   needsQueueWorker: boolean;
   needsWebsockets: boolean;
   envVars: string[];
-  postDeployCommands: string[];
   nginxConfig: "php-fpm" | "reverse-proxy" | "static";
   summary: string;
   description?: string;

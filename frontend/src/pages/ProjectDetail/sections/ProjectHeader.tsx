@@ -3,56 +3,28 @@ import type { Project } from "../../../types";
 import { btnPrimary, typePageDesc, typePageTitle } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import PencilIcon from "../../../components/icons/outlined/PencilIcon";
-import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon";
-import DownloadIcon from "../../../components/icons/outlined/DownloadIcon";
-import TrashIcon from "../../../components/icons/outlined/TrashIcon";
-import BranchSelector from "./BranchSelector";
+import ProjectAvatar from "../../../components/ProjectAvatar";
 
 interface Props {
   project: Project;
-  headerMenuOpen: boolean;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
   onDeploy: () => void;
-  onPull: () => void;
-  onDelete: () => void;
   onNameSave: (name: string) => Promise<void>;
   nameSaving?: boolean;
   nameError?: string;
-  branchList: string[];
-  branchLoading: boolean;
-  branchSearch: string;
-  onBranchSearchChange: (value: string) => void;
-  onLoadBranches: () => void;
-  onSwitchBranch: (branch: string) => void;
 }
 
 export default function ProjectHeader({
   project,
-  headerMenuOpen,
-  onToggleMenu,
-  onCloseMenu,
   onDeploy,
-  onPull,
-  onDelete,
   onNameSave,
   nameSaving = false,
   nameError = "",
-  branchList,
-  branchLoading,
-  branchSearch,
-  onBranchSearchChange,
-  onLoadBranches,
-  onSwitchBranch,
 }: Props) {
-  const isTemplate = project.sourceType === "template";
-  const hasGitActions = !isTemplate && !!project.connectionId;
   const { has, isOwner } = usePermissions();
   const canDeploy = has("deploy:create");
-  const canDelete = has("project:delete");
   const canEditName = isOwner || has("project:manage");
+  const isTemplate = project.sourceType === "template";
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(project.name);
@@ -99,9 +71,7 @@ export default function ProjectHeader({
   return (
     <div className="flex items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
-          <FolderIcon className="size-6 " />
-        </div>
+        <ProjectAvatar project={project} size="lg" />
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {editing ? (
@@ -155,62 +125,11 @@ export default function ProjectHeader({
         </div>
       </div>
       <div className="relative flex shrink-0 items-center gap-4">
-        {hasGitActions && (
-          <BranchSelector
-            currentBranch={project.branch}
-            branchList={branchList}
-            branchLoading={branchLoading}
-            branchSearch={branchSearch}
-            onSearchChange={onBranchSearchChange}
-            onOpen={onLoadBranches}
-            onSwitch={onSwitchBranch}
-          />
-        )}
         {canDeploy && (
           <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
             <RocketIcon className="size-4 " />
             Deploy
           </button>
-        )}
-        <button
-          type="button"
-          onClick={onToggleMenu}
-          className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-secondary-50 hover:bg-secondary-100 transition-colors text-sm font-medium text-text"
-        >
-          Actions
-          <ChevronDownIcon className={`size-4  transition-transform ${headerMenuOpen ? "rotate-180" : ""}`} />
-        </button>
-        {headerMenuOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={onCloseMenu} />
-            <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg bg-card shadow-lg border border-border py-1">
-              {hasGitActions && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => { onCloseMenu(); onPull(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-secondary-50 transition-colors"
-                  >
-                    <DownloadIcon className="size-4  text-text-muted" />
-                    Pull from origin
-                  </button>
-                </>
-              )}
-              {canDelete && (
-                <>
-                  {hasGitActions && <div className="border-t border-border my-1" />}
-                  <button
-                    type="button"
-                    onClick={() => { onCloseMenu(); onDelete(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-danger-500 hover:bg-danger-500/5 transition-colors"
-                  >
-                    <TrashIcon className="size-4 " />
-                    Delete project
-                  </button>
-                </>
-              )}
-            </div>
-          </>
         )}
       </div>
     </div>

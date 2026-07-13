@@ -349,6 +349,7 @@ const POSSIBLE_OUTPUT_DIRS = [
   ".next/out",      // Next.js (older)
   "output",         // Generic
   "public",         // Hugo, some configs
+  "builds",         // Custom build configs
 ];
 
 /**
@@ -364,6 +365,22 @@ export function findOutputDir(repoDir: string): string {
     const candidate = join(repoDir, dir);
     if (existsSync(join(candidate, "index.html"))) {
       return candidate;
+    }
+  }
+
+  // Check one level deeper in each possible dir (e.g. builds/v1.0.0/index.html)
+  for (const dir of POSSIBLE_OUTPUT_DIRS) {
+    const parentDir = join(repoDir, dir);
+    if (existsSync(parentDir) && statSync(parentDir).isDirectory()) {
+      try {
+        const entries = readdirSync(parentDir);
+        for (const entry of entries) {
+          const candidate = join(parentDir, entry);
+          if (statSync(candidate).isDirectory() && existsSync(join(candidate, "index.html"))) {
+            return candidate;
+          }
+        }
+      } catch { /* permission or read error */ }
     }
   }
 

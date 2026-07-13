@@ -21,6 +21,6 @@ export const userWithRoleSchema = userSchema.extend({
 export const listUsersResponseSchema = z.object({
   users: z.array(userWithRoleSchema),
   total: z.number().int().nonnegative(),
-  page: z.number().int().positive(),
   limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
 });

@@ -100,15 +100,14 @@ export async function getUser(userId: string, tenantId: string) {
 
 export interface ListUsersParams {
   tenantId: string;
-  page: number;
   limit: number;
+  offset: number;
   search?: string;
 }
 
 export async function listUsers(params: ListUsersParams) {
-  const { tenantId, page, limit, search } = params;
+  const { tenantId, limit, offset, search } = params;
 
-  const offset = (page - 1) * limit;
   let query = supabaseAdmin
     .from("users")
     .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at", { count: "exact" })
@@ -126,7 +125,7 @@ export async function listUsers(params: ListUsersParams) {
 
   // Fetch membership + role info
   const userIds = (data ?? []).map((u) => u.id);
-  if (userIds.length === 0) return { users: [], total: 0, page, limit };
+  if (userIds.length === 0) return { users: [], total: 0, limit, offset };
 
   const { data: memberships, error: membershipsError } = await supabaseAdmin
     .from("organization_memberships")
@@ -153,8 +152,8 @@ export async function listUsers(params: ListUsersParams) {
       };
     }),
     total: count ?? 0,
-    page,
     limit,
+    offset,
   };
 }
 

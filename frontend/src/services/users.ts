@@ -1,10 +1,10 @@
 import { request } from "./request";
 
 export const usersApi = {
-  list: (params?: { page?: number; limit?: number; search?: string }) => {
+  list: (params?: { limit?: number; offset?: number; search?: string }) => {
     const qs = new URLSearchParams();
-    if (params?.page) qs.set("page", String(params.page));
     if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
     if (params?.search) qs.set("search", params.search);
     const q = qs.toString();
     return request<{

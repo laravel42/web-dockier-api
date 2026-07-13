@@ -27,7 +27,7 @@ export interface PMIntegrationCredentials {
 }
 
 function parseCredentials(encrypted: string): PMIntegrationCredentials {
-  const payload = decryptJson(encrypted);
+  const payload = decryptJson(encrypted) as Record<string, unknown>;
   const config = payload.config;
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     throw new IntegrationsError("Invalid integration credentials", "internal");

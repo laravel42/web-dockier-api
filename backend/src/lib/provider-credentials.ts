@@ -1,13 +1,12 @@
 /**
  * Unified AWS credential resolution.
  *
- * Single source of truth for fetching AWS credentials from the
- * server_providers table. Used by deploy pipeline, image-builder,
- * and codebuild-builder.
+ * Thin wrapper around the deploy domain's getProviderCredentials() that
+ * returns null instead of throwing — used by image-builder and other
+ * services that want graceful degradation on missing/invalid providers.
  */
 
-import { supabaseAdmin } from "../shared/supabase/client.js";
-import { logger } from "../shared/logger.js";
+import { getProviderCredentials } from "../services/deploy/domain/providers.js";
 
 export interface ResolvedCredentials {
   accessKeyId: string;
@@ -16,30 +15,28 @@ export interface ResolvedCredentials {
 }
 
 /**
- * Resolve AWS credentials for a given providerId by querying the server_providers table.
+ * Resolve AWS credentials for a given providerId.
  *
  * Returns null if the providerId is empty, the provider is not found,
  * or the credentials are incomplete.
+ *
+ * Delegates to the deploy domain's getProviderCredentials() — single
+ * source of truth for server_providers table access.
  */
 export async function resolveAwsCredentials(providerId: string): Promise<ResolvedCredentials | null> {
   if (!providerId) return null;
 
-  const { data, error } = await supabaseAdmin
-    .from("server_providers")
-    .select("api_key,api_secret,region")
-    .eq("id", providerId)
-    .maybeSingle();
+  try {
+    const creds = await getProviderCredentials(providerId);
+    if (!creds.apiKey || !creds.apiSecret) return null;
 
-  if (error) {
-    logger.warn(`Failed to fetch provider credentials for ${providerId}: ${error.message}`);
+    return {
+      accessKeyId: creds.apiKey,
+      secretAccessKey: creds.apiSecret,
+      region: creds.region || "us-east-1",
+    };
+  } catch {
+    // Provider not found or DB error — return null for graceful degradation
     return null;
   }
-
-  if (!data?.api_key || !data?.api_secret) return null;
-
-  return {
-    accessKeyId: data.api_key,
-    secretAccessKey: data.api_secret,
-    region: data.region || "us-east-1",
-  };
 }

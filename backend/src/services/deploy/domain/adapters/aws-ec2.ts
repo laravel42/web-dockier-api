@@ -119,7 +119,7 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
 
     // 4. Derive SelfHostedServices from event context
     const selfHostedServices: string[] = [];
-    const hasDbEnvVars = (event.envVars || []).some((v) =>
+    const hasDbEnvVars = (ctx.state.pendingEnvVars || []).some((v) =>
       ["DB_CONNECTION", "DB_DATABASE", "DB_HOST"].includes(v.name),
     );
     if (event.techStack?.some((t) => t.toLowerCase() === "laravel") || hasDbEnvVars) {

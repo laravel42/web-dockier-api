@@ -1,27 +1,71 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { env } from "./config.js";
 
 const ALGORITHM = "aes-256-gcm";
-const KEY = scryptSync(env.JWT_SECRET, "pm-integrations", 32);
 
-export function encryptJson(data: Record<string, unknown>): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(ALGORITHM, KEY, iv);
-  const json = JSON.stringify(data);
-  const encrypted = Buffer.concat([cipher.update(json, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+function getEncryptionKey(): Buffer {
+  const key = env.ENV_ENCRYPTION_KEY;
+  if (!key) throw new Error("ENV_ENCRYPTION_KEY is not configured. Add a 64-char hex key to your .env file and restart the server.");
+  // Only accept 64-char hex string (32 bytes of entropy)
+  if (key.length === 64 && /^[0-9a-f]+$/i.test(key)) return Buffer.from(key, "hex");
+  throw new Error("ENV_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes). Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
 }
 
-export function decryptJson(encrypted: string): Record<string, unknown> {
-  const parts = encrypted.split(":");
-  if (parts.length !== 3) throw new Error("Invalid encrypted payload");
-  const [ivB64, tagB64, dataB64] = parts;
-  const iv = Buffer.from(ivB64, "base64");
-  const tag = Buffer.from(tagB64, "base64");
-  const data = Buffer.from(dataB64, "base64");
-  const decipher = createDecipheriv(ALGORITHM, KEY, iv);
-  decipher.setAuthTag(tag);
-  const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
-  return JSON.parse(decrypted.toString("utf8")) as Record<string, unknown>;
+export interface EncryptedPayload {
+  encrypted: string; // base64
+  iv: string;        // base64
+  authTag: string;   // base64
+}
+
+export function encrypt(plaintext: string): EncryptedPayload {
+  const key = getEncryptionKey();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+
+  let encrypted = cipher.update(plaintext, "utf8", "base64");
+  encrypted += cipher.final("base64");
+  const authTag = cipher.getAuthTag();
+
+  return {
+    encrypted,
+    iv: iv.toString("base64"),
+    authTag: authTag.toString("base64"),
+  };
+}
+
+export function decrypt(payload: EncryptedPayload): string {
+  const key = getEncryptionKey();
+  const iv = Buffer.from(payload.iv, "base64");
+  const authTag = Buffer.from(payload.authTag, "base64");
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(payload.encrypted, "base64", "utf8");
+  decrypted += decipher.final("utf8");
+  return decrypted;
+}
+
+/**
+ * Encrypt a JSON-serializable value into a single opaque string.
+ * Format: base64(iv):base64(authTag):base64(ciphertext)
+ */
+export function encryptJson(data: unknown): string {
+  const plaintext = JSON.stringify(data);
+  const { encrypted, iv, authTag } = encrypt(plaintext);
+  return `${iv}:${authTag}:${encrypted}`;
+}
+
+/**
+ * Decrypt a string produced by encryptJson back into the original value.
+ */
+export function decryptJson(encoded: string): unknown {
+  const firstColon = encoded.indexOf(":");
+  const secondColon = encoded.indexOf(":", firstColon + 1);
+  if (firstColon === -1 || secondColon === -1) throw new Error("Invalid encrypted payload format");
+  const iv = encoded.slice(0, firstColon);
+  const authTag = encoded.slice(firstColon + 1, secondColon);
+  const encrypted = encoded.slice(secondColon + 1);
+  if (!iv || !authTag || !encrypted) throw new Error("Invalid encrypted payload format");
+  const plaintext = decrypt({ encrypted, iv, authTag });
+  return JSON.parse(plaintext);
 }

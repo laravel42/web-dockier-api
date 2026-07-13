@@ -9,33 +9,21 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
-  TEST_JWT_SECRET,
   TEST_TENANT_ID,
   TEST_PROVIDER_ID,
   TEST_DEPLOYMENT_ID,
   TEST_GIT_CONNECTION_ID,
   authHeader,
   makeProviderRow,
-  makeDeploymentRow,
-  ADMIN_MEMBERSHIP,
-  ADMIN_ROLE,
+  createTestEnv,
+  setupPermissionMocks as setupPerms,
 } from "../../../shared/__tests__/test-helpers.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 
 // ─── Mocks ─────────────────────────────────────────────────────────
 
 vi.mock("../../../shared/config.js", () => ({
-  env: {
-    NODE_ENV: "test",
-    PORT: 4000,
-    SERVICE_NAME: "gateway",
-    SUPABASE_URL: "https://test.supabase.co",
-    SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_key_minimum_length",
-    SUPABASE_SECRET_KEY: "sb_secret_test_key_minimum_length_value",
-    JWT_SECRET: TEST_JWT_SECRET,
-    CORS_ORIGIN: "*",
-    WEBHOOK_SECRET: "test-webhook-secret-for-testing",
-  },
+  env: createTestEnv({ WEBHOOK_SECRET: "test-webhook-secret-for-testing" }),
 }));
 
 // Mock Supabase client
@@ -130,42 +118,9 @@ function setupPermissionMocks(opts: {
   role?: Record<string, unknown> | null;
   permissions?: string[];
 } = {}) {
-  const membership = opts.membership ?? ADMIN_MEMBERSHIP;
-  const role = opts.role ?? ADMIN_ROLE;
-  const permissions = opts.permissions ?? Object.values(PERMISSIONS);
-
-  mockFrom.mockImplementation((table: string) => {
-    const chain = {
-      select: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      is: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: null, error: null }),
-      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    };
-
-    if (table === "organization_memberships") {
-      chain.maybeSingle.mockResolvedValue({ data: membership, error: null });
-      return chain;
-    }
-    if (table === "roles") {
-      chain.maybeSingle.mockResolvedValue({ data: role, error: null });
-      return chain;
-    }
-    if (table === "role_permissions") {
-      return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({
-            data: permissions.map((p) => ({ permission_id: p })),
-            error: null,
-          }),
-        }),
-      };
-    }
-    // Default for other tables (e.g. deployments in webhook route)
-    return chain;
+  setupPerms(mockFrom, {
+    ...opts,
+    permissions: opts.permissions ?? Object.values(PERMISSIONS),
   });
 }
 
