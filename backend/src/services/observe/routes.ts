@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
 import {
   heartbeatSchema,
   heartbeatFrequencySchema,
@@ -33,7 +33,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
       schema: {
         tags: ["observe"],
         summary: "List heartbeats for a project",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
           200: z.object({ heartbeats: z.array(heartbeatSchema) }),
         },
@@ -55,7 +55,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
       schema: {
         tags: ["observe"],
         summary: "Create a heartbeat monitor",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         body: z.object({
           name: z.string().min(1).max(100),
           frequency: heartbeatFrequencySchema,
@@ -84,7 +84,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         tags: ["observe"],
         summary: "Delete a heartbeat monitor",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           heartbeatId: z.uuid(),
         }),
         response: { 200: successResponseSchema },
@@ -128,7 +128,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         tags: ["observe"],
         summary: "Get log content",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           logType: logTypeSchema,
         }),
         response: { 200: logEntrySchema },
@@ -152,7 +152,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         tags: ["observe"],
         summary: "Clear log contents",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           logType: logTypeSchema,
         }),
         response: { 200: successResponseSchema },
@@ -178,10 +178,9 @@ export async function registerObserveRoutes(app: FastifyInstance) {
       schema: {
         tags: ["observe"],
         summary: "List project activity",
-        params: z.object({ projectId: z.string().min(1) }),
-        querystring: z.object({
-          limit: z.coerce.number().min(1).max(100).default(50),
-          offset: z.coerce.number().min(0).default(0),
+        params: z.object({ projectId: z.uuid() }),
+        querystring: paginationQuerySchema.extend({
+          limit: z.coerce.number().int().min(1).max(100).default(50),
           search: z.string().optional(),
         }),
         response: {

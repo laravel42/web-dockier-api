@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
 import { commandSchema } from "./schemas.js";
 import {
   runCommand,
@@ -22,7 +22,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["commands"],
         summary: "Run a command on a project",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         body: z.object({
           command: z.string().min(1).max(2000),
         }),
@@ -47,11 +47,8 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["commands"],
         summary: "List commands for a project",
-        params: z.object({ projectId: z.string().min(1) }),
-        querystring: z.object({
-          limit: z.coerce.number().min(1).max(100).default(20),
-          offset: z.coerce.number().min(0).default(0),
-        }),
+        params: z.object({ projectId: z.uuid() }),
+        querystring: paginationQuerySchema,
         response: {
           200: z.object({
             commands: z.array(commandSchema),
@@ -79,7 +76,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
         tags: ["commands"],
         summary: "Get command details",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           commandId: z.uuid(),
         }),
         response: { 200: commandSchema },
@@ -103,7 +100,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
         tags: ["commands"],
         summary: "Delete a command record",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           commandId: z.uuid(),
         }),
         response: { 200: successResponseSchema },

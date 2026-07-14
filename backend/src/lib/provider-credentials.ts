@@ -1,12 +1,19 @@
 /**
- * Unified AWS credential resolution.
+ * Unified provider credential resolution.
  *
- * Thin wrapper around the deploy domain's getProviderCredentials() that
- * returns null instead of throwing — used by image-builder and other
- * services that want graceful degradation on missing/invalid providers.
+ * Owns the raw DB lookup for server_providers credentials.
+ * This is the single source of truth for credential access —
+ * both the deploy service routes and image-builder consume this.
  */
 
-import { getProviderCredentials } from "../services/deploy/domain/providers.js";
+import { supabaseAdmin } from "../shared/supabase/client.js";
+
+export interface ProviderCredentials {
+  provider: string;
+  region: string;
+  apiKey: string;
+  apiSecret: string;
+}
 
 export interface ResolvedCredentials {
   accessKeyId: string;
@@ -15,13 +22,42 @@ export interface ResolvedCredentials {
 }
 
 /**
+ * Fetch provider credentials from the server_providers table.
+ *
+ * Throws if the provider is not found or the query fails.
+ * Used by the deploy routes' internal credentials endpoint.
+ */
+export async function getProviderCredentials(providerId: string): Promise<ProviderCredentials> {
+  const { data, error } = await supabaseAdmin
+    .from("server_providers")
+    .select("provider,region,api_key,api_secret")
+    .eq("id", providerId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      throw new Error("Provider not found");
+    }
+    throw new Error("Failed to fetch provider credentials");
+  }
+  if (!data) {
+    throw new Error("Provider not found");
+  }
+
+  return {
+    provider: data.provider,
+    region: data.region ?? "",
+    apiKey: data.api_key,
+    apiSecret: data.api_secret,
+  };
+}
+
+/**
  * Resolve AWS credentials for a given providerId.
  *
  * Returns null if the providerId is empty, the provider is not found,
- * or the credentials are incomplete.
- *
- * Delegates to the deploy domain's getProviderCredentials() — single
- * source of truth for server_providers table access.
+ * or the credentials are incomplete. Used by image-builder and other
+ * services that want graceful degradation on missing/invalid providers.
  */
 export async function resolveAwsCredentials(providerId: string): Promise<ResolvedCredentials | null> {
   if (!providerId) return null;

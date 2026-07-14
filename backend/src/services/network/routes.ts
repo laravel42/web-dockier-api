@@ -45,7 +45,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
       schema: {
         tags: ["network"],
         summary: "List security rules for a project",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
           200: z.object({ rules: z.array(securityRuleSchema) }),
         },
@@ -68,7 +68,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
       schema: {
         tags: ["network"],
         summary: "Create a security rule",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         body: createSecurityRuleBodySchema,
         response: { 200: securityRuleSchema },
       },
@@ -95,7 +95,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         tags: ["network"],
         summary: "Delete a security rule",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           ruleId: z.string().uuid(),
         }),
         response: { 200: successResponseSchema },
@@ -121,7 +121,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         tags: ["network"],
         summary: "Add a credential to a security rule",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           ruleId: z.string().uuid(),
         }),
         body: addCredentialBodySchema,
@@ -156,7 +156,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         tags: ["network"],
         summary: "Delete a credential from a security rule",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           ruleId: z.string().uuid(),
           credentialId: z.string().uuid(),
         }),
@@ -185,7 +185,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
       schema: {
         tags: ["network"],
         summary: "List redirect rules for a project",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
           200: z.object({ rules: z.array(redirectRuleSchema) }),
         },
@@ -208,7 +208,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
       schema: {
         tags: ["network"],
         summary: "Create a redirect rule",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         body: createRedirectRuleBodySchema,
         response: { 200: redirectRuleSchema },
       },
@@ -235,7 +235,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         tags: ["network"],
         summary: "Delete a redirect rule",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           ruleId: z.string().uuid(),
         }),
         response: { 200: successResponseSchema },
@@ -262,7 +262,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
       schema: {
         tags: ["network"],
         summary: "Apply all network rules to the deployed server",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
           200: z.object({
             success: z.boolean(),

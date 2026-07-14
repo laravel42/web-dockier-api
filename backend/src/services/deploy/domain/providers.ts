@@ -105,20 +105,7 @@ export async function deleteProvider(providerId: string, tenantId: string) {
   throwOnError(error, DeployError, { internalMsg: "Failed to delete provider" });
 }
 
-export async function getProviderCredentials(providerId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("server_providers")
-    .select("provider,region,api_key,api_secret")
-    .eq("id", providerId)
-    .single();
-  const creds = unwrapQuery(data, error, DeployError, {
-    notFoundMsg: "Provider not found",
-    internalMsg: "Failed to fetch provider credentials",
-  });
-  return {
-    provider: creds.provider,
-    region: creds.region ?? "",
-    apiKey: creds.api_key,
-    apiSecret: creds.api_secret,
-  };
-}
+import { getProviderCredentials } from "../../../lib/provider-credentials.js";
+
+export { getProviderCredentials };
+

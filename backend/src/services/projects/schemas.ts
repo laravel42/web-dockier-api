@@ -28,3 +28,12 @@ export const projectSchema = z.object({
   lastCommitHash: z.string(),
   createdAt: z.string(),
 });
+
+// ─── Tags ──────────────────────────────────────────────────────────
+
+export const tagResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  color: z.string(),
+  createdAt: z.string(),
+});

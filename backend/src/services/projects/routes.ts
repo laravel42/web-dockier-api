@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pipeUIMessageStreamToResponse } from "ai";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
-import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
+import { projectConfigSchema, projectSchema, projectSettingsSchema, tagResponseSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { env } from "../../shared/config.js";
@@ -196,13 +196,6 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   );
 
   // ─── Tags ───
-
-  const tagResponseSchema = z.object({
-    id: z.string().uuid(),
-    name: z.string(),
-    color: z.string(),
-    createdAt: z.string(),
-  });
 
   typed.get(
     "/projects/tags",

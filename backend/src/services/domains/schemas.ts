@@ -49,6 +49,25 @@ export const createCertificateBodySchema = z.object({
   ),
 });
 
+// ─── Response Schemas ───
+
+export const verifyDnsResponseSchema = z.object({
+  verified: z.boolean(),
+  serverIp: z.string().optional(),
+  resolvedIp: z.string().optional(),
+  message: z.string(),
+});
+
+export const configPreviewResponseSchema = z.object({
+  generatedConfig: z.string(),
+});
+
+export const applyDomainResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  generatedConfig: z.string().optional(),
+});
+
 // ─── DB Row Types ───
 
 export type DomainRow = {

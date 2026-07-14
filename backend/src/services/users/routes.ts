@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth.js";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
 import {
   createUser,
   getUser,
@@ -75,11 +75,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       schema: {
         tags: ["users"],
         summary: "List users",
-        querystring: z.object({
-          limit: z.coerce.number().int().min(1).max(100).default(20),
-          offset: z.coerce.number().int().min(0).default(0),
-          search: z.string().optional(),
-        }),
+        querystring: paginationQuerySchema.extend({ search: z.string().optional() }),
         response: { 200: listUsersResponseSchema },
       },
     },

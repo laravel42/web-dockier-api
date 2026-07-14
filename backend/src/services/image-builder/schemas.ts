@@ -27,3 +27,25 @@ export const buildCredentialsSchema = z.object({
   secretAccessKey: z.string(),
   region: z.string(),
 });
+
+// ─── Response Schemas ──────────────────────────────────────────────
+
+export const buildLogsResponseSchema = z.object({
+  buildId: z.uuid(),
+  logs: z.array(z.string()),
+  nextToken: z.string().optional(),
+});
+
+export const imageRevisionResponseSchema = z.object({
+  imageUri: z.string(),
+  buildId: z.uuid(),
+  commitSha: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+});
+
+export const deployStatusResponseSchema = z.object({
+  status: z.string(),
+  appUrl: z.string(),
+  stackName: z.string(),
+});

@@ -10,6 +10,9 @@ import {
   updateDomainBodySchema,
   sslCertificateSchema,
   createCertificateBodySchema,
+  verifyDnsResponseSchema,
+  configPreviewResponseSchema,
+  applyDomainResponseSchema,
 } from "./schemas.js";
 import {
   listDomains,
@@ -44,7 +47,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["domains"],
         summary: "List domains for a project",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
           200: z.object({ domains: z.array(domainSchema) }),
         },
@@ -67,7 +70,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["domains"],
         summary: "Add a custom domain",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         body: createDomainBodySchema,
         response: { 200: domainSchema },
       },
@@ -92,7 +95,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         tags: ["domains"],
         summary: "Update a domain",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           domainId: z.string().uuid(),
         }),
         body: updateDomainBodySchema,
@@ -122,7 +125,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         tags: ["domains"],
         summary: "Remove a domain",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           domainId: z.string().uuid(),
         }),
         response: { 200: successResponseSchema },
@@ -149,7 +152,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["domains"],
         summary: "List SSL certificates for a project",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
           200: z.object({ certificates: z.array(sslCertificateSchema) }),
         },
@@ -172,7 +175,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["domains"],
         summary: "Create an SSL certificate",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         body: createCertificateBodySchema,
         response: { 200: sslCertificateSchema },
       },
@@ -208,7 +211,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         tags: ["domains"],
         summary: "Delete an SSL certificate",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           certificateId: z.string().uuid(),
         }),
         response: { 200: successResponseSchema },
@@ -236,16 +239,11 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         tags: ["domains"],
         summary: "Verify DNS configuration for a domain",
         params: z.object({
-          projectId: z.string().min(1),
+          projectId: z.uuid(),
           domainId: z.string().uuid(),
         }),
         response: {
-          200: z.object({
-            verified: z.boolean(),
-            serverIp: z.string().optional(),
-            resolvedIp: z.string().optional(),
-            message: z.string(),
-          }),
+          200: verifyDnsResponseSchema,
         },
       },
     },
@@ -277,9 +275,9 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["domains"],
         summary: "Preview generated nginx domain configuration",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
-          200: z.object({ generatedConfig: z.string() }),
+          200: configPreviewResponseSchema,
         },
       },
     },
@@ -299,13 +297,9 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["domains"],
         summary: "Apply domain configuration to the deployed server",
-        params: z.object({ projectId: z.string().min(1) }),
+        params: z.object({ projectId: z.uuid() }),
         response: {
-          200: z.object({
-            success: z.boolean(),
-            message: z.string(),
-            generatedConfig: z.string().optional(),
-          }),
+          200: applyDomainResponseSchema,
         },
       },
     },

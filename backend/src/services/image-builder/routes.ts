@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
-import { buildCredentialsSchema, buildSchema } from "./schemas.js";
+import { buildCredentialsSchema, buildSchema, buildLogsResponseSchema, imageRevisionResponseSchema, deployStatusResponseSchema } from "./schemas.js";
 import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
@@ -100,7 +100,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         params: z.object({ buildId: z.uuid() }),
         querystring: z.object({ nextToken: z.string().optional() }),
         response: {
-          200: z.object({ buildId: z.uuid(), logs: z.array(z.string()), nextToken: z.string().optional() }),
+          200: buildLogsResponseSchema,
         },
       },
     },
@@ -169,13 +169,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         summary: "Resolve image by git revision",
         params: z.object({ revision: z.string().min(1) }),
         response: {
-          200: z.object({
-            imageUri: z.string(),
-            buildId: z.uuid(),
-            commitSha: z.string(),
-            status: z.string(),
-            createdAt: z.string(),
-          }),
+          200: imageRevisionResponseSchema,
         },
       },
     },
@@ -193,7 +187,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         tags: ["image-builder"],
         summary: "Get deploy status for build",
         params: z.object({ buildId: z.uuid() }),
-        response: { 200: z.object({ status: z.string(), appUrl: z.string(), stackName: z.string() }) },
+        response: { 200: deployStatusResponseSchema },
       },
     },
     async (request) => {
