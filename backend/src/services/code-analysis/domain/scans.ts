@@ -65,6 +65,7 @@ export async function listScans(params: ListScansParams) {
   const { count } = await countQuery;
   const total = count ?? 0;
 
+  // Build the data query
   let query = supabaseAdmin
     .from("scans")
     .select("*")
@@ -73,17 +74,39 @@ export async function listScans(params: ListScansParams) {
     .range(offset, offset + limit - 1);
   if (projectId) query = query.eq("project_id", projectId);
   if (branch) query = query.eq("branch", branch);
+
   const { data, error } = await query;
   const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list scans" });
-  await Promise.all(
-    rows
-      .filter((row) => row.status === "running" || row.status === "pending")
-      .map((row) => reconcileStaleScanById(row.id)),
-  );
 
-  const { data: finalData, error: finalError } = await query;
-  const finalRows = unwrapList(finalData, finalError, CodeAnalysisError, { internalMsg: "Failed to list scans" });
+  // Reconcile stale scans (running/pending that may have been abandoned).
+  // Wrap each in try/catch so a single stuck scan doesn't break the list.
+  const staleRows = rows.filter((row) => row.status === "running" || row.status === "pending");
+  let needsRefresh = false;
 
+  if (staleRows.length > 0) {
+    const results = await Promise.allSettled(
+      staleRows.map((row) => reconcileStaleScanById(row.id)),
+    );
+    needsRefresh = results.some((r) => r.status === "fulfilled" && r.value);
+  }
+
+  // Re-fetch only if reconciliation actually changed any rows
+  let finalRows = rows;
+  if (needsRefresh) {
+    let refreshQuery = supabaseAdmin
+      .from("scans")
+      .select("*")
+      .eq("organization_id", tenantId)
+      .order("updated_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (projectId) refreshQuery = refreshQuery.eq("project_id", projectId);
+    if (branch) refreshQuery = refreshQuery.eq("branch", branch);
+
+    const { data: refreshData, error: refreshError } = await refreshQuery;
+    finalRows = unwrapList(refreshData, refreshError, CodeAnalysisError, { internalMsg: "Failed to list scans" });
+  }
+
+  // Enrich terminal scans with finding severity counts
   const terminalIds = finalRows
     .filter((row) => row.status === "completed" || row.status === "failed")
     .map((row) => row.id);
