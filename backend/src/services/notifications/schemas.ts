@@ -16,7 +16,7 @@ export const notificationDeployMetadataSchema = z.object({
   branch: z.string(),
   commit: z.string().optional(),
   appUrl: z.string().optional(),
-  deployId: z.string().uuid().optional(),
+  deployId: z.uuid().optional(),
 });
 
 export const notificationScanMetadataSchema = z.object({
@@ -24,8 +24,8 @@ export const notificationScanMetadataSchema = z.object({
   repo: z.string(),
   branch: z.string(),
   commit: z.string().optional(),
-  projectId: z.string().uuid().optional(),
-  scanId: z.string().uuid().optional(),
+  projectId: z.uuid().optional(),
+  scanId: z.uuid().optional(),
   summary: z.object({
     errors: z.number(),
     warnings: z.number(),

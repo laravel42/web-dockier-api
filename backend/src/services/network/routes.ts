@@ -22,19 +22,10 @@ import {
   deleteRedirectRule,
 } from "./domain/network.js";
 import { applyNetworkRules } from "./domain/applier.js";
+import { enqueueNetworkApply } from "../domains/domain/worker.js";
 
 export async function registerNetworkRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-
-  /**
-   * Trigger apply in the background after any rule mutation.
-   * Non-blocking — the HTTP response returns immediately.
-   */
-  function scheduleApply(tenantId: string, projectId: string) {
-    void applyNetworkRules({ tenantId, projectId }).catch(() => {
-      // Failures are logged inside applyNetworkRules
-    });
-  }
 
   // ─── Security Rules ───
 
@@ -82,7 +73,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         path: request.body.path,
         credentials: request.body.credentials,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return rule;
     },
   );
@@ -96,7 +87,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         summary: "Delete a security rule",
         params: z.object({
           projectId: z.uuid(),
-          ruleId: z.string().uuid(),
+          ruleId: z.uuid(),
         }),
         response: { 200: successResponseSchema },
       },
@@ -108,7 +99,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -122,12 +113,12 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         summary: "Add a credential to a security rule",
         params: z.object({
           projectId: z.uuid(),
-          ruleId: z.string().uuid(),
+          ruleId: z.uuid(),
         }),
         body: addCredentialBodySchema,
         response: {
           200: z.object({
-            id: z.string().uuid(),
+            id: z.uuid(),
             username: z.string(),
             createdAt: z.string(),
           }),
@@ -143,7 +134,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         username: request.body.username,
         password: request.body.password,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return cred;
     },
   );
@@ -157,8 +148,8 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         summary: "Delete a credential from a security rule",
         params: z.object({
           projectId: z.uuid(),
-          ruleId: z.string().uuid(),
-          credentialId: z.string().uuid(),
+          ruleId: z.uuid(),
+          credentialId: z.uuid(),
         }),
         response: { 200: successResponseSchema },
       },
@@ -171,7 +162,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         ruleId: request.params.ruleId,
         credentialId: request.params.credentialId,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -222,7 +213,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         toPath: request.body.toPath,
         type: request.body.type,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return rule;
     },
   );
@@ -236,7 +227,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         summary: "Delete a redirect rule",
         params: z.object({
           projectId: z.uuid(),
-          ruleId: z.string().uuid(),
+          ruleId: z.uuid(),
         }),
         response: { 200: successResponseSchema },
       },
@@ -248,7 +239,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );

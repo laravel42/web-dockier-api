@@ -18,7 +18,7 @@ export const usersApi = {
         isOwner: boolean;
         createdAt: string;
       }>;
-      total: number;
+      pagination: { total: number; limit: number; offset: number };
     }>(`/users${q ? `?${q}` : ""}`);
   },
 

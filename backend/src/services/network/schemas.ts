@@ -3,12 +3,12 @@ import { z } from "zod";
 // ─── Security Rules ───
 
 export const securityRuleSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   projectId: z.string(),
   name: z.string(),
   path: z.string().nullable(),
   credentials: z.array(z.object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     username: z.string(),
     createdAt: z.string(),
   })),
@@ -33,7 +33,7 @@ export const addCredentialBodySchema = z.object({
 // ─── Redirect Rules ───
 
 export const redirectRuleSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   projectId: z.string(),
   fromPath: z.string(),
   toPath: z.string(),

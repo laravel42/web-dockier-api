@@ -5,7 +5,7 @@ import { z } from "zod";
 import { verifyAuthToken, getAuth } from "../../shared/auth.js";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
 
 // Domain modules
@@ -74,8 +74,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "Create scan",
         body: z.object({
-          projectId: z.string(),
-          connectionId: z.string(),
+          projectId: z.uuid(),
+          connectionId: z.uuid(),
           repo: z.string(),
           branch: z.string(),
         }),
@@ -192,11 +192,9 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "List scan findings",
         params: z.object({ scanId: z.uuid() }),
-        querystring: z.object({
+        querystring: paginationQuerySchema.extend({
           severity: z.string().optional(),
           provider: z.enum(["semgrep", "sonar", "custom"]).optional(),
-          limit: z.coerce.number().int().positive().max(100).optional(),
-          offset: z.coerce.number().int().nonnegative().optional(),
         }),
         response: {
           200: z.object({

@@ -433,7 +433,7 @@ function ActivitySection({ project }: { project: Project }) {
         search: debouncedSearch || undefined,
       });
       setActivity(res.activity);
-      setTotal(res.total);
+      setTotal(res.pagination.total);
     } catch {
       /* silent */
     } finally {

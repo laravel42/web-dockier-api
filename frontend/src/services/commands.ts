@@ -20,7 +20,7 @@ export const commandsApi = {
     }),
 
   list: (projectId: string, params?: { limit?: number; offset?: number }) =>
-    request<{ commands: Command[]; total: number }>(
+    request<{ commands: Command[]; pagination: { total: number; limit: number; offset: number } }>(
       `/projects/${encodeURIComponent(projectId)}/commands?limit=${params?.limit ?? 20}&offset=${params?.offset ?? 0}`,
     ),
 

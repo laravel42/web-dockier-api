@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from "../shared/supabase/client.js";
+import { DomainError } from "../shared/supabase/errors.js";
 
 export interface ProviderCredentials {
   provider: string;
@@ -36,12 +37,12 @@ export async function getProviderCredentials(providerId: string): Promise<Provid
 
   if (error) {
     if (error.code === "PGRST116") {
-      throw new Error("Provider not found");
+      throw new DomainError("Provider not found", "not_found", error);
     }
-    throw new Error("Failed to fetch provider credentials");
+    throw new DomainError("Failed to fetch provider credentials", "internal", error);
   }
   if (!data) {
-    throw new Error("Provider not found");
+    throw new DomainError("Provider not found", "not_found");
   }
 
   return {

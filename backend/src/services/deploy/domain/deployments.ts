@@ -22,24 +22,19 @@ export async function listDeployments(
   tenantId: string,
   filters?: ListDeploymentsFilters,
 ): Promise<ListDeploymentsResult> {
-  const limit = Math.min(Math.max(filters?.limit ?? 50, 1), 100);
+  const limit = Math.min(Math.max(filters?.limit ?? 20, 1), 100);
   const offset = Math.max(filters?.offset ?? 0, 0);
-  const paginated = filters?.projectId != null || filters?.limit != null || filters?.offset != null;
 
   let query = supabaseAdmin
     .from("deployments")
-    .select("*", paginated ? { count: "exact" } : undefined)
+    .select("*", { count: "exact" })
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (filters?.providerId) query = query.eq("provider_id", filters.providerId);
   if (filters?.projectId) query = query.eq("project_id", filters.projectId);
 
-  if (paginated) {
-    query = query.range(offset, offset + limit - 1);
-  } else {
-    query = query.limit(50);
-  }
+  query = query.range(offset, offset + limit - 1);
 
   const { data, error, count } = await query;
   const rows = unwrapList(data, error, DeployError, { internalMsg: "Failed to list deployments" });

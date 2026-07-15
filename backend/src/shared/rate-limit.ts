@@ -1,7 +1,7 @@
 /**
  * Lightweight In-Memory Rate Limiter
  *
- * Provides IP-based rate limiting for public-facing auth endpoints.
+ * Provides IP-based and tenant-based rate limiting for API endpoints.
  * Uses a fixed-window counter stored via MemoryCache with automatic cleanup.
  *
  * Security notes:
@@ -33,29 +33,30 @@ export interface RateLimitOptions {
   prefix?: string;
 }
 
+/** Key extraction function — given a request, returns the rate-limit key or null to skip. */
+type KeyExtractor = (request: FastifyRequest) => string | null;
+
 /**
- * Create a Fastify preHandler that enforces rate limiting.
- *
- * @example
- * ```ts
- * app.post("/auth/register/start", {
- *   preHandler: rateLimit({ max: 5, windowMs: 60_000 }),
- *   ...
- * }, handler);
- * ```
+ * Internal factory that creates a rate-limit preHandler with a custom key strategy.
+ * Both `rateLimit()` and `tenantRateLimit()` are thin wrappers around this.
  */
-export function rateLimit(options: RateLimitOptions = {}) {
-  const { max = 5, windowMs = 60_000, prefix = "rl" } = options;
+function createLimiter(
+  extractKey: KeyExtractor,
+  options: Required<Pick<RateLimitOptions, "max" | "windowMs" | "prefix">>,
+  exceededMessage: string,
+) {
+  const { max, windowMs, prefix } = options;
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const ip = request.ip;
-    const key = `${prefix}:${ip}`;
+    const rawKey = extractKey(request);
+    if (!rawKey) return; // Skip if key can't be resolved
+
+    const key = `${prefix}:${rawKey}`;
     const now = Date.now();
 
     const entry = store.get(key);
 
     if (!entry || entry.resetAt <= now) {
-      // First request in this window or window expired
       const newEntry = { count: 1, resetAt: now + windowMs };
       store.set(key, newEntry, windowMs);
       reply.header("X-RateLimit-Limit", max);
@@ -70,12 +71,33 @@ export function rateLimit(options: RateLimitOptions = {}) {
       reply.header("Retry-After", retryAfterSec);
       reply.header("X-RateLimit-Limit", max);
       reply.header("X-RateLimit-Remaining", 0);
-      return reply.tooManyRequests("Too many requests. Please try again later.");
+      return reply.tooManyRequests(exceededMessage);
     }
 
     reply.header("X-RateLimit-Limit", max);
     reply.header("X-RateLimit-Remaining", max - entry.count);
   };
+}
+
+/**
+ * Create a Fastify preHandler that enforces IP-based rate limiting.
+ *
+ * @example
+ * ```ts
+ * app.post("/auth/register/start", {
+ *   preHandler: rateLimit({ max: 5, windowMs: 60_000 }),
+ *   ...
+ * }, handler);
+ * ```
+ */
+export function rateLimit(options: RateLimitOptions = {}) {
+  const { max = 5, windowMs = 60_000, prefix = "rl" } = options;
+
+  return createLimiter(
+    (request) => request.ip,
+    { max, windowMs, prefix },
+    "Too many requests. Please try again later.",
+  );
 }
 
 /**
@@ -100,36 +122,11 @@ export function rateLimit(options: RateLimitOptions = {}) {
 export function tenantRateLimit(options: RateLimitOptions = {}) {
   const { max = 10, windowMs = 60_000, prefix = "trl" } = options;
 
-  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const tenantId = request.auth?.tenantId;
-    if (!tenantId) return; // Skip if auth hasn't resolved (shouldn't happen after requirePermission)
-
-    const key = `${prefix}:${tenantId}`;
-    const now = Date.now();
-
-    const entry = store.get(key);
-
-    if (!entry || entry.resetAt <= now) {
-      const newEntry = { count: 1, resetAt: now + windowMs };
-      store.set(key, newEntry, windowMs);
-      reply.header("X-RateLimit-Limit", max);
-      reply.header("X-RateLimit-Remaining", max - 1);
-      return;
-    }
-
-    entry.count += 1;
-
-    if (entry.count > max) {
-      const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
-      reply.header("Retry-After", retryAfterSec);
-      reply.header("X-RateLimit-Limit", max);
-      reply.header("X-RateLimit-Remaining", 0);
-      return reply.tooManyRequests("Rate limit exceeded for your organization. Please try again later.");
-    }
-
-    reply.header("X-RateLimit-Limit", max);
-    reply.header("X-RateLimit-Remaining", max - entry.count);
-  };
+  return createLimiter(
+    (request) => request.auth?.tenantId ?? null,
+    { max, windowMs, prefix },
+    "Rate limit exceeded for your organization. Please try again later.",
+  );
 }
 
 /**

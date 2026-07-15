@@ -3,7 +3,7 @@ import { z } from "zod";
 // ─── Domains ───
 
 export const domainSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   projectId: z.string(),
   name: z.string(),
   isPrimary: z.boolean(),
@@ -29,9 +29,9 @@ export const updateDomainBodySchema = z.object({
 // ─── SSL Certificates ───
 
 export const sslCertificateSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   projectId: z.string(),
-  domainId: z.string().uuid().nullable(),
+  domainId: z.uuid().nullable(),
   type: z.enum(["lets_encrypt", "custom", "clone"]),
   status: z.enum(["pending", "active", "expired", "failed"]),
   domainName: z.string(),

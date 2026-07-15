@@ -86,7 +86,7 @@ export default function ProjectCommandsTab({ project }: Props) {
         offset: pageNum * PAGE_SIZE,
       });
       setCommands(res.commands);
-      setTotal(res.total);
+      setTotal(res.pagination.total);
     } catch {
       if (!silent) {
         setError("Failed to load commands");

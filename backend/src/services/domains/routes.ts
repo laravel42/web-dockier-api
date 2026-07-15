@@ -23,20 +23,11 @@ import {
   createCertificate,
   deleteCertificate,
 } from "./domain/domains.js";
-import { applyDomainConfig, issueCertificate, verifyDomainDns, previewDomainConfig } from "./domain/applier.js";
+import { applyDomainConfig, verifyDomainDns, previewDomainConfig } from "./domain/applier.js";
+import { enqueueDomainApply, enqueueCertificateIssue } from "./domain/worker.js";
 
 export async function registerDomainsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-
-  /**
-   * Trigger nginx config apply in the background after domain mutations.
-   * Non-blocking — the HTTP response returns immediately.
-   */
-  function scheduleApply(tenantId: string, projectId: string) {
-    void applyDomainConfig({ tenantId, projectId }).catch(() => {
-      // Failures are logged inside applyDomainConfig
-    });
-  }
 
   // ─── Domains ───
 
@@ -82,7 +73,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         name: request.body.name,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return domain;
     },
   );
@@ -96,7 +87,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         summary: "Update a domain",
         params: z.object({
           projectId: z.uuid(),
-          domainId: z.string().uuid(),
+          domainId: z.uuid(),
         }),
         body: updateDomainBodySchema,
         response: { 200: domainSchema },
@@ -112,7 +103,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         redirectWww: request.body.redirectWww,
         wildcard: request.body.wildcard,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return updated;
     },
   );
@@ -126,7 +117,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         summary: "Remove a domain",
         params: z.object({
           projectId: z.uuid(),
-          domainId: z.string().uuid(),
+          domainId: z.uuid(),
         }),
         response: { 200: successResponseSchema },
       },
@@ -138,7 +129,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         domainId: request.params.domainId,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -190,14 +181,14 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       });
       // For Let's Encrypt, trigger certificate issuance in background
       if (request.body.type === "lets_encrypt") {
-        void issueCertificate({
+        await enqueueCertificateIssue({
           tenantId: auth.tenantId,
           projectId: request.params.projectId,
           certificateId: cert.id,
           domainName: request.body.domainName,
-        }).catch(() => { /* logged inside */ });
+        });
       } else {
-        scheduleApply(auth.tenantId, request.params.projectId);
+        await enqueueDomainApply(auth.tenantId, request.params.projectId);
       }
       return cert;
     },
@@ -212,7 +203,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         summary: "Delete an SSL certificate",
         params: z.object({
           projectId: z.uuid(),
-          certificateId: z.string().uuid(),
+          certificateId: z.uuid(),
         }),
         response: { 200: successResponseSchema },
       },
@@ -224,7 +215,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         certificateId: request.params.certificateId,
       });
-      scheduleApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -240,7 +231,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         summary: "Verify DNS configuration for a domain",
         params: z.object({
           projectId: z.uuid(),
-          domainId: z.string().uuid(),
+          domainId: z.uuid(),
         }),
         response: {
           200: verifyDnsResponseSchema,

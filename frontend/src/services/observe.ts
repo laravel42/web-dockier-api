@@ -113,7 +113,7 @@ export const observeApi = {
     searchParams.set("limit", String(params?.limit ?? 50));
     searchParams.set("offset", String(params?.offset ?? 0));
     if (params?.search) searchParams.set("search", params.search);
-    return request<{ activity: ActivityEntry[]; total: number }>(
+    return request<{ activity: ActivityEntry[]; pagination: { total: number; limit: number; offset: number } }>(
       `/projects/${encodeURIComponent(projectId)}/activity?${searchParams.toString()}`,
     );
   },

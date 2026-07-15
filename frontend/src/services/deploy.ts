@@ -32,7 +32,7 @@ export const deployApi = {
     limit?: number;
     offset?: number;
   }) =>
-    request<{ deployments: Deployment[]; total: number }>(
+    request<{ deployments: Deployment[]; pagination: { total: number; limit: number; offset: number } }>(
       `/deploy/deployments${buildQuery(params)}`,
     ),
 

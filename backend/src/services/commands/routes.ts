@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { commandSchema } from "./schemas.js";
 import {
   runCommand,
@@ -52,19 +52,24 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
         response: {
           200: z.object({
             commands: z.array(commandSchema),
-            total: z.number(),
+            pagination: paginationMetaSchema,
           }),
         },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      return await listCommands({
+      const { limit, offset } = request.query;
+      const result = await listCommands({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
-        limit: request.query.limit,
-        offset: request.query.offset,
+        limit,
+        offset,
       });
+      return {
+        commands: result.commands,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 
