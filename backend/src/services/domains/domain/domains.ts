@@ -163,7 +163,7 @@ export async function deleteDomain(params: {
   const { tenantId, projectId, domainId } = params;
 
   // Check if the domain being deleted is currently the primary domain
-  const { data: domain } = await supabaseAdmin
+  const { data: domain, error: fetchError } = await supabaseAdmin
     .from("domains")
     .select("is_primary")
     .eq("id", domainId)
@@ -171,7 +171,7 @@ export async function deleteDomain(params: {
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (!domain) throw new DomainsError("Domain not found", "not_found");
+  const row = unwrapQuery(domain, fetchError, DomainsError, { notFoundMsg: "Domain not found" });
 
   const { error, count } = await supabaseAdmin
     .from("domains")
@@ -184,7 +184,7 @@ export async function deleteDomain(params: {
   if (count === 0) throw new DomainsError("Domain not found", "not_found");
 
   // If the deleted domain was primary, promote the oldest remaining domain
-  if (domain.is_primary) {
+  if (row.is_primary) {
     const { data: nextDomain } = await supabaseAdmin
       .from("domains")
       .select("id")

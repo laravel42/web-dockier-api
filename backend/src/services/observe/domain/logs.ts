@@ -159,14 +159,12 @@ export async function clearLog(params: {
   const paths = LOG_PATHS[logType];
   const truncateCmd = buildLogClearCommand(paths);
 
-  try {
-    const result = await executeCommand(target, truncateCmd);
-    if (result.exitCode !== 0) {
-      throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}: ${result.output}`, "internal");
-    }
-  } catch (err) {
-    if (err instanceof LogsError) throw err;
+  const result = await executeCommand(target, truncateCmd).catch((err) => {
     throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}`, "internal", err);
+  });
+
+  if (result.exitCode !== 0) {
+    throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}: ${result.output}`, "internal");
   }
 
   // Record activity
