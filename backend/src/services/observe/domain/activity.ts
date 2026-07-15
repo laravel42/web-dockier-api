@@ -1,7 +1,12 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import type { ActivityRow } from "../schemas.js";
 import type { z } from "zod";
 import type { activityEventTypeSchema } from "../schemas.js";
+
+export const ActivityError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("ActivityError");
+export type ActivityError = InstanceType<typeof ActivityError>;
 
 type ActivityEventType = z.infer<typeof activityEventTypeSchema>;
 
@@ -29,12 +34,6 @@ function rowToActivity(row: ActivityRow & { actor_name?: string | null }): Activ
   };
 }
 
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-}
-
 export async function listActivity(params: {
   tenantId: string;
   projectId: string;
@@ -58,12 +57,10 @@ export async function listActivity(params: {
 
   const { data, error, count } = await query;
 
-  if (error) {
-    throw httpError(500, error.message);
-  }
+  const rows = unwrapList(data, error, ActivityError, { internalMsg: "Failed to list activity" });
 
   return {
-    activity: (data || []).map((row) => {
+    activity: rows.map((row) => {
       const userJoin = (row as Record<string, unknown>).users as { name?: string } | null;
       const activityRow: ActivityRow & { actor_name?: string | null } = {
         ...(row as unknown as ActivityRow),
@@ -98,7 +95,5 @@ export async function recordActivity(params: {
     metadata: (metadata ?? {}) as unknown as import("../../../shared/supabase/types.js").Json,
   });
 
-  if (error) {
-    throw httpError(500, error.message);
-  }
+  throwOnError(error, ActivityError, { internalMsg: "Failed to record activity" });
 }

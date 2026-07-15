@@ -1,7 +1,12 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { enqueueCommand } from "./worker.js";
 import { recordActivity } from "../../observe/domain/activity.js";
 import type { CommandRow } from "../schemas.js";
+
+export const CommandsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("CommandsError");
+export type CommandsError = InstanceType<typeof CommandsError>;
 
 export type CommandStatus = "running" | "finished" | "failed" | "timed_out";
 
@@ -31,16 +36,6 @@ function rowToCommand(row: CommandRow): CommandResponse {
   };
 }
 
-/**
- * HTTP error helper — attaches a statusCode so Fastify's error handler
- * translates it to the correct response code.
- */
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-}
-
 export async function runCommand(params: {
   tenantId: string;
   projectId: string;
@@ -57,9 +52,7 @@ export async function runCommand(params: {
     .eq("organization_id", tenantId)
     .single();
 
-  if (projectError || !project) {
-    throw httpError(404, "Project not found");
-  }
+  unwrapQuery(project, projectError, CommandsError, { notFoundMsg: "Project not found" });
 
   // Insert command record with "running" status
   const { data, error } = await supabaseAdmin
@@ -76,14 +69,12 @@ export async function runCommand(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw httpError(500, error?.message || "Failed to create command");
-  }
+  const row = unwrapQuery(data, error, CommandsError, { internalMsg: "Failed to create command" });
 
   // Dispatch to the background worker for actual execution
   try {
     await enqueueCommand({
-      commandId: data.id,
+      commandId: row.id,
       tenantId,
       projectId,
       command,
@@ -93,8 +84,8 @@ export async function runCommand(params: {
     await supabaseAdmin
       .from("commands")
       .update({ status: "failed", output: "Failed to dispatch command for execution.", finished_at: new Date().toISOString() })
-      .eq("id", data.id);
-    throw httpError(500, "Failed to dispatch command for execution");
+      .eq("id", row.id);
+    throw new CommandsError("Failed to dispatch command for execution", "internal");
   }
 
   // Record activity for this command execution
@@ -105,13 +96,13 @@ export async function runCommand(params: {
       userId,
       eventType: "command_run",
       description: "Running custom command",
-      metadata: { commandId: data.id, command },
+      metadata: { commandId: row.id, command },
     });
   } catch {
     // Activity logging is non-critical — don't fail the command if it errors
   }
 
-  return rowToCommand(data as CommandRow);
+  return rowToCommand(row as CommandRow);
 }
 
 export async function listCommands(params: {
@@ -130,12 +121,10 @@ export async function listCommands(params: {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) {
-    throw httpError(500, error.message);
-  }
+  const rows = unwrapList(data, error, CommandsError, { internalMsg: "Failed to list commands" });
 
   return {
-    commands: (data || []).map((row) => rowToCommand(row as CommandRow)),
+    commands: rows.map((row) => rowToCommand(row as CommandRow)),
     total: count ?? 0,
   };
 }
@@ -155,11 +144,9 @@ export async function getCommand(params: {
     .eq("id", commandId)
     .single();
 
-  if (error || !data) {
-    throw httpError(404, "Command not found");
-  }
+  const row = unwrapQuery(data, error, CommandsError, { notFoundMsg: "Command not found" });
 
-  return rowToCommand(data as CommandRow);
+  return rowToCommand(row as CommandRow);
 }
 
 export async function deleteCommand(params: {
@@ -176,11 +163,9 @@ export async function deleteCommand(params: {
     .eq("project_id", projectId)
     .eq("id", commandId);
 
-  if (error) {
-    throw httpError(500, error.message);
-  }
+  throwOnError(error, CommandsError, { internalMsg: "Failed to delete command" });
 
   if (count === 0) {
-    throw httpError(404, "Command not found");
+    throw new CommandsError("Command not found", "not_found");
   }
 }

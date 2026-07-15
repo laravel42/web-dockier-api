@@ -1,13 +1,10 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { DomainRow, SslCertificateRow } from "../schemas.js";
 
-// ─── Helpers ───
-
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-}
+export const DomainsError = createDomainErrorClass<"not_found" | "bad_request" | "conflict" | "internal">("DomainsError");
+export type DomainsError = InstanceType<typeof DomainsError>;
 
 export interface DomainResponse {
   id: string;
@@ -77,8 +74,8 @@ export async function listDomains(params: {
     .order("is_primary", { ascending: false })
     .order("created_at", { ascending: true });
 
-  if (error) throw httpError(500, error.message);
-  return (data || []).map((r) => rowToDomain(r as DomainRow));
+  const rows = unwrapList(data, error, DomainsError, { internalMsg: "Failed to list domains" });
+  return rows.map((r) => rowToDomain(r as DomainRow));
 }
 
 export async function createDomain(params: {
@@ -109,10 +106,10 @@ export async function createDomain(params: {
     .single();
 
   if (error) {
-    if (error.code === "23505") throw httpError(409, "Domain already exists");
-    throw httpError(500, error.message);
+    if (error.code === "23505") throw new DomainsError("Domain already exists", "conflict");
+    throw new DomainsError(error.message, "internal", error);
   }
-  if (!data) throw httpError(500, "Failed to create domain");
+  if (!data) throw new DomainsError("Failed to create domain", "internal");
 
   return rowToDomain(data as DomainRow);
 }
@@ -150,10 +147,12 @@ export async function updateDomain(params: {
     .select()
     .single();
 
-  if (error) throw httpError(500, error.message);
-  if (!data) throw httpError(404, "Domain not found");
+  const row = unwrapQuery(data, error, DomainsError, {
+    notFoundMsg: "Domain not found",
+    internalMsg: "Failed to update domain",
+  });
 
-  return rowToDomain(data as DomainRow);
+  return rowToDomain(row as DomainRow);
 }
 
 export async function deleteDomain(params: {
@@ -172,7 +171,7 @@ export async function deleteDomain(params: {
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (!domain) throw httpError(404, "Domain not found");
+  if (!domain) throw new DomainsError("Domain not found", "not_found");
 
   const { error, count } = await supabaseAdmin
     .from("domains")
@@ -181,8 +180,8 @@ export async function deleteDomain(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) throw httpError(500, error.message);
-  if (count === 0) throw httpError(404, "Domain not found");
+  throwOnError(error, DomainsError, { internalMsg: "Failed to delete domain" });
+  if (count === 0) throw new DomainsError("Domain not found", "not_found");
 
   // If the deleted domain was primary, promote the oldest remaining domain
   if (domain.is_primary) {
@@ -219,8 +218,8 @@ export async function listCertificates(params: {
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
-  if (error) throw httpError(500, error.message);
-  return (data || []).map((r) => rowToCertificate(r as SslCertificateRow));
+  const rows = unwrapList(data, error, DomainsError, { internalMsg: "Failed to list certificates" });
+  return rows.map((r) => rowToCertificate(r as SslCertificateRow));
 }
 
 export async function createCertificate(params: {
@@ -253,9 +252,9 @@ export async function createCertificate(params: {
     .select()
     .single();
 
-  if (error || !data) throw httpError(500, error?.message || "Failed to create certificate");
+  const row = unwrapQuery(data, error, DomainsError, { internalMsg: "Failed to create certificate" });
 
-  return rowToCertificate(data as SslCertificateRow);
+  return rowToCertificate(row as SslCertificateRow);
 }
 
 export async function deleteCertificate(params: {
@@ -272,6 +271,6 @@ export async function deleteCertificate(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) throw httpError(500, error.message);
-  if (count === 0) throw httpError(404, "Certificate not found");
+  throwOnError(error, DomainsError, { internalMsg: "Failed to delete certificate" });
+  if (count === 0) throw new DomainsError("Certificate not found", "not_found");
 }

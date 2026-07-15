@@ -1,6 +1,11 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { unwrapQuery } from "../../../shared/supabase/query.js";
 import { resolveExecutionTarget } from "../../commands/domain/worker.js";
 import { executeCommand } from "../../commands/domain/executor.js";
+
+export const LogsError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("LogsError");
+export type LogsError = InstanceType<typeof LogsError>;
 
 export type LogType = "site" | "nginx_access" | "nginx_error";
 
@@ -46,12 +51,6 @@ const LOG_TYPE_LABELS: Record<LogType, string> = {
 /** Max lines to tail from the log file. */
 const MAX_TAIL_LINES = 500;
 
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-}
-
 /**
  * Retrieve log content from the deployed server by executing `tail` on the log file.
  */
@@ -70,9 +69,7 @@ export async function getLog(params: {
     .eq("organization_id", tenantId)
     .single();
 
-  if (projectError || !project) {
-    throw httpError(404, "Project not found");
-  }
+  unwrapQuery(project, projectError, LogsError, { notFoundMsg: "Project not found" });
 
   // Resolve execution target (same mechanism as commands)
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
@@ -149,15 +146,13 @@ export async function clearLog(params: {
     .eq("organization_id", tenantId)
     .single();
 
-  if (projectError || !project) {
-    throw httpError(404, "Project not found");
-  }
+  unwrapQuery(project, projectError, LogsError, { notFoundMsg: "Project not found" });
 
   // Resolve execution target
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
 
   if (!target) {
-    throw httpError(400, errorMessage || "No active deployment found.");
+    throw new LogsError(errorMessage || "No active deployment found.", "bad_request");
   }
 
   // Build a command that truncates the log file
@@ -167,13 +162,11 @@ export async function clearLog(params: {
   try {
     const result = await executeCommand(target, truncateCmd);
     if (result.exitCode !== 0) {
-      throw httpError(500, `Failed to clear ${LOG_TYPE_LABELS[logType]}: ${result.output}`);
+      throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}: ${result.output}`, "internal");
     }
   } catch (err) {
-    if (err && typeof err === "object" && "statusCode" in err) {
-      throw err;
-    }
-    throw httpError(500, `Failed to clear ${LOG_TYPE_LABELS[logType]}`);
+    if (err instanceof LogsError) throw err;
+    throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}`, "internal", err);
   }
 
   // Record activity

@@ -1,7 +1,12 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { HeartbeatRow } from "../schemas.js";
 import type { z } from "zod";
 import type { heartbeatFrequencySchema, heartbeatGracePeriodSchema, heartbeatStatusSchema } from "../schemas.js";
+
+export const HeartbeatsError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("HeartbeatsError");
+export type HeartbeatsError = InstanceType<typeof HeartbeatsError>;
 
 type HeartbeatFrequency = z.infer<typeof heartbeatFrequencySchema>;
 type HeartbeatGracePeriod = z.infer<typeof heartbeatGracePeriodSchema>;
@@ -40,12 +45,6 @@ function rowToHeartbeat(row: HeartbeatRow): HeartbeatResponse {
   };
 }
 
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-}
-
 export async function createHeartbeat(params: {
   tenantId: string;
   projectId: string;
@@ -63,9 +62,7 @@ export async function createHeartbeat(params: {
     .eq("organization_id", tenantId)
     .single();
 
-  if (projectError || !project) {
-    throw httpError(404, "Project not found");
-  }
+  unwrapQuery(project, projectError, HeartbeatsError, { notFoundMsg: "Project not found" });
 
   const { data, error } = await supabaseAdmin
     .from("heartbeats")
@@ -80,11 +77,9 @@ export async function createHeartbeat(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw httpError(500, error?.message || "Failed to create heartbeat");
-  }
+  const row = unwrapQuery(data, error, HeartbeatsError, { internalMsg: "Failed to create heartbeat" });
 
-  return rowToHeartbeat(data as HeartbeatRow);
+  return rowToHeartbeat(row as HeartbeatRow);
 }
 
 export async function listHeartbeats(params: {
@@ -100,12 +95,10 @@ export async function listHeartbeats(params: {
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw httpError(500, error.message);
-  }
+  const rows = unwrapList(data, error, HeartbeatsError, { internalMsg: "Failed to list heartbeats" });
 
   return {
-    heartbeats: (data || []).map((row) => rowToHeartbeat(row as HeartbeatRow)),
+    heartbeats: rows.map((row) => rowToHeartbeat(row as HeartbeatRow)),
   };
 }
 
@@ -123,12 +116,10 @@ export async function deleteHeartbeat(params: {
     .eq("project_id", projectId)
     .eq("id", heartbeatId);
 
-  if (error) {
-    throw httpError(500, error.message);
-  }
+  throwOnError(error, HeartbeatsError, { internalMsg: "Failed to delete heartbeat" });
 
   if (count === 0) {
-    throw httpError(404, "Heartbeat not found");
+    throw new HeartbeatsError("Heartbeat not found", "not_found");
   }
 }
 
@@ -143,9 +134,7 @@ export async function pingHeartbeat(heartbeatId: string): Promise<void> {
     .eq("id", heartbeatId)
     .single();
 
-  if (fetchError || !current) {
-    throw httpError(404, "Heartbeat not found");
-  }
+  const heartbeat = unwrapQuery(current, fetchError, HeartbeatsError, { notFoundMsg: "Heartbeat not found" });
 
   const { error: updateError } = await supabaseAdmin
     .from("heartbeats")
@@ -156,17 +145,15 @@ export async function pingHeartbeat(heartbeatId: string): Promise<void> {
     })
     .eq("id", heartbeatId);
 
-  if (updateError) {
-    throw httpError(500, updateError.message);
-  }
+  throwOnError(updateError, HeartbeatsError, { internalMsg: "Failed to update heartbeat" });
 
-  if (current.status === "missed") {
+  if (heartbeat.status === "missed") {
     const { recordActivity } = await import("./activity.js");
     await recordActivity({
-      tenantId: current.organization_id,
-      projectId: current.project_id,
+      tenantId: heartbeat.organization_id,
+      projectId: heartbeat.project_id,
       eventType: "heartbeat_recovered",
-      description: `Heartbeat "${current.name}" recovered`,
+      description: `Heartbeat "${heartbeat.name}" recovered`,
     });
   }
 }
