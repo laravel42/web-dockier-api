@@ -74,8 +74,8 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
         tags: ["code-analysis"],
         summary: "Create scan",
         body: z.object({
-          projectId: z.string(),
-          connectionId: z.string(),
+          projectId: z.uuid(),
+          connectionId: z.uuid(),
           repo: z.string(),
           branch: z.string(),
         }),

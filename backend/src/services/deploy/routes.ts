@@ -273,8 +273,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
         tags: ["deploy"],
         summary: "List deployments",
         querystring: paginationQuerySchema.extend({
-          providerId: z.string().uuid().optional(),
-          projectId: z.string().uuid().optional(),
+          providerId: z.uuid().optional(),
+          projectId: z.uuid().optional(),
         }),
         response: {
           200: z.object({

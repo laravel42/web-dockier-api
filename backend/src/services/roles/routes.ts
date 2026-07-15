@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth.js";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { roleResponseSchema } from "./schemas.js";
 import {
   listRoles,
   getRole,
@@ -11,17 +12,6 @@ import {
   updateRole,
   deleteRole,
 } from "./domain/roles.js";
-
-const roleResponseSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  systemKey: z.string().nullable(),
-  isSystem: z.boolean(),
-  isEditable: z.boolean(),
-  isDeletable: z.boolean(),
-  permissions: z.array(z.string()),
-});
 
 export async function registerRolesRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

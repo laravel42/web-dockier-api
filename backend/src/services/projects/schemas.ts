@@ -32,7 +32,7 @@ export const projectSchema = z.object({
 // ─── Tags ──────────────────────────────────────────────────────────
 
 export const tagResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string(),
   color: z.string(),
   createdAt: z.string(),

@@ -266,7 +266,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["projects"],
         summary: "Update a tag",
-        params: z.object({ tagId: z.string().uuid() }),
+        params: z.object({ tagId: z.uuid() }),
         body: z.object({
           name: z.string().min(1).max(50).optional(),
           color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
@@ -292,7 +292,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["projects"],
         summary: "Delete a tag",
-        params: z.object({ tagId: z.string().uuid() }),
+        params: z.object({ tagId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
@@ -333,7 +333,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         summary: "Set tags for a project (replaces all)",
         params: z.object({ projectId: z.uuid() }),
         body: z.object({
-          tagIds: z.array(z.string().uuid()).max(20),
+          tagIds: z.array(z.uuid()).max(20),
         }),
         response: { 200: z.object({ tags: z.array(tagResponseSchema) }) },
       },
