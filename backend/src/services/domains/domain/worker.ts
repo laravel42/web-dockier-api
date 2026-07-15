@@ -17,7 +17,6 @@
  */
 
 import { createWorker, CONFIG_APPLY_QUEUE } from "../../../shared/queue.js";
-import { logger } from "../../../shared/logger.js";
 import { applyDomainConfig, issueCertificate } from "./applier.js";
 import { applyNetworkRules } from "../../network/domain/applier.js";
 
@@ -33,30 +32,37 @@ export interface ConfigApplyJobInput {
   domainName?: string;
 }
 
+/**
+ * Determines if a failure is retryable. Soft failures (no deploy target yet)
+ * should not be retried — the config will be applied on next deployment.
+ */
+function isRetryableFailure(message: string): boolean {
+  return !message.includes("will be applied on next deployment");
+}
+
 async function processConfigApplyJob(input: ConfigApplyJobInput): Promise<void> {
   const { type, tenantId, projectId } = input;
 
   switch (type) {
     case "domain-apply": {
       const result = await applyDomainConfig({ tenantId, projectId });
-      if (!result.success) {
-        logger.warn(`[config-apply] Domain apply failed for project ${projectId}: ${result.message}`);
+      if (!result.success && isRetryableFailure(result.message)) {
+        throw new Error(`Domain apply failed for project ${projectId}: ${result.message}`);
       }
       break;
     }
 
     case "network-apply": {
       const result = await applyNetworkRules({ tenantId, projectId });
-      if (!result.success) {
-        logger.warn(`[config-apply] Network apply failed for project ${projectId}: ${result.message}`);
+      if (!result.success && isRetryableFailure(result.message)) {
+        throw new Error(`Network apply failed for project ${projectId}: ${result.message}`);
       }
       break;
     }
 
     case "certificate-issue": {
       if (!input.certificateId || !input.domainName) {
-        logger.error("[config-apply] certificate-issue job missing certificateId or domainName");
-        return;
+        throw new Error("certificate-issue job missing certificateId or domainName");
       }
       const result = await issueCertificate({
         tenantId,
@@ -65,13 +71,13 @@ async function processConfigApplyJob(input: ConfigApplyJobInput): Promise<void> 
         domainName: input.domainName,
       });
       if (!result.success) {
-        logger.warn(`[config-apply] Certificate issue failed for ${input.domainName}: ${result.message}`);
+        throw new Error(`Certificate issue failed for ${input.domainName}: ${result.message}`);
       }
       break;
     }
 
     default:
-      logger.error(`[config-apply] Unknown job type: ${type}`);
+      throw new Error(`Unknown job type: ${type}`);
   }
 }
 

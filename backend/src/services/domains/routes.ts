@@ -73,7 +73,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         name: request.body.name,
       });
-      void enqueueDomainApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return domain;
     },
   );
@@ -103,7 +103,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         redirectWww: request.body.redirectWww,
         wildcard: request.body.wildcard,
       });
-      void enqueueDomainApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return updated;
     },
   );
@@ -129,7 +129,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         domainId: request.params.domainId,
       });
-      void enqueueDomainApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -181,14 +181,14 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       });
       // For Let's Encrypt, trigger certificate issuance in background
       if (request.body.type === "lets_encrypt") {
-        void enqueueCertificateIssue({
+        await enqueueCertificateIssue({
           tenantId: auth.tenantId,
           projectId: request.params.projectId,
           certificateId: cert.id,
           domainName: request.body.domainName,
         });
       } else {
-        void enqueueDomainApply(auth.tenantId, request.params.projectId);
+        await enqueueDomainApply(auth.tenantId, request.params.projectId);
       }
       return cert;
     },
@@ -215,7 +215,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         certificateId: request.params.certificateId,
       });
-      void enqueueDomainApply(auth.tenantId, request.params.projectId);
+      await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );

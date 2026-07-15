@@ -73,7 +73,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         path: request.body.path,
         credentials: request.body.credentials,
       });
-      void enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return rule;
     },
   );
@@ -99,7 +99,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
       });
-      void enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -134,7 +134,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         username: request.body.username,
         password: request.body.password,
       });
-      void enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return cred;
     },
   );
@@ -162,7 +162,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         ruleId: request.params.ruleId,
         credentialId: request.params.credentialId,
       });
-      void enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
@@ -213,7 +213,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         toPath: request.body.toPath,
         type: request.body.type,
       });
-      void enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return rule;
     },
   );
@@ -239,7 +239,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
       });
-      void enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      await enqueueNetworkApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },
   );
