@@ -5,7 +5,6 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { deploymentSchema, deploymentStatusSchema, providerSchema, serviceEntrySchema } from "./schemas.js";
 import type { ServiceEntry } from "./types.js";
-import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./domain/planner.js";
 import { destroyDeployment } from "./domain/destroy.js";
 import { applyDeploymentWebhookUpdate } from "./domain/processor.js";
@@ -28,7 +27,6 @@ import { listDeployments, getDeployment, getDeploymentForDestroy, getDeploymentF
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin;
 
   typed.post(
     "/deploy/providers",
@@ -356,7 +354,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
-      const result = await destroyDeployment(db, request.params.deploymentId);
+      const result = await destroyDeployment(request.params.deploymentId);
       if (!result.success) throw new DomainError(result.message, "bad_request");
       return { success: true, message: result.message };
     },
@@ -465,7 +463,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     async (request) => {
       const deployment = await getDeploymentForWebhook(request.body.buildId);
       if (!deployment) return { success: false };
-      await applyDeploymentWebhookUpdate(db, request.body.buildId, request.body);
+      await applyDeploymentWebhookUpdate(request.body.buildId, request.body);
       return { success: true };
     },
   );

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Deployment destroy orchestrator.
  *
@@ -10,21 +9,13 @@
 import { getAdapter } from "./adapters/index.js";
 import type { DestroyContext } from "./adapters/types.js";
 import { logger } from "../../../shared/logger.js";
-
-// ─── Types ─────────────────────────────────────────────────────────
-
-export interface DestroyOpts {
-  deploymentId: string;
-  db: any;
-  providerRow: { provider: string; region: string; api_key: string; api_secret: string };
-  deploymentRow: { repo: string; deploy_strategy: string; docker_image: string; tofu_script: string };
-}
+import { supabaseAdmin } from "../../../shared/supabase/client.js";
 
 // ─── Main Orchestrator ─────────────────────────────────────────────
 
-export async function destroyDeployment(db: any, deploymentId: string): Promise<{ success: boolean; message: string }> {
+export async function destroyDeployment(deploymentId: string): Promise<{ success: boolean; message: string }> {
   logger.info(`[destroy] Starting destroy for deployment ${deploymentId}`);
-  const { data: deployment } = await db
+  const { data: deployment } = await supabaseAdmin
     .from("deployments")
     .select("id,repo,provider_id,deploy_strategy,docker_image,logs,tofu_script")
     .eq("id", deploymentId)
@@ -33,7 +24,7 @@ export async function destroyDeployment(db: any, deploymentId: string): Promise<
   logger.info(`[destroy] Found deployment: repo=${deployment.repo} strategy=${deployment.deploy_strategy} provider_id=${deployment.provider_id}`);
 
   // Fetch provider credentials
-  const { data: providerRow } = await db
+  const { data: providerRow } = await supabaseAdmin
     .from("server_providers")
     .select("provider,region,api_key,api_secret")
     .eq("id", deployment.provider_id)
@@ -65,9 +56,9 @@ export async function destroyDeployment(db: any, deploymentId: string): Promise<
           tofuScript: deployment.tofu_script || "",
           deployStrategy: deployment.deploy_strategy,
           appendLog: async (line: string) => {
-            const { data: current } = await db.from("deployments").select("logs").eq("id", deploymentId).maybeSingle();
+            const { data: current } = await supabaseAdmin.from("deployments").select("logs").eq("id", deploymentId).maybeSingle();
             const updatedLogs = (current?.logs || "") + line + "\n";
-            await db.from("deployments").update({ logs: updatedLogs }).eq("id", deploymentId);
+            await supabaseAdmin.from("deployments").update({ logs: updatedLogs }).eq("id", deploymentId);
           },
         };
 
@@ -76,28 +67,28 @@ export async function destroyDeployment(db: any, deploymentId: string): Promise<
         const log = result.success
           ? `\n[${t}] ✓ Infrastructure destroyed via ${adapter.id}`
           : `\n[${t}] ⚠ Partially destroyed via ${adapter.id}. Errors: ${result.errors.join("; ")}`;
-        await markDestroyed(db, deploymentId, deployment.logs, log);
+        await markDestroyed(deploymentId, deployment.logs, log);
         return { success: result.success, message: result.message };
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error(`[destroy] Adapter destroy failed for ${deploymentId}: ${errMsg}`);
       const t = new Date().toISOString().replace("T", " ").slice(0, 19);
-      await markDestroyed(db, deploymentId, deployment.logs, `\n[${t}] ⚠ Destroy error: ${errMsg}`);
+      await markDestroyed(deploymentId, deployment.logs, `\n[${t}] ⚠ Destroy error: ${errMsg}`);
       return { success: false, message: `Destroy failed: ${errMsg}` };
     }
   }
 
   // Fallback: mark as destroyed with a warning
   const t = new Date().toISOString().replace("T", " ").slice(0, 19);
-  await markDestroyed(db, deploymentId, deployment.logs, `\n[${t}] ⚠ No adapter destroy available — marked as destroyed but resources may still exist`);
+  await markDestroyed(deploymentId, deployment.logs, `\n[${t}] ⚠ No adapter destroy available — marked as destroyed but resources may still exist`);
   return { success: true, message: "Marked as destroyed (no adapter destroy available)" };
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
-async function markDestroyed(db: any, deploymentId: string, existingLogs: string, logMessage: string): Promise<void> {
-  await db.from("deployments").update({
+async function markDestroyed(deploymentId: string, existingLogs: string, logMessage: string): Promise<void> {
+  await supabaseAdmin.from("deployments").update({
     status: "destroyed",
     app_url: "",
     tofu_script: "",

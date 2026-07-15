@@ -237,7 +237,6 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
 
   // Create the DB record
   const payload = await createDeploymentRecord(
-    supabaseAdmin,
     {
       tenantId,
       providerId,

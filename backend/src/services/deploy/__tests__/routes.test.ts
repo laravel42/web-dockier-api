@@ -571,7 +571,6 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().success).toBe(true);
     expect(mockApplyDeploymentWebhookUpdate).toHaveBeenCalledWith(
-      expect.anything(),
       TEST_DEPLOYMENT_ID,
       payload,
     );

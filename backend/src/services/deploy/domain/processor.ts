@@ -1,10 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { logger } from "../../../shared/logger.js";
+import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
 
 type CreateDeploymentInput = {
@@ -84,7 +84,7 @@ export function buildDeploymentPreview(input: CreateDeploymentInput, provider: P
   return { template, preview, region };
 }
 
-export async function createDeploymentRecord(db: any, input: CreateDeploymentInput, provider: ProviderSummary): Promise<DeploymentRow> {
+export async function createDeploymentRecord(input: CreateDeploymentInput, provider: ProviderSummary): Promise<DeploymentRow> {
   const createdAt = nowIso();
   const id = randomUUID();
   const { template, preview } = buildDeploymentPreview(input, provider);
@@ -109,14 +109,13 @@ export async function createDeploymentRecord(db: any, input: CreateDeploymentInp
     updated_at: createdAt,
   };
 
-  const { error } = await db.from("deployments").insert(deploymentPayload);
+  const { error } = await supabaseAdmin.from("deployments").insert(deploymentPayload);
   if (error) throw new DeployError("Failed to create deployment", "internal", error);
 
   return deploymentPayload;
 }
 
 export async function applyDeploymentWebhookUpdate(
-  db: any,
   buildId: string,
   payload: {
     status: "deploying" | "success" | "failed";
@@ -130,7 +129,7 @@ export async function applyDeploymentWebhookUpdate(
     containerName?: string;
   },
 ) {
-  const updates: Record<string, unknown> = { updated_at: nowIso() };
+  const updates: Partial<DeploymentRow> = { updated_at: nowIso() };
   if (payload.status === "success") {
     updates.status = "success";
     updates.app_url = payload.appUrl ?? "";
@@ -140,7 +139,7 @@ export async function applyDeploymentWebhookUpdate(
     updates.status = "deploying";
   }
 
-  const { data: current } = await db
+  const { data: current } = await supabaseAdmin
     .from("deployments")
     .select("logs,organization_id,repo,branch,commit_hash,deploy_strategy,provider_id")
     .eq("id", buildId)
@@ -154,7 +153,7 @@ export async function applyDeploymentWebhookUpdate(
     // Derive region from provider if not in payload
     let region = payload.region || "";
     if (!region && current?.provider_id) {
-      const { data: provRow } = await db
+      const { data: provRow } = await supabaseAdmin
         .from("server_providers")
         .select("region, provider")
         .eq("id", current.provider_id)
@@ -197,7 +196,7 @@ export async function applyDeploymentWebhookUpdate(
   if (payload.deployTarget) lines.push(`target=${payload.deployTarget}`);
   updates.logs = addLogLine(current?.logs ?? "", lines.join(" "));
 
-  await db.from("deployments").update(updates).eq("id", buildId);
+  await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);
 
   if (payload.status === "success" && current?.organization_id) {
     const appUrl = payload.appUrl ?? "";
