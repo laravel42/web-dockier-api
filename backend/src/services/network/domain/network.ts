@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type {
   SecurityRuleRow,
   SecurityRuleCredentialRow,
@@ -8,13 +10,8 @@ import { hash } from "bcryptjs";
 
 const BCRYPT_ROUNDS = 10;
 
-// ─── Helpers ───
-
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const err = new Error(message) as Error & { statusCode: number };
-  err.statusCode = statusCode;
-  return err;
-}
+export const NetworkError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("NetworkError");
+export type NetworkError = InstanceType<typeof NetworkError>;
 
 export interface SecurityRuleCredentialResponse {
   id: string;
@@ -89,27 +86,27 @@ export async function listSecurityRules(params: {
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
-  if (error) throw httpError(500, error.message);
+  const rows = unwrapList(rules, error, NetworkError, { internalMsg: "Failed to list security rules" });
 
-  if (!rules || rules.length === 0) return [];
+  if (rows.length === 0) return [];
 
   // Fetch all credentials for these rules in one query
-  const ruleIds = rules.map((r) => r.id);
+  const ruleIds = rows.map((r) => r.id);
   const { data: creds, error: credsError } = await supabaseAdmin
     .from("security_rule_credentials")
     .select("*")
     .in("security_rule_id", ruleIds)
     .order("created_at", { ascending: true });
 
-  if (credsError) throw httpError(500, credsError.message);
+  const credRows = unwrapList(creds, credsError, NetworkError, { internalMsg: "Failed to list credentials" });
 
-  const credsByRule = (creds || []).reduce((acc, c) => {
+  const credsByRule = credRows.reduce((acc, c) => {
     const key = c.security_rule_id;
     (acc[key] = acc[key] || []).push(c);
     return acc;
   }, {} as Record<string, SecurityRuleCredentialRow[]>);
 
-  return rules.map((r) =>
+  return rows.map((r) =>
     rowToSecurityRule(r as SecurityRuleRow, credsByRule[r.id] || []),
   );
 }
@@ -134,14 +131,14 @@ export async function createSecurityRule(params: {
     .select()
     .single();
 
-  if (error || !data) throw httpError(500, error?.message || "Failed to create security rule");
+  const rule = unwrapQuery(data, error, NetworkError, { internalMsg: "Failed to create security rule" });
 
   let credRows: SecurityRuleCredentialRow[] = [];
 
   if (credentials && credentials.length > 0) {
     const inserts = await Promise.all(
       credentials.map(async (c) => ({
-        security_rule_id: data.id,
+        security_rule_id: rule.id,
         username: c.username,
         password_hash: await hash(c.password, BCRYPT_ROUNDS),
       })),
@@ -152,11 +149,11 @@ export async function createSecurityRule(params: {
       .insert(inserts)
       .select();
 
-    if (credError) throw httpError(500, credError.message);
+    throwOnError(credError, NetworkError, { internalMsg: "Failed to create credentials" });
     credRows = (insertedCreds || []) as SecurityRuleCredentialRow[];
   }
 
-  return rowToSecurityRule(data as SecurityRuleRow, credRows);
+  return rowToSecurityRule(rule as SecurityRuleRow, credRows);
 }
 
 export async function deleteSecurityRule(params: {
@@ -173,8 +170,8 @@ export async function deleteSecurityRule(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) throw httpError(500, error.message);
-  if (count === 0) throw httpError(404, "Security rule not found");
+  throwOnError(error, NetworkError, { internalMsg: "Failed to delete security rule" });
+  if (count === 0) throw new NetworkError("Security rule not found", "not_found");
 }
 
 export async function addSecurityRuleCredential(params: {
@@ -195,7 +192,7 @@ export async function addSecurityRuleCredential(params: {
     .eq("project_id", projectId)
     .single();
 
-  if (ruleError || !rule) throw httpError(404, "Security rule not found");
+  unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
 
   const passwordHash = await hash(password, BCRYPT_ROUNDS);
 
@@ -209,9 +206,9 @@ export async function addSecurityRuleCredential(params: {
     .select()
     .single();
 
-  if (error || !data) throw httpError(500, error?.message || "Failed to add credential");
+  const cred = unwrapQuery(data, error, NetworkError, { internalMsg: "Failed to add credential" });
 
-  return rowToCredential(data as SecurityRuleCredentialRow);
+  return rowToCredential(cred as SecurityRuleCredentialRow);
 }
 
 export async function deleteSecurityRuleCredential(params: {
@@ -231,7 +228,7 @@ export async function deleteSecurityRuleCredential(params: {
     .eq("project_id", projectId)
     .single();
 
-  if (ruleError || !rule) throw httpError(404, "Security rule not found");
+  unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
 
   const { error, count } = await supabaseAdmin
     .from("security_rule_credentials")
@@ -239,8 +236,8 @@ export async function deleteSecurityRuleCredential(params: {
     .eq("id", credentialId)
     .eq("security_rule_id", ruleId);
 
-  if (error) throw httpError(500, error.message);
-  if (count === 0) throw httpError(404, "Credential not found");
+  throwOnError(error, NetworkError, { internalMsg: "Failed to delete credential" });
+  if (count === 0) throw new NetworkError("Credential not found", "not_found");
 }
 
 // ─── Redirect Rules ───
@@ -258,9 +255,9 @@ export async function listRedirectRules(params: {
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
-  if (error) throw httpError(500, error.message);
+  const rows = unwrapList(data, error, NetworkError, { internalMsg: "Failed to list redirect rules" });
 
-  return (data || []).map((r) => rowToRedirectRule(r as RedirectRuleRow));
+  return rows.map((r) => rowToRedirectRule(r as RedirectRuleRow));
 }
 
 export async function createRedirectRule(params: {
@@ -284,9 +281,9 @@ export async function createRedirectRule(params: {
     .select()
     .single();
 
-  if (error || !data) throw httpError(500, error?.message || "Failed to create redirect rule");
+  const row = unwrapQuery(data, error, NetworkError, { internalMsg: "Failed to create redirect rule" });
 
-  return rowToRedirectRule(data as RedirectRuleRow);
+  return rowToRedirectRule(row as RedirectRuleRow);
 }
 
 export async function deleteRedirectRule(params: {
@@ -303,6 +300,6 @@ export async function deleteRedirectRule(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) throw httpError(500, error.message);
-  if (count === 0) throw httpError(404, "Redirect rule not found");
+  throwOnError(error, NetworkError, { internalMsg: "Failed to delete redirect rule" });
+  if (count === 0) throw new NetworkError("Redirect rule not found", "not_found");
 }
