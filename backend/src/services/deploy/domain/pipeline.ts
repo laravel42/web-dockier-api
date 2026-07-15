@@ -1,10 +1,8 @@
 /**
  * Deploy pipeline orchestrator.
  *
- * Coordinates the full deployment lifecycle by delegating to focused stage modules:
- *   pipeline-helpers  → logging, status updates, env parsing
- *   pipeline-build    → Docker image construction (cache, local, CodeBuild)
- *   pipeline-health   → post-deploy health check polling
+ * Coordinates the full deployment lifecycle by delegating to focused stage functions.
+ * Each stage receives a shared PipelineContext object and contributes its results.
  *
  * Pipeline stages:
  *   1. Validate & fetch credentials
@@ -16,16 +14,23 @@
  *   7. Execute post-deploy script
  *   8. Apply network rules
  *   9. Health check & finalize
+ *
+ * Existing stage modules remain unchanged:
+ *   pipeline-helpers  → logging, status updates, env parsing
+ *   pipeline-build    → Docker image construction (cache, local, CodeBuild)
+ *   pipeline-health   → post-deploy health check polling
  */
 
+import { readFile, writeFile, rm } from "node:fs/promises";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
-import { createDeployLogger } from "../../../lib/logging.js";
+import { createDeployLogger, type ContextualLogger } from "../../../lib/logging.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
+import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { getAdapter } from "./adapters/index.js";
-import type { AdapterContext } from "./adapters/types.js";
-import { createStreamingRunCmd } from "./run-cmd.js";
+import type { AdapterContext, ProvisionResult, DeployAdapter } from "./adapters/types.js";
+import { createStreamingRunCmd, type RunCmdFn } from "./run-cmd.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { executePostDeployScript } from "./post-deploy.js";
@@ -62,17 +67,77 @@ export interface PipelineInput {
   useRepoDockerfile?: boolean;
 }
 
-// ─── Project Context Loader ────────────────────────────────────────
-
 interface ProjectContext {
   envVars: Array<{ name: string; value: string }>;
   deployScript: string;
   knownPlatform: string;
 }
 
+// ─── Stage 1: Fetch Provider Credentials ───────────────────────────
+
+interface ProviderResult {
+  provider: string;
+  region: string;
+  credentials: { api_key: string; api_secret: string };
+}
+
+async function fetchProviderCredentials(
+  event: PipelineInput,
+): Promise<ProviderResult | null> {
+  const { data: providerRow } = await db
+    .from("server_providers")
+    .select("provider, region, api_key, api_secret")
+    .eq("id", event.providerId)
+    .maybeSingle();
+
+  if (!providerRow) return null;
+
+  let region = providerRow.region || "us-east-1";
+  if (event.tofuScript) {
+    const scriptRegion = extractRegionFromScript(event.tofuScript);
+    if (scriptRegion) region = scriptRegion;
+  }
+
+  return {
+    provider: providerRow.provider || "cloud",
+    region,
+    credentials: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
+  };
+}
+
+// ─── Stage 2: Clone Repository ─────────────────────────────────────
+
+async function cloneRepository(
+  event: PipelineInput,
+  shortId: string,
+  logger: ContextualLogger,
+): Promise<{ repoDir: string; workDir: string; commitHash: string }> {
+  const { data: connRow } = await db
+    .from("git_connections")
+    .select("provider, personal_token, endpoint")
+    .eq("id", event.gitConnectionId)
+    .maybeSingle();
+
+  if (!connRow) throw new Error("Git connection not found");
+
+  return await cloneRepo({
+    git: {
+      provider: connRow.provider,
+      token: connRow.personal_token,
+      repo: event.repo,
+      endpoint: connRow.endpoint || "",
+    },
+    branch: event.branch,
+    shortId,
+    logger,
+  });
+}
+
+// ─── Stage 3: Load Project Context ────────────────────────────────
+
 async function loadProjectContext(
   event: PipelineInput,
-  logger: ReturnType<typeof createDeployLogger>,
+  logger: ContextualLogger,
 ): Promise<ProjectContext> {
   let envVars: Array<{ name: string; value: string }> = [];
   let deployScript = "";
@@ -120,12 +185,200 @@ async function loadProjectContext(
   return { envVars, deployScript, knownPlatform };
 }
 
-// ─── Network Rules ─────────────────────────────────────────────────
+// ─── Stage 5: Build Docker Image ──────────────────────────────────
+
+interface BuildResult {
+  actualImage: string;
+  skippedBuild: boolean;
+}
+
+async function buildDockerImage(ctx: {
+  event: PipelineInput;
+  deploymentId: string;
+  repoName: string;
+  shortId: string;
+  region: string;
+  repoDir: string;
+  workDir: string;
+  commitHash: string;
+  repoConfig: RepoConfig;
+  providerCredentials: { api_key: string; api_secret: string };
+  projectCtx: ProjectContext;
+  runCmd: RunCmdFn;
+  logger: ContextualLogger;
+}): Promise<BuildResult> {
+  const isStaticDeploy = ctx.event.deployStrategy === "static";
+
+  if (isStaticDeploy) {
+    return {
+      actualImage: `${ctx.repoName}:${ctx.shortId}`,
+      skippedBuild: true,
+    };
+  }
+
+  const result = await buildImage({
+    deploymentId: ctx.deploymentId,
+    repoName: ctx.repoName,
+    shortId: ctx.shortId,
+    region: ctx.region,
+    repoDir: ctx.repoDir,
+    workDir: ctx.workDir,
+    commitHash: ctx.commitHash,
+    repoConfig: ctx.repoConfig,
+    repo: ctx.event.repo,
+    branch: ctx.event.branch,
+    deployStrategy: ctx.event.deployStrategy,
+    buildMethod: ctx.event.buildMethod,
+    providerRow: ctx.providerCredentials,
+    projectEnvVars: ctx.projectCtx.envVars,
+    techStack: ctx.event.techStack,
+    runCmd: ctx.runCmd,
+    logger: ctx.logger,
+  });
+
+  return { actualImage: result.actualImage, skippedBuild: result.skippedBuild };
+}
+
+// ─── Stage 6: Push & Provision ─────────────────────────────────────
+
+function buildAdapterContext(ctx: {
+  deploymentId: string;
+  repoName: string;
+  shortId: string;
+  region: string;
+  repoDir: string;
+  workDir: string;
+  commitHash: string;
+  providerCredentials: { api_key: string; api_secret: string };
+  event: PipelineInput;
+  deployStrategy: string;
+  repoConfig: RepoConfig;
+  actualImage: string;
+  runCmd: RunCmdFn;
+}): AdapterContext {
+  const detectedStack = toDetectedStack(ctx.repoConfig);
+
+  return {
+    deploymentId: ctx.deploymentId,
+    repoName: ctx.repoName,
+    shortId: ctx.shortId,
+    region: ctx.region,
+    repoDir: ctx.repoDir,
+    workDir: ctx.workDir,
+    commitHash: ctx.commitHash,
+    providerCredentials: { apiKey: ctx.providerCredentials.api_key, apiSecret: ctx.providerCredentials.api_secret },
+    event: {
+      deploymentId: ctx.event.deploymentId,
+      tenantId: ctx.event.tenantId,
+      providerId: ctx.event.providerId,
+      gitConnectionId: ctx.event.gitConnectionId,
+      projectId: ctx.event.projectId,
+      repo: ctx.event.repo,
+      branch: ctx.event.branch,
+      tofuScript: ctx.event.tofuScript,
+      techStack: ctx.event.techStack,
+      primaryLanguage: ctx.event.primaryLanguage,
+      hasDocker: ctx.event.hasDocker,
+      deployStrategy: ctx.deployStrategy,
+      templateId: ctx.event.templateId,
+      buildMethod: ctx.event.buildMethod,
+      registryUrl: ctx.event.registryUrl,
+      services: ctx.event.services,
+    },
+    detectedStack,
+    runCmd: ctx.runCmd,
+    appendLog: (line: string) => appendLog(ctx.deploymentId, `[${ts()}] ${line}`),
+    writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
+    readFile: (p, e) => readFile(p, e as BufferEncoding),
+    rm,
+    state: { actualImage: ctx.actualImage },
+  };
+}
+
+async function pushAndProvision(
+  adapter: DeployAdapter,
+  adapterCtx: AdapterContext,
+  actualImage: string,
+  isStaticDeploy: boolean,
+  projectCtx: ProjectContext,
+  logger: ContextualLogger,
+): Promise<ProvisionResult> {
+  // Inject environment variables
+  await adapter.injectEnvVars(adapterCtx, projectCtx.envVars);
+
+  // Push image to provider registry
+  let pushResult: { remoteImageUri: string; skipped: boolean };
+
+  const isAlreadyRemote = actualImage.includes(".dkr.ecr.") || actualImage.includes("gcr.io") || actualImage.includes("docker.pkg.dev");
+  if (isAlreadyRemote || isStaticDeploy) {
+    pushResult = { remoteImageUri: actualImage, skipped: true };
+    if (isAlreadyRemote) await logger.info(`Image already in registry: ${actualImage}`);
+  } else {
+    pushResult = await adapter.pushImage(adapterCtx, actualImage);
+  }
+
+  // Provision infrastructure
+  const imageUri = pushResult.skipped ? "" : pushResult.remoteImageUri;
+  const provision = await adapter.provisionInfrastructure(adapterCtx, imageUri || actualImage);
+
+  // Run adapter post-deploy steps
+  await adapter.runPostDeploy(adapterCtx, provision);
+
+  return provision;
+}
+
+// ─── Stage 7: Post-Deploy Script ───────────────────────────────────
+
+async function runPostDeployScriptIfNeeded(ctx: {
+  event: PipelineInput;
+  deployStrategy: string;
+  provider: string;
+  repoName: string;
+  region: string;
+  adapterCtx: AdapterContext;
+  provision: ProvisionResult;
+  projectCtx: ProjectContext;
+  logger: ContextualLogger;
+  runCmd: RunCmdFn;
+  workDir: string;
+}): Promise<void> {
+  if (ctx.deployStrategy === "static") return;
+  if (!ctx.projectCtx.deployScript.trim()) return;
+
+  const containerName = ctx.provider === "aws"
+    ? ctx.repoName
+    : ctx.repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+  await executePostDeployScript(
+    {
+      containerName,
+      region: ctx.region,
+      provider: ctx.provider,
+      techStack: ctx.event.techStack || [],
+      services: ctx.event.services || [],
+      envVars: ctx.projectCtx.envVars,
+      credentials: {
+        apiKey: ctx.adapterCtx.providerCredentials.apiKey,
+        apiSecret: ctx.adapterCtx.providerCredentials.apiSecret,
+      },
+      instanceId: ctx.provision.outputs.InstanceId || "",
+      serverIp: ctx.provision.serverIp || "",
+      deployKeyPath: ctx.adapterCtx.state.deployKeyPath || "",
+      workDir: ctx.workDir,
+    },
+    ctx.projectCtx.deployScript,
+    ctx.logger,
+    ctx.runCmd,
+    ctx.deployStrategy,
+  );
+}
+
+// ─── Stage 8: Network Rules ───────────────────────────────────────
 
 async function applyNetworkRulesIfNeeded(
   event: PipelineInput,
   deployStrategy: string,
-  logger: ReturnType<typeof createDeployLogger>,
+  logger: ContextualLogger,
 ): Promise<void> {
   if (!event.projectId || deployStrategy !== "vps") return;
 
@@ -148,7 +401,112 @@ async function applyNetworkRulesIfNeeded(
   }
 }
 
-// ─── Main Pipeline ─────────────────────────────────────────────────
+// ─── Stage 9: Finalize ─────────────────────────────────────────────
+
+function buildInfraMetadata(ctx: {
+  provider: string;
+  region: string;
+  repoName: string;
+  deployStrategy: string;
+  adapter: DeployAdapter;
+  provision: ProvisionResult;
+}): InfraMetadata {
+  const containerName = ctx.provider === "aws"
+    ? ctx.repoName
+    : ctx.repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+  const service = ADAPTER_TO_SERVICE[ctx.adapter.id] || ctx.adapter.id;
+  const infra: InfraMetadata = {
+    provider: ctx.provider as InfraMetadata["provider"],
+    service: service as InfraMetadata["service"],
+    region: ctx.region,
+    containerName,
+    stackName: `image-builder-app-${ctx.repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+  };
+
+  if (ctx.provision.outputs?.InstanceId) infra.instanceId = ctx.provision.outputs.InstanceId;
+  if (ctx.provision.serverIp) infra.serverIp = ctx.provision.serverIp;
+  if (ctx.provision.outputs?.PublicIp) infra.serverIp = ctx.provision.outputs.PublicIp;
+
+  if (ctx.deployStrategy === "managed" && ctx.provider === "aws") {
+    infra.ecsCluster = ctx.repoName;
+    infra.ecsTaskFamily = ctx.repoName;
+  }
+  if (ctx.deployStrategy === "managed" && ctx.provider === "gcp") {
+    infra.cloudRunService = containerName;
+  }
+
+  return infra;
+}
+
+async function finalizeDeploy(ctx: {
+  deploymentId: string;
+  event: PipelineInput;
+  repoName: string;
+  provider: string;
+  region: string;
+  deployStrategy: string;
+  adapter: DeployAdapter;
+  adapterCtx: AdapterContext;
+  provision: ProvisionResult;
+  actualImage: string;
+  commitHash: string;
+  logger: ContextualLogger;
+}): Promise<void> {
+  const isStaticDeploy = ctx.deployStrategy === "static";
+  const finalUrl = ctx.provision.appUrl || "";
+
+  const infra = buildInfraMetadata({
+    provider: ctx.provider,
+    region: ctx.region,
+    repoName: ctx.repoName,
+    deployStrategy: ctx.deployStrategy,
+    adapter: ctx.adapter,
+    provision: ctx.provision,
+  });
+
+  await ctx.logger.section("Complete");
+  await ctx.logger.success(isStaticDeploy ? "Static site deployed" : `Docker image: ${ctx.actualImage}`);
+  await ctx.logger.success(`Infrastructure provisioned via ${ctx.adapter.id}`);
+
+  if (ctx.adapterCtx.state.machineTypeFallback) {
+    await ctx.logger.warn(
+      `Instance type was changed from ${ctx.adapterCtx.state.originalMachineType} to ${ctx.adapterCtx.state.machineTypeFallback} due to capacity constraints in ${ctx.region}.`,
+    );
+  }
+
+  if (finalUrl) {
+    await waitForAppReady(ctx.deploymentId, finalUrl);
+    await ctx.logger.success(`Application URL: ${finalUrl}`);
+    await updateStatus(ctx.deploymentId, "success", { app_url: finalUrl, infra });
+  } else {
+    await ctx.logger.warn("Could not determine app URL — check cloud console");
+    await updateStatus(ctx.deploymentId, "success", { infra });
+  }
+
+  // Non-blocking notification
+  const deployMessage = finalUrl
+    ? `Deployment of ${ctx.event.repo} (${ctx.event.branch}) succeeded. App URL: ${finalUrl}`
+    : `Deployment of ${ctx.event.repo} (${ctx.event.branch}) succeeded.`;
+
+  void sendNotification({
+    tenantId: ctx.event.tenantId,
+    title: "Deployment succeeded",
+    message: deployMessage,
+    metadata: {
+      kind: "deploy",
+      repo: ctx.event.repo,
+      branch: ctx.event.branch,
+      commit: ctx.commitHash || undefined,
+      appUrl: finalUrl || undefined,
+      deployId: ctx.deploymentId,
+    },
+  }).catch((err) => {
+    obsLogger.error({ err }, `[deploy] Failed to send deploy complete notification for ${ctx.deploymentId}`);
+  });
+}
+
+// ─── Main Pipeline Orchestrator ────────────────────────────────────
 
 /**
  * Execute the full deployment pipeline.
@@ -165,24 +523,14 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
   const shortId = deploymentId.slice(0, 8);
 
   // 1. Fetch provider credentials
-  const { data: providerRow } = await db
-    .from("server_providers")
-    .select("provider, region, api_key, api_secret")
-    .eq("id", event.providerId)
-    .maybeSingle();
-  if (!providerRow) {
+  const providerResult = await fetchProviderCredentials(event);
+  if (!providerResult) {
     await appendLog(deploymentId, `[${ts()}] ✗ Provider not found: ${event.providerId}`);
     await updateStatus(deploymentId, "failed");
     return;
   }
 
-  const provider = providerRow.provider || "cloud";
-  let region = providerRow.region || "us-east-1";
-
-  if (event.tofuScript) {
-    const scriptRegion = extractRegionFromScript(event.tofuScript);
-    if (scriptRegion) region = scriptRegion;
-  }
+  const { provider, region, credentials: providerCredentials } = providerResult;
 
   // Template deploy path (early exit)
   if (event.templateId) {
@@ -205,21 +553,8 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await appendLog(deploymentId, `[${ts()}] ℹ Repository: ${event.repo} | Branch: ${event.branch}`);
 
     // 2. Clone repository
-    const { data: connRow } = await db
-      .from("git_connections")
-      .select("provider, personal_token, endpoint")
-      .eq("id", event.gitConnectionId)
-      .maybeSingle();
-    if (!connRow) throw new Error("Git connection not found");
-
     const logger = createDeployLogger(appendLog, deploymentId);
-    const { repoDir, workDir, commitHash } = await cloneRepo({
-      git: { provider: connRow.provider, token: connRow.personal_token, repo: event.repo, endpoint: connRow.endpoint || "" },
-      branch: event.branch,
-      shortId,
-      logger,
-    });
-
+    const { repoDir, workDir, commitHash } = await cloneRepository(event, shortId, logger);
     await patchDeployment(deploymentId, { commit_hash: commitHash });
 
     // 3. Load project context (env vars, deploy script, platform)
@@ -234,46 +569,8 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     });
 
     // 5. Build Docker image
-    const isStaticDeploy = event.deployStrategy === "static";
-    let actualImage: string;
-    let skippedBuild: boolean;
-
-    if (isStaticDeploy) {
-      actualImage = `${repoName}:${shortId}`;
-      skippedBuild = true;
-    } else {
-      const buildResult = await buildImage({
-        deploymentId,
-        repoName,
-        shortId,
-        region,
-        repoDir,
-        workDir,
-        commitHash,
-        repoConfig,
-        repo: event.repo,
-        branch: event.branch,
-        deployStrategy: event.deployStrategy,
-        buildMethod: event.buildMethod,
-        providerRow: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
-        projectEnvVars: projectCtx.envVars,
-        techStack: event.techStack,
-        runCmd,
-        logger,
-      });
-      actualImage = buildResult.actualImage;
-      skippedBuild = buildResult.skippedBuild;
-    }
-
-    // 6. Push image & provision infrastructure (via adapter)
-    const deployStrategy = event.deployStrategy || "managed";
-    const adapter = getAdapter(provider, deployStrategy);
-    await logger.info(`Using adapter: ${adapter.id}`);
-
-    const detectedStack = toDetectedStack(repoConfig);
-    const { readFile, writeFile, rm } = await import("node:fs/promises");
-
-    const adapterCtx: AdapterContext = {
+    const { actualImage, skippedBuild: _skippedBuild } = await buildDockerImage({
+      event,
       deploymentId,
       repoName,
       shortId,
@@ -281,144 +578,76 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       repoDir,
       workDir,
       commitHash,
-      providerCredentials: { apiKey: providerRow.api_key, apiSecret: providerRow.api_secret },
-      event: {
-        deploymentId,
-        tenantId: event.tenantId,
-        providerId: event.providerId,
-        gitConnectionId: event.gitConnectionId,
-        projectId: event.projectId,
-        repo: event.repo,
-        branch: event.branch,
-        tofuScript: event.tofuScript,
-        techStack: event.techStack,
-        primaryLanguage: event.primaryLanguage,
-        hasDocker: event.hasDocker,
-        deployStrategy,
-        templateId: event.templateId,
-        buildMethod: event.buildMethod,
-        registryUrl: event.registryUrl,
-        services: event.services,
-      },
-      detectedStack,
+      repoConfig,
+      providerCredentials,
+      projectCtx,
       runCmd,
-      appendLog: (line: string) => appendLog(deploymentId, `[${ts()}] ${line}`),
-      writeFile: (p, d, e) => writeFile(p, d, e as BufferEncoding),
-      readFile: (p, e) => readFile(p, e as BufferEncoding),
-      rm,
-      state: { actualImage },
-    };
+      logger,
+    });
 
-    // Inject environment variables
-    await adapter.injectEnvVars(adapterCtx, projectCtx.envVars);
+    // 6. Push image & provision infrastructure
+    const deployStrategy = event.deployStrategy || "managed";
+    const adapter = getAdapter(provider, deployStrategy);
+    await logger.info(`Using adapter: ${adapter.id}`);
 
-    // Push image to provider registry
+    const adapterCtx = buildAdapterContext({
+      deploymentId,
+      repoName,
+      shortId,
+      region,
+      repoDir,
+      workDir,
+      commitHash,
+      providerCredentials,
+      event,
+      deployStrategy,
+      repoConfig,
+      actualImage,
+      runCmd,
+    });
+
     await updateStatus(deploymentId, "deploying");
-    let pushResult: { remoteImageUri: string; skipped: boolean };
+    const provision = await pushAndProvision(
+      adapter,
+      adapterCtx,
+      actualImage,
+      event.deployStrategy === "static",
+      projectCtx,
+      logger,
+    );
 
-    const isAlreadyRemote = actualImage.includes(".dkr.ecr.") || actualImage.includes("gcr.io") || actualImage.includes("docker.pkg.dev");
-    if (isAlreadyRemote || isStaticDeploy) {
-      pushResult = { remoteImageUri: actualImage, skipped: true };
-      if (isAlreadyRemote) await logger.info(`Image already in registry: ${actualImage}`);
-    } else {
-      pushResult = await adapter.pushImage(adapterCtx, actualImage);
-    }
-
-    // Provision infrastructure
-    const imageUri = pushResult.skipped ? "" : pushResult.remoteImageUri;
-    const provision = await adapter.provisionInfrastructure(adapterCtx, imageUri || actualImage);
-
-    // Run adapter post-deploy steps
-    await adapter.runPostDeploy(adapterCtx, provision);
-
-    // 7. Execute deploy script (user-defined post-deploy commands)
-    const containerName = provider === "aws"
-      ? repoName
-      : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-
-    if (deployStrategy !== "static" && projectCtx.deployScript.trim()) {
-      await executePostDeployScript(
-        {
-          containerName,
-          region,
-          provider,
-          techStack: event.techStack || [],
-          services: event.services || [],
-          envVars: projectCtx.envVars,
-          credentials: { apiKey: adapterCtx.providerCredentials.apiKey, apiSecret: adapterCtx.providerCredentials.apiSecret },
-          instanceId: provision.outputs.InstanceId || "",
-          serverIp: provision.serverIp || "",
-          deployKeyPath: adapterCtx.state.deployKeyPath || "",
-          workDir,
-        },
-        projectCtx.deployScript,
-        logger,
-        runCmd,
-        deployStrategy,
-      );
-    }
+    // 7. Execute post-deploy script
+    await runPostDeployScriptIfNeeded({
+      event,
+      deployStrategy,
+      provider,
+      repoName,
+      region,
+      adapterCtx,
+      provision,
+      projectCtx,
+      logger,
+      runCmd,
+      workDir,
+    });
 
     // 8. Apply network rules
     await applyNetworkRulesIfNeeded(event, deployStrategy, logger);
 
     // 9. Finalize: health check, status update, notification
-    const finalUrl = provision.appUrl || "";
-
-    // Build infra metadata
-    const service = ADAPTER_TO_SERVICE[adapter.id] || adapter.id;
-    const infra: InfraMetadata = {
-      provider: provider as InfraMetadata["provider"],
-      service: service as InfraMetadata["service"],
+    await finalizeDeploy({
+      deploymentId,
+      event,
+      repoName,
+      provider,
       region,
-      containerName,
-      stackName: `image-builder-app-${repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
-    };
-    if (provision.outputs?.InstanceId) infra.instanceId = provision.outputs.InstanceId;
-    if (provision.serverIp) infra.serverIp = provision.serverIp;
-    if (provision.outputs?.PublicIp) infra.serverIp = provision.outputs.PublicIp;
-    if (deployStrategy === "managed" && provider === "aws") {
-      infra.ecsCluster = repoName;
-      infra.ecsTaskFamily = repoName;
-    }
-    if (deployStrategy === "managed" && provider === "gcp") {
-      infra.cloudRunService = containerName;
-    }
-
-    await logger.section("Complete");
-    await logger.success(isStaticDeploy ? "Static site deployed" : `Docker image: ${pushResult.remoteImageUri || actualImage}`);
-    await logger.success(`Infrastructure provisioned via ${adapter.id}`);
-
-    if (adapterCtx.state.machineTypeFallback) {
-      await logger.warn(`Instance type was changed from ${adapterCtx.state.originalMachineType} to ${adapterCtx.state.machineTypeFallback} due to capacity constraints in ${region}.`);
-    }
-
-    if (finalUrl) {
-      await waitForAppReady(deploymentId, finalUrl);
-      await logger.success(`Application URL: ${finalUrl}`);
-      await updateStatus(deploymentId, "success", { app_url: finalUrl, infra });
-    } else {
-      await logger.warn("Could not determine app URL — check cloud console");
-      await updateStatus(deploymentId, "success", { infra });
-    }
-
-    // Non-blocking notification
-    const deployMessage = finalUrl
-      ? `Deployment of ${event.repo} (${event.branch}) succeeded. App URL: ${finalUrl}`
-      : `Deployment of ${event.repo} (${event.branch}) succeeded.`;
-    void sendNotification({
-      tenantId: event.tenantId,
-      title: "Deployment succeeded",
-      message: deployMessage,
-      metadata: {
-        kind: "deploy",
-        repo: event.repo,
-        branch: event.branch,
-        commit: commitHash || undefined,
-        appUrl: finalUrl || undefined,
-        deployId: deploymentId,
-      },
-    }).catch((err) => {
-      obsLogger.error({ err }, `[deploy] Failed to send deploy complete notification for ${deploymentId}`);
+      deployStrategy,
+      adapter,
+      adapterCtx,
+      provision,
+      actualImage,
+      commitHash,
+      logger,
     });
 
     // Cleanup work directory
