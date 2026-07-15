@@ -84,12 +84,16 @@ interface ProviderResult {
 async function fetchProviderCredentials(
   event: PipelineInput,
 ): Promise<ProviderResult | null> {
-  const { data: providerRow } = await db
+  const { data: providerRow, error } = await db
     .from("server_providers")
     .select("provider, region, api_key, api_secret")
     .eq("id", event.providerId)
     .maybeSingle();
 
+  if (error) {
+    obsLogger.error({ err: error, providerId: event.providerId }, "[deploy] Failed to fetch provider credentials");
+    return null;
+  }
   if (!providerRow) return null;
 
   let region = providerRow.region || "us-east-1";
@@ -101,7 +105,10 @@ async function fetchProviderCredentials(
   return {
     provider: providerRow.provider || "cloud",
     region,
-    credentials: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
+    credentials: {
+      api_key: providerRow.api_key || "",
+      api_secret: providerRow.api_secret || "",
+    },
   };
 }
 
@@ -112,18 +119,21 @@ async function cloneRepository(
   shortId: string,
   logger: ContextualLogger,
 ): Promise<{ repoDir: string; workDir: string; commitHash: string }> {
-  const { data: connRow } = await db
+  const { data: connRow, error } = await db
     .from("git_connections")
     .select("provider, personal_token, endpoint")
     .eq("id", event.gitConnectionId)
     .maybeSingle();
 
+  if (error) {
+    throw new Error(`Database error fetching git connection: ${error.message}`);
+  }
   if (!connRow) throw new Error("Git connection not found");
 
   return await cloneRepo({
     git: {
-      provider: connRow.provider,
-      token: connRow.personal_token,
+      provider: connRow.provider || "",
+      token: connRow.personal_token || "",
       repo: event.repo,
       endpoint: connRow.endpoint || "",
     },
