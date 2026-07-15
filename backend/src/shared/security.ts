@@ -97,15 +97,19 @@ export async function requireWebhookSignature(request: FastifyRequest, reply: Fa
 /**
  * Fastify preHandler that verifies internal service-to-service calls.
  *
- * Uses the same WEBHOOK_SECRET as a shared internal token passed via
- * the `x-internal-token` header. This protects endpoints that expose
- * sensitive data (credentials, tokens) for internal consumption only.
+ * Uses a dedicated INTERNAL_SERVICE_TOKEN for service-to-service auth,
+ * separate from WEBHOOK_SECRET (which is for external webhook validation).
+ * Falls back to WEBHOOK_SECRET for backward compatibility if the dedicated
+ * token is not yet configured.
  *
- * In development (WEBHOOK_SECRET not set), allows unauthenticated access.
- * In production, WEBHOOK_SECRET must be set.
+ * Passed via the `x-internal-token` header. This protects endpoints that
+ * expose sensitive data (credentials, tokens) for internal consumption only.
+ *
+ * In development (neither token set), allows unauthenticated access.
+ * In production, at least one must be set.
  */
 export async function requireInternalToken(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const secret = env.WEBHOOK_SECRET;
+  const secret = env.INTERNAL_SERVICE_TOKEN || env.WEBHOOK_SECRET;
 
   if (!secret) {
     if (env.NODE_ENV === "production") {

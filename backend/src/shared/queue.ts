@@ -118,9 +118,14 @@ export interface WorkerOptions {
   pollingIntervalSeconds?: number;
 }
 
+export interface EnqueueResult {
+  /** Whether the job was persisted to the queue (true) or ran in-process as fallback (false) */
+  queued: boolean;
+}
+
 export interface WorkerInstance<T> {
   register: () => Promise<void>;
-  enqueue: (input: T, singletonKey?: string) => Promise<void>;
+  enqueue: (input: T, singletonKey?: string) => Promise<EnqueueResult>;
 }
 
 /**
@@ -182,7 +187,7 @@ export function createWorker<T>(
     }
   }
 
-  async function enqueue(input: T, singletonKey?: string): Promise<void> {
+  async function enqueue(input: T, singletonKey?: string): Promise<EnqueueResult> {
     if (isQueueReady() && boss) {
       await boss.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
@@ -190,15 +195,16 @@ export function createWorker<T>(
         ...(singletonKey ? { singletonKey } : {}),
       });
       logger.info(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
-      return;
+      return { queued: true };
     }
 
     logger.warn(`[${queueName}] Queue unavailable — running job in-process${singletonKey ? ` (key: ${singletonKey})` : ""}`);
     setImmediate(() => {
       handler(input).catch((err) => {
-        logger.error({ err }, `[${queueName}] Job failed${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+        logger.error({ err }, `[${queueName}] In-process job failed${singletonKey ? ` (key: ${singletonKey})` : ""}`);
       });
     });
+    return { queued: false };
   }
 
   return { register, enqueue };

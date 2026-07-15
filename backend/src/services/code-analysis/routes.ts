@@ -5,7 +5,7 @@ import { z } from "zod";
 import { verifyAuthToken, getAuth } from "../../shared/auth.js";
 import { customRuleSchema, findingSchema, scanSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
 
 // Domain modules
@@ -101,18 +101,32 @@ export async function registerCodeAnalysisRoutes(app: FastifyInstance) {
       schema: {
         tags: ["code-analysis"],
         summary: "List scans",
-        querystring: z.object({ projectId: z.string().optional(), branch: z.string().optional() }),
-        response: { 200: z.object({ scans: z.array(scanSchema) }) },
+        querystring: paginationQuerySchema.extend({
+          projectId: z.string().optional(),
+          branch: z.string().optional(),
+        }),
+        response: {
+          200: z.object({
+            scans: z.array(scanSchema),
+            pagination: paginationMetaSchema,
+          }),
+        },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      const scans = await listScans({
+      const { limit, offset } = request.query;
+      const result = await listScans({
         tenantId: auth.tenantId,
         projectId: request.query.projectId,
         branch: request.query.branch,
+        limit,
+        offset,
       });
-      return { scans };
+      return {
+        scans: result.scans,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 

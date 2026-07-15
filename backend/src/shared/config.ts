@@ -44,6 +44,7 @@ const envSchema = z
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default("gpt-4o-mini"),
     WEBHOOK_SECRET: z.string().optional(),
+    INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
     DEPLOY_CALLBACK_URL: z.string().optional(),
     IMAGE_BUILDER_CODEBUILD_PROJECT: z.string().min(1).default("image-builder"),
     PGBOSS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(5),
@@ -84,6 +85,24 @@ function parseEnv(): AppEnv {
       "CORS_ORIGIN must be set to a specific origin (not \"*\") in production. " +
       "Example: CORS_ORIGIN=https://app.dockier.dev",
     );
+  }
+
+  // Warn about critical optional vars in production
+  if (parsed.NODE_ENV === "production") {
+    if (!parsed.DATABASE_URL) {
+      throw new Error("DATABASE_URL is required in production (job queue will not function without it).");
+    }
+    if (!parsed.WEBHOOK_SECRET) {
+      throw new Error("WEBHOOK_SECRET is required in production (webhook endpoints will reject all requests).");
+    }
+    if (!parsed.INTERNAL_SERVICE_TOKEN) {
+      // Fall back to WEBHOOK_SECRET but warn — this preserves backward compat
+      // while encouraging migration to a separate token.
+      console.warn(
+        "[config] INTERNAL_SERVICE_TOKEN not set — falling back to WEBHOOK_SECRET. " +
+        "Set a separate INTERNAL_SERVICE_TOKEN for defense-in-depth.",
+      );
+    }
   }
 
   return parsed;

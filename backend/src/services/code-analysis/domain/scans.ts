@@ -48,16 +48,29 @@ export interface ListScansParams {
   tenantId: string;
   projectId?: string;
   branch?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export async function listScans(params: ListScansParams) {
-  const { tenantId, projectId, branch } = params;
+  const { tenantId, projectId, branch, limit = 20, offset = 0 } = params;
+
+  // Count query for pagination metadata
+  let countQuery = supabaseAdmin
+    .from("scans")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", tenantId);
+  if (projectId) countQuery = countQuery.eq("project_id", projectId);
+  if (branch) countQuery = countQuery.eq("branch", branch);
+  const { count } = await countQuery;
+  const total = count ?? 0;
+
   let query = supabaseAdmin
     .from("scans")
     .select("*")
     .eq("organization_id", tenantId)
     .order("updated_at", { ascending: false })
-    .limit(50);
+    .range(offset, offset + limit - 1);
   if (projectId) query = query.eq("project_id", projectId);
   if (branch) query = query.eq("branch", branch);
   const { data, error } = await query;
@@ -76,7 +89,7 @@ export async function listScans(params: ListScansParams) {
     .map((row) => row.id);
   const severityByScan = await getSecurityFindingCountsForScans(terminalIds);
 
-  return finalRows.map((row) => {
+  const scans = finalRows.map((row) => {
     const mapped = rowToScan(row);
     const counts = severityByScan.get(row.id);
     if (!counts) return mapped;
@@ -91,6 +104,8 @@ export async function listScans(params: ListScansParams) {
       },
     };
   });
+
+  return { scans, total };
 }
 
 export async function getScan(scanId: string, tenantId: string) {
