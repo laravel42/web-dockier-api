@@ -115,22 +115,36 @@ export interface ListBuildsParams {
   sourceRepo?: string;
   status?: string;
   limit?: number;
+  offset?: number;
 }
 
-export async function listBuilds(params: ListBuildsParams) {
+export interface ListBuildsResult {
+  builds: ReturnType<typeof rowToBuild>[];
+  total: number;
+}
+
+export async function listBuilds(params: ListBuildsParams): Promise<ListBuildsResult> {
   const { tenantId, sourceRepo, status } = params;
-  const limit = params.limit ?? 50;
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+  const offset = Math.max(params.offset ?? 0, 0);
+
   let query = supabaseAdmin
     .from("builds")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("organization_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("created_at", { ascending: false });
+
   if (sourceRepo) query = query.eq("source_repo", sourceRepo);
   if (status) query = query.eq("status", status);
-  const { data, error } = await query;
+
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
   const rows = unwrapList(data, error, ImageBuilderError, { internalMsg: "Failed to list builds" });
-  return rows.map(rowToBuild);
+  return {
+    builds: rows.map(rowToBuild),
+    total: count ?? rows.length,
+  };
 }
 
 export async function cancelBuild(buildId: string, tenantId: string) {

@@ -76,11 +76,12 @@ export const imageBuilderApi = {
       createdAt: string;
     }>(`/image-builder/builds/${buildId}`),
 
-  listBuilds: (params?: { sourceRepo?: string; status?: string; limit?: number }) => {
+  listBuilds: (params?: { sourceRepo?: string; status?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();
     if (params?.sourceRepo) qs.set("sourceRepo", params.sourceRepo);
     if (params?.status) qs.set("status", params.status);
     if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
     const q = qs.toString();
     return request<{
       builds: Array<{
@@ -98,6 +99,7 @@ export const imageBuilderApi = {
         finishedAt: string;
         createdAt: string;
       }>;
+      pagination: { total: number; limit: number; offset: number };
     }>(`/image-builder/builds${q ? `?${q}` : ""}`);
   },
 

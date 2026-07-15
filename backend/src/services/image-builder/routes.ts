@@ -4,9 +4,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { buildCredentialsSchema, buildSchema, buildLogsResponseSchema, imageRevisionResponseSchema, deployStatusResponseSchema } from "./schemas.js";
-import { supabaseAdmin } from "../../shared/supabase/client.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { resolveAwsCredentials } from "../../lib/provider-credentials.js";
+import { paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { requireWebhookSignature } from "../../shared/security.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
 import {
@@ -17,16 +16,13 @@ import {
   listBuilds,
   cancelBuild,
   resolveImageByRevision,
-  ImageBuilderError,
 } from "./domain/builds.js";
-import { assertOwnership } from "../../shared/supabase/query.js";
 import { deployParamsSchema } from "./domain/deploy-params.js";
 import { processImageBuilderWebhook } from "./domain/webhook.js";
 import { fetchBuildLogs } from "./domain/aws-runtime.js";
 
 export async function registerImageBuilderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const db = supabaseAdmin;
 
   typed.post(
     "/image-builder/builds",
@@ -123,23 +119,32 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
       schema: {
         tags: ["image-builder"],
         summary: "List builds",
-        querystring: z.object({
+        querystring: paginationQuerySchema.extend({
           sourceRepo: z.string().optional(),
           status: z.string().optional(),
-          limit: z.coerce.number().int().positive().max(100).optional(),
         }),
-        response: { 200: z.object({ builds: z.array(buildSchema) }) },
+        response: {
+          200: z.object({
+            builds: z.array(buildSchema),
+            pagination: paginationMetaSchema,
+          }),
+        },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      const builds = await listBuilds({
+      const { limit, offset } = request.query;
+      const result = await listBuilds({
         tenantId: auth.tenantId,
         sourceRepo: request.query.sourceRepo,
         status: request.query.status,
-        limit: request.query.limit,
+        limit,
+        offset,
       });
-      return { builds };
+      return {
+        builds: result.builds,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 

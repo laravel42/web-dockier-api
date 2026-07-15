@@ -48,7 +48,7 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
         offset: page * PAGE_SIZE,
       });
       setDeployments(res.deployments);
-      setTotal(res.total);
+      setTotal(res.pagination.total);
     } catch {
       setError("Failed to load deployments");
       setDeployments([]);

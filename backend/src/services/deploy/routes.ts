@@ -11,7 +11,7 @@ import { applyDeploymentWebhookUpdate } from "./domain/processor.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { resolveDeployTemplate } from "./domain/templates.js";
 import { requireWebhookSignature, requireInternalToken } from "../../shared/security.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
 import { DomainError } from "../../shared/supabase/errors.js";
 import {
@@ -272,28 +272,31 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       schema: {
         tags: ["deploy"],
         summary: "List deployments",
-        querystring: z.object({
+        querystring: paginationQuerySchema.extend({
           providerId: z.string().uuid().optional(),
           projectId: z.string().uuid().optional(),
-          limit: z.coerce.number().int().min(1).max(100).optional(),
-          offset: z.coerce.number().int().min(0).optional(),
         }),
         response: {
           200: z.object({
             deployments: z.array(deploymentSchema),
-            total: z.number().int().nonnegative(),
+            pagination: paginationMetaSchema,
           }),
         },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      return await listDeployments(auth.tenantId, {
+      const { limit, offset } = request.query;
+      const result = await listDeployments(auth.tenantId, {
         providerId: request.query.providerId,
         projectId: request.query.projectId,
-        limit: request.query.limit,
-        offset: request.query.offset,
+        limit,
+        offset,
       });
+      return {
+        deployments: result.deployments,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 

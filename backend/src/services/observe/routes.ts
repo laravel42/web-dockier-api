@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import {
   heartbeatSchema,
   heartbeatFrequencySchema,
@@ -186,20 +186,25 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         response: {
           200: z.object({
             activity: z.array(activitySchema),
-            total: z.number(),
+            pagination: paginationMetaSchema,
           }),
         },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      return await listActivity({
+      const { limit, offset } = request.query;
+      const result = await listActivity({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
-        limit: request.query.limit,
-        offset: request.query.offset,
+        limit,
+        offset,
         search: request.query.search,
       });
+      return {
+        activity: result.activity,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 }
