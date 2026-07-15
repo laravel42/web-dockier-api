@@ -5,14 +5,20 @@
  * auto-retry/patch, or remote build via AWS CodeBuild.
  */
 
+import { exec } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { BuildError } from "../../../lib/logging.js";
 import { patchDockerfile } from "../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { buildViaCodeBuild } from "./codebuild-builder.js";
 import type { RunCmdFn } from "./run-cmd.js";
 import type { ContextualLogger } from "../../../lib/logging.js";
-import { appendLog, ts } from "./pipeline-helpers.js";
+import { appendLog } from "./pipeline-helpers.js";
 import { findCachedImage, patchDeployment } from "./deployments.js";
+
+const execAsync = promisify(exec);
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -83,9 +89,6 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
 
   if (cachedDockerImage) {
     try {
-      const { exec } = await import("node:child_process");
-      const { promisify } = await import("node:util");
-      const execAsync = promisify(exec);
       await execAsync(`docker image inspect ${JSON.stringify(cachedDockerImage)}`, { timeout: 10_000 });
       actualImage = cachedDockerImage;
       skippedBuild = true;
@@ -120,8 +123,6 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
   // ── Local Docker build with retry/patch ──
   if (!skippedBuild) {
     await logger.section("Build Docker Image");
-    const { readFile, writeFile } = await import("node:fs/promises");
-    const { join } = await import("node:path");
     const MAX_BUILD_ATTEMPTS = 3;
 
     for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
