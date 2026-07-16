@@ -10,7 +10,7 @@ import { supabaseAdmin } from "../shared/supabase/client.js";
 import { createDomainErrorClass } from "../shared/supabase/errors.js";
 import { unwrapQuery } from "../shared/supabase/query.js";
 
-const CredentialError = createDomainErrorClass("CredentialError");
+const CredentialError = createDomainErrorClass<"not_found" | "internal">("CredentialError");
 
 export interface ProviderCredentials {
   provider: string;
