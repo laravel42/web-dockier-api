@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership, normalizePagination } from "../../../shared/supabase/query.js";
 import type { DeploymentRow, ServiceEntry } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";
@@ -22,8 +22,7 @@ export async function listDeployments(
   tenantId: string,
   filters?: ListDeploymentsFilters,
 ): Promise<ListDeploymentsResult> {
-  const limit = Math.min(Math.max(filters?.limit ?? 20, 1), 100);
-  const offset = Math.max(filters?.offset ?? 0, 0);
+  const { limit, offset } = normalizePagination(filters ?? {});
 
   let query = supabaseAdmin
     .from("deployments")
@@ -114,10 +113,11 @@ export async function appendDeploymentLog(deploymentId: string, line: string): P
  * Used by the pipeline to transition between building → deploying → success/failed.
  */
 export async function setDeploymentStatus(deploymentId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
-  await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from("deployments")
     .update({ status, updated_at: new Date().toISOString(), ...extra })
     .eq("id", deploymentId);
+  throwOnError(error, DeployError, { internalMsg: "Failed to update deployment status" });
 }
 
 /**
@@ -138,7 +138,7 @@ export async function findCachedImage(
   commitHash: string,
   excludeDeploymentId: string,
 ): Promise<string | null> {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("deployments")
     .select("docker_image")
     .eq("repo", repo)
@@ -150,6 +150,10 @@ export async function findCachedImage(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) {
+    // Log but don't throw — cache miss is non-fatal, pipeline continues without cache
+    return null;
+  }
   return data?.docker_image ?? null;
 }
 

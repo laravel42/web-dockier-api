@@ -7,6 +7,10 @@
  */
 
 import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, writeFile, copyFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { execSync } from "node:child_process";
 import { buildCloneUrl } from "./git-url.js";
 import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack } from "./repo-analyzer/index.js";
 import type { RepoConfig, DetectedStack } from "./repo-analyzer/types.js";
@@ -72,9 +76,6 @@ export interface AnalyzeResult {
  */
 export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
   const { git, branch, shortId, logger } = opts;
-  const { mkdtemp } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { execSync } = await import("node:child_process");
 
   await logger.section("Clone Repository");
 
@@ -101,7 +102,6 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
     );
   } catch (err) {
     // Clean up the temp directory since the caller won't have access to it
-    const { rm } = await import("node:fs/promises");
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
     throw new BuildError(`Failed to clone ${git.repo}@${branch}`, "clone", err);
   }
@@ -163,8 +163,6 @@ function applyKnownPlatform(config: RepoConfig, platform: string): void {
  */
 export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeResult> {
   const { repoDir, logger, skipExistingDockerfile, knownPlatform } = opts;
-  const { existsSync } = await import("node:fs");
-  const { readFile, writeFile, copyFile } = await import("node:fs/promises");
 
   await logger.section("Analyze Repository");
 
