@@ -7,7 +7,10 @@
  */
 
 import { supabaseAdmin } from "../shared/supabase/client.js";
-import { DomainError } from "../shared/supabase/errors.js";
+import { createDomainErrorClass } from "../shared/supabase/errors.js";
+import { unwrapQuery } from "../shared/supabase/query.js";
+
+const CredentialError = createDomainErrorClass<"not_found" | "internal">("CredentialError");
 
 export interface ProviderCredentials {
   provider: string;
@@ -35,21 +38,16 @@ export async function getProviderCredentials(providerId: string): Promise<Provid
     .eq("id", providerId)
     .single();
 
-  if (error) {
-    if (error.code === "PGRST116") {
-      throw new DomainError("Provider not found", "not_found", error);
-    }
-    throw new DomainError("Failed to fetch provider credentials", "internal", error);
-  }
-  if (!data) {
-    throw new DomainError("Provider not found", "not_found");
-  }
+  const row = unwrapQuery(data, error, CredentialError, {
+    notFoundMsg: "Provider not found",
+    internalMsg: "Failed to fetch provider credentials",
+  });
 
   return {
-    provider: data.provider,
-    region: data.region ?? "",
-    apiKey: data.api_key,
-    apiSecret: data.api_secret,
+    provider: row.provider,
+    region: row.region ?? "",
+    apiKey: row.api_key,
+    apiSecret: row.api_secret,
   };
 }
 
