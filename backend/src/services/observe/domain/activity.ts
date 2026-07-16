@@ -2,37 +2,12 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import type { ActivityRow } from "../schemas.js";
-import type { z } from "zod";
-import type { activityEventTypeSchema } from "../schemas.js";
+import { rowToActivity, type ActivityResponse } from "./mappers.js";
+
+export type { ActivityResponse };
 
 export const ActivityError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("ActivityError");
 export type ActivityError = InstanceType<typeof ActivityError>;
-
-type ActivityEventType = z.infer<typeof activityEventTypeSchema>;
-
-export interface ActivityResponse {
-  id: string;
-  projectId: string;
-  userId: string | null;
-  actorName: string | null;
-  eventType: ActivityEventType;
-  description: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-}
-
-function rowToActivity(row: ActivityRow & { actor_name?: string | null }): ActivityResponse {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    userId: row.user_id,
-    actorName: row.actor_name ?? null,
-    eventType: row.event_type as ActivityEventType,
-    description: row.description,
-    metadata: row.metadata ?? undefined,
-    createdAt: row.created_at,
-  };
-}
 
 export async function listActivity(params: {
   tenantId: string;

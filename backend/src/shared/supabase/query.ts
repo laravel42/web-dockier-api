@@ -186,3 +186,31 @@ export function assertOwnership<T extends { organization_id: string }, E extends
   }
   return row;
 }
+
+// ─── Pagination Helpers ────────────────────────────────────────────
+
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Normalize raw pagination params into safe, bounded values.
+ *
+ * Applies:
+ * - Default limit: 20, max limit: 100
+ * - Default offset: 0, min offset: 0
+ *
+ * Use this in domain functions that receive raw query params.
+ *
+ * @example
+ * ```ts
+ * const { limit, offset } = normalizePagination(params);
+ * const query = supabaseAdmin.from("projects").select("*").range(offset, offset + limit - 1);
+ * ```
+ */
+export function normalizePagination(params: PaginationParams): { limit: number; offset: number } {
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+  const offset = Math.max(params.offset ?? 0, 0);
+  return { limit, offset };
+}
