@@ -4,37 +4,12 @@ import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/
 import { enqueueCommand } from "./worker.js";
 import { recordActivity } from "../../observe/domain/activity.js";
 import type { CommandRow } from "../schemas.js";
+import { rowToCommand, type CommandResponse, type CommandStatus } from "./mappers.js";
+
+export type { CommandStatus, CommandResponse };
 
 export const CommandsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("CommandsError");
 export type CommandsError = InstanceType<typeof CommandsError>;
-
-export type CommandStatus = "running" | "finished" | "failed" | "timed_out";
-
-export interface CommandResponse {
-  id: string;
-  projectId: string;
-  userId: string;
-  command: string;
-  status: CommandStatus;
-  output: string;
-  startedAt: string;
-  finishedAt: string | null;
-  createdAt: string;
-}
-
-function rowToCommand(row: CommandRow): CommandResponse {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    userId: row.user_id,
-    command: row.command,
-    status: row.status as CommandStatus,
-    output: row.output,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-    createdAt: row.created_at,
-  };
-}
 
 export async function runCommand(params: {
   tenantId: string;

@@ -2,48 +2,12 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { HeartbeatRow } from "../schemas.js";
-import type { z } from "zod";
-import type { heartbeatFrequencySchema, heartbeatGracePeriodSchema, heartbeatStatusSchema } from "../schemas.js";
+import { rowToHeartbeat, type HeartbeatResponse } from "./mappers.js";
+
+export type { HeartbeatResponse };
 
 export const HeartbeatsError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("HeartbeatsError");
 export type HeartbeatsError = InstanceType<typeof HeartbeatsError>;
-
-type HeartbeatFrequency = z.infer<typeof heartbeatFrequencySchema>;
-type HeartbeatGracePeriod = z.infer<typeof heartbeatGracePeriodSchema>;
-type HeartbeatStatus = z.infer<typeof heartbeatStatusSchema>;
-
-export interface HeartbeatResponse {
-  id: string;
-  projectId: string;
-  name: string;
-  frequency: HeartbeatFrequency;
-  gracePeriod: HeartbeatGracePeriod;
-  status: HeartbeatStatus;
-  lastPingedAt: string | null;
-  pingUrl: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-function buildPingUrl(heartbeatId: string): string {
-  const base = process.env.API_PUBLIC_URL || "https://api.dockier.dev";
-  return `${base}/heartbeats/${heartbeatId}/ping`;
-}
-
-function rowToHeartbeat(row: HeartbeatRow): HeartbeatResponse {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    name: row.name,
-    frequency: row.frequency as HeartbeatFrequency,
-    gracePeriod: row.grace_period as HeartbeatGracePeriod,
-    status: row.status as HeartbeatStatus,
-    lastPingedAt: row.last_pinged_at,
-    pingUrl: buildPingUrl(row.id),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
 export async function createHeartbeat(params: {
   tenantId: string;

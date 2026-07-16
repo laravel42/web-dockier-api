@@ -7,69 +7,21 @@ import type {
   RedirectRuleRow,
 } from "../schemas.js";
 import { hash } from "bcryptjs";
+import {
+  rowToCredential,
+  rowToSecurityRule,
+  rowToRedirectRule,
+  type SecurityRuleCredentialResponse,
+  type SecurityRuleResponse,
+  type RedirectRuleResponse,
+} from "./mappers.js";
+
+export type { SecurityRuleCredentialResponse, SecurityRuleResponse, RedirectRuleResponse };
 
 const BCRYPT_ROUNDS = 10;
 
 export const NetworkError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("NetworkError");
 export type NetworkError = InstanceType<typeof NetworkError>;
-
-export interface SecurityRuleCredentialResponse {
-  id: string;
-  username: string;
-  createdAt: string;
-}
-
-export interface SecurityRuleResponse {
-  id: string;
-  projectId: string;
-  name: string;
-  path: string | null;
-  credentials: SecurityRuleCredentialResponse[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface RedirectRuleResponse {
-  id: string;
-  projectId: string;
-  fromPath: string;
-  toPath: string;
-  type: "temporary" | "permanent";
-  createdAt: string;
-  updatedAt: string;
-}
-
-function rowToCredential(row: SecurityRuleCredentialRow): SecurityRuleCredentialResponse {
-  return {
-    id: row.id,
-    username: row.username,
-    createdAt: row.created_at,
-  };
-}
-
-function rowToSecurityRule(row: SecurityRuleRow, credentials: SecurityRuleCredentialRow[]): SecurityRuleResponse {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    name: row.name,
-    path: row.path,
-    credentials: credentials.map(rowToCredential),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-function rowToRedirectRule(row: RedirectRuleRow): RedirectRuleResponse {
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    fromPath: row.from_path,
-    toPath: row.to_path,
-    type: row.type as "temporary" | "permanent",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
 // ─── Security Rules ───
 
