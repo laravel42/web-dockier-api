@@ -5,6 +5,7 @@ import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";
 import { createDeploymentRecord } from "./processor.js";
 import { enqueueDeployment } from "./worker.js";
+import { logger } from "../../../shared/logger.js";
 
 export interface ListDeploymentsFilters {
   providerId?: string;
@@ -151,7 +152,8 @@ export async function findCachedImage(
     .limit(1)
     .maybeSingle();
   if (error) {
-    // Log but don't throw — cache miss is non-fatal, pipeline continues without cache
+    // Non-fatal — cache miss just means the pipeline rebuilds the image
+    logger.warn({ err: error, repo, branch, commitHash }, "Failed to query cached image");
     return null;
   }
   return data?.docker_image ?? null;
