@@ -14,6 +14,7 @@
  *   7. Execute post-deploy script
  *   8. Apply network rules
  *   9. Health check & finalize
+ *  10. Restore background processes & scheduled jobs
  *
  * Existing stage modules remain unchanged:
  *   pipeline-helpers  → logging, status updates, env parsing
@@ -42,6 +43,7 @@ import { ts, appendLog, updateStatus, parseEnvContent } from "./pipeline-helpers
 import { buildImage } from "./pipeline-build.js";
 import { waitForAppReady } from "./pipeline-health.js";
 import { getDeploymentCurrentStatus, patchDeployment } from "./deployments.js";
+import { restoreProcessesAfterDeploy } from "../../processes/domain/post-deploy-restore.js";
 
 const db = supabaseAdmin;
 
@@ -659,6 +661,19 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
       commitHash,
       logger,
     });
+
+    // 10. Restore background processes and scheduled jobs
+    if (event.projectId) {
+      try {
+        await restoreProcessesAfterDeploy({
+          tenantId: event.tenantId,
+          projectId: event.projectId,
+        });
+      } catch (restoreErr) {
+        const msg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+        await logger.warn(`Could not restore processes/jobs: ${msg}`);
+      }
+    }
 
     // Cleanup work directory
     try { await rm(workDir, { recursive: true, force: true }); } catch {}

@@ -9,6 +9,7 @@ import type { Project, Provider } from "../../../types";
 import OverviewEditor from "./OverviewEditor";
 import ProjectDeploymentsTab from "./ProjectDeploymentsTab";
 import ProjectCommandsTab from "./ProjectCommandsTab";
+import ProjectProcessesTab from "./ProjectProcessesTab";
 import ProjectNetworkTab from "./ProjectNetworkTab";
 import ProjectObserveTab from "./ProjectObserveTab";
 import ProjectDomainsTab from "./ProjectDomainsTab";
@@ -863,6 +864,8 @@ export default function ProjectDescription({
         return renderSensitiveDataSection();
       case "deployments":
         return <ProjectDeploymentsTab project={project} providers={providers} />;
+      case "processes":
+        return <ProjectProcessesTab project={project} />;
       case "commands":
         return <ProjectCommandsTab project={project} />;
       case "network":
