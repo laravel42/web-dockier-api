@@ -10,6 +10,7 @@ import type {
 } from "../../../services/processes";
 import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
+import { getFrameworkById } from "../../../config/frameworks";
 import Modal from "../../../components/Modal";
 import ConfirmModal from "../../../components/ConfirmModal";
 import Spinner from "../../../components/Spinner";
@@ -20,6 +21,30 @@ interface Props {
 }
 
 type SubTab = "processes" | "scheduler";
+
+const ALL_RUNTIME_OPTIONS = [
+  { value: "node", label: "Node.js", versions: ["22", "20", "18"], categories: ["JavaScript"] },
+  { value: "php", label: "PHP", versions: ["8.4", "8.3", "8.2", "8.1"], categories: ["PHP"] },
+  { value: "python", label: "Python", versions: ["3.12", "3.11", "3.10"], categories: ["Python"] },
+  { value: "go", label: "Go", versions: ["1.22", "1.21", "1.20"], categories: ["Other"] },
+];
+
+/** Maps the project's detected platform to the runtimes available for processes. */
+function getRuntimeOptionsForProject(platform?: string): typeof ALL_RUNTIME_OPTIONS {
+  if (!platform) return ALL_RUNTIME_OPTIONS;
+  const fw = getFrameworkById(platform);
+  if (!fw) return ALL_RUNTIME_OPTIONS;
+  // Filter runtimes to those matching the framework's category
+  const filtered = ALL_RUNTIME_OPTIONS.filter((r) => r.categories.includes(fw.category));
+  // If the category is "Static" or nothing matched, allow all
+  return filtered.length > 0 ? filtered : ALL_RUNTIME_OPTIONS;
+}
+
+/** Returns the default runtime value for a project based on its platform. */
+function getDefaultRuntime(platform?: string): string {
+  const options = getRuntimeOptionsForProject(platform);
+  return options[0]?.value ?? "node";
+}
 
 function TabSpinner({ label }: { label: string }) {
   return (
@@ -74,10 +99,12 @@ const FREQUENCY_LABELS: Record<JobFrequency, string> = {
 function ProcessActionsMenu({
   process,
   projectId,
+  project,
   onRefresh,
 }: {
   process: BackgroundProcess;
   projectId: string;
+  project: Project;
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -168,6 +195,7 @@ function ProcessActionsMenu({
       {showEdit && (
         <CreateProcessModal
           projectId={projectId}
+          project={project}
           editProcess={process}
           onClose={() => setShowEdit(false)}
           onCreated={() => { setShowEdit(false); onRefresh(); }}
@@ -298,11 +326,13 @@ function JobActionsMenu({
 
 function CreateProcessModal({
   projectId,
+  project,
   editProcess,
   onClose,
   onCreated,
 }: {
   projectId: string;
+  project: Project;
   editProcess?: BackgroundProcess;
   onClose: () => void;
   onCreated: () => void;
@@ -310,7 +340,7 @@ function CreateProcessModal({
   const [name, setName] = useState(editProcess?.name || "");
   const [type, setType] = useState<ProcessType>(editProcess?.type || "queue_worker");
   const [command, setCommand] = useState(editProcess?.command || "");
-  const [runtime, setRuntime] = useState(editProcess?.runtime || "node");
+  const [runtime, setRuntime] = useState(editProcess?.runtime || getDefaultRuntime(project.platform));
   const [runtimeVersion, setRuntimeVersion] = useState(editProcess?.runtimeVersion || "");
   const [connection, setConnection] = useState(editProcess?.connection || "");
   const [numProcesses, setNumProcesses] = useState(editProcess?.numProcesses ?? 1);
@@ -328,12 +358,7 @@ function CreateProcessModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const RUNTIME_OPTIONS = [
-    { value: "node", label: "Node.js", versions: ["22", "20", "18"] },
-    { value: "php", label: "PHP", versions: ["8.4", "8.3", "8.2", "8.1"] },
-    { value: "python", label: "Python", versions: ["3.12", "3.11", "3.10"] },
-    { value: "go", label: "Go", versions: ["1.22", "1.21", "1.20"] },
-  ];
+  const RUNTIME_OPTIONS = getRuntimeOptionsForProject(project.platform);
 
   const currentRuntimeOpts = RUNTIME_OPTIONS.find((r) => r.value === runtime);
 
@@ -849,7 +874,7 @@ export default function ProjectProcessesTab({ project }: Props) {
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="text-xs text-text-muted">{proc.numProcesses} Process{proc.numProcesses > 1 ? "es" : ""}</span>
                         <ProcessStatusBadge status={proc.status} />
-                        {canManage && <ProcessActionsMenu process={proc} projectId={project.id} onRefresh={fetchData} />}
+                        {canManage && <ProcessActionsMenu process={proc} projectId={project.id} project={project} onRefresh={fetchData} />}
                       </div>
                     </div>
                   ))}
@@ -924,6 +949,7 @@ export default function ProjectProcessesTab({ project }: Props) {
       {showCreateProcess && (
         <CreateProcessModal
           projectId={project.id}
+          project={project}
           onClose={() => setShowCreateProcess(false)}
           onCreated={() => { setShowCreateProcess(false); fetchData(); }}
         />
