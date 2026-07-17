@@ -5,6 +5,9 @@ import { z } from "zod";
 export const processTypeSchema = z.enum(["queue_worker", "custom"]);
 export const processStatusSchema = z.enum(["running", "stopped", "errored"]);
 
+/** Status values accepted by the change-status endpoint (includes 'restart' action). */
+export const processStatusInputSchema = z.enum(["running", "stopped", "errored", "restart"]);
+
 export const backgroundProcessSchema = z.object({
   id: z.uuid(),
   projectId: z.string(),

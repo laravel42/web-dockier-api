@@ -100,7 +100,7 @@ export const processesApi = {
       { method: "PATCH", body: JSON.stringify(body) },
     ),
 
-  changeProcessStatus: (projectId: string, processId: string, status: ProcessStatus) =>
+  changeProcessStatus: (projectId: string, processId: string, status: ProcessStatus | "restart") =>
     request<BackgroundProcess>(
       `/projects/${encodeURIComponent(projectId)}/processes/${encodeURIComponent(processId)}/status`,
       { method: "POST", body: JSON.stringify({ status }) },
@@ -110,6 +110,11 @@ export const processesApi = {
     request<{ success: true }>(
       `/projects/${encodeURIComponent(projectId)}/processes/${encodeURIComponent(processId)}`,
       { method: "DELETE" },
+    ),
+
+  getProcessLogs: (projectId: string, processId: string, lines = 100) =>
+    request<{ logs: string }>(
+      `/projects/${encodeURIComponent(projectId)}/processes/${encodeURIComponent(processId)}/logs?lines=${lines}`,
     ),
 
   // Scheduled Jobs

@@ -11,7 +11,7 @@ import {
   scheduledJobSchema,
   createJobBodySchema,
   updateJobBodySchema,
-  processStatusSchema,
+  processStatusInputSchema,
   jobStatusSchema,
 } from "./schemas.js";
 import {
@@ -26,6 +26,8 @@ import {
   updateJobStatus,
   deleteJob,
 } from "./domain/processes.js";
+import { startProcess, stopProcess, restartProcess, getProcessLogs } from "./domain/executor.js";
+import { installJob, pauseJob, removeJobCron } from "./domain/scheduler-executor.js";
 
 export async function registerProcessesRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -106,17 +108,64 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
         tags: ["processes"],
         summary: "Change process status (start/stop/restart)",
         params: z.object({ projectId: z.uuid(), processId: z.uuid() }),
-        body: z.object({ status: processStatusSchema }),
+        body: z.object({ status: processStatusInputSchema }),
         response: { 200: backgroundProcessSchema },
       },
     },
     async (request) => {
       const auth = getAuth(request);
+      const { projectId, processId } = request.params;
+      const { status } = request.body;
+
+      // Execute the actual process action on infrastructure
+      if (status === "running") {
+        const result = await startProcess({
+          tenantId: auth.tenantId,
+          projectId,
+          processId,
+        });
+        if (!result.success) {
+          // Mark as errored if start failed
+          return await updateProcessStatus({
+            tenantId: auth.tenantId,
+            projectId,
+            processId,
+            status: "errored",
+          });
+        }
+      } else if (status === "stopped") {
+        await stopProcess({
+          tenantId: auth.tenantId,
+          projectId,
+          processId,
+        });
+      } else if (status === "restart") {
+        const result = await restartProcess({
+          tenantId: auth.tenantId,
+          projectId,
+          processId,
+        });
+        if (!result.success) {
+          return await updateProcessStatus({
+            tenantId: auth.tenantId,
+            projectId,
+            processId,
+            status: "errored",
+          });
+        }
+        return await updateProcessStatus({
+          tenantId: auth.tenantId,
+          projectId,
+          processId,
+          status: "running",
+        });
+      }
+
       return await updateProcessStatus({
         tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        processId: request.params.processId,
-        status: request.body.status,
+        projectId,
+        processId,
+        status,
       });
     },
   );
@@ -140,6 +189,29 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
         processId: request.params.processId,
       });
       return { success: true as const };
+    },
+  );
+
+  typed.get(
+    "/projects/:projectId/processes/:processId/logs",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      schema: {
+        tags: ["processes"],
+        summary: "Get background process logs",
+        params: z.object({ projectId: z.uuid(), processId: z.uuid() }),
+        querystring: z.object({ lines: z.coerce.number().int().min(1).max(1000).default(100) }),
+        response: { 200: z.object({ logs: z.string() }) },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await getProcessLogs({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        processId: request.params.processId,
+        lines: request.query.lines,
+      });
     },
   );
 
@@ -225,11 +297,38 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
+      const { projectId, jobId } = request.params;
+      const { status } = request.body;
+
+      // Execute the actual cron action on infrastructure
+      if (status === "installed") {
+        const result = await installJob({
+          tenantId: auth.tenantId,
+          projectId,
+          jobId,
+        });
+        if (!result.success) {
+          // Still update status to reflect intent, but log the failure
+          return await updateJobStatus({
+            tenantId: auth.tenantId,
+            projectId,
+            jobId,
+            status: "paused",
+          });
+        }
+      } else if (status === "paused") {
+        await pauseJob({
+          tenantId: auth.tenantId,
+          projectId,
+          jobId,
+        });
+      }
+
       return await updateJobStatus({
         tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        jobId: request.params.jobId,
-        status: request.body.status,
+        projectId,
+        jobId,
+        status,
       });
     },
   );
@@ -247,10 +346,19 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
+      const { projectId, jobId } = request.params;
+
+      // Remove cron entry from infrastructure (best-effort)
+      await removeJobCron({
+        tenantId: auth.tenantId,
+        projectId,
+        jobId,
+      });
+
       await deleteJob({
         tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        jobId: request.params.jobId,
+        projectId,
+        jobId,
       });
       return { success: true as const };
     },

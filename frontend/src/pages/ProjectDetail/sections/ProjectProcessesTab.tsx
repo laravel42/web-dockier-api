@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { processesApi } from "../../../services/processes";
+import { deployApi } from "../../../services/api";
 import type {
   BackgroundProcess,
   ScheduledJob,
@@ -55,6 +56,63 @@ function TabSpinner({ label }: { label: string }) {
   );
 }
 
+function ProcessLogsModal({
+  projectId,
+  processId,
+  processName,
+  onClose,
+}: {
+  projectId: string;
+  processId: string;
+  processName: string;
+  onClose: () => void;
+}) {
+  const [logs, setLogs] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await processesApi.getProcessLogs(projectId, processId, 200);
+      setLogs(res.logs);
+    } catch {
+      setLogs("Failed to retrieve logs.");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, processId]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  return (
+    <Modal open onClose={onClose} title={`Logs — ${processName}`} size="lg">
+      <div className="flex items-center justify-end gap-2 mb-3">
+        <button
+          type="button"
+          onClick={fetchLogs}
+          className="text-xs text-text-muted hover:text-text transition-colors"
+          title="Refresh"
+        >
+          <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+          </svg>
+        </button>
+      </div>
+      <div className="rounded-lg border border-border bg-[#0d1117] overflow-auto max-h-80">
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <Spinner className="size-4" />
+          </div>
+        ) : (
+          <pre className="p-4 text-xs/relaxed font-mono text-[#c9d1d9] whitespace-pre-wrap break-all">
+            {logs || "No logs available yet."}
+          </pre>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function ProcessStatusBadge({ status }: { status: BackgroundProcess["status"] }) {
   const config: Record<BackgroundProcess["status"], { label: string; color: string; dot: string }> = {
     running: { label: "Running", color: "bg-success-500/10 text-success-500", dot: "bg-success-500" },
@@ -100,16 +158,19 @@ function ProcessActionsMenu({
   process,
   projectId,
   project,
+  hasDeployment,
   onRefresh,
 }: {
   process: BackgroundProcess;
   projectId: string;
   project: Project;
+  hasDeployment: boolean;
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,12 +191,14 @@ function ProcessActionsMenu({
       await processesApi.changeProcessStatus(projectId, process.id, "stopped");
       onRefresh();
     } else if (action === "restart") {
-      await processesApi.changeProcessStatus(projectId, process.id, "running");
+      await processesApi.changeProcessStatus(projectId, process.id, "restart");
       onRefresh();
     } else if (action === "edit") {
       setShowEdit(true);
     } else if (action === "copy") {
       await navigator.clipboard.writeText(process.id);
+    } else if (action === "logs") {
+      setShowLogs(true);
     } else if (action === "delete") {
       setShowDelete(true);
     }
@@ -162,15 +225,19 @@ function ProcessActionsMenu({
 
         {open && (
           <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
-            <button onClick={() => handleAction("restart")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+              <svg className="size-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+              View logs
+            </button>
+            <button onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <svg className="size-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" /></svg>
               Restart
             </button>
-            <button onClick={() => handleAction("start")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <svg className="size-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
               Start
             </button>
-            <button onClick={() => handleAction("stop")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <svg className="size-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
               Stop
             </button>
@@ -209,6 +276,15 @@ function ProcessActionsMenu({
         title="Delete Process"
         message="Are you sure you want to delete this background process? This action cannot be undone."
       />
+
+      {showLogs && (
+        <ProcessLogsModal
+          projectId={projectId}
+          processId={process.id}
+          processName={process.name || process.command}
+          onClose={() => setShowLogs(false)}
+        />
+      )}
     </>
   );
 }
@@ -218,10 +294,12 @@ function ProcessActionsMenu({
 function JobActionsMenu({
   job,
   projectId,
+  hasDeployment,
   onRefresh,
 }: {
   job: ScheduledJob;
   projectId: string;
+  hasDeployment: boolean;
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -276,11 +354,11 @@ function JobActionsMenu({
 
         {open && (
           <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
-            <button onClick={() => handleAction("pause")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("pause")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <svg className="size-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
               Pause
             </button>
-            <button onClick={() => handleAction("run")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("run")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <svg className="size-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
               Run
             </button>
@@ -508,48 +586,37 @@ function CreateProcessModal({
                 <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                 --queue
               </label>
-              <input type="text" className={inputCls} value={queue} onChange={(e) => setQueue(e.target.value)} />
+              <input type="text" className={inputCls} value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
             </div>
 
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
-                --backoff
-              </label>
-              <div className="flex flex-1 items-center gap-2">
-                <input type="number" className={inputCls} value={backoff} onChange={(e) => setBackoff(Number(e.target.value))} min={0} />
-                <span className="text-xs text-text-muted whitespace-nowrap">seconds</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                 Timeout
               </label>
-              <div className="flex flex-1 items-center gap-2">
-                <input type="number" className={inputCls} value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={0} />
-                <span className="text-xs text-text-muted whitespace-nowrap">seconds</span>
+              <div className="relative flex-1">
+                <input type="number" className={`${inputCls} pr-16`} value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={0} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                 Tries
               </label>
-              <div className="flex flex-1 items-center gap-2">
-                <input type="number" className={inputCls} value={tries} onChange={(e) => setTries(Number(e.target.value))} min={0} />
-                <span className="text-xs text-text-muted whitespace-nowrap">tries</span>
+              <div className="relative flex-1">
+                <input type="number" className={`${inputCls} pr-12`} value={tries} onChange={(e) => setTries(Number(e.target.value))} min={0} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">tries</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                 Memory
               </label>
-              <div className="flex flex-1 items-center gap-2">
-                <input type="number" className={inputCls} value={memory} onChange={(e) => setMemory(Number(e.target.value))} min={32} />
-                <span className="text-xs text-text-muted whitespace-nowrap">MB</span>
+              <div className="relative flex-1">
+                <input type="number" className={`${inputCls} pr-10`} value={memory} onChange={(e) => setMemory(Number(e.target.value))} min={32} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">MB</span>
               </div>
             </div>
             {/* PHP-specific fields */}
@@ -557,44 +624,44 @@ function CreateProcessModal({
               <>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                    <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                     --backoff
                   </label>
-                  <div className="flex flex-1 items-center gap-2">
-                    <input type="number" className={inputCls} value={backoff} onChange={(e) => setBackoff(Number(e.target.value))} min={0} />
-                    <span className="text-xs text-text-muted whitespace-nowrap">seconds</span>
+                  <div className="relative flex-1">
+                    <input type="number" className={`${inputCls} pr-16`} value={backoff} onChange={(e) => setBackoff(Number(e.target.value))} min={0} />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                    <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                     --sleep
                   </label>
-                  <div className="flex flex-1 items-center gap-2">
-                    <input type="number" className={inputCls} value={sleep} onChange={(e) => setSleep(Number(e.target.value))} min={0} />
-                    <span className="text-xs text-text-muted whitespace-nowrap">seconds</span>
+                  <div className="relative flex-1">
+                    <input type="number" className={`${inputCls} pr-16`} value={sleep} onChange={(e) => setSleep(Number(e.target.value))} min={0} />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                    <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                     --rest
                   </label>
-                  <div className="flex flex-1 items-center gap-2">
-                    <input type="number" className={inputCls} value={rest} onChange={(e) => setRest(Number(e.target.value))} min={0} />
-                    <span className="text-xs text-text-muted whitespace-nowrap">seconds</span>
+                  <div className="relative flex-1">
+                    <input type="number" className={`${inputCls} pr-16`} value={rest} onChange={(e) => setRest(Number(e.target.value))} min={0} />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                    <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                     --env
                   </label>
                   <input type="text" className={inputCls} value={env} onChange={(e) => setEnv(e.target.value)} />
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <svg className="size-3.5 text-danger-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
+                    <svg className="size-3.5 text-primary-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" /></svg>
                     --force
                   </label>
                   <button
@@ -788,6 +855,17 @@ export default function ProjectProcessesTab({ project }: Props) {
   const [error, setError] = useState("");
   const [showCreateProcess, setShowCreateProcess] = useState(false);
   const [showCreateJob, setShowCreateJob] = useState(false);
+  const [hasDeployment, setHasDeployment] = useState(false);
+
+  // Check if the project has an active deployment
+  useEffect(() => {
+    if (!project.id || !canView) return;
+    deployApi.listDeployments({ projectId: project.id, limit: 5 })
+      .then((res) => {
+        setHasDeployment(res.deployments.some((d) => d.status === "success"));
+      })
+      .catch(() => setHasDeployment(false));
+  }, [project.id, canView]);
 
   const fetchData = useCallback(async () => {
     if (!project.id || !canView) return;
@@ -831,7 +909,7 @@ export default function ProjectProcessesTab({ project }: Props) {
     }`;
 
   return (
-    <div className="flex gap-6 overflow-y-auto pr-1">
+    <div className="flex gap-6 pr-1">
       {/* Sub-tab sidebar */}
       <div className="flex shrink-0 flex-col gap-1 w-44">
         <button type="button" className={subTabCls(subTab === "processes")} onClick={() => setSubTab("processes")}>
@@ -854,6 +932,11 @@ export default function ProjectProcessesTab({ project }: Props) {
                   <p className="text-xs text-text-muted mt-1">
                     Background processes are managed using Supervisor, which monitors your processes and automatically restarts them if they crash or stop unexpectedly. Supports Node.js, PHP, Python, and Go queue workers.
                   </p>
+                  {!hasDeployment && (
+                    <p className="mt-2 text-xs text-amber-400">
+                      Processes won't run until this project has an active deployment. You can pre-configure them now.
+                    </p>
+                  )}
                 </div>
                 {canManage && (
                   <button type="button" className={btnOutline + " whitespace-nowrap"} onClick={() => setShowCreateProcess(true)}>
@@ -874,7 +957,7 @@ export default function ProjectProcessesTab({ project }: Props) {
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="text-xs text-text-muted">{proc.numProcesses} Process{proc.numProcesses > 1 ? "es" : ""}</span>
                         <ProcessStatusBadge status={proc.status} />
-                        {canManage && <ProcessActionsMenu process={proc} projectId={project.id} project={project} onRefresh={fetchData} />}
+                        {canManage && <ProcessActionsMenu process={proc} projectId={project.id} project={project} hasDeployment={hasDeployment} onRefresh={fetchData} />}
                       </div>
                     </div>
                   ))}
@@ -899,6 +982,11 @@ export default function ProjectProcessesTab({ project }: Props) {
                     Schedule any recurring tasks that need to run on your site.{" "}
                     <span className="text-primary-500 cursor-pointer hover:underline">Learn more</span>
                   </p>
+                  {!hasDeployment && (
+                    <p className="mt-2 text-xs text-amber-400">
+                      Scheduled jobs won't run until this project has an active deployment. You can pre-configure them now.
+                    </p>
+                  )}
                 </div>
                 {canManage && (
                   <button type="button" className={btnOutline + " whitespace-nowrap"} onClick={() => setShowCreateJob(true)}>
@@ -928,7 +1016,7 @@ export default function ProjectProcessesTab({ project }: Props) {
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="text-xs text-text-muted">{FREQUENCY_LABELS[job.frequency]}</span>
                         <JobStatusBadge status={job.status} />
-                        {canManage && <JobActionsMenu job={job} projectId={project.id} onRefresh={fetchData} />}
+                        {canManage && <JobActionsMenu job={job} projectId={project.id} hasDeployment={hasDeployment} onRefresh={fetchData} />}
                       </div>
                     </div>
                   ))}
