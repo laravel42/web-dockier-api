@@ -277,9 +277,13 @@ function generateLaravelDockerfile(
   lines.push(`    ${[...systemPkgs].sort().join(" ")} \\`);
   lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
 
-  const allExts = [...new Set([...installable, ...pecl])].sort();
-  if (allExts.length > 0) {
-    lines.push(`RUN install-php-extensions ${allExts.join(" ")}`);
+  if (installable.length > 0) {
+    lines.push(`RUN install-php-extensions ${installable.sort().join(" ")}`);
+  }
+  if (pecl.length > 0) {
+    lines.push(`RUN for ext in ${pecl.sort().join(" ")}; do \\`);
+    lines.push("      for i in 1 2 3; do install-php-extensions $ext && break || sleep 5; done; \\");
+    lines.push("    done");
   }
 
   const composerTag = composerImageTag(phpVer);
@@ -376,9 +380,13 @@ function generateGenericPhpDockerfile(
   lines.push(`RUN apt-get update && apt-get install -y git unzip \\`);
   lines.push("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
 
-  const allExts = [...new Set([...installable, ...pecl])].sort();
-  if (allExts.length > 0) {
-    lines.push(`RUN install-php-extensions ${allExts.join(" ")}`);
+  if (installable.length > 0) {
+    lines.push(`RUN install-php-extensions ${installable.sort().join(" ")}`);
+  }
+  if (pecl.length > 0) {
+    lines.push(`RUN for ext in ${pecl.sort().join(" ")}; do \\`);
+    lines.push("      for i in 1 2 3; do install-php-extensions $ext && break || sleep 5; done; \\");
+    lines.push("    done");
   }
 
   const composerTag = composerImageTag(phpVer);
