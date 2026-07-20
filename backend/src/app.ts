@@ -74,6 +74,13 @@ async function registerCoreRoutesByService(app: FastifyInstance, service: Servic
 export async function buildApp(service: ServiceName) {
   const app = Fastify({
     logger: true,
+    // Global connection timeout (30s). Limits how long the server waits for
+    // the full HTTP request headers to arrive after a socket is opened.
+    connectionTimeout: 30_000,
+    // Global request timeout (60s). Limits the total time a request can take
+    // from when it's received to when the response must be sent. Individual
+    // routes override with handlerTimeout for specific operations.
+    requestTimeout: 60_000,
   });
 
   await app.register(authPlugin);

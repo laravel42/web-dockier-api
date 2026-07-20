@@ -15,6 +15,7 @@ export async function registerScanRoutes(app: FastifyInstance) {
     "/code-analysis/scans",
     {
       preHandler: [app.requirePermission(PERMISSIONS.SCAN_RUN), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "scan-create" })],
+      handlerTimeout: 45_000,
       schema: {
         tags: ["code-analysis"],
         summary: "Create scan",
@@ -114,6 +115,8 @@ export async function registerScanRoutes(app: FastifyInstance) {
     "/code-analysis/scans/:scanId/run",
     {
       preHandler: [app.requirePermission(PERMISSIONS.SCAN_RUN), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "scan-run" })],
+      // Scan run validates the scan, updates status, and enqueues the job.
+      handlerTimeout: 45_000,
       schema: {
         tags: ["code-analysis"],
         summary: "Run scan asynchronously",

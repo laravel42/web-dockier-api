@@ -45,6 +45,10 @@ export function getQueue(): PgBoss | null {
     // Railway). Keeping this small leaves headroom and avoids EMAXCONNSESSION,
     // even when a `tsx watch` restart briefly overlaps old and new connections.
     max: env.PGBOSS_MAX_CONNECTIONS,
+    // Timeout (ms) waiting for a connection from the pool. Prevents the enqueue
+    // call from blocking indefinitely when the pool is exhausted or Postgres is
+    // unresponsive, which would cascade and stall HTTP requests.
+    connectionTimeoutMillis: 10_000,
     // Auto-create schema and tables on start
     migrate: true,
     // Monitor for stuck jobs every 60s
