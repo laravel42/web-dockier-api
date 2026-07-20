@@ -27,6 +27,9 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
     "/deploy/deployments",
     {
       preHandler: [app.requirePermission(PERMISSIONS.DEPLOY_CREATE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "deploy-create" })],
+      // Deployment creation validates provider, creates a DB record, and enqueues
+      // the pipeline job. Allow extra time for the full round-trip under load.
+      handlerTimeout: 45_000,
       schema: {
         tags: ["deploy"],
         summary: "Create deployment",
@@ -155,6 +158,8 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
     "/deploy/deployments/:deploymentId/destroy",
     {
       preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
+      // Destroy may call cloud provider APIs to tear down infrastructure.
+      handlerTimeout: 60_000,
       schema: {
         tags: ["deploy"],
         summary: "Destroy deployment",

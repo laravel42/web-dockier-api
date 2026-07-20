@@ -15,6 +15,8 @@ export async function registerTofuRoutes(app: FastifyInstance) {
     "/deploy/tofu/generate",
     {
       preHandler: app.requirePermission(PERMISSIONS.DEPLOY_CREATE),
+      // IaC generation validates provider and computes the script in-process.
+      handlerTimeout: 30_000,
       schema: {
         tags: ["deploy"],
         summary: "Generate IaC script preview",
