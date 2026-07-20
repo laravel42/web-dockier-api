@@ -6,8 +6,10 @@ import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project } from "../../types";
-import { compareByTime } from "../../utils/sortByTime";
 import { getDefaultDeployScript } from "../../config/frameworks";
+import type { PaginationMeta } from "../../services/projects";
+
+const PAGE_SIZE = 50;
 
 export function useProjects() {
   const navigate = useNavigate();
@@ -24,6 +26,8 @@ export function useProjects() {
   const [viewMode, setViewMode] = useState<"cards" | "table">(
     () => (localStorage.getItem("projects-view") as "cards" | "table") || "cards",
   );
+  const [pagination, setPagination] = useState<PaginationMeta>({ total: 0, limit: PAGE_SIZE, offset: 0 });
+  const [search, setSearch] = useState("");
 
   // Source type: "repository" (existing) or "template" (new)
   const [platform, setPlatform] = useState("");
@@ -44,20 +48,35 @@ export function useProjects() {
 
   // ── Data fetching ──────────────────────────────────────────────
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async (offset = 0, searchQuery?: string) => {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await projectsApi.list();
-      setProjects([...res.projects].sort((a, b) => compareByTime(a, b, "created")));
+      const res = await projectsApi.list({
+        limit: PAGE_SIZE,
+        offset,
+        search: searchQuery ?? search,
+      });
+      setProjects(res.projects);
+      setPagination(res.pagination);
     } catch (err) {
       setLoadError(getErrorMessage(err, "Failed to load projects"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search]);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  const goToPage = (page: number) => {
+    const newOffset = (page - 1) * PAGE_SIZE;
+    fetchProjects(newOffset);
+  };
+
+  const handleSearch = (query: string) => {
+    setSearch(query);
+    fetchProjects(0, query);
+  };
 
   // ── Connection / repo / branch cascading fetches ───────────────
 
@@ -219,6 +238,8 @@ export function useProjects() {
     showForm, editing, form, setForm,
     deleteId, setDeleteId,
     viewMode, changeViewMode,
+    // pagination
+    pagination, goToPage, search, handleSearch,
     // platform
     platform, setPlatform,
     // form / modal

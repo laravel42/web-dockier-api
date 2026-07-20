@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema, tagResponseSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { env } from "../../shared/config.js";
 import {
   createProject,
@@ -90,13 +90,26 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["projects"],
         summary: "List projects",
-        response: { 200: z.object({ projects: z.array(projectSchema) }) },
+        querystring: paginationQuerySchema.extend({
+          limit: z.coerce.number().int().min(1).max(100).default(50),
+          search: z.string().optional(),
+        }),
+        response: {
+          200: z.object({
+            projects: z.array(projectSchema),
+            pagination: paginationMetaSchema,
+          }),
+        },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      const projects = await listProjects(auth.tenantId);
-      return { projects };
+      const { limit, offset, search } = request.query;
+      const result = await listProjects(auth.tenantId, { limit, offset, search });
+      return {
+        projects: result.projects,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 

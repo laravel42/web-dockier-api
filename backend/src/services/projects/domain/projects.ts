@@ -106,15 +106,29 @@ export async function getProject(projectId: string, tenantId: string) {
   return rowToProject(project, commits[project.id] ?? "");
 }
 
-export async function listProjects(tenantId: string) {
-  const { data, error } = await supabaseAdmin
+export async function listProjects(tenantId: string, params?: { limit?: number; offset?: number; search?: string }) {
+  const limit = Math.min(Math.max(params?.limit ?? 50, 1), 100);
+  const offset = Math.max(params?.offset ?? 0, 0);
+
+  let query = supabaseAdmin
     .from("projects")
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at", { count: "exact" })
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
+
+  if (params?.search) {
+    query = query.ilike("name", `%${params.search}%`);
+  }
+
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
   const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
   const commits = await latestCommitByProject(tenantId);
-  return rows.map((row) => rowToProject(row, commits[row.id] ?? ""));
+  return {
+    projects: rows.map((row) => rowToProject(row, commits[row.id] ?? "")),
+    total: count ?? 0,
+  };
 }
 
 export interface UpdateProjectParams {

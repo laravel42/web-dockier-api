@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import {
   createChannel,
   listChannels,
@@ -129,14 +129,26 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["notifications"],
         summary: "List in-app notifications",
-        querystring: z.object({ unreadOnly: z.coerce.boolean().optional() }),
-        response: { 200: z.object({ notifications: z.array(notificationSchema) }) },
+        querystring: paginationQuerySchema.extend({
+          limit: z.coerce.number().int().min(1).max(100).default(30),
+          unreadOnly: z.coerce.boolean().optional(),
+        }),
+        response: {
+          200: z.object({
+            notifications: z.array(notificationSchema),
+            pagination: paginationMetaSchema,
+          }),
+        },
       },
     },
     async (request) => {
       const auth = getAuth(request);
-      const notifications = await listNotifications(auth.tenantId, request.query.unreadOnly);
-      return { notifications };
+      const { limit, offset, unreadOnly } = request.query;
+      const result = await listNotifications(auth.tenantId, { unreadOnly, limit, offset });
+      return {
+        notifications: result.notifications,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 

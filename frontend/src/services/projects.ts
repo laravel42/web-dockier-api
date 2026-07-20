@@ -1,9 +1,29 @@
 import { request } from "./request";
 import type { Project, ProjectConfig } from "../types";
 
+export interface PaginationMeta {
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListProjectsParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+}
+
 export const projectsApi = {
-  list: () =>
-    request<{ projects: Project[] }>("/projects"),
+  list: (params?: ListProjectsParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.offset) searchParams.set("offset", String(params.offset));
+    if (params?.search) searchParams.set("search", params.search);
+    const qs = searchParams.toString();
+    return request<{ projects: Project[]; pagination: PaginationMeta }>(
+      `/projects${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   get: (projectId: string) =>
     request<Project>(`/projects/${projectId}`),

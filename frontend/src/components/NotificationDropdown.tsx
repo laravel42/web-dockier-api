@@ -112,7 +112,7 @@ export default function NotificationDropdown() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    notificationsApi.list(true).then((res) => setNotifications(res.notifications)).catch(() => {});
+    notificationsApi.list({ unreadOnly: true }).then((res) => setNotifications(res.notifications)).catch(() => {});
   }, [location.pathname]);
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export default function NotificationDropdown() {
         next.delete(id);
         return next;
       });
-      notificationsApi.list(true).then((res) => setNotifications(res.notifications)).catch(() => {});
+      notificationsApi.list({ unreadOnly: true }).then((res) => setNotifications(res.notifications)).catch(() => {});
     });
   };
 
