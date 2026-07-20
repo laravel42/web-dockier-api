@@ -281,8 +281,10 @@ function generateLaravelDockerfile(
     lines.push(`RUN install-php-extensions ${installable.sort().join(" ")}`);
   }
   if (pecl.length > 0) {
-    lines.push(`RUN for ext in ${pecl.sort().join(" ")}; do \\`);
-    lines.push("      for i in 1 2 3; do install-php-extensions $ext && break || sleep 5; done; \\");
+    lines.push("RUN for ext in " + pecl.sort().join(" ") + "; do \\");
+    lines.push("      install-php-extensions $ext && continue; \\");
+    lines.push("      sleep 5 && install-php-extensions $ext && continue; \\");
+    lines.push("      sleep 5 && install-php-extensions $ext || exit 1; \\");
     lines.push("    done");
   }
 
@@ -384,8 +386,10 @@ function generateGenericPhpDockerfile(
     lines.push(`RUN install-php-extensions ${installable.sort().join(" ")}`);
   }
   if (pecl.length > 0) {
-    lines.push(`RUN for ext in ${pecl.sort().join(" ")}; do \\`);
-    lines.push("      for i in 1 2 3; do install-php-extensions $ext && break || sleep 5; done; \\");
+    lines.push("RUN for ext in " + pecl.sort().join(" ") + "; do \\");
+    lines.push("      install-php-extensions $ext && continue; \\");
+    lines.push("      sleep 5 && install-php-extensions $ext && continue; \\");
+    lines.push("      sleep 5 && install-php-extensions $ext || exit 1; \\");
     lines.push("    done");
   }
 
