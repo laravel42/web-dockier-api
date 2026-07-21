@@ -72,3 +72,21 @@ export async function recordActivity(params: {
 
   throwOnError(error, ActivityError, { internalMsg: "Failed to record activity" });
 }
+
+/**
+ * Fire-and-forget activity recording.
+ *
+ * Calls recordActivity but swallows any errors — use this in services
+ * where activity logging is non-critical and should never fail the
+ * parent operation (commands, deploys, env updates, etc.).
+ */
+export function safeRecordActivity(params: {
+  tenantId: string;
+  projectId: string;
+  userId?: string;
+  eventType: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+}): void {
+  recordActivity(params).catch(() => {});
+}

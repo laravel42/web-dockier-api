@@ -3,7 +3,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import { enqueueCommand } from "./worker.js";
-import { recordActivity } from "../../observe/domain/activity.js";
+import { safeRecordActivity } from "../../observe/domain/activity.js";
 import type { CommandRow } from "../schemas.js";
 import { rowToCommand, type CommandResponse, type CommandStatus } from "./mappers.js";
 
@@ -58,18 +58,14 @@ export async function runCommand(params: {
   }
 
   // Record activity for this command execution
-  try {
-    await recordActivity({
-      tenantId,
-      projectId,
-      userId,
-      eventType: "command_run",
-      description: "Running custom command",
-      metadata: { commandId: row.id, command },
-    });
-  } catch {
-    // Activity logging is non-critical — don't fail the command if it errors
-  }
+  safeRecordActivity({
+    tenantId,
+    projectId,
+    userId,
+    eventType: "command_run",
+    description: "Running custom command",
+    metadata: { commandId: row.id, command },
+  });
 
   return rowToCommand(row as CommandRow);
 }
