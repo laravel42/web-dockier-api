@@ -214,3 +214,67 @@ export function normalizePagination(params: PaginationParams): { limit: number; 
   const offset = Math.max(params.offset ?? 0, 0);
   return { limit, offset };
 }
+
+// ─── Paginated Query Helper ────────────────────────────────────────
+
+/**
+ * Options for the paginatedQuery helper.
+ */
+export interface PaginatedQueryOptions<TRow, TResult> {
+  /** Error message when the query fails. */
+  internalMsg?: string;
+  /** Map a raw DB row to the API response shape. */
+  map: (row: TRow) => TResult;
+}
+
+/**
+ * Result shape returned by paginatedQuery.
+ */
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+}
+
+/**
+ * Execute a paginated Supabase query and return mapped results with total count.
+ *
+ * Encapsulates the common pattern of:
+ * 1. Apply `.range()` to a query that already has `{ count: "exact" }`
+ * 2. `unwrapList()` the result
+ * 3. Map rows to the response shape
+ * 4. Return `{ data, total }`
+ *
+ * The caller is responsible for building the base query (table, filters, order)
+ * and passing in validated `limit`/`offset` values.
+ *
+ * @example
+ * ```ts
+ * const query = supabaseAdmin
+ *   .from("deployments")
+ *   .select("*", { count: "exact" })
+ *   .eq("organization_id", tenantId)
+ *   .order("created_at", { ascending: false });
+ *
+ * return paginatedQuery(query, { limit, offset }, DeployError, {
+ *   internalMsg: "Failed to list deployments",
+ *   map: rowToDeployment,
+ * });
+ * ```
+ */
+export async function paginatedQuery<TRow, TResult, E extends Error>(
+  query: { range: (from: number, to: number) => PromiseLike<{ data: TRow[] | null; error: PostgrestError | null; count: number | null }> },
+  pagination: { limit: number; offset: number },
+  ErrorClass: DomainErrorConstructor<E>,
+  options: PaginatedQueryOptions<TRow, TResult>,
+): Promise<PaginatedResult<TResult>> {
+  const { limit, offset } = pagination;
+  const { internalMsg = "Database query failed", map } = options;
+
+  const { data, error, count } = await query.range(offset, offset + limit - 1);
+  const rows = unwrapList(data, error, ErrorClass, { internalMsg });
+
+  return {
+    data: rows.map(map),
+    total: count ?? rows.length,
+  };
+}

@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership, paginatedQuery } from "../../../shared/supabase/query.js";
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
 import { enqueueBuild } from "./worker.js";
@@ -137,14 +137,12 @@ export async function listBuilds(params: ListBuildsParams): Promise<ListBuildsRe
   if (sourceRepo) query = query.eq("source_repo", sourceRepo);
   if (status) query = query.eq("status", status);
 
-  query = query.range(offset, offset + limit - 1);
+  const result = await paginatedQuery(query, { limit, offset }, ImageBuilderError, {
+    internalMsg: "Failed to list builds",
+    map: rowToBuild,
+  });
 
-  const { data, error, count } = await query;
-  const rows = unwrapList(data, error, ImageBuilderError, { internalMsg: "Failed to list builds" });
-  return {
-    builds: rows.map(rowToBuild),
-    total: count ?? rows.length,
-  };
+  return { builds: result.data, total: result.total };
 }
 
 export async function cancelBuild(buildId: string, tenantId: string) {
