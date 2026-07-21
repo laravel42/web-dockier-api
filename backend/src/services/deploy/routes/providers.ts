@@ -9,7 +9,6 @@ import { requireInternalToken } from "../../../shared/security.js";
 import {
   createProvider,
   listProviders,
-  getProviderForTenant,
   updateProvider,
   deleteProvider,
   getProviderCredentials,

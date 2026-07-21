@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { logger } from "../../../shared/logger.js";
 import type { ActivityRow } from "../schemas.js";
 import { rowToActivity, type ActivityResponse } from "./mappers.js";
 
@@ -71,4 +72,27 @@ export async function recordActivity(params: {
   });
 
   throwOnError(error, ActivityError, { internalMsg: "Failed to record activity" });
+}
+
+/**
+ * Fire-and-forget activity recording.
+ *
+ * Calls recordActivity but swallows any errors — use this in services
+ * where activity logging is non-critical and should never fail the
+ * parent operation (commands, deploys, env updates, etc.).
+ *
+ * Errors are logged at warn level for observability without impacting
+ * the caller.
+ */
+export function safeRecordActivity(params: {
+  tenantId: string;
+  projectId: string;
+  userId?: string;
+  eventType: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+}): void {
+  void recordActivity(params).catch((err) => {
+    logger.warn({ err, eventType: params.eventType, projectId: params.projectId }, "Non-critical: failed to record activity");
+  });
 }
