@@ -6,7 +6,7 @@ import { registerDeployWorker } from "./services/deploy/domain/worker.js";
 import { registerImageBuildWorker } from "./services/image-builder/domain/worker.js";
 import { registerScanWorker } from "./services/code-analysis/domain/worker.js";
 import { registerCommandWorker } from "./services/commands/domain/worker.js";
-import { registerConfigApplyWorker } from "./services/domains/domain/worker.js";
+import { registerConfigApplyWorker } from "./shared/workers/config-apply.js";
 import { seedCustomRules } from "./services/code-analysis/domain/seed-custom-rules.js";
 import { reconcileAllStaleScans } from "./services/code-analysis/domain/scan-reconcile.js";
 import { reconcileStaleScanJobs } from "./services/code-analysis/domain/scan-queue-reconcile.js";
