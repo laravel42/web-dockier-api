@@ -61,10 +61,8 @@ export async function createDomain(params: {
     .select()
     .single();
 
-  if (error) {
-    if (error.code === "23505") throw new DomainsError("Domain already exists", "conflict");
-    throw new DomainsError(error.message, "internal", error);
-  }
+  if (error?.code === "23505") throw new DomainsError("Domain already exists", "conflict");
+  throwOnError(error, DomainsError, { internalMsg: "Failed to create domain" });
   if (!data) throw new DomainsError("Failed to create domain", "internal");
 
   return rowToDomain(data as DomainRow);

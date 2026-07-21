@@ -16,7 +16,7 @@ async function findDuplicateSshKey(tenantId: string, publicKey: string): Promise
     .from("ssh_keys")
     .select("public_key")
     .eq("organization_id", tenantId);
-  if (error) throw new DeployError("Failed to validate SSH key", "internal", error);
+  throwOnError(error, DeployError, { internalMsg: "Failed to validate SSH key" });
   return (data ?? []).some((row) => normalizeSshPublicKey(row.public_key) === normalized);
 }
 

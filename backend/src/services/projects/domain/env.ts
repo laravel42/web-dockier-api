@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { encrypt, decrypt } from "../../../shared/crypto.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError, throwOnMutationError } from "../../../shared/supabase/query.js";
 
 export const EnvError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("EnvError");
 export type EnvError = InstanceType<typeof EnvError>;
@@ -37,7 +38,7 @@ export async function getMaskedEnv(params: {
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (error) throw new EnvError("Failed to fetch environment file", "internal", error);
+  throwOnError(error, EnvError, { internalMsg: "Failed to fetch environment file" });
   if (!data) return { content: "", exists: false };
 
   // Decrypt to get the real content, then mask values
@@ -79,7 +80,7 @@ export async function revealEnv(params: {
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (error) throw new EnvError("Failed to fetch environment file", "internal", error);
+  throwOnError(error, EnvError, { internalMsg: "Failed to fetch environment file" });
   if (!data) return { content: "", exists: false };
 
   const decrypted = decrypt({
@@ -124,7 +125,7 @@ export async function saveEnv(params: {
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id);
-    if (error) throw new EnvError("Failed to save environment file", "internal", error);
+    throwOnMutationError(error, EnvError, { internalMsg: "Failed to save environment file" });
   } else {
     const { error } = await supabaseAdmin
       .from("project_env_files")
@@ -135,7 +136,7 @@ export async function saveEnv(params: {
         iv,
         auth_tag: authTag,
       });
-    if (error) throw new EnvError("Failed to create environment file", "internal", error);
+    throwOnMutationError(error, EnvError, { internalMsg: "Failed to create environment file" });
   }
 }
 
@@ -152,5 +153,5 @@ export async function deleteEnv(params: {
     .delete()
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
-  if (error) throw new EnvError("Failed to delete environment file", "internal", error);
+  throwOnMutationError(error, EnvError, { internalMsg: "Failed to delete environment file" });
 }

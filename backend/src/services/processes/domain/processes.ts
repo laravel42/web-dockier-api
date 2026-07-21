@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnError } from "../../../shared/supabase/query.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 import { rowToProcess, rowToJob, type BackgroundProcessResponse, type ScheduledJobResponse } from "./mappers.js";
 
@@ -108,9 +109,8 @@ export async function createProcess(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw new ProcessesError("Failed to create process", "internal");
-  }
+  throwOnError(error, ProcessesError, { internalMsg: "Failed to create process" });
+  if (!data) throw new ProcessesError("Failed to create process", "internal");
 
   return rowToProcess(data as BackgroundProcessRow);
 }
@@ -128,11 +128,9 @@ export async function listProcesses(params: {
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
 
-  if (error) {
-    throw new ProcessesError("Failed to list processes", "internal");
-  }
+  throwOnError(error, ProcessesError, { internalMsg: "Failed to list processes" });
 
-  return (data as BackgroundProcessRow[]).map(rowToProcess);
+  return ((data ?? []) as BackgroundProcessRow[]).map(rowToProcess);
 }
 
 export async function updateProcess(params: {
@@ -172,9 +170,8 @@ export async function updateProcess(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw new ProcessesError("Process not found", "not_found");
-  }
+  throwOnError(error, ProcessesError, { notFoundMsg: "Process not found", internalMsg: "Failed to update process" });
+  if (!data) throw new ProcessesError("Process not found", "not_found");
 
   return rowToProcess(data as BackgroundProcessRow);
 }
@@ -196,9 +193,8 @@ export async function updateProcessStatus(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw new ProcessesError("Process not found", "not_found");
-  }
+  throwOnError(error, ProcessesError, { notFoundMsg: "Process not found", internalMsg: "Failed to update process status" });
+  if (!data) throw new ProcessesError("Process not found", "not_found");
 
   return rowToProcess(data as BackgroundProcessRow);
 }
@@ -217,12 +213,8 @@ export async function deleteProcess(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) {
-    throw new ProcessesError("Failed to delete process", "internal");
-  }
-  if (count === 0) {
-    throw new ProcessesError("Process not found", "not_found");
-  }
+  throwOnError(error, ProcessesError, { internalMsg: "Failed to delete process" });
+  if (count === 0) throw new ProcessesError("Process not found", "not_found");
 }
 
 // ─── Scheduled Jobs ───
@@ -267,9 +259,8 @@ export async function createJob(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw new ProcessesError("Failed to create job", "internal");
-  }
+  throwOnError(error, ProcessesError, { internalMsg: "Failed to create job" });
+  if (!data) throw new ProcessesError("Failed to create job", "internal");
 
   return rowToJob(data as ScheduledJobRow);
 }
@@ -287,11 +278,9 @@ export async function listJobs(params: {
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
 
-  if (error) {
-    throw new ProcessesError("Failed to list jobs", "internal");
-  }
+  throwOnError(error, ProcessesError, { internalMsg: "Failed to list jobs" });
 
-  return (data as ScheduledJobRow[]).map(rowToJob);
+  return ((data ?? []) as ScheduledJobRow[]).map(rowToJob);
 }
 
 export async function updateJob(params: {
@@ -319,9 +308,8 @@ export async function updateJob(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw new ProcessesError("Job not found", "not_found");
-  }
+  throwOnError(error, ProcessesError, { notFoundMsg: "Job not found", internalMsg: "Failed to update job" });
+  if (!data) throw new ProcessesError("Job not found", "not_found");
 
   return rowToJob(data as ScheduledJobRow);
 }
@@ -343,9 +331,8 @@ export async function updateJobStatus(params: {
     .select()
     .single();
 
-  if (error || !data) {
-    throw new ProcessesError("Job not found", "not_found");
-  }
+  throwOnError(error, ProcessesError, { notFoundMsg: "Job not found", internalMsg: "Failed to update job status" });
+  if (!data) throw new ProcessesError("Job not found", "not_found");
 
   return rowToJob(data as ScheduledJobRow);
 }
@@ -364,10 +351,6 @@ export async function deleteJob(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) {
-    throw new ProcessesError("Failed to delete job", "internal");
-  }
-  if (count === 0) {
-    throw new ProcessesError("Job not found", "not_found");
-  }
+  throwOnError(error, ProcessesError, { internalMsg: "Failed to delete job" });
+  if (count === 0) throw new ProcessesError("Job not found", "not_found");
 }
