@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, throwOnMutationError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 
 export const TagsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("TagsError");
@@ -176,44 +176,23 @@ export async function setProjectTags(params: {
   tagIds: string[];
 }): Promise<TagResponse[]> {
   const { tenantId, projectId, tagIds } = params;
-
-  // Verify all tag IDs belong to this tenant
   const uniqueTagIds = [...new Set(tagIds)];
-  if (uniqueTagIds.length > 0) {
-    const { count } = await supabaseAdmin
-      .from("project_tags")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", tenantId)
-      .in("id", uniqueTagIds);
-    if (count !== uniqueTagIds.length) {
+
+  // Use the atomic RPC that validates, deletes, and inserts in a single transaction
+  const { data, error } = await supabaseAdmin.rpc("set_project_tags", {
+    p_organization_id: tenantId,
+    p_project_id: projectId,
+    p_tag_ids: uniqueTagIds,
+  });
+
+  if (error) {
+    // P0002 = no_data_found raised by our RPC when tag IDs don't belong to tenant
+    if (error.code === "P0002") {
       throw new TagsError("One or more tags not found", "bad_request");
     }
+    throw new TagsError("Failed to update project tags", "internal", error);
   }
 
-  // Remove all existing assignments for this project
-  const { error: deleteError } = await supabaseAdmin
-    .from("project_tag_assignments")
-    .delete()
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnMutationError(deleteError, TagsError, { internalMsg: "Failed to update project tags" });
-
-  // Insert new assignments
-  if (uniqueTagIds.length > 0) {
-    const rows = uniqueTagIds.map((tagId) => ({
-      organization_id: tenantId,
-      project_id: projectId,
-      tag_id: tagId,
-    }));
-
-    const { error: insertError } = await supabaseAdmin
-      .from("project_tag_assignments")
-      .insert(rows);
-
-    throwOnMutationError(insertError, TagsError, { internalMsg: "Failed to assign tags" });
-  }
-
-  // Return the updated tag list
-  return getProjectTags({ tenantId, projectId });
+  const rows = (data ?? []) as unknown as TagRow[];
+  return rows.map((r) => rowToTag(r));
 }
