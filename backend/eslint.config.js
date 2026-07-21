@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import vitest from "@vitest/eslint-plugin";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
@@ -20,6 +21,13 @@ export default defineConfig([
       ],
       "no-empty": ["warn", { allowEmptyCatch: true }],
       "no-useless-escape": "warn",
+    },
+  },
+  {
+    files: ["**/__tests__/**/*.test.ts"],
+    plugins: { vitest },
+    rules: {
+      "vitest/no-focused-tests": "error",
     },
   },
 ]);
