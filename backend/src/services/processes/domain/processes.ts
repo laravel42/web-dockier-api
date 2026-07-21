@@ -39,7 +39,7 @@ export async function createProcess(params: {
   const { tenantId, projectId, ...rest } = params;
 
   // Verify project belongs to tenant
-  await assertProjectAccess(projectId, tenantId);
+  await assertProjectAccess(projectId, tenantId, ProcessesError);
 
   // Build the command if queue_worker type
   let command = rest.command || "";
@@ -224,7 +224,7 @@ export async function createJob(params: {
   const { tenantId, projectId, ...rest } = params;
 
   // Verify project belongs to tenant
-  await assertProjectAccess(projectId, tenantId);
+  await assertProjectAccess(projectId, tenantId, ProcessesError);
 
   const { data, error } = await db
     .from("scheduled_jobs")

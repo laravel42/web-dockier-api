@@ -20,7 +20,7 @@ export async function createHeartbeat(params: {
   const { tenantId, projectId, name, frequency, gracePeriod } = params;
 
   // Validate the project belongs to this tenant
-  await assertProjectAccess(projectId, tenantId);
+  await assertProjectAccess(projectId, tenantId, HeartbeatsError);
 
   const { data, error } = await supabaseAdmin
     .from("heartbeats")

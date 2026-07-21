@@ -21,7 +21,7 @@ export async function runCommand(params: {
   const { tenantId, projectId, userId, command } = params;
 
   // Validate the project belongs to this tenant before running
-  await assertProjectAccess(projectId, tenantId);
+  await assertProjectAccess(projectId, tenantId, CommandsError);
 
   // Insert command record with "running" status
   const { data, error } = await supabaseAdmin

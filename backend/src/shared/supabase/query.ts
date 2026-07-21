@@ -35,7 +35,7 @@ export interface QueryErrorOptions {
  * error code unions that are subsets of BaseDomainErrorCode.
  */
  
-type DomainErrorConstructor<E extends Error = Error> = new (
+export type DomainErrorConstructor<E extends Error = Error> = new (
   message: string,
   code: string,
   cause?: unknown,

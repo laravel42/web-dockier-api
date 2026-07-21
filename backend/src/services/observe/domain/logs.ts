@@ -61,7 +61,7 @@ export async function getLog(params: {
   const { tenantId, projectId, logType } = params;
 
   // Verify project ownership
-  await assertProjectAccess(projectId, tenantId);
+  await assertProjectAccess(projectId, tenantId, LogsError);
 
   // Resolve execution target (same mechanism as commands)
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
@@ -131,7 +131,7 @@ export async function clearLog(params: {
   const { tenantId, projectId, logType } = params;
 
   // Verify project ownership
-  await assertProjectAccess(projectId, tenantId);
+  await assertProjectAccess(projectId, tenantId, LogsError);
 
   // Resolve execution target
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
