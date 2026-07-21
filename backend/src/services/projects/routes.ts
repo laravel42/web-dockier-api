@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema, tagResponseSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { tenantRateLimit } from "../../shared/rate-limit.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { env } from "../../shared/config.js";
 import {
@@ -156,7 +157,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/overview-ai/chat",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "ai-chat" })],
       schema: {
         tags: ["projects"],
         summary: "BlockNote AI chat for project overview editor",
