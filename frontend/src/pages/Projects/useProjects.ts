@@ -48,14 +48,14 @@ export function useProjects() {
 
   // ── Data fetching ──────────────────────────────────────────────
 
-  const fetchProjects = useCallback(async (offset = 0, searchQuery?: string) => {
+  const fetchProjects = useCallback(async (offset = 0) => {
     setLoading(true);
     setLoadError("");
     try {
       const res = await projectsApi.list({
         limit: PAGE_SIZE,
         offset,
-        search: searchQuery ?? search,
+        search,
       });
       setProjects(res.projects);
       setPagination(res.pagination);
@@ -75,7 +75,6 @@ export function useProjects() {
 
   const handleSearch = (query: string) => {
     setSearch(query);
-    fetchProjects(0, query);
   };
 
   // ── Connection / repo / branch cascading fetches ───────────────

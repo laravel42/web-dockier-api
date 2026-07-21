@@ -15,7 +15,10 @@ export type ProjectsError = InstanceType<typeof ProjectsError>;
  * surface a `lastCommitHash` on the project entity so list/detail pages can show
  * a branch · commit label even when the project itself stores no commit.
  */
-async function latestCommitByProject(tenantId: string, projectId?: string): Promise<Record<string, string>> {
+async function latestCommitByProject(tenantId: string, projectIds?: string[]): Promise<Record<string, string>> {
+  // Skip if no projects to look up
+  if (projectIds && projectIds.length === 0) return {};
+
   let deployQuery = supabaseAdmin
     .from("deployments")
     .select("project_id,commit_hash,updated_at")
@@ -28,9 +31,9 @@ async function latestCommitByProject(tenantId: string, projectId?: string): Prom
     .eq("organization_id", tenantId)
     .neq("commit_sha", "")
     .order("updated_at", { ascending: false });
-  if (projectId) {
-    deployQuery = deployQuery.eq("project_id", projectId);
-    scanQuery = scanQuery.eq("project_id", projectId);
+  if (projectIds) {
+    deployQuery = deployQuery.in("project_id", projectIds);
+    scanQuery = scanQuery.in("project_id", projectIds);
   }
 
   const [deployRes, scanRes] = await Promise.all([deployQuery, scanQuery]);
@@ -102,7 +105,7 @@ export async function getProject(projectId: string, tenantId: string) {
     notFoundMsg: "Project not found",
     internalMsg: "Failed to fetch project",
   });
-  const commits = await latestCommitByProject(tenantId, projectId);
+  const commits = await latestCommitByProject(tenantId, [projectId]);
   return rowToProject(project, commits[project.id] ?? "");
 }
 
@@ -124,7 +127,8 @@ export async function listProjects(tenantId: string, params?: { limit?: number; 
 
   const { data, error, count } = await query;
   const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
-  const commits = await latestCommitByProject(tenantId);
+  const projectIds = rows.map((row) => row.id);
+  const commits = await latestCommitByProject(tenantId, projectIds);
   return {
     projects: rows.map((row) => rowToProject(row, commits[row.id] ?? "")),
     total: count ?? 0,
