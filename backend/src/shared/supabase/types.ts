@@ -627,6 +627,16 @@ export type Database = {
         Args: { p_deployment_id: string; p_line: string };
         Returns: undefined;
       };
+      set_project_tags: {
+        Args: { p_organization_id: string; p_project_id: string; p_tag_ids: string[] };
+        Returns: {
+          id: string;
+          organization_id: string;
+          name: string;
+          color: string;
+          created_at: string;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
