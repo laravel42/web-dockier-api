@@ -282,56 +282,69 @@ function parseNotificationMetadata(value: unknown): NotificationMetadata | null 
   return parsed.success ? parsed.data : null;
 }
 
-export async function listNotifications(tenantId: string, unreadOnly?: boolean) {
+export async function listNotifications(tenantId: string, params?: { unreadOnly?: boolean; limit?: number; offset?: number }) {
+  const limit = Math.min(Math.max(params?.limit ?? 30, 1), 100);
+  const offset = Math.max(params?.offset ?? 0, 0);
+  const unreadOnly = params?.unreadOnly;
+
   const supportsMetadata = await notificationsMetadataColumnExists();
 
   if (supportsMetadata) {
     let query = supabaseAdmin
       .from("notifications")
-      .select(NOTIFICATION_LIST_COLUMNS_WITH_METADATA)
+      .select(NOTIFICATION_LIST_COLUMNS_WITH_METADATA, { count: "exact" })
       .eq("organization_id", tenantId)
-      .order("created_at", { ascending: false })
-      .limit(50);
+      .order("created_at", { ascending: false });
     if (unreadOnly) query = query.eq("read", false);
-    const { data, error } = await query;
+    query = query.range(offset, offset + limit - 1);
+    const { data, error, count } = await query;
     if (isMissingNotificationsMetadataColumn(error)) {
       notificationsMetadataSupported = false;
-      return listNotificationsWithoutMetadata(tenantId, unreadOnly);
+      return listNotificationsWithoutMetadata(tenantId, { unreadOnly, limit, offset });
     }
     const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
-    return rows.map((row) => ({
+    return {
+      notifications: rows.map((row) => ({
+        id: row.id,
+        channel: row.channel,
+        title: row.title,
+        message: row.message,
+        metadata: parseNotificationMetadata(row.metadata),
+        read: row.read,
+        createdAt: row.created_at,
+      })),
+      total: count ?? 0,
+    };
+  }
+
+  return listNotificationsWithoutMetadata(tenantId, { unreadOnly, limit, offset });
+}
+
+async function listNotificationsWithoutMetadata(tenantId: string, params?: { unreadOnly?: boolean; limit?: number; offset?: number }) {
+  const limit = params?.limit ?? 30;
+  const offset = params?.offset ?? 0;
+
+  let query = supabaseAdmin
+    .from("notifications")
+    .select(NOTIFICATION_LIST_COLUMNS_BASE, { count: "exact" })
+    .eq("organization_id", tenantId)
+    .order("created_at", { ascending: false });
+  if (params?.unreadOnly) query = query.eq("read", false);
+  query = query.range(offset, offset + limit - 1);
+  const { data, error, count } = await query;
+  const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
+  return {
+    notifications: rows.map((row) => ({
       id: row.id,
       channel: row.channel,
       title: row.title,
       message: row.message,
-      metadata: parseNotificationMetadata(row.metadata),
+      metadata: null,
       read: row.read,
       createdAt: row.created_at,
-    }));
-  }
-
-  return listNotificationsWithoutMetadata(tenantId, unreadOnly);
-}
-
-async function listNotificationsWithoutMetadata(tenantId: string, unreadOnly?: boolean) {
-  let query = supabaseAdmin
-    .from("notifications")
-    .select(NOTIFICATION_LIST_COLUMNS_BASE)
-    .eq("organization_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (unreadOnly) query = query.eq("read", false);
-  const { data, error } = await query;
-  const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
-  return rows.map((row) => ({
-    id: row.id,
-    channel: row.channel,
-    title: row.title,
-    message: row.message,
-    metadata: null,
-    read: row.read,
-    createdAt: row.created_at,
-  }));
+    })),
+    total: count ?? 0,
+  };
 }
 
 export async function markNotificationRead(notificationId: string, tenantId: string) {

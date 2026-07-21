@@ -65,10 +65,17 @@ export const notificationsApi = {
   deleteChannel: (channelId: string) =>
     request(`/notifications/channels/${channelId}`, { method: "DELETE" }),
 
-  list: (unreadOnly?: boolean) =>
-    request<{ notifications: Notification[] }>(
-      `/notifications${unreadOnly ? "?unreadOnly=true" : ""}`,
-    ),
+  list: (params?: { unreadOnly?: boolean; limit?: number; offset?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.unreadOnly) searchParams.set("unreadOnly", "true");
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.offset) searchParams.set("offset", String(params.offset));
+    const qs = searchParams.toString();
+    return request<{
+      notifications: Notification[];
+      pagination: { total: number; limit: number; offset: number };
+    }>(`/notifications${qs ? `?${qs}` : ""}`);
+  },
 
   markRead: (notificationId: string) =>
     request(`/notifications/${notificationId}/read`, { method: "PUT" }),
