@@ -158,6 +158,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     "/projects/overview-ai/chat",
     {
       preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "ai-chat" })],
+      handlerTimeout: 90_000,
       schema: {
         tags: ["projects"],
         summary: "BlockNote AI chat for project overview editor",
@@ -185,7 +186,8 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
           response: reply.raw,
           stream: result.toUIMessageStream(),
         });
-      } catch {
+      } catch (err) {
+        request.log.error({ err }, "AI chat stream failed");
         return reply.status(500).send({ message: "Failed to process AI request." });
       }
     },
