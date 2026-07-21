@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationMetaSchema } from "../../shared/schemas/responses.js";
 
 export const userSchema = z.object({
   id: z.uuid(),
@@ -20,9 +21,5 @@ export const userWithRoleSchema = userSchema.extend({
 
 export const listUsersResponseSchema = z.object({
   users: z.array(userWithRoleSchema),
-  pagination: z.object({
-    total: z.number().int().nonnegative(),
-    limit: z.number().int().positive(),
-    offset: z.number().int().nonnegative(),
-  }),
+  pagination: paginationMetaSchema,
 });

@@ -18,6 +18,10 @@ export const successResponseSchema = z.object({ success: z.literal(true) });
  * All list endpoints should use this schema for consistency.
  * Defaults: limit=20, offset=0. Max limit: 100.
  *
+ * Content-heavy list pages (projects, activity, notifications) may override
+ * the default limit via `.extend({ limit: z.coerce.number()...default(50) })`
+ * to reduce round-trips on initial page load.
+ *
  * @example
  * ```ts
  * querystring: paginationQuerySchema.extend({ search: z.string().optional() }),
