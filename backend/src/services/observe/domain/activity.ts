@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { escapePostgrestLike } from "../../../shared/security.js";
 import { logger } from "../../../shared/logger.js";
 import type { ActivityRow } from "../schemas.js";
 import { rowToActivity, type ActivityResponse } from "./mappers.js";
@@ -28,7 +29,7 @@ export async function listActivity(params: {
     .range(offset, offset + limit - 1);
 
   if (search) {
-    query = query.ilike("description", `%${search}%`);
+    query = query.ilike("description", `%${escapePostgrestLike(search)}%`);
   }
 
   const { data, error, count } = await query;

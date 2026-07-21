@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
+import { tenantRateLimit } from "../../shared/rate-limit.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { commandSchema } from "./schemas.js";
 import {
@@ -18,7 +19,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/commands",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "cmd-run" })],
       schema: {
         tags: ["commands"],
         summary: "Run a command on a project",
