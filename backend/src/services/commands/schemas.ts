@@ -5,8 +5,8 @@ export const commandStatusSchema = z.enum(["running", "finished", "failed", "tim
 
 export const commandSchema = z.object({
   id: z.uuid(),
-  projectId: z.string(),
-  userId: z.string(),
+  projectId: z.uuid(),
+  userId: z.uuid(),
   command: z.string(),
   status: commandStatusSchema,
   output: z.string(),
