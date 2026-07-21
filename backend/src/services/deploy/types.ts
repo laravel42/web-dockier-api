@@ -1,4 +1,4 @@
-import type { Database } from "../../shared/supabase/types.js";
+import type { TableRow } from "../../shared/supabase/types.js";
 
 export type ServiceEntry = {
   type: string;
@@ -6,9 +6,9 @@ export type ServiceEntry = {
   mode: "vps" | "managed";
 };
 
-export type ProviderRow = Database["public"]["Tables"]["server_providers"]["Row"];
+export type ProviderRow = TableRow<"server_providers">;
 
-export type DeploymentRow = Database["public"]["Tables"]["deployments"]["Row"];
+export type DeploymentRow = TableRow<"deployments">;
 
 export type DeploymentStatus = "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";
 

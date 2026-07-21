@@ -1,8 +1,8 @@
-import type { Database } from "../../../shared/supabase/types.js";
+import type { TableRow } from "../../../shared/supabase/types.js";
 import type { BuildStatus } from "../schemas.js";
 import { buildMetadataSchema, type ParsedBuildMetadata } from "./deploy-params.js";
 
-type BuildRow = Database["public"]["Tables"]["builds"]["Row"];
+type BuildRow = TableRow<"builds">;
 
 /**
  * Accepts both full query rows and freshly-built insert payloads, which omit

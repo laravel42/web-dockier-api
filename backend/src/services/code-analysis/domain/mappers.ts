@@ -1,9 +1,9 @@
 import { scanProgressSchema, summarySchema, type ScanStatus, type FindingSeverity } from "../schemas.js";
-import type { Database } from "../../../shared/supabase/types.js";
+import type { TableRow } from "../../../shared/supabase/types.js";
 
-type ScanRow = Database["public"]["Tables"]["scans"]["Row"];
-type FindingRow = Database["public"]["Tables"]["findings"]["Row"];
-type CustomRuleRow = Database["public"]["Tables"]["custom_rules"]["Row"];
+type ScanRow = TableRow<"scans">;
+type FindingRow = TableRow<"findings">;
+type CustomRuleRow = TableRow<"custom_rules">;
 
 /**
  * Accepts both full query rows and freshly-built insert payloads, which omit

@@ -70,28 +70,8 @@ export const applyDomainResponseSchema = z.object({
 
 // ─── DB Row Types ───
 
-export type DomainRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  name: string;
-  is_primary: boolean;
-  redirect_www: boolean;
-  wildcard: boolean;
-  created_at: string;
-  updated_at: string;
-};
+import type { TableRow } from "../../shared/supabase/types.js";
 
-export type SslCertificateRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  domain_id: string | null;
-  type: string;
-  status: string;
-  domain_name: string;
-  expires_at: string | null;
-  issued_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type DomainRow = TableRow<"domains">;
+
+export type SslCertificateRow = TableRow<"ssl_certificates">;

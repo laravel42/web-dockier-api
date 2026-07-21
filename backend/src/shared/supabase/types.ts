@@ -1,5 +1,17 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+/**
+ * Utility type to extract the Row type for a given table name.
+ * Use this instead of manually defining row types in service schemas.
+ *
+ * @example
+ * ```ts
+ * import type { TableRow } from "../../shared/supabase/types.js";
+ * export type CommandRow = TableRow<"commands">;
+ * ```
+ */
+export type TableRow<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
+
 export type Database = {
   public: {
     Tables: {

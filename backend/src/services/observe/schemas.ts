@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TableRow } from "../../shared/supabase/types.js";
 
 // ─── Heartbeats ───
 
@@ -39,18 +40,7 @@ export const heartbeatSchema = z.object({
   updatedAt: z.string(),
 });
 
-export type HeartbeatRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  name: string;
-  frequency: string;
-  grace_period: string;
-  status: string;
-  last_pinged_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type HeartbeatRow = TableRow<"heartbeats">;
 
 // ─── Activity ───
 
@@ -82,16 +72,7 @@ export const activitySchema = z.object({
   createdAt: z.string(),
 });
 
-export type ActivityRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  user_id: string | null;
-  event_type: string;
-  description: string;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-};
+export type ActivityRow = TableRow<"project_activity">;
 
 // ─── Logs ───
 

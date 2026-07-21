@@ -50,31 +50,10 @@ export const createRedirectRuleBodySchema = z.object({
 
 // ─── DB Row Types ───
 
-export type SecurityRuleRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  name: string;
-  path: string | null;
-  created_at: string;
-  updated_at: string;
-};
+import type { TableRow } from "../../shared/supabase/types.js";
 
-export type SecurityRuleCredentialRow = {
-  id: string;
-  security_rule_id: string;
-  username: string;
-  password_hash: string;
-  created_at: string;
-};
+export type SecurityRuleRow = TableRow<"security_rules">;
 
-export type RedirectRuleRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  from_path: string;
-  to_path: string;
-  type: string;
-  created_at: string;
-  updated_at: string;
-};
+export type SecurityRuleCredentialRow = TableRow<"security_rule_credentials">;
+
+export type RedirectRuleRow = TableRow<"redirect_rules">;
