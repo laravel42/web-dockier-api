@@ -4,6 +4,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
+import { escapePostgrestLike } from "../../../shared/security.js";
 import { rowToProject } from "./mappers.js";
 
 export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("ProjectsError");
@@ -120,7 +121,7 @@ export async function listProjects(tenantId: string, params?: { limit?: number; 
     .order("created_at", { ascending: false });
 
   if (params?.search) {
-    query = query.ilike("name", `%${params.search}%`);
+    query = query.ilike("name", `%${escapePostgrestLike(params.search)}%`);
   }
 
   query = query.range(offset, offset + limit - 1);
