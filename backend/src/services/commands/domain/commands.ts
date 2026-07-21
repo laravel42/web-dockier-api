@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
 import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import { enqueueCommand } from "./worker.js";
 import { safeRecordActivity } from "../../observe/domain/activity.js";
@@ -78,20 +78,19 @@ export async function listCommands(params: {
 }): Promise<{ commands: CommandResponse[]; total: number }> {
   const { tenantId, projectId, limit = 20, offset = 0 } = params;
 
-  const { data, error, count } = await supabaseAdmin
+  const query = supabaseAdmin
     .from("commands")
     .select("*", { count: "exact" })
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order("created_at", { ascending: false });
 
-  const rows = unwrapList(data, error, CommandsError, { internalMsg: "Failed to list commands" });
+  const result = await paginatedQuery(query, { limit, offset }, CommandsError, {
+    internalMsg: "Failed to list commands",
+    map: (row) => rowToCommand(row as CommandRow),
+  });
 
-  return {
-    commands: rows.map((row) => rowToCommand(row as CommandRow)),
-    total: count ?? 0,
-  };
+  return { commands: result.data, total: result.total };
 }
 
 export async function getCommand(params: {

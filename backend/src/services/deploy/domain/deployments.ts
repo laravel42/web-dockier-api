@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList, assertOwnership, normalizePagination } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, assertOwnership, normalizePagination, paginatedQuery } from "../../../shared/supabase/query.js";
 import type { DeploymentRow, ServiceEntry } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";
@@ -34,14 +34,12 @@ export async function listDeployments(
   if (filters?.providerId) query = query.eq("provider_id", filters.providerId);
   if (filters?.projectId) query = query.eq("project_id", filters.projectId);
 
-  query = query.range(offset, offset + limit - 1);
+  const result = await paginatedQuery(query, { limit, offset }, DeployError, {
+    internalMsg: "Failed to list deployments",
+    map: rowToDeployment,
+  });
 
-  const { data, error, count } = await query;
-  const rows = unwrapList(data, error, DeployError, { internalMsg: "Failed to list deployments" });
-  return {
-    deployments: rows.map(rowToDeployment),
-    total: count ?? rows.length,
-  };
+  return { deployments: result.data, total: result.total };
 }
 
 export async function getDeployment(deploymentId: string, tenantId: string) {
