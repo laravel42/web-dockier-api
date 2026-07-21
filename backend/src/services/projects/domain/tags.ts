@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, throwOnMutationError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 
 export const TagsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("TagsError");
@@ -151,7 +151,7 @@ export async function getProjectTags(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (error) throw new TagsError("Failed to fetch project tags", "internal", error);
+  throwOnError(error, TagsError, { internalMsg: "Failed to fetch project tags" });
   if (!data || data.length === 0) return [];
 
   const tagIds = data.map((r) => r.tag_id);
@@ -163,8 +163,8 @@ export async function getProjectTags(params: {
     .in("id", tagIds)
     .order("name", { ascending: true });
 
-  if (tagsError) throw new TagsError("Failed to fetch tags", "internal", tagsError);
-  return (tags || []).map((r) => rowToTag(r as TagRow));
+  const tagRows = unwrapList(tags, tagsError, TagsError, { internalMsg: "Failed to fetch tags" });
+  return tagRows.map((r) => rowToTag(r as TagRow));
 }
 
 export async function setProjectTags(params: {
@@ -194,7 +194,7 @@ export async function setProjectTags(params: {
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
 
-  if (deleteError) throw new TagsError("Failed to update project tags", "internal", deleteError);
+  throwOnMutationError(deleteError, TagsError, { internalMsg: "Failed to update project tags" });
 
   // Insert new assignments
   if (uniqueTagIds.length > 0) {
@@ -208,7 +208,7 @@ export async function setProjectTags(params: {
       .from("project_tag_assignments")
       .insert(rows);
 
-    if (insertError) throw new TagsError("Failed to assign tags", "internal", insertError);
+    throwOnMutationError(insertError, TagsError, { internalMsg: "Failed to assign tags" });
   }
 
   // Return the updated tag list

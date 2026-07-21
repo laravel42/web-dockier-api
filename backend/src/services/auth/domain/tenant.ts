@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { throwOnMutationError } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { signTenantToken } from "./session.js";
@@ -41,7 +42,7 @@ export async function createTenant(params: CreateTenantParams): Promise<CreateTe
     is_owner: true,
     status: "active",
   });
-  if (membershipError) throw new TenantError("Failed to create owner membership", "internal", membershipError);
+  throwOnMutationError(membershipError, TenantError, { internalMsg: "Failed to create owner membership" });
 
   await ensureDefaultInAppChannel(org.id);
 
@@ -74,7 +75,7 @@ export async function switchTenant(params: SwitchTenantParams): Promise<{ token:
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw new TenantError("Failed to verify membership", "internal", error);
+  throwOnMutationError(error, TenantError, { internalMsg: "Failed to verify membership" });
   if (!data) throw new TenantError("No membership in requested tenant", "forbidden");
   if (data.status !== "active") throw new TenantError("Membership is not active", "forbidden");
 
@@ -108,7 +109,7 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId)
     .maybeSingle();
-  if (membershipError) throw new TenantError("Failed to verify target membership", "internal", membershipError);
+  throwOnMutationError(membershipError, TenantError, { internalMsg: "Failed to verify target membership" });
   if (!targetMembership) throw new TenantError("Target user is not a member of this organization", "not_found");
   if (targetMembership.status !== "active") throw new TenantError("Target member is not active", "bad_request");
 

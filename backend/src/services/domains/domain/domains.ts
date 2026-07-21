@@ -61,13 +61,10 @@ export async function createDomain(params: {
     .select()
     .single();
 
-  if (error) {
-    if (error.code === "23505") throw new DomainsError("Domain already exists", "conflict");
-    throw new DomainsError(error.message, "internal", error);
-  }
-  if (!data) throw new DomainsError("Failed to create domain", "internal");
+  if (error?.code === "23505") throw new DomainsError("Domain already exists", "conflict");
+  const row = unwrapQuery(data, error, DomainsError, { internalMsg: "Failed to create domain" });
 
-  return rowToDomain(data as DomainRow);
+  return rowToDomain(row as DomainRow);
 }
 
 export async function updateDomain(params: {
