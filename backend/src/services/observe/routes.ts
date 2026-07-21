@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
+import { rateLimit } from "../../shared/rate-limit.js";
 import {
   heartbeatSchema,
   heartbeatFrequencySchema,
@@ -105,6 +106,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/heartbeats/:heartbeatId/ping",
     {
+      preHandler: rateLimit({ max: 60, windowMs: 60_000, prefix: "heartbeat-ping" }),
       schema: {
         tags: ["observe"],
         summary: "Ping a heartbeat (public, no auth)",

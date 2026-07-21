@@ -39,7 +39,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       schema: {
         tags: ["roles"],
         summary: "Get role",
-        params: z.object({ roleId: z.string().min(1) }),
+        params: z.object({ roleId: z.uuid() }),
         response: { 200: roleResponseSchema },
       },
     },
@@ -83,7 +83,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       schema: {
         tags: ["roles"],
         summary: "Update role",
-        params: z.object({ roleId: z.string().min(1) }),
+        params: z.object({ roleId: z.uuid() }),
         body: z.object({
           name: z.string().min(2).max(80).optional(),
           description: z.string().max(300).optional(),
@@ -112,7 +112,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       schema: {
         tags: ["roles"],
         summary: "Delete role (soft delete)",
-        params: z.object({ roleId: z.string().min(1) }),
+        params: z.object({ roleId: z.uuid() }),
         response: { 200: successResponseSchema },
       },
     },
