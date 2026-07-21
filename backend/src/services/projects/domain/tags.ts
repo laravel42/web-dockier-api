@@ -58,9 +58,12 @@ export async function listTagsWithCounts(tenantId: string): Promise<TagWithCount
 
   const rows = unwrapList(data, error, TagsError, { internalMsg: "Failed to list tags" });
 
-  return rows.map((r: any) => {
-    const tag = rowToTag(r as TagRow);
-    const projectCount = r.project_tag_assignments?.[0]?.count ?? 0;
+  type TagRowWithCount = TagRow & { project_tag_assignments: [{ count: number }] };
+
+  return rows.map((r) => {
+    const row = r as unknown as TagRowWithCount;
+    const tag = rowToTag(row);
+    const projectCount = row.project_tag_assignments?.[0]?.count ?? 0;
     return { ...tag, projectCount };
   });
 }
