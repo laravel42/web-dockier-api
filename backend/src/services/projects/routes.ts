@@ -1,9 +1,19 @@
+/**
+ * Projects Routes — Composer
+ *
+ * Registers all project sub-route modules.
+ * Each module handles a focused domain:
+ *   - projects (this file): CRUD and AI overview chat
+ *   - tags: organization tags and per-project tag assignments
+ *   - env: encrypted environment file management
+ */
+
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pipeUIMessageStreamToResponse } from "ai";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
-import { projectConfigSchema, projectSchema, projectSettingsSchema, tagResponseSchema } from "./schemas.js";
+import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { tenantRateLimit } from "../../shared/rate-limit.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
@@ -16,20 +26,13 @@ import {
   deleteProject,
 } from "./domain/projects.js";
 import { createOverviewAiStream } from "./domain/overview-ai.js";
-import {
-  listTags,
-  listTagsWithCounts,
-  createTag,
-  updateTag,
-  deleteTag,
-  getProjectTags,
-  setProjectTags,
-} from "./domain/tags.js";
-import { getMaskedEnv, revealEnv, saveEnv } from "./domain/env.js";
-import { safeRecordActivity } from "../observe/domain/activity.js";
+import { registerTagRoutes } from "./routes/tags.js";
+import { registerEnvRoutes } from "./routes/env.js";
 
 export async function registerProjectsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  // ─── Project CRUD ───
 
   typed.post(
     "/projects",
@@ -154,6 +157,26 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
   );
 
+  typed.delete(
+    "/projects/:projectId",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.PROJECT_DELETE),
+      schema: {
+        tags: ["projects"],
+        summary: "Delete project",
+        params: z.object({ projectId: z.uuid() }),
+        response: { 200: successResponseSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      await deleteProject(request.params.projectId, auth.tenantId);
+      return { success: true as const };
+    },
+  );
+
+  // ─── AI Overview Chat ───
+
   typed.post(
     "/projects/overview-ai/chat",
     {
@@ -193,249 +216,8 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.delete(
-    "/projects/:projectId",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_DELETE),
-      schema: {
-        tags: ["projects"],
-        summary: "Delete project",
-        params: z.object({ projectId: z.uuid() }),
-        response: { 200: successResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      await deleteProject(request.params.projectId, auth.tenantId);
-      return { success: true as const };
-    },
-  );
+  // ─── Sub-route modules ───
 
-  // ─── Tags ───
-
-  typed.get(
-    "/projects/tags",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
-      schema: {
-        tags: ["projects"],
-        summary: "List all organization tags",
-        response: { 200: z.object({ tags: z.array(tagResponseSchema) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const tags = await listTags(auth.tenantId);
-      return { tags };
-    },
-  );
-
-  typed.get(
-    "/projects/tags/manage",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
-      schema: {
-        tags: ["projects"],
-        summary: "List all organization tags with project counts",
-        response: {
-          200: z.object({
-            tags: z.array(tagResponseSchema.extend({ projectCount: z.number() })),
-          }),
-        },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const tags = await listTagsWithCounts(auth.tenantId);
-      return { tags };
-    },
-  );
-
-  typed.post(
-    "/projects/tags",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
-      schema: {
-        tags: ["projects"],
-        summary: "Create a tag",
-        body: z.object({
-          name: z.string().min(1).max(50),
-          color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-        }),
-        response: { 200: tagResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      return await createTag({
-        tenantId: auth.tenantId,
-        name: request.body.name,
-        color: request.body.color,
-      });
-    },
-  );
-
-  typed.put(
-    "/projects/tags/:tagId",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
-      schema: {
-        tags: ["projects"],
-        summary: "Update a tag",
-        params: z.object({ tagId: z.uuid() }),
-        body: z.object({
-          name: z.string().min(1).max(50).optional(),
-          color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-        }),
-        response: { 200: tagResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      return await updateTag({
-        tenantId: auth.tenantId,
-        tagId: request.params.tagId,
-        name: request.body.name,
-        color: request.body.color,
-      });
-    },
-  );
-
-  typed.delete(
-    "/projects/tags/:tagId",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
-      schema: {
-        tags: ["projects"],
-        summary: "Delete a tag",
-        params: z.object({ tagId: z.uuid() }),
-        response: { 200: successResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      await deleteTag({ tenantId: auth.tenantId, tagId: request.params.tagId });
-      return { success: true as const };
-    },
-  );
-
-  typed.get(
-    "/projects/:projectId/tags",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
-      schema: {
-        tags: ["projects"],
-        summary: "Get tags assigned to a project",
-        params: z.object({ projectId: z.uuid() }),
-        response: { 200: z.object({ tags: z.array(tagResponseSchema) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const tags = await getProjectTags({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-      });
-      return { tags };
-    },
-  );
-
-  typed.put(
-    "/projects/:projectId/tags",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
-      schema: {
-        tags: ["projects"],
-        summary: "Set tags for a project (replaces all)",
-        params: z.object({ projectId: z.uuid() }),
-        body: z.object({
-          tagIds: z.array(z.uuid()).max(20),
-        }),
-        response: { 200: z.object({ tags: z.array(tagResponseSchema) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const tags = await setProjectTags({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        tagIds: request.body.tagIds,
-      });
-      return { tags };
-    },
-  );
-
-  // ─── Environment Files ───
-
-  typed.get(
-    "/projects/:projectId/env",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
-      schema: {
-        tags: ["projects"],
-        summary: "Get masked environment file",
-        params: z.object({ projectId: z.uuid() }),
-        response: { 200: z.object({ content: z.string(), exists: z.boolean() }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      return await getMaskedEnv({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-      });
-    },
-  );
-
-  typed.get(
-    "/projects/:projectId/env/reveal",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
-      schema: {
-        tags: ["projects"],
-        summary: "Reveal full environment file (decrypted)",
-        params: z.object({ projectId: z.uuid() }),
-        response: { 200: z.object({ content: z.string(), exists: z.boolean() }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      return await revealEnv({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-      });
-    },
-  );
-
-  typed.put(
-    "/projects/:projectId/env",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
-      schema: {
-        tags: ["projects"],
-        summary: "Save environment file",
-        params: z.object({ projectId: z.uuid() }),
-        body: z.object({ content: z.string().max(64000) }),
-        response: { 200: z.object({ success: z.literal(true) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      await saveEnv({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        content: request.body.content,
-      });
-
-      safeRecordActivity({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        userId: auth.userId,
-        eventType: "env_updated",
-        description: "Updated environment file",
-      });
-
-      return { success: true as const };
-    },
-  );
+  await registerTagRoutes(app);
+  await registerEnvRoutes(app);
 }
