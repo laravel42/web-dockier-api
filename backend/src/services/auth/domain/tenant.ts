@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnMutationError } from "../../../shared/supabase/query.js";
+import { throwOnError, throwOnMutationError } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { signTenantToken } from "./session.js";
@@ -75,7 +75,7 @@ export async function switchTenant(params: SwitchTenantParams): Promise<{ token:
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
     .maybeSingle();
-  throwOnMutationError(error, TenantError, { internalMsg: "Failed to verify membership" });
+  throwOnError(error, TenantError, { internalMsg: "Failed to verify membership" });
   if (!data) throw new TenantError("No membership in requested tenant", "forbidden");
   if (data.status !== "active") throw new TenantError("Membership is not active", "forbidden");
 
@@ -109,7 +109,7 @@ export async function transferOwnership(params: TransferOwnershipParams): Promis
     .eq("organization_id", tenantId)
     .eq("user_id", targetUserId)
     .maybeSingle();
-  throwOnMutationError(membershipError, TenantError, { internalMsg: "Failed to verify target membership" });
+  throwOnError(membershipError, TenantError, { internalMsg: "Failed to verify target membership" });
   if (!targetMembership) throw new TenantError("Target user is not a member of this organization", "not_found");
   if (targetMembership.status !== "active") throw new TenantError("Target member is not active", "bad_request");
 
