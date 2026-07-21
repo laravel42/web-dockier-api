@@ -4,8 +4,8 @@
  * Handles background application of domain and network configuration
  * to deployed servers via pg-boss queue.
  *
- * Replaces the fire-and-forget `void fn().catch(() => {})` pattern
- * with crash-safe, retryable background processing.
+ * Uses a Registry Pattern so that service-specific handlers are registered
+ * at startup — keeping this shared module decoupled from service logic.
  *
  * Job types:
  * - "domain-apply": Re-generates and applies nginx domain config
@@ -17,8 +17,6 @@
  */
 
 import { createWorker, CONFIG_APPLY_QUEUE } from "../queue.js";
-import { applyDomainConfig, issueCertificate } from "../../services/domains/domain/applier.js";
-import { applyNetworkRules } from "../../services/network/domain/applier.js";
 
 export type ConfigApplyJobType = "domain-apply" | "network-apply" | "certificate-issue";
 
@@ -32,53 +30,29 @@ export interface ConfigApplyJobInput {
   domainName?: string;
 }
 
+// ─── Handler Registry ──────────────────────────────────────────────
+
+export type ConfigApplyHandler = (input: ConfigApplyJobInput) => Promise<void>;
+
+const registry = new Map<ConfigApplyJobType, ConfigApplyHandler>();
+
 /**
- * Determines if a failure is retryable. Soft failures (no deploy target yet)
- * should not be retried — the config will be applied on next deployment.
+ * Register a handler for a specific config-apply job type.
+ * Call this during service initialization (before the worker starts processing).
  */
-function isRetryableFailure(message: string): boolean {
-  return !message.includes("will be applied on next deployment");
+export function registerConfigApplyHandler(type: ConfigApplyJobType, handler: ConfigApplyHandler): void {
+  registry.set(type, handler);
 }
 
+// ─── Job Processor ─────────────────────────────────────────────────
+
 async function processConfigApplyJob(input: ConfigApplyJobInput): Promise<void> {
-  const { type, tenantId, projectId } = input;
-
-  switch (type) {
-    case "domain-apply": {
-      const result = await applyDomainConfig({ tenantId, projectId });
-      if (!result.success && isRetryableFailure(result.message)) {
-        throw new Error(`Domain apply failed for project ${projectId}: ${result.message}`);
-      }
-      break;
-    }
-
-    case "network-apply": {
-      const result = await applyNetworkRules({ tenantId, projectId });
-      if (!result.success && isRetryableFailure(result.message)) {
-        throw new Error(`Network apply failed for project ${projectId}: ${result.message}`);
-      }
-      break;
-    }
-
-    case "certificate-issue": {
-      if (!input.certificateId || !input.domainName) {
-        throw new Error("certificate-issue job missing certificateId or domainName");
-      }
-      const result = await issueCertificate({
-        tenantId,
-        projectId,
-        certificateId: input.certificateId,
-        domainName: input.domainName,
-      });
-      if (!result.success) {
-        throw new Error(`Certificate issue failed for ${input.domainName}: ${result.message}`);
-      }
-      break;
-    }
-
-    default:
-      throw new Error(`Unknown job type: ${type}`);
+  const { type } = input;
+  const handler = registry.get(type);
+  if (!handler) {
+    throw new Error(`No handler registered for job type: ${type}`);
   }
+  await handler(input);
 }
 
 // ─── Worker Instance ───────────────────────────────────────────────
