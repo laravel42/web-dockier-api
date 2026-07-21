@@ -137,7 +137,7 @@ export async function listUsers(params: ListUsersParams) {
 
   type MembershipRow = { user_id: string; role_id: string | null; is_owner: boolean; roles: { name: string } | null };
   const membershipByUser = new Map<string, MembershipRow>();
-  for (const m of (memberships ?? []) as MembershipRow[]) {
+  for (const m of (memberships ?? []) as unknown as MembershipRow[]) {
     membershipByUser.set(m.user_id, m);
   }
 
