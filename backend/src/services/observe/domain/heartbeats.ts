@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import type { HeartbeatRow } from "../schemas.js";
 import { rowToHeartbeat, type HeartbeatResponse } from "./mappers.js";
 
@@ -19,14 +20,7 @@ export async function createHeartbeat(params: {
   const { tenantId, projectId, name, frequency, gracePeriod } = params;
 
   // Validate the project belongs to this tenant
-  const { data: project, error: projectError } = await supabaseAdmin
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  unwrapQuery(project, projectError, HeartbeatsError, { notFoundMsg: "Project not found" });
+  await assertProjectAccess(projectId, tenantId, HeartbeatsError);
 
   const { data, error } = await supabaseAdmin
     .from("heartbeats")

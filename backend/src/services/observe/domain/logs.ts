@@ -1,6 +1,5 @@
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { unwrapQuery } from "../../../shared/supabase/query.js";
+import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import { resolveExecutionTarget } from "../../commands/domain/worker.js";
 import { executeCommand } from "../../commands/domain/executor.js";
 
@@ -62,14 +61,7 @@ export async function getLog(params: {
   const { tenantId, projectId, logType } = params;
 
   // Verify project ownership
-  const { data: project, error: projectError } = await supabaseAdmin
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  unwrapQuery(project, projectError, LogsError, { notFoundMsg: "Project not found" });
+  await assertProjectAccess(projectId, tenantId, LogsError);
 
   // Resolve execution target (same mechanism as commands)
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
@@ -139,14 +131,7 @@ export async function clearLog(params: {
   const { tenantId, projectId, logType } = params;
 
   // Verify project ownership
-  const { data: project, error: projectError } = await supabaseAdmin
-    .from("projects")
-    .select("id")
-    .eq("id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  unwrapQuery(project, projectError, LogsError, { notFoundMsg: "Project not found" });
+  await assertProjectAccess(projectId, tenantId, LogsError);
 
   // Resolve execution target
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
