@@ -20,18 +20,25 @@ async function latestCommitByProject(tenantId: string, projectIds?: string[]): P
   // Skip if no projects to look up
   if (projectIds && projectIds.length === 0) return {};
 
+  // Cap the result set to avoid unbounded reads. In the worst case we need
+  // one row per project from each table — use 2× projectIds length as headroom
+  // for duplicates, or a sensible default when no filter is applied.
+  const maxRows = projectIds ? projectIds.length * 2 : 200;
+
   let deployQuery = supabaseAdmin
     .from("deployments")
     .select("project_id,commit_hash,updated_at")
     .eq("organization_id", tenantId)
     .neq("commit_hash", "")
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(maxRows);
   let scanQuery = supabaseAdmin
     .from("scans")
     .select("project_id,commit_sha,updated_at")
     .eq("organization_id", tenantId)
     .neq("commit_sha", "")
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(maxRows);
   if (projectIds) {
     deployQuery = deployQuery.in("project_id", projectIds);
     scanQuery = scanQuery.in("project_id", projectIds);
@@ -95,6 +102,41 @@ export async function createProject(params: CreateProjectParams) {
   return rowToProject(payload);
 }
 
+/**
+ * Optimized single-project commit lookup. Uses LIMIT 1 per table
+ * instead of the batch function which uses IN clauses.
+ */
+async function latestCommitForProject(tenantId: string, projectId: string): Promise<string> {
+  const [deployRes, scanRes] = await Promise.all([
+    supabaseAdmin
+      .from("deployments")
+      .select("commit_hash,updated_at")
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId)
+      .neq("commit_hash", "")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("scans")
+      .select("commit_sha,updated_at")
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId)
+      .neq("commit_sha", "")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const deployCommit = deployRes.data?.commit_hash ?? "";
+  const deployTs = deployRes.data?.updated_at ? Date.parse(deployRes.data.updated_at) || 0 : 0;
+  const scanCommit = scanRes.data?.commit_sha ?? "";
+  const scanTs = scanRes.data?.updated_at ? Date.parse(scanRes.data.updated_at) || 0 : 0;
+
+  if (!deployCommit && !scanCommit) return "";
+  return scanTs > deployTs ? scanCommit : deployCommit;
+}
+
 export async function getProject(projectId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("projects")
@@ -106,8 +148,8 @@ export async function getProject(projectId: string, tenantId: string) {
     notFoundMsg: "Project not found",
     internalMsg: "Failed to fetch project",
   });
-  const commits = await latestCommitByProject(tenantId, [projectId]);
-  return rowToProject(project, commits[project.id] ?? "");
+  const commit = await latestCommitForProject(tenantId, projectId);
+  return rowToProject(project, commit);
 }
 
 export async function listProjects(tenantId: string, params?: { limit?: number; offset?: number; search?: string }) {
