@@ -250,6 +250,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
     "/projects/:projectId/network/apply",
     {
       preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      handlerTimeout: 45_000,
       schema: {
         tags: ["network"],
         summary: "Apply all network rules to the deployed server",
