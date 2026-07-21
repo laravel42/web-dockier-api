@@ -101,6 +101,7 @@
   --color-accent-foreground: oklch(0.18 0.01 50);
   --color-input: oklch(0.28 0.008 50);
   --color-ring: oklch(0.78 0.08 70);
+  --color-terminal: oklch(0.117 0.0213 240.5);
 
   /* App aliases (backward compat) */
   --color-surface: var(--color-background);

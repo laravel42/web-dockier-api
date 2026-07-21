@@ -98,7 +98,7 @@ export async function createDeploymentRecord(input: CreateDeploymentInput, provi
     repo: input.repo,
     branch: input.branch,
     status: "pending",
-    logs: addLogLine("", `Deployment queued using template "${template.label}".`),
+    logs: addLogLine("", `Deployment queued using template "${template.label}".\n`),
     tofu_script: input.tofuScript?.trim() || preview.script,
     deploy_strategy: input.deployStrategy ?? "managed",
     app_url: "",
