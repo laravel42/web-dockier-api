@@ -22,7 +22,7 @@ import {
   deleteRedirectRule,
 } from "./domain/network.js";
 import { applyNetworkRules } from "./domain/applier.js";
-import { enqueueNetworkApply } from "../domains/domain/worker.js";
+import { enqueueNetworkApply } from "../../shared/workers/config-apply.js";
 
 export async function registerNetworkRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
