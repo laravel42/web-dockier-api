@@ -28,7 +28,9 @@ export function rowToActivity(row: ActivityRow & { actor_name?: string | null })
     actorName: row.actor_name ?? null,
     eventType: row.event_type as ActivityEventType,
     description: row.description,
-    metadata: row.metadata ?? undefined,
+    metadata: (row.metadata !== null && typeof row.metadata === "object" && !Array.isArray(row.metadata))
+      ? row.metadata as Record<string, unknown>
+      : undefined,
     createdAt: row.created_at,
   };
 }

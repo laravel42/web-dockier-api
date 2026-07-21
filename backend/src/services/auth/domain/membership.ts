@@ -35,7 +35,7 @@ export async function listMembershipsForUser(userId: string): Promise<Membership
 
   const rows = unwrapList(data, error, MembershipError, {
     internalMsg: "Failed to list memberships",
-  }) as Array<{
+  }) as unknown as Array<{
     id: string;
     role_id: string | null;
     is_owner: boolean;
@@ -231,7 +231,7 @@ export async function listTenantMemberships(tenantId: string) {
 
   const rows = unwrapList(data, error, MembershipError, {
     internalMsg: "Failed to list tenant memberships",
-  }) as Array<{
+  }) as unknown as Array<{
     id: string;
     role_id: string | null;
     is_owner: boolean;
