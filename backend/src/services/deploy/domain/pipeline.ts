@@ -35,6 +35,7 @@ import { createStreamingRunCmd, type RunCmdFn } from "./run-cmd.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { executePostDeployScript } from "./post-deploy.js";
+import { injectWpConfig } from "./wp-config-inject.js";
 import { sendNotification } from "../../notifications/domain/notifications.js";
 import { ADAPTER_TO_SERVICE, type InfraMetadata } from "../types.js";
 import { revealEnv } from "../../projects/domain/env.js";
@@ -548,8 +549,208 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
   if (event.templateId) {
     const templateConfig = getTemplateConfig(event.templateId);
     if (templateConfig) {
-      await appendLog(deploymentId, `[${ts()}] ℹ Template deploy: ${templateConfig.name} (not yet wired in Fastify pipeline)`);
-      await updateStatus(deploymentId, "failed");
+      const runCmd = createStreamingRunCmd(deploymentId, appendLog, ts);
+      const logger = createDeployLogger(appendLog, deploymentId);
+
+      try {
+        await updateStatus(deploymentId, "building");
+        await appendLog(deploymentId, `[${ts()}] ▶ Starting template deployment: ${templateConfig.name}`);
+        await appendLog(deploymentId, `[${ts()}] ℹ Provider: ${provider} | Region: ${region}`);
+        await appendLog(deploymentId, `[${ts()}] ℹ Strategy: ${event.deployStrategy || "vps"}`);
+        await appendLog(deploymentId, `[${ts()}] ℹ Docker image: ${templateConfig.dockerImage}`);
+
+        // Use the official Docker image — no build needed
+        const actualImage = templateConfig.dockerImage;
+
+        // Merge template env vars with any project-level env vars
+        const projectCtx = await loadProjectContext(event, logger);
+        const templateEnvVars = templateConfig.envVars.filter(
+          (tv) => !projectCtx.envVars.some((pv) => pv.name === tv.name),
+        );
+        const mergedEnvVars = [...templateEnvVars, ...projectCtx.envVars];
+
+        // Merge template services into event
+        const mergedServices = event.services?.length
+          ? event.services
+          : templateConfig.services.map((s) => ({ type: s.type, name: s.name, mode: "vps" }));
+
+        // Build a synthetic RepoConfig for the adapter context
+        const repoConfig: RepoConfig = {
+          runtime: templateConfig.runtime.name as RepoConfig["runtime"],
+          runtimeVersion: templateConfig.runtime.version,
+          packageManager: "unknown",
+          packageManagerVersion: "",
+          framework: templateConfig.id,
+          frameworkVersion: "",
+          buildCommand: templateConfig.runtime.buildCmd,
+          startCommand: templateConfig.runtime.startCmd,
+          port: templateConfig.runtime.port,
+          nodeVersion: "",
+          hasStandalone: false,
+          nativeDeps: [],
+          nextConfig: {},
+          phpVersion: templateConfig.runtime.name === "php" ? templateConfig.runtime.version : "",
+          phpExtensions: [],
+          composerScripts: [],
+          pythonVersion: "",
+          goVersion: "",
+          subDir: "",
+          features: new Set(),
+        };
+
+        const deployStrategy = event.deployStrategy || "vps";
+        const adapter = getAdapter(provider, deployStrategy);
+        await logger.info(`Using adapter: ${adapter.id}`);
+
+        const adapterCtx = buildAdapterContext({
+          deploymentId,
+          repoName,
+          shortId,
+          region,
+          repoDir: "",
+          workDir: "",
+          commitHash: "",
+          providerCredentials,
+          event: {
+            ...event,
+            services: mergedServices,
+            techStack: event.techStack?.length ? event.techStack : templateConfig.techStack,
+            primaryLanguage: event.primaryLanguage || templateConfig.primaryLanguage,
+          },
+          deployStrategy,
+          repoConfig,
+          actualImage,
+          runCmd,
+        });
+
+        // Inject template + project env vars
+        await updateStatus(deploymentId, "deploying");
+        await adapter.injectEnvVars(adapterCtx, mergedEnvVars);
+
+        // Pull the public Docker image locally and push to ECR
+        // (CloudFormation ec2.yml expects an ECR URI for docker pull on the instance)
+        // Force linux/amd64 platform since EC2 instances are x86_64
+        await logger.info(`Pulling ${actualImage} from Docker Hub...`);
+        const pullResult = await runCmd("docker", ["pull", "--platform", "linux/amd64", actualImage]);
+        if (pullResult.code !== 0) {
+          throw new Error(`Failed to pull Docker image: ${pullResult.output.split("\n").slice(-3).join(" ")}`);
+        }
+        await logger.success(`Pulled ${actualImage}`);
+
+        // Push to ECR via the adapter (tags, pushes, and returns the ECR URI)
+        const pushResult = await adapter.pushImage(adapterCtx, actualImage);
+        const ecrImageUri = pushResult.remoteImageUri;
+
+        // Provision infrastructure with the ECR image URI
+        const provision = await adapter.provisionInfrastructure(adapterCtx, ecrImageUri);
+
+        // Run adapter post-deploy steps
+        await adapter.runPostDeploy(adapterCtx, provision);
+
+        // Inject wp-config.php into the WordPress container (non-fatal)
+        if (event.templateId === "wordpress" && event.projectId && event.tenantId) {
+          try {
+            await injectWpConfig(
+              {
+                tenantId: event.tenantId,
+                projectId: event.projectId,
+                containerName: provider === "aws"
+                  ? repoName
+                  : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase(),
+                region,
+                provider,
+                credentials: {
+                  apiKey: providerCredentials.api_key,
+                  apiSecret: providerCredentials.api_secret,
+                },
+                instanceId: provision.outputs.InstanceId || "",
+                serverIp: provision.serverIp || "",
+                deployKeyPath: adapterCtx.state.deployKeyPath || "",
+                workDir: "",
+              },
+              logger,
+              runCmd,
+            );
+          } catch (wpErr) {
+            const msg = wpErr instanceof Error ? wpErr.message : String(wpErr);
+            await logger.warn(`Could not inject wp-config.php: ${msg}`);
+          }
+        }
+
+        // Execute post-deploy script if configured
+        if (projectCtx.deployScript.trim()) {
+          const containerName = provider === "aws"
+            ? repoName
+            : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+          await executePostDeployScript(
+            {
+              containerName,
+              region,
+              provider,
+              techStack: templateConfig.techStack,
+              services: mergedServices,
+              envVars: mergedEnvVars,
+              credentials: {
+                apiKey: providerCredentials.api_key,
+                apiSecret: providerCredentials.api_secret,
+              },
+              instanceId: provision.outputs.InstanceId || "",
+              serverIp: provision.serverIp || "",
+              deployKeyPath: adapterCtx.state.deployKeyPath || "",
+              workDir: "",
+            },
+            projectCtx.deployScript,
+            logger,
+            runCmd,
+            deployStrategy,
+          );
+        }
+
+        // Apply network rules
+        await applyNetworkRulesIfNeeded(event, deployStrategy, logger);
+
+        // WordPress containers need extra time for MySQL + Apache to fully start
+        if (event.templateId === "wordpress") {
+          await logger.info("Waiting for WordPress container to stabilize...");
+          await new Promise((resolve) => setTimeout(resolve, 30_000));
+        }
+
+        // Finalize
+        await finalizeDeploy({
+          deploymentId,
+          event,
+          repoName,
+          provider,
+          region,
+          deployStrategy,
+          adapter,
+          adapterCtx,
+          provision,
+          actualImage,
+          commitHash: "",
+          logger,
+        });
+
+        // Restore background processes
+        if (event.projectId) {
+          try {
+            await restoreProcessesAfterDeploy({
+              tenantId: event.tenantId,
+              projectId: event.projectId,
+            });
+          } catch (restoreErr) {
+            const msg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+            await logger.warn(`Could not restore processes/jobs: ${msg}`);
+          }
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        await appendLog(deploymentId, `[${ts()}]`);
+        await appendLog(deploymentId, `[${ts()}] ✗ Template deployment failed: ${message}`);
+        await updateStatus(deploymentId, "failed");
+      }
+
       return;
     }
   }

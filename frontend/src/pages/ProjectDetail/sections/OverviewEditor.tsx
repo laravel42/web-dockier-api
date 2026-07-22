@@ -73,6 +73,7 @@ function OverviewSpinner({ label = "Loading overview…" }: { label?: string }) 
 
 async function fetchReadmeMarkdown(project: Project): Promise<string | null> {
   if (!project.connectionId || !project.repository) return null;
+  if (project.sourceType === "template") return null;
 
   const parsed = parseOwnerRepo(project.repository);
   if (!parsed) return null;
@@ -181,7 +182,10 @@ export default function OverviewEditor({ project, editable, onProjectUpdate }: P
       if (cancelled) return;
 
       if (!readme) {
-        const entry = { blocks: undefined, loadError: "No README.md found in this repository." };
+        const msg = project.sourceType === "template"
+          ? "Template projects don't have a linked repository overview. Start writing to add content."
+          : "No README.md found in this repository.";
+        const entry = { blocks: undefined, loadError: msg };
         setCachedOverview(cacheKey, entry);
         setInitialContent(undefined);
         setLoadError(entry.loadError);
@@ -212,7 +216,7 @@ export default function OverviewEditor({ project, editable, onProjectUpdate }: P
   const aiTransport = useMemo(() => (editable ? createOverviewAiTransport() : null), [editable]);
 
   const editorOptions = useMemo(() => {
-    if (initialContent === null) return undefined;
+    if (initialContent === null || initialContent === undefined) return undefined;
 
     return {
       initialContent,
@@ -245,7 +249,7 @@ export default function OverviewEditor({ project, editable, onProjectUpdate }: P
   editorRef.current = editor;
 
   useEffect(() => {
-    if (initialContent === null) return;
+    if (initialContent === null || initialContent === undefined) return;
 
     const handler = (event: MouseEvent) => {
       handleOverviewLinkClick(event, overviewRef.current);
@@ -279,7 +283,7 @@ export default function OverviewEditor({ project, editable, onProjectUpdate }: P
   }, [editor, initialContent]);
 
   useEffect(() => {
-    if (initialContent === null || !editable) return;
+    if (initialContent === null || initialContent === undefined || !editable) return;
 
     const unsubChange = editor.onChange(() => {
       if (saveTimer.current) clearTimeout(saveTimer.current);

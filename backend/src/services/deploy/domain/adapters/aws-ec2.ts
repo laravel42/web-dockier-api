@@ -126,6 +126,15 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
       selfHostedServices.push("database");
     }
 
+    // Also include services explicitly declared in the deploy event (e.g. from templates)
+    if (event.services) {
+      for (const svc of event.services) {
+        if (svc.mode === "vps" && !selfHostedServices.includes(svc.type)) {
+          selfHostedServices.push(svc.type);
+        }
+      }
+    }
+
     // 5. Build CloudFormation parameters
     const params: Array<{ ParameterKey: string; ParameterValue: string }> = [
       { ParameterKey: "AppName", ParameterValue: repoName },

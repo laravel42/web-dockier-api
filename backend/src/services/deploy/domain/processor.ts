@@ -93,7 +93,7 @@ export async function createDeploymentRecord(input: CreateDeploymentInput, provi
     id,
     organization_id: input.tenantId,
     provider_id: input.providerId,
-    git_connection_id: input.gitConnectionId,
+    git_connection_id: input.gitConnectionId || null,
     project_id: input.projectId ?? "",
     repo: input.repo,
     branch: input.branch,

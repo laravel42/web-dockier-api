@@ -13,7 +13,7 @@ export const deploymentStatusSchema = z.enum(["pending", "building", "deploying"
 export const deploymentSchema = z.object({
   id: z.uuid(),
   providerId: z.uuid(),
-  gitConnectionId: z.uuid(),
+  gitConnectionId: z.union([z.uuid(), z.literal("")]),
   projectId: z.uuid(),
   repo: z.string(),
   branch: z.string(),

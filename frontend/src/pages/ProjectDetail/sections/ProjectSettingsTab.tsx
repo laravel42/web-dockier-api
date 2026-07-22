@@ -9,6 +9,7 @@ import SourceControlSelect from "../../../components/SourceControlSelect";
 import RepoSelect from "../../../components/RepoSelect";
 import BranchSelect from "../../../components/BranchSelect";
 import EnvEditor from "../../../components/EnvEditor";
+import WpConfigEditor from "../../../components/WpConfigEditor";
 import TrashIcon from "../../../components/icons/outlined/TrashIcon";
 import CheckIcon from "../../../components/icons/outlined/CheckIcon";
 import SearchIcon from "../../../components/icons/outlined/SearchIcon";
@@ -18,6 +19,7 @@ import XIcon from "../../../components/icons/outlined/XIcon";
 import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
 import { tagsApi, type Tag, type TagWithCount } from "../../../services/tags";
 import { envApi } from "../../../services/env";
+import { wpConfigApi } from "../../../services/wp-config";
 import { gitApi } from "../../../services/git";
 import { getDefaultDeployScript } from "../../../config/frameworks";
 import type { Connection, Repo } from "../../../types";
@@ -33,6 +35,7 @@ type SettingsSection =
   | "general"
   | "deployments"
   | "environment"
+  | "wordpress"
   | "composer"
   | "npm"
   | "notifications";
@@ -1185,6 +1188,125 @@ function EnvironmentSection({
   );
 }
 
+// ─── WordPress Section ───
+
+function WordPressSection({
+  project,
+  canManage,
+}: {
+  project: Project;
+  canManage: boolean;
+}) {
+  const [wpContent, setWpContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
+  const [revealed, setRevealed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await wpConfigApi.getMasked(project.id);
+        if (res.exists) {
+          setWpContent(res.content);
+          setOriginalContent(res.content);
+        }
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    };
+    void load();
+  }, [project.id]);
+
+  const handleReveal = async () => {
+    try {
+      const res = await wpConfigApi.reveal(project.id);
+      setWpContent(res.content);
+      setOriginalContent(res.content);
+      setRevealed(true);
+    } catch { /* silent */ }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await wpConfigApi.save(project.id, wpContent);
+      setOriginalContent(wpContent);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  };
+
+  const hasChanges = revealed && wpContent !== originalContent;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <SectionTitle
+        title="WordPress"
+        description="Edit your wp-config.php file. This configuration is encrypted at rest and will be injected into your WordPress container during deployment."
+      />
+
+      <div className="rounded-lg border border-border bg-card/40 p-4">
+        <div className="mb-3">
+          <p className="text-sm font-semibold text-text">wp-config.php</p>
+          <p className="text-xs text-text-muted mt-0.5">
+            Database credentials, authentication keys, and WordPress settings.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="size-4" />
+          </div>
+        ) : (
+          <div className="relative">
+            <div className={!revealed ? "blur-sm select-none pointer-events-none" : ""}>
+              <WpConfigEditor
+                value={wpContent}
+                onChange={revealed ? setWpContent : () => {}}
+                height="400px"
+              />
+            </div>
+            {!revealed && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10">
+                <p className="text-sm text-text-muted font-medium">
+                  WordPress configuration contains sensitive credentials.
+                </p>
+                <button type="button" onClick={() => void handleReveal()} className={btnOutline}>
+                  <EyeIcon className="size-3.5" />
+                  Reveal
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {revealed && canManage && hasChanges && (
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className={btnPrimary}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWpContent(originalContent)}
+              className="text-xs text-text-muted hover:text-text font-medium transition-colors"
+            >
+              Reset
+            </button>
+            {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Composer Section ───
 
 function ComposerSection({ canManage }: { canManage: boolean }) {
@@ -1739,6 +1861,9 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
     { key: "general", label: "General" },
     { key: "deployments", label: "Deployments" },
     { key: "environment", label: "Environment" },
+    ...(project.sourceType === "template" && project.template === "wordpress"
+      ? [{ key: "wordpress" as const, label: "WordPress" }]
+      : []),
     { key: "composer", label: "Composer" },
     { key: "npm", label: "npm" },
     { key: "notifications", label: "Notifications" },
@@ -1774,6 +1899,9 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
         )}
         {activeSection === "environment" && (
           <EnvironmentSection project={project} canManage={canManage} />
+        )}
+        {activeSection === "wordpress" && (
+          <WordPressSection project={project} canManage={canManage} />
         )}
         {activeSection === "composer" && (
           <ComposerSection canManage={canManage} />

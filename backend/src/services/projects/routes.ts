@@ -28,6 +28,7 @@ import {
 import { createOverviewAiStream } from "./domain/overview-ai.js";
 import { registerTagRoutes } from "./routes/tags.js";
 import { registerEnvRoutes } from "./routes/env.js";
+import { registerWpConfigRoutes } from "./routes/wp-config.js";
 
 export async function registerProjectsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -220,4 +221,5 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
 
   await registerTagRoutes(app);
   await registerEnvRoutes(app);
+  await registerWpConfigRoutes(app);
 }

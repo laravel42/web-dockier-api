@@ -35,7 +35,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         summary: "Create deployment",
         body: z.object({
           providerId: z.uuid(),
-          gitConnectionId: z.uuid(),
+          gitConnectionId: z.union([z.uuid(), z.literal("")]),
           projectId: z.string().optional(),
           repo: z.string().min(1),
           branch: z.string().min(1),
