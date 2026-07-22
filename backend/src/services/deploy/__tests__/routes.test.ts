@@ -287,7 +287,7 @@ describe("POST /deploy/deployments", () => {
       id: TEST_DEPLOYMENT_ID,
       providerId: TEST_PROVIDER_ID,
       gitConnectionId: TEST_GIT_CONNECTION_ID,
-      projectId: "",
+      projectId: "c9d0e1f2-9012-4234-abcd-999999999999",
       repo: "acme/my-app",
       branch: "main",
       status: "pending",
@@ -330,7 +330,7 @@ describe("POST /deploy/deployments", () => {
       id: TEST_DEPLOYMENT_ID,
       providerId: TEST_PROVIDER_ID,
       gitConnectionId: TEST_GIT_CONNECTION_ID,
-      projectId: "",
+      projectId: "c9d0e1f2-9012-4234-abcd-999999999999",
       repo: "acme/my-app",
       branch: "main",
       status: "pending",
@@ -394,7 +394,7 @@ describe("GET /deploy/deployments", () => {
         id: TEST_DEPLOYMENT_ID,
         providerId: TEST_PROVIDER_ID,
         gitConnectionId: TEST_GIT_CONNECTION_ID,
-        projectId: "",
+        projectId: "c9d0e1f2-9012-4234-abcd-999999999999",
         repo: "acme/my-app",
         branch: "main",
         status: "success",
@@ -418,12 +418,12 @@ describe("GET /deploy/deployments", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().deployments).toHaveLength(1);
-    expect(res.json().total).toBe(1);
+    expect(res.json().pagination.total).toBe(1);
     expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, {
       providerId: undefined,
       projectId: undefined,
-      limit: undefined,
-      offset: undefined,
+      limit: 20,
+      offset: 0,
     });
   });
 
@@ -440,6 +440,9 @@ describe("GET /deploy/deployments", () => {
     expect(res.statusCode).toBe(200);
     expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, {
       providerId: TEST_PROVIDER_ID,
+      projectId: undefined,
+      limit: 20,
+      offset: 0,
     });
   });
 });
@@ -451,7 +454,7 @@ describe("GET /deploy/deployments/:deploymentId", () => {
       id: TEST_DEPLOYMENT_ID,
       providerId: TEST_PROVIDER_ID,
       gitConnectionId: TEST_GIT_CONNECTION_ID,
-      projectId: "",
+      projectId: "c9d0e1f2-9012-4234-abcd-999999999999",
       repo: "acme/my-app",
       branch: "main",
       status: "success",
