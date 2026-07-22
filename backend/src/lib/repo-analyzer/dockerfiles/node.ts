@@ -20,9 +20,15 @@ export function generateNodeDockerfile(config: RepoConfig): string {
   }
 
   if (pm === "pnpm") {
-    lines.push(`COPY ${copyPrefix}package.json ${copyPrefix}pnpm-lock.yaml* ./`);
+    lines.push(`COPY ${copyPrefix}package.json ${copyPrefix}pnpm-lock.yaml* ${copyPrefix}pnpm-workspace.yaml* ./`);
     lines.push(`RUN corepack enable && corepack prepare pnpm@${pmVer || "9.15.0"} --activate`);
-    lines.push("RUN pnpm install --no-frozen-lockfile");
+    if (config.features.has("workspace")) {
+      // Workspace projects need package sources available for workspace:* resolution
+      lines.push(`COPY ${copyPrefix}. .`);
+      lines.push("RUN pnpm install --no-frozen-lockfile");
+    } else {
+      lines.push("RUN pnpm install --no-frozen-lockfile");
+    }
   } else if (pm === "yarn") {
     lines.push(`COPY ${copyPrefix}package.json ${copyPrefix}yarn.lock* ./`);
     lines.push("RUN corepack enable");
@@ -35,7 +41,10 @@ export function generateNodeDockerfile(config: RepoConfig): string {
     lines.push("RUN npm ci || npm install");
   }
 
-  lines.push(`COPY ${copyPrefix}. .`);
+  // Copy full source (workspace projects with pnpm already copied above for install)
+  if (!(pm === "pnpm" && config.features.has("workspace"))) {
+    lines.push(`COPY ${copyPrefix}. .`);
+  }
 
   if (config.framework === "SvelteKit") {
     const installCmd = pm === "pnpm" ? "pnpm add -D" : pm === "yarn" ? "yarn add -D" : pm === "bun" ? "bun add -D" : "npm install --save-dev";
@@ -123,6 +132,16 @@ export function generateNodeDockerfile(config: RepoConfig): string {
     lines.push("ENV PORT=3000");
     lines.push("EXPOSE 3000");
     lines.push('CMD ["serve", "dist", "-l", "3000", "-s"]');
+  } else if (config.framework === "Astro" && config.features.has("ssr")) {
+    lines.push("COPY --from=builder /app/dist ./dist");
+    if (config.features.has("workspace")) {
+      // Workspace packages are symlinked from node_modules — copy them too
+      lines.push("COPY --from=builder /app/packages ./packages");
+    }
+    lines.push("COPY --from=builder /app/node_modules ./node_modules");
+    lines.push('ENV PORT=3000 HOST="0.0.0.0"');
+    lines.push("EXPOSE 3000");
+    lines.push('CMD ["node", "./dist/server/entry.mjs"]');
   } else {
     lines.push("COPY --from=builder /app .");
     lines.push(`ENV PORT=${config.port}`);

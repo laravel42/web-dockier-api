@@ -11,6 +11,7 @@ interface NodePackageJson {
   devDependencies?: Record<string, string>;
   scripts?: { start?: string; build?: string; serve?: string };
   main?: string;
+  workspaces?: string[] | { packages: string[] };
 }
 
 export function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig) {
@@ -43,6 +44,13 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     config.packageManager = "bun";
   } else {
     config.packageManager = "npm";
+  }
+
+  // Detect workspace (pnpm-workspace.yaml or yarn workspaces in package.json)
+  if (existsSync(join(appDir, "pnpm-workspace.yaml")) || existsSync(join(repoDir, "pnpm-workspace.yaml"))) {
+    config.features.add("workspace");
+  } else if (pkg.workspaces) {
+    config.features.add("workspace");
   }
 
   // Framework detection from dependencies
