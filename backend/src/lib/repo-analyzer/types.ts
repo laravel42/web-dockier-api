@@ -80,3 +80,36 @@ export interface DockerFix {
   patched: string;
   description: string;
 }
+
+// ─── Factory ───────────────────────────────────────────────────────
+
+/**
+ * Create a RepoConfig with sensible defaults, overriding specific fields.
+ * Use this when constructing synthetic configs (e.g. template deploys)
+ * to avoid hard-coding every field and breaking when new fields are added.
+ */
+export function createRepoConfig(overrides: Partial<RepoConfig> = {}): RepoConfig {
+  return {
+    runtime: "unknown",
+    runtimeVersion: "",
+    packageManager: "unknown",
+    packageManagerVersion: "",
+    framework: "",
+    frameworkVersion: "",
+    buildCommand: "",
+    startCommand: "",
+    port: 3000,
+    nodeVersion: "",
+    hasStandalone: false,
+    nativeDeps: [],
+    nextConfig: {},
+    phpVersion: "",
+    phpExtensions: [],
+    composerScripts: [],
+    pythonVersion: "",
+    goVersion: "",
+    subDir: "",
+    features: new Set(),
+    ...overrides,
+  };
+}
