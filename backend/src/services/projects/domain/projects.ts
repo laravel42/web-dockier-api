@@ -6,6 +6,7 @@ import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { escapePostgrestLike } from "../../../shared/security.js";
 import { rowToProject } from "./mappers.js";
+import { saveWpConfig, generateWpConfig } from "./wp-config.js";
 
 export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("ProjectsError");
 export type ProjectsError = InstanceType<typeof ProjectsError>;
@@ -99,6 +100,16 @@ export async function createProject(params: CreateProjectParams) {
     internalMsg: "Failed to create project",
     duplicateMsg: "A project with this name already exists",
   });
+
+  // Seed default wp-config.php for WordPress template projects
+  if (params.sourceType === "template" && params.template === "wordpress") {
+    try {
+      await saveWpConfig({ tenantId, projectId: id, content: generateWpConfig() });
+    } catch {
+      // Non-blocking — user can still configure it manually later
+    }
+  }
+
   return rowToProject(payload);
 }
 

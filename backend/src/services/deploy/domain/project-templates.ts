@@ -39,10 +39,15 @@ const TEMPLATES: Record<string, TemplateConfig> = {
     primaryLanguage: "PHP",
     services: [{ type: "database", name: "MySQL" }],
     envVars: [
-      { name: "WORDPRESS_DB_HOST", value: "host.docker.internal:3306" },
+      // WordPress container env vars (used by the wordpress:latest image)
+      { name: "WORDPRESS_DB_HOST", value: "172.17.0.1" },
       { name: "WORDPRESS_DB_USER", value: "wordpress" },
       { name: "WORDPRESS_DB_PASSWORD", value: "wordpress" },
       { name: "WORDPRESS_DB_NAME", value: "wordpress" },
+      // cfn-init database setup vars (tells CloudFormation to create this DB/user)
+      { name: "DB_DATABASE", value: "wordpress" },
+      { name: "DB_USERNAME", value: "wordpress" },
+      { name: "DB_PASSWORD", value: "wordpress" },
     ],
     vpsSetupScript: `
     # ── MySQL for WordPress ──

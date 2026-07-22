@@ -7,6 +7,7 @@ import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project } from "../../types";
 import { getDefaultDeployScript } from "../../config/frameworks";
+import { PROJECT_TEMPLATES } from "./templates";
 import type { PaginationMeta } from "../../services/projects";
 
 const PAGE_SIZE = 50;
@@ -185,12 +186,24 @@ export function useProjects() {
     setSubmitting(true);
     try {
       const repo = repos.find((r) => r.fullName === selectedRepo);
+      const templateDef = PROJECT_TEMPLATES.find((t) => t.id === platform);
+      const isTemplate = !!templateDef;
+
       const submitData = {
         name: form.name,
-        repository: editing ? form.repository : (repo?.url || form.repository || ""),
-        branch: editing ? form.branch : (selectedBranch || form.branch || ""),
+        repository: editing
+          ? form.repository
+          : isTemplate
+            ? templateDef.defaultRepo
+            : (repo?.url || form.repository || ""),
+        branch: editing
+          ? form.branch
+          : isTemplate
+            ? templateDef.defaultBranch
+            : (selectedBranch || form.branch || ""),
         connectionId: editing ? editing.connectionId : selectedConnectionId,
-        sourceType: "repository" as const,
+        sourceType: isTemplate ? "template" as const : "repository" as const,
+        template: isTemplate ? templateDef.id : undefined,
         platform,
         settings: { deployScript: getDefaultDeployScript(platform) },
       };
@@ -199,15 +212,17 @@ export function useProjects() {
       } else {
         await projectsApi.create(submitData);
         // Run stack analysis before returning to index (so badges show immediately)
-        try {
-          const repoUrl = repo?.url || form.repository;
-          const parsed = parseOwnerRepo(repoUrl);
-          if (parsed) {
-            const br = selectedBranch || form.branch || "main";
-            await gitApi.getStackAnalysis(selectedConnectionId, parsed.owner, parsed.repo, br);
-            gitApi.analyzeRepo(selectedConnectionId, parsed.owner, parsed.repo, br, "openai").catch(() => {});
-          }
-        } catch { /* don't block on failure */ }
+        if (!isTemplate) {
+          try {
+            const repoUrl = repo?.url || form.repository;
+            const parsed = parseOwnerRepo(repoUrl);
+            if (parsed) {
+              const br = selectedBranch || form.branch || "main";
+              await gitApi.getStackAnalysis(selectedConnectionId, parsed.owner, parsed.repo, br);
+              gitApi.analyzeRepo(selectedConnectionId, parsed.owner, parsed.repo, br, "openai").catch(() => {});
+            }
+          } catch { /* don't block on failure */ }
+        }
       }
 
       setShowForm(false); setEditing(null); resetSelections(); fetchProjects();

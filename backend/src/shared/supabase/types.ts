@@ -367,7 +367,7 @@ export type Database = {
           id: string;
           organization_id: string;
           provider_id: string;
-          git_connection_id: string;
+          git_connection_id: string | null;
           project_id: string;
           repo: string;
           branch: string;
@@ -383,7 +383,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["deployments"]["Row"]> &
-          Pick<Database["public"]["Tables"]["deployments"]["Row"], "id" | "organization_id" | "provider_id" | "git_connection_id" | "repo">;
+          Pick<Database["public"]["Tables"]["deployments"]["Row"], "id" | "organization_id" | "provider_id" | "repo">;
         Update: Partial<Database["public"]["Tables"]["deployments"]["Row"]>;
         Relationships: [];
       };
@@ -618,6 +618,22 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["project_env_files"]["Row"]> &
           Pick<Database["public"]["Tables"]["project_env_files"]["Row"], "organization_id" | "project_id" | "encrypted_content" | "iv" | "auth_tag">;
         Update: Partial<Database["public"]["Tables"]["project_env_files"]["Row"]>;
+        Relationships: [];
+      };
+      project_wp_configs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          encrypted_content: string;
+          iv: string;
+          auth_tag: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["project_wp_configs"]["Row"]> &
+          Pick<Database["public"]["Tables"]["project_wp_configs"]["Row"], "organization_id" | "project_id" | "encrypted_content" | "iv" | "auth_tag">;
+        Update: Partial<Database["public"]["Tables"]["project_wp_configs"]["Row"]>;
         Relationships: [];
       };
     };
