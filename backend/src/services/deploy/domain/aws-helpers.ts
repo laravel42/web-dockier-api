@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   EC2Client,
   DescribeVpcsCommand,
@@ -19,10 +19,14 @@ import {
   UpdateStackCommand,
   DeleteStackCommand,
   DescribeStacksCommand,
+  type Output,
 } from "@aws-sdk/client-cloudformation";
 import type { RunCmdFn } from "./run-cmd.js";
 import type { ProvisionResult } from "./adapters/types.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../lib/aws.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface PushToEcrResult {
   /** Full ECR image URI with tag (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app:abc12345) */
@@ -120,9 +124,10 @@ export async function pushToEcr(opts: {
     try {
       await ecr.send(new CreateRepositoryCommand({ repositoryName: imageRepoName }));
       await appendLog("✓ ECR repository created");
-    } catch (createErr: any) {
-      if (!createErr.name?.includes("AlreadyExists")) {
-        throw new Error(`Failed to create ECR repository: ${createErr.message}`);
+    } catch (createErr: unknown) {
+      if (!(createErr instanceof Error) || !createErr.name?.includes("AlreadyExists")) {
+        const msg = createErr instanceof Error ? createErr.message : String(createErr);
+        throw new Error(`Failed to create ECR repository: ${msg}`);
       }
       await appendLog("✓ ECR repository already exists");
     }
@@ -194,7 +199,7 @@ export const CFN_FAILURE_PATTERNS = [
  * Polls every 5 seconds for up to 5 minutes.
  */
 export async function waitForStackDelete(
-  cfn: any,
+  cfn: CloudFormationClient,
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<void> {
@@ -222,7 +227,7 @@ export async function waitForStackDelete(
  * Returns the final stack status, or throws on timeout.
  */
 export async function waitForStackStable(
-  cfn: any,
+  cfn: CloudFormationClient,
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<string> {
@@ -254,14 +259,14 @@ export async function waitForStackStable(
  * Used when a stack already exists and no updates are needed.
  */
 export async function extractStackOutputs(
-  cfn: any,
+  cfn: CloudFormationClient,
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<ProvisionResult> {
   const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
   const stack = result.Stacks?.[0];
   const outputs = Object.fromEntries(
-    (stack?.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
+    (stack?.Outputs || []).map((o: Output) => [o.OutputKey, o.OutputValue]),
   );
   const appUrl = outputs.AppUrl || "";
   const publicIp = outputs.PublicIp || "";
@@ -281,7 +286,7 @@ export async function extractStackOutputs(
  * - No-op if the stack doesn't exist or is in a healthy completed state.
  */
 export async function cleanupStuckStack(
-  cfn: any,
+  cfn: CloudFormationClient,
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<void> {
@@ -305,10 +310,10 @@ export async function cleanupStuckStack(
         await waitForStackStable(cfn, stackName, appendLog);
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Stack doesn't exist yet — that's fine (ValidationError with "does not exist")
     // But log unexpected errors so they're not silently swallowed
-    const msg = err?.message || String(err);
+    const msg = err instanceof Error ? err.message : String(err);
     if (!msg.includes("does not exist")) {
       await appendLog(`⚠ Stack check error (non-fatal): ${msg.slice(0, 200)}`);
     }
@@ -325,7 +330,7 @@ export async function cleanupStuckStack(
  * should check the return value.
  */
 export async function createOrUpdateStack(opts: {
-  cfn: any;
+  cfn: CloudFormationClient;
   stackName: string;
   templateUrl: string;
   params: Array<{ ParameterKey: string; ParameterValue: string }>;
@@ -350,10 +355,10 @@ export async function createOrUpdateStack(opts: {
     );
     await appendLog("✓ CloudFormation stack creation initiated");
     return { isUpdate: false };
-  } catch (createErr: any) {
+  } catch (createErr: unknown) {
     if (
-      createErr.name === "AlreadyExistsException" ||
-      createErr.message?.includes("already exists")
+      (createErr instanceof Error && (createErr.name === "AlreadyExistsException" ||
+      createErr.message?.includes("already exists")))
     ) {
       try {
         await cfn.send(
@@ -366,16 +371,18 @@ export async function createOrUpdateStack(opts: {
         );
         await appendLog("✓ CloudFormation stack update initiated");
         return { isUpdate: true };
-      } catch (updateErr: any) {
-        if (updateErr.message?.includes("No updates are to be performed")) {
+      } catch (updateErr: unknown) {
+        const updateMsg = updateErr instanceof Error ? updateErr.message : String(updateErr);
+        if (updateMsg.includes("No updates are to be performed")) {
           await appendLog("ℹ No infrastructure changes needed");
           const result = await extractStackOutputs(cfn, stackName, appendLog);
           return { isUpdate: true, noUpdatesResult: result };
         }
-        throw new Error(`CloudFormation update failed: ${updateErr.message}`);
+        throw new Error(`CloudFormation update failed: ${updateMsg}`);
       }
     }
-    throw new Error(`CloudFormation create failed: ${createErr.message}`);
+    const createMsg = createErr instanceof Error ? createErr.message : String(createErr);
+    throw new Error(`CloudFormation create failed: ${createMsg}`);
   }
 }
 
@@ -399,9 +406,10 @@ export async function deleteEcrRepo(
   try {
     const ecr = new ECRClient({ region, credentials });
     await ecr.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
-  } catch (e: any) {
-    if (!e.name?.includes("RepositoryNotFoundException")) {
-      errors.push(`ECR ${repoName}: ${e.message}`);
+  } catch (e: unknown) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    if (!err.name?.includes("RepositoryNotFoundException")) {
+      errors.push(`ECR ${repoName}: ${err.message}`);
     }
   }
 }
@@ -421,10 +429,11 @@ export async function destroyCfnStack(
     const cfn = new CloudFormationClient({ region, credentials });
     await cfn.send(new DeleteStackCommand({ StackName: stackName }));
     await appendLog(`✓ Stack deletion initiated: ${stackName}`);
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
     // DeleteStackCommand throws if the stack doesn't exist — that's fine
-    if (!e.message?.includes("does not exist")) {
-      errors.push(`CloudFormation: ${e.message}`);
+    if (!msg.includes("does not exist")) {
+      errors.push(`CloudFormation: ${msg}`);
     }
   }
 }
@@ -440,7 +449,7 @@ export async function destroyCfnStack(
  * rather than giving up prematurely.
  */
 export async function pollStackStatus(opts: {
-  cfn: any;
+  cfn: CloudFormationClient;
   stackName: string;
   isUpdate: boolean;
   appendLog: (line: string) => Promise<void>;
@@ -466,7 +475,7 @@ export async function pollStackStatus(opts: {
 
       if (successStatuses.includes(stackStatus)) {
         const outputs = Object.fromEntries(
-          (stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
+          (stack.Outputs || []).map((o: Output) => [o.OutputKey, o.OutputValue]),
         );
         const appUrl = outputs.AppUrl || "";
         const publicIp = outputs.PublicIp || "";
@@ -487,8 +496,8 @@ export async function pollStackStatus(opts: {
 
       // Log progress periodically
       await appendLog(`ℹ CloudFormation: ${stackStatus}...`);
-    } catch (pollErr: any) {
-      if (pollErr.message?.includes("CloudFormation stack failed")) {
+    } catch (pollErr: unknown) {
+      if (pollErr instanceof Error && pollErr.message?.includes("CloudFormation stack failed")) {
         throw pollErr;
       }
       if (attempt % 8 === 0) {

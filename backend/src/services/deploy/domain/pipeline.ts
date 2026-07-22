@@ -48,6 +48,18 @@ import { restoreProcessesAfterDeploy } from "../../processes/domain/post-deploy-
 
 const db = supabaseAdmin;
 
+// ─── Helpers ───────────────────────────────────────────────────────
+
+/**
+ * Derive the Docker container name from the repo name and cloud provider.
+ * AWS uses the repo name as-is; GCP requires lowercase alphanumeric + hyphens.
+ */
+function containerNameFor(repoName: string, provider: string): string {
+  return provider === "aws"
+    ? repoName
+    : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+}
+
 // ─── Types ─────────────────────────────────────────────────────────
 
 export interface PipelineInput {
@@ -358,9 +370,7 @@ async function runPostDeployScriptIfNeeded(ctx: {
   if (ctx.deployStrategy === "static") return;
   if (!ctx.projectCtx.deployScript.trim()) return;
 
-  const containerName = ctx.provider === "aws"
-    ? ctx.repoName
-    : ctx.repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const containerName = containerNameFor(ctx.repoName, ctx.provider);
 
   await executePostDeployScript(
     {
@@ -424,9 +434,7 @@ function buildInfraMetadata(ctx: {
   adapter: DeployAdapter;
   provision: ProvisionResult;
 }): InfraMetadata {
-  const containerName = ctx.provider === "aws"
-    ? ctx.repoName
-    : ctx.repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const containerName = containerNameFor(ctx.repoName, ctx.provider);
 
   const service = ADAPTER_TO_SERVICE[ctx.adapter.id] || ctx.adapter.id;
   const infra: InfraMetadata = {
@@ -654,9 +662,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
               {
                 tenantId: event.tenantId,
                 projectId: event.projectId,
-                containerName: provider === "aws"
-                  ? repoName
-                  : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase(),
+                containerName: containerNameFor(repoName, provider),
                 region,
                 provider,
                 credentials: {
@@ -679,9 +685,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
 
         // Execute post-deploy script if configured
         if (projectCtx.deployScript.trim()) {
-          const containerName = provider === "aws"
-            ? repoName
-            : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+          const containerName = containerNameFor(repoName, provider);
 
           await executePostDeployScript(
             {

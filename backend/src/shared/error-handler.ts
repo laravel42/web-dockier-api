@@ -50,8 +50,10 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
           return reply.serviceUnavailable(msg);
         case "internal":
           return reply.internalServerError("An internal server error occurred");
-        default:
+        default: {
+          const _exhaustive: never = error.code;
           return reply.internalServerError("An unexpected error occurred");
+        }
       }
     }
 
