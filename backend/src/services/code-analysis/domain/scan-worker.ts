@@ -10,7 +10,7 @@ import { logger as obsLogger } from "../../../shared/logger.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../git-integration/domain/connections.js";
-import { sendNotification } from "../../notifications/domain/notifications.js";
+import { emit } from "../../../shared/events.js";
 import { listCustomRules } from "./custom-rules.js";
 import { filterSecurityFindings } from "./findings.js";
 import { defaultSummary, parseSummary } from "./mappers.js";
@@ -694,7 +694,7 @@ export async function executeScan(
 
     broadcastScanStatus(scanId, "completed", summary);
 
-    void sendNotification({
+    emit("notification:send", {
       tenantId,
       title: "Security scan completed",
       message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${findings.length} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).`,
@@ -712,8 +712,6 @@ export async function executeScan(
           totalFindings: summary.totalFindings,
         },
       },
-    }).catch((err) => {
-      obsLogger.error({ err }, `[scan] Failed to send scan complete notification for ${scanId}`);
     });
 
     await logger.success(

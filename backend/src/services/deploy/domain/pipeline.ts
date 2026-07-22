@@ -35,7 +35,7 @@ import { createStreamingRunCmd, type RunCmdFn } from "./run-cmd.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { executePostDeployScript } from "./post-deploy.js";
-import { sendNotification } from "../../notifications/domain/notifications.js";
+import { emit } from "../../../shared/events.js";
 import { ADAPTER_TO_SERVICE, type InfraMetadata } from "../types.js";
 import { revealEnv } from "../../projects/domain/env.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
@@ -520,7 +520,7 @@ export async function finalizeDeploy(ctx: {
     ? `Deployment of ${ctx.event.repo} (${ctx.event.branch}) succeeded. App URL: ${finalUrl}`
     : `Deployment of ${ctx.event.repo} (${ctx.event.branch}) succeeded.`;
 
-  void sendNotification({
+  emit("notification:send", {
     tenantId: ctx.event.tenantId,
     title: "Deployment succeeded",
     message: deployMessage,
@@ -532,8 +532,6 @@ export async function finalizeDeploy(ctx: {
       appUrl: finalUrl || undefined,
       deployId: ctx.deploymentId,
     },
-  }).catch((err) => {
-    obsLogger.error({ err }, `[deploy] Failed to send deploy complete notification for ${ctx.deploymentId}`);
   });
 }
 

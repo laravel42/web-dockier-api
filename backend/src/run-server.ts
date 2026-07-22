@@ -12,6 +12,7 @@ import { registerNetworkHandlers } from "./services/network/domain/worker.js";
 import { seedCustomRules } from "./services/code-analysis/domain/seed-custom-rules.js";
 import { reconcileAllStaleScans } from "./services/code-analysis/domain/scan-reconcile.js";
 import { reconcileStaleScanJobs } from "./services/code-analysis/domain/scan-queue-reconcile.js";
+import { registerNotificationEventHandlers } from "./services/notifications/domain/event-handlers.js";
 
 // ─── Worker Registry ───────────────────────────────────────────────
 //
@@ -97,6 +98,9 @@ function shouldRun(entry: { services: ServiceName[] }, serviceName: ServiceName)
 export async function runServer(): Promise<void> {
   const serviceName = env.SERVICE_NAME as ServiceName;
   const app = await buildApp(serviceName);
+
+  // Register domain event handlers (runs for all services — events are in-process)
+  registerNotificationEventHandlers();
 
   const activeWorkers = workerRegistry.filter((w) => shouldRun(w, serviceName));
   const needsQueue = activeWorkers.length > 0;

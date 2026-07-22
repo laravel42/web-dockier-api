@@ -4,7 +4,7 @@ import { throwOnError } from "../../../shared/supabase/query.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { listMembershipsForUser, type Membership } from "./membership.js";
 import { signTenantToken } from "./session.js";
-import { ensureDefaultInAppChannel } from "../../notifications/domain/notifications.js";
+import { emit } from "../../../shared/events.js";
 
 export const RegistrationError = createDomainErrorClass<"unauthorized" | "forbidden" | "bad_request" | "too_many_requests" | "internal">("RegistrationError");
 export type RegistrationError = InstanceType<typeof RegistrationError>;
@@ -145,7 +145,7 @@ export async function performDemoLogin(): Promise<DemoLoginResult> {
     throw new RegistrationError("Failed to create demo membership", "internal");
   }
 
-  await ensureDefaultInAppChannel(demoTenantId);
+  emit("tenant:created", { tenantId: demoTenantId });
 
   return {
     session: {
@@ -315,7 +315,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
       isOwner: true,
     };
     memberships = [selected];
-    await ensureDefaultInAppChannel(org.id);
+    emit("tenant:created", { tenantId: org.id });
   }
 
   // Sync user's active org

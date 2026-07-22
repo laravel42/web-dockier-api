@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
-import { sendNotification } from "../../notifications/domain/notifications.js";
-import { logger } from "../../../shared/logger.js";
+import { emit } from "../../../shared/events.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
 
@@ -203,7 +202,7 @@ export async function applyDeploymentWebhookUpdate(
     const message = appUrl
       ? `Deployment of ${current.repo} (${current.branch}) succeeded. App URL: ${appUrl}`
       : `Deployment of ${current.repo} (${current.branch}) succeeded.`;
-    void sendNotification({
+    emit("notification:send", {
       tenantId: current.organization_id,
       title: "Deployment succeeded",
       message,
@@ -215,8 +214,6 @@ export async function applyDeploymentWebhookUpdate(
         appUrl: appUrl || undefined,
         deployId: buildId,
       },
-    }).catch((err) => {
-      logger.error({ err }, `[deploy] Failed to send deploy webhook notification for ${buildId}`);
     });
   }
 }

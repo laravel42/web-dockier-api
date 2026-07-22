@@ -5,7 +5,7 @@ import { invalidatePermissionCache } from "../../../shared/permissions/authoriza
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { signTenantToken } from "./session.js";
 import { slugifyTenant } from "./registration.js";
-import { ensureDefaultInAppChannel } from "../../notifications/domain/notifications.js";
+import { emit } from "../../../shared/events.js";
 
 export interface CreateTenantParams {
   name: string;
@@ -44,7 +44,7 @@ export async function createTenant(params: CreateTenantParams): Promise<CreateTe
   });
   throwOnMutationError(membershipError, TenantError, { internalMsg: "Failed to create owner membership" });
 
-  await ensureDefaultInAppChannel(org.id);
+  emit("tenant:created", { tenantId: org.id });
 
   return {
     tenantId: org.id,
