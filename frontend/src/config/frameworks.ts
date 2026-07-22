@@ -83,7 +83,7 @@ export const FRAMEWORKS: Framework[] = [
   { id: "vuejs", name: "Vue.js", category: "JavaScript", icon: "/devicons/vuejs.svg", defaultDeployScript: VUE_DEPLOY },
   { id: "remix", name: "Remix", category: "JavaScript", icon: "/devicons/remix.svg", defaultDeployScript: REMIX_DEPLOY },
   { id: "svelte", name: "SvelteKit", category: "JavaScript", icon: "/devicons/svelte.svg", defaultDeployScript: SVELTE_DEPLOY },
-  { id: "astro", name: "Astro", category: "JavaScript", icon: "/devicons/astro-dark.svg", defaultDeployScript: ASTRO_DEPLOY },
+  { id: "astro", name: "Astro", category: "JavaScript", icon: "/devicons/astro-light.svg", defaultDeployScript: ASTRO_DEPLOY },
   { id: "nodejs", name: "Node.js", category: "JavaScript", icon: "/devicons/nodejs.svg", defaultDeployScript: NODEJS_DEPLOY },
 
   // Python
