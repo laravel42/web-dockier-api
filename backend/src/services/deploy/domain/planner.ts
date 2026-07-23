@@ -39,8 +39,6 @@ export function getDefaultRegion(provider: string): string {
   return DEFAULT_REGIONS[provider] ?? "us-east-1";
 }
 
-export { normalizeAppName } from "../../../lib/naming.js";
-
 export function detectRuntime(primaryLanguage: string, techStack: string[], aiAnalysis?: GenerateTofuInput["aiAnalysis"]): RuntimePlan {
   if (aiAnalysis?.runtime) {
     return {
