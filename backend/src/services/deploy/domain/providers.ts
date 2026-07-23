@@ -5,8 +5,6 @@ import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../..
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 
-export { getProviderCredentials } from "../../../lib/provider-credentials.js";
-
 export const DeployError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("DeployError");
 export type DeployError = InstanceType<typeof DeployError>;
 

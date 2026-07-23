@@ -11,8 +11,8 @@ import {
   listProviders,
   updateProvider,
   deleteProvider,
-  getProviderCredentials,
 } from "../domain/providers.js";
+import { getProviderCredentials } from "../../../lib/provider-credentials.js";
 
 export async function registerProviderRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
