@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAwsAccountId } from "../../../lib/aws.js";
+import { deriveRepoName as deriveAppName, stackNameFor as deriveStackName } from "../../../lib/naming.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { ParsedBuildMetadata as BuildMetadata } from "./deploy-params.js";
@@ -53,13 +54,8 @@ export interface Logger {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function deriveAppName(sourceRepo: string): string {
-  return sourceRepo.split("/").pop()?.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase() || "";
-}
-
-export function deriveStackName(appName: string): string {
-  return `image-builder-app-${appName}`;
-}
+// Re-exported from lib/naming.ts for backward compatibility
+export { deriveAppName, deriveStackName };
 
 
 function normalizeEnvVars(rawEnvVars: unknown): Array<{ name: string; value: string }> {

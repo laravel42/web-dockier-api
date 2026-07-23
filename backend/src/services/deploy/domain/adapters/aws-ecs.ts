@@ -10,8 +10,8 @@ import {
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
-  stackNameFor,
 } from "../aws-helpers.js";
+import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId } from "../../../../lib/aws.js";
 
 /**

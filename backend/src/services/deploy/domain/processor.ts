@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { generateTofuPreview, getDefaultRegion, normalizeAppName } from "./planner.js";
+import { generateTofuPreview, getDefaultRegion } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
 import { emit } from "../../../shared/events.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
 import { serializeInfra } from "../types.js";
 
@@ -43,11 +44,6 @@ type ProviderSummary = {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function deriveAppName(repo: string): string {
-  const repoName = repo.split("/").pop() || "app";
-  return normalizeAppName(repoName);
 }
 
 function addLogLine(existing: string, line: string): string {
@@ -147,7 +143,7 @@ export async function applyDeploymentWebhookUpdate(
 
   // Build infra metadata on success
   if (payload.status === "success") {
-    const repoName = (current?.repo?.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
+    const repoName = deriveRepoName(current?.repo || "");
     const deployStrategy = current?.deploy_strategy || "vps";
 
     // Derive region from provider if not in payload
@@ -178,7 +174,7 @@ export async function applyDeploymentWebhookUpdate(
       service,
       region: region || "us-east-1",
       containerName,
-      stackName: payload.stackName || `image-builder-app-${repoName}`,
+      stackName: payload.stackName || stackNameFor(repoName),
     };
     if (payload.instanceId) infra.instanceId = payload.instanceId;
     if (serverIp) infra.serverIp = serverIp;

@@ -9,6 +9,7 @@
 import { getAdapter } from "./adapters/index.js";
 import type { DestroyContext } from "./adapters/types.js";
 import { logger } from "../../../shared/logger.js";
+import { deriveRepoName } from "../../../lib/naming.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 
 // ─── Main Orchestrator ─────────────────────────────────────────────
@@ -31,7 +32,7 @@ export async function destroyDeployment(deploymentId: string): Promise<{ success
     .single();
   logger.info(`[destroy] Provider: ${providerRow?.provider} region=${providerRow?.region}`);
 
-  const repoName = deployment.repo.split("/").pop() || "app";
+  const repoName = deriveRepoName(deployment.repo);
   const region = providerRow?.region || "us-east-1";
 
   // Clean up local Docker image

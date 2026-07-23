@@ -19,6 +19,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import {
   listSecurityRules,
   listRedirectRules,
@@ -88,9 +89,7 @@ async function resolveNginxTarget(
     return { target: null, appName: "", errorMessage: "Server provider not found." };
   }
 
-  const appName = (deployment.repo.split("/").pop() || "app")
-    .replace(/[^a-zA-Z0-9-]/g, "-")
-    .toLowerCase();
+  const appName = deriveRepoName(deployment.repo);
 
   const rawInfra = deployment.infra || {};
   const infra = parseInfra(deployment.infra);
@@ -152,8 +151,8 @@ async function resolveEc2InstanceId(
   const credentials = { accessKeyId: provider.api_key, secretAccessKey: provider.api_secret };
 
   // Strategy 1: CFN stack lookup
-  const repoName = (deployment.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
-  const stackName = infra.stackName || `image-builder-app-${repoName}`;
+  const repoName = deriveRepoName(deployment.repo);
+  const stackName = infra.stackName || stackNameFor(repoName);
 
   try {
     const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");

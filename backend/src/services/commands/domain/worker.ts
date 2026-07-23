@@ -18,7 +18,7 @@ import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/queue.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
-import { stackNameFor } from "../../deploy/domain/aws-helpers.js";
+import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import type { InfraMetadata } from "../../deploy/types.js";
 import { parseInfra } from "../../deploy/types.js";
 
@@ -94,7 +94,7 @@ export async function resolveExecutionTarget(
   // ── Fallback: infer from deployment data (legacy deployments before infra column)
   logger.info(`[command-exec] No infra metadata on deployment ${deployment.id}, using legacy resolution`);
 
-  const containerName = deriveContainerName(deployment.docker_image, deployment.repo, projectId);
+  const containerName = deriveContainerName(deployment.repo);
   if (!containerName) {
     return { target: null, errorMessage: "Cannot determine container name from deployment." };
   }
@@ -289,7 +289,7 @@ async function resolveEc2InstanceId(
     const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
     const cfn = new CloudFormationClient({ region: provider.region, credentials });
 
-    const repoName = (deployment.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
+    const repoName = deriveRepoName(deployment.repo);
     const stackName = stackNameFor(repoName);
 
     logger.info(`[command-exec] Looking up CFN stack: ${stackName}`);
@@ -376,21 +376,6 @@ function inferAwsRegionFromUrl(url: string): string | null {
   if (url.includes(".compute-1.amazonaws.com")) return "us-east-1";
 
   return null;
-}
-
-/**
- * Derive a safe container name from deployment metadata.
- * Must match the pipeline's logic: for AWS it's repo.split("/").pop().replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase()
- */
-function deriveContainerName(dockerImage: string, repo: string, projectId: string): string | null {
-  // Use the same derivation as the deploy pipeline
-  const rawName = (repo.split("/").pop() || projectId);
-  const containerName = rawName.replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
-
-  if (!containerName || containerName.length > 64) {
-    return null;
-  }
-  return containerName;
 }
 
 // ─── Job Processor ─────────────────────────────────────────────────

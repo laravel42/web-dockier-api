@@ -18,6 +18,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { listDomains, listCertificates } from "./domains.js";
 import type { DomainResponse, SslCertificateResponse } from "./domains.js";
 import type { ExecutionTarget } from "../../commands/domain/executor.js";
@@ -98,9 +99,7 @@ async function resolveDomainTarget(
     return { target: null, appName: "", errorMessage: "Server provider not found." };
   }
 
-  const appName = (deployment.repo.split("/").pop() || "app")
-    .replace(/[^a-zA-Z0-9-]/g, "-")
-    .toLowerCase();
+  const appName = deriveRepoName(deployment.repo);
 
   const rawInfra = deployment.infra || {};
   const infra = parseInfra(deployment.infra);
@@ -140,8 +139,8 @@ async function resolveEc2InstanceId(
   infra: Record<string, string>,
 ): Promise<string | undefined> {
   const credentials = { accessKeyId: provider.api_key, secretAccessKey: provider.api_secret };
-  const repoName = (deployment.repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
-  const stackName = infra.stackName || `image-builder-app-${repoName}`;
+  const repoName = deriveRepoName(deployment.repo);
+  const stackName = infra.stackName || stackNameFor(repoName);
 
   try {
     const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");

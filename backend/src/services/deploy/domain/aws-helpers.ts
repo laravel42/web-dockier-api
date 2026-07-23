@@ -388,11 +388,6 @@ export async function createOrUpdateStack(opts: {
 
 // ─── Shared Destroy Helpers ─────────────────────────────────────────
 
-/** Canonical CloudFormation stack name for an app deployed by this platform. */
-export function stackNameFor(appName: string): string {
-  return "image-builder-app-" + appName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-}
-
 /**
  * Delete an ECR repository by name (idempotent — ignores RepositoryNotFoundException).
  * Collects errors into the provided array instead of throwing.

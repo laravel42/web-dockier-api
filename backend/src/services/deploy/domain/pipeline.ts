@@ -27,6 +27,8 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createDeployLogger, type ContextualLogger } from "../../../lib/logging.js";
+import { containerNameFor, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
+export { containerNameFor, deriveRepoName } from "../../../lib/naming.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { getAdapter } from "./adapters/index.js";
@@ -47,26 +49,6 @@ import { getDeploymentCurrentStatus, patchDeployment } from "./deployments.js";
 import { restoreProcessesAfterDeploy } from "../../processes/domain/post-deploy-restore.js";
 
 const db = supabaseAdmin;
-
-// ─── Helpers ───────────────────────────────────────────────────────
-
-/**
- * Derive the Docker container name from the repo name and cloud provider.
- * AWS uses the repo name as-is; GCP requires lowercase alphanumeric + hyphens.
- */
-export function containerNameFor(repoName: string, provider: string): string {
-  return provider === "aws"
-    ? repoName
-    : repoName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-}
-
-/**
- * Derive a short, filesystem/Docker-safe app name from a full repo path.
- * e.g. "acme/my-app.io" → "my-appio"
- */
-export function deriveRepoName(repo: string): string {
-  return (repo.split("/").pop() || "app").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
-}
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -452,7 +434,7 @@ function buildInfraMetadata(ctx: {
     service: service as InfraMetadata["service"],
     region: ctx.region,
     containerName,
-    stackName: `image-builder-app-${ctx.repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+    stackName: stackNameFor(ctx.repoName),
   };
 
   if (ctx.provision.outputs?.InstanceId) infra.instanceId = ctx.provision.outputs.InstanceId;

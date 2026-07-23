@@ -8,10 +8,10 @@ import type {
 } from "./types.js";
 import {
   pushToEcr,
-  stackNameFor,
   deleteEcrRepo,
   destroyCfnStack,
 } from "../aws-helpers.js";
+import { stackNameFor } from "../../../../lib/naming.js";
 import { type AwsCredentials } from "../../../../lib/aws.js";
 
 /**

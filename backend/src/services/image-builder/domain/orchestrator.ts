@@ -1,3 +1,5 @@
+import { deriveRepoName } from "../../../lib/naming.js";
+
 export type BuildInput = {
   sourceRepo: string;
   sourceRef?: string;
@@ -11,8 +13,8 @@ export type BuildInput = {
 };
 
 export function deriveImageRepo(sourceRepo: string): string {
-  const base = sourceRepo.split("/").pop()?.replace(/\.git$/i, "") || "app";
-  return base.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const cleaned = sourceRepo.replace(/\.git$/i, "");
+  return deriveRepoName(cleaned);
 }
 
 export function normalizeBuildInput(input: BuildInput) {

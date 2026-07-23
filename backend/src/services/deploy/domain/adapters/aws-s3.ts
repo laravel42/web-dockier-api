@@ -14,9 +14,9 @@ import {
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
-  stackNameFor,
   destroyCfnStack,
 } from "../aws-helpers.js";
+import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../static-site-builder.js";
 
