@@ -19,6 +19,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import type { InfraMetadata } from "../../deploy/types.js";
 import { parseInfra } from "../../deploy/types.js";
 
@@ -75,15 +76,16 @@ export async function resolveExecutionTarget(
   }
 
   // Get provider credentials for the server connection
-  const { data: provider } = await supabaseAdmin
-    .from("server_providers")
-    .select("provider, api_key, api_secret, region")
-    .eq("id", deployment.provider_id)
-    .single();
-
-  if (!provider) {
+  const creds = await getProviderCredentialsSafe(deployment.provider_id);
+  if (!creds) {
     return { target: null, errorMessage: "Server provider not found. The provider may have been deleted." };
   }
+  const provider: ProviderInfo = {
+    provider: creds.provider,
+    api_key: creds.apiKey,
+    api_secret: creds.apiSecret,
+    region: creds.region,
+  };
 
   // ── Fast path: use stored infra metadata (populated on deploys after migration 0047)
   const infra = parseInfra(deployment.infra);

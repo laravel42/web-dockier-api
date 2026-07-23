@@ -29,6 +29,7 @@ import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createDeployLogger, type ContextualLogger } from "../../../lib/logging.js";
 import { containerNameFor, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 export { containerNameFor, deriveRepoName } from "../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { getAdapter } from "./adapters/index.js";
@@ -91,30 +92,24 @@ export interface ProviderResult {
 async function fetchProviderCredentials(
   event: PipelineInput,
 ): Promise<ProviderResult | null> {
-  const { data: providerRow, error } = await db
-    .from("server_providers")
-    .select("provider, region, api_key, api_secret")
-    .eq("id", event.providerId)
-    .maybeSingle();
-
-  if (error) {
-    obsLogger.error({ err: error, providerId: event.providerId }, "[deploy] Failed to fetch provider credentials");
+  const creds = await getProviderCredentialsSafe(event.providerId);
+  if (!creds) {
+    obsLogger.error({ providerId: event.providerId }, "[deploy] Provider not found or credentials unavailable");
     return null;
   }
-  if (!providerRow) return null;
 
-  let region = providerRow.region || "us-east-1";
+  let region = creds.region || "us-east-1";
   if (event.tofuScript) {
     const scriptRegion = extractRegionFromScript(event.tofuScript);
     if (scriptRegion) region = scriptRegion;
   }
 
   return {
-    provider: providerRow.provider || "cloud",
+    provider: creds.provider || "cloud",
     region,
     credentials: {
-      api_key: providerRow.api_key || "",
-      api_secret: providerRow.api_secret || "",
+      api_key: creds.apiKey,
+      api_secret: creds.apiSecret,
     },
   };
 }

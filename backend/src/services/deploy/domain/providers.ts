@@ -5,6 +5,8 @@ import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../..
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 
+export { getProviderCredentials } from "../../../lib/provider-credentials.js";
+
 export const DeployError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("DeployError");
 export type DeployError = InstanceType<typeof DeployError>;
 
@@ -104,8 +106,3 @@ export async function deleteProvider(providerId: string, tenantId: string) {
   const { error } = await supabaseAdmin.from("server_providers").delete().eq("id", providerId);
   throwOnError(error, DeployError, { internalMsg: "Failed to delete provider" });
 }
-
-import { getProviderCredentials } from "../../../lib/provider-credentials.js";
-
-export { getProviderCredentials };
-

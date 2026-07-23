@@ -61,17 +61,29 @@ export async function getProviderCredentials(providerId: string): Promise<Provid
 export async function resolveAwsCredentials(providerId: string): Promise<ResolvedCredentials | null> {
   if (!providerId) return null;
 
-  try {
-    const creds = await getProviderCredentials(providerId);
-    if (!creds.apiKey || !creds.apiSecret) return null;
+  const creds = await getProviderCredentialsSafe(providerId);
+  if (!creds || !creds.apiKey || !creds.apiSecret) return null;
 
-    return {
-      accessKeyId: creds.apiKey,
-      secretAccessKey: creds.apiSecret,
-      region: creds.region || "us-east-1",
-    };
+  return {
+    accessKeyId: creds.apiKey,
+    secretAccessKey: creds.apiSecret,
+    region: creds.region || "us-east-1",
+  };
+}
+
+/**
+ * Fetch provider credentials without throwing on failure.
+ *
+ * Returns null if the providerId is empty, the provider is not found,
+ * or the query fails. Use this in background workers and pipeline stages
+ * where a missing provider should not crash the process.
+ */
+export async function getProviderCredentialsSafe(providerId: string): Promise<ProviderCredentials | null> {
+  if (!providerId) return null;
+
+  try {
+    return await getProviderCredentials(providerId);
   } catch {
-    // Provider not found or DB error — return null for graceful degradation
     return null;
   }
 }

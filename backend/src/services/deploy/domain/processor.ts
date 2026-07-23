@@ -5,6 +5,7 @@ import { DeployError } from "./providers.js";
 import { emit } from "../../../shared/events.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
 import { serializeInfra } from "../types.js";
 
@@ -149,12 +150,8 @@ export async function applyDeploymentWebhookUpdate(
     // Derive region from provider if not in payload
     let region = payload.region || "";
     if (!region && current?.provider_id) {
-      const { data: provRow } = await supabaseAdmin
-        .from("server_providers")
-        .select("region, provider")
-        .eq("id", current.provider_id)
-        .maybeSingle();
-      if (provRow?.region) region = provRow.region;
+      const provCreds = await getProviderCredentialsSafe(current.provider_id);
+      if (provCreds?.region) region = provCreds.region;
     }
 
     // Derive serverIp from appUrl if not provided (e.g. http://ec2-1-2-3-4.compute-1.amazonaws.com → 1.2.3.4)

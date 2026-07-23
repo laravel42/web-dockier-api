@@ -19,6 +19,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { listDomains, listCertificates } from "./domains.js";
 import type { DomainResponse, SslCertificateResponse } from "./domains.js";
 import type { ExecutionTarget } from "../../commands/domain/executor.js";
@@ -89,15 +90,16 @@ async function resolveDomainTarget(
     };
   }
 
-  const { data: provider } = await supabaseAdmin
-    .from("server_providers")
-    .select("provider, api_key, api_secret, region")
-    .eq("id", deployment.provider_id)
-    .maybeSingle();
-
-  if (!provider) {
+  const creds = await getProviderCredentialsSafe(deployment.provider_id);
+  if (!creds) {
     return { target: null, appName: "", errorMessage: "Server provider not found." };
   }
+  const provider = {
+    provider: creds.provider,
+    api_key: creds.apiKey,
+    api_secret: creds.apiSecret,
+    region: creds.region,
+  };
 
   const appName = deriveRepoName(deployment.repo);
 

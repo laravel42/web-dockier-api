@@ -10,6 +10,7 @@ import { getAdapter } from "./adapters/index.js";
 import type { DestroyContext } from "./adapters/types.js";
 import { logger } from "../../../shared/logger.js";
 import { deriveRepoName } from "../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 
 // ─── Main Orchestrator ─────────────────────────────────────────────
@@ -25,15 +26,11 @@ export async function destroyDeployment(deploymentId: string): Promise<{ success
   logger.info(`[destroy] Found deployment: repo=${deployment.repo} strategy=${deployment.deploy_strategy} provider_id=${deployment.provider_id}`);
 
   // Fetch provider credentials
-  const { data: providerRow } = await supabaseAdmin
-    .from("server_providers")
-    .select("provider,region,api_key,api_secret")
-    .eq("id", deployment.provider_id)
-    .single();
-  logger.info(`[destroy] Provider: ${providerRow?.provider} region=${providerRow?.region}`);
+  const creds = await getProviderCredentialsSafe(deployment.provider_id);
+  logger.info(`[destroy] Provider: ${creds?.provider} region=${creds?.region}`);
 
   const repoName = deriveRepoName(deployment.repo);
-  const region = providerRow?.region || "us-east-1";
+  const region = creds?.region || "us-east-1";
 
   // Clean up local Docker image
   if (deployment.docker_image && /^[a-zA-Z0-9_.:/@-]+$/.test(deployment.docker_image)) {
@@ -44,16 +41,16 @@ export async function destroyDeployment(deploymentId: string): Promise<{ success
   }
 
   // Try adapter-based destroy
-  if (providerRow) {
+  if (creds) {
     try {
-      const adapter = getAdapter(providerRow.provider, deployment.deploy_strategy);
+      const adapter = getAdapter(creds.provider, deployment.deploy_strategy);
       if (adapter.destroy) {
         const destroyCtx: DestroyContext = {
           deploymentId,
           repoName,
           appName: repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
           region,
-          providerCredentials: { apiKey: providerRow.api_key, apiSecret: providerRow.api_secret },
+          providerCredentials: { apiKey: creds.apiKey, apiSecret: creds.apiSecret },
           tofuScript: deployment.tofu_script || "",
           deployStrategy: deployment.deploy_strategy,
           appendLog: async (line: string) => {
