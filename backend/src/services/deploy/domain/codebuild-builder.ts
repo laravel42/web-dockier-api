@@ -13,6 +13,7 @@ import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../lib/buildspec-generator/index.js";
 import { getAwsAccountId, ensureS3Bucket } from "../../../lib/aws.js";
 import { env } from "../../../shared/config.js";
+import { logTimestamp as ts } from "../../../shared/utils/time.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -45,10 +46,6 @@ export interface CodeBuildOptions {
 
 const CODEBUILD_POLL_INTERVAL_MS = 15_000;
 const CODEBUILD_MAX_ATTEMPTS = 60; // 15 minutes
-
-function ts(): string {
-  return new Date().toISOString().replace("T", " ").slice(0, 19);
-}
 
 // ─── Main Function ─────────────────────────────────────────────────
 

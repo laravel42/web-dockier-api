@@ -11,6 +11,7 @@ import type { DestroyContext } from "./adapters/types.js";
 import { logger } from "../../../shared/logger.js";
 import { deriveRepoName } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { logTimestamp } from "../../../shared/utils/time.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 
 // ─── Main Orchestrator ─────────────────────────────────────────────
@@ -61,7 +62,7 @@ export async function destroyDeployment(deploymentId: string): Promise<{ success
         };
 
         const result = await adapter.destroy(destroyCtx);
-        const t = new Date().toISOString().replace("T", " ").slice(0, 19);
+        const t = logTimestamp();
         const log = result.success
           ? `\n[${t}] ✓ Infrastructure destroyed via ${adapter.id}`
           : `\n[${t}] ⚠ Partially destroyed via ${adapter.id}. Errors: ${result.errors.join("; ")}`;
@@ -71,14 +72,14 @@ export async function destroyDeployment(deploymentId: string): Promise<{ success
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error(`[destroy] Adapter destroy failed for ${deploymentId}: ${errMsg}`);
-      const t = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const t = logTimestamp();
       await markDestroyed(deploymentId, deployment.logs, `\n[${t}] ⚠ Destroy error: ${errMsg}`);
       return { success: false, message: `Destroy failed: ${errMsg}` };
     }
   }
 
   // Fallback: mark as destroyed with a warning
-  const t = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const t = logTimestamp();
   await markDestroyed(deploymentId, deployment.logs, `\n[${t}] ⚠ No adapter destroy available — marked as destroyed but resources may still exist`);
   return { success: true, message: "Marked as destroyed (no adapter destroy available)" };
 }

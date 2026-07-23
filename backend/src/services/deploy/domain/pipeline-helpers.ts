@@ -14,12 +14,6 @@ import {
   setDeploymentStatus,
 } from "./deployments.js";
 
-// ─── Timestamp ─────────────────────────────────────────────────────
-
-export function ts(): string {
-  return new Date().toISOString().replace("T", " ").slice(0, 19);
-}
-
 // ─── Deployment Log ────────────────────────────────────────────────
 
 export async function appendLog(deploymentId: string, line: string): Promise<void> {

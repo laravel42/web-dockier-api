@@ -6,6 +6,7 @@ import { emit } from "../../../shared/events.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
 import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
 import { serializeInfra } from "../types.js";
 
@@ -43,13 +44,8 @@ type ProviderSummary = {
   region: string | null;
 };
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 function addLogLine(existing: string, line: string): string {
-  const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
-  return `${existing ? `${existing}\n` : ""}[${stamp}] ${line}`;
+  return `${existing ? `${existing}\n` : ""}[${logTimestamp()}] ${line}`;
 }
 
 export function buildDeploymentPreview(input: CreateDeploymentInput, provider: ProviderSummary) {

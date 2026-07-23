@@ -6,7 +6,8 @@
  */
 
 import { pollUntil } from "./poll-until.js";
-import { appendLog, ts } from "./pipeline-helpers.js";
+import { appendLog } from "./pipeline-helpers.js";
+import { logTimestamp as ts } from "../../../shared/utils/time.js";
 
 /**
  * Wait for the deployed application to become reachable.

@@ -43,7 +43,8 @@ import { ADAPTER_TO_SERVICE, type InfraMetadata, serializeInfra } from "../types
 import { revealEnv } from "../../projects/domain/env.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
 
-import { ts, appendLog, updateStatus, parseEnvContent } from "./pipeline-helpers.js";
+import { appendLog, updateStatus, parseEnvContent } from "./pipeline-helpers.js";
+import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { buildImage } from "./pipeline-build.js";
 import { waitForAppReady } from "./pipeline-health.js";
 import { getDeploymentCurrentStatus, patchDeployment } from "./deployments.js";

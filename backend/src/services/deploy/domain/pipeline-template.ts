@@ -20,7 +20,8 @@ import { injectWpConfig } from "./wp-config-inject.js";
 import { restoreProcessesAfterDeploy } from "../../processes/domain/post-deploy-restore.js";
 import type { TemplateConfig } from "./project-templates.js";
 
-import { ts, appendLog, updateStatus } from "./pipeline-helpers.js";
+import { appendLog, updateStatus } from "./pipeline-helpers.js";
+import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import {
   containerNameFor,
   deriveRepoName,

@@ -23,9 +23,7 @@ export interface ContextualLogger {
 
 // ─── Logger Implementations ────────────────────────────────────────
 
-function ts(): string {
-  return new Date().toISOString().replace("T", " ").slice(0, 19);
-}
+import { logTimestamp } from "../shared/utils/time.js";
 
 /**
  * DB-persisted logger used by the deploy service.
@@ -37,20 +35,20 @@ export function createDeployLogger(
 ): ContextualLogger {
   return {
     async info(message: string) {
-      await appendLog(deploymentId, `[${ts()}] ℹ ${message}`);
+      await appendLog(deploymentId, `[${logTimestamp()}] ℹ ${message}`);
     },
     async success(message: string) {
-      await appendLog(deploymentId, `[${ts()}] ✓ ${message}`);
+      await appendLog(deploymentId, `[${logTimestamp()}] ✓ ${message}`);
     },
     async warn(message: string) {
-      await appendLog(deploymentId, `[${ts()}] ⚠ ${message}`);
+      await appendLog(deploymentId, `[${logTimestamp()}] ⚠ ${message}`);
     },
     async error(message: string) {
-      await appendLog(deploymentId, `[${ts()}] ✗ ${message}`);
+      await appendLog(deploymentId, `[${logTimestamp()}] ✗ ${message}`);
     },
     async section(title: string) {
-      await appendLog(deploymentId, `[${ts()}]`);
-      await appendLog(deploymentId, `[${ts()}] ── ${title} ───────────────`);
+      await appendLog(deploymentId, `[${logTimestamp()}]`);
+      await appendLog(deploymentId, `[${logTimestamp()}] ── ${title} ───────────────`);
     },
   };
 }
