@@ -78,7 +78,7 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
   config.phpExtensions = [...extensions];
 
   if (composer.require?.["laravel/framework"]) {
-    config.framework = "Laravel";
+    config.framework = "laravel";
     config.frameworkVersion = cleanVersion(composer.require["laravel/framework"]);
     config.port = 80;
     config.buildCommand = "composer install --no-dev --optimize-autoloader && php artisan config:cache && php artisan route:cache && php artisan view:cache";
@@ -91,11 +91,11 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
     }
     if (existsSync(join(appDir, "app/Console/Kernel.php"))) config.features.add("scheduler");
   } else if (composer.require?.["symfony/framework-bundle"]) {
-    config.framework = "Symfony";
+    config.framework = "symfony";
     config.frameworkVersion = cleanVersion(composer.require["symfony/framework-bundle"]);
     config.port = 8080;
   } else if (composer.require?.["craftcms/cms"]) {
-    config.framework = "Craft CMS";
+    config.framework = "craftcms";
     config.port = 8080;
   }
 

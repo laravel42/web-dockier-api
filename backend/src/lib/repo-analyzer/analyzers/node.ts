@@ -62,7 +62,7 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
   if (hasPayload) config.features.add("payload");
 
   if (allDeps["next"]) {
-    config.framework = "Next.js";
+    config.framework = "nextjs";
     config.frameworkVersion = cleanVersion(allDeps["next"]);
     config.port = 3000;
     for (const cfgName of ["next.config.ts", "next.config.mjs", "next.config.js"]) {
@@ -82,7 +82,7 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     }
     config.features.add("ssr");
   } else if (allDeps["nuxt"]) {
-    config.framework = "Nuxt";
+    config.framework = "nuxt";
     config.frameworkVersion = cleanVersion(allDeps["nuxt"]);
     config.port = 3000;
     let isStatic = false;
@@ -106,16 +106,16 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
       config.features.add("ssr");
     }
   } else if (allDeps["@angular/core"]) {
-    config.framework = "Angular";
+    config.framework = "angular";
     config.frameworkVersion = cleanVersion(allDeps["@angular/core"]);
     config.port = 3000;
     config.features.add("static-export");
   } else if (allDeps["svelte"] || allDeps["@sveltejs/kit"]) {
-    config.framework = "SvelteKit";
+    config.framework = "sveltekit";
     config.frameworkVersion = cleanVersion(allDeps["@sveltejs/kit"] || allDeps["svelte"]);
     config.port = 3000;
   } else if (allDeps["astro"]) {
-    config.framework = "Astro";
+    config.framework = "astro";
     config.frameworkVersion = cleanVersion(allDeps["astro"]);
     config.port = 3000;
     const hasAdapter = allDeps["@astrojs/node"] || allDeps["@astrojs/vercel"] || allDeps["@astrojs/netlify"] || allDeps["@astrojs/cloudflare"];
@@ -125,19 +125,19 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
       config.features.add("static-export");
     }
   } else if (allDeps["remix"] || allDeps["@remix-run/node"]) {
-    config.framework = "Remix";
+    config.framework = "remix";
     config.frameworkVersion = cleanVersion(allDeps["@remix-run/node"] || allDeps["remix"]);
     config.port = 3000;
   } else if (allDeps["express"]) {
-    config.framework = "Express";
+    config.framework = "express";
     config.frameworkVersion = cleanVersion(allDeps["express"]);
     config.port = 3000;
   } else if (allDeps["fastify"]) {
-    config.framework = "Fastify";
+    config.framework = "fastify";
     config.frameworkVersion = cleanVersion(allDeps["fastify"]);
     config.port = 3000;
   } else if (allDeps["hono"]) {
-    config.framework = "Hono";
+    config.framework = "hono";
     config.frameworkVersion = cleanVersion(allDeps["hono"]);
     config.port = 3000;
   }
@@ -145,7 +145,7 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
   if (!config.framework && !pkg.scripts?.start) {
     const isSpa = (allDeps["react"] || allDeps["vue"] || allDeps["vite"] || allDeps["@vitejs/plugin-react"]);
     if (isSpa && pkg.scripts?.build) {
-      config.framework = "SPA";
+      config.framework = "spa";
       config.frameworkVersion = cleanVersion(allDeps["react"] || allDeps["vue"] || allDeps["vite"] || "");
       config.port = 3000;
       config.features.add("static-export");
@@ -154,7 +154,7 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
 
   if (pkg.scripts?.build) config.buildCommand = `${config.packageManager === "npm" ? "npm run" : config.packageManager} build`;
 
-  if (config.framework === "Astro") {
+  if (config.framework === "astro") {
     const astroVer = parseInt((allDeps["astro"] || "0").replace(/[\^~>=<]/g, "")) || 0;
     if (astroVer >= 5 && parseInt(config.runtimeVersion) < 22) {
       config.nodeVersion = "22";

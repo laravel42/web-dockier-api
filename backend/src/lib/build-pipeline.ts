@@ -117,19 +117,22 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
 
 // ─── Platform Override ──────────────────────────────────────────────
 
-/** Map user-selected platform IDs to runtime/framework values used by the analyzer */
+/** Map user-selected platform IDs to runtime/framework values used by the analyzer.
+ * Framework values use lowercase to match the canonical IDs stored in the database
+ * and defined in frontend/src/config/frameworks.ts.
+ */
 const PLATFORM_MAP: Record<string, { runtime: "php" | "node" | "python" | "go" | "unknown"; framework: string }> = {
   laravel: { runtime: "php", framework: "laravel" },
   symfony: { runtime: "php", framework: "symfony" },
   wordpress: { runtime: "php", framework: "wordpress" },
   statamic: { runtime: "php", framework: "laravel" },
   php: { runtime: "php", framework: "" },
-  nextjs: { runtime: "node", framework: "next" },
+  nextjs: { runtime: "node", framework: "nextjs" },
   nuxtjs: { runtime: "node", framework: "nuxt" },
-  react: { runtime: "node", framework: "react" },
-  vuejs: { runtime: "node", framework: "vue" },
+  react: { runtime: "node", framework: "spa" },
+  vuejs: { runtime: "node", framework: "spa" },
   remix: { runtime: "node", framework: "remix" },
-  svelte: { runtime: "node", framework: "svelte" },
+  svelte: { runtime: "node", framework: "sveltekit" },
   nodejs: { runtime: "node", framework: "" },
   django: { runtime: "python", framework: "django" },
   flask: { runtime: "python", framework: "flask" },

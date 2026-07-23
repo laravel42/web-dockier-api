@@ -7,7 +7,7 @@ export function analyzePythonProject(appDir: string, config: RepoConfig) {
   config.packageManager = "pip";
 
   if (existsSync(join(appDir, "manage.py"))) {
-    config.framework = "Django";
+    config.framework = "django";
     config.port = 8000;
   }
 
@@ -17,9 +17,9 @@ export function analyzePythonProject(appDir: string, config: RepoConfig) {
       const content = readFileSync(pyprojectPath, "utf-8");
       const pyVerMatch = content.match(/requires-python\s*=\s*["']>=?(\d+\.\d+)/);
       if (pyVerMatch) config.pythonVersion = pyVerMatch[1];
-      if (content.includes("django")) { config.framework = "Django"; config.port = 8000; }
-      else if (content.includes("fastapi")) { config.framework = "FastAPI"; config.port = 8000; }
-      else if (content.includes("flask")) { config.framework = "Flask"; config.port = 5000; }
+      if (content.includes("django")) { config.framework = "django"; config.port = 8000; }
+      else if (content.includes("fastapi")) { config.framework = "fastapi"; config.port = 8000; }
+      else if (content.includes("flask")) { config.framework = "flask"; config.port = 5000; }
     } catch {}
   }
 
@@ -27,9 +27,9 @@ export function analyzePythonProject(appDir: string, config: RepoConfig) {
   if (existsSync(reqPath)) {
     try {
       const content = readFileSync(reqPath, "utf-8");
-      if (content.includes("Django")) { config.framework = "Django"; config.port = 8000; }
-      else if (content.includes("fastapi")) { config.framework = "FastAPI"; config.port = 8000; }
-      else if (content.includes("flask") || content.includes("Flask")) { config.framework = "Flask"; config.port = 5000; }
+      if (content.includes("Django") || content.includes("django")) { config.framework = "django"; config.port = 8000; }
+      else if (content.includes("fastapi")) { config.framework = "fastapi"; config.port = 8000; }
+      else if (content.includes("flask") || content.includes("Flask")) { config.framework = "flask"; config.port = 5000; }
       if (content.includes("gunicorn")) config.startCommand = "gunicorn";
       if (content.includes("uvicorn")) config.startCommand = "uvicorn";
     } catch {}

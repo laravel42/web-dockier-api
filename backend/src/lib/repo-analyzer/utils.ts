@@ -14,10 +14,10 @@ export function finalizeNodeVersion(config: RepoConfig): void {
 
   let minVer = 18;
 
-  if (config.framework === "Next.js") {
+  if (config.framework === "nextjs") {
     // Modern Next.js SSR stacks (Payload, undici 7+, etc.) fail on Node 18.
     minVer = Math.max(minVer, 20);
-  } else if (config.framework === "Nuxt" && config.features.has("ssr")) {
+  } else if (config.framework === "nuxt" && config.features.has("ssr")) {
     minVer = Math.max(minVer, 20);
   } else if (config.features.has("payload")) {
     minVer = Math.max(minVer, 20);

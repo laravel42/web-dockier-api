@@ -233,7 +233,7 @@ export function generatePhpDockerfile(config: RepoConfig, repoDir?: string): str
 
   const resolvedPhpVer = appDir ? resolvePhpVersion(appDir, phpVer) : phpVer;
 
-  const isLaravel = config.framework === "Laravel" || config.framework === "laravel";
+  const isLaravel = config.framework === "laravel";
   const hasNodeAssets = config.features.has("node-assets");
 
   if (isLaravel) {
