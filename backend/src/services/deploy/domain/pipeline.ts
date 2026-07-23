@@ -38,12 +38,11 @@ import { createStreamingRunCmd, type RunCmdFn } from "./run-cmd.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { executePostDeployScript } from "./post-deploy.js";
-import { emit } from "../../../shared/events.js";
 import { ADAPTER_TO_SERVICE, type InfraMetadata, serializeInfra } from "../types.js";
 import { revealEnv } from "../../projects/domain/env.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
 
-import { appendLog, updateStatus, parseEnvContent } from "./pipeline-helpers.js";
+import { appendLog, updateStatus, parseEnvContent, emitDeploySuccessNotification } from "./pipeline-helpers.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { buildImage } from "./pipeline-build.js";
 import { waitForAppReady } from "./pipeline-health.js";
@@ -494,22 +493,13 @@ export async function finalizeDeploy(ctx: {
   }
 
   // Non-blocking notification
-  const deployMessage = finalUrl
-    ? `Deployment of ${ctx.event.repo} (${ctx.event.branch}) succeeded. App URL: ${finalUrl}`
-    : `Deployment of ${ctx.event.repo} (${ctx.event.branch}) succeeded.`;
-
-  emit("notification:send", {
+  emitDeploySuccessNotification({
     tenantId: ctx.event.tenantId,
-    title: "Deployment succeeded",
-    message: deployMessage,
-    metadata: {
-      kind: "deploy",
-      repo: ctx.event.repo,
-      branch: ctx.event.branch,
-      commit: ctx.commitHash || undefined,
-      appUrl: finalUrl || undefined,
-      deployId: ctx.deploymentId,
-    },
+    deploymentId: ctx.deploymentId,
+    repo: ctx.event.repo,
+    branch: ctx.event.branch,
+    commitHash: ctx.commitHash,
+    appUrl: finalUrl,
   });
 }
 

@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
-import { emit } from "../../../shared/events.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { emitDeploySuccessNotification } from "./pipeline-helpers.js";
 import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
@@ -188,22 +188,13 @@ export async function applyDeploymentWebhookUpdate(
   await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);
 
   if (payload.status === "success" && current?.organization_id) {
-    const appUrl = payload.appUrl ?? "";
-    const message = appUrl
-      ? `Deployment of ${current.repo} (${current.branch}) succeeded. App URL: ${appUrl}`
-      : `Deployment of ${current.repo} (${current.branch}) succeeded.`;
-    emit("notification:send", {
+    emitDeploySuccessNotification({
       tenantId: current.organization_id,
-      title: "Deployment succeeded",
-      message,
-      metadata: {
-        kind: "deploy",
-        repo: current.repo,
-        branch: current.branch,
-        commit: current.commit_hash || undefined,
-        appUrl: appUrl || undefined,
-        deployId: buildId,
-      },
+      deploymentId: buildId,
+      repo: current.repo,
+      branch: current.branch,
+      commitHash: current.commit_hash,
+      appUrl: payload.appUrl,
     });
   }
 }
