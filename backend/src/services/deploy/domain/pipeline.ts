@@ -36,7 +36,7 @@ import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { executePostDeployScript } from "./post-deploy.js";
 import { emit } from "../../../shared/events.js";
-import { ADAPTER_TO_SERVICE, type InfraMetadata } from "../types.js";
+import { ADAPTER_TO_SERVICE, type InfraMetadata, serializeInfra } from "../types.js";
 import { revealEnv } from "../../projects/domain/env.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
 
@@ -509,10 +509,10 @@ export async function finalizeDeploy(ctx: {
   if (finalUrl) {
     await waitForAppReady(ctx.deploymentId, finalUrl);
     await ctx.logger.success(`Application URL: ${finalUrl}`);
-    await updateStatus(ctx.deploymentId, "success", { app_url: finalUrl, infra });
+    await updateStatus(ctx.deploymentId, "success", { app_url: finalUrl, infra: serializeInfra(infra) });
   } else {
     await ctx.logger.warn("Could not determine app URL — check cloud console");
-    await updateStatus(ctx.deploymentId, "success", { infra });
+    await updateStatus(ctx.deploymentId, "success", { infra: serializeInfra(infra) });
   }
 
   // Non-blocking notification

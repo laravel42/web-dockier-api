@@ -80,3 +80,27 @@ export const ADAPTER_TO_SERVICE: Record<string, InfraMetadata["service"]> = {
   "gcp-cloudrun": "cloud-run",
   "gcp-storage": "gcs",
 };
+
+// ─── Infra Serialization Helpers ───────────────────────────────────
+
+/**
+ * Serialize InfraMetadata for storage in the `infra` JSONB column.
+ *
+ * Localizes the Record<string, unknown> cast to one place so callers
+ * pass typed InfraMetadata and never deal with the raw DB type.
+ */
+export function serializeInfra(infra: InfraMetadata): Record<string, unknown> {
+  return infra as unknown as Record<string, unknown>;
+}
+
+/**
+ * Parse the raw `infra` JSONB column back into typed InfraMetadata.
+ *
+ * Returns null if the column is empty/null or missing required fields.
+ * Callers should fall back to legacy resolution when this returns null.
+ */
+export function parseInfra(raw: Record<string, unknown> | null | undefined): InfraMetadata | null {
+  if (!raw) return null;
+  if (!raw.provider || !raw.service || !raw.region || !raw.containerName) return null;
+  return raw as unknown as InfraMetadata;
+}

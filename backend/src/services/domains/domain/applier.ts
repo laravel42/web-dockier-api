@@ -22,6 +22,7 @@ import { listDomains, listCertificates } from "./domains.js";
 import type { DomainResponse, SslCertificateResponse } from "./domains.js";
 import type { ExecutionTarget } from "../../commands/domain/executor.js";
 import type { SslCertificateRow } from "../schemas.js";
+import { parseInfra } from "../../deploy/types.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -101,25 +102,27 @@ async function resolveDomainTarget(
     .replace(/[^a-zA-Z0-9-]/g, "-")
     .toLowerCase();
 
-  const infra = (deployment.infra || {}) as Record<string, string>;
+  const rawInfra = deployment.infra || {};
+  const infra = parseInfra(deployment.infra);
   const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
-  const region = infra.region || provider.region || "us-east-1";
-  const containerName = infra.containerName || appName;
+  const region = infra?.region || (rawInfra as Record<string, string>).region || provider.region || "us-east-1";
+  const containerName = infra?.containerName || (rawInfra as Record<string, string>).containerName || appName;
 
   // AWS EC2 → SSM (preferred)
-  if (infra.instanceId) {
+  const instanceId = infra?.instanceId || (rawInfra as Record<string, string>).instanceId;
+  if (instanceId) {
     return {
-      target: { instanceId: infra.instanceId, containerName, credentials, region },
+      target: { instanceId, containerName, credentials, region },
       appName,
     };
   }
 
   // Fallback: resolve instance from CFN/IP
   if (provider.provider === "aws") {
-    const instanceId = await resolveEc2InstanceId(deployment as DeploymentMeta, provider, region, infra);
-    if (instanceId) {
+    const resolvedInstanceId = await resolveEc2InstanceId(deployment as DeploymentMeta, provider, region, rawInfra as Record<string, string>);
+    if (resolvedInstanceId) {
       return {
-        target: { instanceId, containerName, credentials, region },
+        target: { instanceId: resolvedInstanceId, containerName, credentials, region },
         appName,
       };
     }

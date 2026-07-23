@@ -5,6 +5,7 @@ import { DeployError } from "./providers.js";
 import { emit } from "../../../shared/events.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { DeploymentRow, InfraMetadata, ServiceEntry } from "../types.js";
+import { serializeInfra } from "../types.js";
 
 type CreateDeploymentInput = {
   tenantId: string;
@@ -186,7 +187,7 @@ export async function applyDeploymentWebhookUpdate(
       infra.ecsTaskFamily = repoName;
     }
 
-    updates.infra = infra;
+    updates.infra = serializeInfra(infra);
   }
 
   const lines = [payload.status === "success" ? "Deployment succeeded." : payload.status === "failed" ? "Deployment failed." : "Deployment in progress."];

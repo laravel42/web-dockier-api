@@ -26,6 +26,7 @@ import {
 import { generateNginxConfig } from "./nginx-generator.js";
 import type { NginxGeneratorOutput } from "./nginx-generator.js";
 import { type ExecutionTarget } from "../../commands/domain/executor.js";
+import { parseInfra } from "../../deploy/types.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -91,37 +92,41 @@ async function resolveNginxTarget(
     .replace(/[^a-zA-Z0-9-]/g, "-")
     .toLowerCase();
 
-  const infra = (deployment.infra || {}) as Record<string, string>;
+  const rawInfra = deployment.infra || {};
+  const infra = parseInfra(deployment.infra);
   const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
-  const region = infra.region || provider.region || "us-east-1";
-  const containerName = infra.containerName || appName;
+  const region = infra?.region || (rawInfra as Record<string, string>).region || provider.region || "us-east-1";
+  const containerName = infra?.containerName || (rawInfra as Record<string, string>).containerName || appName;
 
   // AWS EC2 → SSM (preferred path: instanceId in infra)
-  if (infra.instanceId) {
+  const instanceId = infra?.instanceId || (rawInfra as Record<string, string>).instanceId;
+  if (instanceId) {
     return {
-      target: { instanceId: infra.instanceId, containerName, credentials, region },
+      target: { instanceId, containerName, credentials, region },
       appName,
     };
   }
 
   // AWS EC2 fallback: resolve instanceId from CFN stack or IP lookup
-  if (provider.provider === "aws" && (infra.serverIp || infra.stackName)) {
-    const instanceId = await resolveEc2InstanceId(deployment, provider, region, infra);
-    if (instanceId) {
+  const serverIp = infra?.serverIp || (rawInfra as Record<string, string>).serverIp;
+  const stackName = infra?.stackName || (rawInfra as Record<string, string>).stackName;
+  if (provider.provider === "aws" && (serverIp || stackName)) {
+    const resolvedInstanceId = await resolveEc2InstanceId(deployment, provider, region, rawInfra as Record<string, string>);
+    if (resolvedInstanceId) {
       return {
-        target: { instanceId, containerName, credentials, region },
+        target: { instanceId: resolvedInstanceId, containerName, credentials, region },
         appName,
       };
     }
     return {
       target: null,
       appName,
-      errorMessage: `Could not resolve EC2 instance ID via CFN stack or IP lookup. stack="${infra.stackName || "unknown"}", serverIp="${infra.serverIp || "none"}"`,
+      errorMessage: `Could not resolve EC2 instance ID via CFN stack or IP lookup. stack="${stackName || "unknown"}", serverIp="${serverIp || "none"}"`,
     };
   }
 
   // GCP VPS → SSH (limited support)
-  if (infra.serverIp && provider.provider === "gcp") {
+  if (serverIp && provider.provider === "gcp") {
     return {
       target: null,
       appName,

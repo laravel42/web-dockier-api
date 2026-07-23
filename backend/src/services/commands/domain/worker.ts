@@ -20,6 +20,7 @@ import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { stackNameFor } from "../../deploy/domain/aws-helpers.js";
 import type { InfraMetadata } from "../../deploy/types.js";
+import { parseInfra } from "../../deploy/types.js";
 
 export interface CommandJobInput {
   commandId: string;
@@ -85,9 +86,9 @@ export async function resolveExecutionTarget(
   }
 
   // ── Fast path: use stored infra metadata (populated on deploys after migration 0047)
-  const infra = (deployment.infra || {}) as Partial<InfraMetadata>;
-  if (infra.provider && infra.service && infra.region && infra.containerName) {
-    return resolveFromInfra(infra as InfraMetadata, provider, deployment);
+  const infra = parseInfra(deployment.infra);
+  if (infra) {
+    return resolveFromInfra(infra, provider, deployment);
   }
 
   // ── Fallback: infer from deployment data (legacy deployments before infra column)
