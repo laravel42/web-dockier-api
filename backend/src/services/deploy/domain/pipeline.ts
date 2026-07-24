@@ -401,12 +401,14 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await stageNetworkRules(ctx);
     await stageFinalize(ctx);
     await stageRestoreProcesses(ctx);
-
-    await rm(ctx.workDir, { recursive: true, force: true }).catch(() => {});
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ✗ Deployment failed: ${message}`);
     await updateStatus(deploymentId, "failed");
+  } finally {
+    if (ctx.workDir) {
+      await rm(ctx.workDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
