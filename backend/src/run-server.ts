@@ -59,6 +59,10 @@ const workerRegistry: WorkerEntry[] = [
 //
 // Non-queue tasks that run once at startup for specific services.
 // Separate from workers because they don't require pg-boss.
+//
+// These run AFTER the server starts listening so that the /healthz
+// endpoint is responsive immediately. Failures are logged but do not
+// prevent the server from serving traffic.
 
 interface StartupHook {
   services: ServiceName[];
@@ -117,19 +121,29 @@ export async function runServer(): Promise<void> {
     }
   }
 
-  // Run non-queue startup hooks
-  for (const hook of startupHooks) {
-    if (shouldRun(hook, serviceName)) {
-      await hook.run();
-    }
-  }
-
   await app.listen({
     port: env.PORT,
     host: "0.0.0.0",
   });
 
   logger.info(`\n🚀 Backend v2026-06-23 — server running on port ${env.PORT} (service: ${serviceName})\n`);
+
+  // Run non-queue startup hooks AFTER the server is listening.
+  // This ensures /healthz responds immediately while background
+  // initialization (rule seeding, stale scan reconciliation) proceeds.
+  const activeHooks = startupHooks.filter((h) => shouldRun(h, serviceName));
+  if (activeHooks.length > 0) {
+    setImmediate(async () => {
+      for (const hook of activeHooks) {
+        try {
+          await hook.run();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error(`[startup] Post-listen hook failed: ${message}`);
+        }
+      }
+    });
+  }
 
   const shutdown = async () => {
     await app.close();
