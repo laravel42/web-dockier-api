@@ -206,6 +206,8 @@ export async function applyDeploymentWebhookUpdate(
       branch: current.branch,
       reason: payload.cfnStatus ? `Infrastructure error: ${payload.cfnStatus}` : undefined,
       commitHash: current.commit_hash,
+      category: "infra",
+      phase: payload.deployTarget || "cloudformation",
     });
   }
 }

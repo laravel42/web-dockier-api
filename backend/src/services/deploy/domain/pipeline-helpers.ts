@@ -68,6 +68,10 @@ export function emitDeploySuccessNotification(params: {
  *
  * Provides users with immediate awareness of deployment failures
  * through their configured notification channels (in-app, email, etc.).
+ *
+ * Includes optional error classification so the UI and notification
+ * templates can present different messaging for build failures
+ * (user-actionable) vs. infrastructure failures (platform issue).
  */
 export function emitDeployFailureNotification(params: {
   tenantId: string;
@@ -76,15 +80,28 @@ export function emitDeployFailureNotification(params: {
   branch: string;
   reason?: string;
   commitHash?: string;
+  /** Error category: "build" for clone/analyze/docker errors, "infra" for provisioning, "post-deploy" for post-deploy scripts */
+  category?: "build" | "infra" | "post-deploy" | "unknown";
+  /** Specific phase within the category (e.g. "clone", "docker-build", "cloudformation") */
+  phase?: string;
 }): void {
-  const { tenantId, deploymentId, repo, branch, reason, commitHash } = params;
+  const { tenantId, deploymentId, repo, branch, reason, commitHash, category, phase } = params;
+
+  const prefix = category === "build"
+    ? "Build failed"
+    : category === "infra"
+      ? "Infrastructure provisioning failed"
+      : category === "post-deploy"
+        ? "Post-deploy step failed"
+        : "Deployment failed";
+
   const message = reason
-    ? `Deployment of ${repo} (${branch}) failed: ${reason}`
-    : `Deployment of ${repo} (${branch}) failed.`;
+    ? `${prefix} for ${repo} (${branch}): ${reason}`
+    : `${prefix} for ${repo} (${branch}).`;
 
   emit("notification:send", {
     tenantId,
-    title: "Deployment failed",
+    title: prefix,
     message,
     metadata: {
       kind: "deploy",
@@ -92,8 +109,54 @@ export function emitDeployFailureNotification(params: {
       branch,
       commit: commitHash || undefined,
       deployId: deploymentId,
+      failureCategory: category || "unknown",
+      failurePhase: phase || undefined,
     },
   });
+}
+
+// ─── Error Classification ──────────────────────────────────────────
+
+import { BuildError, ProvisionError } from "../../../lib/logging.js";
+
+export interface ErrorClassification {
+  category: "build" | "infra" | "post-deploy" | "unknown";
+  phase?: string;
+}
+
+/**
+ * Classify a caught pipeline error into a category and phase.
+ *
+ * Used by the pipeline catch block to provide structured failure metadata
+ * in notifications. This allows the UI to show different messaging:
+ * - Build errors: "Check your Dockerfile / build configuration"
+ * - Infra errors: "Infrastructure issue — contact support or retry"
+ * - Post-deploy: "Deployment succeeded but a post-deploy step failed"
+ */
+export function classifyPipelineError(error: unknown): ErrorClassification {
+  if (error instanceof BuildError) {
+    return { category: "build", phase: error.phase };
+  }
+  if (error instanceof ProvisionError) {
+    return { category: "infra", phase: error.provider };
+  }
+  // Heuristic classification for untyped errors
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("clone") || msg.includes("git")) {
+      return { category: "build", phase: "clone" };
+    }
+    if (msg.includes("docker") || msg.includes("dockerfile") || msg.includes("build")) {
+      return { category: "build", phase: "docker-build" };
+    }
+    if (msg.includes("cloudformation") || msg.includes("pulumi") || msg.includes("provision") || msg.includes("stack")) {
+      return { category: "infra", phase: "provision" };
+    }
+    if (msg.includes("post-deploy") || msg.includes("post_deploy")) {
+      return { category: "post-deploy" };
+    }
+  }
+  return { category: "unknown" };
 }
 
 // ─── Env Parser ────────────────────────────────────────────────────
