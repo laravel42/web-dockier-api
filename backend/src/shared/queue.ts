@@ -173,12 +173,13 @@ export function createWorker<T>(
           if (!job) continue;
           const input = job.data;
           const jobId = job.id;
-          logger.info(`[${queueName}] Processing job ${jobId}`);
+          const jobLogger = logger.child({ jobId, queue: queueName });
+          jobLogger.info("Processing job");
           try {
             await handler(input);
-            logger.info(`[${queueName}] Completed job ${jobId}`);
+            jobLogger.info("Completed job");
           } catch (err) {
-            logger.error({ err }, `[${queueName}] Failed job ${jobId}`);
+            jobLogger.error({ err }, "Failed job");
             throw err; // re-throw so pg-boss marks it failed and retries
           }
         }
