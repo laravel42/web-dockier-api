@@ -43,47 +43,80 @@ declare module "fastify" {
 const permissionCache = new MemoryCache<ResolvedAuth>({ maxSize: 5_000, sweepIntervalMs: 60_000 });
 const CACHE_TTL_MS = 30_000;
 
+/**
+ * In-flight resolution map (singleflight pattern).
+ *
+ * When multiple concurrent requests miss the cache for the same user+tenant,
+ * they all await the same Promise instead of each firing independent DB queries.
+ * This prevents thundering herd on cache expiry under burst traffic.
+ *
+ * Entries are removed as soon as the Promise settles (success or failure),
+ * so subsequent requests after resolution will hit the warm cache.
+ */
+const inflight = new Map<string, Promise<ResolvedAuth | null>>();
+
 export function invalidatePermissionCache(userId: string, tenantId: string): void {
   permissionCache.delete(`${userId}:${tenantId}`);
 }
 
 export function clearPermissionCache(): void {
   permissionCache.clear();
+  inflight.clear();
 }
 
 export function destroyPermissionCache(): void {
   permissionCache.destroy();
+  inflight.clear();
 }
 
 /**
  * Resolve the full auth context for a user in a tenant.
- * Reduced from 3 queries to 2: membership+role validation in one round-trip
- * via .single() on roles filtered by membership's role_id, then permissions.
  *
- * Uses a 5-second timeout to prevent slow Supabase responses from cascading
- * into full request-queue exhaustion on the server.
+ * Uses a three-tier resolution strategy:
+ * 1. Return from cache if available (hot path, ~0ms)
+ * 2. Join an in-flight resolution if one is already running for this key (singleflight)
+ * 3. Start a new resolution with a 5s timeout and populate both the inflight map and cache
+ *
+ * The singleflight pattern prevents thundering herd: when the cache expires
+ * and 50 concurrent requests arrive for the same user, only ONE DB round-trip
+ * fires — all others await the same Promise.
  */
 async function resolvePermissions(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
   const cacheKey = `${userId}:${tenantId}`;
+
+  // 1. Cache hit — fast path
   const cached = permissionCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
+  // 2. Singleflight — join existing in-flight resolution
+  const existing = inflight.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  // 3. Start new resolution
   const RESOLVE_TIMEOUT_MS = 5_000;
 
-  const result = await Promise.race([
+  const promise = Promise.race([
     resolvePermissionsFromDb(userId, tenantId, email),
     new Promise<null>((_, reject) =>
       setTimeout(() => reject(new Error("Permission resolution timed out")), RESOLVE_TIMEOUT_MS),
     ),
   ]).catch(() => null);
 
-  if (result) {
-    permissionCache.set(cacheKey, result, CACHE_TTL_MS);
-  }
+  inflight.set(cacheKey, promise);
 
-  return result;
+  try {
+    const result = await promise;
+    if (result) {
+      permissionCache.set(cacheKey, result, CACHE_TTL_MS);
+    }
+    return result;
+  } finally {
+    inflight.delete(cacheKey);
+  }
 }
 
 /**
