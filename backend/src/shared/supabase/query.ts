@@ -31,15 +31,21 @@ export interface QueryErrorOptions {
 
 /**
  * DomainError constructor type — matches all service error classes.
- * Uses `string` for the code parameter to accommodate service-specific
- * error code unions that are subsets of BaseDomainErrorCode.
+ *
+ * Uses `any` for the code parameter to bypass contravariance issues.
+ * Service error classes created via createDomainErrorClass have narrow
+ * TCode unions at their throw sites, but when passed to query helpers
+ * (throwOnError, unwrapQuery) as a class reference, contravariance would
+ * otherwise prevent assignment. Using `any` here is safe because the
+ * query helpers only ever pass valid BaseDomainErrorCode values.
  */
 
 import type { ErrorMetadata } from "./errors.js";
  
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type DomainErrorConstructor<E extends Error = Error> = new (
   message: string,
-  code: string,
+  code: any,
   cause?: unknown,
   metadata?: ErrorMetadata,
 ) => E;

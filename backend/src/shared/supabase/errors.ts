@@ -81,8 +81,17 @@ export function createDomainErrorClass<
   // Preserve the class name for stack traces and error handler logging
   Object.defineProperty(ServiceError, "name", { value: className });
 
-  return ServiceError as unknown as {
-    new (message: string, code: string, cause?: unknown, metadata?: ErrorMetadata): DomainError & { readonly code: TCode };
-    prototype: DomainError;
-  };
+  return ServiceError as unknown as DomainErrorClass<TCode>;
+}
+
+/**
+ * Return type of createDomainErrorClass.
+ *
+ * Provides compile-time enforcement of valid error codes at throw sites.
+ * Only the narrow TCode overload is exposed, so `throw new XError("msg", "invalid_code")`
+ * is caught at compile time.
+ */
+export interface DomainErrorClass<TCode extends BaseDomainErrorCode> {
+  new (message: string, code: TCode, cause?: unknown, metadata?: ErrorMetadata): DomainError & { readonly code: TCode };
+  prototype: DomainError;
 }
