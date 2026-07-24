@@ -32,7 +32,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/network/security-rules",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "List security rules for a project",
@@ -55,7 +55,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/network/security-rules",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "Create a security rule",
@@ -81,7 +81,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/network/security-rules/:ruleId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "Delete a security rule",
@@ -107,7 +107,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/network/security-rules/:ruleId/credentials",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "Add a credential to a security rule",
@@ -142,7 +142,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/network/security-rules/:ruleId/credentials/:credentialId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "Delete a credential from a security rule",
@@ -172,7 +172,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/network/redirect-rules",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "List redirect rules for a project",
@@ -195,7 +195,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/network/redirect-rules",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "Create a redirect rule",
@@ -221,7 +221,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/network/redirect-rules/:ruleId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["network"],
         summary: "Delete a redirect rule",
@@ -249,7 +249,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/network/apply",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       handlerTimeout: 45_000,
       schema: {
         tags: ["network"],

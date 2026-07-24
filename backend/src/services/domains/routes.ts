@@ -34,7 +34,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/domains",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "List domains for a project",
@@ -57,7 +57,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/domains",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Add a custom domain",
@@ -81,7 +81,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.patch(
     "/projects/:projectId/domains/:domainId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Update a domain",
@@ -111,7 +111,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/domains/:domainId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Remove a domain",
@@ -139,7 +139,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/certificates",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "List SSL certificates for a project",
@@ -162,7 +162,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/certificates",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Create an SSL certificate",
@@ -197,7 +197,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/certificates/:certificateId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Delete an SSL certificate",
@@ -225,7 +225,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/domains/:domainId/verify-dns",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Verify DNS configuration for a domain",
@@ -262,7 +262,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/domains/config-preview",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Preview generated nginx domain configuration",
@@ -284,7 +284,7 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/domains/apply",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["domains"],
         summary: "Apply domain configuration to the deployed server",
