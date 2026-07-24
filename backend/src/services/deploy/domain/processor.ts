@@ -3,7 +3,7 @@ import { generateTofuPreview, getDefaultRegion } from "./planner.js";
 import { resolveDeployTemplate } from "./templates.js";
 import { DeployError } from "./providers.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { emitDeploySuccessNotification } from "./pipeline-helpers.js";
+import { emitDeploySuccessNotification, emitDeployFailureNotification } from "./pipeline-helpers.js";
 import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
@@ -195,6 +195,17 @@ export async function applyDeploymentWebhookUpdate(
       branch: current.branch,
       commitHash: current.commit_hash,
       appUrl: payload.appUrl,
+    });
+  }
+
+  if (payload.status === "failed" && current?.organization_id) {
+    emitDeployFailureNotification({
+      tenantId: current.organization_id,
+      deploymentId: buildId,
+      repo: current.repo,
+      branch: current.branch,
+      reason: payload.cfnStatus ? `Infrastructure error: ${payload.cfnStatus}` : undefined,
+      commitHash: current.commit_hash,
     });
   }
 }

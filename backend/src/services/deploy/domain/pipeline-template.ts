@@ -20,7 +20,7 @@ import { injectWpConfig } from "./wp-config-inject.js";
 import { restoreProcessesAfterDeploy } from "../../processes/domain/post-deploy-restore.js";
 import type { TemplateConfig } from "./project-templates.js";
 
-import { appendLog, updateStatus } from "./pipeline-helpers.js";
+import { appendLog, updateStatus, emitDeployFailureNotification } from "./pipeline-helpers.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { containerNameFor, deriveRepoName } from "../../../lib/naming.js";
@@ -217,6 +217,14 @@ export async function executeTemplatePipeline(
     } catch (statusErr) {
       obsLogger.error({ err: statusErr, deploymentId }, "[deploy] Could not mark template deployment as failed");
     }
+    // Notify the user of the failure
+    emitDeployFailureNotification({
+      tenantId: event.tenantId,
+      deploymentId,
+      repo: event.repo,
+      branch: event.branch,
+      reason: message,
+    });
   }
 }
 

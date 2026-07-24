@@ -20,7 +20,7 @@ import { getTemplateConfig } from "./project-templates.js";
 import { isCloudProvider } from "../types.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
 
-import { appendLog, updateStatus } from "./pipeline-helpers.js";
+import { appendLog, updateStatus, emitDeployFailureNotification } from "./pipeline-helpers.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { getDeploymentCurrentStatus } from "./deployments.js";
 
@@ -137,6 +137,15 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     } catch (statusErr) {
       obsLogger.error({ err: statusErr, deploymentId }, "[deploy] Could not mark deployment as failed");
     }
+    // Notify the user of the failure
+    emitDeployFailureNotification({
+      tenantId: event.tenantId,
+      deploymentId,
+      repo: event.repo,
+      branch: event.branch,
+      reason: message,
+      commitHash: ctx.commitHash,
+    });
   } finally {
     if (ctx.workDir) {
       await rm(ctx.workDir, { recursive: true, force: true }).catch(() => {});

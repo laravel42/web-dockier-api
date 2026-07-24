@@ -63,6 +63,39 @@ export function emitDeploySuccessNotification(params: {
   });
 }
 
+/**
+ * Emit a deploy-failed notification via the domain event bus.
+ *
+ * Provides users with immediate awareness of deployment failures
+ * through their configured notification channels (in-app, email, etc.).
+ */
+export function emitDeployFailureNotification(params: {
+  tenantId: string;
+  deploymentId: string;
+  repo: string;
+  branch: string;
+  reason?: string;
+  commitHash?: string;
+}): void {
+  const { tenantId, deploymentId, repo, branch, reason, commitHash } = params;
+  const message = reason
+    ? `Deployment of ${repo} (${branch}) failed: ${reason}`
+    : `Deployment of ${repo} (${branch}) failed.`;
+
+  emit("notification:send", {
+    tenantId,
+    title: "Deployment failed",
+    message,
+    metadata: {
+      kind: "deploy",
+      repo,
+      branch,
+      commit: commitHash || undefined,
+      deployId: deploymentId,
+    },
+  });
+}
+
 // ─── Env Parser ────────────────────────────────────────────────────
 
 // Env parsing has been consolidated into shared/env/parse-env.ts.
