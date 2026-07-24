@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Job queue powered by pg-boss (PostgreSQL-backed).
  *
@@ -10,6 +9,7 @@
  */
 
 import { PgBoss } from "pg-boss";
+import type { Job } from "pg-boss";
 import { getPostgresConnectionConfig } from "./postgres.js";
 import { logger } from "./logger.js";
 import { env } from "./config.js";
@@ -166,13 +166,13 @@ export function createWorker<T>(
     try {
       await queue.createQueue(queueName);
 
-      await queue.work(queueName, { batchSize, pollingIntervalSeconds }, async (jobs: any[]) => {
+      await queue.work(queueName, { batchSize, pollingIntervalSeconds }, async (jobs: Job<T>[]) => {
         if (!jobs || jobs.length === 0) return;
 
         for (const job of jobs) {
           if (!job) continue;
-          const input = job.data as T;
-          const jobId = job.id as string;
+          const input = job.data;
+          const jobId = job.id;
           logger.info(`[${queueName}] Processing job ${jobId}`);
           try {
             await handler(input);
