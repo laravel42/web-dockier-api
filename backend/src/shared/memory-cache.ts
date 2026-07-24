@@ -6,11 +6,12 @@
  * - Max size with oldest-entry eviction
  * - Periodic sweep to remove expired entries
  *
- * Used by the permission resolver and rate limiter to avoid
- * duplicating the same store/sweep/evict logic.
- *
- * For horizontal scaling, replace with a Redis-backed implementation.
+ * Implements the CacheStore interface so consumers can program against
+ * the abstract contract. When horizontal scaling requires Redis, swap
+ * the implementation without changing call sites.
  */
+
+import type { CacheStore } from "./cache-store.js";
 
 export interface MemoryCacheOptions {
   /** Maximum number of entries before eviction. Default: 5000 */
@@ -19,7 +20,7 @@ export interface MemoryCacheOptions {
   sweepIntervalMs?: number;
 }
 
-export class MemoryCache<V> {
+export class MemoryCache<V> implements CacheStore<V> {
   private readonly store = new Map<string, { value: V; expiresAt: number }>();
   private readonly maxSize: number;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
