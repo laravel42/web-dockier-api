@@ -17,6 +17,7 @@ import { getGitConnectionCredentials } from "../../../shared/service-clients/git
 import { getAdapter } from "./adapters/index.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { executePostDeployScript } from "./post-deploy.js";
+import { isCloudProvider } from "../types.js";
 
 import { buildImage } from "./pipeline-build.js";
 import { patchDeployment } from "./deployments.js";
@@ -37,7 +38,12 @@ export async function stageProviderCredentials(ctx: PipelineContext): Promise<vo
     throw new Error(`Provider not found: ${ctx.event.providerId}`);
   }
 
-  ctx.provider = creds.provider || "cloud";
+  const rawProvider = creds.provider || "";
+  if (!isCloudProvider(rawProvider)) {
+    throw new Error(`Unsupported cloud provider: "${rawProvider}". Expected "aws" or "gcp".`);
+  }
+
+  ctx.provider = rawProvider;
   ctx.region = creds.region || "us-east-1";
 
   if (ctx.event.tofuScript) {

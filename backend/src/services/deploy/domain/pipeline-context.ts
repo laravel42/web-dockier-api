@@ -18,6 +18,7 @@ import type { DeployAdapter } from "./adapters/types.js";
 import type { AdapterContext, ProvisionResult } from "./adapters/types.js";
 import { deriveRepoName } from "../../../lib/naming.js";
 import type { PipelineInput } from "./pipeline.js";
+import type { CloudProvider } from "../types.js";
 
 export class PipelineContext {
   // ─── Immutable inputs (set at construction) ───────────────────
@@ -29,7 +30,7 @@ export class PipelineContext {
   readonly runCmd: RunCmdFn;
 
   // ─── Stage 1: Provider Credentials ────────────────────────────
-  provider!: string;
+  provider!: CloudProvider;
   region!: string;
   credentials!: { api_key: string; api_secret: string };
 

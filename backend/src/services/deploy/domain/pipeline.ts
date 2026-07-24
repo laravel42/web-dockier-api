@@ -34,7 +34,7 @@ import type { AdapterContext, ProvisionResult, DeployAdapter } from "./adapters/
 import { createStreamingRunCmd, type RunCmdFn } from "./run-cmd.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
-import { ADAPTER_TO_SERVICE, type InfraMetadata, serializeInfra } from "../types.js";
+import { ADAPTER_TO_SERVICE, type CloudProvider, type InfraMetadata, isCloudProvider, serializeInfra } from "../types.js";
 import { revealEnv } from "../../projects/domain/env.js";
 import { getProjectDeployConfig } from "../../../shared/service-clients/projects.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
@@ -78,7 +78,7 @@ export type { ProjectContext };
 // ─── Stage 1: Fetch Provider Credentials ───────────────────────────
 
 export interface ProviderResult {
-  provider: string;
+  provider: CloudProvider;
   region: string;
   credentials: { api_key: string; api_secret: string };
 }
@@ -92,6 +92,12 @@ async function fetchProviderCredentials(
     return null;
   }
 
+  const rawProvider = creds.provider || "";
+  if (!isCloudProvider(rawProvider)) {
+    obsLogger.error({ providerId: event.providerId, provider: rawProvider }, "[deploy] Unsupported cloud provider");
+    return null;
+  }
+
   let region = creds.region || "us-east-1";
   if (event.tofuScript) {
     const scriptRegion = extractRegionFromScript(event.tofuScript);
@@ -99,7 +105,7 @@ async function fetchProviderCredentials(
   }
 
   return {
-    provider: creds.provider || "cloud",
+    provider: rawProvider,
     region,
     credentials: {
       api_key: creds.apiKey,
@@ -241,7 +247,7 @@ export async function applyNetworkRulesIfNeeded(
 // ─── Stage 9: Finalize ─────────────────────────────────────────────
 
 function buildInfraMetadata(ctx: {
-  provider: string;
+  provider: CloudProvider;
   region: string;
   repoName: string;
   deployStrategy: string;
@@ -252,7 +258,7 @@ function buildInfraMetadata(ctx: {
 
   const service = ADAPTER_TO_SERVICE[ctx.adapter.id] || ctx.adapter.id;
   const infra: InfraMetadata = {
-    provider: ctx.provider as InfraMetadata["provider"],
+    provider: ctx.provider,
     service: service as InfraMetadata["service"],
     region: ctx.region,
     containerName,
@@ -278,7 +284,7 @@ export async function finalizeDeploy(ctx: {
   deploymentId: string;
   event: PipelineInput;
   repoName: string;
-  provider: string;
+  provider: CloudProvider;
   region: string;
   deployStrategy: string;
   adapter: DeployAdapter;
