@@ -55,6 +55,9 @@ export function clearPermissionCache(): void {
  * Resolve the full auth context for a user in a tenant.
  * Reduced from 3 queries to 2: membership+role validation in one round-trip
  * via .single() on roles filtered by membership's role_id, then permissions.
+ *
+ * Uses a 5-second timeout to prevent slow Supabase responses from cascading
+ * into full request-queue exhaustion on the server.
  */
 async function resolvePermissions(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
   const cacheKey = `${userId}:${tenantId}`;
@@ -63,6 +66,27 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
     return cached;
   }
 
+  const RESOLVE_TIMEOUT_MS = 5_000;
+
+  const result = await Promise.race([
+    resolvePermissionsFromDb(userId, tenantId, email),
+    new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error("Permission resolution timed out")), RESOLVE_TIMEOUT_MS),
+    ),
+  ]).catch(() => null);
+
+  if (result) {
+    permissionCache.set(cacheKey, result, CACHE_TTL_MS);
+  }
+
+  return result;
+}
+
+/**
+ * Perform the actual DB queries for permission resolution.
+ * Separated from resolvePermissions to keep the timeout wrapper clean.
+ */
+async function resolvePermissionsFromDb(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
   // Query 1: Fetch membership (validates user belongs to tenant and is active)
   const { data: membership, error: membershipError } = await supabaseAdmin
     .from("organization_memberships")
@@ -98,7 +122,7 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
   const role = roleResult.data;
   const permissions = (permResult.data ?? []).map((rp) => rp.permission_id as PermissionKey);
 
-  const resolved: ResolvedAuth = {
+  return {
     userId,
     email,
     tenantId,
@@ -108,9 +132,6 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
     isOwner: membership.is_owner ?? false,
     hierarchyLevel: getHierarchyLevel(role.system_key ?? null),
   };
-
-  permissionCache.set(cacheKey, resolved, CACHE_TTL_MS);
-  return resolved;
 }
 
 /**
