@@ -30,7 +30,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/heartbeats",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["observe"],
         summary: "List heartbeats for a project",
@@ -52,7 +52,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/heartbeats",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["observe"],
         summary: "Create a heartbeat monitor",
@@ -80,7 +80,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/heartbeats/:heartbeatId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["observe"],
         summary: "Delete a heartbeat monitor",
@@ -125,7 +125,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/logs/:logType",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["observe"],
         summary: "Get log content",
@@ -149,7 +149,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/logs/:logType",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["observe"],
         summary: "Clear log contents",
@@ -176,7 +176,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/activity",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["observe"],
         summary: "List project activity",

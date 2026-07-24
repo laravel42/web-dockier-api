@@ -8,7 +8,7 @@ export const providerSchema = z.object({
   createdAt: z.string(),
 });
 
-export const deploymentStatusSchema = z.enum(["pending", "building", "deploying", "success", "failed", "destroyed"]);
+export const deploymentStatusSchema = z.enum(["pending", "building", "deploying", "success", "failed", "destroyed", "cancelled"]);
 
 export const deploymentSchema = z.object({
   id: z.uuid(),

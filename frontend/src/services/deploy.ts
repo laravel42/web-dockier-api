@@ -81,6 +81,11 @@ export const deployApi = {
       method: "POST",
     }),
 
+  cancelDeployment: (deploymentId: string) =>
+    request<Deployment>(`/deploy/deployments/${deploymentId}/cancel`, {
+      method: "POST",
+    }),
+
   getDeployment: (deploymentId: string) =>
     request<Deployment & { updatedAt: string }>(`/deploy/deployments/${deploymentId}`),
 

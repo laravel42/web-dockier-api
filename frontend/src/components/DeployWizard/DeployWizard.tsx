@@ -17,7 +17,8 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     step, state, setState,
     tofuLoading, tofuError, deployError,
     canNext, handleNext, handleBack,
-    startDeploy, generateScript,
+    startDeploy, cancelDeploy, cancellingDeploy,
+    generateScript,
     isDeploying, isFinished,
   } = useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete });
 
@@ -109,13 +110,23 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
       {/* Navigation */}
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
         <div>
-          {step > 0 && step < 6 && (
+          {step > 0 && step < 6 && !isDeploying && (
             <button type="button" onClick={handleBack} className={btnSecondary}>
               ← Back
             </button>
           )}
         </div>
         <div className="flex items-center gap-2">
+          {isDeploying && (
+            <button
+              type="button"
+              onClick={cancelDeploy}
+              disabled={cancellingDeploy}
+              className="h-9 px-4 text-sm font-medium text-amber-500 border border-amber-500/30 rounded-(--radius-btn) hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+            >
+              {cancellingDeploy ? "Cancelling…" : "⛔ Cancel Deploy"}
+            </button>
+          )}
           {step === 6 && isFinished && (
             <button type="button" onClick={onClose} className={btnSecondary}>
               Close

@@ -19,6 +19,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
     deploying: "bg-primary-100 text-primary-700",
     success: "bg-success-50 text-success-500",
     failed: "bg-danger-50 text-danger-500",
+    cancelled: "bg-amber-50 text-amber-600",
   };
 
   const isRunning = ["pending", "building", "deploying"].includes(state.deployStatus);

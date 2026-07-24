@@ -20,16 +20,19 @@ export default function DeployDetail() {
     loading, error,
     allDeploys, allDeploysLoading,
     destroying,
+    cancelling,
     provKey,
     showDeployWizard, setShowDeployWizard,
     openDeployWizard, canLaunchDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
     handleDestroy,
+    handleCancel,
   } = useDeployDetail();
   const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
   const { has } = usePermissions();
   const canDestroy = has("deploy:manage");
+  const canCancel = has("deploy:manage");
 
   if (loading) {
     return <PageLoading />;
@@ -68,6 +71,9 @@ export default function DeployDetail() {
           canDestroy={canDestroy}
           destroying={destroying}
           onDestroy={() => setShowDestroyConfirm(true)}
+          canCancel={canCancel}
+          cancelling={cancelling}
+          onCancel={handleCancel}
         />
 
         <InfoCards deploy={deploy} provKey={provKey} deployUrl={deployUrl} />

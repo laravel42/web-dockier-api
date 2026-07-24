@@ -1,5 +1,4 @@
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import { resolveExecutionTarget } from "../../commands/domain/worker.js";
 import { executeCommand } from "../../commands/domain/executor.js";
 
@@ -59,9 +58,6 @@ export async function getLog(params: {
   logType: LogType;
 }): Promise<LogEntry> {
   const { tenantId, projectId, logType } = params;
-
-  // Verify project ownership
-  await assertProjectAccess(projectId, tenantId, LogsError);
 
   // Resolve execution target (same mechanism as commands)
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
@@ -129,9 +125,6 @@ export async function clearLog(params: {
   logType: LogType;
 }): Promise<void> {
   const { tenantId, projectId, logType } = params;
-
-  // Verify project ownership
-  await assertProjectAccess(projectId, tenantId, LogsError);
 
   // Resolve execution target
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);

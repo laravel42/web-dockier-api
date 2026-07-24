@@ -1,7 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
-import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import { enqueueCommand } from "./worker.js";
 import { safeRecordActivity } from "../../observe/domain/activity.js";
 import type { CommandRow } from "../schemas.js";
@@ -19,9 +18,6 @@ export async function runCommand(params: {
   command: string;
 }): Promise<CommandResponse> {
   const { tenantId, projectId, userId, command } = params;
-
-  // Validate the project belongs to this tenant before running
-  await assertProjectAccess(projectId, tenantId, CommandsError);
 
   // Insert command record with "running" status
   const { data, error } = await supabaseAdmin

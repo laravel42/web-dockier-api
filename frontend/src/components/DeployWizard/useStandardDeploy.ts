@@ -74,8 +74,9 @@ export function useStandardDeploy() {
           deployAppUrl: d.appUrl || prev.deployAppUrl,
         }));
 
-        if (d.status === "success" || d.status === "failed") {
+        if (d.status === "success" || d.status === "failed" || d.status === "cancelled") {
           if (d.status === "failed") onError("Deployment failed. Check logs for details.");
+          if (d.status === "cancelled") onError("Deployment was cancelled.");
           onComplete?.();
           return;
         }

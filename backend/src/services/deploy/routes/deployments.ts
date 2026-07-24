@@ -18,6 +18,7 @@ import {
   getDeploymentForWebhook,
   updateDeploymentStatus,
   createAndEnqueueDeployment,
+  cancelDeployment,
 } from "../domain/deployments.js";
 
 export async function registerDeploymentRoutes(app: FastifyInstance) {
@@ -173,6 +174,23 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
       const result = await destroyDeployment(request.params.deploymentId);
       if (!result.success) throw new DomainError(result.message, "bad_request");
       return { success: true, message: result.message };
+    },
+  );
+
+  typed.post(
+    "/deploy/deployments/:deploymentId/cancel",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
+      schema: {
+        tags: ["deploy"],
+        summary: "Cancel a stuck or in-progress deployment",
+        params: z.object({ deploymentId: z.uuid() }),
+        response: { 200: deploymentSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await cancelDeployment(request.params.deploymentId, auth.tenantId);
     },
   );
 

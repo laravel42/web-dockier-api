@@ -19,7 +19,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/commands",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "cmd-run" })],
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess, tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "cmd-run" })],
       schema: {
         tags: ["commands"],
         summary: "Run a command on a project",

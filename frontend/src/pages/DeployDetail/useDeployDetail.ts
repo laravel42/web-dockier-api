@@ -20,6 +20,7 @@ export function useDeployDetail() {
   const [allDeploys, setAllDeploys] = useState<Deployment[]>([]);
   const [allDeploysLoading, setAllDeploysLoading] = useState(false);
   const [destroying, setDestroying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const [showDeployWizard, setShowDeployWizard] = useState(false);
   const [analysis, setAnalysis] = useState<RepoAnalysis | null>(null);
@@ -131,6 +132,21 @@ export function useDeployDetail() {
     }
   }, [deploy, refreshAllDeploys]);
 
+  const handleCancel = useCallback(async () => {
+    if (!deploy) return { success: false as const, message: "Deployment not found" };
+    setCancelling(true);
+    try {
+      const updated = await deployApi.cancelDeployment(deploy.id);
+      setDeploy(updated);
+      refreshAllDeploys(updated);
+      return { success: true as const, message: "Deployment cancelled" };
+    } catch (err: unknown) {
+      return { success: false as const, message: getErrorMessage(err, "Failed to cancel deployment") };
+    } finally {
+      setCancelling(false);
+    }
+  }, [deploy, refreshAllDeploys]);
+
   const prov = deploy ? providers.find(p => p.id === deploy.providerId) : undefined;
   const provKey = prov?.provider || "";
   const canLaunchDeploy = Boolean(project?.connectionId || project?.sourceType === "template");
@@ -141,11 +157,13 @@ export function useDeployDetail() {
     loading, error,
     allDeploys, allDeploysLoading,
     destroying,
+    cancelling,
     prov, provKey,
     showDeployWizard, setShowDeployWizard,
     openDeployWizard, canLaunchDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
     handleDestroy,
+    handleCancel,
   };
 }

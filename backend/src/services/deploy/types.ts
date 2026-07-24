@@ -10,7 +10,7 @@ export type ProviderRow = TableRow<"server_providers">;
 
 export type DeploymentRow = TableRow<"deployments">;
 
-export type DeploymentStatus = "pending" | "building" | "deploying" | "success" | "failed" | "destroyed";
+export type DeploymentStatus = "pending" | "building" | "deploying" | "success" | "failed" | "destroyed" | "cancelled";
 
 export type PostDeployCommand = {
   command: string;

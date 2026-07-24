@@ -37,7 +37,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/processes",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Create a background process",
@@ -59,7 +59,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/processes",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "List background processes for a project",
@@ -80,7 +80,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.patch(
     "/projects/:projectId/processes/:processId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Update a background process",
@@ -103,7 +103,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/processes/:processId/status",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Change process status (start/stop/restart)",
@@ -173,7 +173,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/processes/:processId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Delete a background process",
@@ -195,7 +195,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/processes/:processId/logs",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Get background process logs",
@@ -220,7 +220,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/scheduled-jobs",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Create a scheduled job",
@@ -242,7 +242,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/scheduled-jobs",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "List scheduled jobs for a project",
@@ -263,7 +263,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.patch(
     "/projects/:projectId/scheduled-jobs/:jobId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Update a scheduled job",
@@ -286,7 +286,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/scheduled-jobs/:jobId/status",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Change job status (pause/resume)",
@@ -336,7 +336,7 @@ export async function registerProcessesRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/scheduled-jobs/:jobId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["processes"],
         summary: "Delete a scheduled job",

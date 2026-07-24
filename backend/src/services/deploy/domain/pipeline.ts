@@ -354,7 +354,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
 
   // Idempotency guard
   const currentStatus = await getDeploymentCurrentStatus(deploymentId);
-  if (currentStatus === "building" || currentStatus === "deploying") return;
+  if (currentStatus === "building" || currentStatus === "deploying" || currentStatus === "cancelled") return;
 
   // Template deploy path (early exit)
   if (event.templateId) {
@@ -395,9 +395,15 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await stageRestoreProcesses(ctx);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
+    // Best-effort logging and status update. If Supabase is unreachable
+    // (the cause of this failure), these calls may also fail silently.
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ✗ Deployment failed: ${message}`);
-    await updateStatus(deploymentId, "failed");
+    try {
+      await updateStatus(deploymentId, "failed");
+    } catch (statusErr) {
+      obsLogger.error({ err: statusErr, deploymentId }, "[deploy] Could not mark deployment as failed");
+    }
   } finally {
     if (ctx.workDir) {
       await rm(ctx.workDir, { recursive: true, force: true }).catch(() => {});

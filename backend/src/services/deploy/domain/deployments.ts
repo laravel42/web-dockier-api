@@ -97,14 +97,26 @@ export async function getDeploymentCurrentStatus(deploymentId: string): Promise<
  * Append a line to the deployment logs column.
  * Uses a Postgres RPC for atomic concatenation — avoids the read-modify-write
  * race condition that loses log lines under concurrent appends.
+ *
+ * This function is intentionally non-throwing. Logging is best-effort —
+ * if Supabase is unreachable (DNS failure, network issues), the log line
+ * is lost but the pipeline continues. Without this resilience, a transient
+ * Supabase outage crashes the deploy worker via unhandled promise rejection
+ * in the streaming command output handler.
  */
 export async function appendDeploymentLog(deploymentId: string, line: string): Promise<void> {
   const sanitized = line.replace(/\0/g, "");
-  const { error } = await supabaseAdmin.rpc("append_deployment_log", {
-    p_deployment_id: deploymentId,
-    p_line: sanitized,
-  });
-  throwOnError(error, DeployError, { internalMsg: "Failed to append deployment log" });
+  try {
+    const { error } = await supabaseAdmin.rpc("append_deployment_log", {
+      p_deployment_id: deploymentId,
+      p_line: sanitized,
+    });
+    if (error) {
+      logger.warn({ err: error, deploymentId }, "[deploy] Failed to append log line (non-fatal)");
+    }
+  } catch (err) {
+    logger.warn({ err, deploymentId }, "[deploy] Failed to append log line (non-fatal)");
+  }
 }
 
 /**
@@ -282,4 +294,57 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
   }
 
   return rowToDeployment(payload);
+}
+
+// ─── Cancel Deployment ─────────────────────────────────────────────
+
+/** Statuses that can be cancelled. */
+const CANCELLABLE_STATUSES = ["pending", "building", "deploying"];
+
+/**
+ * Cancel a stuck or in-progress deployment.
+ *
+ * Sets status to "cancelled" and appends a log line indicating
+ * user-initiated cancellation. Only deployments in pending/building/deploying
+ * status can be cancelled.
+ */
+export async function cancelDeployment(deploymentId: string, tenantId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("deployments")
+    .select("*")
+    .eq("id", deploymentId)
+    .single();
+
+  const deployment = unwrapQuery(data, error, DeployError, {
+    notFoundMsg: "Deployment not found",
+    internalMsg: "Failed to fetch deployment",
+  });
+
+  assertOwnership(deployment, tenantId, DeployError, "Not your deployment");
+
+  if (!CANCELLABLE_STATUSES.includes(deployment.status)) {
+    throw new DeployError(
+      `Cannot cancel deployment in status: ${deployment.status}`,
+      "precondition_failed",
+    );
+  }
+
+  const cancelLog = `\n[${new Date().toISOString()}] ⛔ Deployment cancelled by user`;
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from("deployments")
+    .update({
+      status: "cancelled",
+      logs: (deployment.logs || "") + cancelLog,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deploymentId)
+    .select("*")
+    .single();
+
+  const cancelled = unwrapQuery(updated, updateError, DeployError, {
+    notFoundMsg: "Deployment not found or could not be updated",
+    internalMsg: "Failed to cancel deployment",
+  });
+
+  return rowToDeployment(cancelled);
 }

@@ -22,6 +22,7 @@ import type { TemplateConfig } from "./project-templates.js";
 
 import { appendLog, updateStatus } from "./pipeline-helpers.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
+import { logger as obsLogger } from "../../../shared/logger.js";
 import {
   containerNameFor,
   deriveRepoName,
@@ -212,7 +213,11 @@ export async function executeTemplatePipeline(
     const message = e instanceof Error ? e.message : String(e);
     await appendLog(deploymentId, `[${ts()}]`);
     await appendLog(deploymentId, `[${ts()}] ✗ Template deployment failed: ${message}`);
-    await updateStatus(deploymentId, "failed");
+    try {
+      await updateStatus(deploymentId, "failed");
+    } catch (statusErr) {
+      obsLogger.error({ err: statusErr, deploymentId }, "[deploy] Could not mark template deployment as failed");
+    }
   }
 }
 

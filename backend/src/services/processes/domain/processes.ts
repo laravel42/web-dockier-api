@@ -1,7 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
-import { assertProjectAccess } from "../../../shared/supabase/project-access.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 import { rowToProcess, rowToJob, type BackgroundProcessResponse, type ScheduledJobResponse } from "./mappers.js";
 
@@ -37,9 +36,6 @@ export async function createProcess(params: {
   gracefulShutdown?: number;
 }): Promise<BackgroundProcessResponse> {
   const { tenantId, projectId, ...rest } = params;
-
-  // Verify project belongs to tenant
-  await assertProjectAccess(projectId, tenantId, ProcessesError);
 
   // Build the command if queue_worker type
   let command = rest.command || "";
@@ -222,9 +218,6 @@ export async function createJob(params: {
   monitorHeartbeat?: boolean;
 }): Promise<ScheduledJobResponse> {
   const { tenantId, projectId, ...rest } = params;
-
-  // Verify project belongs to tenant
-  await assertProjectAccess(projectId, tenantId, ProcessesError);
 
   const { data, error } = await db
     .from("scheduled_jobs")

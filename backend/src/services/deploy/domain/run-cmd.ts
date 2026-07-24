@@ -76,17 +76,17 @@ export function createStreamingRunCmd(
             continue;
           }
           if (suppressedCount > 20) {
-            await logFn(deploymentId, `[${tsFn()}] ... (${suppressedCount} verbose lines suppressed)`);
+            await logFn(deploymentId, `[${tsFn()}] ... (${suppressedCount} verbose lines suppressed)`).catch(() => {});
           }
           suppressedCount = 0;
-          await logFn(deploymentId, `[${tsFn()}] ${line}`);
+          await logFn(deploymentId, `[${tsFn()}] ${line}`).catch(() => {});
         }
       };
       proc.stdout!.on("data", onData);
       proc.stderr!.on("data", onData);
       proc.on("close", async (code) => {
         if (suppressedCount > 20) {
-          await logFn(deploymentId, `[${tsFn()}] ... (${suppressedCount} verbose lines suppressed)`);
+          await logFn(deploymentId, `[${tsFn()}] ... (${suppressedCount} verbose lines suppressed)`).catch(() => {});
         }
         resolve({ code: code ?? 1, output });
       });

@@ -9,9 +9,12 @@ interface Props {
   canDestroy: boolean;
   destroying: boolean;
   onDestroy: () => void;
+  canCancel: boolean;
+  cancelling: boolean;
+  onCancel: () => void;
 }
 
-export default function DeployHeader({ deploy, project, onNavigateProject, canDestroy, destroying, onDestroy }: Props) {
+export default function DeployHeader({ deploy, project, onNavigateProject, canDestroy, destroying, onDestroy, canCancel, cancelling, onCancel }: Props) {
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
@@ -38,6 +41,16 @@ export default function DeployHeader({ deploy, project, onNavigateProject, canDe
           </div>
         </div>
       </div>
+      {canCancel && ["pending", "building", "deploying"].includes(deploy.status) && (
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={cancelling}
+          className="text-xs text-amber-500 hover:text-amber-700 font-medium transition-colors disabled:opacity-50"
+        >
+          {cancelling ? "Cancelling..." : "Cancel Deploy"}
+        </button>
+      )}
       {canDestroy && deploy.status === "success" && (
         <button
           type="button"

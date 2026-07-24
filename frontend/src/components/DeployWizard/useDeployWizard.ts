@@ -290,10 +290,29 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     setStep(prev => Math.max(prev - 1, 0));
   };
 
+  // ─── Cancel Deployment ─────────────────────────────────────────────
+
+  const [cancellingDeploy, setCancellingDeploy] = useState(false);
+
+  const cancelDeploy = useCallback(async () => {
+    if (!state.deploymentId) return;
+    setCancellingDeploy(true);
+    try {
+      await deployApi.cancelDeployment(state.deploymentId);
+      cleanupStandardDeployRef.current();
+      setState(prev => ({ ...prev, deployStatus: "cancelled" }));
+      setDeployError("Deployment cancelled.");
+    } catch (err: unknown) {
+      setDeployError(err instanceof Error ? err.message : "Failed to cancel deployment");
+    } finally {
+      setCancellingDeploy(false);
+    }
+  }, [state.deploymentId]);
+
   // ─── Derived State ───────────────────────────────────────────────
 
   const isDeploying = ["pending", "building", "deploying"].includes(state.deployStatus);
-  const isFinished = state.deployStatus === "success" || state.deployStatus === "failed";
+  const isFinished = state.deployStatus === "success" || state.deployStatus === "failed" || state.deployStatus === "cancelled";
 
   return {
     step,
@@ -306,6 +325,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     handleNext,
     handleBack,
     startDeploy,
+    cancelDeploy,
+    cancellingDeploy,
     generateScript,
     isDeploying,
     isFinished,

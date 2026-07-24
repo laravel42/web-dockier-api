@@ -197,6 +197,7 @@ export const statusBadgeColors: Record<string, string> = {
   deploying: "bg-primary-500/10 text-primary-500",
   pending: "bg-secondary-100 text-text-muted",
   destroyed: "bg-secondary-100 text-text-muted",
+  cancelled: "bg-amber-500/10 text-amber-600",
   completed: "bg-success-500/10 text-success-500",
   running: "bg-primary-500/10 text-primary-500",
 };
