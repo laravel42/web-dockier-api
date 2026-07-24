@@ -89,6 +89,30 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
 /**
  * Perform the actual DB queries for permission resolution.
  * Separated from resolvePermissions to keep the timeout wrapper clean.
+ *
+ * ─── Required Database Indexes ─────────────────────────────────────
+ *
+ * These queries run on EVERY authenticated request (before cache hit).
+ * Without proper indexes, they degrade to sequential scans under load.
+ *
+ * organization_memberships (migration 0004):
+ *   - idx_org_memberships_org_user ON (organization_id, user_id)
+ *     Used by Query 1 — membership lookup by org + user.
+ *
+ * roles (migration 0008):
+ *   - PRIMARY KEY on (id)
+ *     Used by Query 2a — role lookup by ID.
+ *   - idx_roles_org ON (organization_id)
+ *     Supports the .eq("organization_id", tenantId) filter.
+ *   - idx_roles_deleted ON (deleted_at) WHERE deleted_at IS NULL
+ *     Supports the .is("deleted_at", null) filter without scanning soft-deleted rows.
+ *
+ * role_permissions (migration 0035):
+ *   - idx_role_permissions_role ON (role_id)
+ *     Used by Query 2b — permission lookup by role.
+ *
+ * If adding a new query to this function, document its index dependency here.
+ * ───────────────────────────────────────────────────────────────────
  */
 async function resolvePermissionsFromDb(userId: string, tenantId: string, email: string): Promise<ResolvedAuth | null> {
   // Query 1: Fetch membership (validates user belongs to tenant and is active)
