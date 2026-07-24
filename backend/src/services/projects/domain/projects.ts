@@ -149,17 +149,19 @@ async function latestCommitForProject(tenantId: string, projectId: string): Prom
 }
 
 export async function getProject(projectId: string, tenantId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("projects")
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
-    .eq("id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-  const project = unwrapQuery(data, error, ProjectsError, {
+  const [projectResult, commit] = await Promise.all([
+    supabaseAdmin
+      .from("projects")
+      .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
+      .eq("id", projectId)
+      .eq("organization_id", tenantId)
+      .single(),
+    latestCommitForProject(tenantId, projectId),
+  ]);
+  const project = unwrapQuery(projectResult.data, projectResult.error, ProjectsError, {
     notFoundMsg: "Project not found",
     internalMsg: "Failed to fetch project",
   });
-  const commit = await latestCommitForProject(tenantId, projectId);
   return rowToProject(project, commit);
 }
 
