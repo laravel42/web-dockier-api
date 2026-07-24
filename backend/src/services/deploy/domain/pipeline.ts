@@ -23,7 +23,6 @@
  */
 
 import { readFile, writeFile, rm } from "node:fs/promises";
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { createDeployLogger, type ContextualLogger } from "../../../lib/logging.js";
 import { containerNameFor, stackNameFor } from "../../../lib/naming.js";
@@ -37,14 +36,13 @@ import { extractRegionFromScript } from "./gcp-helpers.js";
 import { getTemplateConfig } from "./project-templates.js";
 import { ADAPTER_TO_SERVICE, type InfraMetadata, serializeInfra } from "../types.js";
 import { revealEnv } from "../../projects/domain/env.js";
+import { getProjectDeployConfig } from "../../../shared/service-clients/projects.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
 
 import { appendLog, updateStatus, parseEnvContent, emitDeploySuccessNotification } from "./pipeline-helpers.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { waitForAppReady } from "./pipeline-health.js";
 import { getDeploymentCurrentStatus } from "./deployments.js";
-
-const db = supabaseAdmin;
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -140,16 +138,10 @@ export async function loadProjectContext(
 
   // Load deploy script and platform
   try {
-    const { data: projectRow } = await db
-      .from("projects")
-      .select("settings,platform")
-      .eq("id", event.projectId)
-      .maybeSingle();
-    if (projectRow?.settings && typeof projectRow.settings === "object" && !Array.isArray(projectRow.settings)) {
-      deployScript = (projectRow.settings as Record<string, unknown>).deployScript as string ?? "";
-    }
-    if (projectRow?.platform) {
-      knownPlatform = projectRow.platform as string;
+    const projectConfig = await getProjectDeployConfig(event.projectId);
+    if (projectConfig) {
+      deployScript = projectConfig.deployScript;
+      knownPlatform = projectConfig.platform;
     }
     if (deployScript) {
       await logger.info("Deploy script loaded from project settings");

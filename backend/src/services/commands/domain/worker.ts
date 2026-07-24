@@ -20,8 +20,8 @@ import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
 import type { InfraMetadata } from "../../deploy/types.js";
-import { parseInfra } from "../../deploy/types.js";
 
 export interface CommandJobInput {
   commandId: string;
@@ -55,28 +55,19 @@ export async function resolveExecutionTarget(
   projectId: string,
   tenantId: string,
 ): Promise<{ target: ExecutionTarget | null; errorMessage?: string }> {
-  // Find the latest successful deployment for this project
-  const { data: deployment } = await supabaseAdmin
-    .from("deployments")
-    .select("id, provider_id, deploy_strategy, app_url, docker_image, repo, infra")
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .eq("status", "success")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  const deployment = await getActiveDeployment(projectId, tenantId);
 
   if (!deployment) {
     return { target: null, errorMessage: "No active deployment found for this project. Deploy the project first to enable command execution." };
   }
 
   // Static deploys have no container to run commands in
-  if (deployment.deploy_strategy === "static") {
+  if (deployment.deployStrategy === "static") {
     return { target: null, errorMessage: "Commands are not supported for static site deployments (S3/Cloud Storage). There is no running container to execute commands in." };
   }
 
   // Get provider credentials for the server connection
-  const creds = await getProviderCredentialsSafe(deployment.provider_id);
+  const creds = await getProviderCredentialsSafe(deployment.providerId);
   if (!creds) {
     return { target: null, errorMessage: "Server provider not found. The provider may have been deleted." };
   }
@@ -87,10 +78,21 @@ export async function resolveExecutionTarget(
     region: creds.region,
   };
 
+  // Build the legacy DeploymentInfo shape needed by helper functions
+  const deploymentInfo: DeploymentInfo = {
+    id: deployment.id,
+    provider_id: deployment.providerId,
+    deploy_strategy: deployment.deployStrategy,
+    app_url: deployment.appUrl,
+    docker_image: deployment.dockerImage,
+    repo: deployment.repo,
+    infra: deployment.infra as unknown as Record<string, unknown> | null,
+  };
+
   // ── Fast path: use stored infra metadata (populated on deploys after migration 0047)
-  const infra = parseInfra(deployment.infra);
+  const infra = deployment.infra;
   if (infra) {
-    return resolveFromInfra(infra, provider, deployment);
+    return resolveFromInfra(infra, provider, deploymentInfo);
   }
 
   // ── Fallback: infer from deployment data (legacy deployments before infra column)
@@ -101,15 +103,15 @@ export async function resolveExecutionTarget(
     return { target: null, errorMessage: "Cannot determine container name from deployment." };
   }
 
-  if (deployment.deploy_strategy === "vps") {
-    return resolveVpsTarget(deployment, provider, containerName, tenantId);
+  if (deployment.deployStrategy === "vps") {
+    return resolveVpsTarget(deploymentInfo, provider, containerName, tenantId);
   }
 
-  if (deployment.deploy_strategy === "managed") {
-    return resolveManagedTarget(deployment, provider, containerName);
+  if (deployment.deployStrategy === "managed") {
+    return resolveManagedTarget(deploymentInfo, provider, containerName);
   }
 
-  return { target: null, errorMessage: `Unsupported deploy strategy: ${deployment.deploy_strategy}` };
+  return { target: null, errorMessage: `Unsupported deploy strategy: ${deployment.deployStrategy}` };
 }
 
 // ─── Infra-based resolution (preferred) ────────────────────────────

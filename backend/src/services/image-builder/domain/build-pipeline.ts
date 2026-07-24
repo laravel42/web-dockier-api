@@ -59,15 +59,12 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     let gitProvider: string | undefined;
     let gitEndpoint: string | undefined;
     if (gitConnectionId) {
-      const { data: conn } = await db
-        .from("git_connections")
-        .select("provider,personal_token,endpoint")
-        .eq("id", gitConnectionId)
-        .maybeSingle();
-      if (conn?.personal_token) {
-        gitToken = conn.personal_token;
-        gitProvider = conn.provider;
-        gitEndpoint = conn.endpoint || "";
+      const { getGitConnectionCredentials } = await import("../../../shared/service-clients/git-connections.js");
+      const creds = await getGitConnectionCredentials(gitConnectionId);
+      if (creds?.token) {
+        gitToken = creds.token;
+        gitProvider = creds.provider;
+        gitEndpoint = creds.endpoint;
       }
     }
 

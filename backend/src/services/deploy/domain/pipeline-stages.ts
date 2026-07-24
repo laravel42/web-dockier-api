@@ -10,10 +10,10 @@
  * share a single implementation.
  */
 
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { containerNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { getGitConnectionCredentials } from "../../../shared/service-clients/git-connections.js";
 import { getAdapter } from "./adapters/index.js";
 import { extractRegionFromScript } from "./gcp-helpers.js";
 import { executePostDeployScript } from "./post-deploy.js";
@@ -51,23 +51,15 @@ export async function stageProviderCredentials(ctx: PipelineContext): Promise<vo
 // ─── Stage 2: Clone Repository ──────────────────────────────────────
 
 export async function stageClone(ctx: PipelineContext): Promise<void> {
-  const { data: connRow, error } = await supabaseAdmin
-    .from("git_connections")
-    .select("provider, personal_token, endpoint")
-    .eq("id", ctx.event.gitConnectionId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Database error fetching git connection: ${error.message}`);
-  }
-  if (!connRow) throw new Error("Git connection not found");
+  const creds = await getGitConnectionCredentials(ctx.event.gitConnectionId);
+  if (!creds) throw new Error("Git connection not found");
 
   const result = await cloneRepo({
     git: {
-      provider: connRow.provider || "",
-      token: connRow.personal_token || "",
+      provider: creds.provider,
+      token: creds.token,
       repo: ctx.event.repo,
-      endpoint: connRow.endpoint || "",
+      endpoint: creds.endpoint,
     },
     branch: ctx.event.branch,
     shortId: ctx.shortId,

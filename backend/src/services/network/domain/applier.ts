@@ -17,10 +17,11 @@
  *   API handler → fetchRules → generateConfig → resolveTarget → applyToServer
  */
 
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
+import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import {
   listSecurityRules,
   listRedirectRules,
@@ -28,7 +29,6 @@ import {
 import { generateNginxConfig } from "./nginx-generator.js";
 import type { NginxGeneratorOutput } from "./nginx-generator.js";
 import { type ExecutionTarget } from "../../commands/domain/executor.js";
-import { parseInfra } from "../../deploy/types.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -37,15 +37,6 @@ export interface ApplyResult {
   message: string;
   /** The generated nginx config (for debugging/preview) */
   generatedConfig?: string;
-}
-
-interface DeploymentMeta {
-  id: string;
-  provider_id: string;
-  deploy_strategy: string;
-  docker_image: string;
-  repo: string;
-  infra: Record<string, unknown> | null;
 }
 
 // ─── Target Resolution ─────────────────────────────────────────────
@@ -58,29 +49,21 @@ async function resolveNginxTarget(
   projectId: string,
   tenantId: string,
 ): Promise<{ target: ExecutionTarget | null; appName: string; errorMessage?: string }> {
-  const { data: deployment } = await supabaseAdmin
-    .from("deployments")
-    .select("id, provider_id, deploy_strategy, docker_image, repo, infra")
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .eq("status", "success")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const deployment = await getActiveDeployment(projectId, tenantId);
 
   if (!deployment) {
     return { target: null, appName: "", errorMessage: "No active deployment found. Deploy the project first." };
   }
 
-  if (deployment.deploy_strategy !== "vps") {
+  if (deployment.deployStrategy !== "vps") {
     return {
       target: null,
       appName: "",
-      errorMessage: `Network rules are currently supported for VPS deployments only. This project uses "${deployment.deploy_strategy}" strategy.`,
+      errorMessage: `Network rules are currently supported for VPS deployments only. This project uses "${deployment.deployStrategy}" strategy.`,
     };
   }
 
-  const creds = await getProviderCredentialsSafe(deployment.provider_id);
+  const creds = await getProviderCredentialsSafe(deployment.providerId);
   if (!creds) {
     return { target: null, appName: "", errorMessage: "Server provider not found." };
   }
@@ -93,14 +76,13 @@ async function resolveNginxTarget(
 
   const appName = deriveRepoName(deployment.repo);
 
-  const rawInfra = deployment.infra || {};
-  const infra = parseInfra(deployment.infra);
+  const infra = deployment.infra;
   const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
-  const region = infra?.region || (rawInfra as Record<string, string>).region || provider.region || "us-east-1";
-  const containerName = infra?.containerName || (rawInfra as Record<string, string>).containerName || appName;
+  const region = infra?.region || provider.region || "us-east-1";
+  const containerName = infra?.containerName || appName;
 
   // AWS EC2 → SSM (preferred path: instanceId in infra)
-  const instanceId = infra?.instanceId || (rawInfra as Record<string, string>).instanceId;
+  const instanceId = infra?.instanceId;
   if (instanceId) {
     return {
       target: { instanceId, containerName, credentials, region },
@@ -109,10 +91,16 @@ async function resolveNginxTarget(
   }
 
   // AWS EC2 fallback: resolve instanceId from CFN stack or IP lookup
-  const serverIp = infra?.serverIp || (rawInfra as Record<string, string>).serverIp;
-  const stackName = infra?.stackName || (rawInfra as Record<string, string>).stackName;
+  const serverIp = infra?.serverIp;
+  const stackName = infra?.stackName;
   if (provider.provider === "aws" && (serverIp || stackName)) {
-    const resolvedInstanceId = await resolveEc2InstanceId(deployment, provider, region, rawInfra as Record<string, string>);
+    const rawInfra = infra as unknown as Record<string, string> || {};
+    const resolvedInstanceId = await resolveEc2InstanceId(
+      { id: deployment.id, provider_id: deployment.providerId, deploy_strategy: deployment.deployStrategy, docker_image: deployment.dockerImage, repo: deployment.repo, infra: rawInfra },
+      provider,
+      region,
+      rawInfra,
+    );
     if (resolvedInstanceId) {
       return {
         target: { instanceId: resolvedInstanceId, containerName, credentials, region },
@@ -139,6 +127,15 @@ async function resolveNginxTarget(
 }
 
 // ─── EC2 Instance Resolution (fallback) ────────────────────────────
+
+interface DeploymentMeta {
+  id: string;
+  provider_id: string;
+  deploy_strategy: string;
+  docker_image: string;
+  repo: string;
+  infra: Record<string, unknown> | null;
+}
 
 /**
  * Resolve EC2 instance ID when it's not in the infra metadata.
