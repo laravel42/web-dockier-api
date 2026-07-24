@@ -21,28 +21,14 @@ export function applyEnvRecord(
   }
 }
 
+import { parseEnvRecord } from "./parse-env.js";
+
+/**
+ * @deprecated Use `parseEnvRecord` from `./parse-env.js` directly.
+ * Kept for backward compatibility with the cloudflare-secrets script.
+ */
 export function parseEnvFileContent(content: string): Record<string, string> {
-  const record: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!match) continue;
-
-    let value = match[2].trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    record[match[1]] = value;
-  }
-
-  return record;
+  return parseEnvRecord(content);
 }
 
 export function parseSecretString(secretString: string): Record<string, unknown> {

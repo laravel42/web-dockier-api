@@ -39,7 +39,8 @@ import { revealEnv } from "../../projects/domain/env.js";
 import { getProjectDeployConfig } from "../../../shared/service-clients/projects.js";
 import { executeTemplatePipeline } from "./pipeline-template.js";
 
-import { appendLog, updateStatus, parseEnvContent, emitDeploySuccessNotification } from "./pipeline-helpers.js";
+import { appendLog, updateStatus, emitDeploySuccessNotification } from "./pipeline-helpers.js";
+import { parseEnvContent } from "../../../shared/env/parse-env.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { waitForAppReady } from "./pipeline-health.js";
 import { getDeploymentCurrentStatus } from "./deployments.js";
