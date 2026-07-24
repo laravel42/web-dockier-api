@@ -23,16 +23,15 @@ import type { TemplateConfig } from "./project-templates.js";
 import { appendLog, updateStatus } from "./pipeline-helpers.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
+import { containerNameFor, deriveRepoName } from "../../../lib/naming.js";
 import {
-  containerNameFor,
-  deriveRepoName,
   loadProjectContext,
   buildAdapterContext,
   applyNetworkRulesIfNeeded,
   finalizeDeploy,
   type PipelineInput,
   type ProviderResult,
-} from "./pipeline.js";
+} from "./pipeline-shared.js";
 
 // ─── Template Pipeline ─────────────────────────────────────────────
 

@@ -28,7 +28,7 @@ import {
   buildAdapterContext,
   applyNetworkRulesIfNeeded,
   finalizeDeploy,
-} from "./pipeline.js";
+} from "./pipeline-shared.js";
 
 // ─── Stage 1: Provider Credentials ─────────────────────────────────
 

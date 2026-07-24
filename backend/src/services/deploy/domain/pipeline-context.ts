@@ -17,7 +17,7 @@ import type { RunCmdFn } from "./run-cmd.js";
 import type { DeployAdapter } from "./adapters/types.js";
 import type { AdapterContext, ProvisionResult } from "./adapters/types.js";
 import { deriveRepoName } from "../../../lib/naming.js";
-import type { PipelineInput } from "./pipeline.js";
+import type { PipelineInput } from "./pipeline-shared.js";
 import type { CloudProvider } from "../types.js";
 
 export class PipelineContext {
