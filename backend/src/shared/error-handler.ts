@@ -26,9 +26,9 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
       const msg = error.message;
 
       if (error.code === "internal") {
-        request.log.error({ err: error, cause: error.cause }, `Domain error: ${msg}`);
+        request.log.error({ err: error, cause: error.cause, metadata: error.metadata }, `Domain error: ${msg}`);
       } else {
-        request.log.warn({ err: error, cause: error.cause }, `Domain warning: ${msg}`);
+        request.log.warn({ err: error, cause: error.cause, metadata: error.metadata }, `Domain warning: ${msg}`);
       }
 
       switch (error.code) {

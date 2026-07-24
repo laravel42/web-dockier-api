@@ -1,5 +1,5 @@
 export { supabaseAdmin } from "./client.js";
-export { DomainError, type BaseDomainErrorCode } from "./errors.js";
+export { DomainError, type BaseDomainErrorCode, type ErrorMetadata } from "./errors.js";
 export {
   throwOnError,
   assertFound,

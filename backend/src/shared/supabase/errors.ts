@@ -2,8 +2,9 @@
  * Base Domain Error
  *
  * All service-level domain errors extend this class.
- * Provides a consistent interface for error code classification
- * and optional cause preservation for debugging.
+ * Provides a consistent interface for error code classification,
+ * optional cause preservation for debugging, and structured metadata
+ * for observability.
  */
 
 export type BaseDomainErrorCode =
@@ -17,14 +18,33 @@ export type BaseDomainErrorCode =
   | "too_many_requests"
   | "service_unavailable";
 
+/**
+ * Structured metadata attached to domain errors for observability.
+ * Logged by the error handler alongside the error message and cause.
+ *
+ * @example
+ * ```ts
+ * throw new ProjectsError("Not found", "not_found", pgError, {
+ *   table: "projects",
+ *   operation: "select",
+ *   projectId: id,
+ * });
+ * ```
+ */
+export type ErrorMetadata = Record<string, unknown>;
+
 export class DomainError extends Error {
+  public readonly metadata?: ErrorMetadata;
+
   constructor(
     message: string,
     public readonly code: BaseDomainErrorCode,
     public readonly cause?: unknown,
+    metadata?: ErrorMetadata,
   ) {
     super(message);
     this.name = "DomainError";
+    if (metadata) this.metadata = metadata;
   }
 }
 
@@ -43,6 +63,7 @@ export class DomainError extends Error {
  * export type ProjectsError = InstanceType<typeof ProjectsError>;
  *
  * throw new ProjectsError("Not found", "not_found");
+ * throw new ProjectsError("Query failed", "internal", pgError, { table: "projects" });
  * ```
  */
 export function createDomainErrorClass<
@@ -51,8 +72,8 @@ export function createDomainErrorClass<
   class ServiceError extends DomainError {
     declare readonly code: TCode;
 
-    constructor(message: string, code: TCode, cause?: unknown) {
-      super(message, code, cause);
+    constructor(message: string, code: TCode, cause?: unknown, metadata?: ErrorMetadata) {
+      super(message, code, cause, metadata);
       this.name = className;
     }
   }
@@ -61,7 +82,7 @@ export function createDomainErrorClass<
   Object.defineProperty(ServiceError, "name", { value: className });
 
   return ServiceError as unknown as {
-    new (message: string, code: string, cause?: unknown): DomainError & { readonly code: TCode };
+    new (message: string, code: string, cause?: unknown, metadata?: ErrorMetadata): DomainError & { readonly code: TCode };
     prototype: DomainError;
   };
 }

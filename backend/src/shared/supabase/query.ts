@@ -34,11 +34,14 @@ export interface QueryErrorOptions {
  * Uses `string` for the code parameter to accommodate service-specific
  * error code unions that are subsets of BaseDomainErrorCode.
  */
+
+import type { ErrorMetadata } from "./errors.js";
  
 export type DomainErrorConstructor<E extends Error = Error> = new (
   message: string,
   code: string,
   cause?: unknown,
+  metadata?: ErrorMetadata,
 ) => E;
 
 /**
