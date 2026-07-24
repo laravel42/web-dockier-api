@@ -75,6 +75,22 @@ export class MemoryCache<V> implements CacheStore<V> {
   }
 
   /**
+   * Stop the sweep timer and clear all entries.
+   *
+   * Call this during server shutdown or in test teardown to prevent
+   * leaked timers. After calling destroy(), the cache is still usable
+   * (a new sweep timer starts on the next set()), but the old timer
+   * is guaranteed to be released.
+   */
+  destroy(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+    this.store.clear();
+  }
+
+  /**
    * Current number of entries (including potentially expired ones not yet swept).
    */
   get size(): number {

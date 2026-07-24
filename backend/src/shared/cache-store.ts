@@ -45,6 +45,9 @@ export interface CacheStore<V> {
 
   /** Clear all entries. */
   clear(): void;
+
+  /** Stop background timers and release resources. Cache remains usable after. */
+  destroy(): void;
 }
 
 /**
@@ -69,4 +72,7 @@ export interface AsyncCacheStore<V> {
 
   /** Clear all entries. */
   clear(): Promise<void>;
+
+  /** Stop background timers, close connections, and release resources. */
+  destroy(): Promise<void>;
 }

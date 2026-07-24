@@ -51,6 +51,10 @@ export function clearPermissionCache(): void {
   permissionCache.clear();
 }
 
+export function destroyPermissionCache(): void {
+  permissionCache.destroy();
+}
+
 /**
  * Resolve the full auth context for a user in a tenant.
  * Reduced from 3 queries to 2: membership+role validation in one round-trip

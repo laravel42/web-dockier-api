@@ -135,3 +135,10 @@ export function tenantRateLimit(options: RateLimitOptions = {}) {
 export function clearRateLimitStore(): void {
   store.clear();
 }
+
+/**
+ * Stop the sweep timer and clear all entries. Call during server shutdown.
+ */
+export function destroyRateLimitStore(): void {
+  store.destroy();
+}
