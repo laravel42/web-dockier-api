@@ -69,7 +69,31 @@ const envSchema = z
 
 export type AppEnv = z.infer<typeof envSchema>;
 
-export let env!: AppEnv;
+/**
+ * Application environment configuration.
+ *
+ * Backed by a Proxy that throws a clear error if any property is accessed
+ * before `initConfig()` completes. This catches initialization-order bugs
+ * at runtime with a descriptive message instead of silently returning undefined.
+ *
+ * After `initConfig()`, the proxy forwards all reads to the validated config object.
+ */
+let _env: AppEnv | null = null;
+
+export const env: AppEnv = new Proxy({} as AppEnv, {
+  get(_target, prop) {
+    if (_env === null) {
+      throw new Error(
+        `Config not initialized — cannot read env.${String(prop)} before initConfig() completes. ` +
+        "Ensure initConfig() is awaited in server.ts before importing modules that read config at load time.",
+      );
+    }
+    return _env[prop as keyof AppEnv];
+  },
+  set(_target, prop) {
+    throw new Error(`env.${String(prop)} is read-only — configuration cannot be mutated after initialization.`);
+  },
+});
 
 let initialized = false;
 
@@ -115,10 +139,10 @@ function parseEnv(): AppEnv {
  * Must complete before importing app modules (supabase client, crypto, etc.).
  */
 export async function initConfig(): Promise<AppEnv> {
-  if (initialized) return env;
+  if (initialized) return _env!;
 
   await bootstrapEnv();
-  env = parseEnv();
+  _env = parseEnv();
   initialized = true;
-  return env;
+  return _env;
 }
