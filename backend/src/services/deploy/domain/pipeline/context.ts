@@ -11,14 +11,14 @@
  * a clear runtime error.
  */
 
-import type { ContextualLogger } from "../../../lib/logging.js";
-import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
-import type { RunCmdFn } from "./run-cmd.js";
-import type { DeployAdapter } from "./adapters/types.js";
-import type { AdapterContext, ProvisionResult } from "./adapters/types.js";
-import { deriveRepoName } from "../../../lib/naming.js";
-import type { PipelineInput } from "./pipeline-shared.js";
-import type { CloudProvider } from "../types.js";
+import type { ContextualLogger } from "../../../../lib/logging.js";
+import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
+import type { RunCmdFn } from "../run-cmd.js";
+import type { DeployAdapter } from "../adapters/types.js";
+import type { AdapterContext, ProvisionResult } from "../adapters/types.js";
+import { deriveRepoName } from "../../../../lib/naming.js";
+import type { PipelineInput } from "./shared.js";
+import type { CloudProvider } from "../../types.js";
 
 export class PipelineContext {
   // ─── Immutable inputs (set at construction) ───────────────────

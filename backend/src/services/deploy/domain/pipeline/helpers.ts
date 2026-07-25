@@ -12,8 +12,8 @@
 import {
   appendDeploymentLog,
   setDeploymentStatus,
-} from "./deployments.js";
-import { emit } from "../../../shared/events.js";
+} from "../deployments.js";
+import { emit } from "../../../../shared/events.js";
 
 // ─── Deployment Log ────────────────────────────────────────────────
 
@@ -117,7 +117,7 @@ export function emitDeployFailureNotification(params: {
 
 // ─── Error Classification ──────────────────────────────────────────
 
-import { BuildError, ProvisionError } from "../../../lib/logging.js";
+import { BuildError, ProvisionError } from "../../../../lib/logging.js";
 
 export interface ErrorClassification {
   category: "build" | "infra" | "post-deploy" | "unknown";

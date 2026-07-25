@@ -11,20 +11,20 @@
  */
 
 import { rm } from "node:fs/promises";
-import { logger as obsLogger } from "../../../shared/logger.js";
-import { createDeployLogger } from "../../../lib/logging.js";
-import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
-import { createStreamingRunCmd } from "./run-cmd.js";
-import { extractRegionFromScript } from "./gcp-helpers.js";
-import { getTemplateConfig } from "./project-templates.js";
-import { isCloudProvider } from "../types.js";
-import { executeTemplatePipeline } from "./pipeline-template.js";
+import { logger as obsLogger } from "../../../../shared/logger.js";
+import { createDeployLogger } from "../../../../lib/logging.js";
+import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
+import { createStreamingRunCmd } from "../run-cmd.js";
+import { extractRegionFromScript } from "../gcp-helpers.js";
+import { getTemplateConfig } from "../project-templates.js";
+import { isCloudProvider } from "../../types.js";
+import { executeTemplatePipeline } from "./template.js";
 
-import { appendLog, updateStatus, emitDeployFailureNotification, classifyPipelineError } from "./pipeline-helpers.js";
-import { logTimestamp as ts } from "../../../shared/utils/time.js";
-import { getDeploymentCurrentStatus } from "./deployments.js";
+import { appendLog, updateStatus, emitDeployFailureNotification, classifyPipelineError } from "./helpers.js";
+import { logTimestamp as ts } from "../../../../shared/utils/time.js";
+import { getDeploymentCurrentStatus } from "../deployments.js";
 
-import { PipelineContext } from "./pipeline-context.js";
+import { PipelineContext } from "./context.js";
 import {
   stageProviderCredentials,
   stageClone,
@@ -36,12 +36,12 @@ import {
   stageNetworkRules,
   stageFinalize,
   stageRestoreProcesses,
-} from "./pipeline-stages.js";
+} from "./stages.js";
 
-import type { PipelineInput, ProviderResult } from "./pipeline-shared.js";
+import type { PipelineInput, ProviderResult } from "./shared.js";
 
 // Re-export types so existing worker.ts import path continues to work.
-export type { PipelineInput, ProjectContext, ProviderResult } from "./pipeline-shared.js";
+export type { PipelineInput, ProjectContext, ProviderResult } from "./shared.js";
 
 // ─── Private: Fetch Provider Credentials (template path) ───────────
 

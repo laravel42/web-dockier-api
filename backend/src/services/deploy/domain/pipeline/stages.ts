@@ -10,25 +10,25 @@
  * share a single implementation.
  */
 
-import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
-import { containerNameFor } from "../../../lib/naming.js";
-import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
-import { getGitConnectionCredentials } from "../../../shared/service-clients/git-connections.js";
-import { getAdapter } from "./adapters/index.js";
-import { extractRegionFromScript } from "./gcp-helpers.js";
-import { executePostDeployScript } from "./post-deploy.js";
-import { isCloudProvider } from "../types.js";
+import { cloneRepo, analyzeAndGenerate } from "../../../../lib/build-pipeline.js";
+import { containerNameFor } from "../../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
+import { getGitConnectionCredentials } from "../../../../shared/service-clients/git-connections.js";
+import { getAdapter } from "../adapters/index.js";
+import { extractRegionFromScript } from "../gcp-helpers.js";
+import { executePostDeployScript } from "../post-deploy.js";
+import { isCloudProvider } from "../../types.js";
 
-import { buildImage } from "./pipeline-build.js";
-import { patchDeployment } from "./deployments.js";
-import { restoreProcessesAfterDeploy } from "../../processes/domain/post-deploy-restore.js";
-import type { PipelineContext } from "./pipeline-context.js";
+import { buildImage } from "./build.js";
+import { patchDeployment } from "../deployments.js";
+import { restoreProcessesAfterDeploy } from "../../../processes/domain/post-deploy-restore.js";
+import type { PipelineContext } from "./context.js";
 import {
   loadProjectContext,
   buildAdapterContext,
   applyNetworkRulesIfNeeded,
   finalizeDeploy,
-} from "./pipeline-shared.js";
+} from "./shared.js";
 
 // ─── Stage 1: Provider Credentials ─────────────────────────────────
 

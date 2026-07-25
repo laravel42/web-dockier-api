@@ -5,9 +5,9 @@
  * or times out. Results are written to the deployment logs.
  */
 
-import { pollUntil } from "./poll-until.js";
-import { appendLog } from "./pipeline-helpers.js";
-import { logTimestamp as ts } from "../../../shared/utils/time.js";
+import { pollUntil } from "../poll-until.js";
+import { appendLog } from "./helpers.js";
+import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 
 /**
  * Wait for the deployed application to become reachable.

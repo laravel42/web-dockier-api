@@ -14,21 +14,21 @@
  */
 
 import { readFile, writeFile, rm } from "node:fs/promises";
-import { logger as obsLogger } from "../../../shared/logger.js";
-import type { ContextualLogger } from "../../../lib/logging.js";
-import { containerNameFor, stackNameFor } from "../../../lib/naming.js";
-import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
-import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
-import type { AdapterContext, ProvisionResult, DeployAdapter } from "./adapters/types.js";
-import type { RunCmdFn } from "./run-cmd.js";
-import { ADAPTER_TO_SERVICE, type CloudProvider, type InfraMetadata, serializeInfra } from "../types.js";
-import { revealEnv } from "../../projects/domain/env.js";
-import { getProjectDeployConfig } from "../../../shared/service-clients/projects.js";
-import { parseEnvContent } from "../../../shared/env/parse-env.js";
+import { logger as obsLogger } from "../../../../shared/logger.js";
+import type { ContextualLogger } from "../../../../lib/logging.js";
+import { containerNameFor, stackNameFor } from "../../../../lib/naming.js";
+import { toDetectedStack } from "../../../../lib/repo-analyzer/index.js";
+import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
+import type { AdapterContext, ProvisionResult, DeployAdapter } from "../adapters/types.js";
+import type { RunCmdFn } from "../run-cmd.js";
+import { ADAPTER_TO_SERVICE, type CloudProvider, type InfraMetadata, serializeInfra } from "../../types.js";
+import { revealEnv } from "../../../projects/domain/env.js";
+import { getProjectDeployConfig } from "../../../../shared/service-clients/projects.js";
+import { parseEnvContent } from "../../../../shared/env/parse-env.js";
 
-import { appendLog, updateStatus, emitDeploySuccessNotification } from "./pipeline-helpers.js";
-import { logTimestamp as ts } from "../../../shared/utils/time.js";
-import { waitForAppReady } from "./pipeline-health.js";
+import { appendLog, updateStatus, emitDeploySuccessNotification } from "./helpers.js";
+import { logTimestamp as ts } from "../../../../shared/utils/time.js";
+import { waitForAppReady } from "./health.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -176,7 +176,7 @@ export async function applyNetworkRulesIfNeeded(
   if (!event.projectId || deployStrategy !== "vps") return;
 
   try {
-    const { applyNetworkRules } = await import("../../network/domain/applier.js");
+    const { applyNetworkRules } = await import("../../../network/domain/applier.js");
     const networkResult = await applyNetworkRules({
       tenantId: event.tenantId,
       projectId: event.projectId,

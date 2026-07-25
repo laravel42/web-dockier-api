@@ -7,7 +7,7 @@
  */
 
 import { createWorker, DEPLOY_QUEUE } from "../../../shared/queue.js";
-import { executePipeline, type PipelineInput } from "./pipeline.js";
+import { executePipeline, type PipelineInput } from "./pipeline/pipeline.js";
 
 const deployWorker = createWorker<PipelineInput>(
   DEPLOY_QUEUE,
