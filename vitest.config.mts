@@ -5,5 +5,6 @@ export default defineConfig({
     include: ["**/__tests__/**/*.test.ts"],
     exclude: ["**/node_modules/**"],
     testTimeout: 30000,
+    setupFiles: ["./backend/src/shared/__tests__/setup.ts"],
   },
 });
