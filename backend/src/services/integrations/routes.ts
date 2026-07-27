@@ -65,8 +65,8 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         summary: "Create PM integration",
         body: z.object({
           provider: z.enum(PM_PROVIDERS),
-          name: z.string().min(1),
-          config: z.record(z.string(), z.string()),
+          name: z.string().min(1).max(100),
+          config: z.record(z.string().max(100), z.string().max(5000)),
           enabled: z.boolean().optional(),
         }),
         response: { 200: pmIntegrationSchema },
@@ -93,8 +93,8 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         summary: "Update PM integration",
         params: z.object({ integrationId: z.uuid() }),
         body: z.object({
-          name: z.string().min(1).optional(),
-          config: z.record(z.string(), z.string()).optional(),
+          name: z.string().min(1).max(100).optional(),
+          config: z.record(z.string().max(100), z.string().max(5000)).optional(),
           enabled: z.boolean().optional(),
         }),
         response: { 200: pmIntegrationSchema },

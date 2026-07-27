@@ -42,14 +42,14 @@ export const authMeSchema = z.object({
 });
 
 export const billingDetailsSchema = z.object({
-  companyName: z.string(),
-  legalName: z.string(),
-  taxId: z.string(),
-  addressLine1: z.string(),
-  addressLine2: z.string(),
-  city: z.string(),
-  state: z.string(),
-  postalCode: z.string(),
-  country: z.string(),
-  billingEmail: z.string(),
+  companyName: z.string().max(200),
+  legalName: z.string().max(200),
+  taxId: z.string().max(50),
+  addressLine1: z.string().max(300),
+  addressLine2: z.string().max(300),
+  city: z.string().max(100),
+  state: z.string().max(100),
+  postalCode: z.string().max(20),
+  country: z.string().max(100),
+  billingEmail: z.email().max(254),
 });

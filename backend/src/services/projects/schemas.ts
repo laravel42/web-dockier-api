@@ -5,13 +5,13 @@ export const projectConfigSchema = z.object({
 });
 
 export const projectSettingsSchema = z.object({
-  color: z.string().optional(),
-  avatar: z.string().optional(),
-  notes: z.string().optional(),
-  frameworkVersion: z.string().optional(),
-  rootDirectory: z.string().optional(),
-  webDirectory: z.string().optional(),
-  deployScript: z.string().optional(),
+  color: z.string().max(50).optional(),
+  avatar: z.string().max(500).optional(),
+  notes: z.string().max(5000).optional(),
+  frameworkVersion: z.string().max(50).optional(),
+  rootDirectory: z.string().max(500).optional(),
+  webDirectory: z.string().max(500).optional(),
+  deployScript: z.string().max(50_000).optional(),
 }).passthrough();
 
 export const projectSchema = z.object({

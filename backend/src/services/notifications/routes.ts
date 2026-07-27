@@ -27,7 +27,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         summary: "Add notification channel",
         body: z.object({
           type: channelTypeSchema,
-          config: z.record(z.string(), z.string()),
+          config: z.record(z.string().max(100), z.string().max(2000)),
         }),
         response: { 200: channelSchema },
       },
@@ -104,8 +104,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
         tags: ["notifications"],
         summary: "Send notification to enabled channels",
         body: z.object({
-          title: z.string().min(1),
-          message: z.string().min(1),
+          title: z.string().min(1).max(200),
+          message: z.string().min(1).max(5000),
           channels: z.array(channelTypeSchema).optional(),
         }),
         response: { 200: z.object({ sent: z.number().int().nonnegative() }) },

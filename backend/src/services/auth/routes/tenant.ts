@@ -111,7 +111,7 @@ export async function registerTenantRoutes(app: FastifyInstance) {
         params: z.object({ tenantId: z.uuid() }),
         body: z.object({
           email: z.email(),
-          roleId: z.string().min(1),
+          roleId: z.string().min(1).max(100),
         }),
         response: { 200: successResponseSchema },
       },

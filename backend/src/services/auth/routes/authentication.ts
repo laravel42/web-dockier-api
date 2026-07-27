@@ -70,7 +70,7 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
         summary: "Password-based login (development)",
         body: z.object({
           email: z.email(),
-          password: z.string().min(1),
+          password: z.string().min(1).max(200),
         }),
         response: {
           200: z.object({ session: authSessionSchema, memberships: z.array(membershipSchema) }),
@@ -151,7 +151,7 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
         summary: "Verify OTP/magic link token and issue tenant-scoped API JWT",
         body: z.object({
           email: z.email(),
-          token: z.string().min(4),
+          token: z.string().min(4).max(100),
           type: z.enum(["email", "magiclink", "signup"]).default("email"),
           tenantSlug: z.string().min(2).max(60).optional(),
           tenantName: z.string().min(2).max(120).optional(),
