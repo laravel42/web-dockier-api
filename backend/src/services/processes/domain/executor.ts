@@ -33,6 +33,35 @@ function assertSafeCommand(command: string): void {
   }
 }
 
+/**
+ * Fetch a process row and assert it belongs to the given tenant + project.
+ * Throws not_found if the row doesn't exist or doesn't match the scope.
+ */
+async function fetchProcessOrThrow(
+  processId: string,
+  projectId: string,
+  tenantId: string,
+  columns = "*",
+): Promise<BackgroundProcessRow> {
+  const { data } = await db
+    .from("background_processes")
+    .select(columns)
+    .eq("id", processId)
+    .eq("project_id", projectId)
+    .eq("organization_id", tenantId)
+    .single();
+
+  if (!data) throw new ProcessesError("Process not found", "not_found");
+
+  // Defense-in-depth: verify organization_id even if PostgREST filter is correct.
+  // This guards against future query refactors that might accidentally drop the filter.
+  if (columns === "*" && (data as BackgroundProcessRow).organization_id !== tenantId) {
+    throw new ProcessesError("Access denied", "forbidden");
+  }
+
+  return data as BackgroundProcessRow;
+}
+
 /** Marker must be alphanumeric + underscore only. */
 function buildMarker(processId: string): string {
   const short = processId.replace(/[^a-f0-9]/g, "").slice(0, 8);
@@ -53,17 +82,8 @@ export async function startProcess(params: {
 }): Promise<{ success: boolean; message: string }> {
   const { tenantId, projectId, processId } = params;
 
-  // Fetch the process config — scoped to tenant + project for security
-  const { data: proc } = await db
-    .from("background_processes")
-    .select("*")
-    .eq("id", processId)
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  if (!proc) throw new ProcessesError("Process not found", "not_found");
-  const process = proc as BackgroundProcessRow;
+  // Fetch the process config — scoped to tenant + project with ownership assertion
+  const process = await fetchProcessOrThrow(processId, projectId, tenantId);
 
   // Validate the command before execution
   assertSafeCommand(process.command);
@@ -123,16 +143,8 @@ export async function stopProcess(params: {
 }): Promise<{ success: boolean; message: string }> {
   const { tenantId, projectId, processId } = params;
 
-  // Verify ownership
-  const { data: proc } = await db
-    .from("background_processes")
-    .select("id")
-    .eq("id", processId)
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  if (!proc) throw new ProcessesError("Process not found", "not_found");
+  // Verify ownership with defense-in-depth assertion
+  await fetchProcessOrThrow(processId, projectId, tenantId, "id,organization_id");
 
   // Resolve execution target
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
@@ -192,16 +204,8 @@ export async function getProcessLogs(params: {
   // Validate and cap lines to prevent abuse
   const lines = Math.min(Math.max(params.lines ?? 100, 1), 1000);
 
-  // Verify ownership
-  const { data: proc } = await db
-    .from("background_processes")
-    .select("id")
-    .eq("id", processId)
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  if (!proc) throw new ProcessesError("Process not found", "not_found");
+  // Verify ownership with defense-in-depth assertion
+  await fetchProcessOrThrow(processId, projectId, tenantId, "id,organization_id");
 
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
   if (!target) {

@@ -58,15 +58,14 @@ function buildCronExpression(job: ScheduledJobRow): string {
 }
 
 /**
- * Install a scheduled job by adding a cron entry inside the container.
+ * Fetch a scheduled job row and assert it belongs to the given tenant + project.
+ * Throws not_found if the row doesn't exist or doesn't match the scope.
  */
-export async function installJob(params: {
-  tenantId: string;
-  projectId: string;
-  jobId: string;
-}): Promise<{ success: boolean; message: string }> {
-  const { tenantId, projectId, jobId } = params;
-
+async function fetchJobOrThrow(
+  jobId: string,
+  projectId: string,
+  tenantId: string,
+): Promise<ScheduledJobRow> {
   const { data: job } = await db
     .from("scheduled_jobs")
     .select("*")
@@ -76,7 +75,26 @@ export async function installJob(params: {
     .single();
 
   if (!job) throw new ProcessesError("Job not found", "not_found");
-  const jobRow = job as ScheduledJobRow;
+
+  // Defense-in-depth: verify organization_id even if PostgREST filter is correct.
+  if ((job as ScheduledJobRow).organization_id !== tenantId) {
+    throw new ProcessesError("Access denied", "forbidden");
+  }
+
+  return job as ScheduledJobRow;
+}
+
+/**
+ * Install a scheduled job by adding a cron entry inside the container.
+ */
+export async function installJob(params: {
+  tenantId: string;
+  projectId: string;
+  jobId: string;
+}): Promise<{ success: boolean; message: string }> {
+  const { tenantId, projectId, jobId } = params;
+
+  const jobRow = await fetchJobOrThrow(jobId, projectId, tenantId);
 
   // Validate inputs before executing on infrastructure
   assertSafeUser(jobRow.user);
@@ -138,16 +156,7 @@ export async function pauseJob(params: {
 }): Promise<{ success: boolean; message: string }> {
   const { tenantId, projectId, jobId } = params;
 
-  const { data: job } = await db
-    .from("scheduled_jobs")
-    .select("*")
-    .eq("id", jobId)
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .single();
-
-  if (!job) throw new ProcessesError("Job not found", "not_found");
-  const jobRow = job as ScheduledJobRow;
+  const jobRow = await fetchJobOrThrow(jobId, projectId, tenantId);
 
   assertSafeUser(jobRow.user);
 

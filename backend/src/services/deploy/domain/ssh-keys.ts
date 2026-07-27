@@ -84,10 +84,11 @@ export async function createSshKey(params: CreateSshKeyParams) {
 }
 
 export async function deleteSshKey(keyId: string, tenantId: string) {
-  const { error } = await supabaseAdmin
+  const { error, count } = await supabaseAdmin
     .from("ssh_keys")
-    .delete()
+    .delete({ count: "exact" })
     .eq("id", keyId)
     .eq("organization_id", tenantId);
   throwOnError(error, DeployError, { internalMsg: "Failed to delete SSH key" });
+  if (count === 0) throw new DeployError("SSH key not found", "not_found");
 }
