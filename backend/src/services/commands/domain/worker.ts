@@ -15,6 +15,7 @@
  */
 
 import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/queue.js";
+import { getCfn, getEc2 } from "../../../lib/aws-sdk.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
@@ -290,7 +291,7 @@ async function resolveEc2InstanceId(
 
   // Strategy 1: Look up the CloudFormation stack by name
   try {
-    const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient, DescribeStacksCommand } = await getCfn();
     const cfn = new CloudFormationClient({ region: provider.region, credentials });
 
     const repoName = deriveRepoName(deployment.repo);
@@ -316,7 +317,7 @@ async function resolveEc2InstanceId(
   const serverIp = extractIpFromUrl(deployment.app_url);
   if (serverIp) {
     try {
-      const { EC2Client, DescribeInstancesCommand } = await import("@aws-sdk/client-ec2");
+      const { EC2Client, DescribeInstancesCommand } = await getEc2();
       const ec2 = new EC2Client({ region: provider.region, credentials });
 
       const descResult = await ec2.send(new DescribeInstancesCommand({

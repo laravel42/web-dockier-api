@@ -6,6 +6,7 @@
  */
 
 import type { ContextualLogger } from "../../../lib/logging.js";
+import { getSsm } from "../../../lib/aws-sdk.js";
 import { revealWpConfig } from "../../projects/domain/wp-config.js";
 import { pollUntil } from "./poll-until.js";
 import type { RunCmdFn } from "./run-cmd.js";
@@ -106,7 +107,7 @@ async function injectViaSsm(
   const { containerName, instanceId, region, credentials } = ctx;
   if (!instanceId) return;
 
-  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await getSsm();
   const ssm = new SSMClient({
     region,
     credentials: { accessKeyId: credentials.apiKey, secretAccessKey: credentials.apiSecret },

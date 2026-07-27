@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAwsAccountId } from "../../../lib/aws.js";
+import { getS3, getCfn, getEc2 } from "../../../lib/aws-sdk.js";
 import { deriveRepoName as deriveAppName, stackNameFor as deriveStackName } from "../../../lib/naming.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
@@ -109,7 +110,7 @@ export async function checkDeployStatus(params: CheckStackStatusParams): Promise
   const appName = deriveAppName(build.sourceRepo);
   const stackName = deriveStackName(appName);
 
-  const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+  const { CloudFormationClient, DescribeStacksCommand } = await getCfn();
   const cfn = new CloudFormationClient({
     region: credentials.region,
     credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
@@ -262,7 +263,7 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
   const { buildId, credentials, appName, stackName, imageUri, containerPort, deployParams, cfn, logger } = params;
 
   // Discover VPC and subnet
-  const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await import("@aws-sdk/client-ec2");
+  const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await getEc2();
   const ec2 = new EC2Client({
     region: credentials.region,
     credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
@@ -281,7 +282,7 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
   }
 
   // Upload CFN template to S3
-  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const { S3Client, PutObjectCommand } = await getS3();
   const accountId = await getAwsAccountId(credentials.region, {
     accessKeyId: credentials.accessKeyId,
     secretAccessKey: credentials.secretAccessKey,
@@ -326,7 +327,7 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
   }
 
   // Create or update the stack
-  const { CreateStackCommand, UpdateStackCommand } = await import("@aws-sdk/client-cloudformation");
+  const { CreateStackCommand, UpdateStackCommand } = await getCfn();
 
   try {
     await cfn.send(new CreateStackCommand({
@@ -406,7 +407,7 @@ async function appendEnvVarsParameter(
 
   if (envVarsJson.length > 4000) {
     // Upload to S3 — CloudFormation parameter limit is 4096 chars
-    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const { PutObjectCommand } = await getS3();
     const envVarsKey = `env-vars/${stackName}/${buildId}.json`;
     await s3.send(new PutObjectCommand({
       Bucket: templateBucket,

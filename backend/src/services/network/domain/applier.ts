@@ -18,6 +18,7 @@
  */
 
 import { logger } from "../../../shared/logger.js";
+import { getCfn, getEc2, getSsm } from "../../../lib/aws-sdk.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
@@ -154,7 +155,7 @@ async function resolveEc2InstanceId(
   const stackName = infra.stackName || stackNameFor(repoName);
 
   try {
-    const { CloudFormationClient, DescribeStacksCommand } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient, DescribeStacksCommand } = await getCfn();
     const cfn = new CloudFormationClient({ region, credentials });
 
     const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
@@ -175,7 +176,7 @@ async function resolveEc2InstanceId(
   const serverIp = infra.serverIp;
   if (serverIp) {
     try {
-      const { EC2Client, DescribeInstancesCommand } = await import("@aws-sdk/client-ec2");
+      const { EC2Client, DescribeInstancesCommand } = await getEc2();
       const ec2 = new EC2Client({ region, credentials });
 
       const descResult = await ec2.send(new DescribeInstancesCommand({
@@ -212,7 +213,7 @@ async function executeOnHost(target: ExecutionTarget, script: string): Promise<H
     return { exitCode: 1, output: "Missing instanceId, credentials, or region for host execution." };
   }
 
-  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await getSsm();
   const ssm = new SSMClient({
     region: target.region,
     credentials: { accessKeyId: target.credentials.apiKey, secretAccessKey: target.credentials.apiSecret },

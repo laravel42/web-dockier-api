@@ -5,6 +5,8 @@
  * so that each service doesn't need its own copy.
  */
 
+import { getS3, getSts } from "./aws-sdk.js";
+
 /** Standard AWS credential pair used across services. */
 export interface AwsCredentials {
   accessKeyId: string;
@@ -39,7 +41,7 @@ export async function ensureS3Bucket(
   credentials: AwsCredentials,
   bucketName: string,
 ): Promise<void> {
-  const { S3Client, HeadBucketCommand, CreateBucketCommand } = await import("@aws-sdk/client-s3");
+  const { S3Client, HeadBucketCommand, CreateBucketCommand } = await getS3();
   const s3 = new S3Client({ region, credentials });
 
   try {
@@ -78,7 +80,7 @@ export async function getAwsAccountId(
   region: string,
   credentials: AwsCredentials,
 ): Promise<string> {
-  const { STSClient, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+  const { STSClient, GetCallerIdentityCommand } = await getSts();
   const sts = new STSClient({ region, credentials });
   const identity = await sts.send(new GetCallerIdentityCommand({}));
   return identity.Account || "";

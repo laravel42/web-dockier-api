@@ -12,6 +12,7 @@ import type { RepoConfig } from "../../../lib/repo-analyzer/types.js";
 import { toDetectedStack } from "../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../lib/buildspec-generator/index.js";
 import { getAwsAccountId, ensureS3Bucket } from "../../../lib/aws.js";
+import { getS3, getSns, getCodeBuild } from "../../../lib/aws-sdk.js";
 import { env } from "../../../shared/config.js";
 import { logTimestamp as ts } from "../../../shared/utils/time.js";
 
@@ -93,7 +94,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   await logFn(deploymentId, `[${ts()}] ℹ Source bundle: ${(zipBuffer.length / 1024 / 1024).toFixed(1)} MB`);
 
   // 4. Upload to S3
-  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const { S3Client, PutObjectCommand } = await getS3();
   const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
   const s3Key = `${deploymentId}.zip`;
   await ensureS3Bucket(region, { accessKeyId, secretAccessKey }, bucketName);
@@ -109,7 +110,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   const callbackUrl = env.DEPLOY_CALLBACK_URL ?? "";
   const webhookSecret = env.WEBHOOK_SECRET ?? "";
 
-  const { SNSClient, PublishCommand } = await import("@aws-sdk/client-sns");
+  const { SNSClient, PublishCommand } = await getSns();
   const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
   const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
 
@@ -225,7 +226,7 @@ async function pollCodeBuild(opts: {
   const { deploymentId, codebuildProject, region, accessKeyId, secretAccessKey, accountId, imageRepoName, commitHash, appendLog: logFn } = opts;
   const credentials = { accessKeyId, secretAccessKey };
 
-  const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await import("@aws-sdk/client-codebuild");
+  const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await getCodeBuild();
   const cbClient = new CodeBuildClient({ region, credentials });
 
   let codebuildId = "";

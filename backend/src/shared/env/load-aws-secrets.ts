@@ -4,6 +4,7 @@
  */
 
 import { applyEnvRecord, parseSecretString } from "./apply-env-record.js";
+import { getSecretsManager, getSsm } from "../../lib/aws-sdk.js";
 
 function shouldLoadAwsSecrets(): boolean {
   if (process.env.LOAD_SECRETS_FROM === "file") return false;
@@ -15,7 +16,7 @@ function shouldLoadAwsSecrets(): boolean {
 }
 
 async function loadSecretsManagerSecret(secretId: string): Promise<void> {
-  const { SecretsManagerClient, GetSecretValueCommand } = await import("@aws-sdk/client-secrets-manager");
+  const { SecretsManagerClient, GetSecretValueCommand } = await getSecretsManager();
   const client = new SecretsManagerClient({
     region: process.env.AWS_REGION,
   });
@@ -40,7 +41,7 @@ function parameterNameToEnvKey(name: string, pathPrefix: string): string {
 }
 
 async function loadSsmParameters(pathPrefix: string): Promise<void> {
-  const { SSMClient, GetParametersByPathCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, GetParametersByPathCommand } = await getSsm();
   const client = new SSMClient({
     region: process.env.AWS_REGION,
   });

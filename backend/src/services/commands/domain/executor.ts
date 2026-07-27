@@ -10,6 +10,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { getEcs, getSsm } from "../../../lib/aws-sdk.js";
 
 const COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -106,7 +107,7 @@ async function executeViaEcsRunTask(
     const {
       ECSClient, RunTaskCommand, DescribeTasksCommand, DescribeServicesCommand,
       waitUntilTasksStopped,
-    } = await import("@aws-sdk/client-ecs");
+    } = await getEcs();
     const ecs = new ECSClient({
       region: region!,
       credentials: { accessKeyId: credentials!.apiKey, secretAccessKey: credentials!.apiSecret },
@@ -179,7 +180,7 @@ async function resolveEcsNetworkConfig(
   serviceName: string,
 ): Promise<{ awsvpcConfiguration: { subnets: string[]; assignPublicIp: "ENABLED" | "DISABLED"; securityGroups?: string[] } }> {
   try {
-    const { DescribeServicesCommand } = await import("@aws-sdk/client-ecs");
+    const { DescribeServicesCommand } = await getEcs();
     const result = await ecs.send(new DescribeServicesCommand({
       cluster,
       services: [serviceName],
@@ -335,7 +336,7 @@ async function executeViaSSM(
 ): Promise<ExecutionResult> {
   const { instanceId, credentials, region, containerName } = target;
 
-  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await getSsm();
   const ssm = new SSMClient({
     region: region!,
     credentials: { accessKeyId: credentials!.apiKey, secretAccessKey: credentials!.apiSecret },

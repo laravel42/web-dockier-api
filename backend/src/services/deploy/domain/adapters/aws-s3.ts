@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { join, extname } from "node:path";
 import { readdirSync, statSync, readFileSync } from "node:fs";
+import { getS3, getCfn } from "../../../../lib/aws-sdk.js";
 import type {
   DeployAdapter,
   AdapterContext,
@@ -223,7 +224,7 @@ export class AwsS3Adapter implements DeployAdapter {
     ];
 
     // 9. Create or update CloudFormation stack
-    const { CloudFormationClient } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient } = await getCfn();
     const cfn = new CloudFormationClient({ region, credentials });
 
     await cleanupStuckStack(cfn, stackName, appendLog);
@@ -265,7 +266,7 @@ export class AwsS3Adapter implements DeployAdapter {
     uploadDir: string,
     appendLog: (line: string) => Promise<void>,
   ): Promise<void> {
-    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const { PutObjectCommand } = await getS3();
 
     let fileCount = 0;
     const filesToUpload: Array<{ fullPath: string; objectKey: string }> = [];
@@ -330,7 +331,7 @@ export class AwsS3Adapter implements DeployAdapter {
 
     // Delete S3 static site bucket (empty objects first, do this before stack finishes deleting)
     try {
-      const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await import("@aws-sdk/client-s3");
+      const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await getS3();
       const s3 = new S3Client({ region: ctx.region, credentials });
       const bucketName = `${sanitizeBucketName(ctx.appName)}-static-site`;
       let continuationToken: string | undefined;

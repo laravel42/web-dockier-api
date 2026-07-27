@@ -4,6 +4,7 @@ import type {
   ProvisionResult,
 } from "./types.js";
 import { AwsCloudFormationAdapter } from "./aws-cfn-base.js";
+import { getS3, getCfn } from "../../../../lib/aws-sdk.js";
 import {
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
@@ -84,7 +85,7 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
     }
 
     // 3. Upload template to S3
-    const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const { S3Client, PutObjectCommand } = await getS3();
     const s3 = new S3Client({ region, credentials });
     await s3.send(
       new PutObjectCommand({
@@ -131,7 +132,7 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
     }
 
     // 5. Create or update CloudFormation stack
-    const { CloudFormationClient } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient } = await getCfn();
     const cfn = new CloudFormationClient({ region, credentials });
 
     // Pre-create the ECS log group to avoid AlreadyExists errors in CFN

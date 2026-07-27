@@ -17,6 +17,7 @@
  */
 
 import { getAwsAccountId } from "../../../lib/aws.js";
+import { getS3, getSsm } from "../../../lib/aws-sdk.js";
 import type { ContextualLogger } from "../../../lib/logging.js";
 import { formatEnvFileContent } from "../../../shared/env/format-env-file.js";
 import { pollUntil } from "./poll-until.js";
@@ -103,7 +104,7 @@ async function uploadEnvToS3(
 
   const envContent = formatEnvFileContent(envVars);
 
-  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const { S3Client, PutObjectCommand } = await getS3();
   const accountId = await getAwsAccountId(region, {
     accessKeyId: credentials.apiKey,
     secretAccessKey: credentials.apiSecret,
@@ -156,7 +157,7 @@ async function executeSsmScript(params: SsmExecutionParams): Promise<void> {
 
   if (!instanceId) return;
 
-  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await getSsm();
   const ssm = new SSMClient({
     region,
     credentials: { accessKeyId: credentials.apiKey, secretAccessKey: credentials.apiSecret },

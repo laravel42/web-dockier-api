@@ -4,6 +4,7 @@ import type {
   ProvisionResult,
 } from "./types.js";
 import { AwsCloudFormationAdapter } from "./aws-cfn-base.js";
+import { getS3, getCfn } from "../../../../lib/aws-sdk.js";
 import {
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
@@ -73,7 +74,7 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     const templateBody = readCfnTemplate("ec2.yml");
 
     // 2. Upload template to S3 (ensure bucket exists first)
-    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } = await import("@aws-sdk/client-s3");
+    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } = await getS3();
     const s3 = new S3Client({ region, credentials });
 
     try {
@@ -191,7 +192,7 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     }
 
     // 6. Create or update CloudFormation stack
-    const { CloudFormationClient } = await import("@aws-sdk/client-cloudformation");
+    const { CloudFormationClient } = await getCfn();
     const cfn = new CloudFormationClient({ region, credentials });
 
     await cleanupStuckStack(cfn, stackName, appendLog);

@@ -9,6 +9,7 @@
 import { join } from "node:path";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { ensureS3Bucket } from "../../../lib/aws.js";
+import { getS3 } from "../../../lib/aws-sdk.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
 
 export async function bundleAndUploadSource(
@@ -112,7 +113,7 @@ for sf in sorted(pathlib.Path(".").rglob("settings.py")):
     await logger.info(`Created zip: ${zipBuffer.length} bytes`);
 
     // ─── Upload to S3 ──────────────────────────────────────────────
-    const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const { S3Client, PutObjectCommand } = await getS3();
     const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
     const s3Key = `${buildId}.zip`;
 
