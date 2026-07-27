@@ -5,6 +5,9 @@
  * authenticated tenant. Use this on any route with a `:projectId` param
  * to replace manual `assertProjectAccess()` calls in domain functions.
  *
+ * Fetches the core project columns so downstream handlers can read
+ * `request.project` without issuing a second DB query.
+ *
  * Must be placed AFTER auth middleware (requirePermission / requireAuth)
  * in the preHandler array so that `request.auth` is available.
  *
@@ -14,6 +17,10 @@
  *   preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
  *   ...
  * }, handler);
+ *
+ * // In the handler:
+ * const project = request.project!; // guaranteed non-null after middleware
+ * console.log(project.repository, project.branch);
  * ```
  */
 
@@ -21,17 +28,42 @@ import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { supabaseAdmin } from "./supabase/client.js";
 import { getAuth } from "./auth.js";
+import type { Json } from "./supabase/types.js";
+
+/**
+ * Cached project row set by requireProjectAccess.
+ *
+ * Contains the most commonly needed columns across services (commands,
+ * network, domains, processes, deploy). Handlers that need additional
+ * columns (e.g. config blocks) can extend or re-query as needed.
+ */
+export interface CachedProjectRow {
+  id: string;
+  name: string;
+  repository: string;
+  branch: string;
+  connectionId: string;
+  platform: string;
+  sourceType: string;
+  settings: Json;
+}
 
 declare module "fastify" {
   interface FastifyRequest {
     /** Set by requireProjectAccess — the validated project ID from params. */
     projectId?: string;
+    /**
+     * Set by requireProjectAccess — the validated project row.
+     * Avoids a second DB query in handlers that need project metadata.
+     */
+    project?: CachedProjectRow;
   }
 
   interface FastifyInstance {
     /**
      * PreHandler that asserts `params.projectId` exists and belongs to the
-     * authenticated tenant. Sets `request.projectId` on success.
+     * authenticated tenant. Sets `request.projectId` and `request.project`
+     * on success.
      *
      * Place AFTER requirePermission in the preHandler array.
      */
@@ -52,7 +84,7 @@ export const projectAccessPlugin = fp(async (app: FastifyInstance) => {
 
     const { data, error } = await supabaseAdmin
       .from("projects")
-      .select("id")
+      .select("id, name, repository, branch, connection_id, platform, source_type, settings")
       .eq("id", projectId)
       .eq("organization_id", auth.tenantId)
       .maybeSingle();
@@ -67,5 +99,15 @@ export const projectAccessPlugin = fp(async (app: FastifyInstance) => {
     }
 
     request.projectId = projectId;
+    request.project = {
+      id: data.id,
+      name: data.name,
+      repository: data.repository,
+      branch: data.branch,
+      connectionId: data.connection_id,
+      platform: data.platform,
+      sourceType: data.source_type,
+      settings: data.settings,
+    };
   });
 });
