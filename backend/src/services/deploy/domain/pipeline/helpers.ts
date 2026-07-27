@@ -132,6 +132,10 @@ export interface ErrorClassification {
  * - Build errors: "Check your Dockerfile / build configuration"
  * - Infra errors: "Infrastructure issue — contact support or retry"
  * - Post-deploy: "Deployment succeeded but a post-deploy step failed"
+ *
+ * Heuristic patterns are deliberately specific to avoid misclassification.
+ * For example, "clone" alone would match "Could not clone ECR repository"
+ * (an infra error), so we require "git clone" or "failed to clone" context.
  */
 export function classifyPipelineError(error: unknown): ErrorClassification {
   if (error instanceof BuildError) {
@@ -140,22 +144,82 @@ export function classifyPipelineError(error: unknown): ErrorClassification {
   if (error instanceof ProvisionError) {
     return { category: "infra", phase: error.provider };
   }
-  // Heuristic classification for untyped errors
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    if (msg.includes("clone") || msg.includes("git")) {
-      return { category: "build", phase: "clone" };
-    }
-    if (msg.includes("docker") || msg.includes("dockerfile") || msg.includes("build")) {
-      return { category: "build", phase: "docker-build" };
-    }
-    if (msg.includes("cloudformation") || msg.includes("pulumi") || msg.includes("provision") || msg.includes("stack")) {
-      return { category: "infra", phase: "provision" };
-    }
-    if (msg.includes("post-deploy") || msg.includes("post_deploy")) {
-      return { category: "post-deploy" };
-    }
+
+  if (!(error instanceof Error)) {
+    return { category: "unknown" };
   }
+
+  const msg = error.message.toLowerCase();
+
+  // ── Infra patterns (check first — more specific than build) ──────
+  if (
+    msg.includes("cloudformation") ||
+    msg.includes("pulumi") ||
+    msg.includes("provision") ||
+    msg.includes("stack creation failed") ||
+    msg.includes("stack update failed") ||
+    msg.includes("createstack") ||
+    msg.includes("updatestack") ||
+    msg.includes("rollback_complete") ||
+    msg.includes("cloud run") ||
+    msg.includes("ecs service") ||
+    msg.includes("ecr repository") ||
+    msg.includes("capacity constraints") ||
+    msg.includes("instancelimitexceeded") ||
+    msg.includes("vcpu limit")
+  ) {
+    return { category: "infra", phase: "provision" };
+  }
+
+  // ── Post-deploy patterns ─────────────────────────────────────────
+  if (
+    msg.includes("post-deploy") ||
+    msg.includes("post_deploy") ||
+    msg.includes("deploy script failed") ||
+    msg.includes("ssm command failed")
+  ) {
+    return { category: "post-deploy" };
+  }
+
+  // ── Build/clone patterns ─────────────────────────────────────────
+  if (
+    msg.includes("git clone") ||
+    msg.includes("failed to clone") ||
+    msg.includes("clone failed") ||
+    msg.includes("repository not found") ||
+    msg.includes("authentication failed") ||
+    msg.includes("git connection not found") ||
+    msg.includes("could not resolve host")
+  ) {
+    return { category: "build", phase: "clone" };
+  }
+
+  if (
+    msg.includes("dockerfile") ||
+    msg.includes("docker build") ||
+    msg.includes("docker buildx") ||
+    msg.includes("failed to build image") ||
+    msg.includes("build failed") ||
+    msg.includes("exited with code") ||
+    msg.includes("npm run build") ||
+    msg.includes("pnpm build") ||
+    msg.includes("yarn build") ||
+    msg.includes("composer install") ||
+    msg.includes("pip install")
+  ) {
+    return { category: "build", phase: "docker-build" };
+  }
+
+  if (
+    msg.includes("failed to pull docker image") ||
+    msg.includes("docker pull") ||
+    msg.includes("docker push") ||
+    msg.includes("image push failed") ||
+    msg.includes("docker tag")
+  ) {
+    return { category: "build", phase: "docker-build" };
+  }
+
   return { category: "unknown" };
 }
 
