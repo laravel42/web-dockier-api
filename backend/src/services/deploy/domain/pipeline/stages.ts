@@ -5,9 +5,9 @@
  * Stages are independently testable — they require only the context
  * (with relevant properties populated) and their own dependencies.
  *
- * Stages delegate to shared helper functions in pipeline.ts where possible,
- * so the template deploy path (pipeline-template.ts) and the standard path
- * share a single implementation.
+ * Stages delegate to shared helper functions in shared.ts where possible.
+ * Template deploys skip clone/analyze/build and use template-specific
+ * initialization instead (stageTemplateInit, stageTemplatePull).
  */
 
 import { cloneRepo, analyzeAndGenerate } from "../../../../lib/build-pipeline.js";
@@ -17,7 +17,10 @@ import { getGitConnectionCredentials } from "../../../../shared/service-clients/
 import { getAdapter } from "../adapters/index.js";
 import { extractRegionFromScript } from "../gcp-helpers.js";
 import { executePostDeployScript } from "../post-deploy.js";
+import { injectWpConfig } from "../wp-config-inject.js";
 import { isCloudProvider } from "../../types.js";
+import { createRepoConfig } from "../../../../lib/repo-analyzer/types.js";
+import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 
 import { buildImage } from "./build.js";
 import { patchDeployment } from "../deployments.js";
@@ -251,4 +254,118 @@ export async function stageRestoreProcesses(ctx: PipelineContext): Promise<void>
     const msg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
     await ctx.logger.warn(`Could not restore processes/jobs: ${msg}`);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Template-specific stages
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── Template Init: Replaces Clone + Analyze + Build ────────────────
+
+/**
+ * Initialize template deploy context.
+ *
+ * Sets up the synthetic RepoConfig, merges env vars with template defaults,
+ * and sets actualImage to the template's Docker image. This replaces
+ * stageClone, stageAnalyze, and stageBuild for template deploys.
+ */
+export async function stageTemplateInit(ctx: PipelineContext): Promise<void> {
+  const tc = ctx.templateConfig!;
+
+  await ctx.logger.info(`Docker image: ${tc.dockerImage}`);
+
+  // Set the actual image — no build needed
+  ctx.actualImage = tc.dockerImage;
+  ctx.skippedBuild = true;
+
+  // Build a synthetic RepoConfig for the adapter context
+  ctx.repoConfig = createRepoConfig({
+    runtime: tc.runtime.name as RepoConfig["runtime"],
+    runtimeVersion: tc.runtime.version,
+    framework: tc.id,
+    buildCommand: tc.runtime.buildCmd,
+    startCommand: tc.runtime.startCmd,
+    port: tc.runtime.port,
+    phpVersion: tc.runtime.name === "php" ? tc.runtime.version : "",
+  });
+
+  // Merge template env vars with project-level env vars (project wins on conflict)
+  const templateEnvVars = tc.envVars.filter(
+    (tv) => !ctx.envVars.some((pv) => pv.name === tv.name),
+  );
+  ctx.envVars = [...templateEnvVars, ...ctx.envVars];
+
+  // Merge template services into event if not already set
+  if (!ctx.event.services?.length) {
+    ctx.event.services = tc.services.map((s) => ({ type: s.type, name: s.name, mode: "vps" }));
+  }
+
+  // Backfill techStack/primaryLanguage from template if not set by user
+  if (!ctx.event.techStack?.length) {
+    ctx.event.techStack = tc.techStack;
+  }
+  if (!ctx.event.primaryLanguage) {
+    ctx.event.primaryLanguage = tc.primaryLanguage;
+  }
+}
+
+// ─── Template Pull: Pull Docker Image ───────────────────────────────
+
+/**
+ * Pull the template's Docker image locally.
+ *
+ * Forces linux/amd64 platform since EC2 instances are x86_64.
+ * This runs before stageProvision so the image is available for push.
+ */
+export async function stageTemplatePull(ctx: PipelineContext): Promise<void> {
+  const image = ctx.actualImage;
+  await ctx.logger.info(`Pulling ${image} from Docker Hub...`);
+
+  const pullResult = await ctx.runCmd("docker", ["pull", "--platform", "linux/amd64", image]);
+  if (pullResult.code !== 0) {
+    throw new Error(`Failed to pull Docker image: ${pullResult.output.split("\n").slice(-3).join(" ")}`);
+  }
+  await ctx.logger.success(`Pulled ${image}`);
+}
+
+// ─── Template Post-Deploy: WordPress-specific steps ─────────────────
+
+/**
+ * WordPress-specific post-deploy steps:
+ * 1. Inject wp-config.php into the container (non-fatal)
+ * 2. Wait for MySQL + Apache to stabilize
+ */
+export async function stageTemplatePostDeploy(ctx: PipelineContext): Promise<void> {
+  if (ctx.event.templateId !== "wordpress") return;
+  if (!ctx.event.projectId || !ctx.event.tenantId) return;
+
+  // Inject wp-config.php (non-fatal)
+  try {
+    await injectWpConfig(
+      {
+        tenantId: ctx.event.tenantId,
+        projectId: ctx.event.projectId,
+        containerName: containerNameFor(ctx.repoName, ctx.provider),
+        region: ctx.region,
+        provider: ctx.provider,
+        credentials: {
+          apiKey: ctx.credentials.api_key,
+          apiSecret: ctx.credentials.api_secret,
+        },
+        instanceId: ctx.provision.outputs.InstanceId || "",
+        serverIp: ctx.provision.serverIp || "",
+        deployKeyPath: ctx.adapterCtx.state.deployKeyPath || "",
+        workDir: "",
+      },
+      ctx.logger,
+      ctx.runCmd,
+    );
+  } catch (wpErr) {
+    const msg = wpErr instanceof Error ? wpErr.message : String(wpErr);
+    await ctx.logger.warn(`Could not inject wp-config.php: ${msg}`);
+  }
+
+  // WordPress containers need extra time for MySQL + Apache to fully start
+  await ctx.logger.info("Waiting for WordPress container to stabilize...");
+  await new Promise((resolve) => setTimeout(resolve, 30_000));
 }

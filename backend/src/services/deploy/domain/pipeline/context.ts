@@ -16,6 +16,7 @@ import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 import type { RunCmdFn } from "../run-cmd.js";
 import type { DeployAdapter } from "../adapters/types.js";
 import type { AdapterContext, ProvisionResult } from "../adapters/types.js";
+import type { TemplateConfig } from "../project-templates.js";
 import { deriveRepoName } from "../../../../lib/naming.js";
 import type { PipelineInput } from "./shared.js";
 import type { CloudProvider } from "../../types.js";
@@ -29,15 +30,18 @@ export class PipelineContext {
   readonly logger: ContextualLogger;
   readonly runCmd: RunCmdFn;
 
+  // ─── Template config (set before stages if template deploy) ───
+  templateConfig: TemplateConfig | null = null;
+
   // ─── Stage 1: Provider Credentials ────────────────────────────
   provider!: CloudProvider;
   region!: string;
   credentials!: { api_key: string; api_secret: string };
 
   // ─── Stage 2: Clone ───────────────────────────────────────────
-  repoDir!: string;
-  workDir!: string;
-  commitHash!: string;
+  repoDir = "";
+  workDir = "";
+  commitHash = "";
 
   // ─── Stage 3: Project Context ─────────────────────────────────
   envVars: Array<{ name: string; value: string }> = [];
@@ -58,7 +62,12 @@ export class PipelineContext {
 
   // ─── Computed ─────────────────────────────────────────────────
 
+  get isTemplate(): boolean {
+    return this.templateConfig !== null;
+  }
+
   get deployStrategy(): string {
+    if (this.isTemplate) return this.event.deployStrategy || "vps";
     return this.event.deployStrategy || "managed";
   }
 
