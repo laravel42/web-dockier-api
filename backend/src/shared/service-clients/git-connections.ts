@@ -103,3 +103,14 @@ function rejectAfterTimeout(ms: number): Promise<never> {
     setTimeout(() => reject(new Error(`Git connection query timed out after ${ms}ms`)), ms),
   );
 }
+
+// ─── Full Connection Access (tenant-scoped) ────────────────────────
+
+/**
+ * Fetch a full git connection row with tenant ownership verification.
+ *
+ * Re-exports from the git-integration service domain. Used by the
+ * code-analysis scan worker which needs the full connection (provider,
+ * token, endpoint) to clone a repository for scanning.
+ */
+export { getConnectionForTenant } from "../../services/git-integration/domain/connections.js";

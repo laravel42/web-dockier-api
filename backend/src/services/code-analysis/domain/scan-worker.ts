@@ -9,7 +9,7 @@ import { createConsoleLogger } from "../../../lib/logging.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { getConnectionForTenant } from "../../git-integration/domain/connections.js";
+import { getConnectionForTenant } from "../../../shared/service-clients/git-connections.js";
 import { emit } from "../../../shared/events.js";
 import { listCustomRules } from "./custom-rules.js";
 import { filterSecurityFindings } from "./findings.js";

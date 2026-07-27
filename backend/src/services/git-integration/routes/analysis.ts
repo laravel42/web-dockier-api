@@ -11,7 +11,7 @@ import type { Json } from "../../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "../domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/provider-client.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/mr-generator.js";
-import { getFindingById } from "../../code-analysis/domain/findings.js";
+import { getFindingById } from "../../../shared/service-clients/findings.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "../domain/ai-analysis.js";
 import type { TechStackItem } from "../domain/tech-stack.js";
 import type { DetectedService } from "../domain/services.js";

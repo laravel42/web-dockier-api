@@ -12,6 +12,8 @@
  * - Easy to mock in tests
  */
 
-export { getGitConnectionCredentials, type GitConnectionCredentials } from "./git-connections.js";
+export { getGitConnectionCredentials, getConnectionForTenant, type GitConnectionCredentials } from "./git-connections.js";
 export { getProjectDeployConfig, type ProjectDeployConfig } from "./projects.js";
 export { getActiveDeployment, type ActiveDeployment } from "./deployments.js";
+export { executeCommand, resolveExecutionTarget, type ExecutionTarget, type ExecutionResult } from "./command-execution.js";
+export { safeRecordActivity } from "./activity.js";

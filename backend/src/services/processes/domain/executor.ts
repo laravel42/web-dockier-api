@@ -8,8 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
-import { resolveExecutionTarget } from "../../commands/domain/worker.js";
-import { executeCommand } from "../../commands/domain/executor.js";
+import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import { ProcessesError } from "./processes.js";
 import type { BackgroundProcessRow } from "../schemas.js";
 

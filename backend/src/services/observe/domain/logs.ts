@@ -1,6 +1,5 @@
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { resolveExecutionTarget } from "../../commands/domain/worker.js";
-import { executeCommand } from "../../commands/domain/executor.js";
+import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 
 export const LogsError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("LogsError");
 export type LogsError = InstanceType<typeof LogsError>;

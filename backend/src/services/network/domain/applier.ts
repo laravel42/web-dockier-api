@@ -29,7 +29,7 @@ import {
 } from "./network.js";
 import { generateNginxConfig } from "./nginx-generator.js";
 import type { NginxGeneratorOutput } from "./nginx-generator.js";
-import { type ExecutionTarget } from "../../commands/domain/executor.js";
+import { type ExecutionTarget } from "../../../shared/service-clients/command-execution.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 

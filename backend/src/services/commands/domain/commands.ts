@@ -2,7 +2,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
 import { enqueueCommand } from "./worker.js";
-import { safeRecordActivity } from "../../observe/domain/activity.js";
+import { safeRecordActivity } from "../../../shared/service-clients/activity.js";
 import type { CommandRow } from "../schemas.js";
 import { rowToCommand, type CommandResponse, type CommandStatus } from "./mappers.js";
 

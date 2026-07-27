@@ -24,7 +24,7 @@ import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 
 import { buildImage } from "./build.js";
 import { patchDeployment } from "../deployments.js";
-import { restoreProcessesAfterDeploy } from "../../../processes/domain/post-deploy-restore.js";
+import { restoreProcessesAfterDeploy } from "../../../../shared/service-clients/processes.js";
 import type { PipelineContext } from "./context.js";
 import {
   loadProjectContext,

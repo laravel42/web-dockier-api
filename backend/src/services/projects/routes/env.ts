@@ -10,7 +10,7 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { getMaskedEnv, revealEnv, saveEnv } from "../domain/env.js";
-import { safeRecordActivity } from "../../observe/domain/activity.js";
+import { safeRecordActivity } from "../../../shared/service-clients/activity.js";
 
 export async function registerEnvRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

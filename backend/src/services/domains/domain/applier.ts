@@ -24,7 +24,7 @@ import { getActiveDeployment } from "../../../shared/service-clients/deployments
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { listDomains, listCertificates } from "./domains.js";
 import type { DomainResponse, SslCertificateResponse } from "./domains.js";
-import type { ExecutionTarget } from "../../commands/domain/executor.js";
+import type { ExecutionTarget } from "../../../shared/service-clients/command-execution.js";
 import type { SslCertificateRow } from "../schemas.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
