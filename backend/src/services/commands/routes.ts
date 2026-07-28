@@ -44,7 +44,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/commands",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["commands"],
         summary: "List commands for a project",
@@ -77,7 +77,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/commands/:commandId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
       schema: {
         tags: ["commands"],
         summary: "Get command details",
@@ -101,7 +101,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/commands/:commandId",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
       schema: {
         tags: ["commands"],
         summary: "Delete a command record",
