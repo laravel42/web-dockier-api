@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { authPlugin } from "./shared/auth.js";
 import { authorizationPlugin } from "./shared/permissions/authorization.js";
 import { projectAccessPlugin } from "./shared/project-access.js";
+import { rawBodyPlugin } from "./shared/raw-body.js";
 import { registerDomainErrorHandler } from "./shared/error-handler.js";
 import { registerPlatformPlugins } from "./shared/openapi.js";
 import { registerAuthRoutes } from "./services/auth/routes.js";
@@ -84,6 +85,7 @@ export async function buildApp(service: ServiceName) {
     requestTimeout: 60_000,
   });
 
+  await app.register(rawBodyPlugin);
   await app.register(authPlugin);
   await app.register(authorizationPlugin);
   await app.register(projectAccessPlugin);

@@ -88,7 +88,10 @@ export async function requireWebhookSignature(request: FastifyRequest, reply: Fa
     return reply.unauthorized("Missing x-webhook-signature header");
   }
 
-  const rawBody = JSON.stringify(request.body);
+  // Use the raw body bytes captured by rawBodyPlugin for accurate HMAC verification.
+  // Falls back to JSON.stringify for backward compatibility (e.g., in tests where
+  // the plugin may not be registered), but the raw bytes are the correct source.
+  const rawBody = request.rawBody ?? JSON.stringify(request.body);
   if (!verifyWebhookSignature(signature, rawBody, secret)) {
     return reply.unauthorized("Invalid webhook signature");
   }
