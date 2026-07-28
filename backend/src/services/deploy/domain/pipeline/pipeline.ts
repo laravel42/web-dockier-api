@@ -19,7 +19,8 @@ import { createDeployLogger } from "../../../../lib/logging.js";
 import { createStreamingRunCmd } from "../run-cmd.js";
 import { getTemplateConfig } from "../project-templates.js";
 
-import { appendLog, updateStatus, emitDeployFailureNotification, classifyPipelineError } from "./helpers.js";
+import { appendLog, updateStatus, emitDeployFailureNotification } from "./helpers.js";
+import { classifyPipelineError } from "./error-classification.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 import { getDeploymentCurrentStatus } from "../deployments.js";
 
