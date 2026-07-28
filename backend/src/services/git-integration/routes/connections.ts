@@ -19,7 +19,7 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "../domain/connections.js";
-import { listBranches, listRepos } from "../domain/provider-client.js";
+import { listBranches, listRepos } from "../domain/providers/provider-client.js";
 import { parseJsonField, writeRepoListCache } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
 

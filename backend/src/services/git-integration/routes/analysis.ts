@@ -9,16 +9,16 @@ import { getAuth } from "../../../shared/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "../domain/analysis.js";
-import { fetchRepoFile, getRepoFileTree } from "../domain/provider-client.js";
-import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/mr-generator.js";
+import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
 import { getFindingById } from "../../../shared/service-clients/findings.js";
-import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "../domain/ai-analysis.js";
+import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "../domain/ai/ai-analysis.js";
 import type { TechStackItem } from "../domain/tech-stack.js";
 import type { DetectedService } from "../domain/services.js";
 import { env } from "../../../shared/config.js";
 import { tenantRateLimit } from "../../../shared/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { getGitProvider } from "../domain/git-provider.js";
+import { getGitProvider } from "../domain/providers/git-provider.js";
 import {
   parseJsonField,
   writeRepoCache,

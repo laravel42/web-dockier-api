@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeProjectPath } from "../gitlab-client.js";
+import { encodeProjectPath } from "../providers/gitlab-client.js";
 
 describe("encodeProjectPath", () => {
   it("encodes nested GitLab group paths", () => {

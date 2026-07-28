@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseRepoKey, summarizeFindingTitle, estimateFixMinutes } from "../mr-generator.js";
-import { sanitizeBranchName } from "../fix-branch.js";
+import { parseRepoKey, summarizeFindingTitle, estimateFixMinutes } from "../ai/mr-generator.js";
+import { sanitizeBranchName } from "../ai/fix-branch.js";
 
 describe("parseRepoKey", () => {
   it("parses owner/repo keys", () => {

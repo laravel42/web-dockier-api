@@ -9,12 +9,12 @@ import { getAuth } from "../../../shared/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { tenantRateLimit } from "../../../shared/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { fetchRepoFile, getRepoFileTree } from "../domain/provider-client.js";
-import { getGitProvider, type RepoStats } from "../domain/git-provider.js";
+import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { getGitProvider, type RepoStats } from "../domain/providers/git-provider.js";
 import { parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
-import { fixIssueWithAI } from "../domain/fix-issue-ai.js";
-import { reviewPRWithAI } from "../domain/review-pr-ai.js";
+import { fixIssueWithAI } from "../domain/ai/fix-issue-ai.js";
+import { reviewPRWithAI } from "../domain/ai/review-pr-ai.js";
 import { env } from "../../../shared/config.js";
 
 export async function registerRepositoryRoutes(app: FastifyInstance) {

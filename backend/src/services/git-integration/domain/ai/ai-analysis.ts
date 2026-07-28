@@ -6,9 +6,9 @@
  * - Section analysis: overview, architecture, data storage, security, etc.
  */
 
-import type { TechStackItem } from "./tech-stack.js";
-import type { DetectedService } from "./services.js";
-import { logger } from "../../../shared/logger.js";
+import type { TechStackItem } from "../tech-stack.js";
+import type { DetectedService } from "../services.js";
+import { logger } from "../../../../shared/logger.js";
 
 // ─── Types ───
 

@@ -5,7 +5,7 @@
  */
 
 import type { ConnectionLike } from "./provider-client.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../../shared/supabase/errors.js";
 
 export class GitLabApiError extends DomainError {
   constructor(

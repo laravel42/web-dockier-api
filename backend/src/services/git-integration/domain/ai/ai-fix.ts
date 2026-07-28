@@ -2,7 +2,7 @@
  * AI-powered security finding remediation using OpenAI.
  */
 
-import { logger } from "../../../shared/logger.js";
+import { logger } from "../../../../shared/logger.js";
 
 export interface GenerateCodeFixInput {
   filePath: string;

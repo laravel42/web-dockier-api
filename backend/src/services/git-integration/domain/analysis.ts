@@ -1,5 +1,5 @@
-import type { ConnectionLike, RepoRef } from "./provider-client.js";
-import { fetchRepoFile, getRepoFileTree } from "./provider-client.js";
+import type { ConnectionLike, RepoRef } from "./providers/provider-client.js";
+import { fetchRepoFile, getRepoFileTree } from "./providers/provider-client.js";
 import { scanDependencies, type Dependency } from "./dependency-scanner.js";
 import { suggestDeployOptions } from "./deploy-options.js";
 import { detectServices, type DetectedService } from "./services.js";

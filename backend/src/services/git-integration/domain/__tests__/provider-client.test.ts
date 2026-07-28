@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGitHubLinkNext } from "../provider-client.js";
+import { parseGitHubLinkNext } from "../providers/provider-client.js";
 
 describe("parseGitHubLinkNext", () => {
   it("returns the next page URL from a GitHub Link header", () => {

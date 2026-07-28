@@ -1,4 +1,4 @@
-import type { ConnectionLike } from "./provider-client.js";
+import type { ConnectionLike } from "../providers/provider-client.js";
 
 function baseUrl(connection: ConnectionLike): string {
   if (connection.provider === "github") return connection.endpoint || "https://api.github.com";

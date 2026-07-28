@@ -3,7 +3,7 @@
  */
 
 import { getConnectionForTenant } from "../domain/connections.js";
-import { type RepoStats } from "../domain/git-provider.js";
+import { type RepoStats } from "../domain/providers/git-provider.js";
 
 /**
  * Get connection for tenant, letting domain errors propagate to the global handler.

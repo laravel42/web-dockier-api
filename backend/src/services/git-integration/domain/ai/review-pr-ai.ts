@@ -7,8 +7,8 @@
  * 3. Post review comments on the PR via GitHub/GitLab API
  */
 
-import type { ConnectionLike } from "./provider-client.js";
-import { logger } from "../../../shared/logger.js";
+import type { ConnectionLike } from "../providers/provider-client.js";
+import { logger } from "../../../../shared/logger.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

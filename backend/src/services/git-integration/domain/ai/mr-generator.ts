@@ -1,8 +1,8 @@
-import { fetchRepoFile } from "./provider-client.js";
-import type { ConnectionLike } from "./provider-client.js";
+import { fetchRepoFile } from "../providers/provider-client.js";
+import type { ConnectionLike } from "../providers/provider-client.js";
 import { generateCodeFix } from "./ai-fix.js";
 import { commitFixToBranch } from "./fix-branch.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
+import { DomainError } from "../../../../shared/supabase/errors.js";
 
 type CreateMergeRequestInput = {
   owner: string;

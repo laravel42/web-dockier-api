@@ -9,9 +9,9 @@
  * 5. Create a branch, commit the changes, open a PR
  */
 
-import type { ConnectionLike, RepoRef } from "./provider-client.js";
-import { fetchRepoFile, getRepoFileTree } from "./provider-client.js";
-import { logger } from "../../../shared/logger.js";
+import type { ConnectionLike, RepoRef } from "../providers/provider-client.js";
+import { fetchRepoFile, getRepoFileTree } from "../providers/provider-client.js";
+import { logger } from "../../../../shared/logger.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
