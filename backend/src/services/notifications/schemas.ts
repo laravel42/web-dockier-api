@@ -50,3 +50,20 @@ export const notificationSchema = z.object({
   read: z.boolean(),
   createdAt: z.string(),
 });
+
+// ─── Response Schemas ──────────────────────────────────────────────
+
+import { paginationMetaSchema } from "../../shared/schemas/responses.js";
+
+export const listChannelsResponseSchema = z.object({
+  channels: z.array(channelSchema),
+});
+
+export const sendNotificationResponseSchema = z.object({
+  sent: z.number().int().nonnegative(),
+});
+
+export const listNotificationsResponseSchema = z.object({
+  notifications: z.array(notificationSchema),
+  pagination: paginationMetaSchema,
+});

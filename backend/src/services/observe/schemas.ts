@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { TableRow } from "../../shared/supabase/types.js";
+import { paginationMetaSchema } from "../../shared/schemas/responses.js";
 
 // ─── Heartbeats ───
 
@@ -40,6 +41,10 @@ export const heartbeatSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const listHeartbeatsResponseSchema = z.object({
+  heartbeats: z.array(heartbeatSchema),
+});
+
 export type HeartbeatRow = TableRow<"heartbeats">;
 
 // ─── Activity ───
@@ -70,6 +75,11 @@ export const activitySchema = z.object({
   description: z.string(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.string(),
+});
+
+export const listActivityResponseSchema = z.object({
+  activity: z.array(activitySchema),
+  pagination: paginationMetaSchema,
 });
 
 export type ActivityRow = TableRow<"project_activity">;

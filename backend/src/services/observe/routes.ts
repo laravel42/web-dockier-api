@@ -3,13 +3,14 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
 import { rateLimit } from "../../shared/rate-limit.js";
 import {
   heartbeatSchema,
   heartbeatFrequencySchema,
   heartbeatGracePeriodSchema,
-  activitySchema,
+  listHeartbeatsResponseSchema,
+  listActivityResponseSchema,
   logTypeSchema,
   logEntrySchema,
 } from "./schemas.js";
@@ -36,7 +37,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         summary: "List heartbeats for a project",
         params: z.object({ projectId: z.uuid() }),
         response: {
-          200: z.object({ heartbeats: z.array(heartbeatSchema) }),
+          200: listHeartbeatsResponseSchema,
         },
       },
     },
@@ -186,10 +187,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
           search: z.string().optional(),
         }),
         response: {
-          200: z.object({
-            activity: z.array(activitySchema),
-            pagination: paginationMetaSchema,
-          }),
+          200: listActivityResponseSchema,
         },
       },
     },

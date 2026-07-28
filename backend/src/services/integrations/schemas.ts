@@ -71,3 +71,29 @@ export const integrationCreateIssueSchema = z
   .refine((data) => data.integrationId || (data.type && data.config), {
     message: "Either integrationId or type+config is required",
   });
+
+// ─── Response Schemas ──────────────────────────────────────────────
+
+export const listIntegrationsResponseSchema = z.object({
+  integrations: z.array(pmIntegrationSchema),
+});
+
+export const listTeamsResponseSchema = z.object({
+  teams: z.array(pmItemSchema),
+  teamLabel: z.string(),
+  projectLabel: z.string(),
+});
+
+export const listTeamProjectsResponseSchema = z.object({
+  projects: z.array(pmItemSchema),
+});
+
+export const listTeamMembersResponseSchema = z.object({
+  members: z.array(teamMemberSchema),
+});
+
+export const createIssueResponseSchema = z.object({
+  issueId: z.string(),
+  issueKey: z.string(),
+  issueUrl: z.string(),
+});

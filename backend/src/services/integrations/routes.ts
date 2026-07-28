@@ -7,8 +7,11 @@ import {
   integrationRequestSchema,
   integrationWithTeamSchema,
   pmIntegrationSchema,
-  pmItemSchema,
-  teamMemberSchema,
+  listIntegrationsResponseSchema,
+  listTeamsResponseSchema,
+  listTeamProjectsResponseSchema,
+  listTeamMembersResponseSchema,
+  createIssueResponseSchema,
 } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
@@ -46,7 +49,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["integrations"],
         summary: "List PM integrations",
-        response: { 200: z.object({ integrations: z.array(pmIntegrationSchema) }) },
+        response: { 200: listIntegrationsResponseSchema },
       },
     },
     async (request) => {
@@ -139,11 +142,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         summary: "List PM teams/containers",
         body: integrationRequestSchema,
         response: {
-          200: z.object({
-            teams: z.array(pmItemSchema),
-            teamLabel: z.string(),
-            projectLabel: z.string(),
-          }),
+          200: listTeamsResponseSchema,
         },
       },
     },
@@ -163,7 +162,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         tags: ["integrations"],
         summary: "List projects within team",
         body: integrationWithTeamSchema,
-        response: { 200: z.object({ projects: z.array(pmItemSchema) }) },
+        response: { 200: listTeamProjectsResponseSchema },
       },
     },
     async (request) => {
@@ -183,7 +182,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         tags: ["integrations"],
         summary: "List team members",
         body: integrationWithTeamSchema,
-        response: { 200: z.object({ members: z.array(teamMemberSchema) }) },
+        response: { 200: listTeamMembersResponseSchema },
       },
     },
     async (request) => {
@@ -204,11 +203,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
         summary: "Create PM issue/ticket",
         body: integrationCreateIssueSchema,
         response: {
-          200: z.object({
-            issueId: z.string(),
-            issueKey: z.string(),
-            issueUrl: z.string(),
-          }),
+          200: createIssueResponseSchema,
         },
       },
     },

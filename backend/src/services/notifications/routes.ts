@@ -2,9 +2,15 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth.js";
-import { channelSchema, channelTypeSchema, notificationSchema } from "./schemas.js";
+import {
+  channelSchema,
+  channelTypeSchema,
+  listChannelsResponseSchema,
+  sendNotificationResponseSchema,
+  listNotificationsResponseSchema,
+} from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
 import {
   createChannel,
   listChannels,
@@ -49,7 +55,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       schema: {
         tags: ["notifications"],
         summary: "List notification channels",
-        response: { 200: z.object({ channels: z.array(channelSchema) }) },
+        response: { 200: listChannelsResponseSchema },
       },
     },
     async (request) => {
@@ -108,7 +114,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
           message: z.string().min(1).max(5000),
           channels: z.array(channelTypeSchema).optional(),
         }),
-        response: { 200: z.object({ sent: z.number().int().nonnegative() }) },
+        response: { 200: sendNotificationResponseSchema },
       },
     },
     async (request) => {
@@ -134,10 +140,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
           unreadOnly: z.coerce.boolean().optional(),
         }),
         response: {
-          200: z.object({
-            notifications: z.array(notificationSchema),
-            pagination: paginationMetaSchema,
-          }),
+          200: listNotificationsResponseSchema,
         },
       },
     },
