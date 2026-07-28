@@ -194,7 +194,7 @@ describe("GET /users", () => {
     setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.USER_VIEW] });
     mockListUsers.mockResolvedValue({
       users: [{ ...MOCK_USER, roleId: TEST_ROLE_ID, roleName: "Admin", isOwner: false }],
-      pagination: { total: 1, limit: 20, offset: 0 },
+      total: 1,
     });
 
     const res = await app.inject({
@@ -214,7 +214,7 @@ describe("GET /users", () => {
 
   it("passes search query param", async () => {
     setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.USER_VIEW] });
-    mockListUsers.mockResolvedValue({ users: [], pagination: { total: 0, limit: 20, offset: 0 } });
+    mockListUsers.mockResolvedValue({ users: [], total: 0 });
 
     const res = await app.inject({
       method: "GET",

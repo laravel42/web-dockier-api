@@ -81,12 +81,17 @@ export async function registerUsersRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      return await listUsers({
+      const { limit, offset, search } = request.query;
+      const result = await listUsers({
         tenantId: auth.tenantId,
-        limit: request.query.limit,
-        offset: request.query.offset,
-        search: request.query.search,
+        limit,
+        offset,
+        search,
       });
+      return {
+        users: result.users,
+        pagination: { total: result.total, limit, offset },
+      };
     },
   );
 

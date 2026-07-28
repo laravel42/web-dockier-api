@@ -125,7 +125,7 @@ export async function listUsers(params: ListUsersParams) {
 
   // Fetch membership + role info
   const userIds = (data ?? []).map((u) => u.id);
-  if (userIds.length === 0) return { users: [], pagination: { total: 0, limit, offset } };
+  if (userIds.length === 0) return { users: [], total: 0 };
 
   const { data: memberships, error: membershipsError } = await supabaseAdmin
     .from("organization_memberships")
@@ -151,7 +151,7 @@ export async function listUsers(params: ListUsersParams) {
         isOwner: membership?.is_owner ?? false,
       };
     }),
-    pagination: { total: count ?? 0, limit, offset },
+    total: count ?? 0,
   };
 }
 
