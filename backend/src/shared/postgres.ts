@@ -1,4 +1,5 @@
 import type { ConnectionConfig } from "pg";
+import { env } from "./config.js";
 
 function databaseUrlRequiresSsl(databaseUrl: string): boolean {
   return (
@@ -14,7 +15,7 @@ function databaseUrlRequiresSsl(databaseUrl: string): boolean {
  * Supabase pooler requires SSL; Node rejects the chain unless configured.
  */
 export function getPostgresConnectionConfig(connectionString?: string): ConnectionConfig {
-  const url = connectionString ?? process.env.DATABASE_URL;
+  const url = connectionString ?? env.DATABASE_URL;
   if (!url) {
     throw new Error("DATABASE_URL is required");
   }

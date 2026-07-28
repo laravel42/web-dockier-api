@@ -96,15 +96,25 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
     return existing;
   }
 
-  // 3. Start new resolution
+  // 3. Start new resolution with a timeout that is properly cleaned up
   const RESOLVE_TIMEOUT_MS = 5_000;
 
-  const promise = Promise.race([
-    resolvePermissionsFromDb(userId, tenantId, email),
-    new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error("Permission resolution timed out")), RESOLVE_TIMEOUT_MS),
-    ),
-  ]).catch(() => null);
+  const promise = (async (): Promise<ResolvedAuth | null> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        resolvePermissionsFromDb(userId, tenantId, email),
+        new Promise<null>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Permission resolution timed out")), RESOLVE_TIMEOUT_MS);
+        }),
+      ]);
+      return result;
+    } catch {
+      return null;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  })();
 
   inflight.set(cacheKey, promise);
 
