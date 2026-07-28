@@ -213,6 +213,8 @@ export interface CreateDeploymentParams {
   skipPipeline?: boolean;
   templateId?: string;
   services?: ServiceEntry[];
+  /** Request ID for end-to-end log correlation. */
+  correlationId?: string;
 }
 
 /**
@@ -241,6 +243,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
     skipPipeline,
     templateId,
     services,
+    correlationId,
   } = params;
 
   // Validate provider ownership
@@ -291,6 +294,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
       registryUrl,
       services: services as Array<{ type: string; name: string; mode: string }> | undefined,
       useRepoDockerfile,
+      correlationId,
     });
   }
 

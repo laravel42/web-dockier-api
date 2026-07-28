@@ -16,8 +16,9 @@ export async function runCommand(params: {
   projectId: string;
   userId: string;
   command: string;
+  correlationId?: string;
 }): Promise<CommandResponse> {
-  const { tenantId, projectId, userId, command } = params;
+  const { tenantId, projectId, userId, command, correlationId } = params;
 
   // Insert command record with "running" status
   const { data, error } = await supabaseAdmin
@@ -43,6 +44,7 @@ export async function runCommand(params: {
       tenantId,
       projectId,
       command,
+      correlationId,
     });
   } catch {
     // If enqueue fails, mark the command as failed so it doesn't stay stuck

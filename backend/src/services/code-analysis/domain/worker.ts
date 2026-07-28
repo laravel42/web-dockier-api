@@ -24,6 +24,8 @@ export interface ScanJobInput {
   scanId: string;
   tenantId: string;
   options: RunScanOptions;
+  /** Request ID from the originating HTTP request — used for log correlation. */
+  correlationId?: string;
 }
 
 const scanWorker = createWorker<ScanJobInput>(

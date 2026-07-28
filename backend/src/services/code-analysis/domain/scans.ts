@@ -170,7 +170,7 @@ export async function deleteScan(scanId: string, tenantId: string) {
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete scan" });
 }
 
-export async function runScan(scanId: string, tenantId: string, options: RunScanOptions = {}) {
+export async function runScan(scanId: string, tenantId: string, options: RunScanOptions = {}, correlationId?: string) {
   await reconcileStaleScanById(scanId);
 
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
@@ -206,7 +206,7 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
     .single();
   throwOnError(updateError, CodeAnalysisError, { internalMsg: "Failed to update scan status" });
 
-  await enqueueScan({ scanId, tenantId, options });
+  await enqueueScan({ scanId, tenantId, options, correlationId });
 
   await persistScanProgress(scanId, initialProgress);
 

@@ -37,6 +37,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
         projectId: request.params.projectId,
         userId: auth.userId,
         command: request.body.command,
+        correlationId: request.id,
       });
     },
   );

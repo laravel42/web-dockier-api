@@ -140,7 +140,7 @@ export async function registerScanRoutes(app: FastifyInstance) {
       return await runScan(request.params.scanId, auth.tenantId, {
         ...body,
         enableSemgrep,
-      });
+      }, request.id);
     },
   );
 }

@@ -64,6 +64,7 @@ export async function registerImageBuilderRoutes(app: FastifyInstance) {
         deployTarget: request.body.deployTarget,
         providerId: request.body.providerId,
         deployParams: request.body.deployParams,
+        correlationId: request.id,
       });
     },
   );

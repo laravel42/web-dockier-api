@@ -50,6 +50,8 @@ export interface PipelineInput {
   registryUrl?: string;
   services?: Array<{ type: string; name: string; mode: string }>;
   useRepoDockerfile?: boolean;
+  /** Request ID from the originating HTTP request — used for log correlation. */
+  correlationId?: string;
 }
 
 export interface ProjectContext {

@@ -29,6 +29,8 @@ export interface CommandJobInput {
   tenantId: string;
   projectId: string;
   command: string;
+  /** Request ID from the originating HTTP request — used for log correlation. */
+  correlationId?: string;
 }
 
 interface DeploymentInfo {

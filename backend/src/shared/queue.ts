@@ -111,6 +111,17 @@ export const CONFIG_APPLY_QUEUE = "config-apply";
 
 // ─── Generic Worker Factory ────────────────────────────────────────
 
+/**
+ * Optional correlation ID that can be included in any job payload.
+ * When present, the worker's child logger includes it for end-to-end
+ * request tracing (HTTP request → queue → worker → completion).
+ *
+ * Pass `request.id` (Fastify's auto-assigned request ID) at enqueue time.
+ */
+export interface Traceable {
+  correlationId?: string;
+}
+
 export interface WorkerOptions {
   /** Number of retries on failure (default: 2) */
   retryLimit?: number;
@@ -173,7 +184,8 @@ export function createWorker<T>(
           if (!job) continue;
           const input = job.data;
           const jobId = job.id;
-          const jobLogger = logger.child({ jobId, queue: queueName });
+          const correlationId = (input as unknown as Traceable)?.correlationId;
+          const jobLogger = logger.child({ jobId, queue: queueName, ...(correlationId ? { correlationId } : {}) });
           jobLogger.info("Processing job");
           try {
             await handler(input);

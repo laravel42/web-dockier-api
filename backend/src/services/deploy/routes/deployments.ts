@@ -73,6 +73,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         skipPipeline: request.body.skipPipeline,
         templateId: request.body.templateId,
         services: request.body.services as ServiceEntry[] | undefined,
+        correlationId: request.id,
       });
     },
   );

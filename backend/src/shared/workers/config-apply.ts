@@ -28,6 +28,8 @@ export interface ConfigApplyJobInput {
   certificateId?: string;
   /** Only for certificate-issue jobs */
   domainName?: string;
+  /** Request ID from the originating HTTP request — used for log correlation. */
+  correlationId?: string;
 }
 
 // ─── Handler Registry ──────────────────────────────────────────────
@@ -76,9 +78,9 @@ export const registerConfigApplyWorker = configApplyWorker.register;
  * If multiple domain changes happen within the polling interval, only
  * one apply runs (with the latest state from the DB).
  */
-export async function enqueueDomainApply(tenantId: string, projectId: string): Promise<void> {
+export async function enqueueDomainApply(tenantId: string, projectId: string, correlationId?: string): Promise<void> {
   await configApplyWorker.enqueue(
-    { type: "domain-apply", tenantId, projectId },
+    { type: "domain-apply", tenantId, projectId, correlationId },
     `domain-apply:${projectId}`,
   );
 }
@@ -86,9 +88,9 @@ export async function enqueueDomainApply(tenantId: string, projectId: string): P
 /**
  * Enqueue a network rules apply job.
  */
-export async function enqueueNetworkApply(tenantId: string, projectId: string): Promise<void> {
+export async function enqueueNetworkApply(tenantId: string, projectId: string, correlationId?: string): Promise<void> {
   await configApplyWorker.enqueue(
-    { type: "network-apply", tenantId, projectId },
+    { type: "network-apply", tenantId, projectId, correlationId },
     `network-apply:${projectId}`,
   );
 }
@@ -101,6 +103,7 @@ export async function enqueueCertificateIssue(params: {
   projectId: string;
   certificateId: string;
   domainName: string;
+  correlationId?: string;
 }): Promise<void> {
   await configApplyWorker.enqueue(
     { type: "certificate-issue", ...params },

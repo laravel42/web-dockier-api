@@ -31,6 +31,8 @@ export interface BuildJobInput {
   gitConnectionId: string;
   deployTarget: string;
   deployParams: Record<string, unknown>;
+  /** Request ID from the originating HTTP request — used for log correlation. */
+  correlationId?: string;
 }
 
 // ─── Pipeline ──────────────────────────────────────────────────────

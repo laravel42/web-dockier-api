@@ -30,6 +30,8 @@ export interface CreateBuildParams {
   deployTarget?: "ecs" | "ec2" | "s3";
   providerId?: string;
   deployParams?: DeployParams;
+  /** Request ID for end-to-end log correlation. */
+  correlationId?: string;
 }
 
 export async function createBuild(params: CreateBuildParams) {
@@ -86,6 +88,7 @@ export async function createBuild(params: CreateBuildParams) {
       gitConnectionId: params.gitConnectionId ?? "",
       deployTarget: params.deployTarget ?? "",
       deployParams: params.deployParams ?? {},
+      correlationId: params.correlationId,
     });
   } catch (enqueueError: unknown) {
     const message = enqueueError instanceof Error ? enqueueError.message : String(enqueueError);
