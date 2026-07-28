@@ -14,21 +14,13 @@
 
 import { supabaseAdmin } from "../supabase/client.js";
 import { logger } from "../logger.js";
+import { withRetry } from "../retry.js";
 
 export interface GitConnectionCredentials {
   provider: string;
   token: string;
   endpoint: string;
 }
-
-/** Timeout for the Supabase query (ms). Fail fast rather than hang. */
-const QUERY_TIMEOUT_MS = 8_000;
-
-/** Number of attempts before giving up. */
-const MAX_ATTEMPTS = 2;
-
-/** Delay between retries (ms). */
-const RETRY_DELAY_MS = 1_000;
 
 /**
  * Fetch the clone credentials for a git connection.
@@ -50,58 +42,44 @@ const RETRY_DELAY_MS = 1_000;
 export async function getGitConnectionCredentials(connectionId: string): Promise<GitConnectionCredentials | null> {
   if (!connectionId) return null;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const result = await Promise.race([
-        supabaseAdmin
+  try {
+    const data = await withRetry(
+      async () => {
+        const result = await supabaseAdmin
           .from("git_connections")
           .select("provider, personal_token, endpoint")
           .eq("id", connectionId)
-          .maybeSingle(),
-        rejectAfterTimeout(QUERY_TIMEOUT_MS),
-      ]);
+          .maybeSingle();
 
-      if (result.error || !result.data) {
+        // No error + no data = legitimate "not found" — don't retry
+        if (!result.error && !result.data) return null;
+
+        // Query error — throw so withRetry retries the attempt
         if (result.error) {
-          logger.warn({ err: result.error, connectionId, attempt }, "[git-connections] Query failed");
+          throw result.error;
         }
-        // Don't retry on "not found" — that's a legitimate empty result
-        if (!result.error) return null;
-        if (attempt < MAX_ATTEMPTS) {
-          await sleep(RETRY_DELAY_MS);
-          continue;
-        }
-        return null;
-      }
 
-      return {
-        provider: result.data.provider || "",
-        token: result.data.personal_token || "",
-        endpoint: result.data.endpoint || "",
-      };
-    } catch (err) {
-      logger.warn({ err, connectionId, attempt }, "[git-connections] Credential fetch failed");
-      if (attempt < MAX_ATTEMPTS) {
-        await sleep(RETRY_DELAY_MS);
-        continue;
-      }
-      return null;
-    }
+        return result.data;
+      },
+      {
+        attempts: 2,
+        backoffMs: 1_000,
+        timeoutMs: 8_000,
+        label: "git-connection-credentials",
+      },
+    );
+
+    if (!data) return null;
+
+    return {
+      provider: data.provider || "",
+      token: data.personal_token || "",
+      endpoint: data.endpoint || "",
+    };
+  } catch (err) {
+    logger.warn({ err, connectionId }, "[git-connections] Credential fetch failed after retries");
+    return null;
   }
-
-  return null;
-}
-
-// ─── Internal Helpers ──────────────────────────────────────────────
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function rejectAfterTimeout(ms: number): Promise<never> {
-  return new Promise((_, reject) =>
-    setTimeout(() => reject(new Error(`Git connection query timed out after ${ms}ms`)), ms),
-  );
 }
 
 // ─── Full Connection Access (tenant-scoped) ────────────────────────
