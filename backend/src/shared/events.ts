@@ -68,6 +68,45 @@ type Listeners = {
 
 const listeners: Listeners = {};
 
+// ─── Concurrency Limiter ───────────────────────────────────────────
+
+/**
+ * Maximum number of async handler invocations that can be in-flight
+ * concurrently across all events. Excess invocations are queued and
+ * processed as in-flight ones complete.
+ *
+ * This prevents resource exhaustion (open sockets, memory) when many
+ * events fire in a burst (e.g., 50 deployments completing simultaneously
+ * each emitting a notification that fans out to email + Slack + DB).
+ */
+const MAX_CONCURRENCY = 10;
+
+let inflight = 0;
+const queue: Array<() => Promise<void>> = [];
+
+function enqueueTask(task: () => Promise<void>): void {
+  if (inflight < MAX_CONCURRENCY) {
+    runTask(task);
+  } else {
+    queue.push(task);
+  }
+}
+
+function runTask(task: () => Promise<void>): void {
+  inflight++;
+  task()
+    .catch(() => {}) // errors are already logged inside the task
+    .finally(() => {
+      inflight--;
+      if (queue.length > 0) {
+        const next = queue.shift()!;
+        runTask(next);
+      }
+    });
+}
+
+// ─── Public API ────────────────────────────────────────────────────
+
 /**
  * Subscribe to a domain event.
  * Returns an unsubscribe function (useful for testing).
@@ -92,6 +131,11 @@ export function on<K extends keyof DomainEventMap>(
 /**
  * Emit a domain event. All handlers run asynchronously (fire-and-forget).
  * Errors in handlers are logged but never propagated to the emitter.
+ *
+ * Async handlers are subject to a concurrency limit (MAX_CONCURRENCY).
+ * When the limit is reached, excess handler invocations are queued and
+ * executed as in-flight ones complete. Synchronous handlers always run
+ * immediately (they don't consume a concurrency slot).
  */
 export function emit<K extends keyof DomainEventMap>(
   eventName: K,
@@ -104,8 +148,13 @@ export function emit<K extends keyof DomainEventMap>(
     try {
       const result = handler(event);
       if (result && typeof result === "object" && "catch" in result) {
-        (result as Promise<void>).catch((err) => {
-          logger.error({ err, eventName }, `[events] Handler failed for ${eventName}`);
+        // Async handler — route through the concurrency limiter
+        enqueueTask(async () => {
+          try {
+            await result;
+          } catch (err) {
+            logger.error({ err, eventName }, `[events] Handler failed for ${eventName}`);
+          }
         });
       }
     } catch (err) {
@@ -121,4 +170,6 @@ export function clearAllListeners(): void {
   for (const key of Object.keys(listeners)) {
     delete listeners[key as keyof DomainEventMap];
   }
+  queue.length = 0;
+  inflight = 0;
 }
