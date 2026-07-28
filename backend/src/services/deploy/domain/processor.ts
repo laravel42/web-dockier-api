@@ -48,6 +48,85 @@ function formatLogLine(existing: string, line: string): string {
   return `${existing ? `${existing}\n` : ""}[${logTimestamp()}] ${line}`;
 }
 
+// ─── Pure Helpers ──────────────────────────────────────────────────
+
+/**
+ * Extract a server IP from an EC2 public DNS hostname.
+ *
+ * e.g. "http://ec2-1-2-3-4.compute-1.amazonaws.com" → "1.2.3.4"
+ * Returns empty string if the URL doesn't match the EC2 pattern.
+ */
+export function deriveServerIpFromUrl(appUrl: string): string {
+  const ec2Match = appUrl.match(/ec2-([\d-]+)\./);
+  if (ec2Match) return ec2Match[1].replace(/-/g, ".");
+  return "";
+}
+
+/**
+ * Resolve the compute service type from webhook deployTarget or deployment strategy.
+ */
+function resolveServiceType(
+  deployTarget: string | undefined,
+  deployStrategy: string,
+): InfraMetadata["service"] {
+  const serviceMap: Record<string, InfraMetadata["service"]> = { ec2: "ec2", ecs: "ecs" };
+  return serviceMap[deployTarget || ""]
+    || (deployStrategy === "managed" ? "ecs" : deployStrategy === "static" ? "s3" : "ec2");
+}
+
+/** Input for building infrastructure metadata from a webhook success payload. */
+export interface BuildInfraParams {
+  repo: string;
+  deployStrategy: string;
+  region: string;
+  serverIp: string;
+  deployTarget?: string;
+  stackName?: string;
+  instanceId?: string;
+  containerName?: string;
+}
+
+/**
+ * Construct the InfraMetadata object for a successful deployment.
+ *
+ * Pure function — no I/O. All async resolution (provider credentials, etc.)
+ * must happen before calling this.
+ */
+export function buildInfraMetadata(params: BuildInfraParams): InfraMetadata {
+  const {
+    repo,
+    deployStrategy,
+    region,
+    serverIp,
+    deployTarget,
+    stackName,
+    instanceId,
+    containerName,
+  } = params;
+
+  const repoName = deriveRepoName(repo);
+  const service = resolveServiceType(deployTarget, deployStrategy);
+
+  const infra: InfraMetadata = {
+    provider: "aws",
+    service,
+    region: region || "us-east-1",
+    containerName: containerName || repoName,
+    stackName: stackName || stackNameFor(repoName),
+  };
+
+  if (instanceId) infra.instanceId = instanceId;
+  if (serverIp) infra.serverIp = serverIp;
+  if (service === "ecs") {
+    infra.ecsCluster = repoName;
+    infra.ecsTaskFamily = repoName;
+  }
+
+  return infra;
+}
+
+// ─── Deployment Preview & Record ───────────────────────────────────
+
 export function buildDeploymentPreview(input: CreateDeploymentInput, provider: ProviderSummary) {
   const strategy = input.deployStrategy ?? "managed";
   const template = resolveDeployTemplate({
@@ -140,41 +219,26 @@ export async function applyDeploymentWebhookUpdate(
 
   // Build infra metadata on success
   if (payload.status === "success") {
-    const repoName = deriveRepoName(current?.repo || "");
-    const deployStrategy = current?.deploy_strategy || "vps";
-
-    // Derive region from provider if not in payload
+    // Resolve region: prefer payload, fall back to provider credentials
     let region = payload.region || "";
     if (!region && current?.provider_id) {
       const provCreds = await getProviderCredentialsSafe(current.provider_id);
       if (provCreds?.region) region = provCreds.region;
     }
 
-    // Derive serverIp from appUrl if not provided (e.g. http://ec2-1-2-3-4.compute-1.amazonaws.com → 1.2.3.4)
-    let serverIp = payload.serverIp || "";
-    if (!serverIp && payload.appUrl) {
-      const ec2Match = payload.appUrl.match(/ec2-([\d-]+)\./);
-      if (ec2Match) serverIp = ec2Match[1].replace(/-/g, ".");
-    }
+    // Resolve serverIp: prefer payload, fall back to EC2 DNS extraction
+    const serverIp = payload.serverIp || (payload.appUrl ? deriveServerIpFromUrl(payload.appUrl) : "");
 
-    // Determine service from deployTarget or deployStrategy
-    const serviceMap: Record<string, InfraMetadata["service"]> = { ec2: "ec2", ecs: "ecs" };
-    const service: InfraMetadata["service"] = serviceMap[payload.deployTarget || ""] || (deployStrategy === "managed" ? "ecs" : deployStrategy === "static" ? "s3" : "ec2");
-
-    const containerName = payload.containerName || repoName;
-    const infra: InfraMetadata = {
-      provider: "aws",
-      service,
-      region: region || "us-east-1",
-      containerName,
-      stackName: payload.stackName || stackNameFor(repoName),
-    };
-    if (payload.instanceId) infra.instanceId = payload.instanceId;
-    if (serverIp) infra.serverIp = serverIp;
-    if (service === "ecs") {
-      infra.ecsCluster = repoName;
-      infra.ecsTaskFamily = repoName;
-    }
+    const infra = buildInfraMetadata({
+      repo: current?.repo || "",
+      deployStrategy: current?.deploy_strategy || "vps",
+      region,
+      serverIp,
+      deployTarget: payload.deployTarget,
+      stackName: payload.stackName,
+      instanceId: payload.instanceId,
+      containerName: payload.containerName,
+    });
 
     updates.infra = serializeInfra(infra);
   }
