@@ -216,7 +216,7 @@ async function executeViaCloudRunJob(
 
   try {
     // Use GCP REST API for Cloud Run Jobs
-    const { getGcpAccessToken, getGcpProjectId } = await import("../../deploy/domain/gcp-client.js");
+    const { getGcpAccessToken, getGcpProjectId } = await import("../../deploy/domain/infra/gcp-client.js");
 
     const accessToken = await getGcpAccessToken(credentials!.apiKey);
     const projectId = target.gcpProjectId || getGcpProjectId(credentials!.apiKey);

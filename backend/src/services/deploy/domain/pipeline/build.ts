@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { BuildError } from "../../../../lib/logging.js";
 import { patchDockerfile } from "../../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
-import { buildViaCodeBuild } from "../codebuild-builder.js";
+import { buildViaCodeBuild } from "../infra/codebuild-builder.js";
 import type { RunCmdFn } from "../run-cmd.js";
 import type { ContextualLogger } from "../../../../lib/logging.js";
 import { appendLog } from "./helpers.js";

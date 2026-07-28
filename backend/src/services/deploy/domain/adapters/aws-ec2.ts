@@ -11,7 +11,7 @@ import {
   createOrUpdateStack,
   pollStackStatus,
   readCfnTemplate,
-} from "../aws-helpers.js";
+} from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId } from "../../../../lib/aws.js";
 

@@ -21,9 +21,9 @@ import {
   DescribeStacksCommand,
   type Output,
 } from "@aws-sdk/client-cloudformation";
-import type { RunCmdFn } from "./run-cmd.js";
-import type { ProvisionResult } from "./adapters/types.js";
-import { getAwsAccountId, type AwsCredentials } from "../../../lib/aws.js";
+import type { RunCmdFn } from "../run-cmd.js";
+import type { ProvisionResult } from "../adapters/types.js";
+import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

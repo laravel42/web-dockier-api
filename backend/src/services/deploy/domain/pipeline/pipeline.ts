@@ -17,7 +17,7 @@ import { rm } from "node:fs/promises";
 import { logger as obsLogger } from "../../../../shared/logger.js";
 import { createDeployLogger } from "../../../../lib/logging.js";
 import { createStreamingRunCmd } from "../run-cmd.js";
-import { getTemplateConfig } from "../project-templates.js";
+import { getTemplateConfig } from "../planning/project-templates.js";
 
 import { appendLog, updateStatus, emitDeployFailureNotification } from "./helpers.js";
 import { classifyPipelineError } from "./error-classification.js";

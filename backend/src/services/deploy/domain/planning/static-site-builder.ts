@@ -7,8 +7,8 @@
 
 import { join, extname } from "node:path";
 import { existsSync, readdirSync, statSync, readFileSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
-import type { DetectedStack } from "../../../lib/repo-analyzer/types.js";
-import type { RunCmdFn } from "./run-cmd.js";
+import type { DetectedStack } from "../../../../lib/repo-analyzer/types.js";
+import type { RunCmdFn } from "../run-cmd.js";
 
 // ─── MIME Types ────────────────────────────────────────────────────
 

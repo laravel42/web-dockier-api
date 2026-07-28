@@ -6,13 +6,13 @@
  * no adapter is found or the adapter doesn't implement destroy().
  */
 
-import { getAdapter } from "./adapters/index.js";
-import type { DestroyContext } from "./adapters/types.js";
-import { logger } from "../../../shared/logger.js";
-import { deriveRepoName } from "../../../lib/naming.js";
-import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
-import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
-import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { getAdapter } from "../adapters/index.js";
+import type { DestroyContext } from "../adapters/types.js";
+import { logger } from "../../../../shared/logger.js";
+import { deriveRepoName } from "../../../../lib/naming.js";
+import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
+import { logTimestamp, nowIso } from "../../../../shared/utils/time.js";
+import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 
 // ─── Main Orchestrator ─────────────────────────────────────────────
 

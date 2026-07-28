@@ -5,9 +5,9 @@ import { getAuth } from "../../../shared/auth.js";
 import { serviceEntrySchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { normalizeAppName } from "../../../lib/naming.js";
-import { generateTofuPreview, getDefaultRegion } from "../domain/planner.js";
+import { generateTofuPreview, getDefaultRegion } from "../domain/planning/planner.js";
 import { getProviderForTenant } from "../domain/providers.js";
-import { resolveDeployTemplate } from "../domain/templates.js";
+import { resolveDeployTemplate } from "../domain/planning/templates.js";
 
 export async function registerTofuRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();

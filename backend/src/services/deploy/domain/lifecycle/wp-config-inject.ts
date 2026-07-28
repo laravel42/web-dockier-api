@@ -5,11 +5,11 @@
  * and writes it into the WordPress container via SSH or SSM.
  */
 
-import type { ContextualLogger } from "../../../lib/logging.js";
-import { getSsm } from "../../../lib/aws-sdk.js";
-import { revealWpConfig } from "../../projects/domain/wp-config.js";
-import { pollUntil } from "./poll-until.js";
-import type { RunCmdFn } from "./run-cmd.js";
+import type { ContextualLogger } from "../../../../lib/logging.js";
+import { getSsm } from "../../../../lib/aws-sdk.js";
+import { revealWpConfig } from "../../../projects/domain/wp-config.js";
+import { pollUntil } from "../infra/poll-until.js";
+import type { RunCmdFn } from "../run-cmd.js";
 
 interface WpConfigInjectContext {
   tenantId: string;

@@ -7,13 +7,13 @@ import {
   getGcpAccessToken,
   getGcpProjectId,
   enableGcpApis,
-} from "../gcp-helpers.js";
+} from "../infra/gcp-helpers.js";
 import {
   setupPulumiWorkspace,
   restorePulumiState,
   savePulumiState,
-} from "../pulumi-workspace.js";
-import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, SKIP_DIRS } from "../static-site-builder.js";
+} from "../infra/pulumi-workspace.js";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, SKIP_DIRS } from "../planning/static-site-builder.js";
 import type {
   DeployAdapter,
   AdapterContext,

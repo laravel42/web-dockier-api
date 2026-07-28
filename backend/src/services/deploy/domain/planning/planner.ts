@@ -1,4 +1,4 @@
-import type { ServiceEntry } from "../types.js";
+import type { ServiceEntry } from "../../types.js";
 
 export type RuntimePlan = {
   name: string;

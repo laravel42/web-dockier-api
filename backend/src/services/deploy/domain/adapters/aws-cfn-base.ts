@@ -10,7 +10,7 @@ import {
   pushToEcr,
   deleteEcrRepo,
   destroyCfnStack,
-} from "../aws-helpers.js";
+} from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
 import { type AwsCredentials } from "../../../../lib/aws.js";
 

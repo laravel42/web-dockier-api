@@ -7,13 +7,13 @@ import {
   getGcpProjectId,
   deleteOrphanedComputeResources,
   pushToGcpArtifactRegistry,
-} from "../gcp-helpers.js";
+} from "../infra/gcp-helpers.js";
 import {
   setupPulumiWorkspace,
   restorePulumiState,
   savePulumiState,
-} from "../pulumi-workspace.js";
-import { replacePulumiPlaceholders } from "../pulumi-placeholders.js";
+} from "../infra/pulumi-workspace.js";
+import { replacePulumiPlaceholders } from "../infra/pulumi-placeholders.js";
 import type {
   DeployAdapter,
   AdapterContext,

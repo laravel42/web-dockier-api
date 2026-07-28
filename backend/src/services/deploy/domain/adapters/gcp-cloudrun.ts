@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Fully adapted to Supabase (no ts-nocheck).
 import { join } from "node:path";
-import { extractRegionFromScript } from "../gcp-helpers.js";
+import { extractRegionFromScript } from "../infra/gcp-helpers.js";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import {
   getGcpAccessToken,
   getGcpProjectId,
   pushToGcpArtifactRegistry,
-} from "../gcp-helpers.js";
+} from "../infra/gcp-helpers.js";
 import {
   setupPulumiWorkspace,
   restorePulumiState,
   savePulumiState,
-} from "../pulumi-workspace.js";
-import { replacePulumiPlaceholders } from "../pulumi-placeholders.js";
+} from "../infra/pulumi-workspace.js";
+import { replacePulumiPlaceholders } from "../infra/pulumi-placeholders.js";
 import type {
   DeployAdapter,
   AdapterContext,

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RunCmdFn } from "./run-cmd.js";
+import type { RunCmdFn } from "../run-cmd.js";
 
 export interface PulumiWorkspaceResult {
   pulumiDir: string;

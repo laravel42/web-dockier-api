@@ -5,7 +5,7 @@
  * helper functions. New code should use GcpClient directly via createGcpClient().
  */
 
-import type { AdapterContext, PushImageResult } from "./adapters/types.js";
+import type { AdapterContext, PushImageResult } from "../adapters/types.js";
 import {
   GcpClient,
   GcpApiError,

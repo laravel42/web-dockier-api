@@ -5,7 +5,7 @@
  * or times out. Results are written to the deployment logs.
  */
 
-import { pollUntil } from "../poll-until.js";
+import { pollUntil } from "../infra/poll-until.js";
 import { appendLog } from "./helpers.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 

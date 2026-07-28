@@ -87,7 +87,7 @@ vi.mock("../domain/worker.js", () => ({
 }));
 
 const mockDestroyDeployment = vi.fn();
-vi.mock("../domain/destroy.js", () => ({
+vi.mock("../domain/lifecycle/destroy.js", () => ({
   destroyDeployment: (...args: unknown[]) => mockDestroyDeployment(...args),
 }));
 
@@ -101,13 +101,13 @@ vi.mock("../domain/ssh-keys.js", () => ({
   deleteSshKey: (...args: unknown[]) => mockDeleteSshKey(...args),
 }));
 
-vi.mock("../domain/planner.js", () => ({
+vi.mock("../domain/planning/planner.js", () => ({
   generateTofuPreview: () => ({ script: "# mock pulumi", estimatedResources: ["ec2:t3.micro"] }),
   getDefaultRegion: () => "us-east-1",
   normalizeAppName: (name: string) => name.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
 }));
 
-vi.mock("../domain/templates.js", () => ({
+vi.mock("../domain/planning/templates.js", () => ({
   resolveDeployTemplate: () => ({ id: "default", defaultServices: [] }),
 }));
 

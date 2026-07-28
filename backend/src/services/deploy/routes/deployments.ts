@@ -9,7 +9,7 @@ import { paginationQuerySchema, paginationMetaSchema } from "../../../shared/sch
 import { requireWebhookSignature, requireInternalToken } from "../../../shared/security.js";
 import { tenantRateLimit } from "../../../shared/rate-limit.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
-import { destroyDeployment } from "../domain/destroy.js";
+import { destroyDeployment } from "../domain/lifecycle/destroy.js";
 import { applyDeploymentWebhookUpdate } from "../domain/processor.js";
 import {
   listDeployments,

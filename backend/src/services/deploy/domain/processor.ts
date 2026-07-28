@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { generateTofuPreview, getDefaultRegion } from "./planner.js";
-import { resolveDeployTemplate } from "./templates.js";
+import { generateTofuPreview, getDefaultRegion } from "./planning/planner.js";
+import { resolveDeployTemplate } from "./planning/templates.js";
 import { DeployError } from "./providers.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { emitDeploySuccessNotification, emitDeployFailureNotification } from "./pipeline/helpers.js";
