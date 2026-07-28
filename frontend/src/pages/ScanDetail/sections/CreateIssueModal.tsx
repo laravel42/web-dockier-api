@@ -1,6 +1,7 @@
 import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
 import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
 import Modal from "../../../components/Modal";
+import Button from "../../../components/ui/Button";
 import type { PMIntegration, PMTeam, PMMember } from "../../../types";
 import Spinner from "../../../components/Spinner";
 import { SearchableCombobox } from "../../../components/ui/combobox";
@@ -218,10 +219,13 @@ export default function CreateIssueModal({
             </div>
           )}
           <div className="flex justify-end">
-            <button type="submit" disabled={issueCreating || (pmIntegrations.length > 0 && (!issueIntegration || (!selectedPmProject && pmProjects.length > 0)))}
-              className="h-9 px-4 bg-primary-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-primary-600 disabled:opacity-50 transition-colors">
+            <Button
+              type="submit"
+              disabled={pmIntegrations.length > 0 && (!issueIntegration || (!selectedPmProject && pmProjects.length > 0))}
+              loading={issueCreating}
+            >
               {issueCreating ? "Creating..." : "Create Issue"}
-            </button>
+            </Button>
           </div>
         </form>
       )}

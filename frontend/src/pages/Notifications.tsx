@@ -6,7 +6,7 @@ import PageHeader from "../components/ui/PageHeader";
 import PageLoading from "../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../components/ui/PageError";
 import Pagination from "../components/ui/Pagination";
-import { btnLink, cardCls } from "../utils/styles";
+import { btnLink, btnGhost, cardCls } from "../utils/styles";
 import type { Notification } from "../services/notifications";
 import NotificationContent from "../components/NotificationContent";
 import NotificationTitleLink from "../components/NotificationTitleLink";
@@ -54,6 +54,13 @@ export default function Notifications() {
     fetchNotifications(pagination.offset);
   };
 
+  const markAllRead = async () => {
+    await notificationsApi.markAllRead();
+    fetchNotifications(pagination.offset);
+  };
+
+  const hasUnread = notifications.some((n) => !n.read);
+
   const goToPage = (page: number) => {
     fetchNotifications((page - 1) * PAGE_SIZE);
   };
@@ -63,6 +70,13 @@ export default function Notifications() {
       <PageHeader
         title="Notifications"
         description={`${pagination.total} total · Activity from your projects and deployments`}
+        actions={
+          hasUnread ? (
+            <button type="button" onClick={markAllRead} className={btnGhost}>
+              Mark all as read
+            </button>
+          ) : undefined
+        }
       />
 
       {loading ? (

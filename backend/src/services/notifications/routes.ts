@@ -19,6 +19,7 @@ import {
   sendNotification,
   listNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
 } from "./domain/notifications.js";
 
 export async function registerNotificationsRoutes(app: FastifyInstance) {
@@ -170,6 +171,25 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       await markNotificationRead(request.params.notificationId, auth.tenantId);
       return { success: true as const };
+    },
+  );
+
+  typed.put(
+    "/notifications/mark-all-read",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_VIEW),
+      schema: {
+        tags: ["notifications"],
+        summary: "Mark all notifications as read",
+        response: {
+          200: z.object({ success: z.literal(true), updated: z.number().int().nonnegative() }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const { updated } = await markAllNotificationsRead(auth.tenantId);
+      return { success: true as const, updated };
     },
   );
 }

@@ -2,6 +2,7 @@ import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon"
 import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls, segmentActiveCls, segmentIdleCls } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
 import { displayFindingPath } from "../../../utils/scanPaths";
 import { buildCodePreviewRows, buildSnippetPreviewRow } from "../../../utils/codePreview";
 import { providerCount } from "../../../utils/findingCounts";
@@ -197,40 +198,46 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
   const canManageScans = has("scan:manage");
 
   return (
-    <div className="p-3  pl-9 space-y-1.5">
-      <div className="flex items-center gap-2">
+    <div className="p-3  pl-9">
+      <div className="mb-4 flex items-center gap-2">
         <SeverityBadge severity={f.severity as "error" | "warning" | "info"} />
         <span className="text-[10px] text-text-muted font-mono">L{f.startLine}</span>
         <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
         {canManageScans && (pmIntegrations.length > 0 || hasConnectionId) && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
-            <button
-              type="button"
+            <Button
+              variant="outline-primary"
+              size="sm"
               onClick={() => onCreateIssue(f)}
-              className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-              Create issue
-            </button>
-            {hasConnectionId && (
-              <button
-                type="button"
-                onClick={() => onCreateMR(f)}
-                disabled={mrCreating === f.id}
-                className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 disabled:opacity-50 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+              iconLeft={
+                <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
+              }
+            >
+              Create issue
+            </Button>
+            {hasConnectionId && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onCreateMR(f)}
+                loading={mrCreating === f.id}
+                iconLeft={
+                  mrCreating !== f.id ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                    </svg>
+                  ) : undefined
+                }
+              >
                 {mrCreating === f.id ? "Fixing…" : "Fix with AI"}
-              </button>
+              </Button>
             )}
           </div>
         )}
       </div>
-      <p className="text-xs/snug text-text ">{f.message}</p>
+      <p className="mb-2 text-xs/snug text-text ">{f.message}</p>
       <CodePreview finding={f} fileContent={fileContent} />
     </div>
   );

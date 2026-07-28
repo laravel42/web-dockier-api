@@ -80,6 +80,9 @@ export const notificationsApi = {
   markRead: (notificationId: string) =>
     request(`/notifications/${notificationId}/read`, { method: "PUT" }),
 
+  markAllRead: () =>
+    request<{ success: boolean; updated: number }>("/notifications/mark-all-read", { method: "PUT" }),
+
   send: (data: {
     userId: string;
     title: string;

@@ -1,32 +1,38 @@
 import type { ReactNode } from "react";
 import TrashIcon from "./icons/outlined/TrashIcon";
+import Button from "./ui/Button";
 
 interface SettingsModalFooterProps {
   children: ReactNode;
   onDelete?: () => void;
+  /** Visible button text. Default: "Delete" */
+  deleteLabel?: string;
+  /** Accessible label for screen readers (e.g. "Remove Oscar from team"). */
   deleteAriaLabel?: string;
 }
 
 export default function SettingsModalFooter({
   children,
   onDelete,
-  deleteAriaLabel = "Remove",
+  deleteLabel = "Delete",
+  deleteAriaLabel,
 }: SettingsModalFooterProps) {
   return (
     <div
-      className={`flex shrink-0 items-center gap-2 border-t border-border pt-2 ${
+      className={`flex shrink-0 items-center gap-2 pt-3 ${
         onDelete ? "justify-between" : "justify-end"
       }`}
     >
       {onDelete ? (
-        <button
-          type="button"
+        <Button
+          variant="outline-danger"
+          size="sm"
           onClick={onDelete}
-          className="size-9 flex items-center justify-center rounded-md text-danger-500 hover:text-danger-600 hover:bg-danger-500/10 transition-colors shrink-0"
+          iconLeft={<TrashIcon className="size-4" />}
           aria-label={deleteAriaLabel}
         >
-          <TrashIcon className="size-4" />
-        </button>
+          {deleteLabel}
+        </Button>
       ) : null}
       <div className="flex items-center justify-end gap-2">{children}</div>
     </div>

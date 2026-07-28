@@ -357,3 +357,18 @@ export async function markNotificationRead(notificationId: string, tenantId: str
   throwOnError(error, NotificationsError, { internalMsg: "Failed to mark notification as read" });
   if (!data || data.length === 0) throw new NotificationsError("Notification not found", "not_found");
 }
+
+/**
+ * Mark all unread notifications as read for a tenant.
+ * Returns the number of notifications that were updated.
+ */
+export async function markAllNotificationsRead(tenantId: string): Promise<{ updated: number }> {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .update({ read: true })
+    .eq("organization_id", tenantId)
+    .eq("read", false)
+    .select("id");
+  throwOnError(error, NotificationsError, { internalMsg: "Failed to mark all notifications as read" });
+  return { updated: data?.length ?? 0 };
+}

@@ -51,5 +51,10 @@ export const billingDetailsSchema = z.object({
   state: z.string().max(100),
   postalCode: z.string().max(20),
   country: z.string().max(100),
-  billingEmail: z.email().max(254),
+  billingEmail: z.string().max(254),
+});
+
+/** Stricter schema for billing input — requires valid email when provided. */
+export const billingDetailsInputSchema = billingDetailsSchema.extend({
+  billingEmail: z.union([z.email().max(254), z.literal("")]),
 });
