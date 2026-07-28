@@ -5,8 +5,8 @@ import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import ListToolbar from "../../components/ui/ListToolbar";
 import Pagination from "../../components/ui/Pagination";
 import { useProjects } from "./useProjects";
-import { btnPrimary } from "../../utils/styles";
 import { usePermissions } from "../../context/PermissionsContext";
+import Button from "../../components/ui/Button";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
@@ -67,10 +67,9 @@ export default function Projects() {
         description={`${pagination.total} connected ${pagination.total === 1 ? "repository" : "repositories"}`}
         actions={
           canCreate ? (
-            <button onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
-              <PlusIcon className="size-4" />
+            <Button onClick={openCreate} iconLeft={<PlusIcon className="size-4" />}>
               New Project
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -108,11 +107,11 @@ export default function Projects() {
         error={error}
       />
 
-      {loading ? (
+      {loading && projects.length === 0 && !search ? (
         <PageLoading />
       ) : loadError ? (
         <PageError message={loadError} onRetry={reload} />
-      ) : pagination.total === 0 && !search ? (
+      ) : pagination.total === 0 && !search && !loading ? (
         <EmptyMessage>No projects yet. Create one to get started.</EmptyMessage>
       ) : (
         <>
@@ -124,7 +123,9 @@ export default function Projects() {
             onViewModeChange={changeViewMode}
           />
 
-          {projects.length === 0 ? (
+          {loading ? (
+            <PageLoading />
+          ) : projects.length === 0 ? (
             <EmptyMessage>No projects match your search.</EmptyMessage>
           ) : viewMode === "table" ? (
             <ProjectTable

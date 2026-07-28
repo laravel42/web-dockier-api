@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
@@ -29,6 +29,8 @@ export function useProjects() {
   );
   const [pagination, setPagination] = useState<PaginationMeta>({ total: 0, limit: PAGE_SIZE, offset: 0 });
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Source type: "repository" (existing) or "template" (new)
   const [platform, setPlatform] = useState("");
@@ -56,7 +58,7 @@ export function useProjects() {
       const res = await projectsApi.list({
         limit: PAGE_SIZE,
         offset,
-        search,
+        search: debouncedSearch,
       });
       setProjects(res.projects);
       setPagination(res.pagination);
@@ -65,7 +67,7 @@ export function useProjects() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [debouncedSearch]);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
@@ -76,6 +78,10 @@ export function useProjects() {
 
   const handleSearch = (query: string) => {
     setSearch(query);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(query);
+    }, 300);
   };
 
   // ── Connection / repo / branch cascading fetches ───────────────
