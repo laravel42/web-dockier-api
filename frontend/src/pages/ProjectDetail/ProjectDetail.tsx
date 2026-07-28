@@ -1,7 +1,7 @@
 import { useProjectDetail } from "./useProjectDetail";
-import { btnSecondary } from "../../utils/styles";
 import DeployWizard from "../../components/DeployWizard";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
+import Button from "../../components/ui/Button";
 import ProjectHeader from "./sections/ProjectHeader";
 import RepoInfoCard from "./sections/RepoInfoCard";
 import ProjectDetailsCard from "./sections/ProjectDetailsCard";
@@ -104,9 +104,9 @@ export default function ProjectDetail() {
       <div>
         <PageError message={error || "Project not found"} />
         <div className="text-center mt-4">
-          <button type="button" onClick={() => navigate("/projects")} className={btnSecondary}>
+          <Button variant="secondary" onClick={() => navigate("/projects")}>
             Back to Projects
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -114,10 +114,15 @@ export default function ProjectDetail() {
 
   return (
     <div>
-      <button onClick={() => navigate("/projects")} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
-        <ChevronLeftIcon className="size-4 " />
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => navigate("/projects")}
+        iconLeft={<ChevronLeftIcon className="size-4" />}
+        className="mb-6"
+      >
         Back to Projects
-      </button>
+      </Button>
 
       <ProjectHeader
         project={project}
