@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { escapePostgrestLike } from "../../../shared/security.js";
@@ -80,7 +81,7 @@ export async function createProject(params: CreateProjectParams) {
   if (!name.trim()) throw new ProjectsError("Project name is required", "bad_request");
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,
@@ -221,7 +222,7 @@ export async function updateProject(params: UpdateProjectParams) {
   });
 
   const updates: Database["public"]["Tables"]["projects"]["Update"] = {
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
   if (params.name !== undefined) updates.name = params.name;
   if (params.repository !== undefined) updates.repository = params.repository;

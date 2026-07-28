@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { DeployError } from "./providers.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 /** Compare keys by algorithm + key data (ignore optional comment). */
 export function normalizeSshPublicKey(publicKey: string): string {
@@ -67,7 +68,7 @@ export async function createSshKey(params: CreateSshKeyParams) {
     label,
     public_key: publicKey,
     fingerprint,
-    created_at: new Date().toISOString(),
+    created_at: nowIso(),
   };
   const { error } = await supabaseAdmin.from("ssh_keys").insert(payload);
   throwOnError(error, DeployError, {

@@ -9,6 +9,7 @@ import { encrypt, decrypt } from "../../../shared/crypto.js";
 import { randomBytes } from "node:crypto";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, throwOnMutationError } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 export const WpConfigError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("WpConfigError");
 export type WpConfigError = InstanceType<typeof WpConfigError>;
@@ -215,7 +216,7 @@ export async function saveWpConfig(params: {
         encrypted_content: encrypted,
         iv,
         auth_tag: authTag,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso(),
       })
       .eq("id", existing.id);
     throwOnMutationError(error, WpConfigError, { internalMsg: "Failed to save WordPress configuration" });

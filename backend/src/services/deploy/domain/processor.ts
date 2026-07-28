@@ -44,7 +44,7 @@ type ProviderSummary = {
   region: string | null;
 };
 
-function addLogLine(existing: string, line: string): string {
+function formatLogLine(existing: string, line: string): string {
   return `${existing ? `${existing}\n` : ""}[${logTimestamp()}] ${line}`;
 }
 
@@ -91,7 +91,7 @@ export async function createDeploymentRecord(input: CreateDeploymentInput, provi
     repo: input.repo,
     branch: input.branch,
     status: "pending",
-    logs: addLogLine("", `Deployment queued using template "${template.label}".\n`),
+    logs: formatLogLine("", `Deployment queued using template "${template.label}".\n`),
     tofu_script: input.tofuScript?.trim() || preview.script,
     deploy_strategy: input.deployStrategy ?? "managed",
     app_url: "",
@@ -183,7 +183,7 @@ export async function applyDeploymentWebhookUpdate(
   if (payload.stackName) lines.push(`stack=${payload.stackName}`);
   if (payload.cfnStatus) lines.push(`providerStatus=${payload.cfnStatus}`);
   if (payload.deployTarget) lines.push(`target=${payload.deployTarget}`);
-  updates.logs = addLogLine(current?.logs ?? "", lines.join(" "));
+  updates.logs = formatLogLine(current?.logs ?? "", lines.join(" "));
 
   await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);
 

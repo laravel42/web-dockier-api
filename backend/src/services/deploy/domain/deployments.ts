@@ -1,11 +1,12 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership, normalizePagination, paginatedQuery } from "../../../shared/supabase/query.js";
-import type { DeploymentRow, ServiceEntry } from "../types.js";
+import type { DeploymentRow, DeploymentStatus, ServiceEntry } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";
 import { createDeploymentRecord } from "./processor.js";
 import { enqueueDeployment } from "./worker.js";
 import { logger } from "../../../shared/logger.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 export interface ListDeploymentsFilters {
   providerId?: string;
@@ -70,8 +71,8 @@ export async function getDeploymentForDestroy(deploymentId: string, tenantId: st
   return deployment;
 }
 
-export async function updateDeploymentStatus(deploymentId: string, updates: { status?: string; logs?: string; appUrl?: string }) {
-  const payload: Partial<DeploymentRow> = { updated_at: new Date().toISOString() };
+export async function updateDeploymentStatus(deploymentId: string, updates: { status?: DeploymentStatus; logs?: string; appUrl?: string }) {
+  const payload: Partial<DeploymentRow> = { updated_at: nowIso() };
   if (updates.status !== undefined) payload.status = updates.status;
   if (updates.logs !== undefined) payload.logs = updates.logs;
   if (updates.appUrl !== undefined) payload.app_url = updates.appUrl;
@@ -123,10 +124,10 @@ export async function appendDeploymentLog(deploymentId: string, line: string): P
  * Update deployment status and optional extra fields (app_url, infra, etc.).
  * Used by the pipeline to transition between building → deploying → success/failed.
  */
-export async function setDeploymentStatus(deploymentId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
+export async function setDeploymentStatus(deploymentId: string, status: DeploymentStatus, extra?: Record<string, unknown>): Promise<void> {
   const { error } = await supabaseAdmin
     .from("deployments")
-    .update({ status, updated_at: new Date().toISOString(), ...extra })
+    .update({ status, updated_at: nowIso(), ...extra })
     .eq("id", deploymentId);
   throwOnError(error, DeployError, { internalMsg: "Failed to update deployment status" });
 }
@@ -329,13 +330,13 @@ export async function cancelDeployment(deploymentId: string, tenantId: string) {
     );
   }
 
-  const cancelLog = `\n[${new Date().toISOString()}] ⛔ Deployment cancelled by user`;
+  const cancelLog = `\n[${nowIso()}] ⛔ Deployment cancelled by user`;
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("deployments")
     .update({
       status: "cancelled",
       logs: (deployment.logs || "") + cancelLog,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", deploymentId)
     .select("*")

@@ -11,7 +11,7 @@ import type { DestroyContext } from "./adapters/types.js";
 import { logger } from "../../../shared/logger.js";
 import { deriveRepoName } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
-import { logTimestamp } from "../../../shared/utils/time.js";
+import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 
 // ─── Main Orchestrator ─────────────────────────────────────────────
@@ -93,6 +93,6 @@ async function markDestroyed(deploymentId: string, existingLogs: string, logMess
     tofu_script: "",
     docker_image: "",
     logs: (existingLogs || "") + logMessage,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   }).eq("id", deploymentId);
 }

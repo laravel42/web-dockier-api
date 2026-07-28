@@ -2,6 +2,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { encrypt, decrypt } from "../../../shared/crypto.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, throwOnMutationError } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 export const EnvError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("EnvError");
 export type EnvError = InstanceType<typeof EnvError>;
@@ -122,7 +123,7 @@ export async function saveEnv(params: {
         encrypted_content: encrypted,
         iv,
         auth_tag: authTag,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso(),
       })
       .eq("id", existing.id);
     throwOnMutationError(error, EnvError, { internalMsg: "Failed to save environment file" });

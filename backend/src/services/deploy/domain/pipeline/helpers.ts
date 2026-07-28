@@ -13,6 +13,7 @@ import {
   appendDeploymentLog,
   setDeploymentStatus,
 } from "../deployments.js";
+import type { DeploymentStatus } from "../../types.js";
 import { emit } from "../../../../shared/events.js";
 
 // ─── Deployment Log ────────────────────────────────────────────────
@@ -23,7 +24,7 @@ export async function appendLog(deploymentId: string, line: string): Promise<voi
 
 // ─── Status Update ─────────────────────────────────────────────────
 
-export async function updateStatus(deploymentId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
+export async function updateStatus(deploymentId: string, status: DeploymentStatus, extra?: Record<string, unknown>): Promise<void> {
   await setDeploymentStatus(deploymentId, status, extra);
 }
 

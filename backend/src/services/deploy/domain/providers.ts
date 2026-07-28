@@ -4,6 +4,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 export const DeployError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "precondition_failed" | "internal">("DeployError");
 export type DeployError = InstanceType<typeof DeployError>;
@@ -21,7 +22,7 @@ export async function createProvider(params: CreateProviderParams) {
   const { tenantId, provider, label, apiKey, apiSecret, region } = params;
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,
