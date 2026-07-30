@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getErrorMessage } from "../utils/errors";
+import type { PaginationMeta } from "../types";
 
-export interface PaginationMeta {
-  total: number;
-  limit: number;
-  offset: number;
-}
+export type { PaginationMeta };
 
 export interface PaginatedResponse<T> {
   items: T[];

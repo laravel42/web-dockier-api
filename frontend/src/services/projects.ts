@@ -1,12 +1,8 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-import type { Project, ProjectConfig } from "../types";
+import type { Project, ProjectConfig, PaginationMeta } from "../types";
 
-export interface PaginationMeta {
-  total: number;
-  limit: number;
-  offset: number;
-}
+export type { PaginationMeta };
 
 export interface ListProjectsParams {
   limit?: number;

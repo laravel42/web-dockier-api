@@ -2,36 +2,21 @@ import { request } from "./request";
 import { buildQuery } from "./query";
 import type { ScanSummary, Scan, Finding, SecurityFindingCounts } from "../types";
 
-type ScanSummaryApi = ScanSummary & {
-  progress?: {
-    phase: "cloning" | "scanning" | "persisting" | "done";
-    currentFile?: string;
-    currentRule?: string;
-    scanner?: string;
-    filesScanned: number;
-    filesInRepo: number;
-    findingsCount: number;
-    rulesChecked?: number;
-    rulesTotal?: number;
-  };
-  error?: string;
-};
-
 export const codeAnalysisApi = {
   createScan: (data: { projectId: string; connectionId: string; repo: string; branch: string }) =>
-    request<Scan & { summary: ScanSummaryApi }>("/code-analysis/scans", { method: "POST", body: JSON.stringify(data) }),
+    request<Scan>("/code-analysis/scans", { method: "POST", body: JSON.stringify(data) }),
 
   listScans: (projectId?: string, branch?: string) =>
-    request<{ scans: Array<Scan & { summary: ScanSummaryApi }> }>(`/code-analysis/scans${buildQuery({ projectId, branch })}`),
+    request<{ scans: Scan[] }>(`/code-analysis/scans${buildQuery({ projectId, branch })}`),
 
   getScan: (scanId: string) =>
-    request<Scan & { summary: ScanSummaryApi }>(`/code-analysis/scans/${scanId}`),
+    request<Scan>(`/code-analysis/scans/${scanId}`),
 
   runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean; enableSensitiveData?: boolean }) =>
     request<{
       id: string;
       status: string;
-      summary: ScanSummaryApi;
+      summary: ScanSummary;
     }>(`/code-analysis/scans/${scanId}/run`, { method: "POST", body: JSON.stringify({ scanId, ...tools }) }),
 
   listFindings: (
