@@ -47,11 +47,6 @@ export function useSecurityScans() {
     return (projects[a]?.name || "").localeCompare(projects[b]?.name || "");
   });
 
-  const changeViewMode = (mode: "cards" | "table") => {
-    setViewMode(mode);
-    localStorage.setItem("security-scans-view", mode);
-  };
-
   return {
     navigate,
     loading,
