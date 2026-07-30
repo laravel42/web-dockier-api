@@ -37,7 +37,12 @@ export async function createUser(params: CreateUserParams) {
     email_confirm: true,
     user_metadata: { display_name: name },
   });
-  if (authError) throw new UsersError("Failed to create auth user", "bad_request", authError);
+  if (authError) {
+    // Surface the actual Supabase Auth error message (e.g. "User already registered",
+    // "Password should be at least 6 characters") instead of a generic message.
+    const message = authError.message || "Failed to create auth user";
+    throw new UsersError(message, "bad_request", authError);
+  }
 
   const id = authUser.user.id;
   const now = new Date().toISOString();
@@ -249,6 +254,14 @@ export async function removeUser(params: RemoveUserParams) {
     .eq("id", userId)
     .eq("organization_id", tenantId);
   throwOnError(userDeleteError, UsersError, { internalMsg: "Failed to remove user record" });
+
+  // Remove from Supabase Auth so the email can be re-used
+  const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  if (authDeleteError) {
+    // Log but don't fail — the user is already removed from the org.
+    // A dangling auth record is less critical than blocking the operation.
+    console.warn(`[users] Failed to delete auth user ${userId}: ${authDeleteError.message}`);
+  }
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
@@ -300,7 +313,7 @@ async function updateUserRole(
   roleId: string,
   resolvedAuth: ResolvedAuth,
 ) {
-  // Prevent changing role of the organization owner
+  // Check for existing membership
   const { data: targetMembership, error: membershipLookupError } = await supabaseAdmin
     .from("organization_memberships")
     .select("is_owner,role_id,roles!left(system_key)")
@@ -309,9 +322,13 @@ async function updateUserRole(
     .eq("status", "active")
     .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: unknown };
   if (membershipLookupError) throw new UsersError("Failed to look up membership", "internal");
+
+  // If no active membership exists, create one (user was created without a role)
   if (!targetMembership) {
-    throw new UsersError("User is not an active member of this organization", "not_found");
+    await assignRoleToUser(userId, tenantId, roleId, resolvedAuth);
+    return;
   }
+
   if (targetMembership.is_owner) {
     throw new UsersError("Cannot change the role of the organization owner", "forbidden");
   }
