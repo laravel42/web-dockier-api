@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import {
-  btnPrimary,
   featureCardCls,
   marketingHeroDesc,
   marketingHeroTitle,
@@ -9,6 +8,7 @@ import {
   marketingSectionTitle,
   overlinePillCls,
 } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
 import PlusIcon from "../../../components/icons/outlined/PlusIcon";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
@@ -155,14 +155,13 @@ export default function GettingStarted({ navigate }: Props) {
           AWS or GCP — all from one dashboard.
         </p>
         <div className="mt-8 flex justify-center">
-          <button
-            type="button"
+          <Button
             onClick={connect}
-            className={`${btnPrimary} h-10 px-5 text-sm`}
+            size="lg"
+            iconLeft={<PlusIcon />}
           >
-            <PlusIcon className="size-4" />
             Connect repository
-          </button>
+          </Button>
         </div>
         <IntegrationMarquee />
       </section>
@@ -202,26 +201,29 @@ export default function GettingStarted({ navigate }: Props) {
           ))}
         </div>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <button type="button" onClick={connect} className={`${btnPrimary} h-10 px-5`}>
-            <LinkIcon className="size-4" strokeWidth={2} />
+          <Button 
+            onClick={connect}
+            size="lg"
+            iconLeft={<LinkIcon className="size-4" strokeWidth={2} />}
+          >
             Get started
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="lg"
             onClick={() => navigate("/security")}
-            className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium text-text-muted hover:text-text transition-colors"
+            iconLeft={<ShieldCheckIcon className="size-4" />}
           >
-            <ShieldCheckIcon className="size-4" />
             Explore security scans
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="lg"
             onClick={() => navigate("/deploy")}
-            className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium text-text-muted hover:text-text transition-colors"
+            iconLeft={<RocketIcon className="size-4" />}
           >
-            <RocketIcon className="size-4" />
             View deployments
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -238,14 +240,14 @@ export default function GettingStarted({ navigate }: Props) {
           <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
             Connect your first repo and run a security scan in minutes.
           </p>
-          <button
-            type="button"
+          <Button
             onClick={connect}
-            className={`${btnPrimary} mt-6 h-10 px-5`}
+            size="lg"
+            iconLeft={<PlusIcon />}
+            className="mt-6"
           >
-            <PlusIcon className="size-4" />
             Connect repository
-          </button>
+          </Button>
         </div>
       </section>
     </div>

@@ -1,5 +1,6 @@
 import type { Scan, Project } from "../../../types";
-import { cardCls, btnLink, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
+import { cardCls, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import SeverityBadge from "../../../components/SeverityBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
@@ -21,9 +22,9 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
           <h2 className={typePanelTitle}>Recent Security Scans</h2>
           <p className={`${typePanelDesc} mt-0.5`}>Latest activity</p>
         </div>
-        <button type="button" onClick={onViewAll} className={btnLink}>
+        <Button variant="link" onClick={onViewAll}>
           View all
-        </button>
+        </Button>
       </div>
       {scans.length === 0 ? (
         <p className="text-sm text-text-muted text-center py-8">No scans yet</p>

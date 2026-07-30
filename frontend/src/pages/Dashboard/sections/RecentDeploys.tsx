@@ -1,5 +1,6 @@
 import type { Deployment as Deploy, Provider, Project } from "../../../types";
-import { cardCls, btnLink, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
+import { cardCls, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import ProviderBadge from "../../../components/ProviderBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
@@ -21,9 +22,9 @@ export default function RecentDeploys({ deploys, providers, projectMap, fallback
           <h2 className={typePanelTitle}>Recent Deployments</h2>
           <p className={`${typePanelDesc} mt-0.5`}>Latest activity</p>
         </div>
-        <button type="button" onClick={onViewAll} className={btnLink}>
+        <Button variant="link" onClick={onViewAll}>
           View all
-        </button>
+        </Button>
       </div>
       {deploys.length === 0 ? (
         <p className="text-sm text-text-muted text-center py-8">No deployments yet</p>
