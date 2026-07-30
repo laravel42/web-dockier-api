@@ -108,9 +108,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       return await updatePMIntegration({
         integrationId: request.params.integrationId,
         tenantId: auth.tenantId,
-        name: request.body.name,
-        config: request.body.config,
-        enabled: request.body.enabled,
+        ...request.body,
       });
     },
   );

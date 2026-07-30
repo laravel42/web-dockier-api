@@ -39,13 +39,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       return await createUser({
         tenantId: auth.tenantId,
-        email: request.body.email,
-        name: request.body.name,
-        password: request.body.password,
-        country: request.body.country,
-        language: request.body.language,
-        timezone: request.body.timezone,
-        roleId: request.body.roleId,
+        ...request.body,
         resolvedAuth: getResolvedAuth(request),
       });
     },
@@ -121,12 +115,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
       return await updateUser({
         userId: request.params.userId,
         tenantId: auth.tenantId,
-        name: request.body.name,
-        avatarUrl: request.body.avatarUrl,
-        country: request.body.country,
-        language: request.body.language,
-        timezone: request.body.timezone,
-        roleId: request.body.roleId,
+        ...request.body,
         resolvedAuth: getResolvedAuth(request),
       });
     },

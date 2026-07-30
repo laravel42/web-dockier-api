@@ -59,14 +59,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       return await createProject({
         tenantId: auth.tenantId,
-        name: request.body.name,
-        repository: request.body.repository,
-        branch: request.body.branch,
-        connectionId: request.body.connectionId,
-        platform: request.body.platform,
-        sourceType: request.body.sourceType,
-        template: request.body.template,
-        config: request.body.config,
+        ...request.body,
       });
     },
   );
@@ -145,15 +138,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       return await updateProject({
         projectId: request.params.projectId,
         tenantId: auth.tenantId,
-        name: request.body.name,
-        repository: request.body.repository,
-        branch: request.body.branch,
-        connectionId: request.body.connectionId,
-        platform: request.body.platform,
-        sourceType: request.body.sourceType,
-        template: request.body.template,
-        config: request.body.config,
-        settings: request.body.settings,
+        ...request.body,
       });
     },
   );

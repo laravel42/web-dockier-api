@@ -97,9 +97,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       return await updateRole({
         roleId: request.params.roleId,
         tenantId: auth.tenantId,
-        name: request.body.name,
-        description: request.body.description,
-        permissions: request.body.permissions,
+        ...request.body,
         resolvedAuth: getResolvedAuth(request),
       });
     },
