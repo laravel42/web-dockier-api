@@ -2,7 +2,7 @@ import { Search, X } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/cn";
 
 interface SearchInputProps extends Omit<ComponentProps<typeof Input>, "type" | "value" | "onChange"> {
   value: string;

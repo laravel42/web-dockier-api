@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useViewMode } from "../../hooks/useViewMode";
+import { usePaginatedData } from "../../hooks/usePaginatedData";
 import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project } from "../../types";
 import { getDefaultDeployScript } from "../../config/frameworks";
 import { PROJECT_TEMPLATES } from "./templates";
-import type { PaginationMeta } from "../../services/projects";
 
 const PAGE_SIZE = 50;
 
@@ -18,18 +18,29 @@ export function useProjects() {
   const location = useLocation();
   const toast = useToast();
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const {
+    items: projects,
+    loading,
+    error: loadError,
+    pagination,
+    search,
+    goToPage,
+    handleSearch,
+    reload: fetchProjects,
+  } = usePaginatedData(
+    ({ limit, offset, search }) =>
+      projectsApi.list({ limit, offset, search }).then((r) => ({
+        items: r.projects,
+        pagination: r.pagination,
+      })),
+    { pageSize: PAGE_SIZE },
+  );
+
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Pick<Project, "id" | "name" | "repository" | "branch" | "connectionId"> | null>(null);
   const [form, setForm] = useState({ name: "", repository: "", branch: "" });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { viewMode, changeViewMode } = useViewMode("projects-view");
-  const [pagination, setPagination] = useState<PaginationMeta>({ total: 0, limit: PAGE_SIZE, offset: 0 });
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Source type: "repository" (existing) or "template" (new)
   const [platform, setPlatform] = useState("");
@@ -47,41 +58,6 @@ export function useProjects() {
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  // ── Data fetching ──────────────────────────────────────────────
-
-  const fetchProjects = useCallback(async (offset = 0) => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await projectsApi.list({
-        limit: PAGE_SIZE,
-        offset,
-        search: debouncedSearch,
-      });
-      setProjects(res.projects);
-      setPagination(res.pagination);
-    } catch (err) {
-      setLoadError(getErrorMessage(err, "Failed to load projects"));
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch]);
-
-  useEffect(() => { fetchProjects(); }, [fetchProjects]);
-
-  const goToPage = (page: number) => {
-    const newOffset = (page - 1) * PAGE_SIZE;
-    fetchProjects(newOffset);
-  };
-
-  const handleSearch = (query: string) => {
-    setSearch(query);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(query);
-    }, 300);
-  };
 
   // ── Connection / repo / branch cascading fetches ───────────────
 

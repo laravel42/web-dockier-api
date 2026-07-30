@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/cn";
 
 interface PasswordInputProps extends Omit<ComponentProps<typeof Input>, "type"> {
   id: string;
