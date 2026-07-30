@@ -1,6 +1,4 @@
-import type { ScanSummary } from "../types";
-
-type ScanSummaryCounts = Pick<ScanSummary, "totalFindings" | "errors" | "warnings" | "infos">;
+type ScanSummaryCounts = { totalFindings?: number; errors: number; warnings: number; infos: number };
 
 /** Security finding total — prefers severity buckets when summary fields disagree. */
 export function scanSecurityFindingCount(summary: ScanSummaryCounts): number {

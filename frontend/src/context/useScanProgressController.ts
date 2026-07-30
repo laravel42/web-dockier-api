@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchScanSnapshot } from "../services/scan-sync";
 import { getScanWebSocketUrl, type ScanWsMessage } from "../services/scan-websocket";
 import { getToken } from "../services/session";
-import type { Scan } from "../types";
+import type { Scan, ScanStatus } from "../types";
 import {
   ACTIVE_STATUSES,
   POLL_INTERVAL_MS,
@@ -93,7 +93,7 @@ export function useScanProgressController(): ScanProgressContextValue {
           return { ...prev, [scanId]: next };
         });
 
-        if (message.type === "status" && !ACTIVE_STATUSES.has(message.status)) {
+        if (message.type === "status" && !ACTIVE_STATUSES.has(message.status as ScanStatus)) {
           closeSocket(scanId);
         }
       } catch {

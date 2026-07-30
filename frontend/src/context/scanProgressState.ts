@@ -1,15 +1,15 @@
 import type { ScanWsMessage } from "../services/scan-websocket";
-import type { Scan, ScanProgress, ScanSummary } from "../types";
+import type { Scan, ScanProgress, ScanStatus, ScanSummary } from "../types";
 
 export interface ScanLiveState {
-  status: string;
+  status: ScanStatus;
   progress: ScanProgress | null;
   summary: ScanSummary | null;
   error: string | null;
 }
 
-export const ACTIVE_STATUSES = new Set(["pending", "running"]);
-export const TERMINAL_STATUSES = new Set(["completed", "failed"]);
+export const ACTIVE_STATUSES = new Set<ScanStatus>(["pending", "running"]);
+export const TERMINAL_STATUSES = new Set<ScanStatus>(["completed", "failed"]);
 
 const PHASE_ORDER: Record<string, number> = {
   cloning: 0,
@@ -164,7 +164,7 @@ export function applyMessage(
   if (message.type === "status") {
     const summary = summaryFromRecord(message.summary);
     return {
-      status: message.status,
+      status: message.status as ScanStatus,
       progress: summary.progress ?? null,
       summary,
       error: summary.error ?? null,
@@ -173,7 +173,7 @@ export function applyMessage(
 
   const summary = summaryFromRecord(message.summary);
   return {
-    status: message.status,
+    status: message.status as ScanStatus,
     progress: message.progress ?? summary.progress ?? null,
     summary,
     error: summary.error ?? null,
