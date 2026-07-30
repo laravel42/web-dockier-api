@@ -4,7 +4,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { env } from "./config.js";
+import { env } from "../config.js";
 
 // ─── Search Input Sanitization ─────────────────────────────────────
 

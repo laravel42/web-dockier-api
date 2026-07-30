@@ -1,11 +1,11 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { authPlugin } from "./shared/auth.js";
+import { authPlugin } from "./shared/auth/auth.js";
 import { authorizationPlugin } from "./shared/permissions/authorization.js";
-import { projectAccessPlugin } from "./shared/project-access.js";
-import { rawBodyPlugin } from "./shared/raw-body.js";
-import { registerDomainErrorHandler } from "./shared/error-handler.js";
-import { registerPlatformPlugins } from "./shared/openapi.js";
+import { projectAccessPlugin } from "./shared/http/project-access.js";
+import { rawBodyPlugin } from "./shared/http/raw-body.js";
+import { registerDomainErrorHandler } from "./shared/http/error-handler.js";
+import { registerPlatformPlugins } from "./shared/http/openapi.js";
 import { registerAuthRoutes } from "./services/auth/routes.js";
 import { registerCodeAnalysisRoutes } from "./services/code-analysis/routes.js";
 import { registerDeployRoutes } from "./services/deploy/routes.js";

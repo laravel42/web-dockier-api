@@ -9,7 +9,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
-import { env } from "./config.js";
+import { env } from "../config.js";
 
 export async function registerPlatformPlugins(app: FastifyInstance, serviceName: string) {
   app.setValidatorCompiler(validatorCompiler);

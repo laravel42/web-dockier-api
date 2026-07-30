@@ -555,7 +555,7 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
   });
 
   it("processes valid webhook with correct signature", async () => {
-    const { computeWebhookSignature } = await import("../../../shared/security.js");
+    const { computeWebhookSignature } = await import("../../../shared/http/security.js");
     const payload = { buildId: TEST_DEPLOYMENT_ID, status: "success", appUrl: "https://app.example.com" };
     const body = JSON.stringify(payload);
     const signature = computeWebhookSignature(body, "test-webhook-secret-for-testing");
@@ -580,7 +580,7 @@ describe("POST /deploy/webhook/aws-pipeline", () => {
   });
 
   it("returns success:false for non-existent deployment", async () => {
-    const { computeWebhookSignature } = await import("../../../shared/security.js");
+    const { computeWebhookSignature } = await import("../../../shared/http/security.js");
     const payload = { buildId: "d0e1f2a3-0123-4345-abcd-eeeeeeeeeeee", status: "success" };
     const body = JSON.stringify(payload);
     const signature = computeWebhookSignature(body, "test-webhook-secret-for-testing");

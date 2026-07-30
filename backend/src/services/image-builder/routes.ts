@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth.js";
+import { getAuth } from "../../shared/auth/auth.js";
 import { buildCredentialsSchema, buildSchema, buildLogsResponseSchema, imageRevisionResponseSchema, deployStatusResponseSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
-import { requireWebhookSignature } from "../../shared/security.js";
-import { tenantRateLimit } from "../../shared/rate-limit.js";
+import { requireWebhookSignature } from "../../shared/http/security.js";
+import { tenantRateLimit } from "../../shared/http/rate-limit.js";
 import {
   createBuild,
   getBuildWithStatus,

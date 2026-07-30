@@ -16,7 +16,7 @@
  * same project — only the last enqueued job runs.
  */
 
-import { createWorker, CONFIG_APPLY_QUEUE } from "../queue.js";
+import { createWorker, CONFIG_APPLY_QUEUE } from "../database/queue.js";
 
 export type ConfigApplyJobType = "domain-apply" | "network-apply" | "certificate-issue";
 

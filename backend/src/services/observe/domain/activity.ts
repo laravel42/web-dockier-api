@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
-import { escapePostgrestLike } from "../../../shared/security.js";
+import { escapePostgrestLike } from "../../../shared/http/security.js";
 import { logger } from "../../../shared/logger.js";
 import type { ActivityRow } from "../schemas.js";
 import { rowToActivity, type ActivityResponse } from "./mappers.js";

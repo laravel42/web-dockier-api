@@ -11,8 +11,8 @@
 import { PgBoss } from "pg-boss";
 import type { Job } from "pg-boss";
 import { getPostgresConnectionConfig } from "./postgres.js";
-import { logger } from "./logger.js";
-import { env } from "./config.js";
+import { logger } from "../logger.js";
+import { env } from "../config.js";
 
 let boss: PgBoss | null = null;
 let queueStarted = false;

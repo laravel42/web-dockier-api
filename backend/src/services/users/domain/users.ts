@@ -3,7 +3,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
-import { escapePostgrestFilter } from "../../../shared/security.js";
+import { escapePostgrestFilter } from "../../../shared/http/security.js";
 import { rowToUser } from "./mappers.js";
 
 export const UsersError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("UsersError");

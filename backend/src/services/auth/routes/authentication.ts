@@ -7,7 +7,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import {
   authMeSchema,
   authSessionSchema,
@@ -18,7 +18,7 @@ import {
 import { env } from "../../../shared/config.js";
 import { resolveSupabaseSecretKey } from "../../../shared/supabase/keys.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { rateLimit } from "../../../shared/rate-limit.js";
+import { rateLimit } from "../../../shared/http/rate-limit.js";
 import {
   listMembershipsForUser,
   getAuthenticatedUser,

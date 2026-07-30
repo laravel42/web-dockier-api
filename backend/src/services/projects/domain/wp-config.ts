@@ -5,7 +5,7 @@
  */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { encrypt, decrypt } from "../../../shared/crypto.js";
+import { encrypt, decrypt } from "../../../shared/auth/crypto.js";
 import { randomBytes } from "node:crypto";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, throwOnMutationError } from "../../../shared/supabase/query.js";

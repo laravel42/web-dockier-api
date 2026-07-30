@@ -6,7 +6,7 @@
 
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { billingDetailsSchema, billingDetailsInputSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { getBillingDetails, updateBillingDetails } from "../domain/billing.js";

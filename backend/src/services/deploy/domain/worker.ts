@@ -6,7 +6,7 @@
  * for background processing with retry semantics and crash recovery.
  */
 
-import { createWorker, DEPLOY_QUEUE } from "../../../shared/queue.js";
+import { createWorker, DEPLOY_QUEUE } from "../../../shared/database/queue.js";
 import { executePipeline, type PipelineInput } from "./pipeline/pipeline.js";
 
 const deployWorker = createWorker<PipelineInput>(

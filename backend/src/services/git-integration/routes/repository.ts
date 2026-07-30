@@ -5,9 +5,9 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { tenantRateLimit } from "../../../shared/rate-limit.js";
+import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
 import { getGitProvider, type RepoStats } from "../domain/providers/git-provider.js";

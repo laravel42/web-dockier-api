@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { encrypt, decrypt } from "../../../shared/crypto.js";
+import { encrypt, decrypt } from "../../../shared/auth/crypto.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, throwOnMutationError } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";

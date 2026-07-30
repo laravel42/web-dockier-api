@@ -1,8 +1,8 @@
 import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import jwt from "jsonwebtoken";
-import { env } from "./config.js";
-import type { ResolvedAuth } from "./permissions/authorization.js";
+import { env } from "../config.js";
+import type { ResolvedAuth } from "../permissions/authorization.js";
 
 export type AuthContext = {
   userId: string;

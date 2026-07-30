@@ -17,7 +17,7 @@
  */
 
 import { afterAll, beforeEach } from "vitest";
-import { clearRateLimitStore, destroyRateLimitStore } from "../rate-limit.js";
+import { clearRateLimitStore, destroyRateLimitStore } from "../http/rate-limit.js";
 
 beforeEach(() => {
   clearRateLimitStore();

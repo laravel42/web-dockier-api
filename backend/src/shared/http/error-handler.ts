@@ -6,7 +6,7 @@
  */
 
 import type { FastifyError, FastifyInstance } from "fastify";
-import { DomainError } from "./supabase/errors.js";
+import { DomainError } from "../supabase/errors.js";
 
 /**
  * Register a global Fastify error handler that catches DomainError instances

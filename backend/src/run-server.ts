@@ -1,9 +1,9 @@
 import { buildApp, type ServiceName } from "./app.js";
 import { env } from "./shared/config.js";
 import { logger } from "./shared/logger.js";
-import { startQueue, stopQueue } from "./shared/queue.js";
+import { startQueue, stopQueue } from "./shared/database/queue.js";
 import { destroyPermissionCache } from "./shared/permissions/authorization.js";
-import { destroyRateLimitStore } from "./shared/rate-limit.js";
+import { destroyRateLimitStore } from "./shared/http/rate-limit.js";
 import { registerDeployWorker } from "./services/deploy/domain/worker.js";
 import { registerImageBuildWorker } from "./services/image-builder/domain/worker.js";
 import { registerScanWorker } from "./services/code-analysis/domain/worker.js";

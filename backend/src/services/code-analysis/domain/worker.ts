@@ -2,7 +2,7 @@
  * Security scan worker — runs scans off the HTTP request path via pg-boss.
  */
 
-import { createWorker, SECURITY_SCAN_QUEUE } from "../../../shared/queue.js";
+import { createWorker, SECURITY_SCAN_QUEUE } from "../../../shared/database/queue.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { runScanInSubprocess } from "./run-scan-subprocess.js";
 import { failScanIfStillRunning, type RunScanOptions } from "./scan-worker.js";

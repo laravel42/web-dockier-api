@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, isAbsolute } from "node:path";
-import { getOpengrepRulesDir } from "../../../shared/paths.js";
+import { getOpengrepRulesDir } from "../../../shared/utils/paths.js";
 import { mapSemgrepSeverity } from "./scan-analysis.js";
 import { CodeAnalysisError } from "./scans.js";
 

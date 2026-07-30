@@ -12,10 +12,10 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pipeUIMessageStreamToResponse } from "ai";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth.js";
+import { getAuth } from "../../shared/auth/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { tenantRateLimit } from "../../shared/rate-limit.js";
+import { tenantRateLimit } from "../../shared/http/rate-limit.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
 import { env } from "../../shared/config.js";
 import {

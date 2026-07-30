@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "../domain/analysis.js";
@@ -16,7 +16,7 @@ import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "../doma
 import type { TechStackItem } from "../domain/tech-stack.js";
 import type { DetectedService } from "../domain/services.js";
 import { env } from "../../../shared/config.js";
-import { tenantRateLimit } from "../../../shared/rate-limit.js";
+import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { getGitProvider } from "../domain/providers/git-provider.js";
 import {

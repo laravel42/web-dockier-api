@@ -26,9 +26,9 @@
 
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { supabaseAdmin } from "./supabase/client.js";
-import { getAuth } from "./auth.js";
-import type { Json } from "./supabase/types.js";
+import { supabaseAdmin } from "../supabase/client.js";
+import { getAuth } from "../auth/auth.js";
+import type { Json } from "../supabase/types.js";
 
 /**
  * Cached project row set by requireProjectAccess.

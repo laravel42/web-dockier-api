@@ -1,7 +1,7 @@
 import pg from "pg";
 import { initConfig } from "../shared/config.js";
-import { getPostgresConnectionConfig } from "../shared/postgres.js";
-import { SECURITY_SCAN_QUEUE } from "../shared/queue.js";
+import { getPostgresConnectionConfig } from "../shared/database/postgres.js";
+import { SECURITY_SCAN_QUEUE } from "../shared/database/queue.js";
 
 const dryRun = process.argv.includes("--dry-run");
 

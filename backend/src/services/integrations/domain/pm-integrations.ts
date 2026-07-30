@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { encryptJson, decryptJson } from "../../../shared/crypto.js";
+import { encryptJson, decryptJson } from "../../../shared/auth/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";

@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth.js";
+import { getAuth } from "../../shared/auth/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
-import { rateLimit } from "../../shared/rate-limit.js";
+import { rateLimit } from "../../shared/http/rate-limit.js";
 import {
   heartbeatSchema,
   heartbeatFrequencySchema,

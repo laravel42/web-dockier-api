@@ -14,7 +14,7 @@
 
 import { supabaseAdmin } from "../supabase/client.js";
 import { logger } from "../logger.js";
-import { withRetry } from "../retry.js";
+import { withRetry } from "../utils/retry.js";
 
 export interface GitConnectionCredentials {
   provider: string;

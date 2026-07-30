@@ -6,7 +6,7 @@ import { throwOnError, unwrapQuery, unwrapList, assertOwnership, paginatedQuery 
 import { composeSubmittedReason, normalizeBuildInput } from "./orchestrator.js";
 import { createBuildspecPreview } from "./buildspec.js";
 import { enqueueBuild } from "./worker.js";
-import { escapePostgrestFilter } from "../../../shared/security.js";
+import { escapePostgrestFilter } from "../../../shared/http/security.js";
 import { rowToBuild } from "./mappers.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 import { lookupCodeBuildId, refreshBuildStatus } from "./aws-runtime.js";

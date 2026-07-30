@@ -14,7 +14,7 @@
  * - Static (s3/storage) → Not supported (no container to run commands in)
  */
 
-import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/queue.js";
+import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/database/queue.js";
 import { getCfn, getEc2 } from "../../../lib/aws-sdk.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";

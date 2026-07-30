@@ -1,6 +1,6 @@
 import pg from "pg";
-import { getQueue, SECURITY_SCAN_QUEUE } from "../../../shared/queue.js";
-import { getPostgresConnectionConfig } from "../../../shared/postgres.js";
+import { getQueue, SECURITY_SCAN_QUEUE } from "../../../shared/database/queue.js";
+import { getPostgresConnectionConfig } from "../../../shared/database/postgres.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { env } from "../../../shared/config.js";

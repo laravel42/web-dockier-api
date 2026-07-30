@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { deploymentSchema, deploymentStatusSchema, serviceEntrySchema } from "../schemas.js";
 import type { ServiceEntry } from "../types.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { paginationQuerySchema, paginationMetaSchema } from "../../../shared/schemas/responses.js";
-import { requireWebhookSignature, requireInternalToken } from "../../../shared/security.js";
-import { tenantRateLimit } from "../../../shared/rate-limit.js";
+import { requireWebhookSignature, requireInternalToken } from "../../../shared/http/security.js";
+import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { destroyDeployment } from "../domain/lifecycle/destroy.js";
 import { applyDeploymentWebhookUpdate } from "../domain/processor.js";

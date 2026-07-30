@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
-import { buildOtpAuthUrl, generateTotpSecret, verifyTotpToken } from "../../../shared/totp.js";
+import { buildOtpAuthUrl, generateTotpSecret, verifyTotpToken } from "../../../shared/auth/totp.js";
 
 export const TwoFactorError = createDomainErrorClass<"bad_request" | "not_found" | "internal">("TwoFactorError");
 export type TwoFactorError = InstanceType<typeof TwoFactorError>;

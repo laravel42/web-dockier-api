@@ -30,7 +30,7 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   const sensible = await import("@fastify/sensible");
-  const { authPlugin } = await import("../auth.js");
+  const { authPlugin } = await import("../auth/auth.js");
   const { authorizationPlugin, clearPermissionCache } = await import("../permissions/authorization.js");
 
   app = Fastify();

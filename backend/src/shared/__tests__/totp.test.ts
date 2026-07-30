@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { buildOtpAuthUrl, generateTotpSecret, verifyTotpToken } from "../totp.js";
+import { buildOtpAuthUrl, generateTotpSecret, verifyTotpToken } from "../auth/totp.js";
 
 describe("totp", () => {
   afterEach(() => {

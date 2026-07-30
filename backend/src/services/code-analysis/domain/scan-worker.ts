@@ -27,7 +27,7 @@ import {
   dedupeScanFindings,
 } from "./scan-analysis.js";
 import { filterDisabledSonarFindings, runSonarScanner } from "./sonarqube.js";
-import { getOpengrepRulesDir } from "../../../shared/paths.js";
+import { getOpengrepRulesDir } from "../../../shared/utils/paths.js";
 import {
   broadcastScanStatus,
   persistScanProgress,

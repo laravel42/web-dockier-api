@@ -8,11 +8,11 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { supabaseAdmin } from "../supabase/client.js";
-import { getAuth } from "../auth.js";
+import { getAuth } from "../auth/auth.js";
 import type { PermissionKey } from "./constants.js";
 import { CRITICAL_PERMISSIONS } from "./constants.js";
 import { getHierarchyLevel } from "./role-templates.js";
-import { MemoryCache } from "../memory-cache.js";
+import { MemoryCache } from "../cache/memory-cache.js";
 
 export interface ResolvedAuth {
   userId: string;

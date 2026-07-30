@@ -1,6 +1,6 @@
 import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import { verifyAuthToken } from "../../../shared/auth.js";
+import { verifyAuthToken } from "../../../shared/auth/auth.js";
 import { getScan } from "../domain/scans.js";
 import {
   subscribeToScan,

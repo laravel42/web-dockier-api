@@ -15,7 +15,7 @@
  */
 
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { MemoryCache } from "./memory-cache.js";
+import { MemoryCache } from "../cache/memory-cache.js";
 
 interface RateLimitEntry {
   count: number;

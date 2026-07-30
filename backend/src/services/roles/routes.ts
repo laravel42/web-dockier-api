@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth, getResolvedAuth } from "../../shared/auth.js";
+import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
 import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { roleResponseSchema } from "./schemas.js";

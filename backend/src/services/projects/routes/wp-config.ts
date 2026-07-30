@@ -7,7 +7,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { getMaskedWpConfig, revealWpConfig, saveWpConfig } from "../domain/wp-config.js";
 import { safeRecordActivity } from "../../../shared/service-clients/activity.js";

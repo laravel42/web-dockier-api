@@ -6,7 +6,7 @@
  * for background processing with retry semantics and crash recovery.
  */
 
-import { createWorker, IMAGE_BUILD_QUEUE } from "../../../shared/queue.js";
+import { createWorker, IMAGE_BUILD_QUEUE } from "../../../shared/database/queue.js";
 import { executeBuild, type BuildJobInput } from "./build-pipeline.js";
 
 const imageBuildWorker = createWorker<BuildJobInput>(

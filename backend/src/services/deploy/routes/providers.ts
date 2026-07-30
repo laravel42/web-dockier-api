@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { providerSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../../shared/schemas/responses.js";
-import { requireInternalToken } from "../../../shared/security.js";
+import { requireInternalToken } from "../../../shared/http/security.js";
 import {
   createProvider,
   listProviders,

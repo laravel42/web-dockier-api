@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../../shared/schemas/responses.js";
 import { listRuleOverrides, upsertRuleOverride } from "../domain/rule-overrides.js";

@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../../shared/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { scanSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../../shared/schemas/responses.js";
-import { tenantRateLimit } from "../../../shared/rate-limit.js";
+import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { createScan, listScans, getScan, deleteScan, runScan } from "../domain/scans.js";
 
 export async function registerScanRoutes(app: FastifyInstance) {

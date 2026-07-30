@@ -5,7 +5,7 @@ import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/
 import { nowIso } from "../../../shared/utils/time.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { escapePostgrestLike } from "../../../shared/security.js";
+import { escapePostgrestLike } from "../../../shared/http/security.js";
 import { rowToProject } from "./mappers.js";
 import { saveWpConfig, generateWpConfig } from "./wp-config.js";
 

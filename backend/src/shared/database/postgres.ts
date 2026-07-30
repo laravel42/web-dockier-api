@@ -1,5 +1,5 @@
 import type { ConnectionConfig } from "pg";
-import { env } from "./config.js";
+import { env } from "../config.js";
 
 function databaseUrlRequiresSsl(databaseUrl: string): boolean {
   return (
