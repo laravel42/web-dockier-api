@@ -13,6 +13,7 @@
 import { supabaseAdmin } from "../supabase/client.js";
 import type { InfraMetadata } from "../../services/deploy/types.js";
 import { parseInfra } from "../../services/deploy/types.js";
+import { logger } from "../logger.js";
 
 export interface ActiveDeployment {
   id: string;
@@ -51,7 +52,11 @@ export async function getActiveDeployment(
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    logger.warn({ err: error, projectId }, "[service-clients] Failed to fetch active deployment");
+    return null;
+  }
+  if (!data) return null;
 
   return {
     id: data.id,

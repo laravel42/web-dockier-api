@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from "../supabase/client.js";
+import { logger } from "../logger.js";
 
 export interface ProjectDeployConfig {
   platform: string;
@@ -35,7 +36,11 @@ export async function getProjectDeployConfig(projectId: string): Promise<Project
     .eq("id", projectId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    logger.warn({ err: error, projectId }, "[service-clients] Failed to fetch project deploy config");
+    return null;
+  }
+  if (!data) return null;
 
   let deployScript = "";
   if (data.settings && typeof data.settings === "object" && !Array.isArray(data.settings)) {

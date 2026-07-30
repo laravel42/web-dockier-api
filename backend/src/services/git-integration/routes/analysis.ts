@@ -37,6 +37,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
     "/git/connections/:connectionId/stack-analysis",
     {
       preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-stack" })],
+      handlerTimeout: 45_000,
       schema: {
         tags: ["git-integration"],
         summary: "Get stack analysis",
@@ -97,6 +98,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
     "/git/connections/:connectionId/sensitive-data",
     {
       preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-sensitive" })],
+      handlerTimeout: 45_000,
       schema: {
         tags: ["git-integration"],
         summary: "Scan repository for sensitive schema fields",
@@ -248,6 +250,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
     "/git/connections/:connectionId/repo-analyze",
     {
       preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-repo-analyze" })],
+      handlerTimeout: 90_000,
       schema: {
         tags: ["git-integration"],
         summary: "Analyze repository stack and deploy options",
@@ -344,6 +347,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
     "/git/connections/:connectionId/create-mr",
     {
       preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_MR), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-create-mr" })],
+      handlerTimeout: 90_000,
       schema: {
         tags: ["git-integration"],
         summary: "Create fix MR/PR",

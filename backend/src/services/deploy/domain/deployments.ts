@@ -334,22 +334,37 @@ export async function cancelDeployment(deploymentId: string, tenantId: string) {
     );
   }
 
-  const cancelLog = `\n[${nowIso()}] ⛔ Deployment cancelled by user`;
+  // Use optimistic locking: only cancel if status is still cancellable.
+  // This prevents overwriting a concurrent transition (e.g., building → success).
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("deployments")
     .update({
       status: "cancelled",
-      logs: (deployment.logs || "") + cancelLog,
       updated_at: nowIso(),
     })
     .eq("id", deploymentId)
+    .in("status", CANCELLABLE_STATUSES)
     .select("*")
-    .single();
+    .maybeSingle();
 
-  const cancelled = unwrapQuery(updated, updateError, DeployError, {
-    notFoundMsg: "Deployment not found or could not be updated",
-    internalMsg: "Failed to cancel deployment",
-  });
+  if (updateError) {
+    throw new DeployError("Failed to cancel deployment", "internal", updateError);
+  }
 
-  return rowToDeployment(cancelled);
+  if (!updated) {
+    // Race lost — status changed between the read and the update.
+    // Re-fetch current state and return it so the client sees the real status.
+    const { data: current } = await supabaseAdmin
+      .from("deployments")
+      .select("*")
+      .eq("id", deploymentId)
+      .single();
+    if (current) return rowToDeployment(current);
+    throw new DeployError("Deployment status changed before cancel could be applied", "precondition_failed");
+  }
+
+  // Append cancel log atomically via RPC (avoids read-modify-write race)
+  await appendDeploymentLog(deploymentId, `[${nowIso()}] ⛔ Deployment cancelled by user`);
+
+  return rowToDeployment(updated);
 }

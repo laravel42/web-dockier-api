@@ -147,9 +147,13 @@ export async function runServer(): Promise<void> {
     });
   }
 
+  let shuttingDown = false;
   const shutdown = async () => {
-    await app.close();
-    if (needsQueue) await stopQueue();
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info("[shutdown] Graceful shutdown initiated");
+    try { await app.close(); } catch (err) { logger.error({ err }, "[shutdown] app.close() failed"); }
+    try { if (needsQueue) await stopQueue(); } catch (err) { logger.error({ err }, "[shutdown] stopQueue() failed"); }
     destroyPermissionCache();
     destroyRateLimitStore();
     process.exit(0);
