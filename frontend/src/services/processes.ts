@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 
 // ─── Types ───
 
@@ -114,7 +115,7 @@ export const processesApi = {
 
   getProcessLogs: (projectId: string, processId: string, lines = 100) =>
     request<{ logs: string }>(
-      `/projects/${encodeURIComponent(projectId)}/processes/${encodeURIComponent(processId)}/logs?lines=${lines}`,
+      `/projects/${encodeURIComponent(projectId)}/processes/${encodeURIComponent(processId)}/logs${buildQuery({ lines })}`,
     ),
 
   // Scheduled Jobs

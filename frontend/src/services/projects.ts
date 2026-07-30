@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 import type { Project, ProjectConfig } from "../types";
 
 export interface PaginationMeta {
@@ -14,16 +15,10 @@ export interface ListProjectsParams {
 }
 
 export const projectsApi = {
-  list: (params?: ListProjectsParams) => {
-    const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.offset) searchParams.set("offset", String(params.offset));
-    if (params?.search) searchParams.set("search", params.search);
-    const qs = searchParams.toString();
-    return request<{ projects: Project[]; pagination: PaginationMeta }>(
-      `/projects${qs ? `?${qs}` : ""}`,
-    );
-  },
+  list: (params?: ListProjectsParams) =>
+    request<{ projects: Project[]; pagination: PaginationMeta }>(
+      `/projects${buildQuery(params)}`,
+    ),
 
   get: (projectId: string) =>
     request<Project>(`/projects/${projectId}`),

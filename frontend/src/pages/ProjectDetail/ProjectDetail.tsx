@@ -92,7 +92,7 @@ export default function ProjectDetail() {
   };
 
   const lastSuccessfulDeployUrl = recentDeploys.find(
-    (d) => (d.status === "success" || d.status === "completed") && d.appUrl,
+    (d) => d.status === "success" && d.appUrl,
   )?.appUrl;
 
   if (loading) {

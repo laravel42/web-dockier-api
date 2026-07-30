@@ -6,6 +6,17 @@ interface UseAsyncDataOptions {
   enabled?: boolean;
 }
 
+/**
+ * Generic data-fetching hook with loading/error state management.
+ *
+ * Fetches data on mount (or when `enabled` becomes true) and exposes
+ * a `reload()` function for manual re-fetching. Automatically extracts
+ * user-friendly error messages via `getErrorMessage()`.
+ *
+ * @param fetcher - Async function that returns the data
+ * @param deps - Dependency array that triggers re-fetching when values change
+ * @param options - Configuration (e.g., `enabled` to defer initial fetch)
+ */
 export function useAsyncData<T>(
   fetcher: () => Promise<T>,
   deps: readonly unknown[] = [],

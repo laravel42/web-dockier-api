@@ -4,6 +4,7 @@ import { projectsApi, gitApi } from "../../services/api";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { getErrorMessage } from "../../utils/errors";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
+import { useViewMode } from "../../hooks/useViewMode";
 import { useToast } from "../../context/useToast";
 import type { Connection, Repo, Project } from "../../types";
 import { getDefaultDeployScript } from "../../config/frameworks";
@@ -24,9 +25,7 @@ export function useProjects() {
   const [editing, setEditing] = useState<Pick<Project, "id" | "name" | "repository" | "branch" | "connectionId"> | null>(null);
   const [form, setForm] = useState({ name: "", repository: "", branch: "" });
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"cards" | "table">(
-    () => (localStorage.getItem("projects-view") as "cards" | "table") || "cards",
-  );
+  const { viewMode, changeViewMode } = useViewMode("projects-view");
   const [pagination, setPagination] = useState<PaginationMeta>({ total: 0, limit: PAGE_SIZE, offset: 0 });
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -239,11 +238,6 @@ export function useProjects() {
 
   const closeForm = () => {
     setShowForm(false); setEditing(null); resetSelections();
-  };
-
-  const changeViewMode = (mode: "cards" | "table") => {
-    setViewMode(mode);
-    localStorage.setItem("projects-view", mode);
   };
 
   const confirmDelete = () => {

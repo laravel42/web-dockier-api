@@ -57,6 +57,28 @@ export function useProjectBadges(
   useEffect(() => {
     if (projects.length === 0) return;
 
+    async function fetchBadgesForProject(
+      projectId: string,
+      repoKey: string,
+      branch: string,
+      connectionId: string,
+    ): Promise<void> {
+      try {
+        const res = await gitApi.getRepoBadges(repoKey, branch, connectionId || undefined);
+        const badges = selectProjectBadges(res.badges || []);
+        setProjectBadgeCache(projectId, repoKey, branch, connectionId, badges);
+        setFetchedLangs((prev) => ({ ...prev, [projectId]: badges }));
+      } catch {
+        setFetchedLangs((prev) => ({ ...prev, [projectId]: [] }));
+      } finally {
+        setLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(projectId);
+          return next;
+        });
+      }
+    }
+
     const currentIds = new Set(projects.map((p) => p.id));
     for (const id of fetchedRef.current.keys()) {
       if (!currentIds.has(id)) fetchedRef.current.delete(id);
@@ -83,23 +105,7 @@ export function useProjectBadges(
       fetchedRef.current.set(p.id, fetchKey);
       setLoadingIds((prev) => new Set(prev).add(p.id));
 
-      void gitApi
-        .getRepoBadges(repoKey, branch, connectionId || undefined)
-        .then((res) => {
-          const badges = selectProjectBadges(res.badges || []);
-          setProjectBadgeCache(p.id, repoKey, branch, connectionId, badges);
-          setFetchedLangs((prev) => ({ ...prev, [p.id]: badges }));
-        })
-        .catch(() => {
-          setFetchedLangs((prev) => ({ ...prev, [p.id]: [] }));
-        })
-        .finally(() => {
-          setLoadingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(p.id);
-            return next;
-          });
-        });
+      void fetchBadgesForProject(p.id, repoKey, branch, connectionId);
     }
     // projectsKey captures repo/branch/connection changes for the current projects list
     // eslint-disable-next-line react-hooks/exhaustive-deps -- projectsKey is a stable content hash

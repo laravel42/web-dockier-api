@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 
 export interface Command {
   id: string;
@@ -21,7 +22,7 @@ export const commandsApi = {
 
   list: (projectId: string, params?: { limit?: number; offset?: number }) =>
     request<{ commands: Command[]; pagination: { total: number; limit: number; offset: number } }>(
-      `/projects/${encodeURIComponent(projectId)}/commands?limit=${params?.limit ?? 20}&offset=${params?.offset ?? 0}`,
+      `/projects/${encodeURIComponent(projectId)}/commands${buildQuery({ limit: params?.limit ?? 20, offset: params?.offset ?? 0 })}`,
     ),
 
   get: (projectId: string, commandId: string) =>

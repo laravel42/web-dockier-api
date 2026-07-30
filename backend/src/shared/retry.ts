@@ -94,10 +94,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms);
-    promise
-      .then((value) => { clearTimeout(timer); resolve(value); })
-      .catch((err) => { clearTimeout(timer); reject(err); });
-  });
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms);
+      // Allow Node to exit even if the timer is pending (e.g. in tests)
+      if (timer.unref) timer.unref();
+    }),
+  ]);
 }

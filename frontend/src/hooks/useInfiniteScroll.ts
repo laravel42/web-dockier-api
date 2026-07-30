@@ -28,6 +28,20 @@ function isNearScrollRoot(node: Element, root: Element | null, rootMarginPx: num
   return nodeRect.top <= rootRect.bottom + rootMarginPx && nodeRect.bottom >= rootRect.top - rootMarginPx;
 }
 
+/**
+ * Infinite scroll hook using IntersectionObserver.
+ *
+ * Attach the returned `sentinelRef` to a div at the bottom of your list.
+ * When the sentinel scrolls into view, `onLoadMore` is called automatically.
+ * Handles scroll containers, prevents duplicate fetches, and re-checks
+ * visibility after each page load in case the sentinel is still in view.
+ *
+ * @param onLoadMore - Callback to trigger the next page load
+ * @param options.enabled - Whether infinite scroll is active (default: true)
+ * @param options.isLoading - Pass true while fetching to prevent double-triggers
+ * @param options.rootMargin - IntersectionObserver margin (default: "200px")
+ * @returns sentinelRef — callback ref to attach to the sentinel element
+ */
 export function useInfiniteScroll(
   onLoadMore: () => void,
   { enabled = true, isLoading = false, rootMargin = "200px" }: Options = {},

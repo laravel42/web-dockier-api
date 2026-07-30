@@ -1,13 +1,9 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 
 export const usersApi = {
-  list: (params?: { limit?: number; offset?: number; search?: string }) => {
-    const qs = new URLSearchParams();
-    if (params?.limit) qs.set("limit", String(params.limit));
-    if (params?.offset) qs.set("offset", String(params.offset));
-    if (params?.search) qs.set("search", params.search);
-    const q = qs.toString();
-    return request<{
+  list: (params?: { limit?: number; offset?: number; search?: string }) =>
+    request<{
       users: Array<{
         id: string;
         email: string;
@@ -19,8 +15,7 @@ export const usersApi = {
         createdAt: string;
       }>;
       pagination: { total: number; limit: number; offset: number };
-    }>(`/users${q ? `?${q}` : ""}`);
-  },
+    }>(`/users${buildQuery(params)}`),
 
   get: (userId: string) =>
     request<{

@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deployApi, projectsApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
+import { useViewMode } from "../../hooks/useViewMode";
 import type { Deployment, Project } from "../../types";
 import { compareByTime } from "../../utils/sortByTime";
 
@@ -24,9 +24,7 @@ async function fetchDeployPageData(): Promise<DeployPageData> {
 
 export function useDeploy() {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<"cards" | "table">(
-    () => (localStorage.getItem("deployments-view") as "cards" | "table") || "cards",
-  );
+  const { viewMode, changeViewMode } = useViewMode("deployments-view");
   const { data, loading, error, reload } = useAsyncData(fetchDeployPageData, []);
 
   const deployments = data?.deployments ?? [];
@@ -47,11 +45,6 @@ export function useDeploy() {
       return acc;
     }, {}),
   ).sort(([, a], [, b]) => compareByTime(a[0], b[0], "updated"));
-
-  const changeViewMode = (mode: "cards" | "table") => {
-    setViewMode(mode);
-    localStorage.setItem("deployments-view", mode);
-  };
 
   return {
     navigate,

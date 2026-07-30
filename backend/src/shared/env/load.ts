@@ -39,8 +39,3 @@ export async function bootstrapEnv(): Promise<void> {
   await loadCloudflareSecretsIfConfigured();
   await loadAwsSecretsIfConfigured();
 }
-
-/** @deprecated Use bootstrapEnv() via initConfig() */
-export function loadDockierEnv(): void {
-  loadDockierEnvFiles();
-}

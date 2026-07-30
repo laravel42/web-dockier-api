@@ -9,6 +9,13 @@ export function notifyInAppNotificationsChanged() {
   window.dispatchEvent(new Event(IN_APP_NOTIFICATIONS_CHANGED_EVENT));
 }
 
+/**
+ * Checks whether in-app notifications are enabled for the current user/tenant.
+ *
+ * Fetches the notification channels from the API and checks if the `in_app`
+ * channel is enabled. Re-checks on route changes and listens for the
+ * `dockier:in-app-notifications-changed` event for real-time updates.
+ */
 export function useInAppNotificationsEnabled(): { enabled: boolean; loading: boolean } {
   const pathname = useLocation().pathname;
   const { has, loading: permissionsLoading } = usePermissions();
@@ -16,7 +23,7 @@ export function useInAppNotificationsEnabled(): { enabled: boolean; loading: boo
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     if (!canView) {
       setEnabled(false);
       setLoading(false);
@@ -24,14 +31,15 @@ export function useInAppNotificationsEnabled(): { enabled: boolean; loading: boo
     }
 
     setLoading(true);
-    notificationsApi
-      .listChannels()
-      .then((res) => {
-        const inApp = res.channels.find((ch) => ch.type === "in_app");
-        setEnabled(inApp?.enabled ?? false);
-      })
-      .catch(() => setEnabled(false))
-      .finally(() => setLoading(false));
+    try {
+      const res = await notificationsApi.listChannels();
+      const inApp = res.channels.find((ch) => ch.type === "in_app");
+      setEnabled(inApp?.enabled ?? false);
+    } catch {
+      setEnabled(false);
+    } finally {
+      setLoading(false);
+    }
   }, [canView]);
 
   useEffect(() => {

@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
+import { useViewMode } from "../../hooks/useViewMode";
 import type { Scan, Project } from "../../types";
 import { compareByTime } from "../../utils/sortByTime";
 
@@ -23,9 +23,7 @@ async function fetchSecurityScansData(): Promise<SecurityScansData> {
 
 export function useSecurityScans() {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<"cards" | "table">(
-    () => (localStorage.getItem("security-scans-view") as "cards" | "table") || "cards",
-  );
+  const { viewMode, changeViewMode } = useViewMode("security-scans-view");
   const { data, loading, error, reload } = useAsyncData(fetchSecurityScansData, []);
 
   const scans = data?.scans ?? [];

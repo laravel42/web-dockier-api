@@ -1,3 +1,5 @@
+export type ScanStatus = "pending" | "running" | "completed" | "failed";
+
 export interface ScanSummary {
   totalFindings: number;
   errors: number;
@@ -14,7 +16,7 @@ export interface Scan {
   projectId: string;
   repo: string;
   branch: string;
-  status: string;
+  status: ScanStatus;
   summary: ScanSummary;
   commitSha: string;
   commitMessage: string;
@@ -24,14 +26,24 @@ export interface Scan {
   updatedAt: string;
 }
 
+export type FindingSeverity = "error" | "warning" | "info";
+
+/** A single security/quality finding from a scan. */
 export interface Finding {
   id: string;
+  /** The scanner rule that triggered this finding (e.g. "javascript.lang.xss"). */
   ruleId: string;
-  severity: string;
+  /** Severity classification: error, warning, or info. */
+  severity: FindingSeverity;
+  /** Human-readable description of the issue. */
   message: string;
+  /** Path to the affected file relative to the repo root. */
   filePath: string;
+  /** First line of the affected code range (1-indexed). */
   startLine: number;
+  /** Last line of the affected code range (1-indexed). */
   endLine: number;
+  /** Source code excerpt showing the affected lines. */
   snippet: string;
 }
 

@@ -1,4 +1,5 @@
 import { request } from "./request";
+import { buildQuery } from "./query";
 
 // ─── Types ───
 
@@ -108,13 +109,8 @@ export const observeApi = {
     }),
 
   // Activity
-  listActivity: (projectId: string, params?: { limit?: number; offset?: number; search?: string }) => {
-    const searchParams = new URLSearchParams();
-    searchParams.set("limit", String(params?.limit ?? 50));
-    searchParams.set("offset", String(params?.offset ?? 0));
-    if (params?.search) searchParams.set("search", params.search);
-    return request<{ activity: ActivityEntry[]; pagination: { total: number; limit: number; offset: number } }>(
-      `/projects/${encodeURIComponent(projectId)}/activity?${searchParams.toString()}`,
-    );
-  },
+  listActivity: (projectId: string, params?: { limit?: number; offset?: number; search?: string }) =>
+    request<{ activity: ActivityEntry[]; pagination: { total: number; limit: number; offset: number } }>(
+      `/projects/${encodeURIComponent(projectId)}/activity${buildQuery({ limit: params?.limit ?? 50, offset: params?.offset ?? 0, search: params?.search })}`,
+    ),
 };

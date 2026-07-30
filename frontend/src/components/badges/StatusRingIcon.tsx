@@ -1,5 +1,7 @@
+import type { DeploymentStatus, ScanStatus } from "../../types";
+
 interface Props {
-  status: string;
+  status: DeploymentStatus | ScanStatus | (string & {});
   className?: string;
 }
 

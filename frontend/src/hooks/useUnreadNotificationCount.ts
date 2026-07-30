@@ -3,6 +3,12 @@ import { useLocation } from "react-router-dom";
 import { notificationsApi } from "../services/api";
 import { useInAppNotificationsEnabled } from "./useInAppNotificationsEnabled";
 
+/**
+ * Returns the count of unread in-app notifications.
+ *
+ * Re-fetches on route change and when in-app notifications are toggled.
+ * Returns 0 when notifications are disabled or on fetch failure.
+ */
 export function useUnreadNotificationCount(): number {
   const pathname = useLocation().pathname;
   const { enabled: inAppEnabled } = useInAppNotificationsEnabled();
@@ -15,19 +21,18 @@ export function useUnreadNotificationCount(): number {
     }
 
     let cancelled = false;
-    notificationsApi
-      .list(true)
-      .then((res) => {
-        if (!cancelled) {
-          setCount(res.notifications.length);
-        }
-      })
-      .catch(() => {
+
+    async function fetchUnreadCount() {
+      try {
+        const res = await notificationsApi.list({ unreadOnly: true });
+        if (!cancelled) setCount(res.notifications.length);
+      } catch {
         if (!cancelled) setCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
+      }
+    }
+
+    void fetchUnreadCount();
+    return () => { cancelled = true; };
   }, [pathname, inAppEnabled]);
 
   return count;

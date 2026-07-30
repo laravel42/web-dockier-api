@@ -2,12 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import Spinner from "./Spinner";
-
-interface Repo {
-  name: string;
-  fullName: string;
-  private: boolean;
-}
+import type { Repo } from "../types";
 
 interface Props {
   value: string;

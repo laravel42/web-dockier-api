@@ -3,12 +3,7 @@ import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import SourceControlBadge, { getSourceControl } from "./SourceControlBadge";
 import Spinner from "./Spinner";
-
-interface Connection {
-  id: string;
-  provider: string;
-  label: string;
-}
+import type { Connection } from "../types";
 
 interface Props {
   value: string;
