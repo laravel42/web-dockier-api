@@ -88,7 +88,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
           name: z.string().min(2).max(80).optional(),
           description: z.string().max(300).optional(),
           permissions: z.array(z.string()).optional(),
-        }),
+        }).refine((v) => Object.keys(v).length > 0, "Provide at least one field to update"),
         response: { 200: roleResponseSchema },
       },
     },

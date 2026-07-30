@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
 import { sendEmailNotification } from "./email-dispatch.js";
 import { notificationMetadataSchema, type NotificationMetadata } from "../schemas.js";
 
@@ -330,11 +330,10 @@ async function listNotificationsWithoutMetadata(tenantId: string, params?: { unr
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   if (params?.unreadOnly) query = query.eq("read", false);
-  query = query.range(offset, offset + limit - 1);
-  const { data, error, count } = await query;
-  const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
-  return {
-    notifications: rows.map((row) => ({
+
+  const result = await paginatedQuery(query, { limit, offset }, NotificationsError, {
+    internalMsg: "Failed to list notifications",
+    map: (row) => ({
       id: row.id,
       channel: row.channel,
       title: row.title,
@@ -342,8 +341,12 @@ async function listNotificationsWithoutMetadata(tenantId: string, params?: { unr
       metadata: null,
       read: row.read,
       createdAt: row.created_at,
-    })),
-    total: count ?? 0,
+    }),
+  });
+
+  return {
+    notifications: result.data,
+    total: result.total,
   };
 }
 

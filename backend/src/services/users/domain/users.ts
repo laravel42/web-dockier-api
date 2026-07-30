@@ -4,6 +4,7 @@ import { throwOnError, unwrapQuery } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/http/security.js";
+import { logger } from "../../../shared/logger.js";
 import { rowToUser } from "./mappers.js";
 
 export const UsersError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("UsersError");
@@ -260,7 +261,7 @@ export async function removeUser(params: RemoveUserParams) {
   if (authDeleteError) {
     // Log but don't fail — the user is already removed from the org.
     // A dangling auth record is less critical than blocking the operation.
-    console.warn(`[users] Failed to delete auth user ${userId}: ${authDeleteError.message}`);
+    logger.warn({ userId, err: authDeleteError }, "[users] Failed to delete auth user from Supabase Auth");
   }
 }
 

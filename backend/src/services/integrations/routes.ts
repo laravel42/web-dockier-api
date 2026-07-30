@@ -99,7 +99,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
           name: z.string().min(1).max(100).optional(),
           config: z.record(z.string().max(100), z.string().max(5000)).optional(),
           enabled: z.boolean().optional(),
-        }),
+        }).refine((v) => Object.keys(v).length > 0, "Provide at least one field to update"),
         response: { 200: pmIntegrationSchema },
       },
     },

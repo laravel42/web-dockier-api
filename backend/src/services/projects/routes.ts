@@ -136,7 +136,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
           template: z.string().optional(),
           config: projectConfigSchema.optional(),
           settings: projectSettingsSchema.optional(),
-        }),
+        }).refine((v) => Object.keys(v).length > 0, "Provide at least one field to update"),
         response: { 200: projectSchema },
       },
     },
