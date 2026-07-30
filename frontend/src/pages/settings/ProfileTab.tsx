@@ -5,7 +5,7 @@ import { usePermissions } from "../../context/PermissionsContext";
 import { countries } from "../../data/countries";
 import { SearchableCombobox } from "../../components/ui/combobox";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import { btnPrimary } from "../../utils/styles";
+import Button from "../../components/ui/Button";
 import PageLoading from "../../components/ui/PageLoading";
 import Alert from "../../components/ui/Alert";
 import { getErrorMessage } from "../../utils/errors";
@@ -211,9 +211,9 @@ export default function ProfileTab() {
               </SettingsField>
             </div>
             <div className="flex justify-end pt-2">
-              <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
+              <Button type="submit" disabled={saving} loading={saving}>
                 {saving ? "Saving..." : "Save Changes"}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -317,9 +317,9 @@ export default function ProfileTab() {
                   </div>
                   {canManageBilling && (
                     <div className="flex justify-end pt-2">
-                      <button type="submit" disabled={billingSaving} className={`${btnPrimary} disabled:opacity-50`}>
+                      <Button type="submit" disabled={billingSaving} loading={billingSaving}>
                         {billingSaving ? "Saving..." : "Save Billing"}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </form>
@@ -336,14 +336,13 @@ export default function ProfileTab() {
         {twoFactorEnabled ? (
           <Alert variant="success">Two-factor authentication is enabled on your account.</Alert>
         ) : !qrCode ? (
-          <button
-            type="button"
+          <Button
             onClick={handleSetup2FA}
             disabled={twoFactorLoading}
-            className={`${btnPrimary} disabled:opacity-50`}
+            loading={twoFactorLoading}
           >
             {twoFactorLoading ? "Setting up..." : "Setup 2FA"}
-          </button>
+          </Button>
         ) : (
           <div className="space-y-4">
             <div className="text-center">
@@ -365,13 +364,14 @@ export default function ProfileTab() {
                 required
               />
               <div className="flex justify-end">
-                <button
+                <Button
                   type="submit"
                   disabled={twoFactorLoading || verifyToken.length !== 6}
-                  className="h-9 px-4 bg-success-500 text-white text-sm font-medium rounded-(--radius-btn) hover:bg-success-700 disabled:opacity-50 transition-colors"
+                  loading={twoFactorLoading}
+                  className="bg-success-500 hover:bg-success-700"
                 >
                   {twoFactorLoading ? "Verifying..." : "Enable 2FA"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>

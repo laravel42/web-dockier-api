@@ -5,13 +5,15 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { inputCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import Button from "../../components/ui/Button";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useTabList } from "../../hooks/useTabList";
+import PlusIcon from "@/components/icons/outlined/PlusIcon";
 
 export default function SourceControlTab() {
   const { has } = usePermissions();
@@ -63,10 +65,9 @@ export default function SourceControlTab() {
           <p className="text-sm text-text-muted mt-0.5">Connect Git providers for projects and deployments.</p>
         </div>
         {canManage && (
-          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
             Add Connection
-          </button>
+          </Button>
         )}
       </div>
 
@@ -110,7 +111,7 @@ export default function SourceControlTab() {
             <p className="text-xs text-text-muted mt-1">Leave empty for default. Set for self-hosted instances.</p>
           </div>
           <div className="flex justify-end">
-            <button type="submit" className={btnPrimary}>Connect</button>
+            <Button type="submit">Connect</Button>
           </div>
         </form>
       </Modal>
@@ -180,7 +181,7 @@ export default function SourceControlTab() {
               onDelete={canManage ? () => setConfirmRemove(true) : undefined}
               deleteAriaLabel={`Remove ${editForm.label || "connection"}`}
             >
-              <button type="submit" className={btnPrimary}>Save Changes</button>
+              <Button type="submit">Save Changes</Button>
             </SettingsModalFooter>
           </form>
         )}

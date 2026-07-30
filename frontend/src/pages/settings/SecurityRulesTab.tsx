@@ -6,7 +6,12 @@ import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
 import { SearchableCombobox } from "../../components/ui/combobox";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import { inputCls, btnPrimary, segmentActiveCls, segmentIdleCls } from "../../utils/styles";
+import { inputCls, segmentActiveCls, segmentIdleCls } from "../../utils/styles";
+import Button from "../../components/ui/Button";
+import PlusIcon from "../../components/icons/outlined/PlusIcon";
+import PencilIcon from "../../components/icons/outlined/PencilIcon";
+import TrashIcon from "../../components/icons/outlined/TrashIcon";
+import ChevronDownIcon from "../../components/icons/outlined/ChevronDownIcon";
 import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
 
@@ -174,19 +179,17 @@ export default function SecurityRulesTab() {
             {effectiveSource === "custom" && (
               <div className="ml-auto flex items-center gap-2">
                 <input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
-                <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2 shrink-0`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="shrink-0">
                   Add Rule
-                </button>
+                </Button>
               </div>
             )}
             {effectiveSource === "semgrep" && (
               <div className="ml-auto flex items-center gap-2">
                 <input type="text" value={semgrepFilter} onChange={e => setSemgrepFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
-                <button onClick={() => setSemgrepAdding(true)} className={`${btnPrimary} inline-flex items-center gap-2 shrink-0`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                <Button onClick={() => setSemgrepAdding(true)} iconLeft={<PlusIcon className="size-4" />} className="shrink-0">
                   Add Rule
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -287,7 +290,7 @@ export default function SecurityRulesTab() {
           </SettingsField>
           {error && <p className="text-sm text-danger-500">{error}</p>}
           <div className="flex justify-end">
-            <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>{saving ? "Saving…" : editingRule ? "Update" : "Create"}</button>
+            <Button type="submit" disabled={saving} loading={saving}>{saving ? "Saving…" : editingRule ? "Update" : "Create"}</Button>
           </div>
         </form>
       </Modal>
@@ -319,10 +322,10 @@ export default function SecurityRulesTab() {
                 {!r.isSystem && (
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => openEdit(r)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                      <PencilIcon className="size-3.5" />
                     </button>
                     <button onClick={() => setDeleteId(r.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                      <TrashIcon className="size-3.5" />
                     </button>
                   </div>
                 )}
@@ -507,9 +510,7 @@ function SonarQubeRulesPanel() {
                           {i.severity === "INFO" ? (
                             <span className="text-[10px] font-bold text-white leading-none">i</span>
                           ) : (
-                            <svg className="size-2.5  text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d={isUp ? "M4.5 15.75l7.5-7.5 7.5 7.5" : "M19.5 8.25l-7.5 7.5-7.5-7.5"} />
-                            </svg>
+                            <ChevronDownIcon className={`size-2.5 text-white stroke-3 ${isUp ? "rotate-180" : ""}`} />
                           )}
                         </span>
                         {i.severity.charAt(0) + i.severity.slice(1).toLowerCase()}
@@ -551,9 +552,7 @@ function RulesFilterSidebar({ severities, activeSeverity, onSeverityChange, lang
   const [techOpen, setTechOpen] = useState(true);
 
   const chevron = (open: boolean) => (
-    <svg className={`size-3.5  text-text-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-    </svg>
+    <ChevronDownIcon className={`size-3.5 text-text-muted transition-transform ${open ? "rotate-180" : ""}`} />
   );
 
   return (
@@ -816,11 +815,11 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => openEditModal({ id: r.id, ruleId: r.ruleId, isBuiltin: r.isBuiltin, path: r.path, yamlContent: r.yamlContent })} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" /></svg>
+                    <PencilIcon className="size-3.5" />
                   </button>
                   {!r.isBuiltin && (
                     <button onClick={() => setDeleteId(r.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                      <TrashIcon className="size-3.5" />
                     </button>
                   )}
                 </div>
@@ -849,8 +848,8 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
             <p className="text-xs text-text-muted font-mono">{editRule?.isBuiltin ? editRule.path : `DB rule: ${editRule?.ruleId}`}</p>
             <YamlEditor value={editContent} onChange={setEditContent} height="600px" />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setEditRule(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Cancel</button>
-              <button onClick={handleEditSave} disabled={editSaving} className={`${btnPrimary} disabled:opacity-50`}>{editSaving ? "Saving…" : "Save"}</button>
+              <Button variant="outline" onClick={() => setEditRule(null)}>Cancel</Button>
+              <Button onClick={handleEditSave} disabled={editSaving} loading={editSaving}>{editSaving ? "Saving…" : "Save"}</Button>
             </div>
           </div>
         )}
@@ -868,8 +867,8 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
           </SettingsField>
           {newRuleError && <p className="text-sm text-danger-500">{newRuleError}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={onAddingDone} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">Cancel</button>
-            <button onClick={async () => {
+            <Button variant="outline" onClick={onAddingDone}>Cancel</Button>
+            <Button onClick={async () => {
               if (!newRuleId.trim()) { setNewRuleError("Rule ID is required"); return; }
               if (!newRuleContent.trim()) { setNewRuleError("Rule YAML cannot be empty"); return; }
               setNewRuleSaving(true); setNewRuleError("");
@@ -890,7 +889,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
               } catch (e: unknown) {
                 setNewRuleError((e as Error).message || "Failed to save rule");
               } finally { setNewRuleSaving(false); }
-            }} disabled={newRuleSaving} className={`${btnPrimary} disabled:opacity-50`}>{newRuleSaving ? "Saving…" : "Create"}</button>
+            }} disabled={newRuleSaving} loading={newRuleSaving}>{newRuleSaving ? "Saving…" : "Create"}</Button>
           </div>
         </div>
       </Modal>

@@ -1,7 +1,6 @@
 import SeverityBadge from "../../../components/SeverityBadge";
 import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import {
-  btnPrimary,
   cardCls,
   getStatusDotClass,
   sidebarHistoryItemCls,
@@ -11,6 +10,7 @@ import {
 } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
 import type { Scan } from "../../../types";
+import Button from "../../../components/ui/Button";
 import Spinner from "../../../components/Spinner";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 
@@ -37,15 +37,14 @@ export default function ScanSidebar({
       <div className="sticky top-6 space-y-2">
         <div className={`${cardCls} overflow-hidden`}>
           <div className="p-2 border-b border-border/40">
-            <button
-              type="button"
+            <Button
               onClick={onRunScan}
               disabled={!hasConnectionId || permissionsLoading || !canRunScan}
-              className={`${btnPrimary} w-full py-2 text-sm`}
+              iconLeft={<ShieldCheckIcon className="size-3.5" />}
+              className="w-full"
             >
-              <ShieldCheckIcon className="size-3.5" />
               Run new scan
-            </button>
+            </Button>
           </div>
 
           {scanError && (

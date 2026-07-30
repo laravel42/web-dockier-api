@@ -1,7 +1,7 @@
-import { btnPrimary } from "../../utils/styles";
 import PageHeader from "../../components/ui/PageHeader";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
+import Button from "../../components/ui/Button";
 import { useDashboard } from "./useDashboard";
 import { usePermissions } from "../../context/PermissionsContext";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
@@ -54,13 +54,12 @@ export default function Dashboard() {
         title="Dashboard"
         description="Overview of your projects, scans, and deployments."
         actions={
-          <button
+          <Button
             onClick={() => navigate("/projects", { state: { openCreate: true } })}
-            className={`${btnPrimary} inline-flex items-center gap-2`}
+            iconLeft={<PlusIcon />}
           >
-            <PlusIcon className="size-4 " />
             New Project
-          </button>
+          </Button>
         }
       />
 

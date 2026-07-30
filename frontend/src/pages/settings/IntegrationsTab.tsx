@@ -7,13 +7,17 @@ import SettingsModalFooter from "../../components/SettingsModalFooter";
 import { SettingsField } from "../../components/SettingsField";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
+import Button from "../../components/ui/Button";
+import SquaresPlusIcon from "../../components/icons/outlined/SquaresPlusIcon";
 import ListSearchBar from "../../components/ui/ListSearchBar";
 import { usePermissions } from "../../context/PermissionsContext";
 import { integrationsApi } from "../../services/api";
 import { useTabList } from "../../hooks/useTabList";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
+import PlusIcon from "@/components/icons/outlined/PlusIcon";
 
 const PM_TYPES = new Set(["linear", "jira"]);
 
@@ -167,10 +171,9 @@ export default function IntegrationsTab() {
           <p className="text-sm text-text-secondary mt-0.5">Connect external services like databases, caches, storage, and more.</p>
         </div>
         {canManage && (
-          <button onClick={openAdd} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          <Button onClick={openAdd} iconLeft={<PlusIcon />}>
             Add Integration
-          </button>
+          </Button>
         )}
       </div>
 
@@ -227,7 +230,7 @@ export default function IntegrationsTab() {
                     className={`flex items-center gap-3 p-3 rounded-lg border border-border text-left transition-colors ${alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-secondary-50 hover:border-primary-300"}`}
                   >
                     <div className="size-9  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="size-5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <SquaresPlusIcon className="size-5" />}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -246,7 +249,7 @@ export default function IntegrationsTab() {
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="flex items-center gap-3 pb-3 border-b border-border">
               <div className="size-9  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <svg xmlns="http://www.w3.org/2000/svg" className="size-5 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" /></svg>}
+                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <SquaresPlusIcon className="size-5" />}
               </div>
               <div>
                 <p className="text-sm font-semibold text-text">{catalog.name}</p>
@@ -257,12 +260,11 @@ export default function IntegrationsTab() {
             {catalog.fields.map((f) => (
               <SettingsField key={f.key} id={`int-${f.key}`} label={f.label}>
                 {f.options === "dynamic" ? (
-                  <input
+                  <Input
                     id={`int-${f.key}`}
                     type="text"
                     value={formConfig[f.key] || ""}
                     onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
-                    className={inputCls}
                     placeholder={f.placeholder}
                   />
                 ) : Array.isArray(f.options) ? (
@@ -274,12 +276,11 @@ export default function IntegrationsTab() {
                     placeholder={`Select ${f.label.toLowerCase()}`}
                   />
                 ) : (
-                  <input
+                  <Input
                     id={`int-${f.key}`}
                     type={f.secret ? "password" : "text"}
                     value={formConfig[f.key] || ""}
                     onChange={(e) => setFormConfig({ ...formConfig, [f.key]: e.target.value })}
-                    className={inputCls}
                     placeholder={f.placeholder}
                     required
                   />
@@ -287,9 +288,9 @@ export default function IntegrationsTab() {
               </SettingsField>
             ))}
             <div className="flex justify-end">
-              <button type="submit" disabled={saving} className={`${btnPrimary} disabled:opacity-50`}>
+              <Button type="submit" disabled={saving} loading={saving}>
                 {saving ? "Saving..." : "Add Integration"}
-              </button>
+              </Button>
             </div>
           </form>
         ) : null}
@@ -350,12 +351,11 @@ export default function IntegrationsTab() {
                 {editCat.fields.map((f) => (
                   <SettingsField key={f.key} id={`edit-int-${f.key}`} label={f.label}>
                     {f.options === "dynamic" ? (
-                      <input
+                      <Input
                         id={`edit-int-${f.key}`}
                         type="text"
                         value={editConfig[f.key] || ""}
                         onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
-                        className={inputCls}
                         placeholder={f.placeholder}
                       />
                     ) : Array.isArray(f.options) ? (
@@ -367,12 +367,11 @@ export default function IntegrationsTab() {
                         placeholder={`Select ${f.label.toLowerCase()}`}
                       />
                     ) : (
-                      <input
+                      <Input
                         id={`edit-int-${f.key}`}
                         type={f.secret ? "password" : "text"}
                         value={editConfig[f.key] || ""}
                         onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
-                        className={inputCls}
                         placeholder={isPMType(editingIntg.type) ? `${f.placeholder} (leave blank to keep)` : f.placeholder}
                         required={!isPMType(editingIntg.type)}
                       />
@@ -386,7 +385,7 @@ export default function IntegrationsTab() {
                 onDelete={canManage ? () => setConfirmRemove(true) : undefined}
                 deleteAriaLabel={`Remove ${editingIntg.name}`}
               >
-                <button type="submit" className={btnPrimary}>Save Changes</button>
+                <Button type="submit">Save Changes</Button>
               </SettingsModalFooter>
             </form>
           );
@@ -416,9 +415,7 @@ export default function IntegrationsTab() {
         </div>
       ) : (
         <div className="bg-card rounded-card shadow-(--shadow-card) p-12 text-center">
-          <svg xmlns="http://www.w3.org/2000/svg" className="size-10  mx-auto text-text-muted mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
-          </svg>
+          <SquaresPlusIcon className="size-10 mx-auto text-text-muted mb-3" />
           <p className="text-sm text-text-muted">No integrations configured yet. Add one to connect external services like databases, caches, or storage.</p>
         </div>
       )}

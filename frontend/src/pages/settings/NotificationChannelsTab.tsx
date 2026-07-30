@@ -5,12 +5,17 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, btnPrimary, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { inputCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import Button from "../../components/ui/Button";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useTabList } from "../../hooks/useTabList";
 import { notifyInAppNotificationsChanged } from "../../hooks/useInAppNotificationsEnabled";
+import PlusIcon from "@/components/icons/outlined/PlusIcon";
+import EnvelopeIcon from "../../components/icons/outlined/EnvelopeIcon";
+import LinkIcon from "../../components/icons/outlined/LinkIcon";
+import BellIcon from "../../components/icons/outlined/BellIcon";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
@@ -74,10 +79,9 @@ export default function NotificationChannelsTab() {
           <p className="text-sm text-text-muted mt-0.5">Configure where alerts and notifications are delivered.</p>
         </div>
         {canManage && (
-          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
             Add Channel
-          </button>
+          </Button>
         )}
       </div>
 
@@ -104,7 +108,7 @@ export default function NotificationChannelsTab() {
             </div>
           )}
           <div className="flex justify-end">
-            <button type="submit" className={btnPrimary}>Add Channel</button>
+            <Button type="submit">Add Channel</Button>
           </div>
         </form>
       </Modal>
@@ -113,9 +117,9 @@ export default function NotificationChannelsTab() {
         {editingChannel && (() => {
           const chName = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" }[editingChannel.type as string] || editingChannel.type;
           const chIcon = editingChannel.type === "slack" ? <TechBadge name="slack" icon="slack" iconOnly iconSize="w-10 h-10" /> :
-            editingChannel.type === "email" ? <svg xmlns="http://www.w3.org/2000/svg" className="size-10 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> :
-            editingChannel.type === "webhook" ? <svg xmlns="http://www.w3.org/2000/svg" className="size-10 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg> :
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-10 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>;
+            editingChannel.type === "email" ? <EnvelopeIcon className="size-10" /> :
+            editingChannel.type === "webhook" ? <LinkIcon className="size-10" /> :
+            <BellIcon className="size-10" />;
           return (
           <form onSubmit={handleEditChannelSave} className="space-y-5">
             {/* Hero header */}
@@ -170,7 +174,7 @@ export default function NotificationChannelsTab() {
               onDelete={canManage && editingChannel.type !== "in_app" ? () => setConfirmRemove(true) : undefined}
               deleteAriaLabel={`Remove ${chName} channel`}
             >
-              <button type="submit" className={btnPrimary}>Save Changes</button>
+              <Button type="submit">Save Changes</Button>
             </SettingsModalFooter>
           </form>
           );
@@ -187,10 +191,10 @@ export default function NotificationChannelsTab() {
           {channelList.map((ch) => {
             const channelNames: Record<string, string> = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" };
             const channelIcons: Record<string, React.ReactNode> = {
-              email: <svg xmlns="http://www.w3.org/2000/svg" className="size-7 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>,
+              email: <EnvelopeIcon className="size-7" />,
               slack: <TechBadge name="slack" icon="slack" iconOnly iconSize="w-7 h-7" />,
-              webhook: <svg xmlns="http://www.w3.org/2000/svg" className="size-7 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>,
-              in_app: <svg xmlns="http://www.w3.org/2000/svg" className="size-7 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>,
+              webhook: <LinkIcon className="size-7" />,
+              in_app: <BellIcon className="size-7" />,
             };
             return (
             <div key={ch.id} onClick={() => canManage && openEditChannel(ch)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>

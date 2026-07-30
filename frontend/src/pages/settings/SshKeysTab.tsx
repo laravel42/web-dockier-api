@@ -3,7 +3,8 @@ import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { inputCls, btnPrimary, readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import Button from "../../components/ui/Button";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -11,6 +12,8 @@ import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import Alert from "../../components/ui/Alert";
 import { useTabList } from "../../hooks/useTabList";
+import KeyIcon from "../../components/icons/outlined/KeyIcon";
+import PlusIcon from "@/components/icons/outlined/PlusIcon";
 
 export default function SshKeysTab() {
   const { has } = usePermissions();
@@ -68,10 +71,9 @@ export default function SshKeysTab() {
           <p className={`${typePanelDesc} mt-0.5`}>SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
         </div>
         {canManage && (
-          <button onClick={() => setShowForm(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
             Add SSH Key
-          </button>
+          </Button>
         )}
       </div>
 
@@ -90,9 +92,9 @@ export default function SshKeysTab() {
           </div>
           {formError && <Alert variant="error">{formError}</Alert>}
           <div className="flex justify-end">
-            <button type="submit" disabled={submitting} className={`${btnPrimary} disabled:opacity-50`}>
+            <Button type="submit" disabled={submitting} loading={submitting}>
               {submitting ? "Adding…" : "Add Key"}
-            </button>
+            </Button>
           </div>
         </form>
       </Modal>
@@ -142,9 +144,7 @@ export default function SshKeysTab() {
             >
               <div className="flex items-start gap-3 mb-3">
                 <div className="size-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-                  </svg>
+                  <KeyIcon className="size-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-text truncate">{k.label}</p>

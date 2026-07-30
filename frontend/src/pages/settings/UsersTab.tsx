@@ -5,7 +5,11 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
 import ComboBox from "../../components/ComboBox";
-import { inputCls, btnPrimary, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { inputCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import Button from "../../components/ui/Button";
+import UserPlusIcon from "../../components/icons/outlined/UserPlusIcon";
+import EyeIcon from "../../components/icons/outlined/EyeIcon";
+import EyeSlashIcon from "../../components/icons/outlined/EyeSlashIcon";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -225,10 +229,9 @@ export default function UsersTab() {
           <p className="text-sm text-text-muted mt-0.5">Manage team members and their roles.</p>
         </div>
         {canManage && (
-          <button onClick={() => setShowInvite(true)} className={`${btnPrimary} inline-flex items-center gap-2`}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" /></svg>
+          <Button onClick={() => setShowInvite(true)} iconLeft={<UserPlusIcon className="size-4" />}>
             Add User
-          </button>
+          </Button>
         )}
       </div>
 
@@ -317,9 +320,9 @@ export default function UsersTab() {
                 )}
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors">
                   {showPassword ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                    <EyeSlashIcon className="size-4" />
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                    <EyeIcon className="size-4" />
                   )}
                 </button>
               </div>
@@ -338,7 +341,7 @@ export default function UsersTab() {
                 ] as [boolean, string][]).map(([ok, label]) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <span className={`size-3.5  rounded-full flex items-center justify-center ${ok ? "bg-success-500" : "bg-secondary-200"}`}>
-                      {ok && <svg className="size-2  text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                      {ok && <CheckIcon className="size-2 text-white" />}
                     </span>
                     <span className={`text-xs ${ok ? "text-success-600" : "text-text-muted"}`}>{label}</span>
                   </div>
@@ -372,7 +375,7 @@ export default function UsersTab() {
           </SettingsField>
           {inviteError && <Alert variant="error">{inviteError}</Alert>}
           <div className="flex justify-end">
-            <button type="submit" disabled={inviting || !inviteForm.roleId || !inviteForm.timezone || (!!inviteForm.password && !passwordValid)} className={`${btnPrimary} disabled:opacity-50`}>{inviting ? "Creating…" : "Add User"}</button>
+            <Button type="submit" disabled={inviting || !inviteForm.roleId || !inviteForm.timezone || (!!inviteForm.password && !passwordValid)} loading={inviting}>{inviting ? "Creating…" : "Add User"}</Button>
           </div>
         </form>
       </Modal>
@@ -421,7 +424,7 @@ export default function UsersTab() {
             onDelete={editUser && canManage && !editUser.isOwner ? () => setConfirmDelete(true) : undefined}
             deleteAriaLabel={`Remove ${editUser?.name || editUser?.email || "user"}`}
           >            
-            <button onClick={handleEditSave} disabled={saving || !editRoleId || !editTimezone} className={`${btnPrimary} disabled:opacity-50`}>{saving ? "Saving…" : "Save"}</button>
+            <Button onClick={handleEditSave} disabled={saving || !editRoleId || !editTimezone} loading={saving}>{saving ? "Saving…" : "Save"}</Button>
           </SettingsModalFooter>
         </div>
       </Modal>

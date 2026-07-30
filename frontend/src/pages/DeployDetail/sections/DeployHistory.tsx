@@ -1,6 +1,5 @@
 import type { Deployment, Provider } from "../../../types";
 import {
-  btnPrimary,
   cardCls,
   getStatusDotClass,
   sidebarHistoryItemCls,
@@ -9,6 +8,7 @@ import {
   sidebarPanelHeadTitleCls,
 } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
+import Button from "../../../components/ui/Button";
 import ProviderBadge from "../../../components/ProviderBadge";
 import BranchBadge from "../../../components/BranchBadge";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
@@ -44,15 +44,14 @@ export default function DeployHistory({
         <div className={`${cardCls} overflow-hidden`}>
           {canDeploy && (
             <div className="p-2 border-b border-border/40">
-              <button
-                type="button"
+              <Button
                 onClick={onNewDeploy}
                 disabled={permissionsLoading}
-                className={`${btnPrimary} w-full py-2 text-sm`}
+                iconLeft={<RocketIcon className="size-3.5" />}
+                className="w-full"
               >
-                <RocketIcon className="size-3.5" />
                 New deploy
-              </button>
+              </Button>
             </div>
           )}
 
