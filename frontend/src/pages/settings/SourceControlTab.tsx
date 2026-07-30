@@ -5,7 +5,8 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "../../components/SourceControlBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
 import { getErrorMessage } from "../../utils/errors";
 import { usePermissions } from "../../context/PermissionsContext";
@@ -90,22 +91,21 @@ export default function SourceControlTab() {
           </div>
           <div>
             <label htmlFor="git-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
-            <input id="git-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} placeholder="My GitHub Account" required />
+            <Input id="git-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="My GitHub Account" required />
           </div>
           <div>
             <label htmlFor="git-token" className="block text-sm font-medium text-text-secondary mb-1.5">Personal Access Token</label>
-            <input id="git-token" type="password" value={form.personalToken} onChange={(e) => setForm({ ...form, personalToken: e.target.value })} className={inputCls} required />
+            <Input id="git-token" type="password" value={form.personalToken} onChange={(e) => setForm({ ...form, personalToken: e.target.value })} required />
           </div>
           <div>
             <label htmlFor="git-endpoint" className="block text-sm font-medium text-text-secondary mb-1.5">
               API Endpoint <span className="text-text-muted font-normal">(optional)</span>
             </label>
-            <input
+            <Input
               id="git-endpoint"
               type="url"
               value={form.endpoint}
               onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
-              className={inputCls}
               placeholder={form.provider === "github" ? "https://api.github.com" : form.provider === "bitbucket" ? "https://api.bitbucket.org" : "https://gitlab.com"}
             />
             <p className="text-xs text-text-muted mt-1">Leave empty for default. Set for self-hosted instances.</p>
@@ -159,20 +159,20 @@ export default function SourceControlTab() {
               <h3 className="text-sm font-semibold text-text">Configuration</h3>
               <div>
                 <label htmlFor="edit-conn-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
-                <input id="edit-conn-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} className={inputCls} required />
+                <Input id="edit-conn-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} required />
               </div>
               <div>
                 <label htmlFor="edit-conn-token" className="block text-sm font-medium text-text-secondary mb-1.5">
                   Personal Access Token <span className="text-text-muted font-normal">(leave empty to keep current)</span>
                 </label>
-                <input id="edit-conn-token" type="password" value={editForm.personalToken} onChange={(e) => setEditForm({ ...editForm, personalToken: e.target.value })} className={inputCls} placeholder="••••••••" autoComplete="off" />
+                <Input id="edit-conn-token" type="password" value={editForm.personalToken} onChange={(e) => setEditForm({ ...editForm, personalToken: e.target.value })} placeholder="••••••••" autoComplete="off" />
                 <p className="text-xs text-text-muted mt-1">Enter a new token to replace the existing one. Leave blank to keep the current token.</p>
               </div>
               <div>
                 <label htmlFor="edit-conn-endpoint" className="block text-sm font-medium text-text-secondary mb-1.5">
                   API Endpoint <span className="text-text-muted font-normal">(optional)</span>
                 </label>
-                <input id="edit-conn-endpoint" type="url" value={editForm.endpoint} onChange={(e) => setEditForm({ ...editForm, endpoint: e.target.value })} className={inputCls} placeholder="Leave empty for default" />
+                <Input id="edit-conn-endpoint" type="url" value={editForm.endpoint} onChange={(e) => setEditForm({ ...editForm, endpoint: e.target.value })} placeholder="Leave empty for default" />
               </div>
             </div>
 

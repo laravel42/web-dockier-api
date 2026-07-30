@@ -6,7 +6,8 @@ import TechBadge from "../../components/TechBadge";
 import YamlEditor from "../../components/YamlEditor";
 import { SearchableCombobox } from "../../components/ui/combobox";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import { inputCls, segmentActiveCls, segmentIdleCls } from "../../utils/styles";
+import { segmentActiveCls, segmentIdleCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
 import PlusIcon from "../../components/icons/outlined/PlusIcon";
 import PencilIcon from "../../components/icons/outlined/PencilIcon";
@@ -178,7 +179,7 @@ export default function SecurityRulesTab() {
             ))}
             {effectiveSource === "custom" && (
               <div className="ml-auto flex items-center gap-2">
-                <input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
+                <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" style={{ width: 280 }} />
                 <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="shrink-0">
                   Add Rule
                 </Button>
@@ -186,7 +187,7 @@ export default function SecurityRulesTab() {
             )}
             {effectiveSource === "semgrep" && (
               <div className="ml-auto flex items-center gap-2">
-                <input type="text" value={semgrepFilter} onChange={e => setSemgrepFilter(e.target.value)} placeholder="Filter rules…" className={inputCls} style={{ width: 280 }} />
+                <Input type="text" value={semgrepFilter} onChange={e => setSemgrepFilter(e.target.value)} placeholder="Filter rules…" style={{ width: 280 }} />
                 <Button onClick={() => setSemgrepAdding(true)} iconLeft={<PlusIcon className="size-4" />} className="shrink-0">
                   Add Rule
                 </Button>
@@ -259,7 +260,7 @@ export default function SecurityRulesTab() {
           </SettingsField>
           <SettingsTextField id="rule-message" label="Message" type="text" value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} placeholder="Description of the vulnerability" required />
           <SettingsField label="Regex Pattern">
-            <input type="text" value={form.pattern} onChange={e => setForm({ ...form, pattern: e.target.value })} className={`${inputCls} font-mono text-xs`} placeholder="\beval\s*\(" required />
+            <Input type="text" value={form.pattern} onChange={e => setForm({ ...form, pattern: e.target.value })} className="font-mono text-xs" placeholder="\beval\s*\(" required />
             <p className="text-xs text-text-muted mt-1">JavaScript regex syntax (flags gi applied automatically)</p>
           </SettingsField>
           <SettingsField label="File Extensions">

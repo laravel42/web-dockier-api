@@ -3,7 +3,9 @@ import { deployApi } from "../../services/api";
 import Modal from "../../components/Modal";
 import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { inputCls, readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
 import Button from "../../components/ui/Button";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import { getErrorMessage } from "../../utils/errors";
@@ -81,12 +83,12 @@ export default function SshKeysTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="ssh-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
-            <input id="ssh-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} placeholder="e.g. MacBook Pro" required />
+            <Input id="ssh-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g. MacBook Pro" required />
           </div>
           <div>
             <label htmlFor="ssh-pubkey" className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
-            <textarea id="ssh-pubkey" value={form.publicKey} onChange={(e) => setForm({ ...form, publicKey: e.target.value })}
-              className={`${inputCls} h-28 py-2.5 font-mono text-xs resize-none`}
+            <Textarea id="ssh-pubkey" value={form.publicKey} onChange={(e) => setForm({ ...form, publicKey: e.target.value })}
+              className="h-28 font-mono text-xs resize-none"
               placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host" required />
             <p className="text-xs text-text-muted mt-1">Paste the contents of your public key file (e.g. ~/.ssh/id_ed25519.pub)</p>
           </div>
@@ -108,12 +110,12 @@ export default function SshKeysTab() {
             </div>
             <div>
               <label htmlFor="ssh-view-pubkey" className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
-              <textarea
+              <Textarea
                 id="ssh-view-pubkey"
                 readOnly
                 aria-readonly="true"
                 value={viewingKey.publicKey}
-                className={`${inputCls} ${readonlyFieldCls} h-28 py-2.5 font-mono text-xs resize-none`}
+                className={`${readonlyFieldCls} h-28 font-mono text-xs resize-none`}
               />
             </div>
             {canManage && (

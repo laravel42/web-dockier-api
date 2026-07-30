@@ -5,7 +5,8 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import { SettingsField, SettingsTextField } from "../../components/SettingsField";
 import ComboBox from "../../components/ComboBox";
-import { inputCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
 import UserPlusIcon from "../../components/icons/outlined/UserPlusIcon";
 import EyeIcon from "../../components/icons/outlined/EyeIcon";
@@ -293,7 +294,7 @@ export default function UsersTab() {
             <label className="block text-sm font-medium text-text-secondary mb-1.5">Password <span className="text-danger-500">*</span></label>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <input
+                <Input
                   type={showPassword ? "text" : "password"}
                   value={inviteForm.password}
                   onChange={(e) => {
@@ -301,7 +302,7 @@ export default function UsersTab() {
                     setPasswordCopied(false);
                     setInviteForm(f => ({ ...f, password: e.target.value }));
                   }}
-                  className={`${inputCls}${inviteForm.password ? (passwordGenerated ? " pr-16" : " pr-9") : ""}`}
+                  className={inviteForm.password ? (passwordGenerated ? "pr-16" : "pr-9") : ""}
                   placeholder="••••••••"
                 />
                 {passwordGenerated && inviteForm.password && (

@@ -5,7 +5,8 @@ import ConfirmModal from "../../components/ConfirmModal";
 import SettingsModalFooter from "../../components/SettingsModalFooter";
 import TechBadge from "../../components/TechBadge";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
@@ -104,7 +105,7 @@ export default function NotificationChannelsTab() {
           {formData.type !== "in_app" && (
             <div>
               <label htmlFor="channel-config" className="block text-sm font-medium text-text-secondary mb-1.5">{configLabel[formData.type]}</label>
-              <input id="channel-config" type="text" value={formData.configValue} onChange={(e) => setFormData({ ...formData, configValue: e.target.value })} className={inputCls} required />
+              <Input id="channel-config" type="text" value={formData.configValue} onChange={(e) => setFormData({ ...formData, configValue: e.target.value })} required />
             </div>
           )}
           <div className="flex justify-end">
@@ -164,7 +165,7 @@ export default function NotificationChannelsTab() {
                 <h3 className="text-sm font-semibold text-text">Configuration</h3>
                 <div>
                   <label htmlFor="edit-ch-config" className="block text-sm font-medium text-text-secondary mb-1.5">{configLabel[editingChannel.type]}</label>
-                  <input id="edit-ch-config" type="text" value={editConfigValue} onChange={(e) => setEditConfigValue(e.target.value)} className={inputCls} required />
+                  <Input id="edit-ch-config" type="text" value={editConfigValue} onChange={(e) => setEditConfigValue(e.target.value)} required />
                 </div>
               </div>
             )}

@@ -6,7 +6,8 @@ import ConfirmModal from "../../components/ConfirmModal";
 import ProviderBadge from "../../components/ProviderBadge";
 import { getProviderStyle } from "../../data/providers";
 import { SearchableCombobox } from "../../components/ui/combobox";
-import { inputCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
+import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
+import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
@@ -99,18 +100,18 @@ export default function ProvidersTab() {
           </div>
           <div>
             <label htmlFor="provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
-            <input id="provider-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} required />
+            <Input id="provider-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
           </div>
           <div>
             <label htmlFor="provider-key" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel1}</label>
-            <input id="provider-key" type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} className={inputCls} required />
+            <Input id="provider-key" type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} required />
           </div>
 
           {(needsSecret) && <div>
             <label htmlFor="provider-secret" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel2}</label>
             <div className="relative">
-              <input id="provider-secret" type={showSecret ? "text" : "password"} value={form.apiSecret} onChange={(e) => setForm({ ...form, apiSecret: e.target.value })}
-                className={`${inputCls} pr-10`} required />
+              <Input id="provider-secret" type={showSecret ? "text" : "password"} value={form.apiSecret} onChange={(e) => setForm({ ...form, apiSecret: e.target.value })}
+                className="pr-10" required />
               <button type="button" onClick={() => setShowSecret(!showSecret)}
                 className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
                 aria-label={showSecret ? "Hide API secret" : "Show API secret"}>
@@ -177,7 +178,7 @@ export default function ProvidersTab() {
                 <h3 className="text-sm font-semibold text-text">Configuration</h3>
                 <div>
                   <label htmlFor="edit-provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
-                  <input id="edit-provider-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} className={inputCls} required />
+                  <Input id="edit-provider-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} required />
                 </div>
               </div>
 
