@@ -1,5 +1,5 @@
 import DeployWizard from "../../components/DeployWizard";
-import { btnSecondary } from "../../utils/styles";
+import Button from "../../components/ui/Button";
 import { useDeployDetail } from "./useDeployDetail";
 import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
 import { useState } from "react";
@@ -43,9 +43,9 @@ export default function DeployDetail() {
       <div>
         <PageError message={error || "Deployment not found"} />
         <div className="text-center mt-4">
-          <button type="button" onClick={() => navigate("/projects")} className={btnSecondary}>
+          <Button variant="secondary" onClick={() => navigate("/projects")}>
             Back to Project
-          </button>
+          </Button>
         </div>
       </div>
     );

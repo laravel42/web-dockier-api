@@ -1,4 +1,5 @@
 import { cardCls } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
 import ScanSidebar from "./ScanSidebar";
 import type { Scan, Project } from "../../../types";
 import ChevronLeftIcon from "../../../components/icons/outlined/ChevronLeftIcon";
@@ -25,10 +26,9 @@ export default function EmptyScanState({
   return (
     <div className="flex gap-6">
       <div className="flex-1 min-w-0">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
-          <ChevronLeftIcon className="size-4 " />
+        <Button variant="ghost" onClick={onBack} iconLeft={<ChevronLeftIcon className="size-4" />} className="mb-6">
           All Scans
-        </button>
+        </Button>
         <h1 className="text-2xl font-display font-semibold text-text tracking-tight mb-2">{project.name}</h1>
         <div className={`${cardCls} p-12 text-center mt-6`}>
           <ShieldCheckIcon className="size-12  mx-auto text-text-muted mb-4" />

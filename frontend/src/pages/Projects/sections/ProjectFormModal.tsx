@@ -4,13 +4,12 @@ import SourceControlSelect from "../../../components/SourceControlSelect";
 import RepoSelect from "../../../components/RepoSelect";
 import BranchSelect from "../../../components/BranchSelect";
 import { FRAMEWORK_CATEGORIES } from "../../../config/frameworks";
-import {
-  btnPrimary,
-  btnSecondary,
-  inputCls,
-} from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/input";
 import type { Connection, Repo } from "../../../types";
 import LinkIcon from "../../../components/icons/outlined/LinkIcon";
+import ChevronDownIcon from "@/components/icons/outlined/ChevronDownIcon";
+import CheckIcon from "@/components/icons/outlined/CheckIcon";
 
 interface Props {
   open: boolean;
@@ -77,9 +76,7 @@ export default function ProjectFormModal({
               ) : (
                 <span className="text-text-muted">Select a framework…</span>
               )}
-              <svg className="size-4 ml-auto shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
+              <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
             </button>
 
             {frameworkOpen && (
@@ -105,9 +102,7 @@ export default function ProjectFormModal({
                           <img src={fw.icon} alt={fw.name} className="size-5 shrink-0" />
                           <span className="font-medium">{fw.name}</span>
                           {platform === fw.id && (
-                            <svg className="size-4 ml-auto text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                            </svg>
+                            <CheckIcon className="size-4 ml-auto text-primary-500" />
                           )}
                         </button>
                       ))}
@@ -121,12 +116,11 @@ export default function ProjectFormModal({
 
         <div>
           <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
-          <input
+          <Input
             id="project-name"
             type="text"
             value={form.name}
             onChange={(e) => onFormChange({ ...form, name: e.target.value })}
-            className={inputCls}
             placeholder="My App"
             required
           />
@@ -178,19 +172,14 @@ export default function ProjectFormModal({
         )}
 
         <div className="flex items-center justify-end gap-3 pt-4 mt-2 border-t border-border sticky bottom-0 bg-card">
-          <button type="button" onClick={onClose} className={btnSecondary}>Cancel</button>
-          <button
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
             type="submit"
-            className={btnPrimary}
             disabled={!canSubmit || submitting}
+            loading={submitting}
           >
-            {submitting ? (
-              <span className="flex items-center gap-2">
-                <span className="size-4  border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Analyzing…
-              </span>
-            ) : editing ? "Save Changes" : "Create Project"}
-          </button>
+            {submitting ? "Analyzing…" : editing ? "Save Changes" : "Create Project"}
+          </Button>
         </div>
       </form>
     </Modal>

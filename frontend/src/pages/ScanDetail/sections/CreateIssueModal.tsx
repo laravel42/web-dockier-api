@@ -2,6 +2,8 @@ import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon"
 import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
 import Modal from "../../../components/Modal";
 import Button from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/input";
+import { Textarea } from "../../../components/ui/textarea";
 import type { PMIntegration, PMTeam, PMMember } from "../../../types";
 import Spinner from "../../../components/Spinner";
 import { SearchableCombobox } from "../../../components/ui/combobox";
@@ -55,8 +57,6 @@ export default function CreateIssueModal({
   issueCreating, issueSuccess, issueSuccessUrl, issueError, onDismissError,
   onSubmit,
 }: Props) {
-  const inputCls = `w-full h-11 px-3 rounded-[var(--radius-input)] border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors`;
-
   return (
     <Modal open={open} onClose={onClose} title="Create Issue from Finding">
       {issueSuccess ? (
@@ -99,7 +99,7 @@ export default function CreateIssueModal({
           {pmIntegrations.length === 0 && repoUrl && (
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
-              <input type="text" value={repoUrl} readOnly className={`${inputCls} bg-secondary-50 text-text-muted cursor-default`} />
+              <Input type="text" value={repoUrl} readOnly className="bg-secondary-50 text-text-muted cursor-default" />
             </div>
           )}
           {pmIntegrations.length > 0 && (<>
@@ -170,13 +170,13 @@ export default function CreateIssueModal({
           </>)}
           <div>
             <label htmlFor="issue-title" className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
-            <input id="issue-title" type="text" value={issueTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
-              className={`${inputCls} ${titleGenerating ? "opacity-50 cursor-wait" : ""}`} required />
+            <Input id="issue-title" type="text" value={issueTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
+              className={titleGenerating ? "opacity-50 cursor-wait" : ""} required />
           </div>
           <div>
             <label htmlFor="issue-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
-            <textarea id="issue-desc" value={issueDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={8}
-              className="w-full px-3 py-2 rounded-(--radius-input) border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
+            <Textarea id="issue-desc" value={issueDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={8}
+              className="font-mono resize-y" />
           </div>
           {pmMembers.length > 0 && (
             <div>

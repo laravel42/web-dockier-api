@@ -1,4 +1,7 @@
 import { statusBadgeColors as statusColors } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
+import ChevronLeftIcon from "../../../components/icons/outlined/ChevronLeftIcon";
+import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import type { Scan, Project } from "../../../types";
 
 interface Props {
@@ -13,19 +16,14 @@ export default function ScanHeader({ scan, project, liveStatus, onBack, onNaviga
   const status = liveStatus ?? scan.status;
   return (
     <>
-      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-6">
-        <svg xmlns="http://www.w3.org/2000/svg" className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-        </svg>
+      <Button variant="ghost" onClick={onBack} iconLeft={<ChevronLeftIcon className="size-4" />} className="mb-6">
         Back to Security Scans
-      </button>
+      </Button>
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-6 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
+            <ShieldCheckIcon className="size-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">

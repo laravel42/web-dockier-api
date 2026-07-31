@@ -1,4 +1,4 @@
-import { btnSecondary } from "../../utils/styles";
+import Button from "../../components/ui/Button";
 import { useScanDetail } from "./useScanDetail";
 import { useIssueModal } from "./useIssueModal";
 import { useFixModal } from "./useFixModal";
@@ -27,9 +27,9 @@ export default function ScanDetail() {
       <div>
         <PageError message={core.pageError || "Scan not found"} />
         <div className="text-center mt-4">
-          <button type="button" onClick={() => core.navigate("/security")} className={btnSecondary}>
+          <Button variant="secondary" onClick={() => core.navigate("/security")}>
             Back to Security Scans
-          </button>
+          </Button>
         </div>
       </div>
     );
