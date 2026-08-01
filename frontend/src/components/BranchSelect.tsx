@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import Spinner from "./Spinner";
+import CodeIcon from "./icons/outlined/CodeIcon";
+import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
 
 interface Props {
   value: string;
@@ -54,12 +56,6 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
     return <p className="text-sm text-text-muted py-2">No branches found.</p>;
   }
 
-  const branchIcon = (
-    <svg xmlns="http://www.w3.org/2000/svg" className="size-4  shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-    </svg>
-  );
-
   return (
     <div>
       <button
@@ -70,15 +66,13 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
       >
         {value ? (
           <>
-            {branchIcon}
+            <CodeIcon className="size-4 shrink-0 text-text-muted" />
             <span className="truncate">{value}</span>
           </>
         ) : (
           <span className="text-text-muted">Select a branch…</span>
         )}
-        <svg className="size-4  ml-auto shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
+        <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
       </button>
 
       {open && pos && createPortal(
@@ -110,7 +104,7 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
                     value === b ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  {branchIcon}
+                  <CodeIcon className="size-4 shrink-0 text-text-muted" />
                   <span>{b}</span>
                 </button>
               ))

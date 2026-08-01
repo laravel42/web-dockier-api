@@ -5,7 +5,11 @@ import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
 import Modal from "../../../components/Modal";
 import Spinner from "../../../components/Spinner";
-import { btnPrimary, btnOutline, inputCls } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/input";
+import EyeIcon from "../../../components/icons/outlined/EyeIcon";
+import EyeSlashIcon from "../../../components/icons/outlined/EyeSlashIcon";
+import XIcon from "@/components/icons/outlined/XIcon";
 
 interface Props {
   project: Project;
@@ -61,13 +65,13 @@ function SecurityRulesSection({
             Get started and create your first security rule.
           </p>
           {canManage && (
-            <button
+            <Button
               type="button"
-              className={btnOutline}
+              variant="outline"
               onClick={() => setShowCreateModal(true)}
             >
               + Add security rule
-            </button>
+            </Button>
           )}
         </div>
       ) : (
@@ -85,13 +89,13 @@ function SecurityRulesSection({
           ))}
           {canManage && (
             <div className="px-4 py-3">
-              <button
+              <Button
                 type="button"
-                className={btnOutline}
+                variant="outline"
                 onClick={() => setShowCreateModal(true)}
               >
                 + Add security rule
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -137,14 +141,14 @@ function SecurityRuleRow({
           )}
         </div>
         {canManage && (
-          <button
+          <Button
             type="button"
-            className="text-xs text-danger-500 hover:text-danger-400 transition-colors disabled:opacity-50"
+            variant="danger" size="sm"
             onClick={onDelete}
             disabled={deleting}
           >
             {deleting ? "Deleting…" : "Delete"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -167,13 +171,13 @@ function SecurityRuleRow({
           </div>
         )}
         {canManage && (
-          <button
+          <Button
             type="button"
-            className="mt-2 text-xs text-primary-500 hover:text-primary-400 transition-colors"
+            variant="link" size="sm" className="mt-2"
             onClick={() => setShowAddCred(true)}
           >
             + Add credential
-          </button>
+          </Button>
         )}
       </div>
 
@@ -217,17 +221,16 @@ function CredentialChip({
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text">
       <span className="font-medium">{cred.username}</span>
       {canManage && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={handleDelete}
           disabled={deleting}
-          className="text-text-muted hover:text-danger-500 transition-colors disabled:opacity-50"
+          className="px-0! hover:text-danger-500!"
           aria-label={`Remove ${cred.username}`}
         >
-          <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+          <XIcon className="size-3" />
+        </Button>
       )}
     </span>
   );
@@ -273,14 +276,15 @@ function CreateSecurityRuleModal({
   if (showAddCred) {
     return (
       <Modal open onClose={onClose} title="New security rule">
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => setShowAddCred(false)}
-          className="text-xs text-text-muted hover:text-text transition-colors mb-3 flex items-center gap-1"
+          className="px-0!"
         >
           ← Back to new security rule
-        </button>
-        <h3 className="text-sm font-semibold text-text mb-4">New security credential</h3>
+        </Button>
+        <h3 className="mt-4 text-sm font-semibold text-text mb-4">New security credential</h3>
         <InlineCredentialForm
           onAdd={(cred) => {
             setCredentials((prev) => [...prev, cred]);
@@ -296,9 +300,9 @@ function CreateSecurityRuleModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-xs font-medium text-text-muted">Name</label>
-          <input
+          <Input
             type="text"
-            className={inputCls}
+            
             placeholder="Restricted Access"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -313,9 +317,9 @@ function CreateSecurityRuleModal({
           <p className="text-[11px] text-text-muted mb-1.5">
             Leave blank to password protect all routes within your site. Any valid Nginx location path is acceptable.
           </p>
-          <input
+          <Input
             type="text"
-            className={inputCls}
+            
             placeholder="/admin"
             value={path}
             onChange={(e) => setPath(e.target.value)}
@@ -330,13 +334,14 @@ function CreateSecurityRuleModal({
               <p className="text-xs text-text-muted mt-0.5">
                 Get started and add a first credential for this rule.
               </p>
-              <button
+              <Button
                 type="button"
-                className={`${btnOutline} mt-3`}
+                variant="outline"
+                className="mt-3"
                 onClick={() => setShowAddCred(true)}
               >
                 + Add credential
-              </button>
+              </Button>
             </div>
           ) : (
             <div>
@@ -347,38 +352,37 @@ function CreateSecurityRuleModal({
                     className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text"
                   >
                     <span className="font-medium">{c.username}</span>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => setCredentials((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="text-text-muted hover:text-danger-500 transition-colors"
+                      className="px-0! hover:text-danger-500!"
                     >
-                      <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                      <XIcon className="size-3" />
+                    </Button>
                   </span>
                 ))}
               </div>
-              <button
+              <Button
                 type="button"
-                className="text-xs text-primary-500 hover:text-primary-400 transition-colors"
+                variant="link" size="sm"
                 onClick={() => setShowAddCred(true)}
               >
                 + Add credential
-              </button>
+              </Button>
             </div>
           )}
         </div>
 
         {error && <p className="text-xs text-danger-500">{error}</p>}
 
-        <button
+        <Button
           type="submit"
-          className={`${btnPrimary} w-full`}
+          className="w-full"
           disabled={saving || !name.trim()}
         >
           {saving ? "Creating…" : "Add security rule"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );
@@ -405,9 +409,9 @@ function InlineCredentialForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="mb-1 block text-xs font-medium text-text-muted">Username</label>
-        <input
+        <Input
           type="text"
-          className={inputCls}
+          
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
@@ -416,39 +420,30 @@ function InlineCredentialForm({
       <div>
         <label className="mb-1 block text-xs font-medium text-text-muted">Password</label>
         <div className="relative">
-          <input
+          <Input
             type={showPassword ? "text" : "password"}
-            className={inputCls}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
+            className="absolute right-0"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
-            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              {showPassword ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-              ) : (
-                <>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </>
-              )}
-            </svg>
-          </button>
+            {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
+          </Button>
         </div>
       </div>
-      <button
+      <Button
         type="submit"
-        className={`${btnPrimary} w-full`}
+        className="w-full"
         disabled={!username.trim() || !password.trim()}
       >
         Add credential
-      </button>
+      </Button>
     </form>
   );
 }
@@ -495,9 +490,9 @@ function AddCredentialModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-xs font-medium text-text-muted">Username</label>
-          <input
+          <Input
             type="text"
-            className={inputCls}
+            
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
@@ -506,40 +501,32 @@ function AddCredentialModal({
         <div>
           <label className="mb-1 block text-xs font-medium text-text-muted">Password</label>
           <div className="relative">
-            <input
+            <Input
               type={showPassword ? "text" : "password"}
-              className={inputCls}
+              
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
+              className="absolute right-0"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                {showPassword ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                ) : (
-                  <>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </>
-                )}
-              </svg>
-            </button>
+              {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
+            </Button>
           </div>
         </div>
         {error && <p className="text-xs text-danger-500">{error}</p>}
-        <button
+        <Button
           type="submit"
-          className={`${btnPrimary} w-full`}
+          className="w-full"
           disabled={saving || !username.trim() || !password.trim()}
         >
           {saving ? "Adding…" : "Add credential"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );
@@ -586,13 +573,13 @@ function RedirectRulesSection({
             Get started and create your first redirect rule.
           </p>
           {canManage && (
-            <button
+            <Button
               type="button"
-              className={btnOutline}
+              variant="outline"
               onClick={() => setShowCreateModal(true)}
             >
               + Add redirect rule
-            </button>
+            </Button>
           )}
         </div>
       ) : (
@@ -616,27 +603,27 @@ function RedirectRulesSection({
                   {rule.type === "permanent" ? "301" : "302"}
                 </span>
                 {canManage && (
-                  <button
+                  <Button
                     type="button"
-                    className="text-xs text-danger-500 hover:text-danger-400 transition-colors disabled:opacity-50"
+                    variant="danger" size="sm"
                     onClick={() => handleDelete(rule.id)}
                     disabled={deleting === rule.id}
                   >
                     {deleting === rule.id ? "…" : "Delete"}
-                  </button>
+                  </Button>
                 )}
               </div>
             ))}
           </div>
           {canManage && (
             <div className="px-4 py-3 border-t border-border">
-              <button
+              <Button
                 type="button"
-                className={btnOutline}
+                variant="outline"
                 onClick={() => setShowCreateModal(true)}
               >
                 + Add redirect rule
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -694,9 +681,9 @@ function CreateRedirectRuleModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-xs font-medium text-text-muted">From</label>
-          <input
+          <Input
             type="text"
-            className={inputCls}
+            
             placeholder="/from"
             value={fromPath}
             onChange={(e) => setFromPath(e.target.value)}
@@ -705,9 +692,8 @@ function CreateRedirectRuleModal({
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-text-muted">To</label>
-          <input
+          <Input
             type="text"
-            className={inputCls}
             placeholder="/to"
             value={toPath}
             onChange={(e) => setToPath(e.target.value)}
@@ -750,13 +736,13 @@ function CreateRedirectRuleModal({
 
         {error && <p className="text-xs text-danger-500">{error}</p>}
 
-        <button
+        <Button
           type="submit"
-          className={`${btnPrimary} w-full`}
+          className="w-full"
           disabled={saving || !fromPath.trim() || !toPath.trim()}
         >
           {saving ? "Creating…" : "Add redirect rule"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );
@@ -849,9 +835,9 @@ export default function ProjectNetworkTab({ project }: Props) {
               </span>
             )}
           </div>
-          <button
+          <Button
             type="button"
-            className={btnOutline}
+            variant="outline"
             onClick={handleSync}
             disabled={syncing}
           >
@@ -862,7 +848,7 @@ export default function ProjectNetworkTab({ project }: Props) {
             ) : (
               "Sync now"
             )}
-          </button>
+          </Button>
         </div>
       )}
 

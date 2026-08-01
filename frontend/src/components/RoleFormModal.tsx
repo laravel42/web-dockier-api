@@ -1,6 +1,13 @@
 import { useState, useMemo } from "react";
 import Modal from "./Modal";
 import SettingsModalFooter from "./SettingsModalFooter";
+import Button from "./ui/Button";
+import { Input } from "./ui/input";
+import SearchIcon from "./icons/outlined/SearchIcon";
+import CheckIcon from "./icons/outlined/CheckIcon";
+import MinusIcon from "./icons/outlined/MinusIcon";
+import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
+import LockIcon from "./icons/outlined/LockIcon";
 
 interface Permission {
   key: string;
@@ -131,9 +138,6 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  const inputCls =
-    "h-10 w-full rounded-(--radius-input) border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20";
-
   const toggle = (key: string, locked?: boolean) => {
     if (locked) return;
     setSelected((prev) => {
@@ -196,12 +200,11 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
             Name
           </label>
           <p className="mb-1.5 text-xs text-muted-foreground">The name of the role.</p>
-          <input
+          <Input
             id="role-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={inputCls}
             required
           />
         </div>
@@ -212,12 +215,11 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
             Description <span className="ml-1 rounded border border-border px-1.5 py-0.5 text-xs font-normal text-muted-foreground">Optional</span>
           </label>
           <p className="mb-1.5 text-xs text-muted-foreground">An optional, informational description of the role.</p>
-          <input
+          <Input
             id="role-desc"
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className={inputCls}
           />
         </div>
         </div>
@@ -228,18 +230,15 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
 
           {/* Search */}
           <div className="relative mb-3">
-            <svg
+            <SearchIcon
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-            <input
+            />
+            <Input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search"
-              className="h-9 w-full rounded-(--radius-input) border border-border bg-card pl-9 pr-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
+              className="pl-9"
             />
           </div>
 
@@ -266,23 +265,16 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
                       }`}
                     >
                       {checkState === "all" && (
-                        <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
+                        <CheckIcon className="size-3" />
                       )}
                       {checkState === "partial" && (
-                        <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
-                        </svg>
+                        <MinusIcon className="size-3" />
                       )}
                     </span>
                     <span className="flex-1 text-left text-sm font-semibold text-foreground">{group.name}</span>
-                    <svg
+                    <ChevronDownIcon
                       className={`size-4 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-180"}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
+                    />
                   </button>
 
                   {/* Permission items */}
@@ -304,9 +296,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
                             } ${perm.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
                           >
                             {selected.has(perm.key) && (
-                              <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                              </svg>
+                              <CheckIcon className="size-3" />
                             )}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -315,9 +305,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
                                 {perm.key}
                               </span>
                               {perm.locked && (
-                                <svg className="size-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                                </svg>
+                                <LockIcon className="size-3.5 text-muted-foreground" />
                               )}
                             </div>
                             <p className="mt-0.5 text-xs text-muted-foreground">{perm.label}</p>
@@ -347,14 +335,13 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
       </form>
 
       <SettingsModalFooter onDelete={onDelete} deleteAriaLabel={deleteAriaLabel}>
-        <button
+        <Button
           type="submit"
           form="role-form"
           disabled={!name.trim()}
-          className="h-9 px-5 bg-text text-card text-sm font-medium rounded-(--radius-btn) hover:bg-text/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {submitLabel || "Create role"}
-        </button>
+        </Button>
       </SettingsModalFooter>
       </div>
   );

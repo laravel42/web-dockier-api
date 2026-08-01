@@ -23,8 +23,10 @@ import { wpConfigApi } from "../../../services/wp-config";
 import { gitApi } from "../../../services/git";
 import { getDefaultDeployScript } from "../../../config/frameworks";
 import type { Connection, Repo } from "../../../types";
-import { btnPrimary, btnOutline, inputCls, textareaCls } from "../../../utils/styles";
+import Button from "../../../components/ui/Button";
+import CopyIcon from "../../../components/icons/outlined/CopyIcon";
 import { parseOwnerRepo } from "../../../utils/parseOwnerRepo";
+import { Input } from "@/components/ui/input";
 
 interface Props {
   project: Project;
@@ -154,9 +156,7 @@ function CopyableField({ value }: { value: string }) {
         {copied ? (
           <CheckIcon className="size-4" />
         ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-          </svg>
+          <CopyIcon className="size-4" />
         )}
       </button>
     </div>
@@ -404,7 +404,7 @@ function ManageTagsModal({ open, onClose }: { open: boolean; onClose: () => void
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void handleAdd(); }}
-              className={`${inputCls} flex-1`}
+              className={`flex-1`}
               placeholder=""
             />
             <button
@@ -456,7 +456,7 @@ function ManageTagsModal({ open, onClose }: { open: boolean; onClose: () => void
                               if (e.key === "Enter") void handleRename();
                               if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
                             }}
-                            className={`${inputCls} h-7 text-xs flex-1`}
+                            className={`h-7 text-xs flex-1`}
                             autoFocus
                           />
                           <button
@@ -637,9 +637,9 @@ function GeneralSection({
               {project.name.charAt(0).toUpperCase()}
             </div>
             {canManage && (
-              <button type="button" className={btnOutline + " text-xs h-7"}>
+              <Button variant="outline" size="sm">
                 Upload image
-              </button>
+              </Button>
             )}
           </div>
         </SettingsRow>
@@ -686,7 +686,7 @@ function GeneralSection({
                 onChange={(e) => setNoteValue(e.target.value)}
                 disabled={!canManage}
                 rows={3}
-                className={`${textareaCls} text-xs`}
+                className="text-xs"
                 placeholder="Write a note…"
                 autoFocus={showNotes && !noteValue}
               />
@@ -730,11 +730,11 @@ function GeneralSection({
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}
               </span>
-              <input
+              <Input
                 type="text"
                 defaultValue="/"
                 disabled={!canManage}
-                className={`${inputCls} rounded-l-none w-20 h-9 text-xs font-mono`}
+                className={"grow rounded-l-none w-20 h-9 text-xs font-mono"}
               />
             </div>
           </div>
@@ -745,11 +745,11 @@ function GeneralSection({
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}
               </span>
-              <input
+              <Input
                 type="text"
                 defaultValue="/current/public"
                 disabled={!canManage}
-                className={`${inputCls} rounded-l-none w-36 h-9 text-xs font-mono`}
+                className={"grow rounded-l-none w-36 h-9 text-xs font-mono"}
               />
             </div>
           </div>
@@ -816,7 +816,7 @@ function GeneralSection({
       {/* Save floating */}
       {canManage && name !== project.name && (
         <div className="flex items-center gap-3">
-          <button type="button" onClick={handleSave} disabled={saving} className={btnPrimary}>
+          <button type="button" onClick={handleSave} disabled={saving} >
             {saving ? "Saving…" : "Save changes"}
           </button>
           {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
@@ -838,15 +838,15 @@ function GeneralSection({
               type="text"
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
-              className={inputCls}
+              
               placeholder={project.name}
               autoFocus
             />
           </div>
           <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setShowDeleteModal(false)} className={btnOutline}>
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
               Cancel
-            </button>
+            </Button>
             <button
               type="button"
               onClick={handleDelete}
@@ -971,7 +971,7 @@ function DeploymentsSection({
                 type="button"
                 onClick={() => void handleSaveScript()}
                 disabled={saving}
-                className={btnPrimary}
+                
               >
                 {saving ? "Saving…" : "Save"}
               </button>
@@ -1109,10 +1109,10 @@ function EnvironmentSection({
                 <p className="text-sm text-text-muted font-medium">
                   Environment variables should not be shared publicly.
                 </p>
-                <button type="button" onClick={() => void handleReveal()} className={btnOutline}>
+                <Button variant="outline" onClick={() => void handleReveal()}>
                   <EyeIcon className="size-3.5" />
                   Reveal
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -1124,7 +1124,7 @@ function EnvironmentSection({
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className={btnPrimary}
+              
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -1180,7 +1180,7 @@ function EnvironmentSection({
           value={encryptionKey}
           onChange={(e) => setEncryptionKey(e.target.value)}
           disabled={!canManage}
-          className={inputCls}
+          
           placeholder="Enter encryption key"
         />
       </div>
@@ -1273,10 +1273,10 @@ function WordPressSection({
                 <p className="text-sm text-text-muted font-medium">
                   WordPress configuration contains sensitive credentials.
                 </p>
-                <button type="button" onClick={() => void handleReveal()} className={btnOutline}>
+                <Button variant="outline" onClick={() => void handleReveal()}>
                   <EyeIcon className="size-3.5" />
                   Reveal
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -1288,7 +1288,7 @@ function WordPressSection({
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className={btnPrimary}
+              
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -1342,13 +1342,13 @@ function ComposerSection({ canManage }: { canManage: boolean }) {
             <p className="text-sm font-medium text-text">No Composer credentials yet</p>
             <p className="text-xs text-text-muted">Get started and add your first Composer credentials.</p>
             {canManage && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className={`${btnOutline} mt-3`}
+                variant="outline" className="mt-3"
               >
                 + Add credential
-              </button>
+              </Button>
             )}
           </div>
         ) : (
@@ -1371,13 +1371,13 @@ function ComposerSection({ canManage }: { canManage: boolean }) {
               </div>
             ))}
             {canManage && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className={`${btnOutline} self-start mt-1`}
+                variant="outline" className="self-start mt-1"
               >
                 + Add credential
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -1393,7 +1393,7 @@ function ComposerSection({ canManage }: { canManage: boolean }) {
                 type="text"
                 value={newRepo}
                 onChange={(e) => setNewRepo(e.target.value)}
-                className={inputCls}
+                
                 placeholder="repo.packagist.com"
                 autoFocus
               />
@@ -1405,7 +1405,7 @@ function ComposerSection({ canManage }: { canManage: boolean }) {
                 type="text"
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
-                className={inputCls}
+                
                 placeholder=""
               />
             </div>
@@ -1417,7 +1417,7 @@ function ComposerSection({ canManage }: { canManage: boolean }) {
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className={`${inputCls} pr-10`}
+                  className={`pr-10`}
                   placeholder=""
                 />
                 <button
@@ -1480,13 +1480,13 @@ function NpmSection({ canManage }: { canManage: boolean }) {
             <p className="text-sm font-medium text-text">No npm credentials yet</p>
             <p className="text-xs text-text-muted">Get started and add your first npm credentials.</p>
             {canManage && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className={`${btnOutline} mt-3`}
+                variant="outline" className="mt-3"
               >
                 + Add credential
-              </button>
+              </Button>
             )}
           </div>
         ) : (
@@ -1511,13 +1511,13 @@ function NpmSection({ canManage }: { canManage: boolean }) {
               </div>
             ))}
             {canManage && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className={`${btnOutline} self-start mt-1`}
+                variant="outline" className="self-start mt-1"
               >
                 + Add credential
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -1533,7 +1533,7 @@ function NpmSection({ canManage }: { canManage: boolean }) {
                 type="text"
                 value={newRegistry}
                 onChange={(e) => setNewRegistry(e.target.value)}
-                className={inputCls}
+                
                 placeholder="npm.pkg.github.com"
                 autoFocus
               />
@@ -1547,7 +1547,7 @@ function NpmSection({ canManage }: { canManage: boolean }) {
                   type={showToken ? "text" : "password"}
                   value={newToken}
                   onChange={(e) => setNewToken(e.target.value)}
-                  className={`${inputCls} pr-10`}
+                  className={`pr-10`}
                   placeholder=""
                 />
                 <button
@@ -1569,7 +1569,7 @@ function NpmSection({ canManage }: { canManage: boolean }) {
                 type="text"
                 value={newScopes}
                 onChange={(e) => setNewScopes(e.target.value)}
-                className={inputCls}
+                
                 placeholder="@my-org"
               />
               <p className="mt-1.5 text-xs text-text-muted">Packages under these scopes will be installed from this registry.</p>
@@ -1628,7 +1628,7 @@ function NotificationsSection({ canManage }: { canManage: boolean }) {
             value={failureEmail}
             onChange={(e) => setFailureEmail(e.target.value)}
             disabled={!canManage}
-            className={`${inputCls} w-48 h-8 text-xs`}
+            className={`w-48 h-8 text-xs`}
             placeholder="you@example.com"
           />
         </SettingsRow>
@@ -1831,9 +1831,9 @@ function GitRepositoryModal({
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className={btnOutline}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => void handleSubmit()}

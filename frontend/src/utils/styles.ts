@@ -118,10 +118,7 @@ export const segmentActiveCls = "border-primary bg-primary/10 text-foreground";
 /** Segmented control / tab chip — idle */
 export const segmentIdleCls = "border-border text-text-muted hover:border-primary/30";
 
-/** @deprecated Prefer `<Input />` from `@/components/ui/input` or field helpers in `@/components/ui/fields` */
-export const inputCls =
-  "w-full h-9 px-3 rounded-md border border-border bg-background text-ui text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30";
-/** Textarea — like inputCls but without fixed height, with padding and resize control */
+/** Textarea — like Input but without fixed height, with padding and resize control */
 export const textareaCls =
   "w-full px-3 py-2 rounded-md border border-border bg-background text-ui text-text outline-none placeholder:text-text-muted focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 resize-none leading-relaxed";
 /** Read-only inputs/textareas — muted surface, no focus ring */

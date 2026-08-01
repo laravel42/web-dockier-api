@@ -2,6 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import Spinner from "./Spinner";
+import { Input } from "./ui/input";
+import ArchiveBoxIcon from "./icons/outlined/ArchiveBoxIcon";
+import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
+import SyncIcon from "./icons/outlined/SyncIcon";
 import type { Repo } from "../types";
 
 interface Props {
@@ -69,17 +73,13 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
       >
         {selected ? (
           <>
-            <svg xmlns="http://www.w3.org/2000/svg" className="size-4  shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-            </svg>
+            <ArchiveBoxIcon className="size-4 shrink-0 text-text-muted" />
             <span className="truncate">{selected.fullName}{selected.private ? " 🔒" : ""}</span>
           </>
         ) : (
           <span className="text-text-muted">Select a repository…</span>
         )}
-        <svg className="size-4  ml-auto shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
+        <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
       </button>
       {onRefresh && (
         <button
@@ -89,9 +89,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
           className="size-11  shrink-0 rounded-(--radius-input) border border-border bg-card flex items-center justify-center text-text-muted hover:text-primary-500 hover:border-primary-500/30 transition-colors disabled:opacity-50"
           title="Refresh repository list"
         >
-          <svg className={`size-4  ${refreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
-          </svg>
+          <SyncIcon className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
         </button>
       )}
       </div>
@@ -103,13 +101,12 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
           style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
         >
           <div className="p-2 border-b border-border">
-            <input
+            <Input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search repositories…"
-              className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
             />
           </div>
           <div className="overflow-y-auto flex-1">
@@ -125,9 +122,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
                     value === r.fullName ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4  shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                  </svg>
+                  <ArchiveBoxIcon className="size-4 shrink-0 text-text-muted" />
                   <span>{r.fullName}{r.private ? " 🔒" : ""}</span>
                 </button>
               ))

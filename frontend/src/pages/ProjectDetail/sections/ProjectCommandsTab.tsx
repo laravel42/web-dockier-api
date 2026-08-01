@@ -7,6 +7,13 @@ import { usePermissions } from "../../../context/PermissionsContext";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { statusBadgeColors } from "../../../utils/styles";
 import Spinner from "../../../components/Spinner";
+import ArrowRightIcon from "../../../components/icons/filled/ArrowRightIcon";
+import DotsVerticalIcon from "@/components/icons/outlined/DotsVerticalIcon";
+import DocumentIcon from "@/components/icons/outlined/DocumentIcon";
+import SyncIcon from "@/components/icons/outlined/SyncIcon";
+import CopyIcon from "@/components/icons/outlined/CopyIcon";
+import TrashIcon from "@/components/icons/outlined/TrashIcon";
+import XIcon from "@/components/icons/outlined/XIcon";
 
 const PAGE_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
@@ -244,9 +251,7 @@ export default function ProjectCommandsTab({ project }: Props) {
             className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
           >
             {submitting ? <Spinner className="size-3.5" /> : (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5" aria-hidden="true">
-                <path fillRule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clipRule="evenodd" />
-              </svg>
+              <ArrowRightIcon className="size-3.5" />
             )}
             Run
           </button>
@@ -300,9 +305,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                       aria-expanded={openMenuId === cmd.id}
                       aria-haspopup="menu"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-4" aria-hidden="true">
-                        <path d="M8 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM8 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM9.5 12.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z" />
-                      </svg>
+                      <DotsVerticalIcon className="size-4" />
                     </button>
                     {openMenuId === cmd.id && (
                       <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-lg" role="menu">
@@ -312,9 +315,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                           onClick={() => { setOutputModal(cmd); setOpenMenuId(null); }}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5" aria-hidden="true">
-                            <path d="M4.5 2A2.5 2.5 0 0 0 2 4.5v7A2.5 2.5 0 0 0 4.5 14h7a2.5 2.5 0 0 0 2.5-2.5v-7A2.5 2.5 0 0 0 11.5 2h-7ZM5 5.75A.75.75 0 0 1 5.75 5h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 5 5.75ZM5.75 8a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z" />
-                          </svg>
+                          <DocumentIcon className="size-3.5" />
                           View output
                         </button>
                         {canManage && hasDeployment && (
@@ -324,9 +325,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                             onClick={() => void handleRunAgain(cmd)}
                             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5" aria-hidden="true">
-                              <path fillRule="evenodd" d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z" clipRule="evenodd" />
-                            </svg>
+                            <SyncIcon className="size-3.5" />
                             Run again
                           </button>
                         )}
@@ -336,10 +335,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                           onClick={() => handleCopy(cmd)}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5" aria-hidden="true">
-                            <path d="M5.5 3.5A1.5 1.5 0 0 1 7 2h5.5A1.5 1.5 0 0 1 14 3.5v7a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 10.5v-7Z" />
-                            <path d="M3 5a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 3 14h6a1.5 1.5 0 0 0 1.5-1.5V12H7a3 3 0 0 1-3-3V5H3Z" />
-                          </svg>
+                          <CopyIcon />
                           Copy command
                         </button>
                         {canManage && (
@@ -351,9 +347,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                               onClick={() => void handleDelete(cmd)}
                               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-500 transition-colors hover:bg-danger-500/10"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3.5" aria-hidden="true">
-                                <path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clipRule="evenodd" />
-                              </svg>
+                              <TrashIcon className="size-3.5" />
                               Delete
                             </button>
                           </>
@@ -419,9 +413,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                 className="flex size-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-card/60 hover:text-text"
                 aria-label="Close"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-4" aria-hidden="true">
-                  <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
-                </svg>
+                <XIcon className="size-4" />
               </button>
             </div>
             <p className="mb-2 font-mono text-xs text-text-muted break-all">{outputModal.command}</p>

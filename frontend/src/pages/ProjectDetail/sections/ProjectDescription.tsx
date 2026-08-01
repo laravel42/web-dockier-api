@@ -15,6 +15,7 @@ import ProjectObserveTab from "./ProjectObserveTab";
 import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "../../../context/PermissionsContext";
+import XIcon from "@/components/icons/outlined/XIcon";
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -563,7 +564,7 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
               <p className="text-[11px] text-text-muted mt-0.5">Package: {vuln.pkg}</p>
             </div>
             <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors shrink-0">
-              <svg className="size-4 " fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <XIcon className="size-4" />
             </button>
           </div>
           <div className="px-5 py-4 overflow-y-auto flex-1 scrollbar-hide">

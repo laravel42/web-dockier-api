@@ -4,6 +4,8 @@ import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import SourceControlBadge, { getSourceControl } from "./SourceControlBadge";
 import Spinner from "./Spinner";
 import type { Connection } from "../types";
+import { Input } from "./ui/input";
+import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
 
 interface Props {
   value: string;
@@ -78,9 +80,7 @@ export default function SourceControlSelect({ value, onChange, connections, load
         ) : (
           <span className="text-text-muted">Select a source control…</span>
         )}
-        <svg className="size-4  ml-auto shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
+        <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
       </button>
 
       {open && pos && createPortal(
@@ -90,13 +90,12 @@ export default function SourceControlSelect({ value, onChange, connections, load
           style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
         >
           <div className="p-2 border-b border-border">
-            <input
+            <Input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search connections…"
-              className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
             />
           </div>
           <div className="overflow-y-auto flex-1">
