@@ -9,7 +9,7 @@ import { rowToSummary } from "./mappers.js";
 export const PM_PROVIDERS = ["linear", "jira"] as const;
 export type PMProvider = (typeof PM_PROVIDERS)[number];
 
-export const IntegrationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal">("IntegrationsError");
+export const IntegrationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "service_unavailable">("IntegrationsError");
 export type IntegrationsError = InstanceType<typeof IntegrationsError>;
 
 export interface PMIntegrationRow {

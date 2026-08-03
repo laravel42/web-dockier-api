@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, normalizePagination } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
@@ -167,8 +167,7 @@ export async function getProject(projectId: string, tenantId: string) {
 }
 
 export async function listProjects(tenantId: string, params?: { limit?: number; offset?: number; search?: string }) {
-  const limit = Math.min(Math.max(params?.limit ?? 50, 1), 100);
-  const offset = Math.max(params?.offset ?? 0, 0);
+  const { limit, offset } = normalizePagination({ limit: params?.limit ?? 50, offset: params?.offset });
 
   let query = supabaseAdmin
     .from("projects")

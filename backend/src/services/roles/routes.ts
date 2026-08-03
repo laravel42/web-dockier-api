@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
-import { PERMISSIONS, PERMISSION_DEFINITIONS } from "../../shared/permissions/constants.js";
+import { PERMISSIONS, PERMISSION_DEFINITIONS, ALL_PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { roleResponseSchema } from "./schemas.js";
 import {
@@ -15,6 +15,9 @@ import {
 
 export async function registerRolesRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  // Validated permission key schema — rejects invalid permission strings at request validation
+  const permissionKeySchema = z.enum(ALL_PERMISSIONS as unknown as [string, ...string[]]);
 
   typed.get(
     "/roles",
@@ -59,7 +62,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         body: z.object({
           name: z.string().min(2).max(80),
           description: z.string().max(300).optional(),
-          permissions: z.array(z.string()).default([]),
+          permissions: z.array(permissionKeySchema).default([]),
         }),
         response: { 200: roleResponseSchema },
       },
@@ -87,7 +90,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
         body: z.object({
           name: z.string().min(2).max(80).optional(),
           description: z.string().max(300).optional(),
-          permissions: z.array(z.string()).optional(),
+          permissions: z.array(permissionKeySchema).optional(),
         }).refine((v) => Object.keys(v).length > 0, "Provide at least one field to update"),
         response: { 200: roleResponseSchema },
       },

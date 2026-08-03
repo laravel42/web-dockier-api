@@ -20,6 +20,7 @@ import {
   createPMIntegration,
   deletePMIntegration,
   getPMIntegrationConfig,
+  IntegrationsError,
   listPMIntegrations,
   PM_PROVIDERS,
   updatePMIntegration,
@@ -34,7 +35,7 @@ async function resolvePMConfig(
     return getPMIntegrationConfig(body.integrationId, auth.tenantId);
   }
   if (!body.type || !body.config) {
-    throw request.server.httpErrors.badRequest("Either integrationId or type+config is required");
+    throw new IntegrationsError("Either integrationId or type+config is required", "bad_request");
   }
   return { type: body.type, config: body.config };
 }
@@ -209,7 +210,7 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
       const { type, config } = await resolvePMConfig(request, request.body);
       const { title, description, assigneeId } = request.body;
       const provider = providers[type];
-      if (!provider) throw app.httpErrors.notImplemented(`Unsupported integration type: ${type}`);
+      if (!provider) throw new IntegrationsError(`Unsupported integration type: ${type}`, "bad_request");
       try {
         return await provider.createIssue({
           type,
@@ -223,8 +224,8 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
           assigneeId,
         });
       } catch (error) {
-        app.log.error(error);
-        throw app.httpErrors.badGateway("Failed to create issue in external provider");
+        if (error instanceof IntegrationsError) throw error;
+        throw new IntegrationsError("Failed to create issue in external provider", "service_unavailable", error);
       }
     },
   );

@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, normalizePagination } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/http/security.js";
@@ -113,7 +113,8 @@ export interface ListUsersParams {
 }
 
 export async function listUsers(params: ListUsersParams) {
-  const { tenantId, limit, offset, search } = params;
+  const { tenantId, search } = params;
+  const { limit, offset } = normalizePagination(params);
 
   let query = supabaseAdmin
     .from("users")
