@@ -12,7 +12,7 @@ import { env } from "../../../shared/config.js";
 import { bundleAndUploadSource } from "./source-bundler.js";
 import { getAwsAccountId } from "../../../lib/aws.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
-import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import { getSns } from "../../../lib/aws-sdk.js";
 
 const db = supabaseAdmin;
 
@@ -95,6 +95,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     const callbackUrl = env.DEPLOY_CALLBACK_URL ?? "";
     const webhookSecret = env.WEBHOOK_SECRET ?? "";
 
+    const { SNSClient, PublishCommand } = await getSns();
     const sns = new SNSClient({ region, credentials: { accessKeyId, secretAccessKey } });
     const buildRequestTopicArn = `arn:aws:sns:${region}:${accountId}:${codebuildProject}-build-request`;
 

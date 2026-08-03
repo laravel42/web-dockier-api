@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BatchGetBuildsCommand, CodeBuildClient, ListBuildsForProjectCommand } from "@aws-sdk/client-codebuild";
-import { CloudWatchLogsClient, GetLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import type { FastifyInstance } from "fastify";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
+import { getCodeBuild, getCloudWatchLogs } from "../../../lib/aws-sdk.js";
 import { env } from "../../../shared/config.js";
 
 function imageBuilderProjectName(): string {
@@ -11,6 +10,7 @@ function imageBuilderProjectName(): string {
 }
 
 export async function lookupCodeBuildId(credentials: { accessKeyId: string; secretAccessKey: string; region: string }, buildId: string): Promise<string | null> {
+  const { CodeBuildClient, ListBuildsForProjectCommand, BatchGetBuildsCommand } = await getCodeBuild();
   const client = new CodeBuildClient({
     region: credentials.region,
     credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
@@ -27,6 +27,7 @@ export async function refreshBuildStatus(row: any) {
   if (!row.codebuild_id || !row.provider_id) return row;
   const credentials = await resolveAwsCredentials(row.provider_id);
   if (!credentials) return row;
+  const { CodeBuildClient, BatchGetBuildsCommand } = await getCodeBuild();
   const client = new CodeBuildClient({
     region: credentials.region,
     credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
@@ -61,6 +62,7 @@ export async function fetchBuildLogs(app: FastifyInstance, row: any, nextToken?:
   const credentials = await resolveAwsCredentials(row.provider_id || "");
   if (!credentials || !row.codebuild_id) return { logs: ["Build not yet started in CodeBuild"], nextToken: undefined as string | undefined };
   try {
+    const { CloudWatchLogsClient, GetLogEventsCommand } = await getCloudWatchLogs();
     const client = new CloudWatchLogsClient({
       region: credentials.region,
       credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },

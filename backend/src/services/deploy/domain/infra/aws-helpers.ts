@@ -1,26 +1,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  EC2Client,
-  DescribeVpcsCommand,
-  DescribeSubnetsCommand,
-} from "@aws-sdk/client-ec2";
-import {
-  ECRClient,
-  CreateRepositoryCommand,
-  DescribeRepositoriesCommand,
-  GetAuthorizationTokenCommand,
-  DeleteRepositoryCommand,
-} from "@aws-sdk/client-ecr";
-import {
-  CloudFormationClient,
-  CreateStackCommand,
-  UpdateStackCommand,
-  DeleteStackCommand,
-  DescribeStacksCommand,
-  type Output,
-} from "@aws-sdk/client-cloudformation";
+import type { CloudFormationClient, Output } from "@aws-sdk/client-cloudformation";
+import { getEc2, getEcr, getCfn } from "../../../../lib/aws-sdk.js";
 import type { RunCmdFn } from "../run-cmd.js";
 import type { ProvisionResult } from "../adapters/types.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
@@ -65,6 +47,7 @@ export async function getDefaultVpcAndSubnets(
   region: string,
   credentials: AwsCredentials,
 ): Promise<{ vpcId: string; subnetIds: string[] }> {
+  const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await getEc2();
   const ec2 = new EC2Client({ region, credentials });
 
   const vpcsResult = await ec2.send(
@@ -115,6 +98,7 @@ export async function pushToEcr(opts: {
   const remoteImageUri = `${ecrUri}/${imageRepoName}:${shortId}`;
 
   // 2. Create ECR repository if it doesn't exist
+  const { ECRClient, DescribeRepositoriesCommand, CreateRepositoryCommand, GetAuthorizationTokenCommand } = await getEcr();
   const ecr = new ECRClient({ region, credentials });
 
   try {
@@ -203,6 +187,7 @@ export async function waitForStackDelete(
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<void> {
+  const { DescribeStacksCommand } = await getCfn();
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 5_000));
     try {
@@ -231,6 +216,7 @@ export async function waitForStackStable(
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<string> {
+  const { DescribeStacksCommand } = await getCfn();
 
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 15_000));
@@ -263,6 +249,7 @@ export async function extractStackOutputs(
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<ProvisionResult> {
+  const { DescribeStacksCommand } = await getCfn();
   const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
   const stack = result.Stacks?.[0];
   const outputs = Object.fromEntries(
@@ -290,6 +277,7 @@ export async function cleanupStuckStack(
   stackName: string,
   appendLog: (line: string) => Promise<void>,
 ): Promise<void> {
+  const { DescribeStacksCommand, DeleteStackCommand } = await getCfn();
   try {
     const descResult = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
     const existingStack = descResult.Stacks?.[0];
@@ -338,6 +326,7 @@ export async function createOrUpdateStack(opts: {
   appendLog: (line: string) => Promise<void>;
 }): Promise<{ isUpdate: boolean; noUpdatesResult?: ProvisionResult }> {
   const { cfn, stackName, templateUrl, params, deploymentId, appendLog } = opts;
+  const { CreateStackCommand, UpdateStackCommand } = await getCfn();
 
   try {
     await cfn.send(
@@ -399,6 +388,7 @@ export async function deleteEcrRepo(
   errors: string[],
 ): Promise<void> {
   try {
+    const { ECRClient, DeleteRepositoryCommand } = await getEcr();
     const ecr = new ECRClient({ region, credentials });
     await ecr.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
   } catch (e: unknown) {
@@ -421,6 +411,7 @@ export async function destroyCfnStack(
   errors: string[],
 ): Promise<void> {
   try {
+    const { CloudFormationClient, DeleteStackCommand } = await getCfn();
     const cfn = new CloudFormationClient({ region, credentials });
     await cfn.send(new DeleteStackCommand({ StackName: stackName }));
     await appendLog(`✓ Stack deletion initiated: ${stackName}`);
@@ -450,6 +441,7 @@ export async function pollStackStatus(opts: {
   appendLog: (line: string) => Promise<void>;
 }): Promise<ProvisionResult> {
   const { cfn, stackName, isUpdate, appendLog } = opts;
+  const { DescribeStacksCommand } = await getCfn();
 
   const successStatuses = isUpdate ? ["UPDATE_COMPLETE"] : ["CREATE_COMPLETE"];
 

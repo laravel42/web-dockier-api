@@ -25,6 +25,7 @@ let _ec2: typeof import("@aws-sdk/client-ec2") | null = null;
 let _sns: typeof import("@aws-sdk/client-sns") | null = null;
 let _codebuild: typeof import("@aws-sdk/client-codebuild") | null = null;
 let _ecs: typeof import("@aws-sdk/client-ecs") | null = null;
+let _ecr: typeof import("@aws-sdk/client-ecr") | null = null;
 let _secretsManager: typeof import("@aws-sdk/client-secrets-manager") | null = null;
 let _cloudwatchLogs: typeof import("@aws-sdk/client-cloudwatch-logs") | null = null;
 
@@ -60,6 +61,10 @@ export async function getCodeBuild() {
 
 export async function getEcs() {
   return (_ecs ??= await import("@aws-sdk/client-ecs"));
+}
+
+export async function getEcr() {
+  return (_ecr ??= await import("@aws-sdk/client-ecr"));
 }
 
 export async function getSecretsManager() {
