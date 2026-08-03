@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { bootstrapEnv } from "./env/load.js";
 import { isSupabasePublishableKey, isSupabaseSecretKey } from "./supabase/keys.js";
+import { logger } from "./logger.js";
 
 const supabasePublishableKeySchema = z
   .string()
@@ -124,7 +125,7 @@ function parseEnv(): AppEnv {
     if (!parsed.INTERNAL_SERVICE_TOKEN) {
       // Fall back to WEBHOOK_SECRET but warn — this preserves backward compat
       // while encouraging migration to a separate token.
-      console.warn(
+      logger.warn(
         "[config] INTERNAL_SERVICE_TOKEN not set — falling back to WEBHOOK_SECRET. " +
         "Set a separate INTERNAL_SERVICE_TOKEN for defense-in-depth.",
       );

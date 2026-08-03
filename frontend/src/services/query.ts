@@ -14,8 +14,6 @@
  *   buildQuery({ repo, branch: undefined })    // "?repo=app"
  *   buildQuery({})                             // ""
  */
-export type QueryValue = string | number | boolean | undefined | null;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildQuery(params?: Record<string, any> | null): string {
   const search = new URLSearchParams();
