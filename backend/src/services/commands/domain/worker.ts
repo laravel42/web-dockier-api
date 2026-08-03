@@ -18,6 +18,7 @@ import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/database/queue
 import { getCfn, getEc2 } from "../../../lib/aws-sdk.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
@@ -433,7 +434,7 @@ async function updateCommandStatus(
     .update({
       status,
       output: cappedOutput,
-      finished_at: new Date().toISOString(),
+      finished_at: nowIso(),
     })
     .eq("id", commandId);
 

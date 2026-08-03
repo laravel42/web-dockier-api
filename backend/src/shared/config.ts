@@ -2,6 +2,7 @@ import { z } from "zod";
 import { bootstrapEnv } from "./env/load.js";
 import { isSupabasePublishableKey, isSupabaseSecretKey } from "./supabase/keys.js";
 import { logger } from "./logger.js";
+import { SERVICE_NAMES } from "./constants/services.js";
 
 const supabasePublishableKeySchema = z
   .string()
@@ -18,24 +19,7 @@ const envSchema = z
     NODE_ENV: z.string().default("development"),
     PORT: z.coerce.number().int().positive().default(4000),
     SERVICE_NAME: z
-      .enum([
-        "gateway",
-        "auth",
-        "users",
-        "projects",
-        "roles",
-        "deploy",
-        "commands",
-        "processes",
-        "network",
-        "domains",
-        "observe",
-        "notifications",
-        "integrations",
-        "code-analysis",
-        "git-integration",
-        "image-builder",
-      ])
+      .enum(SERVICE_NAMES)
       .default("gateway"),
     SUPABASE_URL: z.url(),
     SUPABASE_PUBLISHABLE_KEY: supabasePublishableKeySchema,
@@ -130,6 +114,14 @@ function parseEnv(): AppEnv {
         "Set a separate INTERNAL_SERVICE_TOKEN for defense-in-depth.",
       );
     }
+  }
+
+  // Warn when the deprecated legacy key is in use
+  if (parsed.SUPABASE_SERVICE_ROLE_KEY && !parsed.SUPABASE_SECRET_KEY) {
+    logger.warn(
+      "[config] SUPABASE_SERVICE_ROLE_KEY is deprecated — migrate to SUPABASE_SECRET_KEY (sb_secret_...). " +
+      "Support will be removed in a future release.",
+    );
   }
 
   return parsed;

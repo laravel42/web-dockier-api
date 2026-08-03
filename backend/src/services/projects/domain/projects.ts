@@ -9,7 +9,7 @@ import { escapePostgrestLike } from "../../../shared/http/security.js";
 import { rowToProject } from "./mappers.js";
 import { saveWpConfig, generateWpConfig } from "./wp-config.js";
 
-export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("ProjectsError");
+export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal" | "service_unavailable">("ProjectsError");
 export type ProjectsError = InstanceType<typeof ProjectsError>;
 
 /**

@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import { type ServiceName } from "./shared/constants/services.js";
 import { authPlugin } from "./shared/auth/auth.js";
 import { authorizationPlugin } from "./shared/permissions/authorization.js";
 import { projectAccessPlugin } from "./shared/http/project-access.js";
@@ -22,23 +23,7 @@ import { registerObserveRoutes } from "./services/observe/routes.js";
 import { registerDomainsRoutes } from "./services/domains/routes.js";
 import { registerUsersRoutes } from "./services/users/routes.js";
 
-export type ServiceName =
-  | "gateway"
-  | "auth"
-  | "users"
-  | "projects"
-  | "roles"
-  | "deploy"
-  | "commands"
-  | "processes"
-  | "network"
-  | "domains"
-  | "observe"
-  | "notifications"
-  | "integrations"
-  | "code-analysis"
-  | "git-integration"
-  | "image-builder";
+export type { ServiceName } from "./shared/constants/services.js";
 
 type RegisterFn = (app: FastifyInstance) => Promise<void>;
 

@@ -24,6 +24,7 @@ import {
   listProjects,
   updateProject,
   deleteProject,
+  ProjectsError,
 } from "./domain/projects.js";
 import { createOverviewAiStream } from "./domain/overview-ai.js";
 import { registerTagRoutes } from "./routes/tags.js";
@@ -179,26 +180,23 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       if (!env.OPENAI_API_KEY) {
-        return reply.status(503).send({ message: "AI is not configured on this server." });
+        throw new ProjectsError("AI is not configured on this server", "service_unavailable");
       }
 
-      try {
-        const result = await createOverviewAiStream({
-          messages: request.body.messages as unknown as Parameters<typeof createOverviewAiStream>[0]["messages"],
-          toolDefinitions: request.body.toolDefinitions as Parameters<
-            typeof createOverviewAiStream
-          >[0]["toolDefinitions"],
-        });
+      // Create the stream before hijacking the response — if this throws,
+      // the global error handler maps it to a proper HTTP error.
+      const result = await createOverviewAiStream({
+        messages: request.body.messages as unknown as Parameters<typeof createOverviewAiStream>[0]["messages"],
+        toolDefinitions: request.body.toolDefinitions as Parameters<
+          typeof createOverviewAiStream
+        >[0]["toolDefinitions"],
+      });
 
-        reply.hijack();
-        pipeUIMessageStreamToResponse({
-          response: reply.raw,
-          stream: result.toUIMessageStream(),
-        });
-      } catch (err) {
-        request.log.error({ err }, "AI chat stream failed");
-        return reply.status(500).send({ message: "Failed to process AI request." });
-      }
+      reply.hijack();
+      pipeUIMessageStreamToResponse({
+        response: reply.raw,
+        stream: result.toUIMessageStream(),
+      });
     },
   );
 

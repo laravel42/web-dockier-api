@@ -5,6 +5,7 @@ import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/http/security.js";
 import { logger } from "../../../shared/logger.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { rowToUser } from "./mappers.js";
 
 export const UsersError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("UsersError");
@@ -46,7 +47,7 @@ export async function createUser(params: CreateUserParams) {
   }
 
   const id = authUser.user.id;
-  const now = new Date().toISOString();
+  const now = nowIso();
 
   // Create public.users record
   const { error } = await supabaseAdmin.from("users").insert({
@@ -182,7 +183,7 @@ export async function updateUser(params: UpdateUserParams) {
   if (params.country !== undefined) updates.country = params.country;
   if (params.language !== undefined) updates.language = params.language;
   if (params.timezone !== undefined) updates.timezone = params.timezone;
-  updates.updated_at = new Date().toISOString();
+  updates.updated_at = nowIso();
 
   const { error } = await supabaseAdmin
     .from("users")

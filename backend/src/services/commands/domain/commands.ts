@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { enqueueCommand } from "./worker.js";
 import { safeRecordActivity } from "../../../shared/service-clients/activity.js";
 import type { CommandRow } from "../schemas.js";
@@ -30,7 +31,7 @@ export async function runCommand(params: {
       command,
       status: "running",
       output: "",
-      started_at: new Date().toISOString(),
+      started_at: nowIso(),
     })
     .select()
     .single();
@@ -50,7 +51,7 @@ export async function runCommand(params: {
     // If enqueue fails, mark the command as failed so it doesn't stay stuck
     await supabaseAdmin
       .from("commands")
-      .update({ status: "failed", output: "Failed to dispatch command for execution.", finished_at: new Date().toISOString() })
+      .update({ status: "failed", output: "Failed to dispatch command for execution.", finished_at: nowIso() })
       .eq("id", row.id);
     throw new CommandsError("Failed to dispatch command for execution", "internal");
   }
