@@ -1,5 +1,2 @@
-export interface Provider {
-  id: string;
-  provider: string;
-  label: string;
-}
+// Re-exported from @dockier/shared-types — do not define types here.
+export type { Provider } from "@dockier/shared-types";

@@ -1,9 +1,12 @@
 /**
- * Frontend type barrel — re-exports from @dockier/shared-types.
+ * @dockier/shared-types
  *
- * All domain types are defined in the shared package (packages/shared-types)
- * and re-exported here so existing import paths (`../types`) continue to work.
+ * Single source of truth for domain types shared between backend and frontend.
+ * Backend Zod schemas validate these shapes at runtime; the frontend imports
+ * them for type-safe API consumption without duplicating definitions.
  */
+
+export type { PaginationMeta } from "./pagination.js";
 
 export type {
   Project,
@@ -11,18 +14,28 @@ export type {
   ProjectTemplate,
   ProjectConfig,
   ProjectSettings,
+} from "./project.js";
+
+export type {
   Deployment,
   DeploymentStatus,
   DeployStrategy,
-  Provider,
-  ScanSummary,
-  Scan,
+} from "./deployment.js";
+
+export type { Provider } from "./provider.js";
+
+export type {
   ScanStatus,
-  Finding,
   FindingSeverity,
   ScanProgress,
-  SecurityFindingCounts,
+  ScanSummary,
+  Scan,
+  Finding,
   ProviderSeverityCounts,
+  SecurityFindingCounts,
+} from "./scan.js";
+
+export type {
   Connection,
   Repo,
   TechBadgeInfo,
@@ -44,8 +57,10 @@ export type {
   SensitiveDataTableColumn,
   SensitiveDataTable,
   SensitiveDataAnalysis,
+} from "./git.js";
+
+export type {
   PMIntegration,
   PMTeam,
   PMMember,
-  PaginationMeta,
-} from "@dockier/shared-types";
+} from "./integrations.js";

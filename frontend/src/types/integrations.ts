@@ -1,20 +1,2 @@
-export interface PMIntegration {
-  id: string;
-  type: string;
-  name: string;
-  config?: Record<string, string>;
-  enabled: boolean;
-  createdAt?: string;
-}
-
-export interface PMTeam {
-  id: string;
-  name: string;
-  key?: string;
-}
-
-export interface PMMember {
-  id: string;
-  name: string;
-  email?: string;
-}
+// Re-exported from @dockier/shared-types — do not define types here.
+export type { PMIntegration, PMTeam, PMMember } from "@dockier/shared-types";

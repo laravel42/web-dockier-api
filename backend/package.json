@@ -18,6 +18,7 @@
     "start:gateway": "SERVICE_NAME=gateway tsx src/server.ts"
   },
   "dependencies": {
+    "@dockier/shared-types": "workspace:*",
     "@ai-sdk/openai": "^2.0.107",
     "@aws-sdk/client-cloudformation": "^3.1030.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1030.0",
