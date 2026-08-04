@@ -7,6 +7,15 @@
 
 export type ProjectSourceType = "repository" | "template";
 
+/**
+ * Project-level infrastructure lifecycle state.
+ *
+ * - `none`      — never deployed, or infrastructure never provisioned
+ * - `live`      — infrastructure is currently provisioned
+ * - `torn_down` — infrastructure was fully torn down; project + history retained
+ */
+export type InfraState = "none" | "live" | "torn_down";
+
 /** Blocks shown on the project overview page. */
 export interface ProjectConfig {
   overviewBlocks?: Record<string, unknown>[];
@@ -43,6 +52,8 @@ export interface Project {
   template?: string;
   config?: ProjectConfig;
   settings?: ProjectSettings;
+  /** Infrastructure lifecycle state. Defaults to "none" server-side. */
+  infraState?: InfraState;
   lastCommitHash?: string;
   createdAt: string;
 }

@@ -25,4 +25,15 @@ export const projectsApi = {
 
   delete: (projectId: string) =>
     request(`/projects/${projectId}`, { method: "DELETE" }),
+
+  /**
+   * Tear down all cloud infrastructure for a project (keeps the project +
+   * deployment history). Reversible: a subsequent deploy recreates resources.
+   */
+  teardownInfrastructure: (projectId: string) =>
+    request<{
+      status: "torn_down" | "partial" | "nothing_to_tear_down";
+      message: string;
+      perStack: Array<{ stackName: string; success: boolean; message: string; errors: string[] }>;
+    }>(`/projects/${projectId}/infrastructure/teardown`, { method: "POST" }),
 };

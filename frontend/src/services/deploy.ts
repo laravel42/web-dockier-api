@@ -76,11 +76,6 @@ export const deployApi = {
       body: JSON.stringify(data),
     }),
 
-  destroyDeployment: (deploymentId: string) =>
-    request<{ success: boolean; message: string }>(`/deploy/deployments/${deploymentId}/destroy`, {
-      method: "POST",
-    }),
-
   cancelDeployment: (deploymentId: string) =>
     request<Deployment>(`/deploy/deployments/${deploymentId}/cancel`, {
       method: "POST",

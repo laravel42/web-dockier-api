@@ -3,20 +3,17 @@ import { projectsApi } from "../../../services/projects";
 import { notificationsApi } from "../../../services/notifications";
 import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
+import { useToast } from "../../../context/useToast";
+import { getErrorMessage } from "../../../utils/errors";
+import { CheckIcon, ChevronDownIcon, CopyIcon, EllipsisVerticalIcon, EyeIcon, SearchIcon, ServerOffIcon, Trash2Icon, XIcon } from "lucide-react";
 import Modal from "../../../components/Modal";
+import ConfirmModal from "../../../components/ConfirmModal";
 import Spinner from "../../../components/Spinner";
 import SourceControlSelect from "../../../components/SourceControlSelect";
 import RepoSelect from "../../../components/RepoSelect";
 import BranchSelect from "../../../components/BranchSelect";
 import EnvEditor from "../../../components/EnvEditor";
 import WpConfigEditor from "../../../components/WpConfigEditor";
-import TrashIcon from "../../../components/icons/outlined/TrashIcon";
-import CheckIcon from "../../../components/icons/outlined/CheckIcon";
-import SearchIcon from "../../../components/icons/outlined/SearchIcon";
-import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon";
-import EyeIcon from "../../../components/icons/outlined/EyeIcon";
-import XIcon from "../../../components/icons/outlined/XIcon";
-import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
 import { tagsApi } from "../../../services/tags";
 import type { Tag, TagWithCount } from "../../../types";
 import { envApi } from "../../../services/env";
@@ -25,7 +22,6 @@ import { gitApi } from "../../../services/git";
 import { getDefaultDeployScript } from "../../../config/frameworks";
 import type { Connection, Repo } from "../../../types";
 import Button from "../../../components/ui/Button";
-import CopyIcon from "../../../components/icons/outlined/CopyIcon";
 import { parseOwnerRepo } from "../../../utils/parseOwnerRepo";
 import { Input } from "@/components/ui/input";
 
@@ -496,7 +492,7 @@ function ManageTagsModal({ open, onClose }: { open: boolean; onClose: () => void
                           onClick={() => setMenuOpenId(menuOpenId === tag.id ? null : tag.id)}
                           className="flex size-7 items-center justify-center rounded-md text-text-muted hover:text-text hover:bg-secondary-50/50 transition-colors"
                         >
-                          <DotsVerticalIcon className="size-4" />
+                          <EllipsisVerticalIcon className="size-4" />
                         </button>
                         {menuOpenId === tag.id && (
                           <>
@@ -565,6 +561,10 @@ function GeneralSection({
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
   const [savingNote, setSavingNote] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
+  const toast = useToast();
+  const [infraState, setInfraState] = useState(project.infraState ?? "none");
+  const [showTeardownModal, setShowTeardownModal] = useState(false);
+  const [tearingDown, setTearingDown] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -602,6 +602,26 @@ function GeneralSection({
       window.location.href = "/projects";
     } catch { /* silent */ }
     finally { setDeleting(false); }
+  };
+
+  const handleTeardown = async () => {
+    setTearingDown(true);
+    try {
+      const res = await projectsApi.teardownInfrastructure(project.id);
+      if (res.status === "torn_down") {
+        setInfraState("torn_down");
+        toast.success(res.message);
+      } else if (res.status === "nothing_to_tear_down") {
+        toast.info(res.message);
+      } else {
+        // partial — infrastructure may still exist, leave state as-is
+        toast.error(res.message);
+      }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to tear down infrastructure"));
+    } finally {
+      setTearingDown(false);
+    }
   };
 
   return (
@@ -792,7 +812,31 @@ function GeneralSection({
       {/* Danger zone */}
       <div className="rounded-lg border border-danger-500/30 bg-danger-500/5 p-4">
         <p className="text-sm font-semibold text-danger-500 mb-1">Danger</p>
-        <p className="text-xs text-text-muted mb-4">Destructive actions that cannot be undone.</p>
+        <p className="text-xs text-text-muted mb-4">Destructive actions. Review carefully before proceeding.</p>
+
+        {/* Tear down infrastructure — reversible: a later deploy recreates resources */}
+        <div className="flex items-center justify-between gap-4 pb-4 mb-4 border-b border-danger-500/20">
+          <div>
+            <p className="text-sm font-medium text-text">Tear down infrastructure</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              Destroys all cloud resources for this project (servers, containers, load balancers, etc).
+              The project and its deployment history are kept — re-deploying recreates the resources.
+            </p>
+          </div>
+          {canManage && (
+            <Button
+              variant="outline-danger"
+              size="sm"
+              loading={tearingDown}
+              disabled={infraState !== "live"}
+              title={infraState !== "live" ? "No provisioned infrastructure to tear down" : undefined}
+              iconLeft={<ServerOffIcon className="size-3.5" />}
+              onClick={() => setShowTeardownModal(true)}
+            >
+              <span className="text-nowrap">Tear down infrastructure</span>
+            </Button>
+          )}
+        </div>
 
         <div className="flex items-center justify-between">
           <div>
@@ -802,17 +846,27 @@ function GeneralSection({
             </p>
           </div>
           {canManage && (
-            <button
-              type="button"
+            <Button
+              variant="outline-danger"
+              size="sm"
+              iconLeft={<Trash2Icon className="size-3.5" />}
               onClick={() => setShowDeleteModal(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border border-danger-500/40 bg-danger-500/10 text-danger-500 hover:bg-danger-500/20 transition-colors"
             >
-              <TrashIcon className="size-3.5" />
               Delete project
-            </button>
+            </Button>
           )}
         </div>
       </div>
+
+      {/* Teardown confirmation */}
+      <ConfirmModal
+        open={showTeardownModal}
+        onClose={() => setShowTeardownModal(false)}
+        onConfirm={handleTeardown}
+        title="Tear down infrastructure"
+        message="This destroys all cloud resources for this project. Your project and deployment history are kept, and re-deploying will recreate the infrastructure. Continue?"
+        confirmLabel="Tear down"
+      />
 
       {/* Save floating */}
       {canManage && name !== project.name && (

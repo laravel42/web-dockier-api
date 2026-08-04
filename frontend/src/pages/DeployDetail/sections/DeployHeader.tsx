@@ -7,9 +7,6 @@ interface Props {
   deploy: Deployment;
   project: Project | null;
   onNavigateProject: () => void;
-  canDestroy: boolean;
-  destroying: boolean;
-  onDestroy: () => void;
   canCancel: boolean;
   cancelling: boolean;
   onCancel: () => void;
@@ -17,15 +14,16 @@ interface Props {
   redeploying: boolean;
   onRedeploy: () => void;
   onRollback: () => void;
+  /** True when this deployment is the most recent successful one (rollback is a no-op → hide it). */
+  isLatestSuccessful: boolean;
 }
 
 export default function DeployHeader({
   deploy, project, onNavigateProject,
-  canDestroy, destroying, onDestroy,
   canCancel, cancelling, onCancel,
   canRedeploy, redeploying, onRedeploy, onRollback,
+  isLatestSuccessful,
 }: Props) {
-  const isActive = deploy.status === "success";
   const isTerminal = ["success", "failed", "cancelled"].includes(deploy.status);
   const isInProgress = ["pending", "building", "deploying"].includes(deploy.status);
 
@@ -59,13 +57,13 @@ export default function DeployHeader({
       <div className="flex items-center gap-2">
         {/* Redeploy — available on terminal deployments (success, failed, cancelled) */}
         {canRedeploy && isTerminal && deploy.status !== "destroyed" && (
-          <Button variant="primary" size="sm" loading={redeploying} onClick={onRedeploy}>
+          <Button variant="primary" size="sm" loading={redeploying} onClick={onRedeploy} iconLeft={<RocketIcon />}>
             Redeploy
           </Button>
         )}
 
-        {/* Rollback — only on past successful deployments that have a commit hash */}
-        {canRedeploy && deploy.status === "success" && deploy.commitHash && (
+        {/* Rollback — only on a PAST successful deployment (not the latest live one) with a commit hash */}
+        {canRedeploy && deploy.status === "success" && deploy.commitHash && !isLatestSuccessful && (
           <Button variant="outline" size="sm" loading={redeploying} onClick={onRollback}>
             Rollback to this
           </Button>
@@ -75,13 +73,6 @@ export default function DeployHeader({
         {canCancel && isInProgress && (
           <Button variant="danger" size="sm" loading={cancelling} onClick={onCancel}>
             Cancel Deploy
-          </Button>
-        )}
-
-        {/* Destroy — on active successful deployments */}
-        {canDestroy && isActive && (
-          <Button variant="outline-danger" size="sm" loading={destroying} onClick={onDestroy}>
-            Destroy
           </Button>
         )}
       </div>

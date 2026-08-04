@@ -58,7 +58,6 @@ vi.mock("../domain/providers.js", async (importOriginal) => {
 
 const mockListDeployments = vi.fn();
 const mockGetDeployment = vi.fn();
-const mockGetDeploymentForDestroy = vi.fn();
 const mockGetDeploymentForWebhook = vi.fn();
 const mockUpdateDeploymentStatus = vi.fn();
 const mockCreateAndEnqueueDeployment = vi.fn();
@@ -66,7 +65,6 @@ const mockCreateAndEnqueueDeployment = vi.fn();
 vi.mock("../domain/deployments.js", () => ({
   listDeployments: (...args: unknown[]) => mockListDeployments(...args),
   getDeployment: (...args: unknown[]) => mockGetDeployment(...args),
-  getDeploymentForDestroy: (...args: unknown[]) => mockGetDeploymentForDestroy(...args),
   getDeploymentForWebhook: (...args: unknown[]) => mockGetDeploymentForWebhook(...args),
   updateDeploymentStatus: (...args: unknown[]) => mockUpdateDeploymentStatus(...args),
   createAndEnqueueDeployment: (...args: unknown[]) => mockCreateAndEnqueueDeployment(...args),
@@ -84,11 +82,6 @@ const mockEnqueueDeployment = vi.fn();
 vi.mock("../domain/worker.js", () => ({
   enqueueDeployment: (...args: unknown[]) => mockEnqueueDeployment(...args),
   registerDeployWorker: vi.fn(),
-}));
-
-const mockDestroyDeployment = vi.fn();
-vi.mock("../domain/lifecycle/destroy.js", () => ({
-  destroyDeployment: (...args: unknown[]) => mockDestroyDeployment(...args),
 }));
 
 const mockListSshKeys = vi.fn();
@@ -476,36 +469,6 @@ describe("GET /deploy/deployments/:deploymentId", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().id).toBe(TEST_DEPLOYMENT_ID);
     expect(mockGetDeployment).toHaveBeenCalledWith(TEST_DEPLOYMENT_ID, TEST_TENANT_ID);
-  });
-});
-
-describe("POST /deploy/deployments/:deploymentId/destroy", () => {
-  it("returns 403 without DEPLOY_MANAGE permission", async () => {
-    setupPermissionMocks({ permissions: [PERMISSIONS.DEPLOY_VIEW, PERMISSIONS.DEPLOY_CREATE] });
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/deploy/deployments/${TEST_DEPLOYMENT_ID}/destroy`,
-      headers: { authorization: authHeader() },
-    });
-
-    expect(res.statusCode).toBe(403);
-  });
-
-  it("destroys deployment with correct permission", async () => {
-    setupPermissionMocks({ permissions: Object.values(PERMISSIONS) });
-    mockGetDeploymentForDestroy.mockResolvedValue({ id: TEST_DEPLOYMENT_ID, organization_id: TEST_TENANT_ID });
-    mockDestroyDeployment.mockResolvedValue({ success: true, message: "Stack deleted" });
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/deploy/deployments/${TEST_DEPLOYMENT_ID}/destroy`,
-      headers: { authorization: authHeader() },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ success: true, message: "Stack deleted" });
-    expect(mockGetDeploymentForDestroy).toHaveBeenCalledWith(TEST_DEPLOYMENT_ID, TEST_TENANT_ID);
   });
 });
 

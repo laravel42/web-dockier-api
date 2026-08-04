@@ -27,6 +27,7 @@ import { getProjectDeployConfig } from "../../../../shared/service-clients/proje
 import { parseEnvContent } from "../../../../shared/env/parse-env.js";
 
 import { appendLog, updateStatus, emitDeploySuccessNotification } from "./helpers.js";
+import { markProjectInfraLive } from "../lifecycle/project-teardown.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 import { waitForAppReady } from "./health.js";
 
@@ -276,6 +277,9 @@ export async function finalizeDeploy(ctx: {
     await ctx.logger.warn("Could not determine app URL — check cloud console");
     await updateStatus(ctx.deploymentId, "success", { infra: serializeInfra(infra) });
   }
+
+  // Infrastructure is now provisioned — mark the project's infra state live.
+  await markProjectInfraLive(ctx.event.projectId);
 
   // Non-blocking notification
   emitDeploySuccessNotification({

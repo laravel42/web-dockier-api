@@ -4,6 +4,7 @@ import { resolveDeployTemplate } from "./planning/templates.js";
 import { DeployError } from "./providers.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { emitDeploySuccessNotification, emitDeployFailureNotification } from "./pipeline/helpers.js";
+import { markProjectInfraLive } from "./lifecycle/project-teardown.js";
 import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
@@ -173,6 +174,9 @@ export async function createDeploymentRecord(input: CreateDeploymentInput, provi
     logs: formatLogLine("", `Deployment queued using template "${template.label}".\n`),
     tofu_script: input.tofuScript?.trim() || preview.script,
     deploy_strategy: input.deployStrategy ?? "managed",
+    // Persist the build method so redeploy/rollback can reuse it. Fall back to
+    // the resolved template's default when the caller didn't specify one.
+    build_method: input.buildMethod ?? template.buildMethod,
     app_url: "",
     commit_hash: "",
     docker_image: "",
@@ -213,7 +217,7 @@ export async function applyDeploymentWebhookUpdate(
 
   const { data: current } = await supabaseAdmin
     .from("deployments")
-    .select("logs,organization_id,repo,branch,commit_hash,deploy_strategy,provider_id")
+    .select("logs,organization_id,project_id,repo,branch,commit_hash,deploy_strategy,provider_id")
     .eq("id", buildId)
     .maybeSingle();
 
@@ -250,6 +254,11 @@ export async function applyDeploymentWebhookUpdate(
   updates.logs = formatLogLine(current?.logs ?? "", lines.join(" "));
 
   await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);
+
+  // Infrastructure is now provisioned — mark the project's infra state live.
+  if (payload.status === "success") {
+    await markProjectInfraLive(current?.project_id);
+  }
 
   if (payload.status === "success" && current?.organization_id) {
     emitDeploySuccessNotification({

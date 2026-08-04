@@ -15,6 +15,8 @@ export const projectSettingsSchema = z.object({
   pushToDeploy: z.boolean().optional(),
 }).passthrough();
 
+export const infraStateSchema = z.enum(["none", "live", "torn_down"]);
+
 export const projectSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -26,6 +28,7 @@ export const projectSchema = z.object({
   template: z.string(),
   config: projectConfigSchema,
   settings: projectSettingsSchema,
+  infraState: infraStateSchema.default("none"),
   lastCommitHash: z.string(),
   createdAt: z.string(),
 });

@@ -57,20 +57,6 @@ export async function getDeployment(deploymentId: string, tenantId: string) {
   return rowToDeployment(deployment);
 }
 
-export async function getDeploymentForDestroy(deploymentId: string, tenantId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("deployments")
-    .select("id,organization_id")
-    .eq("id", deploymentId)
-    .single();
-  const deployment = unwrapQuery(data, error, DeployError, {
-    notFoundMsg: "Deployment not found",
-    internalMsg: "Failed to fetch deployment",
-  });
-  assertOwnership(deployment, tenantId, DeployError, "Not your deployment");
-  return deployment;
-}
-
 export async function updateDeploymentStatus(deploymentId: string, updates: { status?: DeploymentStatus; logs?: string; appUrl?: string }) {
   const payload: Partial<DeploymentRow> = { updated_at: nowIso() };
   if (updates.status !== undefined) payload.status = updates.status;

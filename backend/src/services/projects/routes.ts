@@ -27,6 +27,7 @@ import {
   ProjectsError,
 } from "./domain/projects.js";
 import { createOverviewAiStream } from "./domain/overview-ai.js";
+import { teardownProjectInfrastructure } from "../deploy/domain/lifecycle/project-teardown.js";
 import { registerTagRoutes } from "./routes/tags.js";
 import { registerEnvRoutes } from "./routes/env.js";
 import { registerWpConfigRoutes } from "./routes/wp-config.js";
@@ -159,6 +160,38 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       await deleteProject(request.params.projectId, auth.tenantId);
       return { success: true as const };
+    },
+  );
+
+  // ─── Infrastructure Teardown ───
+
+  typed.post(
+    "/projects/:projectId/infrastructure/teardown",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
+      // Teardown calls cloud provider APIs to delete stacks — allow extra time.
+      handlerTimeout: 60_000,
+      schema: {
+        tags: ["projects"],
+        summary: "Tear down all cloud infrastructure for a project (keeps project + history)",
+        params: z.object({ projectId: z.uuid() }),
+        response: {
+          200: z.object({
+            status: z.enum(["torn_down", "partial", "nothing_to_tear_down"]),
+            message: z.string(),
+            perStack: z.array(z.object({
+              stackName: z.string(),
+              success: z.boolean(),
+              message: z.string(),
+              errors: z.array(z.string()),
+            })),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await teardownProjectInfrastructure(request.params.projectId, auth.tenantId);
     },
   );
 

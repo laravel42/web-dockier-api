@@ -14,6 +14,7 @@ export type {
   ProjectTemplate,
   ProjectConfig,
   ProjectSettings,
+  InfraState,
 } from "./project.js";
 
 export type {

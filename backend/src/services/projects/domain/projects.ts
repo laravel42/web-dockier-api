@@ -153,7 +153,7 @@ export async function getProject(projectId: string, tenantId: string) {
   const [projectResult, commit] = await Promise.all([
     supabaseAdmin
       .from("projects")
-      .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
+      .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,infra_state,created_at")
       .eq("id", projectId)
       .eq("organization_id", tenantId)
       .single(),
@@ -171,7 +171,7 @@ export async function listProjects(tenantId: string, params?: { limit?: number; 
 
   let query = supabaseAdmin
     .from("projects")
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at", { count: "exact" })
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,infra_state,created_at", { count: "exact" })
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
 
@@ -250,7 +250,7 @@ export async function updateProject(params: UpdateProjectParams) {
     .update(updates)
     .eq("id", projectId)
     .eq("organization_id", tenantId)
-    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,created_at")
+    .select("id,name,repository,branch,connection_id,platform,source_type,template,config,settings,infra_state,created_at")
     .single();
   const updated = unwrapQuery(data, error, ProjectsError, {
     notFoundMsg: "Project not found",

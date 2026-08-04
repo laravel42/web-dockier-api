@@ -119,6 +119,7 @@ export type Database = {
           template: string;
           config: Json;
           settings: Json;
+          infra_state: string;
           created_at: string;
           updated_at: string | null;
         };
@@ -378,6 +379,7 @@ export type Database = {
           commit_hash: string;
           docker_image: string;
           deploy_strategy: string;
+          build_method: string | null;
           infra: Record<string, unknown>;
           created_at: string;
           updated_at: string;

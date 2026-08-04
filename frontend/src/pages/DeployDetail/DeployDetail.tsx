@@ -1,17 +1,15 @@
 import DeployWizard from "../../components/DeployWizard";
 import Button from "../../components/ui/Button";
 import { useDeployDetail } from "./useDeployDetail";
-import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
-import { useState } from "react";
 import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
 import { resolveDeployUrl } from "../../utils/resolveDeployUrl";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
-import ConfirmModal from "../../components/ConfirmModal";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import { usePermissions } from "../../context/PermissionsContext";
+import { ChevronLeftIcon } from "lucide-react";
 
 export default function DeployDetail() {
   const {
@@ -19,7 +17,6 @@ export default function DeployDetail() {
     deploy, project, providers,
     loading, error,
     allDeploys, allDeploysLoading,
-    destroying,
     cancelling,
     redeploying,
     provKey,
@@ -27,14 +24,11 @@ export default function DeployDetail() {
     openDeployWizard, canLaunchDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
-    handleDestroy,
     handleCancel,
     handleRedeploy,
     handleRollback,
   } = useDeployDetail();
-  const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
   const { has } = usePermissions();
-  const canDestroy = has("deploy:manage");
   const canCancel = has("deploy:manage");
   const canRedeploy = has("deploy:create");
 
@@ -57,6 +51,13 @@ export default function DeployDetail() {
 
   const deployUrl = resolveDeployUrl(deploy);
 
+  // The most recent successful deployment is the current live version — rolling
+  // back "to this" would be a no-op, so the rollback action is hidden for it.
+  // Until the deployment list has loaded (`latestSuccessfulId` undefined), treat
+  // this as the latest so the rollback button doesn't flicker in and then out.
+  const latestSuccessfulId = allDeploys.find((d) => d.status === "success")?.id;
+  const isLatestSuccessful = latestSuccessfulId === undefined || deploy.id === latestSuccessfulId;
+
   return (
     <div className="flex gap-6">
       <div className="flex-1 min-w-0">
@@ -72,9 +73,6 @@ export default function DeployDetail() {
           deploy={deploy}
           project={project}
           onNavigateProject={() => project && navigate(`/projects/${project.id}`)}
-          canDestroy={canDestroy}
-          destroying={destroying}
-          onDestroy={() => setShowDestroyConfirm(true)}
           canCancel={canCancel}
           cancelling={cancelling}
           onCancel={handleCancel}
@@ -82,6 +80,7 @@ export default function DeployDetail() {
           redeploying={redeploying}
           onRedeploy={handleRedeploy}
           onRollback={() => deploy && handleRollback(deploy.id)}
+          isLatestSuccessful={isLatestSuccessful}
         />
 
         <InfoCards deploy={deploy} provKey={provKey} deployUrl={deployUrl} />
@@ -123,17 +122,6 @@ export default function DeployDetail() {
         />
       )}
 
-      <ConfirmModal
-        open={showDestroyConfirm}
-        onClose={() => setShowDestroyConfirm(false)}
-        title="Destroy Deployment"
-        message="This will destroy all cloud infrastructure for this deployment (servers, firewall rules, static IPs, etc). This action cannot be undone."
-        confirmLabel="Destroy"
-        onConfirm={async () => {
-          const result = await handleDestroy();
-          if (result.success) setShowDestroyConfirm(false);
-        }}
-      />
     </div>
   );
 }

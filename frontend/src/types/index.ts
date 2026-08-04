@@ -11,6 +11,7 @@ export type {
   ProjectTemplate,
   ProjectConfig,
   ProjectSettings,
+  InfraState,
   Deployment,
   DeploymentStatus,
   DeployStrategy,

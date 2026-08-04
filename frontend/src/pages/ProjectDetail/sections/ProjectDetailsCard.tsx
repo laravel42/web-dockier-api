@@ -2,10 +2,8 @@ import { useState, useEffect } from "react";
 import type { Project } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import { getRepoKey } from "../../../utils/parseOwnerRepo";
-import ClipboardIcon from "../../../components/icons/outlined/ClipboardIcon";
-import CheckIcon from "../../../components/icons/outlined/CheckIcon";
-import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
 import { domainsApi } from "../../../services/domains";
+import { CheckIcon, ClipboardIcon, ExternalLinkIcon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -58,7 +56,10 @@ export default function ProjectDetailsCard({ project, deployUrl }: Props) {
     return () => { cancelled = true; };
   }, [project.id]);
 
-  const viewUrl = siteUrl || deployUrl;
+  // When infrastructure has been torn down, the app URL points at resources
+  // that no longer exist — don't present it as though the app were reachable.
+  const infraTornDown = project.infraState === "torn_down";
+  const viewUrl = infraTornDown ? undefined : siteUrl || deployUrl;
 
   return (
     <div className={`${cardCls} p-5 h-full flex flex-col`}>
@@ -74,7 +75,15 @@ export default function ProjectDetailsCard({ project, deployUrl }: Props) {
             <CopyableMonoValue value={repoKey} label="repository path" />
           </div>
         )}
-        {viewUrl && (
+        {infraTornDown && (
+          <div className="mt-auto pt-3 border-t border-border">
+            <p className="text-xs text-text-muted">Site URL</p>
+            <p className="mt-0.5 text-sm text-text-muted">
+              Infrastructure torn down — redeploy to bring the app back online.
+            </p>
+          </div>
+        )}
+        {!infraTornDown && viewUrl && (
           <div className="mt-auto pt-3 border-t border-border">
             <p className="text-xs text-text-muted">Site URL</p>
             <a

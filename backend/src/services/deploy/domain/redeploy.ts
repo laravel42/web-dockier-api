@@ -11,9 +11,26 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { unwrapQuery, assertOwnership } from "../../../shared/supabase/query.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { DeployError } from "./providers.js";
 import { createAndEnqueueDeployment } from "./deployments.js";
 import { rowToDeployment } from "./mappers.js";
+
+type BuildMethod = "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+
+/**
+ * Resolve the build method to reuse for a redeploy/rollback.
+ *
+ * Prefers the source deployment's persisted `build_method`. For legacy rows
+ * created before that column existed it falls back to CodeBuild on AWS — the
+ * Dockier server has no local Docker daemon, so a local build would fail — and
+ * leaves it unset for other providers so the pipeline applies its own default.
+ */
+async function resolveBuildMethod(source: { build_method: string | null; provider_id: string }): Promise<BuildMethod | undefined> {
+  if (source.build_method) return source.build_method as BuildMethod;
+  const creds = await getProviderCredentialsSafe(source.provider_id);
+  return creds?.provider === "aws" ? "codebuild" : undefined;
+}
 
 /**
  * Re-deploy: same provider/strategy/repo/branch, but pulls latest code.
@@ -22,6 +39,7 @@ import { rowToDeployment } from "./mappers.js";
  */
 export async function redeployLatest(deploymentId: string, tenantId: string, correlationId?: string) {
   const source = await getSourceDeployment(deploymentId, tenantId);
+  const buildMethod = await resolveBuildMethod(source);
 
   return await createAndEnqueueDeployment({
     tenantId,
@@ -31,6 +49,7 @@ export async function redeployLatest(deploymentId: string, tenantId: string, cor
     repo: source.repo,
     branch: source.branch,
     deployStrategy: source.deploy_strategy || "managed",
+    buildMethod,
     correlationId: correlationId ? `redeploy:${correlationId}` : undefined,
   });
 }
@@ -51,6 +70,8 @@ export async function rollbackToDeployment(deploymentId: string, tenantId: strin
     );
   }
 
+  const buildMethod = await resolveBuildMethod(source);
+
   // Create a new deployment that pins to the specific commit
   // The pipeline will use this commit instead of HEAD
   const deployment = await createAndEnqueueDeployment({
@@ -61,6 +82,7 @@ export async function rollbackToDeployment(deploymentId: string, tenantId: strin
     repo: source.repo,
     branch: source.branch,
     deployStrategy: source.deploy_strategy || "managed",
+    buildMethod,
     correlationId: correlationId ? `rollback:${source.commit_hash}:${correlationId}` : `rollback:${source.commit_hash}`,
   });
 
@@ -90,12 +112,10 @@ async function getSourceDeployment(deploymentId: string, tenantId: string) {
 
   assertOwnership(deployment, tenantId, DeployError, "Not your deployment");
 
-  if (deployment.status === "destroyed") {
-    throw new DeployError(
-      "Cannot redeploy a destroyed deployment — its infrastructure has been torn down.",
-      "precondition_failed",
-    );
-  }
+  // Redeploy/rollback are intentionally teardown-independent: a new deploy
+  // recreates infrastructure when it was torn down, or updates it when live.
+  // Legacy `destroyed` records still carry the provider/repo/strategy needed to
+  // recreate, so they remain redeployable.
 
   return deployment;
 }

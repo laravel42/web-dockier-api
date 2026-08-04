@@ -8,13 +8,10 @@ import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { paginationQuerySchema, paginationMetaSchema } from "../../../shared/schemas/responses.js";
 import { requireWebhookSignature, requireInternalToken } from "../../../shared/http/security.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
-import { DomainError } from "../../../shared/supabase/errors.js";
-import { destroyDeployment } from "../domain/lifecycle/destroy.js";
 import { applyDeploymentWebhookUpdate } from "../domain/processor.js";
 import {
   listDeployments,
   getDeployment,
-  getDeploymentForDestroy,
   getDeploymentForWebhook,
   updateDeploymentStatus,
   createAndEnqueueDeployment,
@@ -154,28 +151,6 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         appUrl: request.body.appUrl,
       });
       return { success: true as const };
-    },
-  );
-
-  typed.post(
-    "/deploy/deployments/:deploymentId/destroy",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
-      // Destroy may call cloud provider APIs to tear down infrastructure.
-      handlerTimeout: 60_000,
-      schema: {
-        tags: ["deploy"],
-        summary: "Destroy deployment",
-        params: z.object({ deploymentId: z.uuid() }),
-        response: { 200: z.object({ success: z.boolean(), message: z.string() }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      await getDeploymentForDestroy(request.params.deploymentId, auth.tenantId);
-      const result = await destroyDeployment(request.params.deploymentId);
-      if (!result.success) throw new DomainError(result.message, "bad_request");
-      return { success: true, message: result.message };
     },
   );
 
