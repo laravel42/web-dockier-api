@@ -13,14 +13,14 @@ import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import Alert from "../../components/ui/Alert";
-import { useTabList } from "../../hooks/useTabList";
+import { useAsyncData } from "../../hooks/useAsyncData";
 import KeyIcon from "../../components/icons/outlined/KeyIcon";
 import PlusIcon from "@/components/icons/outlined/PlusIcon";
 
 export default function SshKeysTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
-  const { data: keys, loading, error: loadError, reload } = useTabList(
+  const { data: keys, loading, error: loadError, reload } = useAsyncData(
     () => deployApi.listSshKeys().then((res) => res.keys),
     [],
   );

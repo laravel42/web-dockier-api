@@ -12,7 +12,7 @@ import Button from "../../components/ui/Button";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useTabList } from "../../hooks/useTabList";
+import { useAsyncData } from "../../hooks/useAsyncData";
 import PlusIcon from "@/components/icons/outlined/PlusIcon";
 import EyeIcon from "../../components/icons/outlined/EyeIcon";
 import EyeSlashIcon from "../../components/icons/outlined/EyeSlashIcon";
@@ -20,7 +20,7 @@ import EyeSlashIcon from "../../components/icons/outlined/EyeSlashIcon";
 export default function ProvidersTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
-  const { data: providers, loading, error, reload } = useTabList(
+  const { data: providers, loading, error, reload } = useAsyncData(
     () => deployApi.listProviders().then((res) => res.providers),
     [],
   );

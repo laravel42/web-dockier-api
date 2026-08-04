@@ -13,14 +13,14 @@ import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useTabList } from "../../hooks/useTabList";
+import { useAsyncData } from "../../hooks/useAsyncData";
 import PlusIcon from "@/components/icons/outlined/PlusIcon";
 
 export default function SourceControlTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
   const toast = useToast();
-  const { data: connections, loading, error, reload } = useTabList(
+  const { data: connections, loading, error, reload } = useAsyncData(
     () => gitApi.listConnections().then((res) => res.connections),
     [],
   );

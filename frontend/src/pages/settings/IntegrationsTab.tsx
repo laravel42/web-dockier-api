@@ -14,7 +14,7 @@ import SquaresPlusIcon from "../../components/icons/outlined/SquaresPlusIcon";
 import ListSearchBar from "../../components/ui/ListSearchBar";
 import { usePermissions } from "../../context/PermissionsContext";
 import { integrationsApi } from "../../services/api";
-import { useTabList } from "../../hooks/useTabList";
+import { useAsyncData } from "../../hooks/useAsyncData";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
 import PlusIcon from "@/components/icons/outlined/PlusIcon";
@@ -51,7 +51,7 @@ interface Integration {
 export default function IntegrationsTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
-  const { data: pmData, loading, error, reload } = useTabList(
+  const { data: pmData, loading, error, reload } = useAsyncData(
     () => integrationsApi.listPMIntegrations().then((res) => res.integrations),
     [],
   );

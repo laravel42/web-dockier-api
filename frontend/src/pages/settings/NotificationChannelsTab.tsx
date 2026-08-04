@@ -11,7 +11,7 @@ import Button from "../../components/ui/Button";
 import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useTabList } from "../../hooks/useTabList";
+import { useAsyncData } from "../../hooks/useAsyncData";
 import { notifyInAppNotificationsChanged } from "../../hooks/useInAppNotificationsEnabled";
 import PlusIcon from "@/components/icons/outlined/PlusIcon";
 import EnvelopeIcon from "../../components/icons/outlined/EnvelopeIcon";
@@ -21,7 +21,7 @@ import BellIcon from "../../components/icons/outlined/BellIcon";
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
   const canManage = has("notification:manage");
-  const { data: channels, loading, error, reload } = useTabList(
+  const { data: channels, loading, error, reload } = useAsyncData(
     () => notificationsApi.listChannels().then((res) => res.channels),
     [],
   );

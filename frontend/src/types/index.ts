@@ -48,4 +48,5 @@ export type {
   PMTeam,
   PMMember,
   PaginationMeta,
+  BillingDetails,
 } from "@dockier/shared-types";

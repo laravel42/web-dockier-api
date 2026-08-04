@@ -5,7 +5,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useTabList } from "../../hooks/useTabList";
+import { useAsyncData } from "../../hooks/useAsyncData";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";
 import { getErrorMessage } from "../../utils/errors";
@@ -37,7 +37,7 @@ export default function RolesTab() {
   const { has, roleId: currentRoleId, refresh: refreshPermissions } = usePermissions();
   const canManage = has("role:manage");
   const toast = useToast();
-  const { data: roles, loading, error, reload } = useTabList(
+  const { data: roles, loading, error, reload } = useAsyncData(
     () => rolesApi.list().then((res) => res.roles.filter((r) => r && r.name) as RoleItem[]),
     [],
   );

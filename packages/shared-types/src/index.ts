@@ -64,3 +64,5 @@ export type {
   PMTeam,
   PMMember,
 } from "./integrations.js";
+
+export type { BillingDetails } from "./billing.js";
