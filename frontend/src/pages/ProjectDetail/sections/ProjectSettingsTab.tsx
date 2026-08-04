@@ -874,7 +874,9 @@ function DeploymentsSection({
   canManage: boolean;
   onProjectUpdate?: (project: Project) => void;
 }) {
-  const [pushToDeploy, setPushToDeploy] = useState(true);
+  const [pushToDeploy, setPushToDeploy] = useState(
+    (project.settings?.pushToDeploy as boolean) ?? false,
+  );
   const [healthChecks, setHealthChecks] = useState(false);
   const [envInScript, setEnvInScript] = useState(false);
   const [deployScript, setDeployScript] = useState(
@@ -885,6 +887,17 @@ function DeploymentsSection({
 
   const originalScript = project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other");
   const hasScriptChanges = deployScript !== originalScript;
+
+  const handleTogglePushToDeploy = async (enabled: boolean) => {
+    setPushToDeploy(enabled);
+    try {
+      const updated = await projectsApi.update(project.id, { settings: { pushToDeploy: enabled } });
+      onProjectUpdate?.(updated);
+    } catch {
+      // Revert on failure
+      setPushToDeploy(!enabled);
+    }
+  };
 
   const handleSaveScript = async () => {
     setSaving(true);
@@ -909,8 +922,19 @@ function DeploymentsSection({
       {/* Push to deploy */}
       <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
         <SettingsRow label="Push to deploy" description="Automatically trigger a new deployment when changes are pushed to the environment's Git branch.">
-          <ToggleSwitch checked={pushToDeploy} onChange={setPushToDeploy} disabled={!canManage} />
+          <ToggleSwitch checked={pushToDeploy} onChange={handleTogglePushToDeploy} disabled={!canManage} />
         </SettingsRow>
+        {pushToDeploy && (
+          <div className="border-t border-border px-4 py-3">
+            <p className="text-xs text-text-muted mb-1">Deploy Hook URL</p>
+            <code className="text-[11px] text-text-muted font-mono break-all select-all bg-secondary-50 px-2 py-1 rounded border border-border">
+              {deployHookUrl}
+            </code>
+            <p className="text-[10px] text-text-muted mt-1.5">
+              Add this URL as a webhook in your Git provider, or use the HMAC-signed endpoint at <code className="text-[10px]">/deploy/webhook/git-push</code> for production setups.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Deploy script */}

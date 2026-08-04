@@ -14,10 +14,12 @@ import { registerProviderRoutes } from "./routes/providers.js";
 import { registerSshKeyRoutes } from "./routes/ssh-keys.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTofuRoutes } from "./routes/tofu.js";
+import { registerGitPushWebhookRoutes } from "./routes/git-push-webhook.js";
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   await registerProviderRoutes(app);
   await registerSshKeyRoutes(app);
   await registerDeploymentRoutes(app);
   await registerTofuRoutes(app);
+  await registerGitPushWebhookRoutes(app);
 }

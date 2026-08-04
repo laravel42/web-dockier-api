@@ -12,6 +12,7 @@ export const projectSettingsSchema = z.object({
   rootDirectory: z.string().max(500).optional(),
   webDirectory: z.string().max(500).optional(),
   deployScript: z.string().max(50_000).optional(),
+  pushToDeploy: z.boolean().optional(),
 }).passthrough();
 
 export const projectSchema = z.object({
