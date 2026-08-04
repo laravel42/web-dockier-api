@@ -4,12 +4,11 @@ import { deployApi } from "../../../services/api";
 import type {
   BackgroundProcess,
   ScheduledJob,
-  CreateProcessBody,
-  CreateJobBody,
   ProcessType,
   JobFrequency,
-} from "../../../services/processes";
-import type { Project } from "../../../types";
+  Project,
+} from "../../../types";
+import type { CreateProcessBody, CreateJobBody } from "../../../services/processes";
 import { usePermissions } from "../../../context/PermissionsContext";
 import { getFrameworkById } from "../../../config/frameworks";
 import Modal from "../../../components/Modal";

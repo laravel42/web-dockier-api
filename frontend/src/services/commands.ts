@@ -1,17 +1,6 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-
-export interface Command {
-  id: string;
-  projectId: string;
-  userId: string;
-  command: string;
-  status: "running" | "finished" | "failed" | "timed_out";
-  output: string;
-  startedAt: string;
-  finishedAt: string | null;
-  createdAt: string;
-}
+import type { Command } from "../types";
 
 export const commandsApi = {
   run: (projectId: string, command: string) =>

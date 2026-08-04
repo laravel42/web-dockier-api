@@ -66,3 +66,61 @@ export type {
 } from "./integrations.js";
 
 export type { BillingDetails } from "./billing.js";
+
+export type { Command, CommandStatus } from "./command.js";
+
+export type {
+  Domain,
+  SslCertificate,
+  SslCertificateType,
+  SslCertificateStatus,
+} from "./domain.js";
+
+export type {
+  Build,
+  BuildListItem,
+  BuildImage,
+  BuildLogs,
+  BuildDeployStatus,
+  BuildDeployTarget,
+  BuildDeployParams,
+  StartBuildInput,
+} from "./image-builder.js";
+
+export type {
+  SecurityRule,
+  SecurityRuleCredential,
+  RedirectRule,
+  RedirectType,
+} from "./network.js";
+
+export type {
+  Heartbeat,
+  HeartbeatFrequency,
+  HeartbeatGracePeriod,
+  HeartbeatStatus,
+  LogType,
+  LogEntry,
+  ActivityEventType,
+  ActivityEntry,
+} from "./observe.js";
+
+export type {
+  BackgroundProcess,
+  ScheduledJob,
+  ProcessType,
+  ProcessStatus,
+  JobFrequency,
+  JobStatus,
+} from "./process.js";
+
+export type { TenantMembership } from "./auth.js";
+
+export type { Tag, TagWithCount } from "./tag.js";
+
+export type {
+  Notification,
+  NotificationMetadata,
+  NotificationDeployMetadata,
+  NotificationScanMetadata,
+} from "./notification.js";

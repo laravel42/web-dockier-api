@@ -1,13 +1,5 @@
 import { request } from "./request";
-
-export type TenantMembership = {
-  id: string;
-  tenantId: string;
-  tenantName: string;
-  tenantSlug: string;
-  roleName: string;
-  isOwner: boolean;
-};
+import type { TenantMembership } from "../types";
 
 export const authApi = {
   demoLogin: () =>

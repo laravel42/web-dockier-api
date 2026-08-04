@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { commandsApi } from "../../../services/commands";
 import { deployApi } from "../../../services/api";
-import type { Command } from "../../../services/commands";
+import type { Command } from "../../../types";
 import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
 import { formatCardDateTime } from "../../../utils/formatCardDate";

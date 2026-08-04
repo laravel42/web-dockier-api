@@ -17,7 +17,8 @@ import ChevronDownIcon from "../../../components/icons/outlined/ChevronDownIcon"
 import EyeIcon from "../../../components/icons/outlined/EyeIcon";
 import XIcon from "../../../components/icons/outlined/XIcon";
 import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
-import { tagsApi, type Tag, type TagWithCount } from "../../../services/tags";
+import { tagsApi } from "../../../services/tags";
+import type { Tag, TagWithCount } from "../../../types";
 import { envApi } from "../../../services/env";
 import { wpConfigApi } from "../../../services/wp-config";
 import { gitApi } from "../../../services/git";

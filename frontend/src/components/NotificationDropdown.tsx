@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { notificationsApi } from "../services/api";
-import type { Notification } from "../services/notifications";
+import type { Notification } from "../types";
 import NotificationContent from "./NotificationContent";
 import NotificationTitleLink from "./NotificationTitleLink";
 import BellIcon from "./icons/outlined/BellIcon";

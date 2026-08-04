@@ -7,7 +7,7 @@ import PageLoading from "../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../components/ui/PageError";
 import Pagination from "../components/ui/Pagination";
 import { btnLink, btnGhost, cardCls } from "../utils/styles";
-import type { Notification } from "../services/notifications";
+import type { Notification } from "../types";
 import NotificationContent from "../components/NotificationContent";
 import NotificationTitleLink from "../components/NotificationTitleLink";
 

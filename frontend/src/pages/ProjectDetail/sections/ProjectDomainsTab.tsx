@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { domainsApi } from "../../../services/domains";
-import type { Domain, SslCertificate } from "../../../services/domains";
+import type { Domain, SslCertificate } from "../../../types";
 import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
 import Modal from "../../../components/Modal";

@@ -1,15 +1,5 @@
 import { request } from "./request";
-
-export interface Tag {
-  id: string;
-  name: string;
-  color: string;
-  createdAt: string;
-}
-
-export interface TagWithCount extends Tag {
-  projectCount: number;
-}
+import type { Tag, TagWithCount } from "../types";
 
 export const tagsApi = {
   /** List all organization tags */

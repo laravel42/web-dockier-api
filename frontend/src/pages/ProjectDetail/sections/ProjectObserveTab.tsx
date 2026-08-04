@@ -7,8 +7,8 @@ import type {
   LogType,
   LogEntry,
   ActivityEntry,
-} from "../../../services/observe";
-import type { Project } from "../../../types";
+  Project,
+} from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
 import Modal from "../../../components/Modal";
 import Spinner from "../../../components/Spinner";

@@ -1,4 +1,4 @@
-import type { Notification, NotificationMetadata } from "../services/notifications";
+import type { Notification, NotificationMetadata } from "../types";
 
 const SCAN_MESSAGE_RE =
   /^Scan of (.+?) \((.+?)\) finished with (\d+) finding\(s\) \((\d+) errors, (\d+) warnings\)\.$/;

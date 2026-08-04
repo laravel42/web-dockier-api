@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { Notification } from "../services/notifications";
+import type { Notification } from "../types";
 import { getNotificationDetailPath } from "../utils/notificationContent";
 
 interface Props {

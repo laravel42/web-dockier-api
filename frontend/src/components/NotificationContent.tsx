@@ -1,6 +1,6 @@
 import BranchCommitLabel from "./BranchCommitLabel";
 import SeverityBadge from "./SeverityBadge";
-import type { Notification } from "../services/notifications";
+import type { Notification } from "../types";
 import { resolveNotificationMetadata } from "../utils/notificationContent";
 import { isScanSecurityClean } from "../utils/scanSummary";
 

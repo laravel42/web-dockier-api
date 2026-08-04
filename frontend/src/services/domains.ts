@@ -1,32 +1,5 @@
 import { request } from "./request";
-
-// ─── Types ───
-
-export interface Domain {
-  id: string;
-  projectId: string;
-  name: string;
-  isPrimary: boolean;
-  redirectWww: boolean;
-  wildcard: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SslCertificate {
-  id: string;
-  projectId: string;
-  domainId: string | null;
-  type: "lets_encrypt" | "custom" | "clone";
-  status: "pending" | "active" | "expired" | "failed";
-  domainName: string;
-  expiresAt: string | null;
-  issuedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ─── API ───
+import type { Domain, SslCertificate } from "../types";
 
 export const domainsApi = {
   // Domains

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { networkApi } from "../../../services/network";
-import type { SecurityRule, RedirectRule } from "../../../services/network";
+import type { SecurityRule, RedirectRule } from "../../../types";
 import type { Project } from "../../../types";
 import { usePermissions } from "../../../context/PermissionsContext";
 import Modal from "../../../components/Modal";
