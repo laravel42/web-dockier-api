@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { getErrorMessage } from "../utils/errors";
+import { useState, useCallback, useRef } from "react";
+import { useAsyncData } from "./useAsyncData";
 import type { PaginationMeta } from "../types";
 
 export type { PaginationMeta };
@@ -19,9 +19,8 @@ export interface UsePaginatedDataOptions {
 /**
  * Generic hook for paginated, searchable data fetching.
  *
- * Handles: loading/error state, pagination (offset-based), debounced search,
- * and re-fetching when search changes. Provides `goToPage`, `handleSearch`,
- * and `reload` for consumer control.
+ * Composes `useAsyncData` for the fetch lifecycle (loading, error, stale-request
+ * cancellation) and adds pagination state + debounced search on top.
  *
  * @param fetcher - Async function that receives `{ limit, offset, search }` and returns paginated data
  * @param options - Configuration (pageSize, debounceMs)
@@ -45,48 +44,33 @@ export function usePaginatedData<T>(
 ) {
   const { pageSize = 20, debounceMs = 300 } = options;
 
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<PaginationMeta>({ total: 0, limit: pageSize, offset: 0 });
-
+  const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchData = useCallback(async (offset = 0) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetcher({ limit: pageSize, offset, search: debouncedSearch });
-      setItems(result.items);
-      setPagination(result.pagination);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- debouncedSearch is the trigger
-  }, [debouncedSearch, pageSize]);
+  // useAsyncData handles loading, error, stale-request cancellation.
+  // Re-fetches automatically when offset or debouncedSearch changes.
+  const { data, loading, error, reload } = useAsyncData(
+    () => fetcher({ limit: pageSize, offset, search: debouncedSearch }),
+    [pageSize, offset, debouncedSearch],
+  );
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const items = data?.items ?? [];
+  const pagination: PaginationMeta = data?.pagination ?? { total: 0, limit: pageSize, offset };
 
   const goToPage = useCallback((page: number) => {
-    const newOffset = (page - 1) * pageSize;
-    fetchData(newOffset);
-  }, [fetchData, pageSize]);
+    setOffset((page - 1) * pageSize);
+  }, [pageSize]);
 
   const handleSearch = useCallback((query: string) => {
     setSearch(query);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setDebouncedSearch(query);
+      setOffset(0); // Reset to first page on new search
     }, debounceMs);
   }, [debounceMs]);
-
-  const reload = useCallback(() => {
-    fetchData(pagination.offset);
-  }, [fetchData, pagination.offset]);
 
   return {
     items,
