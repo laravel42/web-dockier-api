@@ -20,6 +20,7 @@ import {
   createAndEnqueueDeployment,
   cancelDeployment,
 } from "../domain/deployments.js";
+import { redeployLatest, rollbackToDeployment } from "../domain/redeploy.js";
 
 export async function registerDeploymentRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -192,6 +193,42 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       return await cancelDeployment(request.params.deploymentId, auth.tenantId);
+    },
+  );
+
+  typed.post(
+    "/deploy/deployments/:deploymentId/redeploy",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.DEPLOY_CREATE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "deploy-create" })],
+      handlerTimeout: 45_000,
+      schema: {
+        tags: ["deploy"],
+        summary: "Re-deploy using the same config but latest code from the branch",
+        params: z.object({ deploymentId: z.uuid() }),
+        response: { 200: deploymentSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await redeployLatest(request.params.deploymentId, auth.tenantId, request.id);
+    },
+  );
+
+  typed.post(
+    "/deploy/deployments/:deploymentId/rollback",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.DEPLOY_CREATE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "deploy-create" })],
+      handlerTimeout: 45_000,
+      schema: {
+        tags: ["deploy"],
+        summary: "Rollback — re-deploy the exact commit from this deployment",
+        params: z.object({ deploymentId: z.uuid() }),
+        response: { 200: deploymentSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await rollbackToDeployment(request.params.deploymentId, auth.tenantId, request.id);
     },
   );
 

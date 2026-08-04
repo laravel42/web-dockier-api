@@ -86,6 +86,16 @@ export const deployApi = {
       method: "POST",
     }),
 
+  redeployLatest: (deploymentId: string) =>
+    request<Deployment>(`/deploy/deployments/${deploymentId}/redeploy`, {
+      method: "POST",
+    }),
+
+  rollbackToDeployment: (deploymentId: string) =>
+    request<Deployment>(`/deploy/deployments/${deploymentId}/rollback`, {
+      method: "POST",
+    }),
+
   getDeployment: (deploymentId: string) =>
     request<Deployment & { updatedAt: string }>(`/deploy/deployments/${deploymentId}`),
 

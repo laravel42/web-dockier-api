@@ -21,6 +21,7 @@ export default function DeployDetail() {
     allDeploys, allDeploysLoading,
     destroying,
     cancelling,
+    redeploying,
     provKey,
     showDeployWizard, setShowDeployWizard,
     openDeployWizard, canLaunchDeploy,
@@ -28,11 +29,14 @@ export default function DeployDetail() {
     handleDeployComplete,
     handleDestroy,
     handleCancel,
+    handleRedeploy,
+    handleRollback,
   } = useDeployDetail();
   const [showDestroyConfirm, setShowDestroyConfirm] = useState(false);
   const { has } = usePermissions();
   const canDestroy = has("deploy:manage");
   const canCancel = has("deploy:manage");
+  const canRedeploy = has("deploy:create");
 
   if (loading) {
     return <PageLoading />;
@@ -74,6 +78,10 @@ export default function DeployDetail() {
           canCancel={canCancel}
           cancelling={cancelling}
           onCancel={handleCancel}
+          canRedeploy={canRedeploy}
+          redeploying={redeploying}
+          onRedeploy={handleRedeploy}
+          onRollback={() => deploy && handleRollback(deploy.id)}
         />
 
         <InfoCards deploy={deploy} provKey={provKey} deployUrl={deployUrl} />

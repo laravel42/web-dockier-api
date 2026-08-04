@@ -1,6 +1,7 @@
 import type { Deployment, Project } from "../../../types";
 import { statusBadgeColors as statusColors, typeCaption, typePageTitle } from "../../../utils/styles";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
+import Button from "../../../components/ui/Button";
 
 interface Props {
   deploy: Deployment;
@@ -12,14 +13,27 @@ interface Props {
   canCancel: boolean;
   cancelling: boolean;
   onCancel: () => void;
+  canRedeploy: boolean;
+  redeploying: boolean;
+  onRedeploy: () => void;
+  onRollback: () => void;
 }
 
-export default function DeployHeader({ deploy, project, onNavigateProject, canDestroy, destroying, onDestroy, canCancel, cancelling, onCancel }: Props) {
+export default function DeployHeader({
+  deploy, project, onNavigateProject,
+  canDestroy, destroying, onDestroy,
+  canCancel, cancelling, onCancel,
+  canRedeploy, redeploying, onRedeploy, onRollback,
+}: Props) {
+  const isActive = deploy.status === "success";
+  const isTerminal = ["success", "failed", "cancelled"].includes(deploy.status);
+  const isInProgress = ["pending", "building", "deploying"].includes(deploy.status);
+
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
-        <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
-          <RocketIcon className="size-6 " />
+        <div className="size-12 rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
+          <RocketIcon className="size-6" />
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -41,26 +55,36 @@ export default function DeployHeader({ deploy, project, onNavigateProject, canDe
           </div>
         </div>
       </div>
-      {canCancel && ["pending", "building", "deploying"].includes(deploy.status) && (
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={cancelling}
-          className="text-xs text-amber-500 hover:text-amber-700 font-medium transition-colors disabled:opacity-50"
-        >
-          {cancelling ? "Cancelling..." : "Cancel Deploy"}
-        </button>
-      )}
-      {canDestroy && deploy.status === "success" && (
-        <button
-          type="button"
-          onClick={onDestroy}
-          disabled={destroying}
-          className="text-xs text-danger-500 hover:text-danger-700 font-medium transition-colors disabled:opacity-50"
-        >
-          {destroying ? "Destroying..." : "Destroy"}
-        </button>
-      )}
+
+      <div className="flex items-center gap-2">
+        {/* Redeploy — available on terminal deployments (success, failed, cancelled) */}
+        {canRedeploy && isTerminal && deploy.status !== "destroyed" && (
+          <Button variant="primary" size="sm" loading={redeploying} onClick={onRedeploy}>
+            Redeploy
+          </Button>
+        )}
+
+        {/* Rollback — only on past successful deployments that have a commit hash */}
+        {canRedeploy && deploy.status === "success" && deploy.commitHash && (
+          <Button variant="outline" size="sm" loading={redeploying} onClick={onRollback}>
+            Rollback to this
+          </Button>
+        )}
+
+        {/* Cancel — during in-progress deploys */}
+        {canCancel && isInProgress && (
+          <Button variant="danger" size="sm" loading={cancelling} onClick={onCancel}>
+            Cancel Deploy
+          </Button>
+        )}
+
+        {/* Destroy — on active successful deployments */}
+        {canDestroy && isActive && (
+          <Button variant="outline-danger" size="sm" loading={destroying} onClick={onDestroy}>
+            Destroy
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

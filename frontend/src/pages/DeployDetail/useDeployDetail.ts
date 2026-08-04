@@ -147,6 +147,33 @@ export function useDeployDetail() {
     }
   }, [deploy, refreshAllDeploys]);
 
+  const [redeploying, setRedeploying] = useState(false);
+
+  const handleRedeploy = useCallback(async () => {
+    if (!deploy) return;
+    setRedeploying(true);
+    try {
+      const newDeploy = await deployApi.redeployLatest(deploy.id);
+      navigate(`/deploy/${newDeploy.id}`);
+    } catch {
+      // Error handled by global toast or silently
+    } finally {
+      setRedeploying(false);
+    }
+  }, [deploy, navigate]);
+
+  const handleRollback = useCallback(async (deploymentId: string) => {
+    setRedeploying(true);
+    try {
+      const newDeploy = await deployApi.rollbackToDeployment(deploymentId);
+      navigate(`/deploy/${newDeploy.id}`);
+    } catch {
+      // Error handled by global toast or silently
+    } finally {
+      setRedeploying(false);
+    }
+  }, [navigate]);
+
   const prov = deploy ? providers.find(p => p.id === deploy.providerId) : undefined;
   const provKey = prov?.provider || "";
   const canLaunchDeploy = Boolean(project?.connectionId || project?.sourceType === "template");
@@ -158,6 +185,7 @@ export function useDeployDetail() {
     allDeploys, allDeploysLoading,
     destroying,
     cancelling,
+    redeploying,
     prov, provKey,
     showDeployWizard, setShowDeployWizard,
     openDeployWizard, canLaunchDeploy,
@@ -165,5 +193,7 @@ export function useDeployDetail() {
     handleDeployComplete,
     handleDestroy,
     handleCancel,
+    handleRedeploy,
+    handleRollback,
   };
 }
