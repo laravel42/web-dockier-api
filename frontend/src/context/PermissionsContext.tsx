@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { authApi } from "../services/api";
-import { getToken } from "../services/session";
+import { useAuth } from "./AuthContext";
 
 interface PermissionsContextValue {
   permissions: Set<string>;
@@ -27,6 +27,7 @@ const PermissionsContext = createContext<PermissionsContextValue>({
 });
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
+  const { token } = useAuth();
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [roleId, setRoleId] = useState("");
   const [roleName, setRoleName] = useState("");
@@ -34,8 +35,14 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true);
 
   const fetchPermissions = useCallback(async () => {
-    const token = getToken();
-    if (!token) { setPermissions(new Set()); setRoleId(""); setRoleName(""); setIsOwner(false); setLoading(false); return; }
+    if (!token) {
+      setPermissions(new Set());
+      setRoleId("");
+      setRoleName("");
+      setIsOwner(false);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const me = await authApi.getMe();
@@ -50,8 +57,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
+  // Re-fetch permissions whenever the token changes (login, tenant switch, logout)
   useEffect(() => { fetchPermissions(); }, [fetchPermissions]);
 
   const has = useCallback((p: string) => {

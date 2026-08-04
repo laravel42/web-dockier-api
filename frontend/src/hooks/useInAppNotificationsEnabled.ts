@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
 import { notificationsApi } from "../services/api";
 import { usePermissions } from "../context/PermissionsContext";
 
@@ -9,15 +8,17 @@ export function notifyInAppNotificationsChanged() {
   window.dispatchEvent(new Event(IN_APP_NOTIFICATIONS_CHANGED_EVENT));
 }
 
+/** Polling interval for notification channel status (60 seconds). */
+const POLL_INTERVAL_MS = 60_000;
+
 /**
  * Checks whether in-app notifications are enabled for the current user/tenant.
  *
- * Fetches the notification channels from the API and checks if the `in_app`
- * channel is enabled. Re-checks on route changes and listens for the
- * `dockier:in-app-notifications-changed` event for real-time updates.
+ * Fetches the notification channels from the API once on mount, then polls
+ * every 60s. Also listens for the `dockier:in-app-notifications-changed`
+ * event for immediate updates when the user toggles channels.
  */
 export function useInAppNotificationsEnabled(): { enabled: boolean; loading: boolean } {
-  const pathname = useLocation().pathname;
   const { has, loading: permissionsLoading } = usePermissions();
   const canView = has("notification:view");
   const [enabled, setEnabled] = useState(false);
@@ -42,11 +43,20 @@ export function useInAppNotificationsEnabled(): { enabled: boolean; loading: boo
     }
   }, [canView]);
 
+  // Initial fetch once permissions are resolved
   useEffect(() => {
     if (permissionsLoading) return;
     load();
-  }, [permissionsLoading, load, pathname]);
+  }, [permissionsLoading, load]);
 
+  // Poll periodically instead of on every route change
+  useEffect(() => {
+    if (permissionsLoading || !canView) return;
+    const interval = setInterval(load, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [permissionsLoading, canView, load]);
+
+  // Listen for explicit channel toggle events
   useEffect(() => {
     const onChange = () => load();
     window.addEventListener(IN_APP_NOTIFICATIONS_CHANGED_EVENT, onChange);
