@@ -1,8 +1,8 @@
 import ProjectTechBadges from "../../../components/ProjectTechBadges";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardMeta, typeCardTitle } from "../../../utils/styles";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import type { Project, TechBadgeInfo } from "../../../types";
+import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   project: Project | undefined;

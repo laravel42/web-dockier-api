@@ -3,9 +3,8 @@ import Modal from "../../../components/Modal";
 import { btnPrimary, btnSecondary, btnDanger } from "../../../utils/styles";
 import { timeAgo } from "../../../utils/timeAgo";
 import type { RepoIssue } from "../../../types";
-import AlertCircleIcon from "../../../components/icons/outlined/AlertCircleIcon";
-import ChatBubbleIcon from "../../../components/icons/outlined/ChatBubbleIcon";
 import Spinner from "../../../components/Spinner";
+import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
 
 interface Props {
   issue: RepoIssue | null;
@@ -71,7 +70,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
         <div className="space-y-4">
           {/* Issue header */}
           <div className="flex items-start gap-3">
-            <AlertCircleIcon className="size-5 text-emerald-500 mt-0.5 shrink-0" />
+            <CircleAlertIcon className="size-5 text-emerald-500 mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-text leading-snug">{issue.title}</h3>
               <div className="mt-1 text-sm text-text-muted">
@@ -103,7 +102,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
           <div className="flex items-center gap-4 text-sm text-text-muted">
             {issue.comments > 0 && (
               <span className="flex items-center gap-1.5">
-                <ChatBubbleIcon className="size-4" />
+                <MessageSquareTextIcon className="size-4" />
                 {issue.comments} comment{issue.comments !== 1 ? "s" : ""}
               </span>
             )}

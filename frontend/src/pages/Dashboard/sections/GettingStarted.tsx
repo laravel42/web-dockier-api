@@ -9,17 +9,9 @@ import {
   overlinePillCls,
 } from "../../../utils/styles";
 import Button from "../../../components/ui/Button";
-import PlusIcon from "../../../components/icons/outlined/PlusIcon";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
-import ChatBubbleIcon from "../../../components/icons/outlined/ChatBubbleIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import EyeIcon from "../../../components/icons/outlined/EyeIcon";
-import LockIcon from "../../../components/icons/outlined/LockIcon";
-import WarningIcon from "../../../components/icons/outlined/WarningIcon";
-import CodeIcon from "../../../components/icons/outlined/CodeIcon";
-import CheckIcon from "../../../components/icons/outlined/CheckIcon";
 import IntegrationMarquee from "./IntegrationMarquee";
+import { CheckIcon, CodeXmlIcon, EyeIcon, LinkIcon, LockIcon, MessageSquareTextIcon, PlusIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 
 interface Props {
   navigate: NavigateFunction;
@@ -58,19 +50,19 @@ const FEATURES: Feature[] = [
     bullets: ["Pattern-based scanner", "High-confidence matches", "File-level context"],
   },
   {
-    icon: <WarningIcon className="size-4" />,
+    icon: <TriangleAlertIcon className="size-4" />,
     title: "Dependency resilience",
     description: "Track vulnerable dependencies and outdated packages in your stack.",
     bullets: ["Lockfile analysis", "Transitive risk", "Remediation guidance"],
   },
   {
-    icon: <ChatBubbleIcon className="size-4" />,
+    icon: <MessageSquareTextIcon className="size-4" />,
     title: "AI remediation",
     description: "Generate fix pull requests powered by AI to resolve issues quickly.",
     bullets: ["Context-aware fixes", "Branch + MR workflow", "Review before merge"],
   },
   {
-    icon: <CodeIcon className="size-4" />,
+    icon: <CodeXmlIcon className="size-4" />,
     title: "IaC scanning",
     description: "Scan Terraform, CloudFormation, and infra configs for misconfigurations.",
     bullets: ["Multi-cloud templates", "Policy violations", "Deploy-time checks"],
@@ -158,7 +150,7 @@ export default function GettingStarted({ navigate }: Props) {
           <Button
             onClick={connect}
             size="lg"
-            iconLeft={<PlusIcon />}
+            iconLeft={<PlusIcon className="size-4" />}
           >
             Connect repository
           </Button>
@@ -243,7 +235,7 @@ export default function GettingStarted({ navigate }: Props) {
           <Button
             onClick={connect}
             size="lg"
-            iconLeft={<PlusIcon />}
+            iconLeft={<PlusIcon className="size-4" />}
             className="mt-6"
           >
             Connect repository

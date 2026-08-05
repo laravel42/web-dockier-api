@@ -9,9 +9,8 @@ import { useAsyncData } from "../../hooks/useAsyncData";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useToast } from "../../context/useToast";
 import { getErrorMessage } from "../../utils/errors";
-import PlusIcon from "@/components/icons/outlined/PlusIcon";
-import ShieldCheckIcon from "../../components/icons/outlined/ShieldCheckIcon";
 import Button from "@/components/ui/Button";
+import { PlusIcon, ShieldCheckIcon } from "lucide-react";
 
 function isAdminRole(role: RoleItem | null): boolean {
   if (!role) return false;
@@ -81,7 +80,7 @@ export default function RolesTab() {
           <p className="text-sm text-text-muted mt-0.5">Define roles and permissions for your team.</p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowRoleModal(true)} iconLeft={<PlusIcon />}>
+          <Button onClick={() => setShowRoleModal(true)} iconLeft={<PlusIcon className="size-4" />}>
             Add Role
           </Button>
         )}

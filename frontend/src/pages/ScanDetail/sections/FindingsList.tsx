@@ -1,9 +1,6 @@
-import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
-import ChevronRightIcon from "../../../components/icons/outlined/ChevronRightIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import { cardCls, segmentActiveCls, segmentIdleCls } from "../../../utils/styles";
 import Button from "../../../components/ui/Button";
-import PlusCircleIcon from "../../../components/icons/outlined/PlusCircleIcon";
 import SparklesIcon from "../../../components/icons/outlined/SparklesIcon";
 import { displayFindingPath } from "../../../utils/scanPaths";
 import { buildCodePreviewRows, buildSnippetPreviewRow } from "../../../utils/codePreview";
@@ -12,6 +9,7 @@ import { usePermissions } from "../../../context/PermissionsContext";
 import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
 import type { Finding, PMIntegration, SecurityFindingCounts } from "../../../types";
 import Spinner from "../../../components/Spinner";
+import { ChevronRightIcon, CircleCheckIcon, CirclePlusIcon } from "lucide-react";
 
 interface Props {
   findings: Finding[];
@@ -85,7 +83,7 @@ export default function FindingsList({
   if (!hasSecurityFindings && scanCompleted && !hasActiveFilter) {
     return (
       <div className={`${cardCls} p-8 text-center`}>
-        <CheckCircleIcon className="size-10  mx-auto text-success-500 mb-3" />
+        <CircleCheckIcon className="size-10  mx-auto text-success-500 mb-3" />
         <p className="text-sm text-text-muted">No security findings — looking clean.</p>
       </div>
     );
@@ -212,7 +210,7 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
               size="sm"
               onClick={() => onCreateIssue(f)}
               iconLeft={
-                <PlusCircleIcon className="size-4" />
+                <CirclePlusIcon className="size-4" />
               }
             >
               Create issue

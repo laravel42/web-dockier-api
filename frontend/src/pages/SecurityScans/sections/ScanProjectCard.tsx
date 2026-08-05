@@ -5,7 +5,7 @@ import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
 import { isScanSecurityClean, scanHasSecurityErrors } from "../../../utils/scanSummary";
 import type { Scan, Project, TechBadgeInfo } from "../../../types";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
+import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   project: Project | undefined;

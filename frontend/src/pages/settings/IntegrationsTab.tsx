@@ -10,14 +10,13 @@ import { SearchableCombobox } from "../../components/ui/combobox";
 import { settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
 import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
-import SquaresPlusIcon from "../../components/icons/outlined/SquaresPlusIcon";
 import ListSearchBar from "../../components/ui/ListSearchBar";
 import { usePermissions } from "../../context/PermissionsContext";
 import { integrationsApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError from "../../components/ui/PageError";
-import PlusIcon from "@/components/icons/outlined/PlusIcon";
+import { PlusIcon, Grid2X2PlusIcon } from "lucide-react";
 
 const PM_TYPES = new Set(["linear", "jira"]);
 
@@ -171,7 +170,7 @@ export default function IntegrationsTab() {
           <p className="text-sm text-text-secondary mt-0.5">Connect external services like databases, caches, storage, and more.</p>
         </div>
         {canManage && (
-          <Button onClick={openAdd} iconLeft={<PlusIcon />}>
+          <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />}>
             Add Integration
           </Button>
         )}
@@ -230,7 +229,7 @@ export default function IntegrationsTab() {
                     className={`flex items-center gap-3 p-3 rounded-lg border border-border text-left transition-colors ${alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-secondary-50 hover:border-primary-300"}`}
                   >
                     <div className="size-9  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <SquaresPlusIcon className="size-5" />}
+                      {INTEGRATION_ICONS[cat.type] ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-5 h-5" /> : <Grid2X2PlusIcon className="size-5" />}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -249,7 +248,7 @@ export default function IntegrationsTab() {
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="flex items-center gap-3 pb-3 border-b border-border">
               <div className="size-9  rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <SquaresPlusIcon className="size-5" />}
+                {INTEGRATION_ICONS[catalog.type] ? <TechBadge name={catalog.type} icon={INTEGRATION_ICONS[catalog.type]} iconOnly iconSize="w-5 h-5" /> : <Grid2X2PlusIcon className="size-5" />}
               </div>
               <div>
                 <p className="text-sm font-semibold text-text">{catalog.name}</p>
@@ -415,7 +414,7 @@ export default function IntegrationsTab() {
         </div>
       ) : (
         <div className="bg-card rounded-card shadow-(--shadow-card) p-12 text-center">
-          <SquaresPlusIcon className="size-10 mx-auto text-text-muted mb-3" />
+          <Grid2X2PlusIcon className="size-10 mx-auto text-text-muted mb-3" />
           <p className="text-sm text-text-muted">No integrations configured yet. Add one to connect external services like databases, caches, or storage.</p>
         </div>
       )}

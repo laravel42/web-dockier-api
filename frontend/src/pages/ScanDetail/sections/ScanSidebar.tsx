@@ -1,5 +1,4 @@
 import SeverityBadge from "../../../components/SeverityBadge";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import {
   cardCls,
   getStatusDotClass,
@@ -13,6 +12,7 @@ import type { Scan } from "../../../types";
 import Button from "../../../components/ui/Button";
 import Spinner from "../../../components/Spinner";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   scanId: string | undefined;

@@ -3,10 +3,8 @@ import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import Spinner from "./Spinner";
 import { Input } from "./ui/input";
-import ArchiveBoxIcon from "./icons/outlined/ArchiveBoxIcon";
-import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
-import SyncIcon from "./icons/outlined/SyncIcon";
 import type { Repo } from "../types";
+import { ArchiveIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 
 interface Props {
   value: string;
@@ -73,7 +71,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
       >
         {selected ? (
           <>
-            <ArchiveBoxIcon className="size-4 shrink-0 text-text-muted" />
+            <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
             <span className="truncate">{selected.fullName}{selected.private ? " 🔒" : ""}</span>
           </>
         ) : (
@@ -89,7 +87,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
           className="size-11  shrink-0 rounded-(--radius-input) border border-border bg-card flex items-center justify-center text-text-muted hover:text-primary-500 hover:border-primary-500/30 transition-colors disabled:opacity-50"
           title="Refresh repository list"
         >
-          <SyncIcon className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCwIcon className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
         </button>
       )}
       </div>
@@ -122,7 +120,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
                     value === r.fullName ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  <ArchiveBoxIcon className="size-4 shrink-0 text-text-muted" />
+                  <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
                   <span>{r.fullName}{r.private ? " 🔒" : ""}</span>
                 </button>
               ))

@@ -10,19 +10,13 @@ import {
 } from "../config/nav";
 import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
 import { navLinkActiveCls, navLinkCls, navLinkIdleCls } from "../utils/styles";
-import DashboardIcon from "./icons/outlined/DashboardIcon";
-import FolderIcon from "./icons/outlined/FolderIcon";
-import ShieldCheckIcon from "./icons/outlined/ShieldCheckIcon";
-import SettingsIcon from "./icons/outlined/SettingsIcon";
-import LogoutIcon from "./icons/outlined/LogoutIcon";
 import NotificationDropdown from "./NotificationDropdown";
 import { useTheme } from "../context/ThemeContext";
-import MoonIcon from "./icons/outlined/MoonIcon";
-import SunIcon from "./icons/outlined/SunIcon";
+import { FolderClosedIcon, LayoutGridIcon, LogOutIcon, MoonIcon, SettingsIcon, ShieldCheckIcon, SunMediumIcon } from "lucide-react";
 
 const navIcons: Partial<Record<NavIconName, ReactNode>> = {
-  dashboard: <DashboardIcon className="size-4 shrink-0" />,
-  projects: <FolderIcon className="size-4 shrink-0" />,
+  dashboard: <LayoutGridIcon className="size-4 shrink-0" />,
+  projects: <FolderClosedIcon className="size-4 shrink-0" />,
   security: <ShieldCheckIcon className="size-4 shrink-0" />,
   settings: <SettingsIcon className="size-4 shrink-0" />,
 };
@@ -77,7 +71,7 @@ export default function TopNavbar() {
             className="flex size-9 items-center justify-center rounded-md text-text-muted hover:bg-card hover:text-text transition-colors"
             aria-label="Toggle theme"
           >
-            {theme === "light" ? <MoonIcon className="size-4" /> : <SunIcon className="size-4" />}
+            {theme === "light" ? <MoonIcon className="size-4" /> : <SunMediumIcon className="size-4" />}
           </button>
           {inAppEnabled && <NotificationDropdown />}
           <button
@@ -86,7 +80,7 @@ export default function TopNavbar() {
             className="flex size-9 items-center justify-center rounded-md text-text-muted hover:bg-card hover:text-text transition-colors"
             aria-label="Sign out"
           >
-            <LogoutIcon className="size-4" />
+            <LogOutIcon className="size-4" />
           </button>
         </div>
       </div>

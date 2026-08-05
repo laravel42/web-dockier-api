@@ -9,7 +9,7 @@ import PageError from "../../components/ui/PageError";
 import EmptyState from "../../components/ui/EmptyState";
 import ListToolbar from "../../components/ui/ListToolbar";
 import { EmptyMessage } from "../../components/ui/PageError";
-import ShieldCheckIcon from "../../components/icons/outlined/ShieldCheckIcon";
+import { ShieldCheckIcon } from "lucide-react";
 
 export default function SecurityScans() {
   const [search, setSearch] = useState("");

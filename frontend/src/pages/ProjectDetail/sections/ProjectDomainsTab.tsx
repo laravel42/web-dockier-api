@@ -7,14 +7,7 @@ import Modal from "../../../components/Modal";
 import Spinner from "../../../components/Spinner";
 import Button from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/input";
-import PencilIcon from "../../../components/icons/outlined/PencilIcon";
-import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
-import CopyIcon from "../../../components/icons/outlined/CopyIcon";
-import HashIcon from "../../../components/icons/outlined/HashIcon";
-import InfoCircleIcon from "../../../components/icons/outlined/InfoCircleIcon";
-import ExternalLinkIcon from "@/components/icons/outlined/ExternalLinkIcon";
-import CheckCircleIcon from "@/components/icons/outlined/CheckCircleIcon";
-import TrashIcon from "@/components/icons/outlined/TrashIcon";
+import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -108,7 +101,7 @@ function DomainRow({
                 className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-secondary-50/50 transition-colors"
                 aria-label="Domain actions"
               >
-                <DotsVerticalIcon className="size-4" />
+                <EllipsisVerticalIcon className="size-4" />
               </button>
             {menuOpen && (
               <>
@@ -144,7 +137,7 @@ function DomainRow({
                     disabled={verifying}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors disabled:opacity-50"
                   >
-                    <CheckCircleIcon className="size-3.5" />
+                    <CircleCheckIcon className="size-3.5" />
                     {verifying ? "Verifying…" : "Verify DNS"}
                   </button>
                   <div className="my-1 border-t border-border" />
@@ -154,7 +147,7 @@ function DomainRow({
                     disabled={deleting}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors disabled:opacity-50"
                   >
-                    <TrashIcon className="size-3.5" />
+                    <Trash2Icon className="size-3.5" />
                     {deleting ? "Deleting…" : "Delete"}
                   </button>
                 </div>
@@ -389,7 +382,7 @@ function CertificateRow({
               className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-secondary-50/50 transition-colors"
               aria-label="Certificate actions"
             >
-              <DotsVerticalIcon className="size-4" />
+              <EllipsisVerticalIcon className="size-4" />
             </button>
             {menuOpen && (
               <>
@@ -457,8 +450,9 @@ function CertificatesSection({
           <Button
             variant="outline"
             onClick={() => setShowCreateModal(true)}
+            iconLeft={<PlusIcon className="size-3.5" />}
           >
-            + Add certificate
+            Add certificate
           </Button>
         )}
       </div>
@@ -635,7 +629,7 @@ function NginxConfigModal({
             </pre>
           </div>
           <p className="mt-3 text-[11px] text-amber-500 flex items-center gap-1.5">
-            <InfoCircleIcon className="size-3.5 shrink-0" />
+            <InfoIcon className="size-3.5 shrink-0" />
             This is the auto-generated config based on your domains. Changes are applied via Sync.
           </p>
         </>
@@ -752,7 +746,7 @@ export default function ProjectDomainsTab({ project }: Props) {
             <Button
               variant="outline"
               onClick={() => setShowNginxModal(true)}
-              iconLeft={<PencilIcon className="size-3.5" />}
+              iconLeft={<SquarePenIcon className="size-3.5" />}
             >
               Edit Nginx configuration
             </Button>

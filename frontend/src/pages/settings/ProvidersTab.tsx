@@ -13,9 +13,7 @@ import { usePermissions } from "../../context/PermissionsContext";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import PlusIcon from "@/components/icons/outlined/PlusIcon";
-import EyeIcon from "../../components/icons/outlined/EyeIcon";
-import EyeSlashIcon from "../../components/icons/outlined/EyeSlashIcon";
+import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 
 export default function ProvidersTab() {
   const { has } = usePermissions();
@@ -77,7 +75,7 @@ export default function ProvidersTab() {
           <p className="text-sm text-text-muted mt-0.5">Connect cloud providers used for deployments.</p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon className="size-4" />}>
             Add Provider
           </Button>
         )}
@@ -116,7 +114,7 @@ export default function ProvidersTab() {
                 className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
                 aria-label={showSecret ? "Hide API secret" : "Show API secret"}>
                 {showSecret ? (
-                  <EyeSlashIcon className="size-4.5" />
+                  <EyeOffIcon className="size-4.5" />
                 ) : (
                   <EyeIcon className="size-4.5" />
                 )}

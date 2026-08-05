@@ -1,6 +1,5 @@
 import { useProjectDetail } from "./useProjectDetail";
 import DeployWizard from "../../components/DeployWizard";
-import ChevronLeftIcon from "../../components/icons/outlined/ChevronLeftIcon";
 import Button from "../../components/ui/Button";
 import ProjectHeader from "./sections/ProjectHeader";
 import RepoInfoCard from "./sections/RepoInfoCard";
@@ -22,6 +21,7 @@ import { useState } from "react";
 import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
 import { gitApi } from "../../services/api";
 import type { RepoIssue, RepoPullRequest } from "../../types";
+import { ChevronLeftIcon } from "lucide-react";
 
 export default function ProjectDetail() {
   const {

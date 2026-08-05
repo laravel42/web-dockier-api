@@ -4,8 +4,7 @@ import { notificationsApi } from "../services/api";
 import type { Notification } from "../types";
 import NotificationContent from "./NotificationContent";
 import NotificationTitleLink from "./NotificationTitleLink";
-import BellIcon from "./icons/outlined/BellIcon";
-import CheckSquareIcon from "./icons/outlined/CheckSquareIcon";
+import { BellIcon, SquareCheckIcon } from "lucide-react";
 
 const DISMISS_MS = 280;
 
@@ -92,7 +91,7 @@ function NotificationDropdownItem({
                   title="Mark as read"
                   className="inline-flex shrink-0 items-center justify-center p-0 text-primary transition-colors hover:text-primary/80"
                 >
-                  <CheckSquareIcon className="hover:bg-primary/10" />
+                  <SquareCheckIcon className="size-4 hover:bg-primary/10" />
                 </button>
               )}
             </div>
@@ -157,7 +156,7 @@ export default function NotificationDropdown() {
         aria-label="Notifications"
         aria-expanded={open}
       >
-        <BellIcon />
+        <BellIcon className="size-5" />
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-danger-500 text-[10px] font-bold text-white">
             {unreadCount > 9 ? "9+" : unreadCount}

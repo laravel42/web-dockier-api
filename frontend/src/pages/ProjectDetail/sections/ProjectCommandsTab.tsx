@@ -7,13 +7,7 @@ import { usePermissions } from "../../../context/PermissionsContext";
 import { formatCardDateTime } from "../../../utils/formatCardDate";
 import { statusBadgeColors } from "../../../utils/styles";
 import Spinner from "../../../components/Spinner";
-import ArrowRightIcon from "../../../components/icons/filled/ArrowRightIcon";
-import DotsVerticalIcon from "@/components/icons/outlined/DotsVerticalIcon";
-import DocumentIcon from "@/components/icons/outlined/DocumentIcon";
-import SyncIcon from "@/components/icons/outlined/SyncIcon";
-import CopyIcon from "@/components/icons/outlined/CopyIcon";
-import TrashIcon from "@/components/icons/outlined/TrashIcon";
-import XIcon from "@/components/icons/outlined/XIcon";
+import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react";
 
 const PAGE_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
@@ -305,7 +299,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                       aria-expanded={openMenuId === cmd.id}
                       aria-haspopup="menu"
                     >
-                      <DotsVerticalIcon className="size-4" />
+                      <EllipsisVerticalIcon className="size-4" />
                     </button>
                     {openMenuId === cmd.id && (
                       <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-lg" role="menu">
@@ -315,7 +309,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                           onClick={() => { setOutputModal(cmd); setOpenMenuId(null); }}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                         >
-                          <DocumentIcon className="size-3.5" />
+                          <FileTextIcon className="size-3.5" />
                           View output
                         </button>
                         {canManage && hasDeployment && (
@@ -325,7 +319,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                             onClick={() => void handleRunAgain(cmd)}
                             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                           >
-                            <SyncIcon className="size-3.5" />
+                            <RefreshCwIcon className="size-3.5" />
                             Run again
                           </button>
                         )}
@@ -335,7 +329,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                           onClick={() => handleCopy(cmd)}
                           className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                         >
-                          <CopyIcon />
+                          <CopyIcon className="size-3.5" />
                           Copy command
                         </button>
                         {canManage && (
@@ -347,7 +341,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                               onClick={() => void handleDelete(cmd)}
                               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-500 transition-colors hover:bg-danger-500/10"
                             >
-                              <TrashIcon className="size-3.5" />
+                              <Trash2Icon className="size-3.5" />
                               Delete
                             </button>
                           </>

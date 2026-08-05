@@ -9,12 +9,9 @@ import { SettingsField, SettingsTextField } from "../../components/SettingsField
 import { segmentActiveCls, segmentIdleCls } from "../../utils/styles";
 import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
-import PlusIcon from "../../components/icons/outlined/PlusIcon";
-import PencilIcon from "../../components/icons/outlined/PencilIcon";
-import TrashIcon from "../../components/icons/outlined/TrashIcon";
-import ChevronDownIcon from "../../components/icons/outlined/ChevronDownIcon";
 import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
+import { ChevronDownIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 
 interface CRule {
   id: string; ruleId: string; severity: string; message: string;
@@ -323,10 +320,10 @@ export default function SecurityRulesTab() {
                 {!r.isSystem && (
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => openEdit(r)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                      <PencilIcon className="size-3.5" />
+                      <SquarePenIcon className="size-3.5" />
                     </button>
                     <button onClick={() => setDeleteId(r.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
-                      <TrashIcon className="size-3.5" />
+                      <Trash2Icon className="size-3.5" />
                     </button>
                   </div>
                 )}
@@ -816,11 +813,11 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => openEditModal({ id: r.id, ruleId: r.ruleId, isBuiltin: r.isBuiltin, path: r.path, yamlContent: r.yamlContent })} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
-                    <PencilIcon className="size-3.5" />
+                    <SquarePenIcon className="size-3.5" />
                   </button>
                   {!r.isBuiltin && (
                     <button onClick={() => setDeleteId(r.id)} className="size-7  flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
-                      <TrashIcon className="size-3.5" />
+                      <Trash2Icon className="size-3.5" />
                     </button>
                   )}
                 </div>

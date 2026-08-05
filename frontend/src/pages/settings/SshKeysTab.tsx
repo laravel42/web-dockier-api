@@ -14,8 +14,7 @@ import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import Alert from "../../components/ui/Alert";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import KeyIcon from "../../components/icons/outlined/KeyIcon";
-import PlusIcon from "@/components/icons/outlined/PlusIcon";
+import { KeyRoundIcon, PlusIcon } from "lucide-react";
 
 export default function SshKeysTab() {
   const { has } = usePermissions();
@@ -73,7 +72,7 @@ export default function SshKeysTab() {
           <p className={`${typePanelDesc} mt-0.5`}>SSH keys used for VPS deployments (AWS EC2, GCP Compute Engine)</p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon className="size-4" />}>
             Add SSH Key
           </Button>
         )}
@@ -146,7 +145,7 @@ export default function SshKeysTab() {
             >
               <div className="flex items-start gap-3 mb-3">
                 <div className="size-9 rounded-lg flex items-center justify-center shrink-0 text-primary-500">
-                  <KeyIcon className="size-5" />
+                  <KeyRoundIcon className="size-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-text truncate">{k.label}</p>

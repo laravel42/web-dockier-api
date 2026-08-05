@@ -5,7 +5,7 @@ import SourceControlBadge, { getSourceControl } from "./SourceControlBadge";
 import Spinner from "./Spinner";
 import type { Connection } from "../types";
 import { Input } from "./ui/input";
-import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
+import { ChevronDownIcon } from "lucide-react";
 
 interface Props {
   value: string;

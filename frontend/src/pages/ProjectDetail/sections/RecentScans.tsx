@@ -4,7 +4,7 @@ import StatusRingIcon from "../../../components/badges/StatusRingIcon";
 import SeverityBadge from "../../../components/SeverityBadge";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { isScanSecurityClean } from "../../../utils/scanSummary";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
+import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   scans: Scan[];

@@ -2,8 +2,7 @@ import type { RepoIssue } from "../../../types";
 import { cardCls } from "../../../utils/styles";
 import { timeAgo } from "../../../utils/timeAgo";
 import Spinner from "../../../components/Spinner";
-import AlertCircleIcon from "../../../components/icons/outlined/AlertCircleIcon";
-import ChatBubbleIcon from "../../../components/icons/outlined/ChatBubbleIcon";
+import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
 
 interface Props {
   issues: RepoIssue[];
@@ -72,7 +71,7 @@ export default function OpenIssues({ issues, issuesLoading, issuesError, onIssue
               onClick={() => onIssueClick(issue)}
               className="w-full text-left flex items-start gap-3 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors cursor-pointer"
             >
-              <AlertCircleIcon className="size-4 text-emerald-500 mt-0.5 shrink-0" />
+              <CircleAlertIcon className="size-4 text-emerald-500 mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-text line-clamp-2">{issue.title}</div>
                 <div className="mt-1 text-xs text-text-muted">
@@ -89,7 +88,7 @@ export default function OpenIssues({ issues, issuesLoading, issuesError, onIssue
               </div>
               {issue.comments > 0 && (
                 <span className="flex items-center gap-1 text-xs text-text-muted shrink-0 tabular-nums">
-                  <ChatBubbleIcon className="size-3.5" />
+                  <MessageSquareTextIcon className="size-3.5" />
                   {issue.comments}
                 </span>
               )}

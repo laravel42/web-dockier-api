@@ -4,11 +4,11 @@ import PageError from "../../components/ui/PageError";
 import Button from "../../components/ui/Button";
 import { useDashboard } from "./useDashboard";
 import { usePermissions } from "../../context/PermissionsContext";
-import PlusIcon from "../../components/icons/outlined/PlusIcon";
 import KpiGrid from "./sections/KpiGrid";
 import GettingStarted from "./sections/GettingStarted";
 import RecentDeploys from "./sections/RecentDeploys";
 import RecentScans from "./sections/RecentScans";
+import { PlusIcon } from "lucide-react";
 
 export default function Dashboard() {
   const {
@@ -56,7 +56,7 @@ export default function Dashboard() {
         actions={
           <Button
             onClick={() => navigate("/projects", { state: { openCreate: true } })}
-            iconLeft={<PlusIcon />}
+            iconLeft={<PlusIcon className="size-4" />}
           >
             New Project
           </Button>

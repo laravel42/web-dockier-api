@@ -1,4 +1,4 @@
-import SearchIcon from "../icons/outlined/SearchIcon";
+import { SearchIcon } from "lucide-react";
 
 interface Props {
   value: string;

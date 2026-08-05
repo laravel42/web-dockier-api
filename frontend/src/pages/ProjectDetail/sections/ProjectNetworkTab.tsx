@@ -7,9 +7,7 @@ import Modal from "../../../components/Modal";
 import Spinner from "../../../components/Spinner";
 import Button from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/input";
-import EyeIcon from "../../../components/icons/outlined/EyeIcon";
-import EyeSlashIcon from "../../../components/icons/outlined/EyeSlashIcon";
-import XIcon from "@/components/icons/outlined/XIcon";
+import { EyeIcon, EyeOffIcon, XIcon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -433,7 +431,7 @@ function InlineCredentialForm({
             className="absolute right-0"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
-            {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
+            {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
           </Button>
         </div>
       </div>
@@ -515,7 +513,7 @@ function AddCredentialModal({
               className="absolute right-0"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
+              {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
             </Button>
           </div>
         </div>

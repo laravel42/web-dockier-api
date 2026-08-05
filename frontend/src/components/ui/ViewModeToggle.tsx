@@ -1,5 +1,4 @@
-import GridIcon from "../icons/outlined/GridIcon";
-import Bars3Icon from "../icons/outlined/Bars3Icon";
+import { LayoutGridIcon, MenuIcon } from "lucide-react";
 
 export type ViewMode = "cards" | "table";
 
@@ -24,7 +23,7 @@ export default function ViewModeToggle({ mode, onChange }: Props) {
         aria-label="Card view"
         aria-pressed={mode === "cards"}
       >
-        <GridIcon className="size-4" />
+        <LayoutGridIcon className="size-4" />
       </button>
       <button
         type="button"
@@ -34,7 +33,7 @@ export default function ViewModeToggle({ mode, onChange }: Props) {
         aria-label="Table view"
         aria-pressed={mode === "table"}
       >
-        <Bars3Icon className="size-4" />
+        <MenuIcon className="size-4" />
       </button>
     </div>
   );

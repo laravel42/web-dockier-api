@@ -1,8 +1,7 @@
 import { statusBadgeColors as statusColors } from "../../../utils/styles";
 import Button from "../../../components/ui/Button";
-import ChevronLeftIcon from "../../../components/icons/outlined/ChevronLeftIcon";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
 import type { Scan, Project } from "../../../types";
+import { ChevronLeftIcon, ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   scan: Scan;

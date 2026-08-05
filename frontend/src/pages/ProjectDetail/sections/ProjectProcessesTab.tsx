@@ -16,17 +16,7 @@ import ConfirmModal from "../../../components/ConfirmModal";
 import Spinner from "../../../components/Spinner";
 import Button from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/input";
-import SyncIcon from "../../../components/icons/outlined/SyncIcon";
-import PencilIcon from "../../../components/icons/outlined/PencilIcon";
-import TrashIcon from "../../../components/icons/outlined/TrashIcon";
-import DotsVerticalIcon from "../../../components/icons/outlined/DotsVerticalIcon";
-import DocumentIcon from "../../../components/icons/outlined/DocumentIcon";
-import PlayIcon from "../../../components/icons/outlined/PlayIcon";
-import StopIcon from "../../../components/icons/outlined/StopIcon";
-import PauseIcon from "../../../components/icons/outlined/PauseIcon";
-import InfoCircleIcon from "../../../components/icons/filled/InfoCircleIcon";
-import CheckCircleFilledIcon from "../../../components/icons/filled/CheckCircleIcon";
-import CopyIcon from "@/components/icons/outlined/CopyIcon";
+import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -104,7 +94,7 @@ function ProcessLogsModal({
           className="text-xs text-text-muted hover:text-text transition-colors"
           title="Refresh"
         >
-          <SyncIcon className="size-4" />
+          <RefreshCwIcon className="size-4" />
         </button>
       </div>
       <div className="rounded-lg border border-border bg-[#0d1117] overflow-auto max-h-80">
@@ -227,17 +217,17 @@ function ProcessActionsMenu({
           className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-secondary-50 transition-colors"
           aria-label="Actions"
         >
-          <DotsVerticalIcon className="size-4 text-text-muted" />
+          <EllipsisVerticalIcon className="size-4 text-text-muted" />
         </button>
 
         {open && (
           <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
             <button onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <DocumentIcon className="size-4 text-text-muted" />
+              <FileTextIcon className="size-4 text-text-muted" />
               View logs
             </button>
             <button onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <SyncIcon className="size-4 text-text-muted" />
+              <RefreshCwIcon className="size-4 text-text-muted" />
               Restart
             </button>
             <button onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -245,12 +235,12 @@ function ProcessActionsMenu({
               Start
             </button>
             <button onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <StopIcon className="size-4 text-text-muted" />
+              <SquareIcon className="size-4 text-text-muted" />
               Stop
             </button>
             <div className="my-1 border-t border-border" />
             <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
-              <PencilIcon className="size-4 text-text-muted" />
+              <SquarePenIcon className="size-4 text-text-muted" />
               Edit
             </button>
             <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
@@ -259,7 +249,7 @@ function ProcessActionsMenu({
             </button>
             <div className="my-1 border-t border-border" />
             <button onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
-              <TrashIcon className="size-4" />
+              <Trash2Icon className="size-4" />
               Delete
             </button>
           </div>
@@ -354,7 +344,7 @@ function JobActionsMenu({
           className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-secondary-50 transition-colors"
           aria-label="Actions"
         >
-          <DotsVerticalIcon className="size-4 text-text-muted" />
+          <EllipsisVerticalIcon className="size-4 text-text-muted" />
         </button>
 
         {open && (
@@ -369,7 +359,7 @@ function JobActionsMenu({
             </button>
             <div className="my-1 border-t border-border" />
             <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
-              <PencilIcon className="size-4 text-text-muted" />
+              <SquarePenIcon className="size-4 text-text-muted" />
               Edit
             </button>
             <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
@@ -378,7 +368,7 @@ function JobActionsMenu({
             </button>
             <div className="my-1 border-t border-border" />
             <button onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
-              <TrashIcon className="size-4" />
+              <Trash2Icon className="size-4" />
               Delete
             </button>
           </div>
@@ -554,7 +544,7 @@ function CreateProcessModal({
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 Runtime
               </label>
               <select  value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
@@ -564,7 +554,7 @@ function CreateProcessModal({
             {currentRuntimeOpts && currentRuntimeOpts.versions.length > 0 && (
               <div className="flex items-center gap-3">
                 <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                  <InfoCircleIcon className="size-3.5 text-primary-500" />
+                  <InfoIcon className="size-3.5 text-primary-500" />
                   Version
                 </label>
                 <select  value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
@@ -574,21 +564,21 @@ function CreateProcessModal({
             )}
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 {runtime === "php" ? "Connection" : "Entry point"}
               </label>
               <Input type="text"  value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
             </div>
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 processes
               </label>
               <Input type="number"  value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
             </div>
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 --queue
               </label>
               <Input type="text"  value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
@@ -596,7 +586,7 @@ function CreateProcessModal({
 
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 Timeout
               </label>
               <div className="relative flex-1">
@@ -606,7 +596,7 @@ function CreateProcessModal({
             </div>
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 Tries
               </label>
               <div className="relative flex-1">
@@ -616,7 +606,7 @@ function CreateProcessModal({
             </div>
             <div className="flex items-center gap-3">
               <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                <InfoCircleIcon className="size-3.5 text-primary-500" />
+                <InfoIcon className="size-3.5 text-primary-500" />
                 Memory
               </label>
               <div className="relative flex-1">
@@ -629,7 +619,7 @@ function CreateProcessModal({
               <>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <InfoCircleIcon className="size-3.5 text-primary-500" />
+                    <InfoIcon className="size-3.5 text-primary-500" />
                     --backoff
                   </label>
                   <div className="relative flex-1">
@@ -639,7 +629,7 @@ function CreateProcessModal({
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <InfoCircleIcon className="size-3.5 text-primary-500" />
+                    <InfoIcon className="size-3.5 text-primary-500" />
                     --sleep
                   </label>
                   <div className="relative flex-1">
@@ -649,7 +639,7 @@ function CreateProcessModal({
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <InfoCircleIcon className="size-3.5 text-primary-500" />
+                    <InfoIcon className="size-3.5 text-primary-500" />
                     --rest
                   </label>
                   <div className="relative flex-1">
@@ -659,14 +649,14 @@ function CreateProcessModal({
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <InfoCircleIcon className="size-3.5 text-primary-500" />
+                    <InfoIcon className="size-3.5 text-primary-500" />
                     --env
                   </label>
                   <Input type="text"  value={env} onChange={(e) => setEnv(e.target.value)} />
                 </div>
                 <div className="flex items-center gap-3">
                   <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
-                    <InfoCircleIcon className="size-3.5 text-primary-500" />
+                    <InfoIcon className="size-3.5 text-primary-500" />
                     --force
                   </label>
                   <button
@@ -1009,7 +999,7 @@ export default function ProjectProcessesTab({ project }: Props) {
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-text truncate">{job.name}</p>
                           {job.monitorHeartbeat && (
-                            <CheckCircleFilledIcon className="size-3.5 text-success-500 shrink-0" />
+                            <CircleCheckIcon className="size-3.5 text-success-500 shrink-0" />
                           )}
                         </div>
                         <p className="text-xs text-text-muted font-mono truncate mt-0.5">

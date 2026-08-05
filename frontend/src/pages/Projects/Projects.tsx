@@ -10,7 +10,7 @@ import Button from "../../components/ui/Button";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
-import PlusIcon from "../../components/icons/outlined/PlusIcon";
+import { PlusIcon } from "lucide-react";
 
 export default function Projects() {
   const { has } = usePermissions();

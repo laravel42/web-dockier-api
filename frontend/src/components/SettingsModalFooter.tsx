@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import TrashIcon from "./icons/outlined/TrashIcon";
 import Button from "./ui/Button";
+import { Trash2Icon } from "lucide-react";
 
 interface SettingsModalFooterProps {
   children: ReactNode;
@@ -28,7 +28,7 @@ export default function SettingsModalFooter({
           variant="outline-danger"
           size="sm"
           onClick={onDelete}
-          iconLeft={<TrashIcon className="size-4" />}
+          iconLeft={<Trash2Icon className="size-4" />}
           aria-label={deleteAriaLabel}
         >
           {deleteLabel}

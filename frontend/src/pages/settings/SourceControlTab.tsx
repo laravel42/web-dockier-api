@@ -14,7 +14,7 @@ import { useToast } from "../../context/useToast";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import PlusIcon from "@/components/icons/outlined/PlusIcon";
+import { PlusIcon } from "lucide-react";
 
 export default function SourceControlTab() {
   const { has } = usePermissions();
@@ -66,7 +66,7 @@ export default function SourceControlTab() {
           <p className="text-sm text-text-muted mt-0.5">Connect Git providers for projects and deployments.</p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon className="size-4" />}>
             Add Connection
           </Button>
         )}

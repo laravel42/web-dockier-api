@@ -13,10 +13,7 @@ import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { notifyInAppNotificationsChanged } from "../../hooks/useInAppNotificationsEnabled";
-import PlusIcon from "@/components/icons/outlined/PlusIcon";
-import EnvelopeIcon from "../../components/icons/outlined/EnvelopeIcon";
-import LinkIcon from "../../components/icons/outlined/LinkIcon";
-import BellIcon from "../../components/icons/outlined/BellIcon";
+import { BellIcon, LinkIcon, MailIcon, PlusIcon } from "lucide-react";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
@@ -118,7 +115,7 @@ export default function NotificationChannelsTab() {
         {editingChannel && (() => {
           const chName = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" }[editingChannel.type as string] || editingChannel.type;
           const chIcon = editingChannel.type === "slack" ? <TechBadge name="slack" icon="slack" iconOnly iconSize="w-10 h-10" /> :
-            editingChannel.type === "email" ? <EnvelopeIcon className="size-10" /> :
+            editingChannel.type === "email" ? <MailIcon className="size-10" /> :
             editingChannel.type === "webhook" ? <LinkIcon className="size-10" /> :
             <BellIcon className="size-10" />;
           return (
@@ -192,7 +189,7 @@ export default function NotificationChannelsTab() {
           {channelList.map((ch) => {
             const channelNames: Record<string, string> = { email: "Email", slack: "Slack", webhook: "Webhook", in_app: "In-App" };
             const channelIcons: Record<string, React.ReactNode> = {
-              email: <EnvelopeIcon className="size-7" />,
+              email: <MailIcon className="size-7" />,
               slack: <TechBadge name="slack" icon="slack" iconOnly iconSize="w-7 h-7" />,
               webhook: <LinkIcon className="size-7" />,
               in_app: <BellIcon className="size-7" />,

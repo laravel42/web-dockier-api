@@ -1,7 +1,7 @@
 import type { WizardState } from "../types";
 import { PROVIDER_REGIONS } from "../constants";
 import { getPlans } from "../plans";
-import CheckCircleIcon from "../../icons/filled/CheckCircleIcon";
+import { CircleCheckIcon } from "lucide-react";
 
 export default function StepEnvironment({ state, templateId, onChange, onRegionChange }: {
   state: WizardState;
@@ -83,7 +83,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 <div className="flex items-center justify-between mb-3">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${plan.badgeColor}`}>{plan.badge}</span>
                   {selected && (
-                    <CheckCircleIcon className="size-4  text-primary-500" />
+                    <CircleCheckIcon className="size-4  text-primary-500" />
                   )}
                 </div>
                 <p className="text-sm font-semibold text-text mb-2">{plan.label}</p>

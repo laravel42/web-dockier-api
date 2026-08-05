@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { RepoAnalysis, WizardState } from "../types";
 import { PROVIDER_META } from "../constants";
 import { choiceCardIdleCls, choiceCardSelectedCls } from "../../../utils/styles";
-import CheckCircleIcon from "../../icons/filled/CheckCircleIcon";
+import { CircleCheckIcon } from "lucide-react";
 
 /** Templates that cannot use static hosting (they need a server runtime). */
 const STATIC_INCOMPATIBLE_TEMPLATES = ["wordpress"];
@@ -79,7 +79,7 @@ export default function StepService({ state, templateId, analysis, onChange }: {
                 <p className="text-xs text-muted-foreground mt-1">{svc.description}</p>
               </div>
               {selected && (
-                <CheckCircleIcon className="size-5 text-primary shrink-0 mt-1" />
+                <CircleCheckIcon className="size-5 text-primary shrink-0 mt-1" />
               )}
             </button>
           );

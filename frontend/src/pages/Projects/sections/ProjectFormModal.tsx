@@ -7,9 +7,7 @@ import { FRAMEWORK_CATEGORIES } from "../../../config/frameworks";
 import Button from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/input";
 import type { Connection, Repo } from "../../../types";
-import LinkIcon from "../../../components/icons/outlined/LinkIcon";
-import ChevronDownIcon from "@/components/icons/outlined/ChevronDownIcon";
-import CheckIcon from "@/components/icons/outlined/CheckIcon";
+import { CheckIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -148,7 +146,7 @@ export default function ProjectFormModal({
             {!selectedConnectionId && (
               <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
                 <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <LinkIcon className="size-7 " />
+                  <LinkIcon className="size-7" />
                 </div>
                 <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
                 <p className="text-xs text-text-muted max-w-xs">Select a source control provider above to browse your repositories and pick a branch.</p>

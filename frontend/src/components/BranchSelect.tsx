@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
 import Spinner from "./Spinner";
-import CodeIcon from "./icons/outlined/CodeIcon";
-import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
+import { CodeXmlIcon, ChevronDownIcon } from "lucide-react";
 
 interface Props {
   value: string;
@@ -66,7 +65,7 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
       >
         {value ? (
           <>
-            <CodeIcon className="size-4 shrink-0 text-text-muted" />
+            <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
             <span className="truncate">{value}</span>
           </>
         ) : (
@@ -104,7 +103,7 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
                     value === b ? "bg-primary-50 text-primary-600" : "text-text"
                   }`}
                 >
-                  <CodeIcon className="size-4 shrink-0 text-text-muted" />
+                  <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
                   <span>{b}</span>
                 </button>
               ))

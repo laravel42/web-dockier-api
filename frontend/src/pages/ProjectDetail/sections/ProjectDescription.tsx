@@ -15,7 +15,7 @@ import ProjectObserveTab from "./ProjectObserveTab";
 import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "../../../context/PermissionsContext";
-import XIcon from "@/components/icons/outlined/XIcon";
+import { XIcon } from "lucide-react";
 
 interface Props {
   analysis: RepoAnalysis | null;

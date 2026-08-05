@@ -1,5 +1,3 @@
-import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
-import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
 import Modal from "../../../components/Modal";
 import Button from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/input";
@@ -7,6 +5,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import type { PMIntegration, PMTeam, PMMember } from "../../../types";
 import Spinner from "../../../components/Spinner";
 import { SearchableCombobox } from "../../../components/ui/combobox";
+import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -62,7 +61,7 @@ export default function CreateIssueModal({
       {issueSuccess ? (
         <div className="flex flex-col items-center py-6 gap-4">
           <div className="size-12  rounded-full bg-success-500/10 flex items-center justify-center">
-            <CheckCircleIcon className="size-7  text-success-500" />
+            <CircleCheckIcon className="size-7 text-success-500" />
           </div>
           <p className="text-sm font-medium text-success-500">{issueSuccess}</p>
           {issueSuccessUrl && (

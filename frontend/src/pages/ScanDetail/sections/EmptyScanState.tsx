@@ -2,8 +2,7 @@ import { cardCls } from "../../../utils/styles";
 import Button from "../../../components/ui/Button";
 import ScanSidebar from "./ScanSidebar";
 import type { Scan, Project } from "../../../types";
-import ChevronLeftIcon from "../../../components/icons/outlined/ChevronLeftIcon";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
+import { ChevronLeftIcon, ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   project: Project;

@@ -1,8 +1,8 @@
 import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
-import WarningIcon from "../../icons/outlined/WarningIcon";
 import Spinner from "../../Spinner";
 import DockerfileIcon from "../../icons/filled/DockerfileIcon";
+import { TriangleAlertIcon } from "lucide-react";
 
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
 const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
@@ -38,7 +38,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   if (!analysis) {
     return (
       <div className="flex flex-col items-center py-8 gap-3 text-center">
-        <WarningIcon className="size-10  text-warning-500" />
+        <TriangleAlertIcon className="size-10  text-warning-500" />
         {analysisError ? (
           <p className="text-sm text-danger-500">{analysisError}</p>
         ) : (

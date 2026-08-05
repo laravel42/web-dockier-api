@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { WizardState } from "../types";
-import CheckIcon from "../../icons/outlined/CheckIcon";
-import ExternalLinkIcon from "../../icons/outlined/ExternalLinkIcon";
+import { CheckIcon, ExternalLinkIcon } from "lucide-react";
 import Spinner from "../../Spinner";
 
 export default function StepDeploy({ state }: { state: WizardState }) {
@@ -49,7 +48,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
                 done ? "bg-primary-500/80 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
               }`}>
                 {done ? (
-                  <CheckIcon className="size-3 " />
+                  <CheckIcon className="size-3" />
                 ) : active ? (
                   <div className="size-2  border border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
@@ -94,7 +93,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <div className="rounded-lg bg-orange-500/10 border border-orange-500/20 p-3">
           <p className="text-xs text-orange-600 font-semibold uppercase tracking-wide mb-1">CodeBuild Logs</p>
           <a href={state.codebuildLogsUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
-            <ExternalLinkIcon className="size-4  shrink-0" />
+            <ExternalLinkIcon className="size-4 shrink-0" />
             View in CloudWatch
           </a>
         </div>
@@ -113,7 +112,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <div className="rounded-lg bg-success-500/10 border border-success-500/20 p-3">
           <p className="text-xs text-success-500 font-semibold uppercase tracking-wide mb-1">Application URL</p>
           <a href={state.deployAppUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
-            <ExternalLinkIcon className="size-4  shrink-0" />
+            <ExternalLinkIcon className="size-4 shrink-0" />
             {state.deployAppUrl}
           </a>
         </div>

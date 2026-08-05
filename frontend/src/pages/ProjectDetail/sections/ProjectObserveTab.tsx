@@ -14,13 +14,7 @@ import Modal from "../../../components/Modal";
 import Spinner from "../../../components/Spinner";
 import Button from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/input";
-import TrashIcon from "../../../components/icons/outlined/TrashIcon";
-import DownloadIcon from "../../../components/icons/outlined/DownloadIcon";
-import SearchIcon from "../../../components/icons/outlined/SearchIcon";
-import SyncIcon from "../../../components/icons/outlined/SyncIcon";
-import ClockIcon from "../../../components/icons/outlined/ClockIcon";
-import ArchiveXIcon from "../../../components/icons/outlined/ArchiveXIcon";
-import XIcon from "@/components/icons/outlined/XIcon";
+import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -370,7 +364,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
               className="text-xs text-text-muted hover:text-danger-500 transition-colors disabled:opacity-50"
               title="Delete contents"
             >
-              <TrashIcon className="size-4" />
+              <Trash2Icon className="size-4" />
             </button>
           )}
           <button
@@ -388,7 +382,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
             className="text-xs text-text-muted hover:text-text transition-colors"
             title="Refresh"
           >
-            <SyncIcon className="size-4" />
+            <RefreshCwIcon className="size-4" />
           </button>
         </div>
       </div>

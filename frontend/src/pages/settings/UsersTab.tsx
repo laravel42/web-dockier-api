@@ -8,9 +8,6 @@ import ComboBox from "../../components/ComboBox";
 import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
 import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
-import UserPlusIcon from "../../components/icons/outlined/UserPlusIcon";
-import EyeIcon from "../../components/icons/outlined/EyeIcon";
-import EyeSlashIcon from "../../components/icons/outlined/EyeSlashIcon";
 import { formatCardDateTime } from "../../utils/formatCardDate";
 import PageLoading from "../../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../../components/ui/PageError";
@@ -19,8 +16,7 @@ import { getErrorMessage } from "../../utils/errors";
 import { useToast } from "../../context/useToast";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../context/PermissionsContext";
-import ClipboardIcon from "../../components/icons/outlined/ClipboardIcon";
-import CheckIcon from "../../components/icons/outlined/CheckIcon";
+import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 
 interface UserItem {
   id: string;
@@ -230,7 +226,7 @@ export default function UsersTab() {
           <p className="text-sm text-text-muted mt-0.5">Manage team members and their roles.</p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowInvite(true)} iconLeft={<UserPlusIcon className="size-4" />}>
+          <Button onClick={() => setShowInvite(true)} iconLeft={<UserRoundPlusIcon className="size-4" />}>
             Add User
           </Button>
         )}
@@ -321,7 +317,7 @@ export default function UsersTab() {
                 )}
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors">
                   {showPassword ? (
-                    <EyeSlashIcon className="size-4" />
+                    <EyeOffIcon className="size-4" />
                   ) : (
                     <EyeIcon className="size-4" />
                   )}

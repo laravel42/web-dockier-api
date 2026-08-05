@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Project } from "../../../types";
 import { btnPrimary, typePageDesc, typePageTitle } from "../../../utils/styles";
 import { usePermissions } from "../../../context/PermissionsContext";
-import PencilIcon from "../../../components/icons/outlined/PencilIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
 import ProjectAvatar from "../../../components/ProjectAvatar";
+import { SquarePenIcon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -106,7 +106,7 @@ export default function ProjectHeader({
                     className="p-1 rounded-md text-text-muted opacity-0 group-hover:opacity-100 hover:text-text hover:bg-secondary-50 transition-all shrink-0 disabled:opacity-50"
                     aria-label="Edit project name"
                   >
-                    <PencilIcon className="size-4" />
+                    <SquarePenIcon className="size-4" />
                   </button>
                 )}
               </div>

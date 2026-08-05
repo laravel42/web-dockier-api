@@ -1,4 +1,4 @@
-import CheckIcon from "../../icons/outlined/CheckIcon";
+import { CheckIcon } from "lucide-react";
 import { STEPS } from "../constants";
 
 export default function Stepper({ current, steps }: { current: number; steps: typeof STEPS }) {

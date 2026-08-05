@@ -3,11 +3,7 @@ import Modal from "./Modal";
 import SettingsModalFooter from "./SettingsModalFooter";
 import Button from "./ui/Button";
 import { Input } from "./ui/input";
-import SearchIcon from "./icons/outlined/SearchIcon";
-import CheckIcon from "./icons/outlined/CheckIcon";
-import MinusIcon from "./icons/outlined/MinusIcon";
-import ChevronDownIcon from "./icons/outlined/ChevronDownIcon";
-import LockIcon from "./icons/outlined/LockIcon";
+import { SearchIcon, CheckIcon, MinusIcon, ChevronDownIcon, LockIcon } from "lucide-react";
 
 interface Permission {
   key: string;

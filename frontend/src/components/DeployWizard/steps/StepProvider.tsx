@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { WizardState, Provider } from "../types";
 import { PROVIDER_META } from "../constants";
 import { choiceCardIdleCls, choiceCardSelectedCls } from "../../../utils/styles";
-import CheckCircleIcon from "../../icons/filled/CheckCircleIcon";
+import { CircleCheckIcon } from "lucide-react";
 
 export default function StepProvider({ state, providers, onChange }: {
   state: WizardState;
@@ -74,7 +74,7 @@ export default function StepProvider({ state, providers, onChange }: {
               )}
               {selected && (
                 <div className="absolute top-1.5 right-1.5">
-                  <CheckCircleIcon className="size-4 text-primary" />
+                  <CircleCheckIcon className="size-4 text-primary" />
                 </div>
               )}
             </button>
@@ -102,7 +102,7 @@ export default function StepProvider({ state, providers, onChange }: {
                     <span className={`text-sm font-medium ${isActive ? "text-foreground" : "text-text"}`}>{p.label}</span>
                     <span className="text-xs text-muted-foreground ml-2">({p.id.slice(0, 8)}…)</span>
                   </div>
-                  {isActive && <CheckCircleIcon className="size-4 text-primary shrink-0" />}
+                  {isActive && <CircleCheckIcon className="size-4 text-primary shrink-0" />}
                 </button>
               );
             })}

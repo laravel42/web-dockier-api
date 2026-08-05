@@ -2,7 +2,7 @@ import type { Deployment } from "../../../types";
 import { strategyLabels, cardCls } from "../../../utils/styles";
 import ProviderBadge from "../../../components/ProviderBadge";
 import { getProviderStyle } from "../../../data/providers";
-import ExternalLinkIcon from "../../../components/icons/outlined/ExternalLinkIcon";
+import { ExternalLinkIcon } from "lucide-react";
 
 interface Props {
   deploy: Deployment;

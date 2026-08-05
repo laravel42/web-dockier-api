@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 import { statCardCls, typeStatDelta, typeStatLabel, typeStatValueSm } from "../../../utils/styles";
-import FolderIcon from "../../../components/icons/outlined/FolderIcon";
 import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import CheckCircleIcon from "../../../components/icons/outlined/CheckCircleIcon";
-import AlertCircleIcon from "../../../components/icons/outlined/AlertCircleIcon";
-import ShieldCheckIcon from "../../../components/icons/outlined/ShieldCheckIcon";
-import WarningIcon from "../../../components/icons/outlined/WarningIcon";
+import { CircleAlertIcon, CircleCheckIcon, FolderClosedIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 
 interface KpiItem {
   label: string;
@@ -36,12 +32,12 @@ export default function KpiGrid({
   const iconCls = "size-4 text-primary-500";
 
   const kpis: KpiItem[] = [
-    { label: "Projects", value: projects, delta: "Connected repositories", icon: <FolderIcon className={iconCls} /> },
+    { label: "Projects", value: projects, delta: "Connected repositories", icon: <FolderClosedIcon className={iconCls} /> },
     ...(showDeploys
       ? [
           { label: "Deployments", value: deploys, delta: "All time", icon: <RocketIcon className={iconCls} /> },
-          { label: "Successful", value: successDeploys, delta: "Completed deploys", icon: <CheckCircleIcon className={iconCls} /> },
-          { label: "Failed", value: failedDeploys, delta: "Needs attention", icon: <AlertCircleIcon className={iconCls} /> },
+          { label: "Successful", value: successDeploys, delta: "Completed deploys", icon: <CircleCheckIcon className={iconCls} /> },
+          { label: "Failed", value: failedDeploys, delta: "Needs attention", icon: <CircleAlertIcon className={iconCls} /> },
         ]
       : []),
     { label: "Scans", value: scans, delta: "Security runs", icon: <ShieldCheckIcon className={iconCls} /> },
@@ -49,7 +45,7 @@ export default function KpiGrid({
       label: "Findings",
       value: totalFindings,
       delta: totalFindings > 0 ? "Across all scans" : "No issues detected",
-      icon: <WarningIcon className={iconCls} />,
+      icon: <TriangleAlertIcon className={iconCls} />,
     },
   ];
 
