@@ -13,6 +13,23 @@ import PageLoading from "../../components/ui/PageLoading";
 import Spinner from "../../components/Spinner";
 import { ChevronDownIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 
+// ─── Severity dot color mapping ───
+const SEVERITY_DOT_CLS: Record<string, string> = {
+  error: "bg-danger-500",
+  high: "bg-danger-500",
+  blocker: "bg-danger-500",
+  critical: "bg-orange-500",
+  warning: "bg-warning-500",
+  medium: "bg-warning-500",
+  major: "bg-warning-500",
+  minor: "bg-primary-500",
+  info: "bg-secondary-400",
+};
+
+function severityDotCls(severity: string): string {
+  return SEVERITY_DOT_CLS[severity.toLowerCase()] || "bg-primary-500";
+}
+
 interface CRule {
   id: string; ruleId: string; severity: string; message: string;
   pattern: string; extensions: string[]; enabled: boolean; isSystem: boolean;
@@ -302,7 +319,7 @@ export default function SecurityRulesTab() {
           {filtered.map(r => (
             <div key={r.id} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className="size-2.5  rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" ? "#ef4444" : r.severity === "warning" ? "#eab308" : "#3b82f6" }} />
+                <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
                 <button type="button" onClick={() => handleToggle(r)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
@@ -475,7 +492,7 @@ function SonarQubeRulesPanel() {
             return (
             <div key={r.key} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${disabledSqRules.has(r.key) ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className={`size-2.5  rounded-full shrink-0`} style={{ backgroundColor: { BLOCKER: "#ef4444", CRITICAL: "#f97316", MAJOR: "#eab308", MINOR: "#3b82f6", INFO: "#94a3b8" }[r.severity] || "#94a3b8" }} />
+                <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.key}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {exts.slice(0, 1).map(e => (
@@ -797,7 +814,7 @@ function SemgrepRulesPanel({ filter, adding, onAddingDone }: { filter: string; a
           {shown.map(r => (
             <div key={r.id} className={`bg-card border border-border rounded-lg p-3 flex flex-col gap-2 transition-all ${!r.enabled ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className="size-2.5  rounded-full shrink-0" style={{ backgroundColor: r.severity === "error" || r.severity === "ERROR" || r.severity === "HIGH" ? "#ef4444" : r.severity === "warning" || r.severity === "WARNING" || r.severity === "MEDIUM" ? "#eab308" : "#3b82f6" }} />
+                <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {!r.isBuiltin && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600 shrink-0">User</span>}
                 <button type="button" onClick={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)}
