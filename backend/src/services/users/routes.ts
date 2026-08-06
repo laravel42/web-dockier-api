@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import {
   createUser,
   getUser,
@@ -82,10 +82,7 @@ export async function registerUsersRoutes(app: FastifyInstance) {
         offset,
         search,
       });
-      return {
-        users: result.users,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("users", result.users, result.total, limit, offset);
     },
   );
 

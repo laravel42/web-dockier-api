@@ -16,6 +16,26 @@ export type DomainsError = InstanceType<typeof DomainsError>;
 
 // ─── Domains ───
 
+export async function getDomainById(params: {
+  tenantId: string;
+  projectId: string;
+  domainId: string;
+}): Promise<DomainResponse | null> {
+  const { tenantId, projectId, domainId } = params;
+
+  const { data, error } = await supabaseAdmin
+    .from("domains")
+    .select("*")
+    .eq("id", domainId)
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (error) throw new DomainsError("Failed to fetch domain", "internal");
+  if (!data) return null;
+  return rowToDomain(data as DomainRow);
+}
+
 export async function listDomains(params: {
   tenantId: string;
   projectId: string;

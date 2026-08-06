@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
+import DropdownPortal from "./DropdownPortal";
 
 interface Option {
   value: string;
@@ -60,43 +60,36 @@ export default function ComboBox({ value, onChange, options, placeholder = "Sele
         </svg>
       </button>
 
-      {open && pos && createPortal(
-        <div
-          ref={dropdownRef}
-          className="bg-card border border-border rounded-(--radius-input) shadow-lg max-h-64 flex flex-col"
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
-        >
-          <div className="p-2 border-b border-border">
-            <input
-              ref={inputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
-            />
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-text-muted text-center">{emptyLabel}</div>
-            ) : (
-              filtered.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => { onChange(o.value); setOpen(false); }}
-                  className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-primary/10 transition-colors ${
-                    value === o.value ? "text-primary-600 font-medium" : "text-text"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))
-            )}
-          </div>
-        </div>,
-        document.body
-      )}
+      <DropdownPortal open={open} pos={pos} dropdownRef={dropdownRef}>
+        <div className="p-2 border-b border-border">
+          <input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
+          />
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-sm text-text-muted text-center">{emptyLabel}</div>
+          ) : (
+            filtered.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { onChange(o.value); setOpen(false); }}
+                className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-primary/10 transition-colors ${
+                  value === o.value ? "text-primary-600 font-medium" : "text-text"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))
+          )}
+        </div>
+      </DropdownPortal>
     </div>
   );
 }

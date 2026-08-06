@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
+import DropdownPortal from "./DropdownPortal";
 import Spinner from "./Spinner";
 import { Input } from "./ui/input";
 import type { Repo } from "../types";
@@ -92,43 +92,36 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
       )}
       </div>
 
-      {open && pos && createPortal(
-        <div
-          ref={dropdownRef}
-          className="bg-card border border-border rounded-(--radius-input) shadow-lg max-h-64 flex flex-col"
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
-        >
-          <div className="p-2 border-b border-border">
-            <Input
-              ref={inputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search repositories…"
-            />
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-text-muted text-center">No repositories found</div>
-            ) : (
-              filtered.map((r) => (
-                <button
-                  key={r.fullName}
-                  type="button"
-                  onClick={() => { onChange(r.fullName); setOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                    value === r.fullName ? "bg-primary-50 text-primary-600" : "text-text"
-                  }`}
-                >
-                  <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
-                  <span>{r.fullName}{r.private ? " 🔒" : ""}</span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>,
-        document.body
-      )}
+      <DropdownPortal open={open} pos={pos} dropdownRef={dropdownRef}>
+        <div className="p-2 border-b border-border">
+          <Input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search repositories…"
+          />
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-sm text-text-muted text-center">No repositories found</div>
+          ) : (
+            filtered.map((r) => (
+              <button
+                key={r.fullName}
+                type="button"
+                onClick={() => { onChange(r.fullName); setOpen(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
+                  value === r.fullName ? "bg-primary-50 text-primary-600" : "text-text"
+                }`}
+              >
+                <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
+                <span>{r.fullName}{r.private ? " 🔒" : ""}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </DropdownPortal>
     </div>
   );
 }

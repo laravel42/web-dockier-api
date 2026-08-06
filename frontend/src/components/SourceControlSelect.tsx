@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
+import DropdownPortal from "./DropdownPortal";
 import SourceControlBadge, { getSourceControl } from "./SourceControlBadge";
 import Spinner from "./Spinner";
 import type { Connection } from "../types";
@@ -83,43 +83,36 @@ export default function SourceControlSelect({ value, onChange, connections, load
         <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
       </button>
 
-      {open && pos && createPortal(
-        <div
-          ref={dropdownRef}
-          className="bg-card border border-border rounded-(--radius-input) shadow-lg max-h-64 flex flex-col"
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
-        >
-          <div className="p-2 border-b border-border">
-            <Input
-              ref={inputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search connections…"
-            />
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-text-muted text-center">No connections found</div>
-            ) : (
-              filtered.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => { onChange(c.id); setOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                    value === c.id ? "bg-primary-50 text-primary-600" : "text-text"
-                  }`}
-                >
-                  <SourceControlBadge provider={c.provider} showName={false} />
-                  <span>{c.label} ({getSourceControl(c.provider).name})</span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>,
-        document.body
-      )}
+      <DropdownPortal open={open} pos={pos} dropdownRef={dropdownRef}>
+        <div className="p-2 border-b border-border">
+          <Input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search connections…"
+          />
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-sm text-text-muted text-center">No connections found</div>
+          ) : (
+            filtered.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { onChange(c.id); setOpen(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
+                  value === c.id ? "bg-primary-50 text-primary-600" : "text-text"
+                }`}
+              >
+                <SourceControlBadge provider={c.provider} showName={false} />
+                <span>{c.label} ({getSourceControl(c.provider).name})</span>
+              </button>
+            ))
+          )}
+        </div>
+      </DropdownPortal>
     </div>
   );
 }

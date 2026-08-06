@@ -25,7 +25,7 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/scheduled-jobs",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["processes"],
         summary: "Create a scheduled job",
@@ -47,7 +47,7 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/scheduled-jobs",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["processes"],
         summary: "List scheduled jobs for a project",
@@ -68,7 +68,7 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
   typed.patch(
     "/projects/:projectId/scheduled-jobs/:jobId",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["processes"],
         summary: "Update a scheduled job",
@@ -91,7 +91,7 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/scheduled-jobs/:jobId/status",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["processes"],
         summary: "Change job status (pause/resume)",
@@ -141,7 +141,7 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/scheduled-jobs/:jobId",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["processes"],
         summary: "Delete a scheduled job",

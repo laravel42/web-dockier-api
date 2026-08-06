@@ -143,6 +143,10 @@ export const settingsCardInteractiveCls =
 export const settingsCardGridCls =
   "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3";
 
+/** List-page card grid (Projects, Deploy, Security Scans) */
+export const cardGridCls =
+  "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4";
+
 /** Table wrapper — list pages */
 export const tablePanelCls = "overflow-hidden rounded-xl border border-border/50 bg-card/40 backdrop-blur";
 

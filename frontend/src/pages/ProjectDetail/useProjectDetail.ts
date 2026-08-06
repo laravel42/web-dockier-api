@@ -337,7 +337,8 @@ export function useProjectDetail() {
       gitApi.invalidateStatsCache(repoKey).catch(() => {});
     }
     await projectsApi.update(projectId, { branch });
-    window.location.reload();
+    // Re-mount the route to refresh all data with the new branch
+    navigate(0);
   };
 
   return {

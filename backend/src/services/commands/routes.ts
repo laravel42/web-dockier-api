@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAuth } from "../../shared/auth/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { tenantRateLimit } from "../../shared/http/rate-limit.js";
-import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import { commandSchema } from "./schemas.js";
 import {
   runCommand,
@@ -19,7 +19,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/commands",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess, tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "cmd-run" })],
+      preHandler: [...app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "cmd-run" })],
       schema: {
         tags: ["commands"],
         summary: "Run a command on a project",
@@ -45,7 +45,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/commands",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["commands"],
         summary: "List commands for a project",
@@ -68,17 +68,14 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
         limit,
         offset,
       });
-      return {
-        commands: result.commands,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("commands", result.commands, result.total, limit, offset);
     },
   );
 
   typed.get(
     "/projects/:projectId/commands/:commandId",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["commands"],
         summary: "Get command details",
@@ -102,7 +99,7 @@ export async function registerCommandsRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/commands/:commandId",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["commands"],
         summary: "Delete a command record",

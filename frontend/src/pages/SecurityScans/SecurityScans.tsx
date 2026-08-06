@@ -10,6 +10,7 @@ import EmptyState from "../../components/ui/EmptyState";
 import ListToolbar from "../../components/ui/ListToolbar";
 import { EmptyMessage } from "../../components/ui/PageError";
 import { ShieldCheckIcon } from "lucide-react";
+import { cardGridCls } from "../../utils/styles";
 
 export default function SecurityScans() {
   const [search, setSearch] = useState("");
@@ -95,7 +96,7 @@ export default function SecurityScans() {
           onSelectEmpty={(projectId) => navigate(`/security/project/${projectId}`)}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className={cardGridCls}>
           {filteredProjectIds.map((projectId) => {
             const projectScans = grouped[projectId];
             if (!projectScans || projectScans.length === 0) {

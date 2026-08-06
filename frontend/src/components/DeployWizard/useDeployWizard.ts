@@ -10,9 +10,10 @@ import { deployApi } from "../../services/api";
 import type { WizardState, RepoAnalysis, Provider } from "./types";
 import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
 import { getPlans } from "./plans";
-import { parseOwnerRepo } from "./utils";
 import { detectServiceModes } from "./envDetection";
 import { useStandardDeploy } from "./useStandardDeploy";
+import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { getErrorMessage } from "@/utils/errors";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -187,7 +188,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         tofuRegion: res.region,
       }));
     } catch (err: unknown) {
-      setTofuError(err instanceof Error ? err.message : "Failed to generate Pulumi program");
+      setTofuError(getErrorMessage(err, "Failed to generate Pulumi program"));
     } finally {
       setTofuLoading(false);
     }
@@ -228,7 +229,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         onComplete: () => onDeployCompleteRef.current?.(),
       });
     } catch (err: unknown) {
-      setDeployError(err instanceof Error ? err.message : "Failed to start deployment");
+      setDeployError(getErrorMessage(err, "Failed to start deployment"));
       setState(prev => ({ ...prev, deployStatus: "failed" }));
     }
   }, [state, project, analysis, startStandardDeploy]);
@@ -303,7 +304,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       setState(prev => ({ ...prev, deployStatus: "cancelled" }));
       setDeployError("Deployment cancelled.");
     } catch (err: unknown) {
-      setDeployError(err instanceof Error ? err.message : "Failed to cancel deployment");
+      setDeployError(getErrorMessage(err, "Failed to cancel deployment"));
     } finally {
       setCancellingDeploy(false);
     }

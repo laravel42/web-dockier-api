@@ -11,6 +11,7 @@ import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
 import { PlusIcon } from "lucide-react";
+import { cardGridCls } from "../../utils/styles";
 
 export default function Projects() {
   const { has } = usePermissions();
@@ -135,7 +136,7 @@ export default function Projects() {
               onSelect={(id) => navigate(`/projects/${id}`)}
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className={cardGridCls}>
               {projects.map((p) => (
                 <ProjectCard
                   key={p.id}

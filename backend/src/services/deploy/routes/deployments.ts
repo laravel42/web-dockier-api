@@ -3,9 +3,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { deploymentSchema, deploymentStatusSchema, serviceEntrySchema } from "../schemas.js";
-import type { ServiceEntry } from "../types.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { paginationQuerySchema, paginationMetaSchema } from "../../../shared/schemas/responses.js";
+import { paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../../shared/schemas/responses.js";
 import { requireWebhookSignature, requireInternalToken } from "../../../shared/http/security.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { applyDeploymentWebhookUpdate } from "../domain/processor.js";
@@ -70,7 +69,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         useRepoDockerfile: request.body.useRepoDockerfile,
         skipPipeline: request.body.skipPipeline,
         templateId: request.body.templateId,
-        services: request.body.services as ServiceEntry[] | undefined,
+        services: request.body.services,
         correlationId: request.id,
       });
     },
@@ -104,10 +103,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         limit,
         offset,
       });
-      return {
-        deployments: result.deployments,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("deployments", result.deployments, result.total, limit, offset);
     },
   );
 

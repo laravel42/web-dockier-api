@@ -1,4 +1,4 @@
-import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import TechCell from "../../../components/TechCell";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
 import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
@@ -17,7 +17,6 @@ export default function ProjectTable({ projects, projectLangs, projectBadgeLoadi
   return (
     <DataTable columns={["Name", "Repository", "Branch", "Tech", "Created"]}>
       {projects.map((p) => {
-        const badges = projectLangs[p.id];
         return (
           <tr key={p.id} onClick={() => onSelect(p.id)} className={tableRowCls}>
             <td className={`${tableCellCls} font-medium`}>{p.name}</td>
@@ -26,12 +25,11 @@ export default function ProjectTable({ projects, projectLangs, projectBadgeLoadi
               <BranchCommitLabel branch={p.branch || "main"} commit={p.lastCommitHash || undefined} onClick={() => onSelect(p.id)} />
             </td>
             <td>
-              <ProjectTechBadges
-                badges={badges}
-                loading={projectBadgeLoading.has(p.id)}
+              <TechCell
+                projectId={p.id}
+                projectLangs={projectLangs}
+                projectBadgeLoading={projectBadgeLoading}
                 platform={p.platform}
-                limit={3}
-                emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
               />
             </td>
             <td className={typeCardDateCls}>

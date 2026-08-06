@@ -10,7 +10,7 @@ import {
   listNotificationsResponseSchema,
 } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import {
   createChannel,
   listChannels,
@@ -149,10 +149,7 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       const { limit, offset, unreadOnly } = request.query;
       const result = await listNotifications(auth.tenantId, { unreadOnly, limit, offset });
-      return {
-        notifications: result.notifications,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("notifications", result.notifications, result.total, limit, offset);
     },
   );
 

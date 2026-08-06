@@ -127,7 +127,7 @@ export interface WizardState {
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   // Step 7 (Deploy)
   deploymentId: string;
-  deployStatus: string;
+  deployStatus: "" | "pending" | "building" | "deploying" | "success" | "failed" | "destroyed" | "cancelled";
   deployLogs: string[];
   deployAppUrl: string;
   codebuildBuildId: string;

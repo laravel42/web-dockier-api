@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useDropdownPosition } from "../hooks/useDropdownPosition";
+import DropdownPortal from "./DropdownPortal";
 import Spinner from "./Spinner";
 import { CodeXmlIcon, ChevronDownIcon } from "lucide-react";
 
@@ -74,55 +74,48 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
         <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
       </button>
 
-      {open && pos && createPortal(
-        <div
-          ref={dropdownRef}
-          className="bg-card border border-border rounded-(--radius-input) shadow-lg max-h-64 flex flex-col"
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
-        >
-          <div className="p-2 border-b border-border">
-            <input
-              ref={inputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search branches…"
-              className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
-            />
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-text-muted text-center">No branches found</div>
-            ) : (
-              filtered.map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => { onChange(b); setOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                    value === b ? "bg-primary-50 text-primary-600" : "text-text"
-                  }`}
-                >
-                  <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
-                  <span>{b}</span>
-                </button>
-              ))
-            )}
-          </div>
-          {onReload && (
-            <div className="border-t border-border px-3 py-2">
+      <DropdownPortal open={open} pos={pos} dropdownRef={dropdownRef}>
+        <div className="p-2 border-b border-border">
+          <input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search branches…"
+            className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
+          />
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-sm text-text-muted text-center">No branches found</div>
+          ) : (
+            filtered.map((b) => (
               <button
+                key={b}
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onReload(); }}
-                className="text-sm font-medium text-primary-500 hover:text-primary-400 transition-colors"
+                onClick={() => { onChange(b); setOpen(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
+                  value === b ? "bg-primary-50 text-primary-600" : "text-text"
+                }`}
               >
-                Reload branches
+                <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
+                <span>{b}</span>
               </button>
-            </div>
+            ))
           )}
-        </div>,
-        document.body
-      )}
+        </div>
+        {onReload && (
+          <div className="border-t border-border px-3 py-2">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onReload(); }}
+              className="text-sm font-medium text-primary-500 hover:text-primary-400 transition-colors"
+            >
+              Reload branches
+            </button>
+          </div>
+        )}
+      </DropdownPortal>
     </div>
   );
 }

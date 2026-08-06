@@ -1,4 +1,4 @@
-import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import TechCell from "../../../components/TechCell";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
 import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
@@ -43,15 +43,13 @@ export default function ScanProjectTable({
         const project = projects[projectId];
         const projectScans = grouped[projectId];
         const hasScans = projectScans && projectScans.length > 0;
-        const badges = projectLangs[projectId];
 
         const techCell = (
-          <ProjectTechBadges
-            badges={badges}
-            loading={projectBadgeLoading.has(projectId)}
+          <TechCell
+            projectId={projectId}
+            projectLangs={projectLangs}
+            projectBadgeLoading={projectBadgeLoading}
             platform={project?.platform}
-            limit={3}
-            emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
           />
         );
 

@@ -44,3 +44,27 @@ export const paginationMetaSchema = z.object({
 
 /** Type helper for pagination response metadata */
 export type PaginationMeta = z.infer<typeof paginationMetaSchema>;
+
+// ─── Paginated Response Builder ────────────────────────────────────
+
+/**
+ * Build a standard paginated API response.
+ *
+ * Eliminates the repetitive `{ [key]: items, pagination: { total, limit, offset } }`
+ * construction that appears in every list handler.
+ *
+ * @example
+ * ```ts
+ * const result = await listCommands({ tenantId, projectId, limit, offset });
+ * return paginatedResponse("commands", result.commands, result.total, limit, offset);
+ * ```
+ */
+export function paginatedResponse<K extends string, T>(
+  key: K,
+  items: T[],
+  total: number,
+  limit: number,
+  offset: number,
+): Record<K, T[]> & { pagination: PaginationMeta } {
+  return { [key]: items, pagination: { total, limit, offset } } as Record<K, T[]> & { pagination: PaginationMeta };
+}

@@ -14,7 +14,7 @@
  * @example
  * ```ts
  * typed.post("/projects/:projectId/commands", {
- *   preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+ *   preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
  *   ...
  * }, handler);
  *
@@ -29,6 +29,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { supabaseAdmin } from "../supabase/client.js";
 import { getAuth } from "../auth/auth.js";
 import type { Json } from "../supabase/types.js";
+import type { PermissionKey } from "../permissions/constants.js";
 
 /**
  * Cached project row set by requireProjectAccess.
@@ -68,6 +69,19 @@ declare module "fastify" {
      * Place AFTER requirePermission in the preHandler array.
      */
     requireProjectAccess: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+
+    /**
+     * Combined preHandler: requirePermission(...permissions) + requireProjectAccess.
+     *
+     * Use on any route with `:projectId` that needs both permission and project
+     * ownership validation. Returns an array suitable for the `preHandler` option.
+     *
+     * @example
+     * ```ts
+     * preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
+     * ```
+     */
+    requireProjectPermission: (...permissions: PermissionKey[]) => Array<(request: FastifyRequest, reply: FastifyReply) => Promise<void>>;
   }
 }
 
@@ -109,5 +123,18 @@ export const projectAccessPlugin = fp(async (app: FastifyInstance) => {
       sourceType: data.source_type,
       settings: data.settings,
     };
+  });
+
+  /**
+   * Combined helper: requirePermission + requireProjectAccess in one call.
+   *
+   * Returns a preHandler array so routes can use:
+   *   preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE)
+   *
+   * instead of the two-element pattern:
+   *   preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess]
+   */
+  app.decorate("requireProjectPermission", (...permissions: PermissionKey[]) => {
+    return [app.requirePermission(...permissions), app.requireProjectAccess];
   });
 });

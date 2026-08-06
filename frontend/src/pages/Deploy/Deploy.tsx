@@ -9,6 +9,7 @@ import PageError from "../../components/ui/PageError";
 import ListToolbar from "../../components/ui/ListToolbar";
 import { EmptyMessage } from "../../components/ui/PageError";
 import { compareByTime } from "../../utils/sortByTime";
+import { cardGridCls } from "../../utils/styles";
 
 export default function Deploy() {
   const [search, setSearch] = useState("");
@@ -78,7 +79,7 @@ export default function Deploy() {
               onSelect={(id) => navigate(`/deploy/${id}`)}
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className={cardGridCls}>
               {filteredGrouped.map(([groupKey, repoDeploys]) => {
                 const proj = projectById[groupKey];
                 const latest = [...repoDeploys].sort((a, b) => compareByTime(a, b, "updated"))[0];

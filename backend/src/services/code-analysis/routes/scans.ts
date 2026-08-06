@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { scanSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { createScan, listScans, getScan, deleteScan, runScan } from "../domain/scans.js";
 
@@ -69,10 +69,7 @@ export async function registerScanRoutes(app: FastifyInstance) {
         limit,
         offset,
       });
-      return {
-        scans: result.scans,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("scans", result.scans, result.total, limit, offset);
     },
   );
 

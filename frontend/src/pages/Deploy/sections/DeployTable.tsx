@@ -1,4 +1,4 @@
-import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import TechCell from "../../../components/TechCell";
 import BranchCommitLabel from "../../../components/BranchCommitLabel";
 import { getRepoSlug } from "../../../utils/parseOwnerRepo";
 import {
@@ -27,7 +27,6 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
         const proj = projectById[groupKey];
         const sorted = [...repoDeploys].sort((a, b) => compareByTime(a, b, "updated"));
         const latest = sorted[0];
-        const badges = proj ? projectLangs[proj.id] : undefined;
         const repoLabel = proj?.repository ? getRepoSlug(proj.repository) : latest.repo;
 
         return (
@@ -43,12 +42,11 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
             </td>
             <td className={tableCellMutedCls}>{sorted.length}</td>
             <td>
-              <ProjectTechBadges
-                badges={badges}
-                loading={proj ? projectBadgeLoading.has(proj.id) : false}
+              <TechCell
+                projectId={proj?.id ?? ""}
+                projectLangs={projectLangs}
+                projectBadgeLoading={projectBadgeLoading}
                 platform={proj?.platform}
-                limit={3}
-                emptyPlaceholder={<span className="text-ui-sm text-text-muted">—</span>}
               />
             </td>
             <td>

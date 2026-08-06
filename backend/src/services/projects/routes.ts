@@ -16,7 +16,7 @@ import { getAuth } from "../../shared/auth/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { tenantRateLimit } from "../../shared/http/rate-limit.js";
-import { successResponseSchema, paginationQuerySchema, paginationMetaSchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import { env } from "../../shared/config.js";
 import {
   createProject,
@@ -106,10 +106,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       const { limit, offset, search } = request.query;
       const result = await listProjects(auth.tenantId, { limit, offset, search });
-      return {
-        projects: result.projects,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("projects", result.projects, result.total, limit, offset);
     },
   );
 

@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth/auth.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { successResponseSchema, paginationQuerySchema } from "../../shared/schemas/responses.js";
+import { successResponseSchema, paginationQuerySchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import { rateLimit } from "../../shared/http/rate-limit.js";
 import {
   heartbeatSchema,
@@ -31,7 +31,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/heartbeats",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["observe"],
         summary: "List heartbeats for a project",
@@ -53,7 +53,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/heartbeats",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["observe"],
         summary: "Create a heartbeat monitor",
@@ -81,7 +81,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/heartbeats/:heartbeatId",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["observe"],
         summary: "Delete a heartbeat monitor",
@@ -126,7 +126,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/logs/:logType",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["observe"],
         summary: "Get log content",
@@ -150,7 +150,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.delete(
     "/projects/:projectId/logs/:logType",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["observe"],
         summary: "Clear log contents",
@@ -177,7 +177,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/activity",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_VIEW), app.requireProjectAccess],
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["observe"],
         summary: "List project activity",
@@ -201,10 +201,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
         offset,
         search: request.query.search,
       });
-      return {
-        activity: result.activity,
-        pagination: { total: result.total, limit, offset },
-      };
+      return paginatedResponse("activity", result.activity, result.total, limit, offset);
     },
   );
 }
