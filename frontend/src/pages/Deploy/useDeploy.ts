@@ -1,42 +1,42 @@
 import { useNavigate } from "react-router-dom";
-import { deployApi, projectsApi } from "../../services/api";
+import { deployApi } from "../../services/api";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { useProjectBadges } from "../../hooks/useProjectBadges";
 import { useViewMode } from "../../hooks/useViewMode";
 import type { Deployment, Project } from "../../types";
 import { compareByTime } from "../../utils/sortByTime";
 
-interface DeployPageData {
-  deployments: Deployment[];
-  projects: Project[];
-}
-
-async function fetchDeployPageData(): Promise<DeployPageData> {
-  const [dRes, projRes] = await Promise.all([
-    deployApi.listDeployments(),
-    projectsApi.list(),
-  ]);
-  return {
-    deployments: dRes.deployments,
-    projects: projRes.projects,
-  };
+async function fetchDeployments(): Promise<Deployment[]> {
+  const res = await deployApi.listDeployments();
+  return res.deployments;
 }
 
 export function useDeploy() {
   const navigate = useNavigate();
   const { viewMode, changeViewMode } = useViewMode("deployments-view");
-  const { data, loading, error, reload } = useAsyncData(fetchDeployPageData, []);
+  const { data: deployments, loading, error, reload } = useAsyncData(fetchDeployments, []);
 
-  const deployments = data?.deployments ?? [];
-  const projects = data?.projects ?? [];
-  const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projects);
+  const allDeployments = deployments ?? [];
 
-  const projectById: Record<string, Project> = {};
-  for (const p of projects) {
-    projectById[p.id] = p;
+  // Build a lightweight Project-like lookup from deployment data for badges/display
+  const projectById: Record<string, Pick<Project, "id" | "name" | "repository" | "branch" | "connectionId" | "platform">> = {};
+  for (const d of allDeployments) {
+    if (d.projectId && !projectById[d.projectId]) {
+      projectById[d.projectId] = {
+        id: d.projectId,
+        name: d.projectName || d.repo,
+        repository: d.repo,
+        branch: d.branch,
+        connectionId: "",
+        platform: "",
+      };
+    }
   }
 
-  const sortedDeployments = [...deployments].sort((a, b) => compareByTime(a, b, "updated"));
+  const projectsForBadges = Object.values(projectById) as Project[];
+  const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projectsForBadges);
+
+  const sortedDeployments = [...allDeployments].sort((a, b) => compareByTime(a, b, "updated"));
 
   const grouped = Object.entries(
     sortedDeployments.reduce<Record<string, Deployment[]>>((acc, d) => {
@@ -48,13 +48,13 @@ export function useDeploy() {
 
   return {
     navigate,
-    deployments,
+    deployments: allDeployments,
     loading,
     error,
     reload,
     projectLangs,
     projectBadgeLoading,
-    projectById,
+    projectById: projectById as Record<string, Project>,
     grouped,
     viewMode,
     changeViewMode,

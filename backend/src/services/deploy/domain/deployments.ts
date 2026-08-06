@@ -40,7 +40,33 @@ export async function listDeployments(
     map: rowToDeployment,
   });
 
-  return { deployments: result.data, total: result.total };
+  // Batch-fetch project names for all deployments in a single query
+  const projectIds = [...new Set(result.data.map((d) => d.projectId).filter(Boolean))];
+  const projectNameMap = await getProjectNameMap(projectIds);
+
+  const deployments = result.data.map((d) => ({
+    ...d,
+    projectName: projectNameMap.get(d.projectId) ?? "",
+  }));
+
+  return { deployments, total: result.total };
+}
+
+/**
+ * Batch-fetch project names by IDs.
+ * Returns a Map<projectId, name> for quick lookups.
+ */
+async function getProjectNameMap(projectIds: string[]): Promise<Map<string, string>> {
+  if (projectIds.length === 0) return new Map();
+  const { data } = await supabaseAdmin
+    .from("projects")
+    .select("id, name")
+    .in("id", projectIds);
+  const map = new Map<string, string>();
+  for (const row of data ?? []) {
+    map.set(row.id, row.name);
+  }
+  return map;
 }
 
 export async function getDeployment(deploymentId: string, tenantId: string) {

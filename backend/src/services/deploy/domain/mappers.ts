@@ -16,6 +16,7 @@ export function rowToDeployment(row: DeploymentRow) {
     providerId: row.provider_id ?? "",
     gitConnectionId: row.git_connection_id ?? "",
     projectId: row.project_id ?? "",
+    projectName: "",
     repo: row.repo,
     branch: row.branch,
     status: row.status as DeploymentStatus,

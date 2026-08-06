@@ -15,6 +15,7 @@ export const deploymentSchema = z.object({
   providerId: z.uuid(),
   gitConnectionId: z.union([z.uuid(), z.literal("")]),
   projectId: z.uuid(),
+  projectName: z.string(),
   repo: z.string(),
   branch: z.string(),
   status: deploymentStatusSchema,
