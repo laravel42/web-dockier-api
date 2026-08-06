@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { wpConfigApi } from "@/services/wp-config";
 import type { Project } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import WpConfigEditor from "@/components/WpConfigEditor";
@@ -15,28 +16,26 @@ interface Props {
 }
 
 export default function WordPressSection({ project, canManage }: Props) {
+  const toast = useToast();
+
+  const { data: config, loading } = useAsyncData(
+    () => wpConfigApi.getMasked(project.id),
+    [project.id],
+  );
+
   const [wpContent, setWpContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [revealed, setRevealed] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const toast = useToast();
+  const [initialized, setInitialized] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await wpConfigApi.getMasked(project.id);
-        if (res.exists) {
-          setWpContent(res.content);
-          setOriginalContent(res.content);
-        }
-      } catch (err) {
-        toast.error(getErrorMessage(err, "Failed to load wp-config"));
-      } finally { setLoading(false); }
-    };
-    void load();
-  }, [project.id, toast]);
+  // Sync fetched data into editable state once loaded
+  if (config?.exists && !initialized) {
+    setWpContent(config.content);
+    setOriginalContent(config.content);
+    setInitialized(true);
+  }
 
   const handleReveal = async () => {
     try {

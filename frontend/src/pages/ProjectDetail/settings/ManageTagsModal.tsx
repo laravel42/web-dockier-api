@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { tagsApi } from "@/services/tags";
 import type { TagWithCount } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
@@ -15,35 +16,29 @@ interface ManageTagsModalProps {
 }
 
 export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps) {
-  const [tags, setTags] = useState<TagWithCount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+
+  const { data, loading, reload, setData } = useAsyncData(
+    () => tagsApi.listWithCounts(),
+    [open],
+    { enabled: open },
+  );
+
+  const tags = data?.tags ?? [];
+
   const [newTagName, setNewTagName] = useState("");
   const [search, setSearch] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const toast = useToast();
-
-  const fetchTags = useCallback(async () => {
-    try {
-      const res = await tagsApi.listWithCounts();
-      setTags(res.tags);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to load tags"));
-    } finally { setLoading(false); }
-  }, [toast]);
-
-  useEffect(() => {
-    if (open) { setLoading(true); void fetchTags(); }
-  }, [open, fetchTags]);
 
   const handleAdd = async () => {
     if (!newTagName.trim()) return;
     try {
       await tagsApi.create({ name: newTagName.trim() });
       setNewTagName("");
-      void fetchTags();
+      void reload();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to create tag"));
     }
@@ -53,7 +48,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
     setDeleting(tagId);
     try {
       await tagsApi.delete(tagId);
-      setTags(tags.filter((t) => t.id !== tagId));
+      setData((prev) => prev ? { ...prev, tags: prev.tags.filter((t) => t.id !== tagId) } : prev);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to delete tag"));
     } finally { setDeleting(null); setMenuOpenId(null); }
@@ -69,7 +64,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
     if (!renamingId || !renameValue.trim()) return;
     try {
       await tagsApi.update(renamingId, { name: renameValue.trim() });
-      setTags(tags.map((t) => t.id === renamingId ? { ...t, name: renameValue.trim() } : t));
+      setData((prev) => prev ? { ...prev, tags: prev.tags.map((t) => t.id === renamingId ? { ...t, name: renameValue.trim() } : t) } : prev);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to rename tag"));
     } finally { setRenamingId(null); setRenameValue(""); }
