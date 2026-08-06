@@ -8,6 +8,7 @@ import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import TagPicker from "./TagPicker";
 import { GitRepositoryModal } from "./GitSettings";
 import BranchPickerInline from "./GitSettings";
@@ -43,8 +44,9 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
       onProjectUpdate?.(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch { /* silent */ }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save project"));
+    } finally { setSaving(false); }
   };
 
   const handleColorChange = async (color: string) => {
@@ -52,7 +54,9 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     try {
       const updated = await projectsApi.update(project.id, { settings: { color } });
       onProjectUpdate?.(updated);
-    } catch { /* silent */ }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update color"));
+    }
   };
 
   const handleSaveNote = async () => {
@@ -60,8 +64,9 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     try {
       const updated = await projectsApi.update(project.id, { settings: { notes: noteValue } });
       onProjectUpdate?.(updated);
-    } catch { /* silent */ }
-    finally { setSavingNote(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save note"));
+    } finally { setSavingNote(false); }
   };
 
   const handleDelete = async () => {
@@ -70,8 +75,9 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     try {
       await projectsApi.delete(project.id);
       window.location.href = "/projects";
-    } catch { /* silent */ }
-    finally { setDeleting(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete project"));
+    } finally { setDeleting(false); }
   };
 
   const handleTeardown = async () => {
@@ -166,7 +172,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
 
           {(showNotes || !!noteValue) && (
             <div className="flex flex-col gap-2">
-              <textarea
+              <Textarea
                 name="notes"
                 value={noteValue}
                 onChange={(e) => setNoteValue(e.target.value)}

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { wpConfigApi } from "@/services/wp-config";
 import type { Project } from "@/types";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import WpConfigEditor from "@/components/WpConfigEditor";
@@ -19,6 +21,7 @@ export default function WordPressSection({ project, canManage }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     const load = async () => {
@@ -28,11 +31,12 @@ export default function WordPressSection({ project, canManage }: Props) {
           setWpContent(res.content);
           setOriginalContent(res.content);
         }
-      } catch { /* silent */ }
-      finally { setLoading(false); }
+      } catch (err) {
+        toast.error(getErrorMessage(err, "Failed to load wp-config"));
+      } finally { setLoading(false); }
     };
     void load();
-  }, [project.id]);
+  }, [project.id, toast]);
 
   const handleReveal = async () => {
     try {
@@ -40,7 +44,9 @@ export default function WordPressSection({ project, canManage }: Props) {
       setWpContent(res.content);
       setOriginalContent(res.content);
       setRevealed(true);
-    } catch { /* silent */ }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to reveal config"));
+    }
   };
 
   const handleSave = async () => {
@@ -50,8 +56,9 @@ export default function WordPressSection({ project, canManage }: Props) {
       setOriginalContent(wpContent);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch { /* silent */ }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save wp-config"));
+    } finally { setSaving(false); }
   };
 
   const hasChanges = revealed && wpContent !== originalContent;
