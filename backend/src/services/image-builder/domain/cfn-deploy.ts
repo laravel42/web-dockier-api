@@ -20,6 +20,7 @@ import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { ParsedBuildMetadata as BuildMetadata } from "./deploy-params.js";
 import { parseBuildMetadata, parseDeployParamsFromMetadata } from "./deploy-params.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -236,9 +237,11 @@ async function attemptFallbackStackCreation(params: FallbackParams): Promise<voi
       cfn,
       logger,
     });
-  } catch (err: any) {
-    if (!err.name?.includes("AlreadyExists") && !err.message?.includes("already exists")) {
-      logger.debug(`Fallback stack creation failed: ${err.message}`);
+  } catch (err: unknown) {
+    const msg = getErrMsg(err);
+    const isAlreadyExists = (err instanceof Error && err.name?.includes("AlreadyExists")) || msg?.includes("already exists");
+    if (!isAlreadyExists) {
+      logger.debug(`Fallback stack creation failed: ${msg}`);
     } else {
       logger.debug(`Stack already exists (race with Lambda)`);
     }
@@ -342,8 +345,9 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
       OnFailure: "ROLLBACK",
     }));
     logger.debug(`Created CloudFormation stack ${stackName} as fallback`);
-  } catch (createErr: any) {
-    if (createErr.name?.includes("AlreadyExists") || createErr.message?.includes("already exists")) {
+  } catch (createErr: unknown) {
+    const isAlreadyExists = (createErr instanceof Error && createErr.name?.includes("AlreadyExists")) || getErrMsg(createErr)?.includes("already exists");
+    if (isAlreadyExists) {
       try {
         await cfn.send(new UpdateStackCommand({
           StackName: stackName,
@@ -352,11 +356,11 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
           Capabilities: ["CAPABILITY_NAMED_IAM"],
         }));
         logger.debug(`Updated existing CloudFormation stack ${stackName}`);
-      } catch (updateErr: any) {
-        if (updateErr.message?.includes("No updates")) {
+      } catch (updateErr: unknown) {
+        if (getErrMsg(updateErr)?.includes("No updates")) {
           logger.debug(`Stack ${stackName} already up to date`);
         } else {
-          logger.debug(`Stack update failed: ${updateErr.message}`);
+          logger.debug(`Stack update failed: ${getErrMsg(updateErr)}`);
         }
       }
     } else {

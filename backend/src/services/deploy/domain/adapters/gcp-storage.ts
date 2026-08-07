@@ -23,6 +23,7 @@ import type {
   DestroyResult,
 } from "./types.js";
 import { runCmd } from "../run-cmd.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
  * GCP Cloud Storage + CDN adapter.
@@ -304,8 +305,8 @@ export class GcpStorageAdapter implements DeployAdapter {
           .pop()
           ?.trim() || "";
       await appendLog(`  bucketName = ${bucketName || "(not found)"}`);
-    } catch (e: any) {
-      await appendLog(`  (could not parse outputs: ${e.message})`);
+    } catch (e: unknown) {
+      await appendLog(`  (could not parse outputs: ${getErrMsg(e)})`);
     }
 
     // Store pulumiDir and providerEnv for runPostDeploy
@@ -423,8 +424,8 @@ export class GcpStorageAdapter implements DeployAdapter {
           await appendLog(`✓ Static files uploaded to gs://${gcsBucket}`);
         }
       }
-    } catch (e: any) {
-      await appendLog(`⚠ Static file upload error: ${e.message}`);
+    } catch (e: unknown) {
+      await appendLog(`⚠ Static file upload error: ${getErrMsg(e)}`);
     }
 
 
@@ -482,8 +483,8 @@ export class GcpStorageAdapter implements DeployAdapter {
             errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
           }
         }
-      } catch (e: any) {
-        errors.push(e.message || "Unknown error during Pulumi destroy");
+      } catch (e: unknown) {
+        errors.push(getErrMsg(e) || "Unknown error during Pulumi destroy");
       } finally {
         try { await rm(workDir, { recursive: true, force: true }); } catch {}
       }
@@ -520,7 +521,7 @@ export class GcpStorageAdapter implements DeployAdapter {
           } while (pageToken);
           const deleteRes = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucketName}`, { method: "DELETE", headers: authHeaders });
           if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`Bucket delete: ${(await deleteRes.text()).slice(0, 150)}`);
-        } catch (e: any) { errors.push(`Bucket delete: ${e.message}`); }
+        } catch (e: unknown) { errors.push(`Bucket delete: ${getErrMsg(e)}`); }
       }
 
       // Delete CDN / LB resources
@@ -553,7 +554,7 @@ export class GcpStorageAdapter implements DeployAdapter {
               if (result.status === "rejected") errors.push(`${type} delete: ${result.reason?.message || "Unknown error"}`);
             }
           }
-        } catch (e: any) { errors.push(`${type} delete: ${e.message}`); }
+        } catch (e: unknown) { errors.push(`${type} delete: ${getErrMsg(e)}`); }
       }
     } else {
       await ctx.appendLog("⚠ No Pulumi state and no GCP credentials — marked as destroyed");

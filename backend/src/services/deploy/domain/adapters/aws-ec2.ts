@@ -14,6 +14,7 @@ import {
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId } from "../../../../lib/aws.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
  * AWS EC2 adapter.
@@ -88,9 +89,9 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
       try {
         await s3.send(new CreateBucketCommand(createParams));
         await appendLog(`✓ Created S3 bucket: ${templateBucket}`);
-      } catch (bucketErr: any) {
-        if (!bucketErr.name?.includes("BucketAlreadyOwnedByYou")) {
-          throw new Error(`Failed to create S3 bucket: ${bucketErr.message}`);
+      } catch (bucketErr: unknown) {
+        if (!(bucketErr instanceof Error && bucketErr.name?.includes("BucketAlreadyOwnedByYou"))) {
+          throw new Error(`Failed to create S3 bucket: ${getErrMsg(bucketErr)}`);
         }
       }
     }

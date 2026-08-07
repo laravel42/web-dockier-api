@@ -23,6 +23,7 @@ import type {
   DestroyResult,
 } from "./types.js";
 import { runCmd } from "../run-cmd.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 const db = supabaseAdmin;
 
@@ -251,8 +252,8 @@ export class GcpCloudRunAdapter implements DeployAdapter {
             await writeFs(indexPath, program, "utf-8");
           }
         }
-      } catch (e: any) {
-        await appendLog(`⚠ Cloud Run import check: ${e.message} (continuing)`);
+      } catch (e: unknown) {
+        await appendLog(`⚠ Cloud Run import check: ${getErrMsg(e)} (continuing)`);
       }
     }
 
@@ -341,8 +342,8 @@ export class GcpCloudRunAdapter implements DeployAdapter {
         appUrl = `https://${appUrl}`;
       }
       await appendLog(`  appUrl = ${appUrl || "(not found)"}`);
-    } catch (e: any) {
-      await appendLog(`  (could not parse outputs: ${e.message})`);
+    } catch (e: unknown) {
+      await appendLog(`  (could not parse outputs: ${getErrMsg(e)})`);
     }
 
     // Store pulumiDir and providerEnv for runPostDeploy
@@ -401,7 +402,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       try {
         const res = await fetch(`https://run.googleapis.com/v2/projects/${gcpProjectId}/locations/${arRegion}/services/${serviceName}`, { method: "DELETE", headers: authHeaders });
         if (!res.ok && res.status !== 404) errors.push(`Cloud Run delete: ${res.status} ${(await res.text()).slice(0, 150)}`);
-      } catch (e: any) { errors.push(`Cloud Run delete: ${e.message}`); }
+      } catch (e: unknown) { errors.push(`Cloud Run delete: ${getErrMsg(e)}`); }
 
       // Delete Cloud SQL instance if present
       const dbMatch = ctx.tofuScript.match(/new gcp\.sql\.DatabaseInstance\([^,]+,\s*\{[^}]*name:\s*"([^"]+)"/s);
@@ -409,7 +410,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
         try {
           const res = await fetch(`https://sqladmin.googleapis.com/v1/projects/${gcpProjectId}/instances/${dbMatch[1]}`, { method: "DELETE", headers: authHeaders });
           if (!res.ok && res.status !== 404) errors.push(`Cloud SQL delete: ${res.status} ${(await res.text()).slice(0, 150)}`);
-        } catch (e: any) { errors.push(`Cloud SQL delete: ${e.message}`); }
+        } catch (e: unknown) { errors.push(`Cloud SQL delete: ${getErrMsg(e)}`); }
       }
     }
 
@@ -419,7 +420,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       try {
         const deleteRes = await fetch(`${arBase}?force=true`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
         if (!deleteRes.ok && deleteRes.status !== 404) errors.push(`AR repo delete: ${deleteRes.status} ${(await deleteRes.text()).slice(0, 150)}`);
-      } catch (e: any) { errors.push(`AR repo delete: ${e.message}`); }
+      } catch (e: unknown) { errors.push(`AR repo delete: ${getErrMsg(e)}`); }
     }
 
     return {
@@ -464,8 +465,8 @@ export class GcpCloudRunAdapter implements DeployAdapter {
           errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
         }
       }
-    } catch (e: any) {
-      errors.push(e.message || "Unknown error during Pulumi destroy");
+    } catch (e: unknown) {
+      errors.push(getErrMsg(e) || "Unknown error during Pulumi destroy");
     } finally {
       try { await rm(workDir, { recursive: true, force: true }); } catch {}
     }

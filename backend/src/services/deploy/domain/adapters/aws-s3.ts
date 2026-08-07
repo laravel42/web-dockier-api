@@ -20,6 +20,7 @@ import {
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
  * Sanitize a name for use as an S3 bucket name.
@@ -169,10 +170,10 @@ export class AwsS3Adapter implements DeployAdapter {
         }
         await s3.send(new CreateBucketCommand(createParams));
         await appendLog("✓ S3 bucket created");
-      } catch (bucketErr: any) {
+      } catch (bucketErr: unknown) {
         // BucketAlreadyOwnedByYou is fine
-        if (!bucketErr.name?.includes("BucketAlreadyOwnedByYou")) {
-          throw new Error(`Failed to create S3 bucket: ${bucketErr.message}`);
+        if (!(bucketErr instanceof Error && bucketErr.name?.includes("BucketAlreadyOwnedByYou"))) {
+          throw new Error(`Failed to create S3 bucket: ${getErrMsg(bucketErr)}`);
         }
         await appendLog("✓ S3 bucket already exists");
       }

@@ -14,6 +14,7 @@ import {
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId } from "../../../../lib/aws.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
  * AWS ECS Fargate adapter.
@@ -146,11 +147,11 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
         await logs.send(new CreateLogGroupCommand({ logGroupName }));
         await logs.send(new PutRetentionPolicyCommand({ logGroupName, retentionInDays: 14 }));
         await appendLog(`✓ Created log group ${logGroupName}`);
-      } catch (logErr: any) {
-        if (logErr.name === "ResourceAlreadyExistsException") {
+      } catch (logErr: unknown) {
+        if (logErr instanceof Error && logErr.name === "ResourceAlreadyExistsException") {
           await appendLog(`ℹ Log group ${logGroupName} already exists`);
         } else {
-          await appendLog(`⚠ Failed to pre-create log group: ${logErr.message}`);
+          await appendLog(`⚠ Failed to pre-create log group: ${getErrMsg(logErr)}`);
         }
       }
     } catch {

@@ -23,6 +23,7 @@ import type {
   DestroyResult,
 } from "./types.js";
 import { runCmd } from "../run-cmd.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 const db = supabaseAdmin;
 
@@ -614,8 +615,8 @@ export class GcpComputeAdapter implements DeployAdapter {
       if (appUrl && !appUrl.startsWith("http")) appUrl = `http://${appUrl}`;
       await appendLog(`  serverIp = ${serverIp || "(not found)"}`);
       await appendLog(`  appUrl = ${appUrl || "(not found)"}`);
-    } catch (e: any) {
-      await appendLog(`  (could not parse outputs: ${e.message})`);
+    } catch (e: unknown) {
+      await appendLog(`  (could not parse outputs: ${getErrMsg(e)})`);
     }
 
     // Store pulumiDir, providerEnv, and deployKeyPath for runPostDeploy
@@ -1092,8 +1093,8 @@ export class GcpComputeAdapter implements DeployAdapter {
             errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
           }
         }
-      } catch (e: any) {
-        errors.push(e.message || "Unknown error during Pulumi destroy");
+      } catch (e: unknown) {
+        errors.push(getErrMsg(e) || "Unknown error during Pulumi destroy");
       } finally {
         try { await rm(workDir, { recursive: true, force: true }); } catch {}
       }

@@ -8,6 +8,7 @@
  */
 
 import { createSign } from "node:crypto";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 // ─── Error Types ────────────────────────────────────────────────────
 
@@ -140,9 +141,9 @@ export class GcpClient {
         }
 
         return res;
-      } catch (err: any) {
-        lastError = err;
-        if (attempt === maxAttempts) throw err;
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err : new Error(getErrMsg(err));
+        if (attempt === maxAttempts) throw lastError;
         await this.backoff(attempt);
       }
     }
@@ -227,8 +228,8 @@ export class GcpClient {
         const body = await res.text();
         return { created: false, error: `${res.status} ${body.slice(0, 200)}` };
       }
-    } catch (e: any) {
-      return { created: false, error: e.message };
+    } catch (e: unknown) {
+      return { created: false, error: getErrMsg(e) };
     }
   }
 
@@ -393,10 +394,12 @@ export async function getGcpAccessToken(
 
       const tokenData = await tokenRes.json() as { access_token?: string };
       return tokenData.access_token || "";
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (attempt === maxRetries) throw err;
       // Only retry on transient/network errors
-      if (err.message?.includes("(transient)") || err.name === "TimeoutError" || !err.message?.includes("GCP token exchange failed")) {
+      const msg = getErrMsg(err);
+      const isTimeout = err instanceof Error && err.name === "TimeoutError";
+      if (msg?.includes("(transient)") || isTimeout || !msg?.includes("GCP token exchange failed")) {
         await new Promise(r => setTimeout(r, 2_000 * Math.pow(2, attempt - 1)));
         continue;
       }
