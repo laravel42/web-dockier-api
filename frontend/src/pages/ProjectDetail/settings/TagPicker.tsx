@@ -1,10 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { tagsApi } from "@/services/tags";
 import type { Tag } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { CheckIcon, CirclePlusIcon, XIcon } from "lucide-react";
 import ManageTagsModal from "./ManageTagsModal";
+
+// ─── Types ───
+
+interface TagData {
+  allTags: Tag[];
+  selectedIds: string[];
+}
 
 // ─── Tag Picker ───
 
@@ -17,26 +25,25 @@ export default function TagPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showManage, setShowManage] = useState(false);
   const toast = useToast();
 
-  const fetchData = useCallback(async () => {
-    try {
+  const { data: tagData, loading, reload, setData: setTagData } = useAsyncData<TagData>(
+    async () => {
       const [orgTags, projectTags] = await Promise.all([
         tagsApi.list(),
         tagsApi.getProjectTags(projectId),
       ]);
-      setAllTags(orgTags.tags);
-      setSelectedIds(projectTags.tags.map((t) => t.id));
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to load tags"));
-    } finally { setLoading(false); }
-  }, [projectId, toast]);
+      return {
+        allTags: orgTags.tags,
+        selectedIds: projectTags.tags.map((t) => t.id),
+      };
+    },
+    [projectId],
+  );
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const allTags = tagData?.allTags ?? [];
+  const selectedIds = tagData?.selectedIds ?? [];
 
   const filteredTags = allTags.filter(
     (tag) => tag.name.toLowerCase().includes(inputValue.toLowerCase()),
@@ -44,11 +51,15 @@ export default function TagPicker({
 
   const selectedTags = allTags.filter((t) => selectedIds.includes(t.id));
 
+  const updateSelectedIds = (next: string[]) => {
+    setTagData((prev) => prev ? { ...prev, selectedIds: next } : prev);
+  };
+
   const toggleTag = async (tagId: string) => {
     const next = selectedIds.includes(tagId)
       ? selectedIds.filter((id) => id !== tagId)
       : [...selectedIds, tagId];
-    setSelectedIds(next);
+    updateSelectedIds(next);
     try {
       await tagsApi.setProjectTags(projectId, next);
     } catch (err) {
@@ -58,7 +69,7 @@ export default function TagPicker({
 
   const removeTag = async (tagId: string) => {
     const next = selectedIds.filter((id) => id !== tagId);
-    setSelectedIds(next);
+    updateSelectedIds(next);
     try {
       await tagsApi.setProjectTags(projectId, next);
     } catch (err) {
@@ -70,10 +81,11 @@ export default function TagPicker({
     if (!inputValue.trim()) return;
     try {
       const newTag = await tagsApi.create({ name: inputValue.trim() });
-      setAllTags([...allTags, newTag]);
-      const next = [...selectedIds, newTag.id];
-      setSelectedIds(next);
-      await tagsApi.setProjectTags(projectId, next);
+      setTagData((prev) => prev
+        ? { allTags: [...prev.allTags, newTag], selectedIds: [...prev.selectedIds, newTag.id] }
+        : { allTags: [newTag], selectedIds: [newTag.id] },
+      );
+      await tagsApi.setProjectTags(projectId, [...selectedIds, newTag.id]);
       setInputValue("");
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to create tag"));
@@ -82,7 +94,7 @@ export default function TagPicker({
 
   const handleManageDone = () => {
     setShowManage(false);
-    void fetchData();
+    void reload();
   };
 
   if (loading) return <span className="text-xs text-text-muted">Loading...</span>;

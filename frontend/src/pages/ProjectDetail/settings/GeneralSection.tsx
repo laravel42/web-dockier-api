@@ -3,6 +3,7 @@ import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useSaveAction } from "@/hooks/useSaveAction";
 import { ChevronDownIcon, ServerOffIcon, Trash2Icon } from "lucide-react";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -25,11 +26,8 @@ interface Props {
 export default function GeneralSection({ project, canManage, onProjectUpdate }: Props) {
   const [name] = useState(project.name);
   const [selectedColor, setSelectedColor] = useState(project.settings?.color ?? PROJECT_COLORS[0]);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [showNotes, setShowNotes] = useState(!!project.settings?.notes);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
-  const [savingNote, setSavingNote] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
   const toast = useToast();
 
@@ -43,17 +41,13 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     handleTeardown, openTeardownModal, closeTeardownModal,
   } = useInfraTeardown(project.id, project.infraState ?? "none");
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const { saving, saved, save: handleSave } = useSaveAction(
+    async () => {
       const updated = await projectsApi.update(project.id, { name });
       onProjectUpdate?.(updated);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save project"));
-    } finally { setSaving(false); }
-  };
+    },
+    { errorFallback: "Failed to save project" },
+  );
 
   const handleColorChange = async (color: string) => {
     setSelectedColor(color);
@@ -65,15 +59,13 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     }
   };
 
-  const handleSaveNote = async () => {
-    setSavingNote(true);
-    try {
+  const { saving: savingNote, save: handleSaveNote } = useSaveAction(
+    async () => {
       const updated = await projectsApi.update(project.id, { settings: { notes: noteValue } });
       onProjectUpdate?.(updated);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save note"));
-    } finally { setSavingNote(false); }
-  };
+    },
+    { errorFallback: "Failed to save note" },
+  );
 
   return (
     <div className="flex flex-col gap-6">

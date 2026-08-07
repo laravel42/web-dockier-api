@@ -1,31 +1,34 @@
 import { useState } from "react";
 import { projectsApi } from "@/services/projects";
-import { useToast } from "@/context/useToast";
-import { getErrorMessage } from "@/utils/errors";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 
 /**
  * Encapsulates project deletion logic: confirmation modal state,
  * name validation, and the async delete operation.
+ *
+ * Built on top of `useConfirmableAction` for consistent modal + async patterns.
  */
 export function useProjectDelete(projectId: string, projectName: string) {
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmName, setConfirmName] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const toast = useToast();
+
+  const {
+    showModal: showDeleteModal,
+    running: deleting,
+    execute,
+    open: openDeleteModal,
+    close: closeDeleteModal,
+  } = useConfirmableAction(
+    async () => {
+      await projectsApi.delete(projectId);
+      window.location.href = "/projects";
+    },
+    { errorFallback: "Failed to delete project" },
+  );
 
   const handleDelete = async () => {
     if (confirmName !== projectName) return;
-    setDeleting(true);
-    try {
-      await projectsApi.delete(projectId);
-      window.location.href = "/projects";
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete project"));
-    } finally { setDeleting(false); }
+    await execute();
   };
-
-  const openDeleteModal = () => setShowDeleteModal(true);
-  const closeDeleteModal = () => setShowDeleteModal(false);
 
   return {
     showDeleteModal,

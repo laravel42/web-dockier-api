@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { wpConfigApi } from "@/services/wp-config";
 import type { Project } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useSaveAction } from "@/hooks/useSaveAction";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import WpConfigEditor from "@/components/WpConfigEditor";
@@ -26,16 +27,14 @@ export default function WordPressSection({ project, canManage }: Props) {
   const [wpContent, setWpContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [revealed, setRevealed] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [initialized, setInitialized] = useState(false);
 
-  // Sync fetched data into editable state once loaded
-  if (config?.exists && !initialized) {
-    setWpContent(config.content);
-    setOriginalContent(config.content);
-    setInitialized(true);
-  }
+  // Sync fetched data into editable state when config loads
+  useEffect(() => {
+    if (config?.exists) {
+      setWpContent(config.content);
+      setOriginalContent(config.content);
+    }
+  }, [config]);
 
   const handleReveal = async () => {
     try {
@@ -48,17 +47,13 @@ export default function WordPressSection({ project, canManage }: Props) {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const { saving, saved, save: handleSave } = useSaveAction(
+    async () => {
       await wpConfigApi.save(project.id, wpContent);
       setOriginalContent(wpContent);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save wp-config"));
-    } finally { setSaving(false); }
-  };
+    },
+    { errorFallback: "Failed to save wp-config" },
+  );
 
   const hasChanges = revealed && wpContent !== originalContent;
 

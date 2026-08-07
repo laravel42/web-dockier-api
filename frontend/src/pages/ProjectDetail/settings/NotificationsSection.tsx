@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { notificationsApi } from "@/services/notifications";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { Input } from "@/components/ui/input";
 import { SectionTitle, SettingsRow, TabSpinner } from "./shared";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
@@ -9,23 +10,21 @@ interface Props {
 }
 
 export default function NotificationsSection({ canManage }: Props) {
-  const [loading, setLoading] = useState(true);
   const [deployHook, setDeployHook] = useState(false);
-  const [slackEnabled, setSlackEnabled] = useState(false);
-  const [discordEnabled, setDiscordEnabled] = useState(false);
   const [telegramEnabled, setTelegramEnabled] = useState(false);
   const [failureEmail, setFailureEmail] = useState("");
 
-  const fetchChannels = useCallback(async () => {
-    try {
-      const res = await notificationsApi.listChannels();
-      setSlackEnabled(res.channels.some((c) => c.type === "slack" && c.enabled));
-      setDiscordEnabled(res.channels.some((c) => c.type === "discord" && c.enabled));
-    } catch { /* silent */ }
-    finally { setLoading(false); }
-  }, []);
+  const { data: channels, loading } = useAsyncData(
+    () => notificationsApi.listChannels(),
+    [],
+  );
 
-  useEffect(() => { fetchChannels(); }, [fetchChannels]);
+  const slackEnabled = channels?.channels.some((c) => c.type === "slack" && c.enabled) ?? false;
+  const discordEnabled = channels?.channels.some((c) => c.type === "discord" && c.enabled) ?? false;
+
+  // Local overrides for toggle interactions (optimistic UI)
+  const [slackOverride, setSlackOverride] = useState<boolean | null>(null);
+  const [discordOverride, setDiscordOverride] = useState<boolean | null>(null);
 
   if (loading) return <TabSpinner label="Loading notifications…" />;
 
@@ -50,11 +49,11 @@ export default function NotificationsSection({ canManage }: Props) {
         </SettingsRow>
 
         <SettingsRow label="Slack deployment notifications" description="Enable and configure Slack deployment notifications.">
-          <ToggleSwitch checked={slackEnabled} onChange={setSlackEnabled} disabled={!canManage} />
+          <ToggleSwitch checked={slackOverride ?? slackEnabled} onChange={setSlackOverride} disabled={!canManage} />
         </SettingsRow>
 
         <SettingsRow label="Discord deployment notifications" description="Enable and configure Discord deployment notifications.">
-          <ToggleSwitch checked={discordEnabled} onChange={setDiscordEnabled} disabled={!canManage} />
+          <ToggleSwitch checked={discordOverride ?? discordEnabled} onChange={setDiscordOverride} disabled={!canManage} />
         </SettingsRow>
 
         <SettingsRow label="Telegram deployment notifications" description="Enable and configure Telegram deployment notifications." border={false}>
