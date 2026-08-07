@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
-import { useToast } from "@/context/useToast";
-import { getErrorMessage } from "@/utils/errors";
 import { useSaveAction } from "@/hooks/useSaveAction";
+import { useOptimisticToggle } from "@/hooks/useOptimisticToggle";
 import Button from "@/components/ui/Button";
 import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
@@ -17,29 +16,22 @@ interface Props {
 }
 
 export default function DeploymentsSection({ project, canManage, onProjectUpdate }: Props) {
-  const [pushToDeploy, setPushToDeploy] = useState(
+  const [pushToDeploy, togglePushToDeploy] = useOptimisticToggle(
     (project.settings?.pushToDeploy as boolean) ?? false,
+    async (enabled) => {
+      const updated = await projectsApi.update(project.id, { settings: { pushToDeploy: enabled } });
+      onProjectUpdate?.(updated);
+    },
+    { errorFallback: "Failed to update push-to-deploy setting" },
   );
   const [healthChecks, setHealthChecks] = useState(false);
   const [envInScript, setEnvInScript] = useState(false);
   const [deployScript, setDeployScript] = useState(
     project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other"),
   );
-  const toast = useToast();
 
   const originalScript = project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other");
   const hasScriptChanges = deployScript !== originalScript;
-
-  const handleTogglePushToDeploy = async (enabled: boolean) => {
-    setPushToDeploy(enabled);
-    try {
-      const updated = await projectsApi.update(project.id, { settings: { pushToDeploy: enabled } });
-      onProjectUpdate?.(updated);
-    } catch (err) {
-      setPushToDeploy(!enabled);
-      toast.error(getErrorMessage(err, "Failed to update push-to-deploy setting"));
-    }
-  };
 
   const { saving, saved, save: handleSaveScript } = useSaveAction(
     async () => {
@@ -61,7 +53,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
       {/* Push to deploy */}
       <SettingsCard>
         <SettingsRow label="Push to deploy" description="Automatically trigger a new deployment when changes are pushed to the environment's Git branch.">
-          <ToggleSwitch checked={pushToDeploy} onChange={handleTogglePushToDeploy} disabled={!canManage} />
+          <ToggleSwitch checked={pushToDeploy} onChange={togglePushToDeploy} disabled={!canManage} />
         </SettingsRow>
         {pushToDeploy && (
           <div className="border-t border-border px-4 py-3">
