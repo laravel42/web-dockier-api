@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { codeAnalysisApi } from "../../services/api";
-import Modal from "../../components/Modal";
-import ConfirmModal from "../../components/ConfirmModal";
-import TechBadge from "../../components/TechBadge";
-import { SearchableCombobox } from "../../components/ui/combobox";
-import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import { segmentActiveCls, segmentIdleCls } from "../../utils/styles";
-import { Input } from "../../components/ui/input";
-import Button from "../../components/ui/Button";
-import PageLoading from "../../components/ui/PageLoading";
+import { codeAnalysisApi } from "@/services/api";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
+import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
+import TechBadge from "@/components/TechBadge";
+import { SearchableCombobox } from "@/components/ui/combobox";
+import { SettingsField, SettingsTextField } from "@/components/SettingsField";
+import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
+import { Input } from "@/components/ui/input";
+import Button from "@/components/ui/Button";
+import PageLoading from "@/components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
-import ToggleSwitch from "../../components/ui/ToggleSwitch";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
 import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
 import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
@@ -90,11 +92,12 @@ export default function SecurityRulesTab() {
   const [semgrepAdding, setSemgrepAdding] = useState(false);
   const [sevTab, setSevTab] = useState<string>("");
   const [langFilter, setLangFilter] = useState<Set<string>>(new Set());
+  const toast = useToast();
 
   const fetchRules = async () => {
     setLoading(true);
     try { const res = await codeAnalysisApi.listCustomRules(); setRules(res.rules); }
-    catch { /* ignore */ } finally { setLoading(false); }
+    catch (err) { toast.error(getErrorMessage(err, "Failed to load custom rules")); } finally { setLoading(false); }
   };
   useEffect(() => { fetchRules(); }, []);
 
@@ -123,15 +126,19 @@ export default function SecurityRulesTab() {
   };
 
   const handleToggle = async (r: CRule) => {
+    setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
     try {
       await codeAnalysisApi.updateCustomRule(r.id, { enabled: !r.enabled });
-      setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
-    } catch { /* ignore */ }
+    } catch (err) {
+      setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: r.enabled } : x));
+      toast.error(getErrorMessage(err, "Failed to toggle rule"));
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    try { await codeAnalysisApi.deleteCustomRule(deleteId); } catch { /* ignore */ }
+    try { await codeAnalysisApi.deleteCustomRule(deleteId); }
+    catch (err) { toast.error(getErrorMessage(err, "Failed to delete rule")); }
     setDeleteId(null); fetchRules();
   };
 

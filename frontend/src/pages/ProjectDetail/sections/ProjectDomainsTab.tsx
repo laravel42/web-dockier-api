@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { domainsApi } from "../../../services/domains";
-import type { Domain, SslCertificate } from "../../../types";
-import type { Project } from "../../../types";
-import { usePermissions } from "../../../context/PermissionsContext";
-import Modal from "../../../components/Modal";
-import Spinner from "../../../components/Spinner";
-import Button from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/input";
+import { domainsApi } from "@/services/domains";
+import type { Domain, SslCertificate } from "@/types";
+import type { Project } from "@/types";
+import { usePermissions } from "@/context/PermissionsContext";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
+import Modal from "@/components/Modal";
+import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 
 interface Props {
@@ -39,14 +41,16 @@ function DomainRow({
   const [deleting, setDeleting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<{ verified: boolean; message: string } | null>(null);
+  const toast = useToast();
 
   const handleDelete = async () => {
     setDeleting(true);
     try {
       await domainsApi.deleteDomain(projectId, domain.id);
       onRefresh();
-    } catch { /* silent */ }
-    finally { setDeleting(false); setMenuOpen(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete domain"));
+    } finally { setDeleting(false); setMenuOpen(false); }
   };
 
   const handleVerifyDns = async () => {
@@ -186,6 +190,7 @@ function DomainsSection({
   const [newDomain, setNewDomain] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+  const toast = useToast();
 
   const primaryDomain = domains.find((d) => d.isPrimary);
   const wildcard = primaryDomain?.wildcard ?? false;
@@ -213,7 +218,9 @@ function DomainsSection({
         wildcard: !wildcard,
       });
       onRefresh();
-    } catch { /* silent */ }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update wildcard setting"));
+    }
   };
 
   return (
@@ -326,6 +333,7 @@ function CertificateRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   const typeLabels: Record<SslCertificate["type"], string> = {
     lets_encrypt: "Let's Encrypt",
@@ -352,8 +360,9 @@ function CertificateRow({
     try {
       await domainsApi.deleteCertificate(projectId, cert.id);
       onRefresh();
-    } catch { /* silent */ }
-    finally { setDeleting(false); setMenuOpen(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete certificate"));
+    } finally { setDeleting(false); setMenuOpen(false); }
   };
 
   const expiresLabel = cert.expiresAt

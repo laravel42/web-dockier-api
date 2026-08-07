@@ -3,6 +3,8 @@ import { projectsApi } from "@/services/projects";
 import { gitApi } from "@/services/git";
 import type { Project, Connection, Repo } from "@/types";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
 import SourceControlSelect from "@/components/SourceControlSelect";
@@ -22,6 +24,8 @@ export default function BranchPickerInline({
 }) {
   const [branches, setBranches] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const toast = useToast();
 
   const fetchBranches = useCallback(async () => {
     if (!project.connectionId || !project.repository) return;
@@ -45,7 +49,9 @@ export default function BranchPickerInline({
     try {
       const updated = await projectsApi.update(project.id, { branch });
       onProjectUpdate?.(updated);
-    } catch { /* silent */ }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update branch"));
+    }
   };
 
   if (!project.connectionId || !project.repository) {
@@ -89,6 +95,7 @@ export function GitRepositoryModal({
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(project.repository || "");
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -97,10 +104,12 @@ export function GitRepositoryModal({
       try {
         const res = await gitApi.listConnections();
         setConnections(res.connections);
-      } catch { /* silent */ }
-      finally { setLoadingConnections(false); }
+      } catch (err) {
+        toast.error(getErrorMessage(err, "Failed to load connections"));
+      } finally { setLoadingConnections(false); }
     };
     void load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- toast is stable
   }, [open]);
 
   useEffect(() => {
@@ -125,11 +134,13 @@ export function GitRepositoryModal({
             if (match) setSelectedRepo(match.fullName);
           }
         }
-      } catch { /* silent */ }
-      finally { if (!cancelled) setLoadingRepos(false); }
+      } catch (err) {
+        if (!cancelled) toast.error(getErrorMessage(err, "Failed to load repositories"));
+      } finally { if (!cancelled) setLoadingRepos(false); }
     };
     void load();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- toast is stable
   }, [selectedConnectionId, project.connectionId, project.repository]);
 
   const handleSubmit = async () => {
@@ -142,8 +153,9 @@ export function GitRepositoryModal({
       });
       onProjectUpdate?.(updated);
       onClose();
-    } catch { /* silent */ }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update repository"));
+    } finally { setSaving(false); }
   };
 
   return (

@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { networkApi } from "../../../services/network";
-import type { SecurityRule, RedirectRule } from "../../../types";
-import type { Project } from "../../../types";
-import { usePermissions } from "../../../context/PermissionsContext";
-import Modal from "../../../components/Modal";
-import Spinner from "../../../components/Spinner";
-import Button from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/input";
-import { EyeIcon, EyeOffIcon, XIcon } from "lucide-react";
+import { networkApi } from "@/services/network";
+import type { SecurityRule, RedirectRule } from "@/types";
+import type { Project } from "@/types";
+import { usePermissions } from "@/context/PermissionsContext";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
+import Modal from "@/components/Modal";
+import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
+import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 
 interface Props {
   project: Project;
@@ -37,14 +39,16 @@ function SecurityRulesSection({
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const toast = useToast();
 
   const handleDelete = async (ruleId: string) => {
     setDeleting(ruleId);
     try {
       await networkApi.deleteSecurityRule(projectId, ruleId);
       onRefresh();
-    } catch { /* handled by parent */ }
-    finally { setDeleting(null); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete security rule"));
+    } finally { setDeleting(null); }
   };
 
   return (
@@ -67,8 +71,9 @@ function SecurityRulesSection({
               type="button"
               variant="outline"
               onClick={() => setShowCreateModal(true)}
+              iconLeft={<PlusIcon className="size-3.5" />}
             >
-              + Add security rule
+              Add security rule
             </Button>
           )}
         </div>
@@ -91,8 +96,9 @@ function SecurityRulesSection({
                 type="button"
                 variant="outline"
                 onClick={() => setShowCreateModal(true)}
+                iconLeft={<PlusIcon className="size-3.5" />}
               >
-                + Add security rule
+                Add security rule
               </Button>
             </div>
           )}
@@ -173,8 +179,9 @@ function SecurityRuleRow({
             type="button"
             variant="link" size="sm" className="mt-2"
             onClick={() => setShowAddCred(true)}
+            iconLeft={<PlusIcon className="size-3.5" />}
           >
-            + Add credential
+            Add credential
           </Button>
         )}
       </div>
@@ -205,14 +212,16 @@ function CredentialChip({
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   const handleDelete = async () => {
     setDeleting(true);
     try {
       await networkApi.deleteCredential(projectId, ruleId, cred.id);
       onDeleted();
-    } catch { /* silent */ }
-    finally { setDeleting(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete credential"));
+    } finally { setDeleting(false); }
   };
 
   return (
@@ -337,8 +346,9 @@ function CreateSecurityRuleModal({
                 variant="outline"
                 className="mt-3"
                 onClick={() => setShowAddCred(true)}
+                iconLeft={<PlusIcon className="size-3.5" />}
               >
-                + Add credential
+                Add credential
               </Button>
             </div>
           ) : (
@@ -365,8 +375,9 @@ function CreateSecurityRuleModal({
                 type="button"
                 variant="link" size="sm"
                 onClick={() => setShowAddCred(true)}
+                iconLeft={<PlusIcon className="size-3.5" />}
               >
-                + Add credential
+                Add credential
               </Button>
             </div>
           )}
@@ -545,14 +556,16 @@ function RedirectRulesSection({
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const toast = useToast();
 
   const handleDelete = async (ruleId: string) => {
     setDeleting(ruleId);
     try {
       await networkApi.deleteRedirectRule(projectId, ruleId);
       onRefresh();
-    } catch { /* handled by parent */ }
-    finally { setDeleting(null); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to delete redirect rule"));
+    } finally { setDeleting(null); }
   };
 
   return (
@@ -575,8 +588,9 @@ function RedirectRulesSection({
               type="button"
               variant="outline"
               onClick={() => setShowCreateModal(true)}
+              iconLeft={<PlusIcon className="size-3.5" />}
             >
-              + Add redirect rule
+              Add redirect rule
             </Button>
           )}
         </div>
@@ -619,8 +633,9 @@ function RedirectRulesSection({
                 type="button"
                 variant="outline"
                 onClick={() => setShowCreateModal(true)}
+                iconLeft={<PlusIcon className="size-3.5" />}
               >
-                + Add redirect rule
+                Add redirect rule
               </Button>
             </div>
           )}
