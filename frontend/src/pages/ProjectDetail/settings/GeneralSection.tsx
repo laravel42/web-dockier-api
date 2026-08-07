@@ -13,6 +13,8 @@ import TagPicker from "./TagPicker";
 import { GitRepositoryModal } from "./GitSettings";
 import BranchPickerInline from "./GitSettings";
 import { SectionTitle, SettingsRow, PROJECT_COLORS } from "./shared";
+import { useProjectDelete } from "../hooks/useProjectDelete";
+import { useInfraTeardown } from "../hooks/useInfraTeardown";
 
 interface Props {
   project: Project;
@@ -25,17 +27,21 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
   const [selectedColor, setSelectedColor] = useState(project.settings?.color ?? PROJECT_COLORS[0]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [confirmName, setConfirmName] = useState("");
-  const [deleting, setDeleting] = useState(false);
   const [showNotes, setShowNotes] = useState(!!project.settings?.notes);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
   const [savingNote, setSavingNote] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
   const toast = useToast();
-  const [infraState, setInfraState] = useState(project.infraState ?? "none");
-  const [showTeardownModal, setShowTeardownModal] = useState(false);
-  const [tearingDown, setTearingDown] = useState(false);
+
+  const {
+    showDeleteModal, confirmName, setConfirmName, deleting,
+    handleDelete, openDeleteModal, closeDeleteModal,
+  } = useProjectDelete(project.id, project.name);
+
+  const {
+    infraState, showTeardownModal, tearingDown,
+    handleTeardown, openTeardownModal, closeTeardownModal,
+  } = useInfraTeardown(project.id, project.infraState ?? "none");
 
   const handleSave = async () => {
     setSaving(true);
@@ -67,36 +73,6 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to save note"));
     } finally { setSavingNote(false); }
-  };
-
-  const handleDelete = async () => {
-    if (confirmName !== project.name) return;
-    setDeleting(true);
-    try {
-      await projectsApi.delete(project.id);
-      window.location.href = "/projects";
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete project"));
-    } finally { setDeleting(false); }
-  };
-
-  const handleTeardown = async () => {
-    setTearingDown(true);
-    try {
-      const res = await projectsApi.teardownInfrastructure(project.id);
-      if (res.status === "torn_down") {
-        setInfraState("torn_down");
-        toast.success(res.message);
-      } else if (res.status === "nothing_to_tear_down") {
-        toast.info(res.message);
-      } else {
-        toast.error(res.message);
-      }
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to tear down infrastructure"));
-    } finally {
-      setTearingDown(false);
-    }
   };
 
   return (
@@ -292,7 +268,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
               disabled={infraState !== "live"}
               title={infraState !== "live" ? "No provisioned infrastructure to tear down" : undefined}
               iconLeft={<ServerOffIcon className="size-3.5" />}
-              onClick={() => setShowTeardownModal(true)}
+              onClick={openTeardownModal}
             >
               <span className="text-nowrap">Tear down infrastructure</span>
             </Button>
@@ -311,7 +287,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
               variant="outline-danger"
               size="sm"
               iconLeft={<Trash2Icon className="size-3.5" />}
-              onClick={() => setShowDeleteModal(true)}
+              onClick={openDeleteModal}
             >
               Delete project
             </Button>
@@ -322,7 +298,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
       {/* Teardown confirmation */}
       <ConfirmModal
         open={showTeardownModal}
-        onClose={() => setShowTeardownModal(false)}
+        onClose={closeTeardownModal}
         onConfirm={handleTeardown}
         title="Tear down infrastructure"
         message="This destroys all cloud resources for this project. Your project and deployment history are kept, and re-deploying will recreate the infrastructure. Continue?"
@@ -340,7 +316,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
       )}
 
       {/* Delete modal */}
-      <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete project">
+      <Modal open={showDeleteModal} onClose={closeDeleteModal} title="Delete project">
         <div className="flex flex-col gap-4">
           <p className="text-sm text-text-muted">
             This action is permanent. All deployments, environment files, domains, and configuration for{" "}
@@ -359,7 +335,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             />
           </div>
           <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button variant="outline" onClick={closeDeleteModal}>
               Cancel
             </Button>
             <Button
