@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
 import Button from "@/components/ui/Button";
 import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
@@ -23,6 +25,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const toast = useToast();
 
   const originalScript = project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other");
   const hasScriptChanges = deployScript !== originalScript;
@@ -32,8 +35,9 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
     try {
       const updated = await projectsApi.update(project.id, { settings: { pushToDeploy: enabled } });
       onProjectUpdate?.(updated);
-    } catch {
+    } catch (err) {
       setPushToDeploy(!enabled);
+      toast.error(getErrorMessage(err, "Failed to update push-to-deploy setting"));
     }
   };
 
@@ -44,8 +48,9 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
       onProjectUpdate?.(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch { /* silent */ }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save deploy script"));
+    } finally { setSaving(false); }
   };
 
   const deployHookUrl = `https://dockier.dev/api/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;

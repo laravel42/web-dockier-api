@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { envApi } from "@/services/env";
 import type { Project } from "@/types";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +26,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
   const [cacheEnabled, setCacheEnabled] = useState(true);
   const [queuesEnabled, setQueuesEnabled] = useState(true);
   const [encryptionKey, setEncryptionKey] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
     const load = async () => {
@@ -31,10 +34,12 @@ export default function EnvironmentSection({ project, canManage }: Props) {
         const res = await envApi.getMasked(project.id);
         setEnvContent(res.content);
         setOriginalContent(res.content);
-      } catch { /* silent */ }
-      finally { setLoading(false); }
+      } catch (err) {
+        toast.error(getErrorMessage(err, "Failed to load environment file"));
+      } finally { setLoading(false); }
     };
     void load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- toast is stable
   }, [project.id]);
 
   const handleReveal = async () => {
@@ -43,7 +48,9 @@ export default function EnvironmentSection({ project, canManage }: Props) {
       setEnvContent(res.content);
       setOriginalContent(res.content);
       setRevealed(true);
-    } catch { /* silent */ }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to reveal environment variables"));
+    }
   };
 
   const handleSave = async () => {
@@ -53,8 +60,9 @@ export default function EnvironmentSection({ project, canManage }: Props) {
       setOriginalContent(envContent);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch { /* silent */ }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to save environment file"));
+    } finally { setSaving(false); }
   };
 
   const hasChanges = revealed && envContent !== originalContent;

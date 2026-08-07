@@ -56,6 +56,7 @@ export default function TagPicker({
   };
 
   const toggleTag = async (tagId: string) => {
+    const prev = selectedIds;
     const next = selectedIds.includes(tagId)
       ? selectedIds.filter((id) => id !== tagId)
       : [...selectedIds, tagId];
@@ -63,16 +64,19 @@ export default function TagPicker({
     try {
       await tagsApi.setProjectTags(projectId, next);
     } catch (err) {
+      updateSelectedIds(prev);
       toast.error(getErrorMessage(err, "Failed to update tags"));
     }
   };
 
   const removeTag = async (tagId: string) => {
+    const prev = selectedIds;
     const next = selectedIds.filter((id) => id !== tagId);
     updateSelectedIds(next);
     try {
       await tagsApi.setProjectTags(projectId, next);
     } catch (err) {
+      updateSelectedIds(prev);
       toast.error(getErrorMessage(err, "Failed to remove tag"));
     }
   };
