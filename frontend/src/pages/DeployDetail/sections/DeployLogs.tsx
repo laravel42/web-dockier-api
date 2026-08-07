@@ -1,4 +1,4 @@
-import { cardCls } from "../../../utils/styles";
+import { cardCls } from "@/utils/styles";
 import { SquareTerminalIcon } from "lucide-react";
 
 interface Props {

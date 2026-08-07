@@ -1,4 +1,4 @@
-import DevIcon from "../../../components/DevIcon";
+import DevIcon from "@/components/DevIcon";
 
 const INTEGRATIONS = [
   { slug: "github", label: "GitHub" },

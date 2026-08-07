@@ -1,9 +1,9 @@
 import { useState } from "react";
-import Modal from "../../../components/Modal";
-import { btnPrimary, btnSecondary, btnDanger } from "../../../utils/styles";
-import { timeAgo } from "../../../utils/timeAgo";
-import type { RepoIssue } from "../../../types";
-import Spinner from "../../../components/Spinner";
+import Modal from "@/components/Modal";
+import { btnPrimary, btnSecondary, btnDanger } from "@/utils/styles";
+import { timeAgo } from "@/utils/timeAgo";
+import type { RepoIssue } from "@/types";
+import Spinner from "@/components/Spinner";
 import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
 
 interface Props {

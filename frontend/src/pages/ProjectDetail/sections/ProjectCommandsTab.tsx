@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { commandsApi } from "../../../services/commands";
-import { deployApi } from "../../../services/api";
-import type { Command } from "../../../types";
-import type { Project } from "../../../types";
-import { usePermissions } from "../../../context/PermissionsContext";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import { statusBadgeColors } from "../../../utils/styles";
-import Spinner from "../../../components/Spinner";
+import { commandsApi } from "@/services/commands";
+import { deployApi } from "@/services/api";
+import type { Command } from "@/types";
+import type { Project } from "@/types";
+import { usePermissions } from "@/context/PermissionsContext";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import { statusBadgeColors } from "@/utils/styles";
+import Spinner from "@/components/Spinner";
 import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react";
 
 const PAGE_SIZE = 10;

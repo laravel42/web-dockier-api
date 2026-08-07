@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { observeApi } from "../../../services/observe";
+import { observeApi } from "@/services/observe";
 import type {
   Heartbeat,
   HeartbeatFrequency,
@@ -8,12 +8,12 @@ import type {
   LogEntry,
   ActivityEntry,
   Project,
-} from "../../../types";
-import { usePermissions } from "../../../context/PermissionsContext";
-import Modal from "../../../components/Modal";
-import Spinner from "../../../components/Spinner";
-import Button from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/input";
+} from "@/types";
+import { usePermissions } from "@/context/PermissionsContext";
+import Modal from "@/components/Modal";
+import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
 import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
 
 interface Props {

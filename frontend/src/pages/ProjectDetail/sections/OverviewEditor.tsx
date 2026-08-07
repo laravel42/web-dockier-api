@@ -8,10 +8,10 @@ import "@blocknote/shadcn/style.css";
 import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import "@blocknote/xl-ai/style.css";
-import type { Project } from "../../../types";
-import { projectsApi } from "../../../services/projects";
-import { gitApi } from "../../../services/git";
-import { parseOwnerRepo } from "../../../utils/parseOwnerRepo";
+import type { Project } from "@/types";
+import { projectsApi } from "@/services/projects";
+import { gitApi } from "@/services/git";
+import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { normalizeOverviewBlocks } from "../utils/normalizeOverviewBlocks";
 import {
   getOverviewCacheKey,

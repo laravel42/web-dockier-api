@@ -1,4 +1,4 @@
-import Button from "../../components/ui/Button";
+import Button from "@/components/ui/Button";
 import { useScanDetail } from "./useScanDetail";
 import { useIssueModal } from "./useIssueModal";
 import { useFixModal } from "./useFixModal";
@@ -10,8 +10,8 @@ import ScanProgressPanel from "./sections/ScanProgressPanel";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError from "../../components/ui/PageError";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
 
 export default function ScanDetail() {
   const core = useScanDetail();

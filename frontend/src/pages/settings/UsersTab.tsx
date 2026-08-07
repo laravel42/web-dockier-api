@@ -1,21 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
-import { usersApi, rolesApi } from "../../services/api";
-import Modal from "../../components/Modal";
-import ConfirmModal from "../../components/ConfirmModal";
-import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import ComboBox from "../../components/ComboBox";
-import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
-import { Input } from "../../components/ui/input";
-import Button from "../../components/ui/Button";
-import { formatCardDateTime } from "../../utils/formatCardDate";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import Alert from "../../components/ui/Alert";
-import { getErrorMessage } from "../../utils/errors";
-import { useToast } from "../../context/useToast";
-import { useAuth } from "../../context/AuthContext";
-import { usePermissions } from "../../context/PermissionsContext";
+import { usersApi, rolesApi } from "@/services/api";
+import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
+import SettingsModalFooter from "@/components/SettingsModalFooter";
+import { SettingsField, SettingsTextField } from "@/components/SettingsField";
+import ComboBox from "@/components/ComboBox";
+import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
+import { Input } from "@/components/ui/input";
+import Button from "@/components/ui/Button";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError, { EmptyMessage } from "@/components/ui/PageError";
+import Alert from "@/components/ui/Alert";
+import { getErrorMessage } from "@/utils/errors";
+import { useToast } from "@/context/useToast";
+import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 
 interface UserItem {

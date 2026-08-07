@@ -1,21 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { processesApi } from "../../../services/processes";
-import { deployApi } from "../../../services/api";
+import { processesApi } from "@/services/processes";
+import { deployApi } from "@/services/api";
 import type {
   BackgroundProcess,
   ScheduledJob,
   ProcessType,
   JobFrequency,
   Project,
-} from "../../../types";
-import type { CreateProcessBody, CreateJobBody } from "../../../services/processes";
-import { usePermissions } from "../../../context/PermissionsContext";
-import { getFrameworkById } from "../../../config/frameworks";
-import Modal from "../../../components/Modal";
-import ConfirmModal from "../../../components/ConfirmModal";
-import Spinner from "../../../components/Spinner";
-import Button from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/input";
+} from "@/types";
+import type { CreateProcessBody, CreateJobBody } from "@/services/processes";
+import { usePermissions } from "@/context/PermissionsContext";
+import { getFrameworkById } from "@/config/frameworks";
+import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
+import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 
 interface Props {

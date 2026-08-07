@@ -1,17 +1,17 @@
-import ConfirmModal from "../../components/ConfirmModal";
-import PageHeader from "../../components/ui/PageHeader";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import ListToolbar from "../../components/ui/ListToolbar";
-import Pagination from "../../components/ui/Pagination";
+import ConfirmModal from "@/components/ConfirmModal";
+import PageHeader from "@/components/ui/PageHeader";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError, { EmptyMessage } from "@/components/ui/PageError";
+import ListToolbar from "@/components/ui/ListToolbar";
+import Pagination from "@/components/ui/Pagination";
 import { useProjects } from "./useProjects";
-import { usePermissions } from "../../context/PermissionsContext";
-import Button from "../../components/ui/Button";
+import { usePermissions } from "@/context/PermissionsContext";
+import Button from "@/components/ui/Button";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
 import { PlusIcon } from "lucide-react";
-import { cardGridCls } from "../../utils/styles";
+import { cardGridCls } from "@/utils/styles";
 
 export default function Projects() {
   const { has } = usePermissions();

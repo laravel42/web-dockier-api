@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import type { RepoAnalysis, SensitiveField, Dependency } from "../../../components/DeployWizard";
+import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
 import MDEditor from "@uiw/react-md-editor";
-import { cardCls, segmentActiveCls, segmentIdleCls } from "../../../utils/styles";
-import SensitivityBadge, { getSensitivityStyle } from "../../../components/badges/SensitivityBadge";
-import { gitApi } from "../../../services/api";
-import type { Project, Provider } from "../../../types";
+import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
+import SensitivityBadge, { getSensitivityStyle } from "@/components/badges/SensitivityBadge";
+import { gitApi } from "@/services/api";
+import type { Project, Provider } from "@/types";
 import OverviewEditor from "./OverviewEditor";
 import ProjectDeploymentsTab from "./ProjectDeploymentsTab";
 import ProjectCommandsTab from "./ProjectCommandsTab";
@@ -14,7 +14,7 @@ import ProjectNetworkTab from "./ProjectNetworkTab";
 import ProjectObserveTab from "./ProjectObserveTab";
 import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
-import { usePermissions } from "../../../context/PermissionsContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { XIcon } from "lucide-react";
 
 interface Props {

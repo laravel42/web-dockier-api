@@ -1,4 +1,4 @@
-import type { RepoStats } from "../../../types";
+import type { RepoStats } from "@/types";
 
 interface Props {
   stats: RepoStats | null;

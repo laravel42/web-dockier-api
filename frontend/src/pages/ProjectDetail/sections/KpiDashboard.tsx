@@ -1,8 +1,8 @@
-import type { RepoStats } from "../../../types";
-import { cardCls, typeCaption, typeStatValueSm } from "../../../utils/styles";
-import SectionHeader from "../../../components/ui/SectionHeader";
+import type { RepoStats } from "@/types";
+import { cardCls, typeCaption, typeStatValueSm } from "@/utils/styles";
+import SectionHeader from "@/components/ui/SectionHeader";
 import { langColors, getKpiCards } from "../constants";
-import Spinner from "../../../components/Spinner";
+import Spinner from "@/components/Spinner";
 
 interface Props {
   stats: RepoStats | null;

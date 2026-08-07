@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import Modal from "../../../components/Modal";
-import { btnPrimary, btnSecondary } from "../../../utils/styles";
-import { timeAgo } from "../../../utils/timeAgo";
-import type { RepoPullRequest } from "../../../types";
-import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
-import Spinner from "../../../components/Spinner";
+import Modal from "@/components/Modal";
+import { btnPrimary, btnSecondary } from "@/utils/styles";
+import { timeAgo } from "@/utils/timeAgo";
+import type { RepoPullRequest } from "@/types";
+import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
+import Spinner from "@/components/Spinner";
 
 interface ReviewResult {
   summary: string;

@@ -1,10 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { deployApi } from "../../services/api";
-import { useAsyncData } from "../../hooks/useAsyncData";
-import { useProjectBadges } from "../../hooks/useProjectBadges";
-import { useViewMode } from "../../hooks/useViewMode";
-import type { Deployment, Project } from "../../types";
-import { compareByTime } from "../../utils/sortByTime";
+import { deployApi } from "@/services/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { useProjectBadges } from "@/hooks/useProjectBadges";
+import { useViewMode } from "@/hooks/useViewMode";
+import type { Deployment, Project } from "@/types";
+import { compareByTime } from "@/utils/sortByTime";
 
 async function fetchDeployments(): Promise<Deployment[]> {
   const res = await deployApi.listDeployments();

@@ -1,4 +1,4 @@
-import SeverityBadge from "../../../components/SeverityBadge";
+import SeverityBadge from "@/components/SeverityBadge";
 import {
   cardCls,
   getStatusDotClass,
@@ -6,12 +6,12 @@ import {
   sidebarHistoryLabelCls,
   sidebarPanelHeadCls,
   sidebarPanelHeadTitleCls,
-} from "../../../utils/styles";
-import { usePermissions } from "../../../context/PermissionsContext";
-import type { Scan } from "../../../types";
-import Button from "../../../components/ui/Button";
-import Spinner from "../../../components/Spinner";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
+} from "@/utils/styles";
+import { usePermissions } from "@/context/PermissionsContext";
+import type { Scan } from "@/types";
+import Button from "@/components/ui/Button";
+import Spinner from "@/components/Spinner";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {

@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { notificationsApi } from "../../services/api";
-import Modal from "../../components/Modal";
-import ConfirmModal from "../../components/ConfirmModal";
-import SettingsModalFooter from "../../components/SettingsModalFooter";
-import TechBadge from "../../components/TechBadge";
-import { SearchableCombobox } from "../../components/ui/combobox";
-import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "../../utils/styles";
-import { Input } from "../../components/ui/input";
-import Button from "../../components/ui/Button";
-import { usePermissions } from "../../context/PermissionsContext";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useAsyncData } from "../../hooks/useAsyncData";
-import { notifyInAppNotificationsChanged } from "../../hooks/useInAppNotificationsEnabled";
+import { notificationsApi } from "@/services/api";
+import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
+import SettingsModalFooter from "@/components/SettingsModalFooter";
+import TechBadge from "@/components/TechBadge";
+import { SearchableCombobox } from "@/components/ui/combobox";
+import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
+import { Input } from "@/components/ui/input";
+import Button from "@/components/ui/Button";
+import { usePermissions } from "@/context/PermissionsContext";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError, { EmptyMessage } from "@/components/ui/PageError";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { notifyInAppNotificationsChanged } from "@/hooks/useInAppNotificationsEnabled";
 import { BellIcon, LinkIcon, MailIcon, PlusIcon } from "lucide-react";
 
 export default function NotificationChannelsTab() {

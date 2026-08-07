@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { projectsApi } from "../../services/api";
-import { useProjectBadges } from "../../hooks/useProjectBadges";
-import { useViewMode } from "../../hooks/useViewMode";
-import { usePaginatedData } from "../../hooks/usePaginatedData";
+import { projectsApi } from "@/services/api";
+import { useProjectBadges } from "@/hooks/useProjectBadges";
+import { useViewMode } from "@/hooks/useViewMode";
+import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { useProjectForm } from "./useProjectForm";
 
 const PAGE_SIZE = 50;

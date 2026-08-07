@@ -1,5 +1,5 @@
-import EmptyState from "../../../components/ui/EmptyState";
-import RocketIcon from "../../../components/icons/outlined/RocketIcon";
+import EmptyState from "@/components/ui/EmptyState";
+import RocketIcon from "@/components/icons/outlined/RocketIcon";
 
 interface Props {
   onGoToProjects: () => void;

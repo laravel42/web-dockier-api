@@ -3,13 +3,13 @@ import { useDeploy } from "./useDeploy";
 import DeployEmptyState from "./sections/EmptyState";
 import DeployCard from "./sections/DeployCard";
 import DeployTable from "./sections/DeployTable";
-import PageHeader from "../../components/ui/PageHeader";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError from "../../components/ui/PageError";
-import ListToolbar from "../../components/ui/ListToolbar";
-import { EmptyMessage } from "../../components/ui/PageError";
-import { compareByTime } from "../../utils/sortByTime";
-import { cardGridCls } from "../../utils/styles";
+import PageHeader from "@/components/ui/PageHeader";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
+import ListToolbar from "@/components/ui/ListToolbar";
+import { EmptyMessage } from "@/components/ui/PageError";
+import { compareByTime } from "@/utils/sortByTime";
+import { cardGridCls } from "@/utils/styles";
 
 export default function Deploy() {
   const [search, setSearch] = useState("");

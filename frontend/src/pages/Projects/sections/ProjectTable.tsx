@@ -1,10 +1,10 @@
-import TechCell from "../../../components/TechCell";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import type { Project, TechBadgeInfo } from "../../../types";
+import TechCell from "@/components/TechCell";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { getRepoSlug } from "@/utils/parseOwnerRepo";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "@/utils/styles";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import DataTable, { tableRowCls } from "@/components/ui/DataTable";
+import type { Project, TechBadgeInfo } from "@/types";
 
 interface Props {
   projects: Project[];

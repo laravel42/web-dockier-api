@@ -1,14 +1,14 @@
-import SeverityBadge from "../../../components/SeverityBadge";
-import { cardCls, segmentActiveCls, segmentIdleCls } from "../../../utils/styles";
-import Button from "../../../components/ui/Button";
-import SparklesIcon from "../../../components/icons/outlined/SparklesIcon";
-import { displayFindingPath } from "../../../utils/scanPaths";
-import { buildCodePreviewRows, buildSnippetPreviewRow } from "../../../utils/codePreview";
-import { providerCount } from "../../../utils/findingCounts";
-import { usePermissions } from "../../../context/PermissionsContext";
-import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
-import type { Finding, PMIntegration, SecurityFindingCounts } from "../../../types";
-import Spinner from "../../../components/Spinner";
+import SeverityBadge from "@/components/SeverityBadge";
+import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
+import Button from "@/components/ui/Button";
+import SparklesIcon from "@/components/icons/outlined/SparklesIcon";
+import { displayFindingPath } from "@/utils/scanPaths";
+import { buildCodePreviewRows, buildSnippetPreviewRow } from "@/utils/codePreview";
+import { providerCount } from "@/utils/findingCounts";
+import { usePermissions } from "@/context/PermissionsContext";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import type { Finding, PMIntegration, SecurityFindingCounts } from "@/types";
+import Spinner from "@/components/Spinner";
 import { ChevronRightIcon, CircleCheckIcon, CirclePlusIcon } from "lucide-react";
 
 interface Props {

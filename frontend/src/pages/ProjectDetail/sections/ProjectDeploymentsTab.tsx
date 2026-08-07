@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deployApi } from "../../../services/api";
-import type { Deployment, Project, Provider } from "../../../types";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import ProviderBadge from "../../../components/ProviderBadge";
-import ServiceBadge from "../../../components/ServiceBadge";
-import { usePermissions } from "../../../context/PermissionsContext";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import { getStatusDotClass, statusBadgeColors } from "../../../utils/styles";
-import Spinner from "../../../components/Spinner";
+import { deployApi } from "@/services/api";
+import type { Deployment, Project, Provider } from "@/types";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import ProviderBadge from "@/components/ProviderBadge";
+import ServiceBadge from "@/components/ServiceBadge";
+import { usePermissions } from "@/context/PermissionsContext";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import { getStatusDotClass, statusBadgeColors } from "@/utils/styles";
+import Spinner from "@/components/Spinner";
 
 const PAGE_SIZE = 10;
 

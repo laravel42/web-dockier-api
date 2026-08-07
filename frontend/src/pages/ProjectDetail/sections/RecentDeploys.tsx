@@ -1,11 +1,11 @@
-import type { Deployment as DeployInfo, Provider as ProviderInfo } from "../../../types";
-import { cardCls } from "../../../utils/styles";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import { getDeployServiceLabel } from "../../../utils/deployService";
-import { getProviderStyle } from "../../../data/providers";
-import ProviderBadge from "../../../components/ProviderBadge";
-import StatusRingIcon from "../../../components/badges/StatusRingIcon";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import type { Deployment as DeployInfo, Provider as ProviderInfo } from "@/types";
+import { cardCls } from "@/utils/styles";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import { getDeployServiceLabel } from "@/utils/deployService";
+import { getProviderStyle } from "@/data/providers";
+import ProviderBadge from "@/components/ProviderBadge";
+import StatusRingIcon from "@/components/badges/StatusRingIcon";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
 
 interface Props {
   deploys: DeployInfo[];

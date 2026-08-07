@@ -1,8 +1,8 @@
-import type { RepoPullRequest } from "../../../types";
-import { cardCls } from "../../../utils/styles";
-import { timeAgo } from "../../../utils/timeAgo";
-import Spinner from "../../../components/Spinner";
-import GitBranchIcon from "../../../components/icons/outlined/GitBranchIcon";
+import type { RepoPullRequest } from "@/types";
+import { cardCls } from "@/utils/styles";
+import { timeAgo } from "@/utils/timeAgo";
+import Spinner from "@/components/Spinner";
+import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
 
 interface Props {
   pullRequests: RepoPullRequest[];

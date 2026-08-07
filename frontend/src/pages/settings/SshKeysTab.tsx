@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { deployApi } from "../../services/api";
-import Modal from "../../components/Modal";
-import ConfirmModal from "../../components/ConfirmModal";
-import SettingsModalFooter from "../../components/SettingsModalFooter";
-import { readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "../../utils/styles";
-import { Input } from "../../components/ui/input";
-import { Textarea } from "../../components/ui/textarea";
-import Button from "../../components/ui/Button";
-import { formatCardDateTime } from "../../utils/formatCardDate";
-import { getErrorMessage } from "../../utils/errors";
-import { usePermissions } from "../../context/PermissionsContext";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import Alert from "../../components/ui/Alert";
-import { useAsyncData } from "../../hooks/useAsyncData";
+import { deployApi } from "@/services/api";
+import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
+import SettingsModalFooter from "@/components/SettingsModalFooter";
+import { readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import Button from "@/components/ui/Button";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import { getErrorMessage } from "@/utils/errors";
+import { usePermissions } from "@/context/PermissionsContext";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError, { EmptyMessage } from "@/components/ui/PageError";
+import Alert from "@/components/ui/Alert";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { KeyRoundIcon, PlusIcon } from "lucide-react";
 
 export default function SshKeysTab() {

@@ -8,8 +8,8 @@ import {
   Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { UserJourneyNode } from "../../../components/DeployWizard/types";
-import { cardCls } from "../../../utils/styles";
+import type { UserJourneyNode } from "@/components/DeployWizard/types";
+import { cardCls } from "@/utils/styles";
 
 interface Props {
   journey: UserJourneyNode;

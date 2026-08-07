@@ -1,7 +1,7 @@
-import type { Deployment, Project } from "../../../types";
-import { statusBadgeColors as statusColors, typeCaption, typePageTitle } from "../../../utils/styles";
-import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import Button from "../../../components/ui/Button";
+import type { Deployment, Project } from "@/types";
+import { statusBadgeColors as statusColors, typeCaption, typePageTitle } from "@/utils/styles";
+import RocketIcon from "@/components/icons/outlined/RocketIcon";
+import Button from "@/components/ui/Button";
 
 interface Props {
   deploy: Deployment;

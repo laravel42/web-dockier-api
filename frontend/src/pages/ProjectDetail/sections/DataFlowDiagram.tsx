@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { AIAnalysis } from "../../../components/DeployWizard/types";
-import { cardCls } from "../../../utils/styles";
-import SensitivityBadge, { getSensitivityStyle } from "../../../components/badges/SensitivityBadge";
+import type { AIAnalysis } from "@/components/DeployWizard/types";
+import { cardCls } from "@/utils/styles";
+import SensitivityBadge, { getSensitivityStyle } from "@/components/badges/SensitivityBadge";
 
 interface Props {
   dataFlow: NonNullable<AIAnalysis["dataFlow"]>;

@@ -1,5 +1,5 @@
 import type { PartialBlock } from "@blocknote/core";
-import type { Project } from "../../../types";
+import type { Project } from "@/types";
 
 const CACHE_VERSION = 1;
 

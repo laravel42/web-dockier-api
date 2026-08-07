@@ -1,6 +1,6 @@
 import { useProjectDetail } from "./useProjectDetail";
-import DeployWizard from "../../components/DeployWizard";
-import Button from "../../components/ui/Button";
+import DeployWizard from "@/components/DeployWizard";
+import Button from "@/components/ui/Button";
 import ProjectHeader from "./sections/ProjectHeader";
 import RepoInfoCard from "./sections/RepoInfoCard";
 import ProjectDetailsCard from "./sections/ProjectDetailsCard";
@@ -15,12 +15,12 @@ import ProjectDescription from "./sections/ProjectDescription";
 import PullLogModal from "./modals/PullLogModal";
 import IssueDetailModal from "./modals/IssueDetailModal";
 import PRDetailModal from "./modals/PRDetailModal";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError from "../../components/ui/PageError";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
 import { useState } from "react";
-import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import { gitApi } from "../../services/api";
-import type { RepoIssue, RepoPullRequest } from "../../types";
+import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { gitApi } from "@/services/api";
+import type { RepoIssue, RepoPullRequest } from "@/types";
 import { ChevronLeftIcon } from "lucide-react";
 
 export default function ProjectDetail() {

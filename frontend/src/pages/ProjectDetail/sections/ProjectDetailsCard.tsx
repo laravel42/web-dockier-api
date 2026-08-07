@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import type { Project } from "../../../types";
-import { cardCls } from "../../../utils/styles";
-import { getRepoKey } from "../../../utils/parseOwnerRepo";
-import { domainsApi } from "../../../services/domains";
+import type { Project } from "@/types";
+import { cardCls } from "@/utils/styles";
+import { getRepoKey } from "@/utils/parseOwnerRepo";
+import { domainsApi } from "@/services/domains";
 import { CheckIcon, ClipboardIcon, ExternalLinkIcon } from "lucide-react";
 
 interface Props {

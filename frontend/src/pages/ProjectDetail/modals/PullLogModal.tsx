@@ -1,5 +1,5 @@
-import Modal from "../../../components/Modal";
-import { btnSecondary } from "../../../utils/styles";
+import Modal from "@/components/Modal";
+import { btnSecondary } from "@/utils/styles";
 
 interface Props {
   pullLog: string[] | null;

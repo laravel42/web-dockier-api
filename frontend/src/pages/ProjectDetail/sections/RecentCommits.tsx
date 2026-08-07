@@ -1,7 +1,7 @@
-import type { CommitInfo } from "../../../types";
-import { cardCls } from "../../../utils/styles";
-import { timeAgo } from "../../../utils/timeAgo";
-import Spinner from "../../../components/Spinner";
+import type { CommitInfo } from "@/types";
+import { cardCls } from "@/utils/styles";
+import { timeAgo } from "@/utils/timeAgo";
+import Spinner from "@/components/Spinner";
 
 interface Props {
   commits: CommitInfo[];

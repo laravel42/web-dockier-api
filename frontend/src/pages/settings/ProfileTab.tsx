@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { usersApi, authApi, billingApi } from "../../services/api";
-import { useAuth } from "../../context/AuthContext";
-import { usePermissions } from "../../context/PermissionsContext";
-import { countries } from "../../data/countries";
-import { SearchableCombobox } from "../../components/ui/combobox";
-import { SettingsField, SettingsTextField } from "../../components/SettingsField";
-import Button from "../../components/ui/Button";
-import PageLoading from "../../components/ui/PageLoading";
-import Alert from "../../components/ui/Alert";
-import { getErrorMessage } from "../../utils/errors";
-import { emptyBillingDetails, type BillingDetails } from "../../types/billing";
+import { usersApi, authApi, billingApi } from "@/services/api";
+import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
+import { countries } from "@/data/countries";
+import { SearchableCombobox } from "@/components/ui/combobox";
+import { SettingsField, SettingsTextField } from "@/components/SettingsField";
+import Button from "@/components/ui/Button";
+import PageLoading from "@/components/ui/PageLoading";
+import Alert from "@/components/ui/Alert";
+import { getErrorMessage } from "@/utils/errors";
+import { emptyBillingDetails, type BillingDetails } from "@/types/billing";
 
 export default function ProfileTab() {
   const { userId, email: authEmail, userProfile, setUserProfile } = useAuth();

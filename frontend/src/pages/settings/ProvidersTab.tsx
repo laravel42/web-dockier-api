@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { deployApi } from "../../services/api";
-import Modal from "../../components/Modal";
-import SettingsModalFooter from "../../components/SettingsModalFooter";
-import ConfirmModal from "../../components/ConfirmModal";
-import ProviderBadge from "../../components/ProviderBadge";
-import { getProviderStyle } from "../../data/providers";
-import { SearchableCombobox } from "../../components/ui/combobox";
-import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
-import { Input } from "../../components/ui/input";
-import Button from "../../components/ui/Button";
-import { usePermissions } from "../../context/PermissionsContext";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useAsyncData } from "../../hooks/useAsyncData";
+import { deployApi } from "@/services/api";
+import Modal from "@/components/Modal";
+import SettingsModalFooter from "@/components/SettingsModalFooter";
+import ConfirmModal from "@/components/ConfirmModal";
+import ProviderBadge from "@/components/ProviderBadge";
+import { getProviderStyle } from "@/data/providers";
+import { SearchableCombobox } from "@/components/ui/combobox";
+import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "@/utils/styles";
+import { Input } from "@/components/ui/input";
+import Button from "@/components/ui/Button";
+import { usePermissions } from "@/context/PermissionsContext";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError, { EmptyMessage } from "@/components/ui/PageError";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 
 export default function ProvidersTab() {

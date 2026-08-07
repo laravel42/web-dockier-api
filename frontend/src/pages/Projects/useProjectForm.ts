@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { projectsApi, gitApi } from "../../services/api";
-import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import { getErrorMessage } from "../../utils/errors";
-import { useToast } from "../../context/useToast";
-import { getDefaultDeployScript } from "../../config/frameworks";
+import { projectsApi, gitApi } from "@/services/api";
+import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { getErrorMessage } from "@/utils/errors";
+import { useToast } from "@/context/useToast";
+import { getDefaultDeployScript } from "@/config/frameworks";
 import { PROJECT_TEMPLATES } from "./templates";
-import type { Connection, Repo, Project } from "../../types";
+import type { Connection, Repo, Project } from "@/types";
 
 export interface ProjectFormState {
   name: string;

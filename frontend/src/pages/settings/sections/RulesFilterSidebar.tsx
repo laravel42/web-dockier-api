@@ -1,5 +1,5 @@
 import { useState } from "react";
-import TechBadge from "../../../components/TechBadge";
+import TechBadge from "@/components/TechBadge";
 import { ChevronDownIcon } from "lucide-react";
 
 export interface SeverityItem {

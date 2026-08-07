@@ -1,14 +1,14 @@
-import DeployWizard from "../../components/DeployWizard";
-import Button from "../../components/ui/Button";
+import DeployWizard from "@/components/DeployWizard";
+import Button from "@/components/ui/Button";
 import { useDeployDetail } from "./useDeployDetail";
 import DeployHeader from "./sections/DeployHeader";
 import InfoCards from "./sections/InfoCards";
-import { resolveDeployUrl } from "../../utils/resolveDeployUrl";
+import { resolveDeployUrl } from "@/utils/resolveDeployUrl";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError from "../../components/ui/PageError";
-import { usePermissions } from "../../context/PermissionsContext";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
+import { usePermissions } from "@/context/PermissionsContext";
 import { ChevronLeftIcon } from "lucide-react";
 
 export default function DeployDetail() {

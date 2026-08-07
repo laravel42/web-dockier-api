@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { Project } from "../../../types";
-import { btnPrimary, typePageDesc, typePageTitle } from "../../../utils/styles";
-import { usePermissions } from "../../../context/PermissionsContext";
-import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import ProjectAvatar from "../../../components/ProjectAvatar";
+import type { Project } from "@/types";
+import { btnPrimary, typePageDesc, typePageTitle } from "@/utils/styles";
+import { usePermissions } from "@/context/PermissionsContext";
+import RocketIcon from "@/components/icons/outlined/RocketIcon";
+import ProjectAvatar from "@/components/ProjectAvatar";
 import { SquarePenIcon } from "lucide-react";
 
 interface Props {

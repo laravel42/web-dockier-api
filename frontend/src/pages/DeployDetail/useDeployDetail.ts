@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { deployApi, gitApi, projectsApi } from "../../services/api";
-import { getErrorMessage } from "../../utils/errors";
-import { getRepoKey, parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import type { RepoAnalysis } from "../../components/DeployWizard";
-import type { Deployment, Provider, Project } from "../../types";
-import { compareByTime } from "../../utils/sortByTime";
+import { deployApi, gitApi, projectsApi } from "@/services/api";
+import { getErrorMessage } from "@/utils/errors";
+import { getRepoKey, parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import type { RepoAnalysis } from "@/components/DeployWizard";
+import type { Deployment, Provider, Project } from "@/types";
+import { compareByTime } from "@/utils/sortByTime";
 
 const IN_PROGRESS_STATUSES = new Set(["pending", "building", "deploying"]);
 const POLL_INTERVAL_MS = 2_000;

@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { rolesApi } from "../../services/api";
-import RoleFormModal from "../../components/RoleFormModal";
-import ConfirmModal from "../../components/ConfirmModal";
-import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "../../utils/styles";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError, { EmptyMessage } from "../../components/ui/PageError";
-import { useAsyncData } from "../../hooks/useAsyncData";
-import { usePermissions } from "../../context/PermissionsContext";
-import { useToast } from "../../context/useToast";
-import { getErrorMessage } from "../../utils/errors";
+import { rolesApi } from "@/services/api";
+import RoleFormModal from "@/components/RoleFormModal";
+import ConfirmModal from "@/components/ConfirmModal";
+import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "@/utils/styles";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError, { EmptyMessage } from "@/components/ui/PageError";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { usePermissions } from "@/context/PermissionsContext";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
 import Button from "@/components/ui/Button";
 import { PlusIcon, ShieldCheckIcon } from "lucide-react";
 

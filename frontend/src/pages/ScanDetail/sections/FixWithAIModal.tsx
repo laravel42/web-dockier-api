@@ -1,7 +1,7 @@
-import Modal from "../../../components/Modal";
-import { SearchableCombobox } from "../../../components/ui/combobox";
-import Button from "../../../components/ui/Button";
-import type { Finding, RepoMember, FixResult } from "../../../types";
+import Modal from "@/components/Modal";
+import { SearchableCombobox } from "@/components/ui/combobox";
+import Button from "@/components/ui/Button";
+import type { Finding, RepoMember, FixResult } from "@/types";
 import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
 
 interface Props {

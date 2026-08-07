@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { integrationsApi, gitApi } from "../../services/api";
-import { ApiError } from "../../services/api-error";
-import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "../../types";
+import { integrationsApi, gitApi } from "@/services/api";
+import { ApiError } from "@/services/api-error";
+import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "@/types";
 
 export function useIssueModal(project: Project | null) {
   const [pmIntegrations, setPmIntegrations] = useState<PMIntegration[]>([]);

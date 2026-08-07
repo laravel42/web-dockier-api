@@ -1,6 +1,6 @@
-import { cardCls, typeCaption, typeStatValueSm } from "../../../utils/styles";
-import { resolveFilteredCounts } from "../../../utils/findingCounts";
-import type { ScanProgress, ScanSummary, SecurityFindingCounts } from "../../../types";
+import { cardCls, typeCaption, typeStatValueSm } from "@/utils/styles";
+import { resolveFilteredCounts } from "@/utils/findingCounts";
+import type { ScanProgress, ScanSummary, SecurityFindingCounts } from "@/types";
 
 interface Props {
   summary: ScanSummary;

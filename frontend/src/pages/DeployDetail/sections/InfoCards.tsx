@@ -1,7 +1,7 @@
-import type { Deployment } from "../../../types";
-import { strategyLabels, cardCls } from "../../../utils/styles";
-import ProviderBadge from "../../../components/ProviderBadge";
-import { getProviderStyle } from "../../../data/providers";
+import type { Deployment } from "@/types";
+import { strategyLabels, cardCls } from "@/utils/styles";
+import ProviderBadge from "@/components/ProviderBadge";
+import { getProviderStyle } from "@/data/providers";
 import { ExternalLinkIcon } from "lucide-react";
 
 interface Props {

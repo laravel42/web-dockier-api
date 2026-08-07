@@ -3,14 +3,14 @@ import { useSecurityScans } from "./useSecurityScans";
 import ScanProjectCard from "./sections/ScanProjectCard";
 import ScanProjectTable from "./sections/ScanProjectTable";
 import EmptyProjectCard from "./sections/EmptyProjectCard";
-import PageHeader from "../../components/ui/PageHeader";
-import PageLoading from "../../components/ui/PageLoading";
-import PageError from "../../components/ui/PageError";
-import EmptyState from "../../components/ui/EmptyState";
-import ListToolbar from "../../components/ui/ListToolbar";
-import { EmptyMessage } from "../../components/ui/PageError";
+import PageHeader from "@/components/ui/PageHeader";
+import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
+import EmptyState from "@/components/ui/EmptyState";
+import ListToolbar from "@/components/ui/ListToolbar";
+import { EmptyMessage } from "@/components/ui/PageError";
 import { ShieldCheckIcon } from "lucide-react";
-import { cardGridCls } from "../../utils/styles";
+import { cardGridCls } from "@/utils/styles";
 
 export default function SecurityScans() {
   const [search, setSearch] = useState("");

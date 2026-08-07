@@ -1,10 +1,10 @@
-import Modal from "../../../components/Modal";
-import Button from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/input";
-import { Textarea } from "../../../components/ui/textarea";
-import type { PMIntegration, PMTeam, PMMember } from "../../../types";
-import Spinner from "../../../components/Spinner";
-import { SearchableCombobox } from "../../../components/ui/combobox";
+import Modal from "@/components/Modal";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { PMIntegration, PMTeam, PMMember } from "@/types";
+import Spinner from "@/components/Spinner";
+import { SearchableCombobox } from "@/components/ui/combobox";
 import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
 
 interface Props {

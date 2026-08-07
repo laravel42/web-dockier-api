@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { statCardCls, typeStatDelta, typeStatLabel, typeStatValueSm } from "../../../utils/styles";
-import RocketIcon from "../../../components/icons/outlined/RocketIcon";
+import { statCardCls, typeStatDelta, typeStatLabel, typeStatValueSm } from "@/utils/styles";
+import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import { CircleAlertIcon, CircleCheckIcon, FolderClosedIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 
 interface KpiItem {

@@ -1,10 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { codeAnalysisApi, projectsApi } from "../../services/api";
-import { useAsyncData } from "../../hooks/useAsyncData";
-import { useProjectBadges } from "../../hooks/useProjectBadges";
-import { useViewMode } from "../../hooks/useViewMode";
-import type { Scan, Project } from "../../types";
-import { compareByTime } from "../../utils/sortByTime";
+import { codeAnalysisApi, projectsApi } from "@/services/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { useProjectBadges } from "@/hooks/useProjectBadges";
+import { useViewMode } from "@/hooks/useViewMode";
+import type { Scan, Project } from "@/types";
+import { compareByTime } from "@/utils/sortByTime";
 
 interface SecurityScansData {
   scans: Scan[];

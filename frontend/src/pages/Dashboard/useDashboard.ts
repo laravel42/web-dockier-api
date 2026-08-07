@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { projectsApi, deployApi, codeAnalysisApi } from "../../services/api";
-import { useAsyncData } from "../../hooks/useAsyncData";
-import type { Project, Deployment as Deploy, Scan, Provider } from "../../types";
+import { projectsApi, deployApi, codeAnalysisApi } from "@/services/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import type { Project, Deployment as Deploy, Scan, Provider } from "@/types";
 
 interface DashboardData {
   projects: Project[];

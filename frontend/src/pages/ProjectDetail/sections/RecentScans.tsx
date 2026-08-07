@@ -1,9 +1,9 @@
-import type { Scan } from "../../../types";
-import { cardCls } from "../../../utils/styles";
-import StatusRingIcon from "../../../components/badges/StatusRingIcon";
-import SeverityBadge from "../../../components/SeverityBadge";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import { isScanSecurityClean } from "../../../utils/scanSummary";
+import type { Scan } from "@/types";
+import { cardCls } from "@/utils/styles";
+import StatusRingIcon from "@/components/badges/StatusRingIcon";
+import SeverityBadge from "@/components/SeverityBadge";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { isScanSecurityClean } from "@/utils/scanSummary";
 import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {

@@ -1,11 +1,11 @@
-import ProjectTechBadges from "../../../components/ProjectTechBadges";
-import ProjectAvatar from "../../../components/ProjectAvatar";
-import DevIcon from "../../../components/DevIcon";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import { getRepoSlug } from "../../../utils/parseOwnerRepo";
-import { cardInteractiveCls, typeCardDateCls, typeCardTitle } from "../../../utils/styles";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import type { Project, TechBadgeInfo } from "../../../types";
+import ProjectTechBadges from "@/components/ProjectTechBadges";
+import ProjectAvatar from "@/components/ProjectAvatar";
+import DevIcon from "@/components/DevIcon";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { getRepoSlug } from "@/utils/parseOwnerRepo";
+import { cardInteractiveCls, typeCardDateCls, typeCardTitle } from "@/utils/styles";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import type { Project, TechBadgeInfo } from "@/types";
 
 interface Props {
   project: Project;

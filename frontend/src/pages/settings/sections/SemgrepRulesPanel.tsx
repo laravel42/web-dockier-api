@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { codeAnalysisApi } from "../../../services/api";
-import TechBadge from "../../../components/TechBadge";
-import Modal from "../../../components/Modal";
-import ConfirmModal from "../../../components/ConfirmModal";
-import YamlEditor from "../../../components/YamlEditor";
-import { SettingsField, SettingsTextField } from "../../../components/SettingsField";
-import PageLoading from "../../../components/ui/PageLoading";
-import Spinner from "../../../components/Spinner";
-import Button from "../../../components/ui/Button";
+import { codeAnalysisApi } from "@/services/api";
+import TechBadge from "@/components/TechBadge";
+import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
+import YamlEditor from "@/components/YamlEditor";
+import { SettingsField, SettingsTextField } from "@/components/SettingsField";
+import PageLoading from "@/components/ui/PageLoading";
+import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
 import { SquarePenIcon, Trash2Icon } from "lucide-react";
-import ToggleSwitch from "../../../components/ui/ToggleSwitch";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 

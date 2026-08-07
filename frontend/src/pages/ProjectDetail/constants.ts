@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { createElement } from "react";
-import type { RepoStats } from "../../types";
+import type { RepoStats } from "@/types";
 import { CircleAlertIcon, CodeXmlIcon, EyeIcon, Share2Icon, StarIcon, UsersIcon } from "lucide-react";
 
 export const langColors = [

@@ -1,5 +1,5 @@
 import { DefaultChatTransport } from "ai";
-import { getToken } from "../../../services/session";
+import { getToken } from "@/services/session";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 

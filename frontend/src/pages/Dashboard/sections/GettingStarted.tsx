@@ -7,9 +7,9 @@ import {
   marketingSectionDesc,
   marketingSectionTitle,
   overlinePillCls,
-} from "../../../utils/styles";
-import Button from "../../../components/ui/Button";
-import RocketIcon from "../../../components/icons/outlined/RocketIcon";
+} from "@/utils/styles";
+import Button from "@/components/ui/Button";
+import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import IntegrationMarquee from "./IntegrationMarquee";
 import { CheckIcon, CodeXmlIcon, EyeIcon, LinkIcon, LockIcon, MessageSquareTextIcon, PlusIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 

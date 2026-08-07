@@ -1,4 +1,4 @@
-import type { Deployment, Provider } from "../../../types";
+import type { Deployment, Provider } from "@/types";
 import {
   cardCls,
   getStatusDotClass,
@@ -6,13 +6,13 @@ import {
   sidebarHistoryLabelCls,
   sidebarPanelHeadCls,
   sidebarPanelHeadTitleCls,
-} from "../../../utils/styles";
-import { usePermissions } from "../../../context/PermissionsContext";
-import Button from "../../../components/ui/Button";
-import ProviderBadge from "../../../components/ProviderBadge";
-import BranchBadge from "../../../components/BranchBadge";
-import RocketIcon from "../../../components/icons/outlined/RocketIcon";
-import Spinner from "../../../components/Spinner";
+} from "@/utils/styles";
+import { usePermissions } from "@/context/PermissionsContext";
+import Button from "@/components/ui/Button";
+import ProviderBadge from "@/components/ProviderBadge";
+import BranchBadge from "@/components/BranchBadge";
+import RocketIcon from "@/components/icons/outlined/RocketIcon";
+import Spinner from "@/components/Spinner";
 
 interface Props {
   deploys: Deployment[];

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { gitApi } from "../../services/api";
-import { parseOwnerRepo } from "../../utils/parseOwnerRepo";
-import type { Finding, Project, RepoMember, FixResult } from "../../types";
+import { gitApi } from "@/services/api";
+import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import type { Finding, Project, RepoMember, FixResult } from "@/types";
 
 export function useFixModal(project: Project | null) {
   const [fixModal, setFixModal] = useState<{ open: boolean; finding: Finding | null }>({ open: false, finding: null });

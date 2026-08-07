@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { codeAnalysisApi } from "../../../services/api";
-import TechBadge from "../../../components/TechBadge";
-import PageLoading from "../../../components/ui/PageLoading";
-import Button from "../../../components/ui/Button";
-import Spinner from "../../../components/Spinner";
+import { codeAnalysisApi } from "@/services/api";
+import TechBadge from "@/components/TechBadge";
+import PageLoading from "@/components/ui/PageLoading";
+import Button from "@/components/ui/Button";
+import Spinner from "@/components/Spinner";
 import { ChevronDownIcon } from "lucide-react";
-import ToggleSwitch from "../../../components/ui/ToggleSwitch";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 

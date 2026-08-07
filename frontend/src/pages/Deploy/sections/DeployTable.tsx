@@ -1,16 +1,16 @@
-import TechCell from "../../../components/TechCell";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import { getRepoSlug } from "../../../utils/parseOwnerRepo";
+import TechCell from "@/components/TechCell";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { getRepoSlug } from "@/utils/parseOwnerRepo";
 import {
   statusDotColors as statusColors,
   tableCellCls,
   tableCellMutedCls,
   typeCardDateCls,
-} from "../../../utils/styles";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import type { Deployment, Project, TechBadgeInfo } from "../../../types";
-import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
+} from "@/utils/styles";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import DataTable, { tableRowCls } from "@/components/ui/DataTable";
+import type { Deployment, Project, TechBadgeInfo } from "@/types";
+import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
 
 interface Props {
   grouped: Array<[string, Deployment[]]>;

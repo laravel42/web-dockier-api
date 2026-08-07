@@ -1,12 +1,12 @@
 import { useState } from "react";
-import Modal from "../../../components/Modal";
-import SourceControlSelect from "../../../components/SourceControlSelect";
-import RepoSelect from "../../../components/RepoSelect";
-import BranchSelect from "../../../components/BranchSelect";
-import { FRAMEWORK_CATEGORIES } from "../../../config/frameworks";
-import Button from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/input";
-import type { Connection, Repo } from "../../../types";
+import Modal from "@/components/Modal";
+import SourceControlSelect from "@/components/SourceControlSelect";
+import RepoSelect from "@/components/RepoSelect";
+import BranchSelect from "@/components/BranchSelect";
+import { FRAMEWORK_CATEGORIES } from "@/config/frameworks";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
+import type { Connection, Repo } from "@/types";
 import { CheckIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 
 interface Props {

@@ -1,10 +1,10 @@
-import type { Scan, Project } from "../../../types";
-import { cardCls, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
-import Button from "../../../components/ui/Button";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import SeverityBadge from "../../../components/SeverityBadge";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import { isScanSecurityClean, scanHasSecurityErrors } from "../../../utils/scanSummary";
+import type { Scan, Project } from "@/types";
+import { cardCls, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "@/utils/styles";
+import Button from "@/components/ui/Button";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import SeverityBadge from "@/components/SeverityBadge";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { isScanSecurityClean, scanHasSecurityErrors } from "@/utils/scanSummary";
 
 interface Props {
   scans: Scan[];

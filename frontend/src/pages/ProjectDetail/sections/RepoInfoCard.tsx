@@ -1,9 +1,9 @@
-import type { Project, RepoStats } from "../../../types";
-import { cardCls } from "../../../utils/styles";
-import { timeAgo } from "../../../utils/timeAgo";
-import GitCommitIcon from "../../../components/icons/outlined/GitCommitIcon";
-import SourceControlBadge from "../../../components/SourceControlBadge";
-import ProjectTechBadges from "../../../components/ProjectTechBadges";
+import type { Project, RepoStats } from "@/types";
+import { cardCls } from "@/utils/styles";
+import { timeAgo } from "@/utils/timeAgo";
+import GitCommitIcon from "@/components/icons/outlined/GitCommitIcon";
+import SourceControlBadge from "@/components/SourceControlBadge";
+import ProjectTechBadges from "@/components/ProjectTechBadges";
 
 interface Props {
   project: Project;

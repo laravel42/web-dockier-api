@@ -1,9 +1,9 @@
-import type { Deployment as Deploy, Provider, Project } from "../../../types";
-import { cardCls, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "../../../utils/styles";
-import Button from "../../../components/ui/Button";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import ProviderBadge from "../../../components/ProviderBadge";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
+import type { Deployment as Deploy, Provider, Project } from "@/types";
+import { cardCls, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "@/utils/styles";
+import Button from "@/components/ui/Button";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import ProviderBadge from "@/components/ProviderBadge";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
 
 interface Props {
   deploys: Deploy[];

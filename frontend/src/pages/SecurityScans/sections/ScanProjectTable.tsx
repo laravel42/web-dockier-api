@@ -1,11 +1,11 @@
-import TechCell from "../../../components/TechCell";
-import BranchCommitLabel from "../../../components/BranchCommitLabel";
-import DataTable, { tableRowCls } from "../../../components/ui/DataTable";
-import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "../../../utils/styles";
-import { formatCardDateTime } from "../../../utils/formatCardDate";
-import type { Scan, Project, TechBadgeInfo } from "../../../types";
-import { compareByTime, getSortTimestamp } from "../../../utils/sortByTime";
-import { isScanSecurityClean, scanHasSecurityErrors, scanSecurityFindingCount } from "../../../utils/scanSummary";
+import TechCell from "@/components/TechCell";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import DataTable, { tableRowCls } from "@/components/ui/DataTable";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "@/utils/styles";
+import { formatCardDateTime } from "@/utils/formatCardDate";
+import type { Scan, Project, TechBadgeInfo } from "@/types";
+import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
+import { isScanSecurityClean, scanHasSecurityErrors, scanSecurityFindingCount } from "@/utils/scanSummary";
 
 interface Props {
   sortedProjectIds: string[];
