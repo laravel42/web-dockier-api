@@ -8,7 +8,8 @@ import Alert from "../components/ui/Alert";
 import AuthLayout from "../components/AuthLayout";
 import { InputWithLabel } from "../components/ui/fields";
 import { PasswordInput } from "../components/ui/fields/password-input";
-import { btnPrimaryAuth, btnSecondaryAuth, btnLink } from "../utils/styles";
+import { btnLink } from "../utils/styles";
+import Button from "../components/ui/Button";
 import { getErrorMessage } from "../utils/errors";
 
 export default function Login() {
@@ -152,10 +153,12 @@ export default function Login() {
             autoComplete="one-time-code"
           />
         )}
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="lg"
+          className="w-full"
           disabled={loading || (loginMode === "otp" && !otpSent && cooldownSeconds > 0)}
-          className={btnPrimaryAuth}
         >
           {loading
             ? "Please wait..."
@@ -166,35 +169,35 @@ export default function Login() {
                 : cooldownSeconds > 0
                   ? `Retry in ${cooldownSeconds}s`
                   : "Send sign-in code"}
-        </button>
+        </Button>
         {loginMode === "otp" && otpSent && (
-          <button type="button" onClick={resetFlow} className={btnSecondaryAuth}>
+          <Button variant="outline" size="lg" className="w-full" onClick={resetFlow}>
             Use a different email
-          </button>
+          </Button>
         )}
       </form>
 
       <div className="mt-4 flex items-center gap-3">
-        <button
-          type="button"
+        <Button
+          variant="link"
           onClick={() => {
             setLoginMode(loginMode === "otp" ? "password" : "otp");
             resetFlow();
           }}
-          className={btnLink}
         >
           {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
-        </button>
+        </Button>
       </div>
       {demoLoginEnabled && (
-      <button
-        type="button"
+      <Button
+        variant="outline"
+        size="lg"
+        className="w-full mt-3"
         onClick={handleDemoLogin}
         disabled={loading}
-        className={`${btnSecondaryAuth} mt-3`}
       >
         Continue in demo mode
-      </button>
+      </Button>
       )}
 
       {!demoLoginEnabled && (

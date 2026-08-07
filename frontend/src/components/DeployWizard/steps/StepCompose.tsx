@@ -1,10 +1,10 @@
 import type { WizardState } from "../types";
-import DockerIcon from "../../icons/filled/DockerIcon";
-import Spinner from "../../Spinner";
-import DockerfileIcon from "../../icons/filled/DockerfileIcon";
-import RailpackIcon from "../../icons/outlined/RailpackIcon";
-import NixpacksIcon from "../../icons/outlined/NixpacksIcon";
-import CodeBuildIcon from "../../icons/outlined/CodeBuildIcon";
+import DockerIcon from "@/components/icons/filled/DockerIcon";
+import Spinner from "@/components/Spinner";
+import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
+import RailpackIcon from "@/components/icons/outlined/RailpackIcon";
+import NixpacksIcon from "@/components/icons/outlined/NixpacksIcon";
+import CodeBuildIcon from "@/components/icons/outlined/CodeBuildIcon";
 
 export default function StepCompose({ state, loading, error, hasRepoDockerfile, onToggleDocker, onBuildMethodChange, onDockerfileSourceChange, onRegenerateScript, isTemplate }: {
   state: WizardState;

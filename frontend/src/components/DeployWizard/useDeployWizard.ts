@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { deployApi } from "../../services/api";
+import { deployApi } from "@/services/api";
 import type { WizardState, RepoAnalysis, Provider } from "./types";
 import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
 import { getPlans } from "./plans";

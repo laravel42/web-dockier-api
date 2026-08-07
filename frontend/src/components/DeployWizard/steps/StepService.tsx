@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { RepoAnalysis, WizardState } from "../types";
 import { PROVIDER_META } from "../constants";
-import { choiceCardIdleCls, choiceCardSelectedCls } from "../../../utils/styles";
+import { choiceCardIdleCls, choiceCardSelectedCls } from "@/utils/styles";
 import { CircleCheckIcon } from "lucide-react";
 
 /** Templates that cannot use static hosting (they need a server runtime). */

@@ -7,7 +7,8 @@ import { usePermissions } from "../context/PermissionsContext";
 import Alert from "../components/ui/Alert";
 import AuthLayout from "../components/AuthLayout";
 import { InputWithLabel } from "../components/ui/fields";
-import { btnPrimaryAuth, btnLink } from "../utils/styles";
+import { btnLink } from "../utils/styles";
+import Button from "../components/ui/Button";
 import { getErrorMessage } from "../utils/errors";
 
 export default function Register() {
@@ -122,10 +123,12 @@ export default function Register() {
             autoComplete="one-time-code"
           />
         )}
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="lg"
+          className="w-full"
           disabled={loading || (!otpSent && cooldownSeconds > 0)}
-          className={btnPrimaryAuth}
         >
           {loading
             ? "Please wait..."
@@ -134,7 +137,7 @@ export default function Register() {
               : cooldownSeconds > 0
                 ? `Retry in ${cooldownSeconds}s`
                 : "Send verification code"}
-        </button>
+        </Button>
       </form>
       <p className="mt-6 text-center text-sm text-muted-foreground">
         Already have an account?{" "}

@@ -1,5 +1,5 @@
 import Modal from "@/components/Modal";
-import { btnSecondary } from "@/utils/styles";
+import Button from "@/components/ui/Button";
 
 interface Props {
   pullLog: string[] | null;
@@ -22,7 +22,7 @@ export default function PullLogModal({ pullLog, pullLoading, onClose }: Props) {
         )}
       </div>
       <div className="flex justify-end mt-4">
-        <button type="button" onClick={onClose} className={btnSecondary}>Close</button>
+        <Button variant="outline" onClick={onClose}>Close</Button>
       </div>
     </Modal>
   );

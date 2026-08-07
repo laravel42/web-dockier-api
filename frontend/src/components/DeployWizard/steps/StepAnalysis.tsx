@@ -1,7 +1,7 @@
 import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
-import Spinner from "../../Spinner";
-import DockerfileIcon from "../../icons/filled/DockerfileIcon";
+import Spinner from "@/components/Spinner";
+import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
 import { TriangleAlertIcon } from "lucide-react";
 
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { btnSecondary, cardCls, typeBodyMuted, typePanelTitle } from "../../utils/styles";
+import Button from "./Button";
+import { cardCls, typeBodyMuted, typePanelTitle } from "@/utils/styles";
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -23,9 +24,9 @@ export default function EmptyState({
       {title && <h2 className={`${typePanelTitle} mb-2`}>{title}</h2>}
       <p className={typeBodyMuted}>{description}</p>
       {action && (
-        <button type="button" onClick={action.onClick} className={`${btnSecondary} mt-4`}>
+        <Button variant="outline" onClick={action.onClick} className="mt-4">
           {action.label}
-        </button>
+        </Button>
       )}
     </div>
   );

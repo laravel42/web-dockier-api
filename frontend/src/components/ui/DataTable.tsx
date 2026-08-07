@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { tablePanelCls, tableHeadCls } from "../../utils/styles";
+import { tablePanelCls, tableHeadCls } from "@/utils/styles";
 
 interface Props {
   children: ReactNode;

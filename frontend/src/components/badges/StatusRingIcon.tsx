@@ -1,4 +1,4 @@
-import type { DeploymentStatus, ScanStatus } from "../../types";
+import type { DeploymentStatus, ScanStatus } from "@/types";
 
 interface Props {
   status: DeploymentStatus | ScanStatus | (string & {});

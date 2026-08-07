@@ -1,9 +1,8 @@
 import { useState } from "react";
 import Modal from "@/components/Modal";
-import { btnPrimary, btnSecondary, btnDanger } from "@/utils/styles";
+import Button from "@/components/ui/Button";
 import { timeAgo } from "@/utils/timeAgo";
 import type { RepoIssue } from "@/types";
-import Spinner from "@/components/Spinner";
 import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
 
 interface Props {
@@ -149,28 +148,26 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-4 border-t border-border/50">
-            <button
-              type="button"
+            <Button
+              variant="primary"
               onClick={handleFixWithAI}
               disabled={fixing || closing || !!fixResult}
-              className={btnPrimary}
+              loading={fixing}
             >
-              {fixing ? <Spinner className="size-3.5" /> : null}
-              {fixResult ? "Fix Created" : fixing ? "Generating fix…" : "Fix with AI"}
-            </button>
-            <button
-              type="button"
+              {fixResult ? "Fix Created" : "Fix with AI"}
+            </Button>
+            <Button
+              variant="danger"
               onClick={handleClose}
               disabled={closing || fixing}
-              className={`${btnDanger} h-8 px-3 inline-flex items-center gap-1.5`}
+              loading={closing}
             >
-              {closing ? <Spinner className="size-3.5" /> : null}
               Close Issue
-            </button>
+            </Button>
             <div className="flex-1" />
-            <button type="button" onClick={onClose} className={btnSecondary}>
+            <Button variant="outline" onClick={onClose}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

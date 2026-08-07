@@ -6,7 +6,8 @@ import PageHeader from "../components/ui/PageHeader";
 import PageLoading from "../components/ui/PageLoading";
 import PageError, { EmptyMessage } from "../components/ui/PageError";
 import Pagination from "../components/ui/Pagination";
-import { btnLink, btnGhost, cardCls } from "../utils/styles";
+import { cardCls } from "../utils/styles";
+import Button from "../components/ui/Button";
 import type { Notification } from "../types";
 import NotificationContent from "../components/NotificationContent";
 import NotificationTitleLink from "../components/NotificationTitleLink";
@@ -72,9 +73,9 @@ export default function Notifications() {
         description={`${pagination.total} total · Activity from your projects and deployments`}
         actions={
           hasUnread ? (
-            <button type="button" onClick={markAllRead} className={btnGhost}>
+            <Button variant="ghost" onClick={markAllRead}>
               Mark all as read
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -113,9 +114,9 @@ export default function Notifications() {
                     <NotificationContent notification={n} />
                   </div>
                   {!n.read && (
-                    <button type="button" onClick={() => markRead(n.id)} className={`${btnLink} shrink-0 text-xs`}>
+                    <Button variant="link" size="sm" onClick={() => markRead(n.id)} className="shrink-0">
                       Mark read
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}

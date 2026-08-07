@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import type { WizardState, Provider } from "../types";
 import { PROVIDER_META } from "../constants";
-import { choiceCardIdleCls, choiceCardSelectedCls } from "../../../utils/styles";
+import { choiceCardIdleCls, choiceCardSelectedCls } from "@/utils/styles";
 import { CircleCheckIcon } from "lucide-react";
 
 export default function StepProvider({ state, providers, onChange }: {

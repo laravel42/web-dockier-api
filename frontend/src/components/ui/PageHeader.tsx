@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { typePageDesc, typePageTitle } from "../../utils/styles";
+import { typePageDesc, typePageTitle } from "@/utils/styles";
 
 interface PageHeaderProps {
   title: string;

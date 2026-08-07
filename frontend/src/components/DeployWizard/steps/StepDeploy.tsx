@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { WizardState } from "../types";
 import { CheckIcon, ExternalLinkIcon } from "lucide-react";
-import Spinner from "../../Spinner";
+import Spinner from "@/components/Spinner";
 
 export default function StepDeploy({ state }: { state: WizardState }) {
   const logsRef = useRef<HTMLDivElement>(null);

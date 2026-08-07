@@ -1,6 +1,6 @@
 import React from "react";
 import Alert from "./ui/Alert";
-import { btnPrimary } from "../utils/styles";
+import Button from "./ui/Button";
 
 interface State {
   hasError: boolean;
@@ -28,13 +28,12 @@ export default class ErrorBoundary extends React.Component<
             <p className="font-medium">{this.props.title ?? "Something went wrong"}</p>
             <p className="mt-1 opacity-90">{this.state.message}</p>
           </Alert>
-          <button
-            type="button"
-            className={btnPrimary}
+          <Button
+            variant="primary"
             onClick={() => this.setState({ hasError: false, message: "" })}
           >
             Try again
-          </button>
+          </Button>
         </div>
       );
     }

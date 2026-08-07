@@ -1,4 +1,4 @@
-import { getStatusBadgeClass } from "../../utils/styles";
+import { getStatusBadgeClass } from "@/utils/styles";
 
 interface Props {
   status: string;

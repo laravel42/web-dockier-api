@@ -76,34 +76,11 @@ export const choiceCardIconIdleCls = "bg-muted text-muted-foreground";
 export const choiceCardIconSelectedCls = "bg-primary/15 text-primary";
 
 // ── Buttons ──────────────────────────────────────────────────────
-export const btnPrimary =
-  "inline-flex items-center justify-center gap-1.5 h-8 px-3 text-ui font-medium tracking-tight rounded-md bg-primary text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none";
-
-export const btnSecondary =
-  "inline-flex items-center justify-center gap-1.5 h-8 px-3 text-ui font-medium tracking-tight rounded-md bg-secondary-100 text-text hover:bg-secondary-200 transition-colors disabled:opacity-50 disabled:pointer-events-none";
-
-export const btnOutline =
-  "inline-flex items-center justify-center gap-1.5 h-8 px-3 text-ui font-medium tracking-tight rounded-md border border-border bg-background shadow-sm hover:bg-card/60 transition-colors disabled:opacity-50 disabled:pointer-events-none";
-
-export const btnGhost =
-  "inline-flex items-center justify-center gap-1.5 h-8 px-3 text-ui font-medium tracking-tight rounded-md text-text-muted hover:bg-card/60 hover:text-text transition-colors disabled:opacity-50 disabled:pointer-events-none";
-
-export const btnDanger = "text-ui text-danger-500 hover:text-danger-700 font-medium transition-colors";
-
 export const btnLink =
   "inline-flex items-center gap-1 text-ui font-medium text-primary hover:text-primary/80 transition-colors";
 
 /** Form field labels */
 export const labelCls = "mb-1 block text-xs font-medium leading-none text-muted-foreground";
-
-/** Auth */
-export const btnPrimaryAuth =
-  "h-10 px-4 w-full text-sm font-semibold tracking-tight rounded-md bg-primary text-primary-foreground shadow hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none";
-
-export const btnSecondaryAuth =
-  "h-10 px-4 w-full text-sm font-semibold tracking-tight rounded-md border border-border bg-transparent hover:bg-card/60 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none";
-
-export const btnAccent = btnPrimary;
 
 /** Sidebar nav link */
 export const navLinkCls =

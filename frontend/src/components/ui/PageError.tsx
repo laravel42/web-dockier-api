@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Alert from "./Alert";
-import { btnSecondary } from "../../utils/styles";
+import Button from "./Button";
 
 interface PageErrorProps {
   message: string;
@@ -15,9 +15,9 @@ export default function PageError({ message, onRetry, className = "" }: PageErro
         {message}
       </Alert>
       {onRetry && (
-        <button type="button" onClick={onRetry} className={btnSecondary}>
+        <Button variant="outline" onClick={onRetry}>
           Retry
-        </button>
+        </Button>
       )}
     </div>
   );

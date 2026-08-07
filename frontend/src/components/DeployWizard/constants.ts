@@ -92,8 +92,6 @@ export const PROVIDER_REGIONS: Record<string, Array<{ id: string; name: string; 
   ],
 };
 
-export { btnPrimary, btnSecondary } from "../../utils/styles";
-
 /** Preselect when exactly one provider type is configured. */
 export function getDefaultProviderSelection(
   providers: Array<{ id: string; provider: string }>,

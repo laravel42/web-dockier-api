@@ -1,4 +1,4 @@
-import { typePanelDesc, typePanelTitle } from "../../utils/styles";
+import { typePanelDesc, typePanelTitle } from "@/utils/styles";
 
 interface Props {
   title: string;

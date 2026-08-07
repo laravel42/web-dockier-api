@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "@/types";
-import { btnPrimary, typePageDesc, typePageTitle } from "@/utils/styles";
+import { typePageDesc, typePageTitle } from "@/utils/styles";
 import { usePermissions } from "@/context/PermissionsContext";
+import Button from "@/components/ui/Button";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import ProjectAvatar from "@/components/ProjectAvatar";
 import { SquarePenIcon } from "lucide-react";
@@ -126,10 +127,9 @@ export default function ProjectHeader({
       </div>
       <div className="relative flex shrink-0 items-center gap-4">
         {canDeploy && (
-          <button type="button" onClick={onDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
-            <RocketIcon className="size-4 " />
+          <Button variant="primary" onClick={onDeploy} iconLeft={<RocketIcon className="size-4" />}>
             Deploy
-          </button>
+          </Button>
         )}
       </div>
     </div>

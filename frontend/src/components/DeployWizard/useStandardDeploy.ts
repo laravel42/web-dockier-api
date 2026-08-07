@@ -6,7 +6,7 @@
  */
 
 import { useRef, useCallback } from "react";
-import { deployApi } from "../../services/api";
+import { deployApi } from "@/services/api";
 import type { WizardState, RepoAnalysis } from "./types";
 
 interface StandardDeployParams {

@@ -1,7 +1,8 @@
 import type { DeployWizardProps } from "./types";
-import { STEPS, PROVIDER_REGIONS, btnPrimary, btnSecondary } from "./constants";
+import { STEPS, PROVIDER_REGIONS } from "./constants";
 import { useDeployWizard } from "./useDeployWizard";
 import Modal from "../Modal";
+import Button from "../ui/Button";
 import Stepper from "./steps/Stepper";
 import StepProvider from "./steps/StepProvider";
 import StepService from "./steps/StepService";
@@ -10,7 +11,7 @@ import StepEnvironment from "./steps/StepEnvironment";
 import StepCompose from "./steps/StepCompose";
 import StepDeploy from "./steps/StepDeploy";
 import RocketIcon from "../icons/outlined/RocketIcon";
-import Spinner from "../Spinner";
+import { ArrowLeftIcon, ArrowRightIcon, RotateCwIcon } from "lucide-react";
 
 export default function DeployWizard({ open, onClose, project, analysis, analysisLoading, analysisError, providers, onDeployComplete }: DeployWizardProps) {
   const {
@@ -111,9 +112,13 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
         <div>
           {step > 0 && step < 6 && !isDeploying && (
-            <button type="button" onClick={handleBack} className={btnSecondary}>
-              ← Back
-            </button>
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              iconLeft={<ArrowLeftIcon className="size-3.5" />}
+            >
+              Back
+            </Button>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -128,34 +133,35 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             </button>
           )}
           {step === 6 && isFinished && (
-            <button type="button" onClick={onClose} className={btnSecondary}>
+            <Button variant="outline" onClick={onClose}>
               Close
-            </button>
+            </Button>
           )}
           {step === 6 && state.deployStatus === "failed" && (
-            <button type="button" onClick={startDeploy} className={btnPrimary + " flex items-center gap-1.5"}>
-              ↻ Retry
-            </button>
+            <Button
+              variant="primary"
+              onClick={startDeploy}
+              iconLeft={<RotateCwIcon className="size-3.5" />}
+            >
+              Retry
+            </Button>
           )}
           {step < 6 && !isDeploying && (
             <>
               {step === 0 && (
-                <button type="button" onClick={() => { if (!isDeploying) onClose(); }} className={btnSecondary}>
+                <Button variant="outline" onClick={() => { if (!isDeploying) onClose(); }}>
                   Cancel
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
+              <Button
+                variant="primary"
                 onClick={handleNext}
                 disabled={!canNext()}
-                className={`${btnPrimary} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5`}
+                loading={step === 5 && tofuLoading}
               >
                 {step === 5 ? (
                   tofuLoading ? (
-                    <>
-                      <Spinner className="size-4" />
-                      Preparing deploy script…
-                    </>
+                    "Preparing deploy script…"
                   ) : !state.tofuScript ? (
                     "Prepare deploy script"
                   ) : (
@@ -165,9 +171,12 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                     </>
                   )
                 ) : (
-                  "Next →"
+                  <>
+                    Next
+                    <ArrowRightIcon className="size-3.5" />
+                  </>
                 )}
-              </button>
+              </Button>
             </>
           )}
         </div>

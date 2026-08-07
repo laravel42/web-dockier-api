@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Modal from "@/components/Modal";
-import { btnPrimary, btnSecondary } from "@/utils/styles";
+import Button from "@/components/ui/Button";
 import { timeAgo } from "@/utils/timeAgo";
 import type { RepoPullRequest } from "@/types";
 import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
@@ -137,19 +137,18 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-            <button
-              type="button"
+            <Button
+              variant="primary"
               onClick={handleReview}
               disabled={reviewing || !!reviewResult}
-              className={btnPrimary}
+              loading={reviewing}
             >
-              {reviewing ? <Spinner className="size-3.5" /> : null}
-              {reviewResult ? "Review Posted" : reviewing ? "Reviewing…" : "Review with AI"}
-            </button>
+              {reviewResult ? "Review Posted" : "Review with AI"}
+            </Button>
             <div className="flex-1" />
-            <button type="button" onClick={handleClose} className={btnSecondary}>
+            <Button variant="outline" onClick={handleClose}>
               Close
-            </button>
+            </Button>
           </div>
         </div>
       )}
