@@ -7,6 +7,7 @@ import { useSaveAction } from "@/hooks/useSaveAction";
 import Button from "@/components/ui/Button";
 import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
+import SettingsCard from "./SettingsCard";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
 interface Props {
@@ -58,7 +59,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
       />
 
       {/* Push to deploy */}
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         <SettingsRow label="Push to deploy" description="Automatically trigger a new deployment when changes are pushed to the environment's Git branch.">
           <ToggleSwitch checked={pushToDeploy} onChange={handleTogglePushToDeploy} disabled={!canManage} />
         </SettingsRow>
@@ -73,10 +74,10 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
             </p>
           </div>
         )}
-      </div>
+      </SettingsCard>
 
       {/* Deploy script */}
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">Deploy script</p>
           <p className="text-xs text-text-muted mt-0.5">
@@ -129,10 +130,10 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
             </div>
           )}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Deploy hook */}
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">Deploy hook</p>
           <p className="text-xs text-text-muted mt-0.5">
@@ -140,10 +141,10 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
           </p>
         </div>
         <CopyableField value={deployHookUrl} />
-      </div>
+      </SettingsCard>
 
       {/* Health checks */}
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         <SettingsRow
           label="Health checks"
           description="After deploying, Dockier will ping a URL in your application to ensure it is still available."
@@ -151,10 +152,10 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
         >
           <ToggleSwitch checked={healthChecks} onChange={setHealthChecks} disabled={!canManage} />
         </SettingsRow>
-      </div>
+      </SettingsCard>
 
       {/* Keys */}
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">Keys</p>
           <p className="text-xs text-text-muted mt-0.5">Your project's public SSH keys.</p>
@@ -167,7 +168,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
           </p>
           <CopyableField value={`ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... dockier@${project.name}`} />
         </div>
-      </div>
+      </SettingsCard>
     </div>
   );
 }

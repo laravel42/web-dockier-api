@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import WpConfigEditor from "@/components/WpConfigEditor";
 import { EyeIcon } from "lucide-react";
 import { SectionTitle } from "./shared";
+import SettingsCard from "./SettingsCard";
 
 interface Props {
   project: Project;
@@ -36,7 +37,7 @@ export default function WordPressSection({ project, canManage }: Props) {
         description="Edit your wp-config.php file. This configuration is encrypted at rest and will be injected into your WordPress container during deployment."
       />
 
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">wp-config.php</p>
           <p className="text-xs text-text-muted mt-0.5">
@@ -85,7 +86,7 @@ export default function WordPressSection({ project, canManage }: Props) {
             {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
           </div>
         )}
-      </div>
+      </SettingsCard>
     </div>
   );
 }

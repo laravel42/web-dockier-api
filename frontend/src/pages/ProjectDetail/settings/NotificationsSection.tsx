@@ -3,6 +3,7 @@ import { notificationsApi } from "@/services/notifications";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { Input } from "@/components/ui/input";
 import { SectionTitle, SettingsRow, TabSpinner } from "./shared";
+import SettingsCard from "./SettingsCard";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
 interface Props {
@@ -32,7 +33,7 @@ export default function NotificationsSection({ canManage }: Props) {
     <div className="flex flex-col gap-6">
       <SectionTitle title="Notifications" description="Manage your site's notification settings." />
 
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         <SettingsRow label="Deployment failure emails" description="Dockier can notify you by email whenever your site fails to deploy.">
           <Input
             type="email"
@@ -59,7 +60,7 @@ export default function NotificationsSection({ canManage }: Props) {
         <SettingsRow label="Telegram deployment notifications" description="Enable and configure Telegram deployment notifications." border={false}>
           <ToggleSwitch checked={telegramEnabled} onChange={setTelegramEnabled} disabled={!canManage} />
         </SettingsRow>
-      </div>
+      </SettingsCard>
     </div>
   );
 }

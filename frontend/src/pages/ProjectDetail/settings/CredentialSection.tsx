@@ -4,6 +4,7 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { SectionTitle } from "./shared";
+import SettingsCard from "./SettingsCard";
 
 // ─── Types ───
 
@@ -118,7 +119,7 @@ export default function CredentialSection<T extends Credential>({
         linkHref={linkHref}
       />
 
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         {credentials.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <p className="text-sm font-medium text-text">No credentials yet</p>
@@ -161,7 +162,7 @@ export default function CredentialSection<T extends Credential>({
             )}
           </div>
         )}
-      </div>
+      </SettingsCard>
 
       <Modal open={showAddModal} onClose={closeModal} title={modalTitle}>
         <div className="flex flex-col gap-5">

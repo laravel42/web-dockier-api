@@ -14,6 +14,7 @@ import TagPicker from "./TagPicker";
 import { GitRepositoryModal } from "./GitSettings";
 import BranchPickerInline from "./GitSettings";
 import { SectionTitle, SettingsRow, PROJECT_COLORS } from "./shared";
+import SettingsCard from "./SettingsCard";
 import { useProjectDelete } from "../hooks/useProjectDelete";
 import { useInfraTeardown } from "../hooks/useInfraTeardown";
 
@@ -77,7 +78,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
       />
 
       {/* Main settings card */}
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         {/* Framework */}
         <SettingsRow label="Framework" description="The framework used by the installed application.">
           <span className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-text capitalize">
@@ -165,10 +166,10 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             </div>
           )}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Directories card */}
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-4">
           <p className="text-sm font-semibold text-text">Directories</p>
           <p className="text-xs text-text-muted mt-0.5">
@@ -207,10 +208,10 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             </div>
           </div>
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Git card */}
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         <div className="px-4 py-3">
           <p className="text-sm font-semibold text-text">Git</p>
           <p className="text-xs text-text-muted mt-0.5">Configure your site's Git settings.</p>
@@ -231,7 +232,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
         <SettingsRow label="Branch" description="Configure the Git branch that should be deployed." border={false}>
           <BranchPickerInline project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
         </SettingsRow>
-      </div>
+      </SettingsCard>
 
       {/* Git repository modal */}
       <GitRepositoryModal

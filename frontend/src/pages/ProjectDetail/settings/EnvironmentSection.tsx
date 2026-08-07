@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import EnvEditor from "@/components/EnvEditor";
 import { EyeIcon } from "lucide-react";
 import { SectionTitle, SettingsRow } from "./shared";
+import SettingsCard from "./SettingsCard";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
 interface Props {
@@ -43,7 +44,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
         description="Below you may edit the .env file for your application, which is a standard default environment file typically loaded by applications. If the application is uninstalled, the environment file will also be removed."
       />
 
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">Environment variables</p>
           <p className="text-xs text-text-muted mt-0.5">Your application's environment variables.</p>
@@ -88,21 +89,21 @@ export default function EnvironmentSection({ project, canManage }: Props) {
             {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
           </div>
         )}
-      </div>
+      </SettingsCard>
 
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         <SettingsRow label="Cache" description="Run cache clearing commands after updating environment variables." border={false}>
           <ToggleSwitch checked={cacheEnabled} onChange={setCacheEnabled} disabled={!canManage} />
         </SettingsRow>
-      </div>
+      </SettingsCard>
 
-      <div className="rounded-lg border border-border bg-card/40 overflow-hidden">
+      <SettingsCard>
         <SettingsRow label="Queues" description="Restart queue workers (and Horizon, if running) after updating environment variables." border={false}>
           <ToggleSwitch checked={queuesEnabled} onChange={setQueuesEnabled} disabled={!canManage} />
         </SettingsRow>
-      </div>
+      </SettingsCard>
 
-      <div className="rounded-lg border border-border bg-card/40 p-4">
+      <SettingsCard padded>
         <div className="mb-3">
           <p className="text-sm font-semibold text-text">Encrypted environment files</p>
           <p className="text-xs/relaxed text-text-muted mt-0.5">
@@ -121,7 +122,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
           disabled={!canManage}
           placeholder="Enter encryption key"
         />
-      </div>
+      </SettingsCard>
     </div>
   );
 }
