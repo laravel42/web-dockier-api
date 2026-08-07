@@ -50,11 +50,13 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
   );
 
   const handleColorChange = async (color: string) => {
+    const prev = selectedColor;
     setSelectedColor(color);
     try {
       const updated = await projectsApi.update(project.id, { settings: { color } });
       onProjectUpdate?.(updated);
     } catch (err) {
+      setSelectedColor(prev);
       toast.error(getErrorMessage(err, "Failed to update color"));
     }
   };

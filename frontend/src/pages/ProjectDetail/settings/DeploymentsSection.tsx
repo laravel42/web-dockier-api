@@ -3,6 +3,7 @@ import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useSaveAction } from "@/hooks/useSaveAction";
 import Button from "@/components/ui/Button";
 import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
@@ -23,8 +24,6 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
   const [deployScript, setDeployScript] = useState(
     project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other"),
   );
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const toast = useToast();
 
   const originalScript = project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other");
@@ -41,17 +40,13 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
     }
   };
 
-  const handleSaveScript = async () => {
-    setSaving(true);
-    try {
+  const { saving, saved, save: handleSaveScript } = useSaveAction(
+    async () => {
       const updated = await projectsApi.update(project.id, { settings: { deployScript } });
       onProjectUpdate?.(updated);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save deploy script"));
-    } finally { setSaving(false); }
-  };
+    },
+    { errorFallback: "Failed to save deploy script" },
+  );
 
   const deployHookUrl = `https://dockier.dev/api/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;
 

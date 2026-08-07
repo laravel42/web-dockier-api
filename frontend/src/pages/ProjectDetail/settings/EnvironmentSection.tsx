@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { envApi } from "@/services/env";
 import type { Project } from "@/types";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { useSaveAction } from "@/hooks/useSaveAction";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
@@ -20,27 +22,23 @@ export default function EnvironmentSection({ project, canManage }: Props) {
   const [envContent, setEnvContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [revealed, setRevealed] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [cacheEnabled, setCacheEnabled] = useState(true);
   const [queuesEnabled, setQueuesEnabled] = useState(true);
   const [encryptionKey, setEncryptionKey] = useState("");
   const toast = useToast();
 
+  const { data: envData, loading } = useAsyncData(
+    () => envApi.getMasked(project.id),
+    [project.id],
+  );
+
+  // Sync fetched data into editable state when it loads
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await envApi.getMasked(project.id);
-        setEnvContent(res.content);
-        setOriginalContent(res.content);
-      } catch (err) {
-        toast.error(getErrorMessage(err, "Failed to load environment file"));
-      } finally { setLoading(false); }
-    };
-    void load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- toast is stable
-  }, [project.id]);
+    if (envData) {
+      setEnvContent(envData.content);
+      setOriginalContent(envData.content);
+    }
+  }, [envData]);
 
   const handleReveal = async () => {
     try {
@@ -53,17 +51,13 @@ export default function EnvironmentSection({ project, canManage }: Props) {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const { saving, saved, save: handleSave } = useSaveAction(
+    async () => {
       await envApi.save(project.id, envContent);
       setOriginalContent(envContent);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save environment file"));
-    } finally { setSaving(false); }
-  };
+    },
+    { errorFallback: "Failed to save environment file" },
+  );
 
   const hasChanges = revealed && envContent !== originalContent;
 
