@@ -1,10 +1,6 @@
-import { useEffect, useState } from "react";
 import { wpConfigApi } from "@/services/wp-config";
 import type { Project } from "@/types";
-import { useToast } from "@/context/useToast";
-import { getErrorMessage } from "@/utils/errors";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import { useSaveAction } from "@/hooks/useSaveAction";
+import { useRevealableEditor } from "@/hooks/useRevealableEditor";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import WpConfigEditor from "@/components/WpConfigEditor";
@@ -17,45 +13,21 @@ interface Props {
 }
 
 export default function WordPressSection({ project, canManage }: Props) {
-  const toast = useToast();
-
-  const { data: config, loading } = useAsyncData(
-    () => wpConfigApi.getMasked(project.id),
-    [project.id],
-  );
-
-  const [wpContent, setWpContent] = useState("");
-  const [originalContent, setOriginalContent] = useState("");
-  const [revealed, setRevealed] = useState(false);
-
-  // Sync fetched data into editable state when config loads
-  useEffect(() => {
-    if (config?.exists) {
-      setWpContent(config.content);
-      setOriginalContent(config.content);
-    }
-  }, [config]);
-
-  const handleReveal = async () => {
-    try {
-      const res = await wpConfigApi.reveal(project.id);
-      setWpContent(res.content);
-      setOriginalContent(res.content);
-      setRevealed(true);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to reveal config"));
-    }
-  };
-
-  const { saving, saved, save: handleSave } = useSaveAction(
-    async () => {
-      await wpConfigApi.save(project.id, wpContent);
-      setOriginalContent(wpContent);
+  const {
+    content, setContent, loading, revealed, hasChanges,
+    saving, saved, handleReveal, handleSave, reset,
+  } = useRevealableEditor(
+    {
+      getMasked: () => wpConfigApi.getMasked(project.id),
+      reveal: () => wpConfigApi.reveal(project.id),
+      save: (c) => wpConfigApi.save(project.id, c),
     },
-    { errorFallback: "Failed to save wp-config" },
+    [project.id],
+    {
+      revealErrorMessage: "Failed to reveal config",
+      saveErrorMessage: "Failed to save wp-config",
+    },
   );
-
-  const hasChanges = revealed && wpContent !== originalContent;
 
   return (
     <div className="flex flex-col gap-6">
@@ -80,8 +52,8 @@ export default function WordPressSection({ project, canManage }: Props) {
           <div className="relative">
             <div className={!revealed ? "blur-sm select-none pointer-events-none" : ""}>
               <WpConfigEditor
-                value={wpContent}
-                onChange={revealed ? setWpContent : () => {}}
+                value={content}
+                onChange={revealed ? setContent : () => {}}
                 height="400px"
               />
             </div>
@@ -107,7 +79,7 @@ export default function WordPressSection({ project, canManage }: Props) {
             <Button variant="primary" size="sm" onClick={() => void handleSave()} loading={saving}>
               Save
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setWpContent(originalContent)}>
+            <Button variant="ghost" size="sm" onClick={reset}>
               Reset
             </Button>
             {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}

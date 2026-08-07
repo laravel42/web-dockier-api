@@ -1,10 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { envApi } from "@/services/env";
 import type { Project } from "@/types";
-import { useToast } from "@/context/useToast";
-import { getErrorMessage } from "@/utils/errors";
-import { useAsyncData } from "@/hooks/useAsyncData";
-import { useSaveAction } from "@/hooks/useSaveAction";
+import { useRevealableEditor } from "@/hooks/useRevealableEditor";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
@@ -19,47 +16,25 @@ interface Props {
 }
 
 export default function EnvironmentSection({ project, canManage }: Props) {
-  const [envContent, setEnvContent] = useState("");
-  const [originalContent, setOriginalContent] = useState("");
-  const [revealed, setRevealed] = useState(false);
   const [cacheEnabled, setCacheEnabled] = useState(true);
   const [queuesEnabled, setQueuesEnabled] = useState(true);
   const [encryptionKey, setEncryptionKey] = useState("");
-  const toast = useToast();
 
-  const { data: envData, loading } = useAsyncData(
-    () => envApi.getMasked(project.id),
-    [project.id],
-  );
-
-  // Sync fetched data into editable state when it loads
-  useEffect(() => {
-    if (envData) {
-      setEnvContent(envData.content);
-      setOriginalContent(envData.content);
-    }
-  }, [envData]);
-
-  const handleReveal = async () => {
-    try {
-      const res = await envApi.reveal(project.id);
-      setEnvContent(res.content);
-      setOriginalContent(res.content);
-      setRevealed(true);
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to reveal environment variables"));
-    }
-  };
-
-  const { saving, saved, save: handleSave } = useSaveAction(
-    async () => {
-      await envApi.save(project.id, envContent);
-      setOriginalContent(envContent);
+  const {
+    content, setContent, loading, revealed, hasChanges,
+    saving, saved, handleReveal, handleSave, reset,
+  } = useRevealableEditor(
+    {
+      getMasked: () => envApi.getMasked(project.id),
+      reveal: () => envApi.reveal(project.id),
+      save: (c) => envApi.save(project.id, c),
     },
-    { errorFallback: "Failed to save environment file" },
+    [project.id],
+    {
+      revealErrorMessage: "Failed to reveal environment variables",
+      saveErrorMessage: "Failed to save environment file",
+    },
   );
-
-  const hasChanges = revealed && envContent !== originalContent;
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,8 +57,8 @@ export default function EnvironmentSection({ project, canManage }: Props) {
           <div className="relative">
             <div className={!revealed ? "blur-sm select-none pointer-events-none" : ""}>
               <EnvEditor
-                value={envContent}
-                onChange={revealed ? setEnvContent : () => {}}
+                value={content}
+                onChange={revealed ? setContent : () => {}}
                 height="280px"
                 placeholder="# Add your environment variables here&#10;APP_ENV=production&#10;DB_HOST=127.0.0.1"
               />
@@ -107,7 +82,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
             <Button variant="primary" size="sm" onClick={() => void handleSave()} loading={saving}>
               Save
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setEnvContent(originalContent)}>
+            <Button variant="ghost" size="sm" onClick={reset}>
               Reset
             </Button>
             {saved && <span className="text-xs text-success-500 font-medium">Saved</span>}
