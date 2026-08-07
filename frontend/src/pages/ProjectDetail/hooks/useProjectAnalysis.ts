@@ -2,22 +2,14 @@ import { useState, useEffect } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { clearProjectBadgeCache } from "@/utils/projectBadgeCache";
+import { SessionCache } from "@/utils/sessionCache";
 import { getErrorMessage } from "@/utils/errors";
 import type { Project } from "@/types";
 import type { RepoAnalysis } from "@/components/DeployWizard";
 import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
 
 // ─── Analysis session cache ────────────────────────────────────────
-const CACHE_VERSION = 11;
-function getCachedAnalysis(key: string): RepoAnalysis | null {
-  try {
-    const raw = sessionStorage.getItem(`analysis:v${CACHE_VERSION}:${key}`);
-    return raw ? JSON.parse(raw) as RepoAnalysis : null;
-  } catch { return null; }
-}
-function setCachedAnalysis(key: string, data: RepoAnalysis) {
-  try { sessionStorage.setItem(`analysis:v${CACHE_VERSION}:${key}`, JSON.stringify(data)); } catch { /* quota */ }
-}
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 11);
 
 
 /**
@@ -45,13 +37,13 @@ export function useProjectAnalysis(project: Project | null) {
     setAnalysisLoading(true);
     setAnalysisError("");
     const cacheKey = `${parsed.owner}/${parsed.repo}:${project.branch || "main"}`;
-    const cached = getCachedAnalysis(cacheKey);
+    const cached = analysisCache.get(cacheKey);
     if (cached?.aiAnalysis) {
       setAnalysis(cached);
       setAnalysisLoading(false);
     } else {
       gitApi.analyzeRepo(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, "openai", project.id)
-        .then((res) => { setCachedAnalysis(cacheKey, res); setAnalysis(res); })
+        .then((res) => { analysisCache.set(cacheKey, res); setAnalysis(res); })
         .catch((err: unknown) => setAnalysisError(getErrorMessage(err, "Failed to analyze repo")))
         .finally(() => setAnalysisLoading(false));
     }
@@ -64,7 +56,7 @@ export function useProjectAnalysis(project: Project | null) {
     const repoKey = `${parsed.owner}/${parsed.repo}`;
     const cacheKey = `${repoKey}:${project.branch || "main"}`;
     // Clear all caches
-    try { sessionStorage.removeItem(`analysis:v${CACHE_VERSION}:${cacheKey}`); } catch { /* ignore */ }
+    analysisCache.remove(cacheKey);
     clearProjectBadgeCache(project.id);
     await Promise.all([
       gitApi.invalidateAnalysisCache(repoKey, project.branch || "main").catch(() => {}),
@@ -85,7 +77,7 @@ export function useProjectAnalysis(project: Project | null) {
                 dependencies: res.dependencies ?? prev.dependencies,
               }
             : res;
-          setCachedAnalysis(cacheKey, merged);
+          analysisCache.set(cacheKey, merged);
           return merged;
         });
       })
