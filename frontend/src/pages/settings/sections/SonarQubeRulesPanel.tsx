@@ -5,6 +5,7 @@ import PageLoading from "../../../components/ui/PageLoading";
 import Button from "../../../components/ui/Button";
 import Spinner from "../../../components/Spinner";
 import { ChevronDownIcon } from "lucide-react";
+import ToggleSwitch from "../../../components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 
@@ -159,10 +160,7 @@ export default function SonarQubeRulesPanel() {
                             <TechBadge key={e.ext} name={e.ext} icon={e.icon} label={techLabel} />
                           ))}
                         </div>
-                        <button type="button" onClick={() => handleToggle(r.key)}
-                          className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${!disabledSqRules.has(r.key) ? "bg-primary-500" : "bg-secondary-200"}`}>
-                          <span className={`absolute top-px size-4 rounded-full bg-white shadow transition-transform ${!disabledSqRules.has(r.key) ? "left-[14px]" : "left-px"}`} />
-                        </button>
+                        <ToggleSwitch checked={!disabledSqRules.has(r.key)} onChange={() => handleToggle(r.key)} />
                       </div>
                       <p className="text-sm/relaxed text-text">{r.name}</p>
                       {/* Impacts */}

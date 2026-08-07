@@ -10,6 +10,7 @@ import { Input } from "../../components/ui/input";
 import Button from "../../components/ui/Button";
 import PageLoading from "../../components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import ToggleSwitch from "../../components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
 import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
 import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
@@ -157,13 +158,10 @@ export default function SecurityRulesTab() {
             { key: "semgrep", name: "Semgrep" },
             { key: "customRules", name: "Custom Rules" },
           ] as const).map(({ key, name }) => (
-            <button key={key} type="button" onClick={() => toggleTool(key)}
-              className="flex items-center gap-2.5 text-sm">
+            <div key={key} className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
-              <span className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${scanTools[key] ? "bg-primary-500" : "bg-secondary-200"}`}>
-                <span className={`absolute top-px size-4 rounded-full bg-white shadow transition-transform ${scanTools[key] ? "left-[14px]" : "left-px"}`} />
-              </span>
-            </button>
+              <ToggleSwitch checked={scanTools[key]} onChange={() => toggleTool(key)} />
+            </div>
           ))}
         </div>
       </div>
@@ -399,9 +397,7 @@ function CustomRulesPanel({
                     <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                     <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                     {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
-                    <button type="button" onClick={() => onToggle(r)} className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                      <span className={`absolute top-px size-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
-                    </button>
+                    <ToggleSwitch checked={r.enabled} onChange={() => onToggle(r)} />
                   </div>
                   <p className="text-sm/relaxed text-text">{r.message}</p>
                   <code className="text-xs text-text-muted font-mono bg-secondary-50 px-2 py-1 rounded truncate">{r.pattern}</code>

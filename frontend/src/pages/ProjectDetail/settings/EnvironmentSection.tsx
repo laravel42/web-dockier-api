@@ -6,7 +6,8 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import EnvEditor from "@/components/EnvEditor";
 import { EyeIcon } from "lucide-react";
-import { SectionTitle, SettingsRow, ToggleSwitch } from "./shared";
+import { SectionTitle, SettingsRow } from "./shared";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
 interface Props {
   project: Project;

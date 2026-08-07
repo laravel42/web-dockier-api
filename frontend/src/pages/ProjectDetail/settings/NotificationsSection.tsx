@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { notificationsApi } from "@/services/notifications";
 import { Input } from "@/components/ui/input";
-import { SectionTitle, SettingsRow, ToggleSwitch, TabSpinner } from "./shared";
+import { SectionTitle, SettingsRow, TabSpinner } from "./shared";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
 interface Props {
   canManage: boolean;

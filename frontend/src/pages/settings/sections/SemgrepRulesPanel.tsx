@@ -9,6 +9,7 @@ import PageLoading from "../../../components/ui/PageLoading";
 import Spinner from "../../../components/Spinner";
 import Button from "../../../components/ui/Button";
 import { SquarePenIcon, Trash2Icon } from "lucide-react";
+import ToggleSwitch from "../../../components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 
@@ -224,10 +225,7 @@ export default function SemgrepRulesPanel({ filter, adding, onAddingDone }: Prop
                 <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                 {!r.isBuiltin && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600 shrink-0">User</span>}
-                <button type="button" onClick={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)}
-                  className={`w-8 h-[18px] rounded-full shrink-0 transition-colors relative ${r.enabled ? "bg-primary-500" : "bg-secondary-200"}`}>
-                  <span className={`absolute top-px size-4 rounded-full bg-white shadow transition-transform ${r.enabled ? "left-[14px]" : "left-px"}`} />
-                </button>
+                <ToggleSwitch checked={r.enabled} onChange={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)} />
               </div>
               <p className="text-sm/relaxed text-text">{r.name}</p>
               <p className="text-xs/relaxed text-text-muted bg-secondary-50 px-2 py-1 rounded line-clamp-2">{r.message}</p>

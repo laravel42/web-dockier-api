@@ -3,7 +3,8 @@ import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
 import Button from "@/components/ui/Button";
 import { getDefaultDeployScript } from "@/config/frameworks";
-import { SectionTitle, SettingsRow, ToggleSwitch, CopyableField } from "./shared";
+import { SectionTitle, SettingsRow, CopyableField } from "./shared";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
 interface Props {
   project: Project;
