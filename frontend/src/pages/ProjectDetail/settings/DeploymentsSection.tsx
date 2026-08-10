@@ -4,7 +4,7 @@ import type { Project } from "@/types";
 import { useSaveAction } from "@/hooks/useSaveAction";
 import { useOptimisticToggle } from "@/hooks/useOptimisticToggle";
 import Button from "@/components/ui/Button";
-import EnvEditor from "@/components/EnvEditor";
+import CodeEditor from "@/components/CodeEditor";
 import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
 import SettingsCard from "./SettingsCard";
@@ -76,7 +76,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
           </p>
         </div>
 
-        <EnvEditor
+        <CodeEditor
           value={deployScript}
           onChange={setDeployScript}
           language="shell"

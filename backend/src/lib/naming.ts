@@ -92,5 +92,22 @@ export function deriveContainerName(repo: string, provider?: string): string | n
  * e.g. "my-app" → "image-builder-app-my-app"
  */
 export function stackNameFor(appName: string): string {
-  return "image-builder-app-" + appName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  return "image-builder-app-" + sanitizeEcrRepoName(appName);
+}
+
+// ─── ECR Repo Name ─────────────────────────────────────────────────
+
+/**
+ * Sanitize a repository name for use as an AWS ECR repository name.
+ *
+ * ECR repo names must be lowercase and can only contain letters, digits,
+ * hyphens, underscores, forward slashes, and periods. We strip to the
+ * safest subset (letters, digits, hyphens) for maximum compatibility
+ * across all AWS services that reference the ECR image URI.
+ *
+ * e.g. "My_App.io" → "my-app-io"
+ *      "ACME/Repo" → "acme-repo"
+ */
+export function sanitizeEcrRepoName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 }

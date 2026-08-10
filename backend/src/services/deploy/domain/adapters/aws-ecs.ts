@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type {
   AdapterContext,
   ProvisionResult,
 } from "./types.js";
 import { AwsCloudFormationAdapter } from "./aws-cfn-base.js";
-import { getS3, getCfn } from "../../../../lib/aws-sdk.js";
+import { getS3, getCfn, getCloudWatchLogs } from "../../../../lib/aws-sdk.js";
 import {
   getDefaultVpcAndSubnets,
   cleanupStuckStack,
@@ -13,7 +12,7 @@ import {
   readCfnTemplate,
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
-import { getAwsAccountId } from "../../../../lib/aws.js";
+import { getAwsAccountId, ensureS3Bucket } from "../../../../lib/aws.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
@@ -88,6 +87,7 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
     // 3. Upload template to S3
     const { S3Client, PutObjectCommand } = await getS3();
     const s3 = new S3Client({ region, credentials });
+    await ensureS3Bucket(region, credentials, templateBucket);
     await s3.send(
       new PutObjectCommand({
         Bucket: templateBucket,
@@ -138,9 +138,7 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
 
     // Pre-create the ECS log group to avoid AlreadyExists errors in CFN
     try {
-      const { CloudWatchLogsClient, CreateLogGroupCommand, PutRetentionPolicyCommand } = await import(
-        "@aws-sdk/client-cloudwatch-logs"
-      );
+      const { CloudWatchLogsClient, CreateLogGroupCommand, PutRetentionPolicyCommand } = await getCloudWatchLogs();
       const logs = new CloudWatchLogsClient({ region, credentials });
       const logGroupName = `/ecs/${repoName}`;
       try {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * CodeBuild Builder — remote image build via AWS CodeBuild.
  *
@@ -8,11 +7,13 @@
  * can hand off to the standard adapter dispatch for infrastructure provisioning.
  */
 
+import type { Build } from "@aws-sdk/client-codebuild";
 import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 import { toDetectedStack } from "../../../../lib/repo-analyzer/index.js";
 import { generateBuildspec } from "../../../../lib/buildspec-generator/index.js";
 import { getAwsAccountId, ensureS3Bucket } from "../../../../lib/aws.js";
 import { getS3, getSns, getCodeBuild } from "../../../../lib/aws-sdk.js";
+import { sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { env } from "../../../../shared/config.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 
@@ -78,7 +79,7 @@ export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBui
   // 1. Get AWS account ID
   const accountId = await getAwsAccountId(region, { accessKeyId, secretAccessKey });
 
-  const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const imageRepoName = sanitizeEcrRepoName(repoName);
   const cacheRepoName = `${imageRepoName}-cache`;
   const codebuildProject = env.IMAGE_BUILDER_CODEBUILD_PROJECT;
   const bucketName = `${codebuildProject}-source-${accountId}`;
@@ -243,7 +244,7 @@ async function pollCodeBuild(opts: {
         const buildIds = (listResult.ids || []).slice(0, 10);
         if (buildIds.length > 0) {
           const batchResult = await cbClient.send(new BatchGetBuildsCommand({ ids: buildIds }));
-          const match = (batchResult.builds || []).find((b: any) =>
+          const match = (batchResult.builds || []).find((b: Build) =>
             (b.source?.location || "").includes(`${deploymentId}.zip`),
           );
           if (match?.id) {

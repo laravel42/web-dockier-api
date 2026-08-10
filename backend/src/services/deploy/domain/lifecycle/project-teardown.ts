@@ -10,7 +10,7 @@
 
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logger } from "../../../../shared/logger.js";
-import { deriveRepoName, stackNameFor } from "../../../../lib/naming.js";
+import { deriveRepoName, stackNameFor, sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
 import { parseInfra } from "../../types.js";
 import { getAdapter } from "../adapters/index.js";
@@ -172,7 +172,7 @@ export async function destroyStack(resolved: ResolvedStack): Promise<DestroyResu
   const ctx: DestroyContext = {
     deploymentId: resolved.sampleDeploymentId,
     repoName,
-    appName: repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+    appName: sanitizeEcrRepoName(repoName),
     region: resolved.region || "us-east-1",
     providerCredentials: { apiKey: creds.apiKey, apiSecret: creds.apiSecret },
     tofuScript: resolved.tofuScript,

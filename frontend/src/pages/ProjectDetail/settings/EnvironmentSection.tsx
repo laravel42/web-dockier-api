@@ -5,7 +5,7 @@ import { useRevealableEditor } from "@/hooks/useRevealableEditor";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
-import EnvEditor from "@/components/EnvEditor";
+import CodeEditor from "@/components/CodeEditor";
 import { EyeIcon } from "lucide-react";
 import { SectionTitle, SettingsRow } from "./shared";
 import SettingsCard from "./SettingsCard";
@@ -57,7 +57,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
         ) : (
           <div className="relative">
             <div className={!revealed ? "blur-sm select-none pointer-events-none" : ""}>
-              <EnvEditor
+              <CodeEditor
                 value={content}
                 onChange={revealed ? setContent : () => {}}
                 height="280px"

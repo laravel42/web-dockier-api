@@ -35,7 +35,7 @@ type EditorLanguage = keyof typeof LANGUAGES;
 
 // ─── Component ─────────────────────────────────────────────────────
 
-interface EnvEditorProps {
+interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
   height?: string;
@@ -44,7 +44,7 @@ interface EnvEditorProps {
   readOnly?: boolean;
 }
 
-export default function EnvEditor({ value, onChange, height = "140px", placeholder, language = "env", readOnly = false }: EnvEditorProps) {
+export default function CodeEditor({ value, onChange, height = "140px", placeholder, language = "env", readOnly = false }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);

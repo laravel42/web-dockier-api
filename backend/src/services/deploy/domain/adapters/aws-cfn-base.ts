@@ -11,7 +11,7 @@ import {
   deleteEcrRepo,
   destroyCfnStack,
 } from "../infra/aws-helpers.js";
-import { stackNameFor } from "../../../../lib/naming.js";
+import { stackNameFor, sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { type AwsCredentials } from "../../../../lib/aws.js";
 
 /**
@@ -98,7 +98,7 @@ export abstract class AwsCloudFormationAdapter implements DeployAdapter {
     await destroyCfnStack(stackName, ctx.region, credentials, ctx.appendLog, errors);
 
     // Delete ECR repos — sanitize the same way pushToEcr does during provisioning
-    const ecrRepoName = ctx.repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const ecrRepoName = sanitizeEcrRepoName(ctx.repoName);
     await deleteEcrRepo(ecrRepoName, ctx.region, credentials, errors);
     await deleteEcrRepo(`${ecrRepoName}-cache`, ctx.region, credentials, errors);
 

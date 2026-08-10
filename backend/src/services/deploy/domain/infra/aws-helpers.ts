@@ -6,6 +6,7 @@ import { getEc2, getEcr, getCfn } from "../../../../lib/aws-sdk.js";
 import type { RunCmdFn } from "../run-cmd.js";
 import type { ProvisionResult } from "../adapters/types.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
+import { sanitizeEcrRepoName } from "../../../../lib/naming.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -93,7 +94,7 @@ export async function pushToEcr(opts: {
     throw new Error("Could not determine AWS account ID from credentials");
   }
 
-  const imageRepoName = repoName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const imageRepoName = sanitizeEcrRepoName(repoName);
   const ecrUri = `${accountId}.dkr.ecr.${region}.amazonaws.com`;
   const remoteImageUri = `${ecrUri}/${imageRepoName}:${shortId}`;
 
