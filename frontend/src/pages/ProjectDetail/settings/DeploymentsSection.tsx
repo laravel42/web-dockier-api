@@ -4,6 +4,7 @@ import type { Project } from "@/types";
 import { useSaveAction } from "@/hooks/useSaveAction";
 import { useOptimisticToggle } from "@/hooks/useOptimisticToggle";
 import Button from "@/components/ui/Button";
+import EnvEditor from "@/components/EnvEditor";
 import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
 import SettingsCard from "./SettingsCard";
@@ -24,8 +25,6 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
     },
     { errorFallback: "Failed to update push-to-deploy setting" },
   );
-  const [healthChecks, setHealthChecks] = useState(false);
-  const [envInScript, setEnvInScript] = useState(false);
   const [deployScript, setDeployScript] = useState(
     project.settings?.deployScript as string ?? getDefaultDeployScript(project.platform ?? "other"),
   );
@@ -77,38 +76,26 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
           </p>
         </div>
 
-        <div className="relative rounded-md border border-border bg-background overflow-hidden">
-          <div className="flex">
-            <div className="flex flex-col items-end p-2 select-none border-r border-border/50 bg-card/60">
-              {deployScript.split("\n").map((_, i) => (
-                <span key={i} className="text-[11px]/5 text-text-muted/50 font-mono">
-                  {i + 1}
-                </span>
-              ))}
-            </div>
-            <textarea
-              value={deployScript}
-              onChange={(e) => setDeployScript(e.target.value)}
-              disabled={!canManage}
-              rows={deployScript.split("\n").length}
-              className="flex-1 bg-transparent px-3 py-2 font-mono text-[12px]/5 text-text outline-none resize-none placeholder:text-text-muted"
-              spellCheck={false}
-            />
-          </div>
-        </div>
+        <EnvEditor
+          value={deployScript}
+          onChange={setDeployScript}
+          language="shell"
+          readOnly={!canManage}
+          height="auto"
+        />
 
         <div className="mt-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={envInScript}
-              onChange={(e) => setEnvInScript(e.target.checked)}
-              disabled={!canManage}
+              checked={false}
+              disabled
               className="size-3.5 rounded border-border accent-primary-500"
             />
             <span className="text-xs text-text-muted">
               Make <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-[10px] font-mono">.env</code> variables available to deployment script
             </span>
+            <span className="text-[10px] font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
           </label>
           {canManage && hasScriptChanges && (
             <div className="flex items-center gap-3">
@@ -142,7 +129,10 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
           description="After deploying, Dockier will ping a URL in your application to ensure it is still available."
           border={false}
         >
-          <ToggleSwitch checked={healthChecks} onChange={setHealthChecks} disabled={!canManage} />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
+            <ToggleSwitch checked={false} onChange={() => {}} disabled />
+          </div>
         </SettingsRow>
       </SettingsCard>
 

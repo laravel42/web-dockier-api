@@ -1,10 +1,12 @@
 import { useRef, useEffect } from "react";
 import { EditorView, basicSetup } from "codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { StreamLanguage } from "@codemirror/language";
 
-// Minimal .env / properties language definition
+// ─── Language modes ────────────────────────────────────────────────
+
+/** Minimal .env / properties language definition */
 const envLang = StreamLanguage.define({
   token(stream) {
     if (stream.sol() && stream.match(/\s*#/)) { stream.skipToEnd(); return "comment"; }
@@ -15,18 +17,41 @@ const envLang = StreamLanguage.define({
   },
 });
 
+/** Minimal shell/bash language definition */
+const shellLang = StreamLanguage.define({
+  token(stream) {
+    if (stream.sol() && stream.match(/\s*#/)) { stream.skipToEnd(); return "comment"; }
+    if (stream.match(/\$\{[^}]*\}/) || stream.match(/\$[A-Za-z_][A-Za-z0-9_]*/)) return "variableName";
+    if (stream.match(/"[^"]*"/) || stream.match(/'[^']*'/)) return "string";
+    if (stream.sol() && stream.match(/[a-z_][a-z0-9_-]*/i)) return "keyword";
+    if (stream.match(/&&|\|\||[|;]/)) return "operator";
+    stream.next();
+    return null;
+  },
+});
+
+const LANGUAGES = { env: envLang, shell: shellLang } as const;
+type EditorLanguage = keyof typeof LANGUAGES;
+
+// ─── Component ─────────────────────────────────────────────────────
+
 interface EnvEditorProps {
   value: string;
   onChange: (value: string) => void;
   height?: string;
   placeholder?: string;
+  language?: EditorLanguage;
+  readOnly?: boolean;
 }
 
-export default function EnvEditor({ value, onChange, height = "140px", placeholder }: EnvEditorProps) {
+export default function EnvEditor({ value, onChange, height = "140px", placeholder, language = "env", readOnly = false }: EnvEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  const heightCompartment = useRef(new Compartment());
+  const readOnlyCompartment = useRef(new Compartment());
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -35,15 +60,18 @@ export default function EnvEditor({ value, onChange, height = "140px", placehold
       doc: value,
       extensions: [
         basicSetup,
-        envLang,
+        LANGUAGES[language],
         oneDark,
-        EditorView.theme({
-          "&": {
-            height,
-            fontFamily: '"Space Grotesk", ui-sans-serif, system-ui, sans-serif',
-          },
-          ".cm-scroller": { overflow: "auto" },
-        }),
+        heightCompartment.current.of(
+          EditorView.theme({
+            "&": {
+              height,
+              fontFamily: '"Space Grotesk", ui-sans-serif, system-ui, sans-serif',
+            },
+            ".cm-scroller": { overflow: "auto" },
+          }),
+        ),
+        readOnlyCompartment.current.of(EditorState.readOnly.of(readOnly)),
         ...(placeholder ? [EditorView.contentAttributes.of({ "aria-placeholder": placeholder })] : []),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChangeRef.current(update.state.doc.toString());
@@ -55,7 +83,7 @@ export default function EnvEditor({ value, onChange, height = "140px", placehold
     viewRef.current = view;
     return () => { view.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -65,6 +93,30 @@ export default function EnvEditor({ value, onChange, height = "140px", placehold
       view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
     }
   }, [value]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: heightCompartment.current.reconfigure(
+        EditorView.theme({
+          "&": {
+            height,
+            fontFamily: '"Space Grotesk", ui-sans-serif, system-ui, sans-serif',
+          },
+          ".cm-scroller": { overflow: "auto" },
+        }),
+      ),
+    });
+  }, [height]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: readOnlyCompartment.current.reconfigure(EditorState.readOnly.of(readOnly)),
+    });
+  }, [readOnly]);
 
   return <div ref={containerRef} className="rounded-lg overflow-hidden border border-border" />;
 }
