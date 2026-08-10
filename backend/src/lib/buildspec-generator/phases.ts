@@ -2,37 +2,16 @@
 
 import { buildAndPush } from "./common.js";
 
-export function nodeBuildPhase(stack: { framework: string; packageManager: string }): string {
+/**
+ * Generate the build phase section of a CodeBuild buildspec.
+ *
+ * All runtimes follow the same structure: log a descriptive label,
+ * then run the shared Docker build-and-push commands. The label
+ * is the only part that varies between stacks.
+ */
+export function buildPhase(label: string): string {
   return `  build:
     commands:
-      - echo "Building Node.js (${stack.framework}) with ${stack.packageManager}"
-${buildAndPush()}`;
-}
-
-export function phpBuildPhase(stack: { framework: string; hasNodeAssets: boolean }): string {
-  return `  build:
-    commands:
-      - echo "Building PHP (${stack.framework})${stack.hasNodeAssets ? " with frontend assets" : ""}"
-${buildAndPush()}`;
-}
-
-export function pythonBuildPhase(stack: { framework: string }): string {
-  return `  build:
-    commands:
-      - echo "Building Python (${stack.framework})"
-${buildAndPush()}`;
-}
-
-export function goBuildPhase(): string {
-  return `  build:
-    commands:
-      - echo "Building Go"
-${buildAndPush()}`;
-}
-
-export function fallbackBuildPhase(): string {
-  return `  build:
-    commands:
-      - echo "Unknown stack — building with Dockerfile"
+      - echo "${label}"
 ${buildAndPush()}`;
 }

@@ -17,7 +17,7 @@ export type { DetectedStack, RepoConfig, NativeDep, DockerFix } from "./types.js
 export { configSummary } from "./utils.js";
 export { patchDockerfile } from "./docker-fixer.js";
 export { buildWithRailpack, isRailpackAvailable, buildWithNixpacks, isNixpacksAvailable } from "./builders.js";
-export type { RailpackBuildResult, NixpacksBuildResult } from "./builders.js";
+export type { CliBuildResult, RailpackBuildResult, NixpacksBuildResult } from "./builders.js";
 
 export function analyzeRepoConfig(repoDir: string): RepoConfig {
   const config: RepoConfig = {

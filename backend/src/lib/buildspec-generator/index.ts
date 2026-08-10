@@ -2,7 +2,7 @@
 
 import type { DetectedStack } from "../repo-analyzer/types.js";
 import { commonPreBuild, commonPostBuild, staticBuildAndSync, staticPostBuild } from "./common.js";
-import { nodeBuildPhase, phpBuildPhase, pythonBuildPhase, goBuildPhase, fallbackBuildPhase } from "./phases.js";
+import { buildPhase } from "./phases.js";
 
 const COMMON_INSTALL = `  install:
     commands:
@@ -31,23 +31,23 @@ env:
 phases:
 `;
 
-  let buildPhase: string;
+  let phase: string;
 
   switch (stack.runtime) {
     case "node":
-      buildPhase = nodeBuildPhase(stack);
+      phase = buildPhase(`Building Node.js (${stack.framework}) with ${stack.packageManager}`);
       break;
     case "php":
-      buildPhase = phpBuildPhase(stack);
+      phase = buildPhase(`Building PHP (${stack.framework})${stack.hasNodeAssets ? " with frontend assets" : ""}`);
       break;
     case "python":
-      buildPhase = pythonBuildPhase(stack);
+      phase = buildPhase(`Building Python (${stack.framework})`);
       break;
     case "go":
-      buildPhase = goBuildPhase();
+      phase = buildPhase("Building Go");
       break;
     default:
-      buildPhase = fallbackBuildPhase();
+      phase = buildPhase("Unknown stack — building with Dockerfile");
       break;
   }
 
@@ -57,7 +57,7 @@ phases:
     "",
     commonPreBuild(),
     "",
-    buildPhase,
+    phase,
     "",
     commonPostBuild(),
     COMMON_FOOTER,
