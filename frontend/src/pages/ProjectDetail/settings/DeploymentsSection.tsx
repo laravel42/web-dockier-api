@@ -40,7 +40,8 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
     { errorFallback: "Failed to save deploy script" },
   );
 
-  const deployHookUrl = `https://dockier.dev/api/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;
+  const apiBase = import.meta.env.VITE_API_BASE || window.location.origin;
+  const deployHookUrl = `${apiBase}/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;
 
   return (
     <div className="flex flex-col gap-6">

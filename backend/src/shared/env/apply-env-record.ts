@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+import { parseEnvRecord } from "./parse-env.js";
 
 export function applyEnvRecord(
   record: Record<string, unknown>,
@@ -21,8 +22,6 @@ export function applyEnvRecord(
   }
 }
 
-import { parseEnvRecord } from "./parse-env.js";
-
 /**
  * @deprecated Use `parseEnvRecord` from `./parse-env.js` directly.
  * Kept for backward compatibility with the cloudflare-secrets script.
@@ -41,5 +40,5 @@ export function parseSecretString(secretString: string): Record<string, unknown>
     throw new Error("JSON secret must be a flat object of string values");
   }
 
-  return parseEnvFileContent(trimmed);
+  return parseEnvRecord(trimmed);
 }
