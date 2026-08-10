@@ -1,4 +1,4 @@
-import { spawn, execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -35,18 +35,6 @@ function runCmd(
     proc.on("close", (code) => resolve({ code: code ?? 1, output }));
     proc.on("error", (err) => resolve({ code: 1, output: err.message }));
   });
-}
-
-/**
- * Check whether a CLI tool is available on the system PATH.
- */
-function isCliAvailable(cmd: string): boolean {
-  try {
-    execSync(`${cmd} --version`, { timeout: 5_000, stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -93,7 +81,8 @@ export async function buildWithRailpack(
 }
 
 export async function isRailpackAvailable(): Promise<boolean> {
-  return isCliAvailable("railpack");
+  const check = await runCmd("railpack", ["--version"], ".");
+  return check.code === 0;
 }
 
 export async function buildWithNixpacks(
@@ -112,5 +101,6 @@ export async function buildWithNixpacks(
 }
 
 export async function isNixpacksAvailable(): Promise<boolean> {
-  return isCliAvailable("nixpacks");
+  const check = await runCmd("nixpacks", ["--version"], ".");
+  return check.code === 0;
 }

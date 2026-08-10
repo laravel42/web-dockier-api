@@ -13,76 +13,45 @@ export interface ProjectBadgesResult {
   loadingIds: ReadonlySet<string>;
 }
 
-function projectFetchKey(
-  p: { repository: string; branch?: string; connectionId?: string },
-): string {
+interface ProjectInput {
+  id: string;
+  repository: string;
+  branch?: string;
+  connectionId?: string;
+}
+
+function buildFetchKey(p: ProjectInput): string {
   return `${p.repository}:${p.branch ?? ""}:${p.connectionId ?? ""}`;
 }
 
 /**
  * Fetches tech badge info for a list of projects.
  * Results are cached in localStorage per project (invalidated when repo/branch/connection changes).
- * Returns max 4 major-framework badges per project (whitelist + dedup).
+ * Returns max 4 major-framework badges per project sorted by confidence.
  */
-export function useProjectBadges(
-  projects: Array<{ id: string; repository: string; branch?: string; connectionId?: string }>,
-): ProjectBadgesResult {
-  const [fetchedLangs, setFetchedLangs] = useState<Record<string, TechBadgeInfo[]>>({});
+export function useProjectBadges(projects: ProjectInput[]): ProjectBadgesResult {
+  const [badges, setBadges] = useState<Record<string, TechBadgeInfo[]>>({});
   const [loadingIds, setLoadingIds] = useState<Set<string>>(() => new Set());
   const fetchedRef = useRef<Map<string, string>>(new Map());
 
-  const projectsKey = projects
-    .map((p) => `${p.id}:${p.repository}:${p.branch ?? ""}:${p.connectionId ?? ""}`)
-    .join("|");
-
-  const cachedLangs = useMemo(() => {
-    const result: Record<string, TechBadgeInfo[]> = {};
-    for (const p of projects) {
-      if (!p.repository) continue;
-      const repoKey = getRepoKey(p.repository);
-      if (!repoKey) continue;
-      const cached = getProjectBadgeCache(p.id, repoKey, p.branch || "main", p.connectionId || "");
-      if (cached !== null) result[p.id] = cached;
-    }
-    return result;
-    // projectsKey captures repo/branch/connection changes for the current projects list
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- projectsKey is a stable content hash
-  }, [projectsKey]);
+  // Stable content-hash of the projects list for dependency tracking
+  const projectsKey = useMemo(
+    () => projects.map((p) => `${p.id}:${buildFetchKey(p)}`).join("|"),
+    [projects],
+  );
 
   useEffect(() => {
-    setFetchedLangs({});
+    // Reset state when the projects list changes structurally
+    setBadges({});
     setLoadingIds(new Set());
+    fetchedRef.current.clear();
   }, [projectsKey]);
 
   useEffect(() => {
     if (projects.length === 0) return;
 
-    async function fetchBadgesForProject(
-      projectId: string,
-      repoKey: string,
-      branch: string,
-      connectionId: string,
-    ): Promise<void> {
-      try {
-        const res = await gitApi.getRepoBadges(repoKey, branch, connectionId || undefined);
-        const badges = selectProjectBadges(res.badges || []);
-        setProjectBadgeCache(projectId, repoKey, branch, connectionId, badges);
-        setFetchedLangs((prev) => ({ ...prev, [projectId]: badges }));
-      } catch {
-        setFetchedLangs((prev) => ({ ...prev, [projectId]: [] }));
-      } finally {
-        setLoadingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(projectId);
-          return next;
-        });
-      }
-    }
-
-    const currentIds = new Set(projects.map((p) => p.id));
-    for (const id of fetchedRef.current.keys()) {
-      if (!currentIds.has(id)) fetchedRef.current.delete(id);
-    }
+    const pending = new Set<string>();
+    const immediateResults: Record<string, TechBadgeInfo[]> = {};
 
     for (const p of projects) {
       if (!p.repository) continue;
@@ -92,29 +61,59 @@ export function useProjectBadges(
 
       const branch = p.branch || "main";
       const connectionId = p.connectionId || "";
-      const fetchKey = projectFetchKey(p);
+      const fetchKey = buildFetchKey(p);
 
+      // Skip if already fetched with the same key
       if (fetchedRef.current.get(p.id) === fetchKey) continue;
+      fetchedRef.current.set(p.id, fetchKey);
 
+      // Check localStorage cache first
       const cached = getProjectBadgeCache(p.id, repoKey, branch, connectionId);
       if (cached !== null) {
-        fetchedRef.current.set(p.id, fetchKey);
+        immediateResults[p.id] = cached;
         continue;
       }
 
-      fetchedRef.current.set(p.id, fetchKey);
-      setLoadingIds((prev) => new Set(prev).add(p.id));
-
-      void fetchBadgesForProject(p.id, repoKey, branch, connectionId);
+      // Mark as loading and fetch from API
+      pending.add(p.id);
+      fetchBadge(p.id, repoKey, branch, connectionId);
     }
-    // projectsKey captures repo/branch/connection changes for the current projects list
+
+    // Apply cached results synchronously
+    if (Object.keys(immediateResults).length > 0) {
+      setBadges((prev) => ({ ...prev, ...immediateResults }));
+    }
+    if (pending.size > 0) {
+      setLoadingIds((prev) => {
+        const next = new Set(prev);
+        for (const id of pending) next.add(id);
+        return next;
+      });
+    }
+
+    async function fetchBadge(
+      projectId: string,
+      repoKey: string,
+      branch: string,
+      connectionId: string,
+    ): Promise<void> {
+      try {
+        const res = await gitApi.getRepoBadges(repoKey, branch, connectionId || undefined);
+        const selected = selectProjectBadges(res.badges || []);
+        setProjectBadgeCache(projectId, repoKey, branch, connectionId, selected);
+        setBadges((prev) => ({ ...prev, [projectId]: selected }));
+      } catch {
+        setBadges((prev) => ({ ...prev, [projectId]: [] }));
+      } finally {
+        setLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(projectId);
+          return next;
+        });
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- projectsKey is a stable content hash
   }, [projectsKey]);
-
-  const badges = useMemo(
-    () => ({ ...cachedLangs, ...fetchedLangs }),
-    [cachedLangs, fetchedLangs],
-  );
 
   return { badges, loadingIds };
 }
