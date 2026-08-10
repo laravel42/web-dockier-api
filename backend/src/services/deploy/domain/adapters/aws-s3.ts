@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { join, extname } from "node:path";
-import { readdirSync, statSync, readFileSync } from "node:fs";
+import { readdir, stat, readFile } from "node:fs/promises";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { getS3, getCfn } from "../../../../lib/aws-sdk.js";
 import type {
   DeployAdapter,
@@ -18,9 +18,8 @@ import {
   destroyCfnStack,
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
-import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
+import { getAwsAccountId, ensureS3Bucket, type AwsCredentials } from "../../../../lib/aws.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
-import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
  * Sanitize a name for use as an S3 bucket name.
@@ -153,31 +152,10 @@ export class AwsS3Adapter implements DeployAdapter {
     const websiteBucket = `${sanitizeBucketName(repoName)}-static-site`;
     await appendLog("── Upload to S3 ───────────────────");
 
-    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutPublicAccessBlockCommand } = await import(
-      "@aws-sdk/client-s3"
-    );
+    const { S3Client, PutObjectCommand, PutPublicAccessBlockCommand } = await getS3();
     const s3 = new S3Client({ region, credentials });
 
-    try {
-      await s3.send(new HeadBucketCommand({ Bucket: websiteBucket }));
-      await appendLog("✓ S3 bucket already exists");
-    } catch {
-      try {
-        // us-east-1 doesn't accept a LocationConstraint
-        const createParams: any = { Bucket: websiteBucket };
-        if (region !== "us-east-1") {
-          createParams.CreateBucketConfiguration = { LocationConstraint: region };
-        }
-        await s3.send(new CreateBucketCommand(createParams));
-        await appendLog("✓ S3 bucket created");
-      } catch (bucketErr: unknown) {
-        // BucketAlreadyOwnedByYou is fine
-        if (!(bucketErr instanceof Error && bucketErr.name?.includes("BucketAlreadyOwnedByYou"))) {
-          throw new Error(`Failed to create S3 bucket: ${getErrMsg(bucketErr)}`);
-        }
-        await appendLog("✓ S3 bucket already exists");
-      }
-    }
+    await ensureS3Bucket(region, credentials, websiteBucket);
 
     // Allow CloudFormation to attach a bucket policy for CloudFront OAC access.
     // We keep BlockPublicAcls and IgnorePublicAcls true (no public ACLs), but
@@ -204,6 +182,7 @@ export class AwsS3Adapter implements DeployAdapter {
     const templateBucket = `${codebuildProject}-templates-${accountId}`;
     const templateKey = "s3.yml";
 
+    await ensureS3Bucket(region, credentials, templateBucket);
     await s3.send(
       new PutObjectCommand({
         Bucket: templateBucket,
@@ -262,7 +241,7 @@ export class AwsS3Adapter implements DeployAdapter {
    * - All other files: long-lived immutable cache (1 year)
    */
   private async syncFilesToS3(
-    s3: any,
+    s3: S3Client,
     bucket: string,
     uploadDir: string,
     appendLog: (line: string) => Promise<void>,
@@ -272,26 +251,27 @@ export class AwsS3Adapter implements DeployAdapter {
     let fileCount = 0;
     const filesToUpload: Array<{ fullPath: string; objectKey: string }> = [];
 
-    const collectFiles = (dir: string, prefix: string) => {
-      const entries = readdirSync(dir);
+    const collectFiles = async (dir: string, prefix: string): Promise<void> => {
+      const entries = await readdir(dir);
       for (const entry of entries) {
         if (SKIP_DIRS.has(entry)) continue;
 
         const fullPath = join(dir, entry);
         const objectKey = prefix ? `${prefix}/${entry}` : entry;
+        const stats = await stat(fullPath);
 
-        if (statSync(fullPath).isDirectory()) {
-          collectFiles(fullPath, objectKey);
+        if (stats.isDirectory()) {
+          await collectFiles(fullPath, objectKey);
         } else {
           filesToUpload.push({ fullPath, objectKey });
         }
       }
     };
 
-    collectFiles(uploadDir, "");
+    await collectFiles(uploadDir, "");
 
     const uploadFile = async (file: { fullPath: string; objectKey: string }) => {
-      const content = readFileSync(file.fullPath);
+      const content = await readFile(file.fullPath);
       const ext = extname(file.fullPath).toLowerCase();
       const contentType = MIME_TYPES[ext] || "application/octet-stream";
 

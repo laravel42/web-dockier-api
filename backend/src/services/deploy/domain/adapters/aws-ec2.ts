@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type {
   AdapterContext,
   ProvisionResult,
@@ -13,8 +12,7 @@ import {
   readCfnTemplate,
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
-import { getAwsAccountId } from "../../../../lib/aws.js";
-import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { getAwsAccountId, ensureS3Bucket } from "../../../../lib/aws.js";
 
 /**
  * AWS EC2 adapter.
@@ -75,26 +73,10 @@ export class AwsEc2Adapter extends AwsCloudFormationAdapter {
     const templateBody = readCfnTemplate("ec2.yml");
 
     // 2. Upload template to S3 (ensure bucket exists first)
-    const { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } = await getS3();
+    const { S3Client, PutObjectCommand } = await getS3();
     const s3 = new S3Client({ region, credentials });
 
-    try {
-      await s3.send(new HeadBucketCommand({ Bucket: templateBucket }));
-    } catch {
-       
-      const createParams: any = { Bucket: templateBucket };
-      if (region !== "us-east-1") {
-        createParams.CreateBucketConfiguration = { LocationConstraint: region };
-      }
-      try {
-        await s3.send(new CreateBucketCommand(createParams));
-        await appendLog(`✓ Created S3 bucket: ${templateBucket}`);
-      } catch (bucketErr: unknown) {
-        if (!(bucketErr instanceof Error && bucketErr.name?.includes("BucketAlreadyOwnedByYou"))) {
-          throw new Error(`Failed to create S3 bucket: ${getErrMsg(bucketErr)}`);
-        }
-      }
-    }
+    await ensureS3Bucket(region, credentials, templateBucket);
 
     const templateKey = "ec2.yml";
     await s3.send(

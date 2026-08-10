@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * CloudFormation Deploy Orchestrator
  *
@@ -11,16 +10,17 @@
  * This module is pure business logic — no Fastify request/reply coupling.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { getAwsAccountId } from "../../../lib/aws.js";
-import { getS3, getCfn, getEc2 } from "../../../lib/aws-sdk.js";
+import { getAwsAccountId, ensureS3Bucket } from "../../../lib/aws.js";
+import { getS3, getCfn } from "../../../lib/aws-sdk.js";
+import type { CloudFormationClient, Output, Stack } from "@aws-sdk/client-cloudformation";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { deriveRepoName as deriveAppName, stackNameFor as deriveStackName } from "../../../lib/naming.js";
 import type { ResolvedCredentials } from "../../../lib/provider-credentials.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { ParsedBuildMetadata as BuildMetadata } from "./deploy-params.js";
 import { parseBuildMetadata, parseDeployParamsFromMetadata } from "./deploy-params.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { getDefaultVpcAndSubnets, readCfnTemplate } from "../../deploy/domain/infra/aws-helpers.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -77,16 +77,6 @@ function normalizeEnvVars(rawEnvVars: unknown): Array<{ name: string; value: str
     .filter((v): v is { name: string; value: string } => v !== null && v.name.length > 0);
 }
 
-function readCfnTemplate(): string {
-  // __dirname resolves to services/image-builder/domain/ at runtime (tsx supports it)
-  try {
-    return readFileSync(join(__dirname, "../../deploy/domain/cfn-templates/ec2.yml"), "utf-8");
-  } catch {
-    // Fallback for compiled output where __dirname may differ
-    return readFileSync(join(process.cwd(), "src/services/deploy/domain/cfn-templates/ec2.yml"), "utf-8");
-  }
-}
-
 // ─── Stack Status Check ──────────────────────────────────────────────────────
 
 export interface CheckStackStatusParams {
@@ -118,7 +108,7 @@ export async function checkDeployStatus(params: CheckStackStatusParams): Promise
   });
 
   // Try to describe the existing stack
-  let stack: any = null;
+  let stack: Stack | null = null;
   try {
     const result = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
     stack = result.Stacks?.[0] || null;
@@ -145,7 +135,7 @@ export async function checkDeployStatus(params: CheckStackStatusParams): Promise
 
   if (stackStatus === "CREATE_COMPLETE" || stackStatus === "UPDATE_COMPLETE") {
     const outputs = Object.fromEntries(
-      (stack.Outputs || []).map((o: any) => [o.OutputKey, o.OutputValue]),
+      (stack.Outputs || []).map((o: Output) => [o.OutputKey, o.OutputValue]),
     );
     const appUrl = outputs.AppUrl || "";
 
@@ -178,7 +168,7 @@ interface FallbackParams {
   credentials: ResolvedCredentials;
   appName: string;
   stackName: string;
-  cfn: any;
+  cfn: CloudFormationClient;
   logger: Logger;
 }
 
@@ -258,26 +248,18 @@ interface CreateStackParams {
   imageUri: string;
   containerPort: string;
   deployParams: Record<string, unknown>;
-  cfn: any;
+  cfn: CloudFormationClient;
   logger: Logger;
 }
 
 async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
   const { buildId, credentials, appName, stackName, imageUri, containerPort, deployParams, cfn, logger } = params;
 
-  // Discover VPC and subnet
-  const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } = await getEc2();
-  const ec2 = new EC2Client({
-    region: credentials.region,
-    credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
-  });
+  const awsCreds = { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey };
 
-  const vpcsResult = await ec2.send(new DescribeVpcsCommand({ Filters: [{ Name: "is-default", Values: ["true"] }] }));
-  const vpcId = vpcsResult.Vpcs?.[0]?.VpcId || "";
-  const subnetsResult = vpcId
-    ? await ec2.send(new DescribeSubnetsCommand({ Filters: [{ Name: "vpc-id", Values: [vpcId] }] }))
-    : { Subnets: [] };
-  const subnetId = (subnetsResult.Subnets || [])[0]?.SubnetId || "";
+  // Discover VPC and subnet using shared helper
+  const { vpcId, subnetIds } = await getDefaultVpcAndSubnets(credentials.region, awsCreds);
+  const subnetId = subnetIds[0] || "";
 
   if (!vpcId || !subnetId) {
     logger.debug(`Fallback stack creation aborted: Default VPC or Subnet not found. vpcId=${vpcId}, subnetId=${subnetId}`);
@@ -286,17 +268,12 @@ async function createOrUpdateStack(params: CreateStackParams): Promise<void> {
 
   // Upload CFN template to S3
   const { S3Client, PutObjectCommand } = await getS3();
-  const accountId = await getAwsAccountId(credentials.region, {
-    accessKeyId: credentials.accessKeyId,
-    secretAccessKey: credentials.secretAccessKey,
-  });
+  const accountId = await getAwsAccountId(credentials.region, awsCreds);
   const templateBucket = `image-builder-templates-${accountId}`;
-  const templateBody = readCfnTemplate();
+  const templateBody = readCfnTemplate("ec2.yml");
 
-  const s3 = new S3Client({
-    region: credentials.region,
-    credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
-  });
+  const s3 = new S3Client({ region: credentials.region, credentials: awsCreds });
+  await ensureS3Bucket(credentials.region, awsCreds, templateBucket);
   await s3.send(new PutObjectCommand({
     Bucket: templateBucket,
     Key: "ec2.yml",
@@ -396,7 +373,7 @@ function buildCfnParameters(input: CfnParameterInput): Array<{ ParameterKey: str
 async function appendEnvVarsParameter(
   cfnParams: Array<{ ParameterKey: string; ParameterValue: string }>,
   deployParams: Record<string, unknown>,
-  s3: any,
+  s3: S3Client,
   templateBucket: string,
   stackName: string,
   buildId: string,
