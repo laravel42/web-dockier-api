@@ -16,13 +16,21 @@
  * Extract the repository's short name from a full repo path and normalize it
  * to a filesystem/Docker-safe lowercase identifier.
  *
+ * Replaces non-alphanumeric characters with hyphens, collapses consecutive
+ * hyphens, and trims leading/trailing hyphens — producing names that are
+ * valid for Docker tags, ECR repos, and CloudFormation identifiers.
+ *
  * e.g. "acme/my-app.io" → "my-app-io"
  *      "user/SomeRepo"  → "somerepo"
+ *      "org/my..app"    → "my-app"
+ *      "org/.hidden"    → "hidden"
  */
 export function deriveRepoName(repo: string): string {
   return (repo.split("/").pop() || "app")
     .replace(/[^a-zA-Z0-9-]/g, "-")
-    .toLowerCase();
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase() || "app";
 }
 
 // ─── App Name (for IaC / Tofu previews) ────────────────────────────
