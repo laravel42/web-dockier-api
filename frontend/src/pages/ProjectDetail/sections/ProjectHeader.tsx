@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Project } from "@/types";
 import { typePageDesc, typePageTitle } from "@/utils/styles";
 import { usePermissions } from "@/context/PermissionsContext";
@@ -19,6 +19,8 @@ interface Props {
   nameError?: string;
   /** A deploy is running right now. */
   liveDeploy?: boolean;
+  /** Rendered beneath the title in place of the creation date. */
+  posture?: ReactNode;
 }
 
 export default function ProjectHeader({
@@ -31,6 +33,7 @@ export default function ProjectHeader({
   nameSaving = false,
   nameError = "",
   liveDeploy = false,
+  posture,
 }: Props) {
   const { has, isOwner } = usePermissions();
   const canDeploy = has("deploy:create");
@@ -146,11 +149,15 @@ export default function ProjectHeader({
               </span>
             )}
           </div>
-          <p className={typePageDesc}>
-            Created {new Date(project.createdAt).toLocaleDateString()}
-            {nameSaving && <span className="ml-2 text-primary-500">Saving…</span>}
-            {nameError && <span className="ml-2 text-danger-500">{nameError}</span>}
-          </p>
+          {posture ?? (
+            <p className={typePageDesc}>Created {new Date(project.createdAt).toLocaleDateString()}</p>
+          )}
+          {(nameSaving || nameError) && (
+            <p className={typePageDesc}>
+              {nameSaving && <span className="text-primary-500">Saving…</span>}
+              {nameError && <span className="text-danger-ink">{nameError}</span>}
+            </p>
+          )}
         </div>
       </div>
       <div className="relative flex shrink-0 items-center gap-2">

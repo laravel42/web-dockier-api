@@ -9,6 +9,7 @@ import OpenIssues from "./sections/OpenIssues";
 import PullRequests from "./sections/PullRequests";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
+import ProjectPostureLine from "./sections/ProjectPostureLine";
 import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
 import PullLogModal from "./modals/PullLogModal";
@@ -40,6 +41,7 @@ export default function ProjectDetail() {
     recentDeploys,
     recentScans,
     deploysError, scansError, fetchScans, hasLiveDeploy,
+    deploysLoaded, scansLoaded,
   } = useProjectDetail();
 
   const nameByLogin: Record<string, string> = {};
@@ -146,6 +148,17 @@ export default function ProjectDetail() {
         nameSaving={nameSaving}
         nameError={nameError}
         liveDeploy={hasLiveDeploy}
+        posture={
+          <ProjectPostureLine
+            project={project}
+            recentDeploys={recentDeploys}
+            recentScans={recentScans}
+            deploysError={deploysError}
+            scansError={scansError}
+            deploysLoaded={deploysLoaded}
+            scansLoaded={scansLoaded}
+          />
+        }
       />
 
       <div className="mb-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">

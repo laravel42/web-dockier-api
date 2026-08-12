@@ -103,5 +103,7 @@ export function useProjectDetail() {
     fetchScans: deploys.fetchScans,
     hasLiveDeploy: deploys.hasLiveDeploy,
     hasLiveScan: deploys.hasLiveScan,
+    deploysLoaded: deploys.deploysLoaded,
+    scansLoaded: deploys.scansLoaded,
   };
 }
