@@ -17,6 +17,7 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
+import { useUrlSection } from "@/hooks/useUrlSection";
 
 interface Props {
   project: Project;
@@ -654,7 +655,7 @@ const SECTION_KEYS = SECTIONS.map((s) => s.key);
 export default function ProjectObserveTab({ project }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
-  const [activeSection, setActiveSection] = useState<ObserveSection>("heartbeats");
+  const [activeSection, setActiveSection] = useUrlSection(SECTION_KEYS);
   const handleSectionKeyDown = useTabListKeyboard(SECTION_KEYS, setActiveSection);
 
   if (permissionsLoading) return <TabSpinner label="Loading…" />;

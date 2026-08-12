@@ -20,12 +20,15 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
+import { useUrlSection } from "@/hooks/useUrlSection";
 
 interface Props {
   project: Project;
 }
 
 type SubTab = "processes" | "scheduler";
+// Module-level so the identity is stable across renders (useUrlSection memoises on it).
+const SUB_TAB_KEYS: readonly SubTab[] = ["processes", "scheduler"];
 
 const ALL_RUNTIME_OPTIONS = [
   { value: "node", label: "Node.js", versions: ["22", "20", "18"], categories: ["JavaScript"] },
@@ -840,8 +843,8 @@ export default function ProjectProcessesTab({ project }: Props) {
   const canManage = has("project:manage");
   const canView = has("project:view");
 
-  const [subTab, setSubTab] = useState<SubTab>("processes");
-  const subTabKeys: SubTab[] = ["processes", "scheduler"];
+  const [subTab, setSubTab] = useUrlSection(SUB_TAB_KEYS);
+  const subTabKeys = SUB_TAB_KEYS;
   const handleSubTabKeyDown = useTabListKeyboard(subTabKeys, setSubTab);
   const [processes, setProcesses] = useState<BackgroundProcess[]>([]);
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);

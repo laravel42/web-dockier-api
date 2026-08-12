@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
@@ -10,6 +10,7 @@ import WordPressSection from "../settings/WordPressSection";
 import ComposerSection from "../settings/ComposerSection";
 import NpmSection from "../settings/NpmSection";
 import NotificationsSection from "../settings/NotificationsSection";
+import { useUrlSection } from "@/hooks/useUrlSection";
 
 interface Props {
   project: Project;
@@ -28,7 +29,6 @@ type SettingsSection =
 export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
-  const [activeSection, setActiveSection] = useState<SettingsSection>("general");
 
   const sections = useMemo((): { key: SettingsSection; label: string }[] => [
     { key: "general", label: "General" },
@@ -42,6 +42,7 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
     { key: "notifications", label: "Notifications" },
   ], [project.sourceType, project.template]);
   const sectionKeys = useMemo(() => sections.map((s) => s.key), [sections]);
+  const [activeSection, setActiveSection] = useUrlSection(sectionKeys);
   const handleSectionKeyDown = useTabListKeyboard(sectionKeys, setActiveSection);
 
   if (permissionsLoading) return <TabSpinner label="Loading…" />;
