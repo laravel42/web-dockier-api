@@ -4,6 +4,11 @@ import tempfile
 import boto3
 from botocore.exceptions import NoCredentialsError
 
+# Directories never archived. `.git` in particular must not ship: uploading it
+# puts the full history of a private repository into object storage on every
+# scan, and no engine scans it anyway.
+EXCLUDED_DIRS = {".git"}
+
 # Object storage abstraction
 class ObjectStore:
     def upload_file(self, file_path: str, destination_path: str) -> str:
@@ -56,17 +61,43 @@ def get_store() -> ObjectStore:
     return LocalMockStore()
 
 def zip_directory(dir_path: str, output_path: str):
-    """Zips a directory recursively."""
-    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, _, files in os.walk(dir_path):
+    """Zips a directory recursively, skipping symlinks and EXCLUDED_DIRS.
+
+    Symlinks are skipped rather than followed. This service archives untrusted
+    repositories and zipfile.write() dereferences links, so a repo containing a
+    symlink named `config.yml` pointing at /etc/passwd or a mounted credentials
+    file would have that file's *contents* copied into the archive and uploaded
+    to object storage. Nothing is lost by skipping them: a link whose target is
+    inside the repo is already archived under its real path, and a link whose
+    target is outside the repo is not the repo's code.
+    """
+    dir_path = os.path.realpath(dir_path)
+    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(dir_path):
+            # Prune in place so os.walk does not descend into them.
+            dirs[:] = [
+                d for d in dirs
+                if d not in EXCLUDED_DIRS and not os.path.islink(os.path.join(root, d))
+            ]
             for file in files:
                 file_path = os.path.join(root, file)
+                if os.path.islink(file_path):
+                    print(f"[*] storage: skipping symlink {os.path.relpath(file_path, dir_path)}")
+                    continue
                 # Ensure we store relative paths inside the zip
                 zipf.write(file_path, os.path.relpath(file_path, dir_path))
 
 def unzip_directory(zip_path: str, extract_to: str):
-    """Unzips a file into the target directory."""
-    with zipfile.ZipFile(zip_path, 'r') as zipf:
+    """Unzips a file into the target directory.
+
+    Note on path traversal: CPython's ZipFile.extract() sanitizes member names
+    before writing — it strips drive letters, leading separators, and every
+    '..' component — so a crafted member cannot escape `extract_to` ("zip
+    slip"). It also writes members flagged as symlinks as ordinary files
+    containing the target path rather than creating a link. Do not replace this
+    with a different extraction library without re-establishing both properties.
+    """
+    with zipfile.ZipFile(zip_path, "r") as zipf:
         zipf.extractall(extract_to)
 
 def upload_codebase(repo_dir: str, scan_id: str) -> str:

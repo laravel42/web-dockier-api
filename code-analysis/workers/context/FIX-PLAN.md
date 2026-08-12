@@ -36,7 +36,7 @@ against customer repositories.
 | Phase 2 — P1 delivery (§4) | Not started. Blocked on decisions §7.1, §7.3, §7.5. |
 | Phase 3 — P2 engines (§5) | Not started. |
 | Phase 4 — config drift (§6) | Not started. Blocked on decision §7.4. |
-| Phase 5 — security (§8) | Not started. **Unblocked — can proceed now.** |
+| **Phase 5 — security** (§8) | **Done**, except engine sandboxing (§8.6), which is an ops decision. |
 | Phase 6 — hygiene (§9) | Not started. |
 
 ### Deviations from plan as written
@@ -59,7 +59,8 @@ Two Phase 2 items were pulled forward because Phase 1 could not be completed cor
   crashed tool into `[]`, so those engines cannot yet report `status="failed"`. Assigned to §5.1.
 - **`fix-lint.js`** at the tree root is a one-off codemod for the `admin/` Next.js app. Out of
   scope for §0.3, which named only `fix_test.py`; flagged rather than deleted.
-- **Pre-existing `sonar-scanner` token-in-argv exposure**, symlink capture, and zip-slip. Phase 5.
+- **Pre-existing `sonar-scanner` token-in-argv exposure** (§5.2, Phase 3). Symlink capture and
+  `.git` upload were addressed in Phase 5; zip-slip proved not to be a defect (§8.3).
 
 ---
 
@@ -380,25 +381,64 @@ These are not mine to make; Phase 2 onward depends on them.
 ## 8. Phase 5 — Security hardening
 
 This service clones and unpacks **untrusted repositories**, which raises the bar.
+Each item below was verified empirically before being acted on; one turned out not to be a real
+defect and is recorded as such rather than quietly fixed.
 
-- **Symlink capture.** `zip_directory` uses `zipf.write()`, which follows symlinks. A repo with a
-  symlink to `/etc/passwd` or a mounted credentials file gets that content zipped and uploaded to
-  S3. Skip symlinks explicitly.
-- **Zip Slip.** `extractall()` with no path validation (`storage.py:71`). Currently mitigated only
-  by the fact that you author the archive — a mitigation that evaporates the moment any other
-  producer writes to that bucket. Validate members against the extraction root.
-- **`.git` is uploaded.** `zip_directory` walks everything including `.git`, shipping full history to
-  object storage on every scan. Exclude it.
-- **`cloneUrl` is unvalidated.** Passed straight to `Repo.clone_from` with no scheme allowlist.
-  GitPython has a history of argument-injection issues via `ext::` and `--upload-pack`-style URLs.
-  Allowlist `https://` and known hosts.
-- **Clone credentials.** `gateway/README.md` says to route them through `SecretManager`; nothing
-  does.
-- **Engine sandboxing.** `semgrep`, `sonar-scanner`, and `codeql` all execute against attacker-
-  supplied source. Confirm they run in a container with no host network and no cloud credentials in
-  the environment.
+### 8.1 Symlink capture — **CONFIRMED, fixed**
+`zip_directory` used `zipf.write()`, which dereferences symlinks. Reproduced against a fixture repo
+containing `innocent-config.yml -> /tmp/host-credentials`: the archive contained the **contents** of
+the host file (`SECRET_TOKEN=hunter2`) under an innocuous name, and would have been uploaded to S3.
 
----
+Symlinks — files and directories — are now skipped. Nothing is lost: a link whose target is inside
+the repo is already archived under its real path, and a link whose target is outside the repo is not
+the repo's code.
+
+### 8.2 `.git` upload — **CONFIRMED, fixed**
+`zip_directory` walked everything, shipping full history (including `.git/config`, which commonly
+carries a remote URL with an embedded token) to object storage on every scan. Now excluded via
+`EXCLUDED_DIRS`. `.gitignore` is deliberately still archived — the exclusion matches path
+components, not the substring `.git`.
+
+### 8.3 Zip Slip — **NOT A DEFECT. The original plan was wrong.**
+The earlier claim that `extractall()` was "mitigated only by the fact that you author the archive"
+does not hold. CPython's `ZipFile.extract()` sanitizes member names before writing: it strips drive
+letters, leading separators, and every `..` component. Verified on Python 3.9.6 with an archive
+containing `../../escaped.txt` and `/abs/rooted.txt` — both landed inside the extraction root.
+Members flagged as symlinks are written as ordinary files containing the target path, not as links.
+
+No fix was applied, because there was nothing to fix. A regression test
+(`test_extraction_cannot_escape_the_target_directory`) and a docstring now pin both properties, so
+swapping in a different extraction library re-opens the question loudly.
+
+### 8.4 Unvalidated `cloneUrl` — **CONFIRMED, fixed**
+The URL went straight to `Repo.clone_from`. `validate_clone_url()` now enforces an https-only scheme
+allowlist, rejecting `ext::` (which makes git execute an arbitrary command), `file://`, `ssh://`,
+and `git://`, plus any value starting with `-` (which git parses as an option, e.g.
+`--upload-pack=<command>`).
+
+Host restriction is **opt-in** via `ALLOWED_CLONE_HOSTS` (comma-separated). A hardcoded allowlist of
+github/gitlab/bitbucket was rejected because `DESCRIPTION.md` puts self-hosted GitLab in scope; when
+the variable is unset any https host is accepted.
+
+### 8.5 Clone credentials — **fixed**
+`gateway/README.md` required routing credentials through the secret manager; nothing did. The
+gateway now resolves an optional `GIT_CLONE_TOKEN` and injects it into the clone URL, falling back
+to an anonymous clone when no token is configured (correct for public repos). `GIT_TERMINAL_PROMPT=0`
+makes an auth-required clone fail fast rather than blocking a worker thread on a credential prompt.
+
+Separately, the failure path wrote `str(err)` — which carries the full URL, token and all — to
+stdout and to `pgboss.job.output`. All such paths now go through `redact_credentials()`.
+
+**New environment variables:** `ALLOWED_CLONE_HOSTS` (optional), `GIT_CLONE_TOKEN` (optional secret).
+
+### 8.6 Engine sandboxing — **OPEN, not addressed**
+`semgrep`, `sonar-scanner`, and `codeql` all execute against attacker-supplied source. This tree
+contains **no Dockerfile, compose file, or any other container configuration**, so as written the
+engines run unsandboxed on the host, with whatever cloud credentials the process environment holds.
+
+This is a deployment decision rather than a code change, so it is left open. It should be settled
+alongside §7.5 (deployment topology): engines need a container with no host network and no cloud
+credentials in the environment.
 
 ## 9. Phase 6 — Hygiene (P3)
 

@@ -25,6 +25,21 @@ The Gateway publishes to multiple Redis channels (`scan:semgrep`, `scan:regex`, 
 }
 ```
 
+## Security
+
+The gateway is the only component that touches untrusted input from outside the platform, so two
+guards live here:
+
+- **`cloneUrl` validation.** https only. `ext::` (arbitrary command execution), `file://`, `ssh://`,
+  `git://`, and any value beginning with `-` are rejected. Set `ALLOWED_CLONE_HOSTS`
+  (comma-separated) to restrict further; unset means any https host, which self-hosted GitLab needs.
+- **Credentials.** An optional `GIT_CLONE_TOKEN` secret is injected into the clone URL and exists
+  only in that value. It is never logged, never published in the scan message, and never written to
+  the database — `redact_credentials()` guards every such path. Without a token the clone is
+  anonymous, which is correct for public repositories.
+
+Archives exclude `.git` and skip symlinks; see `infrastructure/storage.py`.
+
 ## LLM Instructions
 When extending this service, ensure that any new language detection logic added to `_detect_language` does not perform deep file system traversal that would block the asyncio thread. Use lightweight heuristics. When handling repository credentials for `cloneUrl`, use the `SecretManager` (infrastructure) rather than logging or hardcoding tokens.
 

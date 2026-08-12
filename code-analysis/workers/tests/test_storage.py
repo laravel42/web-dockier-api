@@ -112,3 +112,98 @@ def test_upload_codebase_cleans_up_its_staging_archive(tmp_path):
     leftovers = [p for p in os.listdir(__import__("tempfile").gettempdir())
                  if p.startswith("dockier-upload-scan-1-")]
     assert leftovers == []
+
+
+def test_symlinks_are_not_archived(tmp_path):
+    """
+    zipfile.write() dereferences symlinks. Without an explicit skip, a repo
+    containing a symlink named like an ordinary config file would have the
+    *contents* of its target — a host credentials file, /etc/passwd — copied
+    into the archive and uploaded to object storage.
+    """
+    import zipfile
+
+    secret = tmp_path / "host-credentials"
+    secret.write_text("SECRET_TOKEN=hunter2")
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("print('hi')")
+    (repo / "innocent-config.yml").symlink_to(secret)
+
+    archive = tmp_path / "out.zip"
+    zip_directory(str(repo), str(archive))
+
+    with zipfile.ZipFile(archive) as z:
+        names = z.namelist()
+        blob = b"".join(z.read(n) for n in names)
+
+    assert names == ["app.py"]
+    assert b"hunter2" not in blob
+
+
+def test_symlinked_directories_are_not_traversed(tmp_path):
+    import zipfile
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.env").write_text("AWS_SECRET_ACCESS_KEY=leak")
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "main.go").write_text("package main")
+    (repo / "vendored").symlink_to(outside, target_is_directory=True)
+
+    archive = tmp_path / "out.zip"
+    zip_directory(str(repo), str(archive))
+
+    with zipfile.ZipFile(archive) as z:
+        blob = b"".join(z.read(n) for n in z.namelist())
+        assert z.namelist() == ["main.go"]
+    assert b"leak" not in blob
+
+
+def test_git_directory_is_excluded(tmp_path):
+    import zipfile
+
+    repo = tmp_path / "repo"
+    (repo / ".git" / "objects").mkdir(parents=True)
+    (repo / ".git" / "config").write_text("[remote]\n  url = https://user:token@host/r.git")
+    (repo / ".git" / "objects" / "abc").write_text("history")
+    (repo / "app.py").write_text("print('hi')")
+    (repo / ".gitignore").write_text("*.pyc")
+
+    archive = tmp_path / "out.zip"
+    zip_directory(str(repo), str(archive))
+
+    with zipfile.ZipFile(archive) as z:
+        names = z.namelist()
+
+    assert not any(n.startswith(".git/") for n in names), names
+    assert ".gitignore" in names, "excluding .git must not also drop .gitignore"
+    assert "app.py" in names
+
+
+def test_extraction_cannot_escape_the_target_directory(tmp_path):
+    """
+    Regression guard, not a fix: CPython's ZipFile.extract() strips '..' and
+    leading separators from member names, so extractall cannot write outside
+    extract_to. This test fails if extraction is ever swapped for a library
+    without that property.
+    """
+    import zipfile
+
+    archive = tmp_path / "evil.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("../../escaped.txt", "pwned")
+        z.writestr("/abs/rooted.txt", "pwned")
+        z.writestr("ok.py", "clean")
+
+    target = tmp_path / "extracted"
+    unzip_directory(str(archive), str(target))
+
+    escaped = [p for p in tmp_path.rglob("escaped.txt") if target not in p.parents and p.parent != target]
+    assert escaped == [], f"archive member escaped the extraction root: {escaped}"
+    assert (target / "escaped.txt").exists()
+    assert (target / "abs" / "rooted.txt").exists()
+    assert (target / "ok.py").read_text() == "clean"
