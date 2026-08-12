@@ -49,7 +49,6 @@ export default function RecentDeploys({
   navigate,
   fallbackCommitHash,
 }: Props) {
-  if (!deploys.length) return null;
 
   const providerKey = (providerId: string) =>
     allProviders.find((p) => p.id === providerId)?.provider || "";
@@ -89,7 +88,7 @@ export default function RecentDeploys({
                     <div className="relative z-10 flex size-8 shrink-0 items-center justify-center">
                       <span className="size-2.5 rounded-full bg-border ring-4 ring-card" />
                     </div>
-                    <span className="text-[14px] font-bold text-text-muted pt-1.5">{row.label}</span>
+                    <span className="text-sm font-bold text-text-muted pt-1.5">{row.label}</span>
                   </>
                 ) : (
                   <>

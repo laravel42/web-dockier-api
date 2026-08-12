@@ -5,13 +5,15 @@ import { usePermissions } from "@/context/PermissionsContext";
 import Button from "@/components/ui/Button";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import ProjectAvatar from "@/components/ProjectAvatar";
-import { SquarePenIcon } from "lucide-react";
+import { ShieldCheckIcon, SquarePenIcon } from "lucide-react";
 
 interface Props {
   project: Project;
   siteUrl?: string;
   repoFaviconUrl?: string;
   onDeploy: () => void;
+  /** Opens the scan launcher for this project. */
+  onScan?: () => void;
   onNameSave: (name: string) => Promise<void>;
   nameSaving?: boolean;
   nameError?: string;
@@ -22,12 +24,14 @@ export default function ProjectHeader({
   siteUrl,
   repoFaviconUrl,
   onDeploy,
+  onScan,
   onNameSave,
   nameSaving = false,
   nameError = "",
 }: Props) {
   const { has, isOwner } = usePermissions();
   const canDeploy = has("deploy:create");
+  const canScan = has("scan:run");
   const canEditName = isOwner || has("project:manage");
   const isTemplate = project.sourceType === "template";
 
@@ -74,7 +78,7 @@ export default function ProjectHeader({
   };
 
   return (
-    <div className="flex items-center justify-between gap-4 mb-8">
+    <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
       <div className="flex items-center gap-3 min-w-0">
         <ProjectAvatar project={project} size="lg" siteUrl={siteUrl} repoFaviconUrl={repoFaviconUrl} />
         <div className="min-w-0">
@@ -108,7 +112,7 @@ export default function ProjectHeader({
                     type="button"
                     onClick={startEditing}
                     disabled={nameSaving}
-                    className="p-1 rounded-md text-text-muted opacity-0 group-hover:opacity-100 hover:text-text hover:bg-secondary-50 transition-all shrink-0 disabled:opacity-50"
+                    className="p-1 rounded-md text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-text hover:bg-secondary-50 transition-all shrink-0 disabled:opacity-50"
                     aria-label="Edit project name"
                   >
                     <SquarePenIcon className="size-4" />
@@ -129,7 +133,12 @@ export default function ProjectHeader({
           </p>
         </div>
       </div>
-      <div className="relative flex shrink-0 items-center gap-4">
+      <div className="relative flex shrink-0 items-center gap-2">
+        {canScan && onScan && (
+          <Button variant="outline" onClick={onScan} iconLeft={<ShieldCheckIcon className="size-4" />}>
+            Scan
+          </Button>
+        )}
         {canDeploy && (
           <Button variant="primary" onClick={onDeploy} iconLeft={<RocketIcon className="size-4" />}>
             Deploy

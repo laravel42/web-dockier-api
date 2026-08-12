@@ -140,6 +140,7 @@ export default function ProjectDetail() {
         siteUrl={siteUrl}
         repoFaviconUrl={repoFaviconUrl}
         onDeploy={() => setShowDeployWizard(true)}
+        onScan={() => navigate(`/security/project/${project.id}`)}
         onNameSave={handleUpdateName}
         nameSaving={nameSaving}
         nameError={nameError}
@@ -193,7 +194,7 @@ export default function ProjectDetail() {
             fallbackCommitHash={stats?.lastCommitHash}
           />
         }
-        securityPanel={<RecentScans scans={recentScans} navigate={navigate} />}
+        securityPanel={<RecentScans scans={recentScans} navigate={navigate} projectId={project.id} />}
       />
 
       <DeployWizard

@@ -10,6 +10,8 @@ import { ShieldCheckIcon } from "lucide-react";
 interface Props {
   scans: Scan[];
   navigate: (path: string) => void;
+  /** Enables the "Run first scan" action on the empty state. */
+  projectId?: string;
 }
 
 function dayLabel(dateStr: string): string {
@@ -40,14 +42,21 @@ function buildRows(scans: Scan[]): TimelineRow[] {
   return rows;
 }
 
-export default function RecentScans({ scans, navigate }: Props) {
-  if (!scans.length) return null;
+export default function RecentScans({ scans, navigate, projectId }: Props) {
 
   if (!scans.length) {
     return (
       <div className="flex h-full flex-col">
         <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
-        <EmptyState compact description="No security scans have been run for this project yet." />
+        <EmptyState
+          compact
+          description="No security scans have been run for this project yet."
+          action={
+            projectId
+              ? { label: "Run first scan", onClick: () => navigate(`/security/project/${projectId}`) }
+              : undefined
+          }
+        />
       </div>
     );
   }
@@ -75,7 +84,7 @@ export default function RecentScans({ scans, navigate }: Props) {
                     <div className="relative z-10 flex size-8 shrink-0 items-center justify-center">
                       <span className="size-2.5 rounded-full bg-border ring-4 ring-card" />
                     </div>
-                    <span className="text-[14px] font-bold text-text-muted pt-1.5">{row.label}</span>
+                    <span className="text-sm font-bold text-text-muted pt-1.5">{row.label}</span>
                   </>
                 ) : (
                   <>
