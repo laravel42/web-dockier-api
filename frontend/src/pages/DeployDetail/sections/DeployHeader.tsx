@@ -30,7 +30,7 @@ export default function DeployHeader({
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-3">
-        <div className="size-12 rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
+        <div className="size-12 rounded-xl bg-primary-500/15 flex items-center justify-center text-primary-500">
           <RocketIcon className="size-6" />
         </div>
         <div>

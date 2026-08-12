@@ -52,7 +52,7 @@ export default function ContributorsGrid({ stats, nameByLogin }: Props) {
                 key={c.name}
                 className="flex items-center gap-3 min-w-0 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors"
               >
-                <span className="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-1.5 rounded-full text-[11px] font-bold tabular-nums ring-1 bg-secondary-100/50 text-text-muted ring-border">
+                <span className="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-1.5 rounded-sm text-[11px] font-bold tabular-nums ring-1 bg-secondary-100/50 text-text-muted ring-border">
                   #{rank}
                 </span>
                 <Avatar name={c.name} avatarUrl={c.avatarUrl} />

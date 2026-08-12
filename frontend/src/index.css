@@ -169,9 +169,18 @@
   --radius-input: var(--radius-md);
 
   --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 12%);
+
+  /* The one elevation token — overlays only (modal, dropdown, toast, popover).
+     In-page surfaces stay flat; see DESIGN.md → The Flat-By-Law Rule. */
+  --shadow-overlay:
+    0 8px 24px -4px oklch(0 0 0 / 40%),
+    0 2px 6px -2px oklch(0 0 0 / 30%);
 }
 
 [data-theme="light"] {
+  --shadow-overlay:
+    0 8px 24px -4px oklch(0 0 0 / 12%),
+    0 2px 6px -2px oklch(0 0 0 / 8%);
   --color-background: oklch(0.97 0.008 60);
   --color-foreground: oklch(0.22 0.01 50);
   --color-card: oklch(1 0.005 60);
@@ -380,6 +389,26 @@ textarea:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .animate-marquee {
     animation: none;
+  }
+}
+
+/* Global reduced-motion floor. The two guards above are surface-specific; this
+   catches every Tailwind and tw-animate-css entrance, exit, and pulse in the app. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Spinners are the exception: they report work still in flight, so they keep
+     turning — slowly enough not to provoke vestibular discomfort. */
+  .animate-spin {
+    animation-duration: 1.8s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
@@ -629,7 +658,7 @@ textarea:focus-visible {
   border-radius: var(--radius-card);
   border-color: oklch(1 0 0 / 12%);
   background: var(--color-card);
-  box-shadow: var(--shadow-card-hover);
+  box-shadow: var(--shadow-overlay);
 }
 
 /* Link/format toolbars — closed toggles must use popover text, not accent-foreground */

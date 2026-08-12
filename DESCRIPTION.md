@@ -78,7 +78,7 @@ These are explicitly out of scope and require a deliberate decision to bring in:
 - **Cloud providers beyond AWS and GCP** — Deployment automation currently supports AWS and GCP. Additional providers may be added later but are not in the current scope.
 - **DAST, IAST, or container image scanning** — Static analysis (SAST) and dependency scanning (SCA) only.
 - **Multi-tenancy / org hierarchy** — Flat app_id model. No SSO/SAML, no cross-org sharing.
-- **Mobile apps** — Desktop-first SPA. No responsive mobile layout or push notifications.
+- **Native mobile apps** — No iOS or Android application and no push notifications. The web SPA itself *is* responsive down to phone widths (see `PRODUCT.md` → *Platform*); only native apps are out of scope.
 - **Self-hosted Dockier** — No Helm chart or Docker Compose distribution for self-hosting.
 - **AI model customization** — Fixed model (gpt-5.4-mini) via API. No fine-tuning, no local LLMs, no user model selection.
 - **Monorepo-aware scanning** — Single repo + branch per scan. No per-package scanning within monorepos.

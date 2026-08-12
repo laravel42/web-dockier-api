@@ -13,6 +13,8 @@ export interface NavItemConfig {
   icon: NavIconName;
   /** Match pathname exactly (e.g. dashboard home) */
   exact?: boolean;
+  /** When set, nav item is hidden unless the user has this permission */
+  permission?: string;
 }
 
 export interface NavGroupConfig {
@@ -28,6 +30,7 @@ export const sidebarNavGroups: NavGroupConfig[] = [
     label: "Workspace",
     items: [
       { to: "/projects", label: "Projects", icon: "projects" },
+      { to: "/deploy", label: "Deploy", icon: "deploy", permission: "deploy:view" },
       { to: "/security", label: "Security", icon: "security" },
     ],
   },

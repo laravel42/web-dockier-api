@@ -12,11 +12,14 @@ import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnab
 import { navLinkActiveCls, navLinkCls, navLinkIdleCls } from "../utils/styles";
 import NotificationDropdown from "./NotificationDropdown";
 import { useTheme } from "../context/ThemeContext";
+import { usePermissions } from "../context/PermissionsContext";
+import RocketIcon from "./icons/outlined/RocketIcon";
 import { FolderClosedIcon, LayoutGridIcon, LogOutIcon, MoonIcon, SettingsIcon, ShieldCheckIcon, SunMediumIcon } from "lucide-react";
 
 const navIcons: Partial<Record<NavIconName, ReactNode>> = {
   dashboard: <LayoutGridIcon className="size-4 shrink-0" />,
   projects: <FolderClosedIcon className="size-4 shrink-0" />,
+  deploy: <RocketIcon className="size-4 shrink-0" />,
   security: <ShieldCheckIcon className="size-4 shrink-0" />,
   settings: <SettingsIcon className="size-4 shrink-0" />,
 };
@@ -40,6 +43,11 @@ export default function TopNavbar() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { enabled: inAppEnabled } = useInAppNotificationsEnabled();
+  const { has, loading: permLoading } = usePermissions();
+
+  const visibleNavItems = sidebarNavItems.filter(
+    (item) => !item.permission || (!permLoading && has(item.permission)),
+  );
 
   const signOut = () => {
     logout();
@@ -55,7 +63,7 @@ export default function TopNavbar() {
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide"
           aria-label="Main navigation"
         >
-          {sidebarNavItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavItem
               key={item.to}
               item={item}

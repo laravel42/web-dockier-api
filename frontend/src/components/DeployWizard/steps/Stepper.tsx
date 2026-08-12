@@ -10,7 +10,7 @@ export default function Stepper({ current, steps }: { current: number; steps: ty
         return (
           <div key={i} className="flex items-center gap-1 flex-1">
             <div className={`flex items-center justify-center size-7  rounded-full text-xs font-semibold shrink-0 transition-colors ${
-              done ? "bg-primary-500/80 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
+              done ? "bg-primary-500/80 text-primary-foreground" : active ? "bg-primary-500 text-primary-foreground" : "bg-secondary-100 text-text-muted"
             }`}>
               {done ? (
                 <CheckIcon />

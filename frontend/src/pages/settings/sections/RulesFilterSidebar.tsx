@@ -46,14 +46,14 @@ export default function RulesFilterSidebar({
   return (
     <div className="w-52 shrink-0 space-y-1.5 self-start sticky top-6">
       {/* Severity */}
-      <div className="bg-secondary-50/60 rounded-lg overflow-hidden">
-        <button onClick={() => setSevOpen(!sevOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-secondary-100 transition-colors">
+      <div className="rounded-lg overflow-hidden border border-border/50 bg-card/40">
+        <button onClick={() => setSevOpen(!sevOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-card/60 transition-colors">
           Severity {chevron(sevOpen)}
         </button>
         {sevOpen && (
           <div className="px-2 pb-2 space-y-0.5">
             {severities.map(s => (
-              <button key={s.key} onClick={() => onSeverityChange(activeSeverity === s.key ? "" : s.key)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${activeSeverity === s.key ? "bg-primary-500 text-white font-medium" : "text-text-muted hover:bg-secondary-100"}`}>
+              <button key={s.key} onClick={() => onSeverityChange(activeSeverity === s.key ? "" : s.key)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${activeSeverity === s.key ? "bg-primary-500 text-primary-foreground font-medium" : "text-text-muted hover:bg-card/60"}`}>
                 <span className="flex items-center gap-2">{s.icon && <span className="text-[10px]">{s.icon}</span>}{s.label}</span>
                 <span className={`text-xs ${activeSeverity === s.key ? "text-white/70" : s.color}`}>{s.count}</span>
               </button>
@@ -63,8 +63,8 @@ export default function RulesFilterSidebar({
       </div>
 
       {/* Technology */}
-      <div className="bg-secondary-50/60 rounded-lg overflow-hidden">
-        <button onClick={() => setTechOpen(!techOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-secondary-100 transition-colors">
+      <div className="rounded-lg overflow-hidden border border-border/50 bg-card/40">
+        <button onClick={() => setTechOpen(!techOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-card/60 transition-colors">
           Technology {chevron(techOpen)}
         </button>
         {techOpen && (
@@ -73,7 +73,7 @@ export default function RulesFilterSidebar({
               const active = activeLangs.has(l.key);
               return (
                 <button key={l.key} type="button" onClick={() => onLangToggle(l.key)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all ${active ? "bg-primary-50 text-primary-600 font-medium" : "text-text-muted hover:bg-secondary-100"}`}>
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all ${active ? "bg-primary-500/15 text-primary-300 font-medium" : "text-text-muted hover:bg-card/60"}`}>
                   <TechBadge name={l.key} icon={l.icon} iconOnly iconSize="w-5 h-5" />
                   <span className="text-sm truncate flex-1 text-left">{l.label}</span>
                   {l.count !== undefined && <span className="text-xs font-semibold">{l.count}</span>}

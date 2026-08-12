@@ -144,7 +144,7 @@ export default function TagPicker({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setInputValue(""); }} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-card shadow-lg overflow-hidden">
+          <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-card shadow-(--shadow-overlay) overflow-hidden">
             <div className="max-h-48 overflow-y-auto py-1">
               {filteredTags.map((tag) => (
                 <button

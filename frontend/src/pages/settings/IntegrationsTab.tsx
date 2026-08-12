@@ -7,7 +7,7 @@ import SettingsModalFooter from "@/components/SettingsModalFooter";
 import { SettingsField } from "@/components/SettingsField";
 import TechBadge from "@/components/TechBadge";
 import { SearchableCombobox } from "@/components/ui/combobox";
-import { settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
+import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
 import ListSearchBar from "@/components/ui/ListSearchBar";
@@ -332,7 +332,7 @@ export default function IntegrationsTab() {
                 </div>
                 <div className="ml-auto">
                   <button id="edit-intg-enabled" type="button" onClick={() => setEditEnabled(!editEnabled)}
-                    className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
+                    className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-primary-foreground hover:bg-primary-600"}`}>
                     {editEnabled ? "Disable" : "Enable"}
                   </button>
                 </div>
@@ -398,16 +398,18 @@ export default function IntegrationsTab() {
             const cat = INTEGRATION_CATALOG.find(c => c.type === intg.type);
             return (
               <div key={intg.id} onClick={() => canManage && openEdit(intg)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="size-8  flex items-center justify-center shrink-0">
-                    {(cat && INTEGRATION_ICONS[cat.type]) ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-7 h-7" /> : null}
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="size-8  flex items-center justify-center shrink-0">
+                      {(cat && INTEGRATION_ICONS[cat.type]) ? <TechBadge name={cat.type} icon={INTEGRATION_ICONS[cat.type]} iconOnly iconSize="w-7 h-7" /> : null}
+                    </div>
+                    <p className="text-sm font-semibold text-text truncate">{intg.name}</p>
                   </div>
-                  <p className="text-sm font-semibold text-text">{intg.name}</p>
+                  <span className={`shrink-0 ${intg.enabled ? settingsBadgeCls.success : settingsBadgeCls.muted}`}>
+                    {intg.enabled ? "Enabled" : "Disabled"}
+                  </span>
                 </div>
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${intg.enabled ? "bg-success-50 text-success-500" : "bg-secondary-100 text-text-muted"}`}>
-                  {intg.enabled ? "Enabled" : "Disabled"}
-                </span>
-                {cat && <p className="text-xs text-text-muted mt-2">{cat.description}</p>}
+                {cat && <p className="text-xs text-text-muted">{cat.description}</p>}
               </div>
             );
           })}

@@ -10,6 +10,7 @@ import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { SquarePenIcon, Trash2Icon } from "lucide-react";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
+import { settingsBadgeCls } from "@/utils/styles";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 
@@ -224,17 +225,17 @@ export default function SemgrepRulesPanel({ filter, adding, onAddingDone }: Prop
               <div className="flex items-center gap-2">
                 <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                 <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
-                {!r.isBuiltin && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-50 text-primary-600 shrink-0">User</span>}
+                {!r.isBuiltin && <span className={settingsBadgeCls.primary}>User</span>}
                 <ToggleSwitch checked={r.enabled} onChange={() => r.isBuiltin ? toggleBuiltinRule(r.ruleId) : toggleDbRule(dbRules.find(d => d.id === r.id)!)} />
               </div>
               <p className="text-sm/relaxed text-text">{r.name}</p>
-              <p className="text-xs/relaxed text-text-muted bg-secondary-50 px-2 py-1 rounded line-clamp-2">{r.message}</p>
+              <p className="text-xs/relaxed text-text-muted bg-secondary-500/10 px-2 py-1 rounded line-clamp-2">{r.message}</p>
               <div className="flex items-end gap-2">
                 <div className="flex flex-wrap gap-1 flex-1">
                   <TechBadge name={r.lang} icon={langIcon[r.lang]} label={r.lang} />
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEditModal({ id: r.id, ruleId: r.ruleId, isBuiltin: r.isBuiltin, path: r.path, yamlContent: r.yamlContent })} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                  <button onClick={() => openEditModal({ id: r.id, ruleId: r.ruleId, isBuiltin: r.isBuiltin, path: r.path, yamlContent: r.yamlContent })} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-500/10 transition-colors" aria-label="Edit">
                     <SquarePenIcon className="size-3.5" />
                   </button>
                   {!r.isBuiltin && (

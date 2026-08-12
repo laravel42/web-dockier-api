@@ -62,7 +62,7 @@ export default function PullRequests({ pullRequests, pullRequestsLoading, pullRe
                 </div>
               </div>
               {pr.draft && (
-                <span className="rounded-full border border-border bg-secondary-50/50 px-2 py-0.5 text-[10px] font-medium text-text-muted shrink-0">
+                <span className="rounded-sm border border-border bg-secondary-50/50 px-2 py-0.5 text-[10px] font-medium text-text-muted shrink-0">
                   Draft
                 </span>
               )}

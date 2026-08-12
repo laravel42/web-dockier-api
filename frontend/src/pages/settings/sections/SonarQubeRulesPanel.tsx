@@ -107,7 +107,7 @@ export default function SonarQubeRulesPanel() {
             { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-orange-500", icon: "🟠" },
             { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-yellow-500", icon: "🟡" },
             { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-blue-500", icon: "🔵" },
-            { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-slate-400", icon: "⚪" },
+            { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-text-muted", icon: "⚪" },
           ]}
           activeSeverity={sevFilter}
           onSeverityChange={(k) => { setSevFilter(k); setSqVisible(30); }}
@@ -167,13 +167,13 @@ export default function SonarQubeRulesPanel() {
                       <div className="flex flex-wrap gap-1.5">
                         {r.impacts.map(i => {
                           const sevColors: Record<string, { statusBg: string; icon: string; iconBg: string; labelBg: string; labelText: string }> = {
-                            BLOCKER: { statusBg: "bg-red-100", icon: "text-red-600", iconBg: "bg-red-500", labelBg: "bg-red-50", labelText: "text-red-700" },
-                            HIGH: { statusBg: "bg-red-100", icon: "text-red-600", iconBg: "bg-red-500", labelBg: "bg-red-50", labelText: "text-red-700" },
-                            MEDIUM: { statusBg: "bg-amber-100", icon: "text-amber-600", iconBg: "bg-amber-500", labelBg: "bg-amber-50", labelText: "text-amber-700" },
-                            LOW: { statusBg: "bg-emerald-100", icon: "text-emerald-600", iconBg: "bg-emerald-500", labelBg: "bg-emerald-50", labelText: "text-emerald-700" },
-                            INFO: { statusBg: "bg-sky-100", icon: "text-sky-600", iconBg: "bg-sky-500", labelBg: "bg-sky-50", labelText: "text-sky-700" },
+                            BLOCKER: { statusBg: "bg-red-500/30", icon: "text-red-300", iconBg: "bg-red-500", labelBg: "bg-red-500/30 border border-red-500/45", labelText: "text-red-300" },
+                            HIGH: { statusBg: "bg-red-500/30", icon: "text-red-300", iconBg: "bg-red-500", labelBg: "bg-red-500/30 border border-red-500/45", labelText: "text-red-300" },
+                            MEDIUM: { statusBg: "bg-amber-500/30", icon: "text-amber-300", iconBg: "bg-amber-500", labelBg: "bg-amber-500/30 border border-amber-500/45", labelText: "text-amber-300" },
+                            LOW: { statusBg: "bg-emerald-500/30", icon: "text-emerald-300", iconBg: "bg-emerald-500", labelBg: "bg-emerald-500/30 border border-emerald-500/45", labelText: "text-emerald-300" },
+                            INFO: { statusBg: "bg-sky-500/30", icon: "text-sky-300", iconBg: "bg-sky-500", labelBg: "bg-sky-500/30 border border-sky-500/45", labelText: "text-sky-300" },
                           };
-                          const s = sevColors[i.severity] || { statusBg: "bg-secondary-100", icon: "text-text-muted", iconBg: "bg-secondary-400", labelBg: "bg-secondary-50", labelText: "text-text" };
+                          const s = sevColors[i.severity] || { statusBg: "bg-secondary-500/20", icon: "text-text-muted", iconBg: "bg-secondary-400", labelBg: "bg-secondary-500/20 border border-border/60", labelText: "text-text-muted" };
                           const isUp = i.severity === "HIGH" || i.severity === "MEDIUM" || i.severity === "BLOCKER";
                           return (
                             <span key={i.softwareQuality} className="inline-flex items-center rounded-lg text-xs overflow-hidden">

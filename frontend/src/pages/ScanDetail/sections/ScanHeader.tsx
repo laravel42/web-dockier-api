@@ -21,12 +21,12 @@ export default function ScanHeader({ scan, project, liveStatus, onBack, onNaviga
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="size-12  rounded-xl bg-primary-50 flex items-center justify-center text-primary-500">
+          <div className="size-12  rounded-xl bg-primary-500/15 flex items-center justify-center text-primary-500">
             <ShieldCheckIcon className="size-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold text-text">Scan Results</h1>
+              <h1 className="font-semibold text-text">Scan Results</h1>
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[status] || "bg-secondary-100 text-text-muted"}`}>
                 {status}
               </span>

@@ -53,7 +53,7 @@ export function useSaveAction<T = void>(
     } finally {
       setSaving(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- saveFn is caller-controlled
+   
   }, [saveFn, savedDuration, errorFallback, onSuccess, toast]);
 
   return { saving, saved, save };

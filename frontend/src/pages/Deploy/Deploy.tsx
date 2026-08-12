@@ -40,7 +40,12 @@ export default function Deploy() {
   }, [grouped, projectById, search]);
 
   if (loading) {
-    return <PageLoading />;
+    return (
+      <div>
+        <PageHeader title="Deployments" />
+        <PageLoading />
+      </div>
+    );
   }
 
   if (error) {

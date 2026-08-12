@@ -15,7 +15,7 @@ import BranchSelect from "@/components/BranchSelect";
 
 export default function BranchPickerInline({
   project,
-  canManage: _canManage,
+  canManage,
   onProjectUpdate,
 }: {
   project: Project;
@@ -54,7 +54,7 @@ export default function BranchPickerInline({
     }
   };
 
-  if (!project.connectionId || !project.repository) {
+  if (!project.connectionId || !project.repository || !canManage) {
     return (
       <span className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-text-muted">
         {project.branch || "main"}

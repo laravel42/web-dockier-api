@@ -69,7 +69,7 @@ export default function CreateIssueModal({
               href={issueSuccessUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors"
+              className="h-9 px-5 inline-flex items-center gap-2 bg-primary-500 text-primary-foreground text-sm font-medium rounded hover:bg-primary-600 transition-colors"
             >
               <ExternalLinkIcon className="size-4 " />
               Open Issue

@@ -158,14 +158,14 @@ export default function NotificationDropdown() {
       >
         <BellIcon className="size-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-danger-500 text-[10px] font-bold text-white">
+          <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-danger-700 text-[10px] font-bold text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-88 overflow-hidden rounded-lg border border-border/80 bg-card shadow-(--shadow-card-hover)">
+        <div className="absolute right-0 top-full z-50 mt-2 w-88 overflow-hidden rounded-lg border border-border/80 bg-card shadow-(--shadow-overlay)">
           <div className="flex items-center justify-between border-b border-border/60 px-3.5 py-2">
             <span className="text-xs font-semibold text-text">Notifications</span>
             <Link

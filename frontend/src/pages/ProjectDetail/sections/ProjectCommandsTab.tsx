@@ -48,7 +48,7 @@ function StatusBadge({ status }: { status: Command["status"] }) {
   };
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${colorMap[status]}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium ${colorMap[status]}`}>
       <span className={`size-2 rounded-full ${dotColorMap[status]}`} />
       {labels[status]}
     </span>
@@ -219,7 +219,7 @@ export default function ProjectCommandsTab({ project }: Props) {
       {/* Run new command section */}
       <div className="rounded-lg border border-border/50 bg-card/30 p-4">
         <h3 className="text-sm font-semibold text-text">Run new command</h3>
-        <p className="mt-1 text-xs text-text-muted leading-relaxed">
+        <p className="mt-1 text-xs/relaxed text-text-muted ">
           Easily execute arbitrary commands on your server. All commands are executed from within
           the site&apos;s root directory. Commands will be executed as the <code className="rounded border border-border/60 bg-card/60 px-1 py-0.5 text-[11px] font-mono">dockier</code> user
           and may run for two minutes before timing out.
@@ -302,7 +302,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                       <EllipsisVerticalIcon className="size-4" />
                     </button>
                     {openMenuId === cmd.id && (
-                      <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-lg" role="menu">
+                      <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-(--shadow-overlay)" role="menu">
                         <button
                           type="button"
                           role="menuitem"
@@ -395,7 +395,7 @@ export default function ProjectCommandsTab({ project }: Props) {
           tabIndex={-1}
         >
           <div
-            className="mx-4 w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-xl"
+            className="mx-4 w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-(--shadow-overlay)"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -415,7 +415,7 @@ export default function ProjectCommandsTab({ project }: Props) {
               <StatusBadge status={outputModal.status} />
               <span className="text-[11px] text-text-muted">{formatCardDateTime(outputModal.startedAt)}</span>
             </div>
-            <pre className="max-h-64 overflow-auto rounded-lg border border-border/50 bg-background p-3 font-mono text-xs text-text leading-relaxed scrollbar-hide whitespace-pre-wrap break-all">
+            <pre className="max-h-64 overflow-auto rounded-lg border border-border/50 bg-background p-3 font-mono text-xs/relaxed text-text  scrollbar-hide whitespace-pre-wrap break-all">
               {outputModal.output || "No output available."}
             </pre>
           </div>

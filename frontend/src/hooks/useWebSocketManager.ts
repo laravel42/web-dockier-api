@@ -40,7 +40,10 @@ export interface UseWebSocketManagerOptions<T> {
  */
 export function useWebSocketManager<T>(options: UseWebSocketManagerOptions<T>) {
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+
+  useEffect(() => {
+    optionsRef.current = options;
+  });
 
   const socketsRef = useRef<Map<string, WebSocket>>(new Map());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());

@@ -7,6 +7,7 @@ import { ToastProvider } from "./context/ToastContext";
 import { ScanProgressProvider } from "./context/ScanProgressContext";
 import SessionHandler from "./components/SessionHandler";
 import Layout from "./components/Layout";
+import PermissionRoute from "./components/PermissionRoute";
 import PageLoading from "./components/ui/PageLoading";
 
 // ─── Lazy-loaded page chunks ───────────────────────────────────────
@@ -56,8 +57,22 @@ export default function App() {
                     <Route path="/security" element={<SecurityScans />} />
                     <Route path="/security/project/:projectId" element={<ScanDetail />} />
                     <Route path="/security/:scanId" element={<ScanDetail />} />
-                    <Route path="/deploy" element={<Deploy />} />
-                    <Route path="/deploy/:deployId" element={<DeployDetail />} />
+                    <Route
+                      path="/deploy"
+                      element={
+                        <PermissionRoute permission="deploy:view">
+                          <Deploy />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      path="/deploy/:deployId"
+                      element={
+                        <PermissionRoute permission="deploy:view">
+                          <DeployDetail />
+                        </PermissionRoute>
+                      }
+                    />
                     <Route path="/settings" element={<Settings />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />

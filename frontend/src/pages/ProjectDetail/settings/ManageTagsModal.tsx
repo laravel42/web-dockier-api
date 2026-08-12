@@ -106,7 +106,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
           <label className="mb-1.5 block text-sm font-medium text-text">Tags</label>
           <div className="rounded-lg border border-border">
             {/* Search */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 transition-colors focus-within:border-primary/60">
               <SearchIcon className="size-4 text-text-muted" />
               <input
                 type="text"
@@ -183,7 +183,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
                         {menuOpenId === tag.id && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
-                            <div className="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg border border-border bg-card shadow-lg py-1">
+                            <div className="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1">
                               <button
                                 type="button"
                                 onClick={() => handleStartRename(tag)}

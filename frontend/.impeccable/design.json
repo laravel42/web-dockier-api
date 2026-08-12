@@ -1,0 +1,462 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-11T21:58:14Z",
+  "title": "Design System: Dockier",
+  "extensions": {
+    "colorMeta": {
+      "lamplight-ochre": {
+        "role": "primary",
+        "displayName": "Lamplight Ochre",
+        "canonical": "oklch(0.78 0.08 70)",
+        "tonalRamp": [
+          "oklch(0.32 0.05 55)",
+          "oklch(0.45 0.06 60)",
+          "oklch(0.58 0.07 65)",
+          "oklch(0.70 0.08 68)",
+          "oklch(0.78 0.08 70)",
+          "oklch(0.84 0.07 72)",
+          "oklch(0.92 0.04 70)",
+          "oklch(0.96 0.02 70)"
+        ]
+      },
+      "lamplight-ochre-deep": {
+        "role": "primary",
+        "displayName": "Lamplight Ochre Deep",
+        "canonical": "oklch(0.70 0.08 68)",
+        "tonalRamp": [
+          "oklch(0.32 0.05 55)",
+          "oklch(0.45 0.06 60)",
+          "oklch(0.58 0.07 65)",
+          "oklch(0.70 0.08 68)",
+          "oklch(0.78 0.08 70)",
+          "oklch(0.84 0.07 72)",
+          "oklch(0.92 0.04 70)",
+          "oklch(0.96 0.02 70)"
+        ]
+      },
+      "ink-on-ochre": {
+        "role": "primary",
+        "displayName": "Ink on Ochre",
+        "canonical": "oklch(0.18 0.01 50)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "banked-graphite": {
+        "role": "neutral",
+        "displayName": "Banked Graphite",
+        "canonical": "oklch(0.17 0.008 50)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "sunk-graphite": {
+        "role": "neutral",
+        "displayName": "Sunk Graphite",
+        "canonical": "oklch(0.19 0.008 50)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "raised-graphite": {
+        "role": "neutral",
+        "displayName": "Raised Graphite",
+        "canonical": "oklch(0.21 0.009 50)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "muted-graphite": {
+        "role": "neutral",
+        "displayName": "Muted Graphite",
+        "canonical": "oklch(0.23 0.008 50)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "field-well": {
+        "role": "neutral",
+        "displayName": "Field Well",
+        "canonical": "oklch(0.28 0.008 50)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "filament-line": {
+        "role": "neutral",
+        "displayName": "Filament Line",
+        "canonical": "oklch(0.32 0.008 50 / 60%)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "warm-bone": {
+        "role": "neutral",
+        "displayName": "Warm Bone",
+        "canonical": "oklch(0.95 0.008 60)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "dimmed-bone": {
+        "role": "neutral",
+        "displayName": "Dimmed Bone",
+        "canonical": "oklch(0.68 0.012 60)",
+        "tonalRamp": [
+          "oklch(0.19 0.008 50)",
+          "oklch(0.25 0.009 50)",
+          "oklch(0.32 0.009 50)",
+          "oklch(0.42 0.009 50)",
+          "oklch(0.52 0.009 50)",
+          "oklch(0.72 0.009 50)",
+          "oklch(0.90 0.008 50)",
+          "oklch(0.96 0.008 50)"
+        ]
+      },
+      "deep-signal-blue": {
+        "role": "tertiary",
+        "displayName": "Deep Signal Blue",
+        "canonical": "oklch(0.117 0.0213 240.5)",
+        "tonalRamp": []
+      },
+      "signal-success": {
+        "role": "semantic",
+        "displayName": "Signal Success",
+        "canonical": "#10b981",
+        "tonalRamp": [
+          "#047857",
+          "#10b981",
+          "#d1fae5",
+          "#ecfdf5"
+        ]
+      },
+      "signal-warning": {
+        "role": "semantic",
+        "displayName": "Signal Warning",
+        "canonical": "#f59e0b",
+        "tonalRamp": [
+          "#b45309",
+          "#f59e0b",
+          "#fef3c7",
+          "#fffbeb"
+        ]
+      },
+      "signal-danger": {
+        "role": "semantic",
+        "displayName": "Signal Danger",
+        "canonical": "#ef4444",
+        "tonalRamp": [
+          "#b91c1c",
+          "#ef4444",
+          "#fee2e2",
+          "#fef2f2"
+        ]
+      },
+      "legacy-berry": {
+        "role": "semantic",
+        "displayName": "Legacy Berry (severity / marketing only)",
+        "canonical": "#AB2022",
+        "tonalRamp": [
+          "#240505",
+          "#470A0B",
+          "#6A1012",
+          "#8B1819",
+          "#AB2022",
+          "#DC6162",
+          "#F8BCBC",
+          "#FEEBEB"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "h1 only. The largest text in the product at 22px — a hard CSS-enforced ceiling."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "h2. Section headers within a page."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "h3. Card and panel headers."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base document setting at 15px; prose paragraphs step down to 14px."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The workhorse at 13px — buttons, inputs, table cells, nav. Most text in the product."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-xs",
+        "value": "0 1px 2px 0 oklch(0 0 0 / 12%)",
+        "purpose": "In-page only. Keeps a filled button from dissolving into its background. Not a hierarchy tool."
+      },
+      {
+        "name": "shadow-overlay",
+        "value": "0 8px 24px -4px oklch(0 0 0 / 40%), 0 2px 6px -2px oklch(0 0 0 / 30%)",
+        "purpose": "The single elevation for anything floating above the page — modal, dropdown, popover, toast, context menu. Light theme redefines it at 12%/8%."
+      }
+    ],
+    "motion": [
+      {
+        "name": "transition-colors",
+        "value": "150ms",
+        "purpose": "The entire motion vocabulary for controls. State is communicated by color shift; no transforms, no scaling, no press feedback."
+      },
+      {
+        "name": "ease-overshoot",
+        "value": "cubic-bezier(0.34, 1.2, 0.64, 1)",
+        "purpose": "0.32s search-field expansion (16rem to 22rem on focus-within). The one place motion has personality. Disabled under prefers-reduced-motion."
+      },
+      {
+        "name": "marquee",
+        "value": "40s linear infinite",
+        "purpose": "Horizontal scrolling ticker. Disabled under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ],
+    "atmosphere": [
+      {
+        "name": "lamp-glow",
+        "value": "radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.78 0.08 70 / 7%), transparent 60%)",
+        "purpose": "The single light source. Fixed to the viewport, never scrolls. Binding identity, capped at 7%."
+      },
+      {
+        "name": "hatch",
+        "value": "repeating-linear-gradient(115deg, oklch(1 0 0 / 1.5%) 0 1px, transparent 1px 10px)",
+        "purpose": "body::before texture under a radial mask. Binding identity, capped at 1.5% — felt, not seen."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The only ochre-filled control. Reserved for the single primary action on a surface.",
+      "html": "<button class=\"ds-btn-primary\">Run scan</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;font-family:var(--font-family);font-size:var(--text-ui);font-weight:500;letter-spacing:-0.01em;border-radius:var(--radius-md);transition:background-color .15s,color .15s,border-color .15s;cursor:pointer;background:var(--color-primary);color:var(--color-primary-foreground);border:none;box-shadow:0 1px 2px 0 oklch(0 0 0 / 12%);}.ds-btn-primary:hover{background:color-mix(in oklch, var(--color-primary) 90%, transparent);}.ds-btn-primary:focus-visible{outline:none;border-color:var(--color-ring);box-shadow:0 0 0 3px color-mix(in oklch, var(--color-primary) 50%, transparent);}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Default secondary action. Hairline border on the page floor; hover fills to a translucent card.",
+      "html": "<button class=\"ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;font-family:var(--font-family);font-size:var(--text-ui);font-weight:500;letter-spacing:-0.01em;border-radius:var(--radius-md);transition:background-color .15s,color .15s,border-color .15s;cursor:pointer;background:var(--color-background);color:var(--color-foreground);border:1px solid var(--color-border);box-shadow:0 1px 2px 0 oklch(0 0 0 / 12%);}.ds-btn-outline:hover{background:color-mix(in oklch, var(--color-card) 60%, transparent);}.ds-btn-outline:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in oklch, var(--color-primary) 50%, transparent);}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Lowest-emphasis action and the default for icon-only controls in chrome.",
+      "html": "<button class=\"ds-btn-ghost\">Dismiss</button>",
+      "css": ".ds-btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;font-family:var(--font-family);font-size:var(--text-ui);font-weight:500;letter-spacing:-0.01em;border-radius:var(--radius-md);transition:background-color .15s,color .15s,border-color .15s;cursor:pointer;background:transparent;color:var(--color-muted-foreground);border:none;}.ds-btn-ghost:hover{background:color-mix(in oklch, var(--color-card) 60%, transparent);color:var(--color-foreground);}.ds-btn-ghost:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in oklch, var(--color-primary) 50%, transparent);}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "32px field with a transparent interior over the input well. Focus supplies the ochre ring — native outlines are globally suppressed.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Filter findings\" />",
+      "css": ".ds-input{height:32px;width:220px;padding:4px 10px;font-family:var(--font-family);font-size:var(--text-ui);color:var(--color-foreground);background:transparent;border:1px solid var(--color-input);border-radius:var(--radius-md);transition:border-color .15s,box-shadow .15s;outline:none;}.ds-input::placeholder{color:var(--color-muted-foreground);}.ds-input:focus-visible{border-color:var(--color-ring);box-shadow:0 0 0 3px color-mix(in oklch, var(--color-primary) 50%, transparent);}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The dominant container: 12px radius, hairline border, Raised Graphite. No shadow — ever.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">Dependency scan</h3><p class=\"ds-card-body\">4 vulnerable packages across 2 ecosystems.</p></div>",
+      "css": ".ds-card{padding:16px;background:var(--color-card);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:none;font-family:var(--font-family);}.ds-card-title{margin:0 0 4px;font-size:16px;font-weight:600;line-height:1.15;letter-spacing:-0.025em;color:var(--color-foreground);}.ds-card-body{margin:0;font-size:14px;line-height:1.5;color:var(--color-muted-foreground);}"
+    },
+    {
+      "name": "Nav Link",
+      "kind": "nav",
+      "refersTo": "nav-link-active",
+      "description": "Active state is an ochre wash at 10% behind Warm Bone text — the accent is never the text color and never an underline.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-nav-link--active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"/><path d=\"m9 12 2 2 4-4\"/></svg>Security</a><a class=\"ds-nav-link\" href=\"#\">Projects</a></nav>",
+      "css": ".ds-nav{display:flex;gap:4px;font-family:var(--font-family);}.ds-nav-link{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:14px;font-weight:500;line-height:1.375;border-radius:var(--radius-md);text-decoration:none;color:var(--color-muted-foreground);transition:background-color .15s,color .15s;}.ds-nav-link:hover{background:var(--color-card);color:var(--color-foreground);}.ds-nav-link--active{background:color-mix(in oklch, var(--color-primary) 10%, transparent);color:var(--color-foreground);}"
+    },
+    {
+      "name": "Compact Data Table",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "The signature dense surface. The uppercase, letter-spaced head is the only uppercase in the system.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Severity</th><th>Rule</th><th>File</th></tr></thead><tbody><tr><td>High</td><td>sql-injection</td><td>api/users.ts</td></tr><tr><td>Medium</td><td>weak-crypto</td><td>lib/hash.ts</td></tr></tbody></table>",
+      "css": ".ds-table{width:100%;border-collapse:collapse;font-family:var(--font-family);color:var(--color-foreground);}.ds-table thead th{padding:8px 12px;font-size:12px;line-height:1.33;letter-spacing:0.04em;text-transform:uppercase;text-align:left;font-weight:500;color:var(--color-muted-foreground);border-bottom:1px solid var(--color-border);}.ds-table td{padding:8px 12px;font-size:var(--text-ui);line-height:1.45;border-bottom:1px solid color-mix(in oklch, var(--color-border) 50%, transparent);}"
+    },
+    {
+      "name": "Severity Badge",
+      "kind": "chip",
+      "refersTo": null,
+      "description": "Severity uses its own functional language and never borrows the ochre accent.",
+      "html": "<span class=\"ds-badge ds-badge--danger\">Critical</span> <span class=\"ds-badge ds-badge--warning\">Medium</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;padding:2px 8px;font-family:var(--font-family);font-size:12px;font-weight:500;line-height:1.33;border-radius:var(--radius-sm);border:1px solid transparent;}.ds-badge--danger{color:var(--color-danger-500);background:color-mix(in oklch, var(--color-danger-500) 12%, transparent);border-color:color-mix(in oklch, var(--color-danger-500) 35%, transparent);}.ds-badge--warning{color:var(--color-warning-500);background:color-mix(in oklch, var(--color-warning-500) 12%, transparent);border-color:color-mix(in oklch, var(--color-warning-500) 35%, transparent);}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Lamplit Control Room",
+    "overview": "Dockier is a dark room with one warm light in it. Every surface is a warm graphite — never a neutral gray, always carrying a trace of red-orange in the hue (50-60) at almost no saturation (chroma 0.008-0.012) — and a single ochre light source sits above the top edge of every page, falling off into the dark. That one light is the whole color story. It marks where you can act and where the system is paying attention, and it appears nowhere else.\n\nThe room is dense. This is an operator's surface: scan findings, dependency tables, deploy logs, commit lists. Headings are capped at 22px by CSS enforcement, controls stand 28-40px tall, and the base text is 15px on a 1.55 rhythm. Density here reads as instrumentation, not clutter.\n\nDepth is a lie the system refuses to tell. There are no drop shadows carrying hierarchy; structure comes from hairline borders, one-step tonal shifts between graphite planes, and translucency over a fixed background.",
+    "keyCharacteristics": [
+      "Warm graphite neutrals, never true gray (hue 50-60, chroma <=0.012)",
+      "One ochre accent at low chroma (0.08), used scarcely and functionally",
+      "Dark-first: the dark palette is the default; light is the override",
+      "Flat by law — hairline borders and tonal steps carry all hierarchy",
+      "Compact by design — 22px heading ceiling, 32px default control height",
+      "Fixed atmosphere: ochre glow + 115deg hatch, pinned to the viewport",
+      "Space Grotesk throughout with ss01/ss02 alternates and negative tracking"
+    ],
+    "rules": [
+      {
+        "name": "The One Light Rule",
+        "section": "colors",
+        "body": "Lamplight Ochre covers no more than ~10% of any screen. It marks interaction and system attention — primary action, focus, active nav, series-1 — and is never decoration, never a divider, never a content background. Its scarcity is the entire reason it reads as 'act here.'"
+      },
+      {
+        "name": "The Severity Is Not Brand Rule",
+        "section": "colors",
+        "body": "Success, Warning, and Danger are a separate functional language. They never borrow ochre, and ochre never stands in for them. Legacy berry, seed, dusk, and cream are severity and marketing accents only."
+      },
+      {
+        "name": "The Warm Neutral Rule",
+        "section": "colors",
+        "body": "No true gray. Every neutral carries hue 50-60 at chroma 0.008-0.012."
+      },
+      {
+        "name": "The 22px Ceiling Rule",
+        "section": "typography",
+        "body": "Nothing renders larger than 22px. Enforced in CSS with !important overrides on h1-h6 carrying text-2xl and above. Get presence from weight, color, or space instead."
+      },
+      {
+        "name": "The Tightening Rule",
+        "section": "typography",
+        "body": "Tracking tightens as size grows: -0.005em body, -0.025em h3, -0.03em h2, -0.035em h1 and .font-display."
+      },
+      {
+        "name": "The One Family Rule",
+        "section": "typography",
+        "body": "There is no second typeface, including for code. --font-mono resolves to Space Grotesk. Code is distinguished by surface and token color."
+      },
+      {
+        "name": "The Chrome Recedes Rule",
+        "section": "layout",
+        "body": "Navigation sits one tonal step below the page floor and is translucent. Chrome never competes with content for brightness."
+      },
+      {
+        "name": "The Flat-By-Law Rule",
+        "section": "elevation",
+        "body": "Two elevations exist and no more: flat for anything in the page, --shadow-overlay for anything floating above it. If an in-page surface needs to separate, use a tonal step and a hairline — in that order. Never introduce a third value or a shadow scale."
+      },
+      {
+        "name": "The Fixed Light Rule",
+        "section": "elevation",
+        "body": "The atmosphere is binding identity, capped at current subtlety: ochre glow at 7%, hatch at 1.5%, both fixed to the viewport. Never intensify. At 5% the hatch becomes a pattern and the room becomes wallpaper."
+      },
+      {
+        "name": "The Two-Radius Rule",
+        "section": "shapes",
+        "body": "Controls are 10px, containers are 12px. Use 8px and 16px only for tight details and large panels. Never a square (0). rounded-full is reserved for genuinely circular objects (avatars, dots, spinners); status, severity and count badges take the 8px radius, never a pill."
+      }
+    ],
+    "dos": [
+      "Do carry every neutral in the warm family (hue 50-60, chroma <=0.012). A true gray is instantly foreign here.",
+      "Do express hierarchy with a tonal step plus a hairline Filament Line border, in that order.",
+      "Do keep Lamplight Ochre under ~10% of any screen, and only on interaction, focus, active state, or series-1.",
+      "Do use the 13px label size as the default for UI text — buttons, inputs, table cells, nav.",
+      "Do pair every focus state with the 3px ochre ring; native outlines are globally suppressed.",
+      "Do verify both themes. Dark is the default and light is a full override.",
+      "Do guard every new animation with prefers-reduced-motion.",
+      "Do close the responsive gap at md: when touching a layout — phone-width support is a product requirement."
+    ],
+    "donts": [
+      "Don't add a shadow scale. There is one --shadow-xs and it is not a hierarchy tool.",
+      "Don't exceed 22px on any text. CSS enforces this with !important.",
+      "Don't intensify the atmosphere. The hatch stays at 1.5% and the glow at 7%.",
+      "Don't reintroduce the legacy berry, dusk, cream, or seed scales as primary surfaces.",
+      "Don't add transforms, scaling, or press animations to controls. State is communicated through color alone.",
+      "Don't introduce a second typeface, including a monospace family for code.",
+      "Don't put Warm Bone text on an ochre fill — ochre carries Ink-on-Ochre.",
+      "Don't invent a shadow utility. shadow-lg, shadow-xl, shadow-md and ad-hoc values are banned; overlays use shadow-(--shadow-overlay) and nothing else.",
+      "Don't use rounded-full on anything with horizontal padding. If it has px-, it is a badge, and badges are 8px.",
+      "Don't put white text on a solid ochre fill — oklch(0.78 0.08 70) against #fff is about 1.75:1. Ochre carries text-primary-foreground."
+    ]
+  }
+}

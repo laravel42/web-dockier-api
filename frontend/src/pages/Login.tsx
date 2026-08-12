@@ -108,7 +108,7 @@ export default function Login() {
 
   return (
     <AuthLayout>
-      <h1 className="font-display text-2xl font-semibold text-foreground">Welcome back</h1>
+      <h1 className="font-display font-semibold text-foreground">Welcome back</h1>
       <p className="mt-1 mb-6 text-sm text-muted-foreground">
         {loginMode === "password"
           ? "Sign in with your email and password"

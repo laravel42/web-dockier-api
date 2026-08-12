@@ -8,14 +8,17 @@ import PageError, { EmptyMessage } from "../components/ui/PageError";
 import Pagination from "../components/ui/Pagination";
 import { cardCls } from "../utils/styles";
 import Button from "../components/ui/Button";
-import type { Notification } from "../types";
+import { useToast } from "../context/useToast";
 import NotificationContent from "../components/NotificationContent";
 import NotificationTitleLink from "../components/NotificationTitleLink";
+import type { Notification } from "../types";
+import { getErrorMessage } from "../utils/errors";
 
 const PAGE_SIZE = 30;
 
 export default function Notifications() {
   const navigate = useNavigate();
+  const toast = useToast();
   const { enabled: inAppEnabled, loading: inAppLoading } = useInAppNotificationsEnabled();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,13 +54,21 @@ export default function Notifications() {
   }
 
   const markRead = async (id: string) => {
-    await notificationsApi.markRead(id);
-    fetchNotifications(pagination.offset);
+    try {
+      await notificationsApi.markRead(id);
+      await fetchNotifications(pagination.offset);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to mark notification as read"));
+    }
   };
 
   const markAllRead = async () => {
-    await notificationsApi.markAllRead();
-    fetchNotifications(pagination.offset);
+    try {
+      await notificationsApi.markAllRead();
+      await fetchNotifications(pagination.offset);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to mark all notifications as read"));
+    }
   };
 
   const hasUnread = notifications.some((n) => !n.read);

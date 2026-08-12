@@ -73,7 +73,7 @@ export default function Register() {
 
   return (
     <AuthLayout>
-      <h1 className="font-display text-2xl font-semibold text-foreground">Create account</h1>
+      <h1 className="font-display font-semibold text-foreground">Create account</h1>
       <p className="mt-1 mb-6 text-sm text-muted-foreground">
         Sign up with secure email OTP verification
       </p>

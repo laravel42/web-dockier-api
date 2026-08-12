@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTabListKeyboard, panelId, tabId } from "../hooks/useTabListKeyboard";
 import { usePermissions } from "../context/PermissionsContext";
 import PageHeader from "../components/ui/PageHeader";
 import PageLoading from "../components/ui/PageLoading";
@@ -18,6 +19,32 @@ export default function Settings() {
   const { has, loading } = usePermissions();
   const [tab, setTab] = useState<Tab>("profile");
 
+  const tabs: Array<{ key: Tab; label: string; visible: boolean }> = useMemo(
+    () => [
+      { key: "profile", label: "Profile", visible: true },
+      { key: "users", label: "Users", visible: has("user:view") || has("user:manage") },
+      { key: "roles", label: "Roles", visible: has("role:view") || has("role:manage") },
+      { key: "providers", label: "Providers", visible: has("credential:view") || has("credential:manage") },
+      { key: "ssh-keys", label: "SSH Keys", visible: has("credential:view") || has("credential:manage") },
+      { key: "source-control", label: "Source Control", visible: has("credential:view") || has("credential:manage") },
+      { key: "channels", label: "Notification Channels", visible: has("notification:view") || has("notification:manage") },
+      { key: "integrations", label: "Integrations", visible: has("credential:view") || has("credential:manage") },
+      { key: "security-rules", label: "Security Tools", visible: has("scan:manage") },
+    ],
+    [has],
+  );
+
+  const visibleTabs = useMemo(() => tabs.filter((t) => t.visible), [tabs]);
+  const activeTab = visibleTabs.some((t) => t.key === tab) ? tab : (visibleTabs[0]?.key ?? "profile");
+  const visibleTabKeys = useMemo(() => visibleTabs.map((t) => t.key), [visibleTabs]);
+  const handleTabKeyDown = useTabListKeyboard(visibleTabKeys, setTab);
+
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.key === tab)) {
+      setTab(visibleTabs[0]?.key ?? "profile");
+    }
+  }, [tab, visibleTabs]);
+
   if (loading) {
     return (
       <div>
@@ -32,43 +59,38 @@ export default function Settings() {
       active ? "bg-primary-500/10 text-text" : "text-text-muted hover:bg-card/60 hover:text-text"
     }`;
 
-  const tabs: Array<{ key: Tab; label: string; visible: boolean }> = [
-    { key: "profile", label: "Profile", visible: true },
-    { key: "users", label: "Users", visible: has("user:view") || has("user:manage") },
-    { key: "roles", label: "Roles", visible: has("role:view") || has("role:manage") },
-    { key: "providers", label: "Providers", visible: has("credential:view") || has("credential:manage") },
-    { key: "ssh-keys", label: "SSH Keys", visible: has("credential:view") || has("credential:manage") },
-    { key: "source-control", label: "Source Control", visible: has("credential:view") || has("credential:manage") },
-    { key: "channels", label: "Notification Channels", visible: has("notification:view") || has("notification:manage") },
-    { key: "integrations", label: "Integrations", visible: has("credential:view") || has("credential:manage") },
-    { key: "security-rules", label: "Security Tools", visible: has("scan:manage") },
-  ];
-
   return (
     <div>
       <PageHeader title="Settings" description="Account, team, and integrations." />
       <div className="flex flex-wrap gap-2 mb-6" role="tablist">
-        {tabs.filter((t) => t.visible).map(({ key, label }) => (
+        {visibleTabs.map(({ key, label }) => (
           <button
             key={key}
+            type="button"
             role="tab"
-            aria-selected={tab === key}
+            id={tabId(key)}
+            aria-controls={panelId(key)}
+            aria-selected={activeTab === key}
+            tabIndex={activeTab === key ? 0 : -1}
             onClick={() => setTab(key)}
-            className={tabCls(tab === key)}
+            onKeyDown={(e) => handleTabKeyDown(e, key)}
+            className={tabCls(activeTab === key)}
           >
             {label}
           </button>
         ))}
       </div>
-      {tab === "profile" && <ProfileTab />}
-      {tab === "users" && <UsersTab />}
-      {tab === "roles" && <RolesTab />}
-      {tab === "providers" && <ProvidersTab />}
-      {tab === "ssh-keys" && <SshKeysTab />}
-      {tab === "source-control" && <SourceControlTab />}
-      {tab === "channels" && <NotificationChannelsTab />}
-      {tab === "integrations" && <IntegrationsTab />}
-      {tab === "security-rules" && <SecurityRulesTab />}
+      <div role="tabpanel" id={panelId(activeTab)} aria-labelledby={tabId(activeTab)}>
+        {activeTab === "profile" && <ProfileTab />}
+        {activeTab === "users" && <UsersTab />}
+        {activeTab === "roles" && <RolesTab />}
+        {activeTab === "providers" && <ProvidersTab />}
+        {activeTab === "ssh-keys" && <SshKeysTab />}
+        {activeTab === "source-control" && <SourceControlTab />}
+        {activeTab === "channels" && <NotificationChannelsTab />}
+        {activeTab === "integrations" && <IntegrationsTab />}
+        {activeTab === "security-rules" && <SecurityRulesTab />}
+      </div>
     </div>
   );
 }

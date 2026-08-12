@@ -45,7 +45,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
           return (
             <div key={step} className="flex items-center gap-1.5 flex-1">
               <div className={`size-5  rounded-full flex items-center justify-center shrink-0 ${
-                done ? "bg-primary-500/80 text-white" : active ? "bg-primary-500 text-white" : "bg-secondary-100 text-text-muted"
+                done ? "bg-primary-500/80 text-primary-foreground" : active ? "bg-primary-500 text-primary-foreground" : "bg-secondary-100 text-text-muted"
               }`}>
                 {done ? (
                   <CheckIcon className="size-3" />
@@ -64,7 +64,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
 
       {/* Logs */}
       {state.deployLogs.length > 0 && (
-        <div ref={logsRef} className="rounded-lg bg-taupe-800 p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed ">
+        <div ref={logsRef} className="rounded-lg bg-terminal p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed ">
           {state.deployLogs.map((line, i) => (
             <div key={i} className={
               line.includes("✓") ? "text-green-400" :
@@ -82,9 +82,9 @@ export default function StepDeploy({ state }: { state: WizardState }) {
       )}
 
       {state.deployLogs.length === 0 && isRunning && (
-        <div className="rounded-lg bg-taupe-800 p-6 flex items-center justify-center gap-2">
+        <div className="rounded-lg bg-terminal p-6 flex items-center justify-center gap-2">
           <div className="size-4  border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-gray-400">Waiting for logs…</span>
+          <span className="text-sm text-text-muted">Waiting for logs…</span>
         </div>
       )}
 

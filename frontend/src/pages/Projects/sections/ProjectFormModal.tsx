@@ -80,7 +80,7 @@ export default function ProjectFormModal({
             {frameworkOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setFrameworkOpen(false)} />
-                <div className="absolute inset-x-0  top-full z-20 mt-1 rounded-(--radius-input) border border-border bg-card shadow-lg max-h-64 overflow-y-auto">
+                <div className="absolute inset-x-0  top-full z-20 mt-1 rounded-(--radius-input) border border-border bg-card shadow-(--shadow-overlay) max-h-64 overflow-y-auto">
                   {FRAMEWORK_CATEGORIES.map((category) => (
                     <div key={category.name}>
                       <div className="sticky top-0 bg-card/95 backdrop-blur px-3 py-1.5 border-b border-border/50">

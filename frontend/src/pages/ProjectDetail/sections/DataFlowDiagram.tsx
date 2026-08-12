@@ -49,7 +49,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
             }).map(([key, count]) => {
               const s = getSensitivityStyle(key);
               return (
-                <span key={key} className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+                <span key={key} className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-sm ${s.bg} ${s.text}`}>
                   {s.label} ({count})
                 </span>
               );
@@ -69,7 +69,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs font-semibold text-text">{entity.name}</h3>
-                      <span className="text-[10px] text-text-muted bg-card border border-border px-1.5 py-0.5 rounded-full shrink-0">{entity.storage}</span>
+                      <span className="text-[10px] text-text-muted bg-card border border-border px-1.5 py-0.5 rounded-sm shrink-0">{entity.storage}</span>
                       <span className="text-[10px] text-text-muted">{entity.fields?.length || 0} fields</span>
                     </div>
                   </div>

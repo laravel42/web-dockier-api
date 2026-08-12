@@ -2,6 +2,8 @@ interface ToggleSwitchProps {
   checked: boolean;
   onChange: (val: boolean) => void;
   disabled?: boolean;
+  /** Accessible name when no visible label is associated with the switch. */
+  ariaLabel?: string;
 }
 
 /**
@@ -9,15 +11,16 @@ interface ToggleSwitchProps {
  *
  * Use this instead of raw `<button>` + inline toggle styling.
  */
-export default function ToggleSwitch({ checked, onChange, disabled }: ToggleSwitchProps) {
+export default function ToggleSwitch({ checked, onChange, disabled, ariaLabel }: ToggleSwitchProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 disabled:cursor-not-allowed ${
         checked ? "bg-primary-500" : "bg-secondary-200"
       }`}
     >

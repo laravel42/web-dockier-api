@@ -155,14 +155,14 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                       <button
                         type="button"
                         onClick={() => onChange({ ...state.servicesModes, [svc.type]: "vps" })}
-                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${!isManaged ? "bg-primary-500 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${!isManaged ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
                       >
                         Self-hosted
                       </button>
                       <button
                         type="button"
                         onClick={() => onChange({ ...state.servicesModes, [svc.type]: "managed" })}
-                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${isManaged ? "bg-primary-500 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${isManaged ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
                       >
                         Managed
                       </button>

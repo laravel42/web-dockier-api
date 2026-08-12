@@ -107,7 +107,7 @@ export default function Modal({ open, onClose, title, children, size = "default"
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div
           ref={dialogRef}
-          className={`${widthCls} w-full pointer-events-auto relative bg-card rounded-card shadow-(--shadow-card-hover) border border-border/50 p-5 flex flex-col`}
+          className={`${widthCls} w-full pointer-events-auto relative bg-card rounded-card shadow-(--shadow-overlay) border border-border/50 p-5 flex flex-col`}
           style={{ maxHeight: "85vh" }}
           tabIndex={-1}
           onClick={(e) => e.stopPropagation()}

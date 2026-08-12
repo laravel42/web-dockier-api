@@ -17,7 +17,7 @@ function Label({ name, color }: { name: string; color: string }) {
   if (color) {
     return (
       <span
-        className="rounded-full border px-2 py-0.5 text-xs font-medium"
+        className="rounded-sm border px-2 py-0.5 text-xs font-medium"
         style={{ backgroundColor: `${color}20`, borderColor: `${color}55`, color }}
       >
         {name}
@@ -25,7 +25,7 @@ function Label({ name, color }: { name: string; color: string }) {
     );
   }
   return (
-    <span className="rounded-full border border-border bg-secondary-50/50 px-2 py-0.5 text-xs font-medium text-text-muted">
+    <span className="rounded-sm border border-border bg-secondary-50/50 px-2 py-0.5 text-xs font-medium text-text-muted">
       {name}
     </span>
   );
@@ -71,7 +71,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
           <div className="flex items-start gap-3">
             <CircleAlertIcon className="size-5 text-emerald-500 mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-text leading-snug">{issue.title}</h3>
+              <h3 className="text-base/snug font-semibold text-text ">{issue.title}</h3>
               <div className="mt-1 text-sm text-text-muted">
                 #{issue.number} opened {timeAgo(issue.createdAt)}
                 {issue.author && ` by ${issue.author}`}
@@ -91,7 +91,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
           {/* Issue body / description */}
           {issue.body && (
             <div className="rounded-lg border border-border/50 bg-secondary-50/30 p-3 max-h-60 overflow-y-auto">
-              <pre className="text-sm text-text whitespace-pre-wrap break-words font-sans leading-relaxed">
+              <pre className="text-sm/relaxed text-text whitespace-pre-wrap wrap-break-word font-sans ">
                 {issue.body}
               </pre>
             </div>

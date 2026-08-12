@@ -6,14 +6,18 @@ Instructions for AI coding agents working on this codebase.
 
 Dockier is a developer platform that connects source code repositories to security scanning, AI-powered project analysis, deployment automation, and project management — all from a single dashboard. See `PRODUCT.md` for the full feature set and `DESCRIPTION.md` for goals, scope, non-goals, and success criteria.
 
-**UX parity program:** In-app UX is aligned with the web design system in [`../web-berry/docs/design-guidelines.html`](../web-berry/docs/design-guidelines.html) (Dockier tokens: `dockier-*`, `dusk`, `cream`, `seed`; Bely/Soleil via Adobe Typekit). Delivery is tracked in Linear project *Dockier App — UX Parity & Hardening*; see `docs/delivery/multi-agent-playbook.md` for agent routing and quota guidelines.
+**Design system:** In-app UX follows the token system implemented in `frontend/src/index.css` — a graphite neutral base with a sand/ochre primary accent, `dusk` / `cream` / `seed` scales, and **Space Grotesk** across every type role (sans, display, heading, mono). Theming is token-driven via `data-theme` light and dark variants over shadcn/ui primitives. The berry scale (`dockier-50`…`dockier-900`) is **legacy**, reserved for severity states and marketing accents only — it is not the product's primary identity. `PRODUCT.md` → *Brand Commitments* is the binding record.
+
+> **Superseded:** an earlier UX parity program aligned the app to the sibling `web-berry` design system (Bely/Soleil via Adobe Typekit, berry as the primary world). That is no longer the target, and the sibling repository is not part of this checkout — do not restore it as the authority.
+
+Delivery is tracked in Linear project *Dockier App — UX Parity & Hardening*; see `docs/delivery/multi-agent-playbook.md` for agent routing and quota guidelines.
 
 ## Tech stack
 
 - **Backend:** Fastify + TypeScript (modular service routes in `backend/src/services`)
 - **Frontend:** React 19 + Vite + Tailwind CSS v4 (in `frontend/`)
 - **Database:** Supabase Postgres (canonical schema via `supabase/migrations/`)
-- **Package manager:** pnpm (v10) — do NOT use npm or yarn
+- **Package manager:** pnpm (v11, pinned via root `packageManager`) — do NOT use npm or yarn
 - **Language:** TypeScript (strict mode, ES2022 target, bundler module resolution)
 - **Testing:** Vitest — tests live in `__tests__/` directories, files named `*.test.ts`
 - **AI:** OpenAI API (gpt-5.4-mini) — server-side only

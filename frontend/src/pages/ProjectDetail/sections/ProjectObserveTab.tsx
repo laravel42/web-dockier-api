@@ -571,7 +571,7 @@ function ActivityDetailModal({
       tabIndex={-1}
     >
       <div
-        className="mx-4 flex w-full max-w-2xl flex-col rounded-xl border border-border bg-card shadow-xl"
+        className="mx-4 flex w-full max-w-2xl flex-col rounded-xl border border-border bg-card shadow-(--shadow-overlay)"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >

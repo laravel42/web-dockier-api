@@ -377,7 +377,7 @@ function CustomRulesPanel({
                       <button key={ext} type="button"
                         onClick={() => onFormChange({ ...form, extensions: selected ? form.extensions.filter(e => e !== ext) : [...form.extensions, ext] })}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                          selected ? "border-primary-500 bg-primary-50 text-primary-600" : "border-border bg-card text-text-muted hover:border-primary-300"
+                          selected ? "border-primary-500 bg-primary-500/15 text-primary-300" : "border-border bg-card text-text-muted hover:border-primary-500/30"
                         }`}>
                         <TechBadge name={ext} icon={icon} iconOnly />{label}
                       </button>
@@ -416,7 +416,7 @@ function CustomRulesPanel({
                     </div>
                     {!r.isSystem && (
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => onEdit(r)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-50 transition-colors" aria-label="Edit">
+                        <button onClick={() => onEdit(r)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-500/10 transition-colors" aria-label="Edit">
                           <SquarePenIcon className="size-3.5" />
                         </button>
                         <button onClick={() => onDelete(r.id)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">

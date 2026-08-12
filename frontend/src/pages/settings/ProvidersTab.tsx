@@ -159,7 +159,7 @@ export default function ProvidersTab() {
                 </div>
                 <div className="ml-auto">
                   <button id="edit-provider-enabled" type="button" onClick={() => setEditEnabled(!editEnabled)}
-                    className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-white hover:bg-primary-600"}`}>
+                    className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-primary-foreground hover:bg-primary-600"}`}>
                     {editEnabled ? "Disable" : "Enable"}
                   </button>
                 </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
 import MDEditor from "@uiw/react-md-editor";
@@ -15,6 +15,7 @@ import ProjectObserveTab from "./ProjectObserveTab";
 import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "@/context/PermissionsContext";
+import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { XIcon } from "lucide-react";
 
 interface Props {
@@ -40,6 +41,30 @@ const MAIN_TABS = [
 ] as const;
 
 type MainTabKey = typeof MAIN_TABS[number]["key"];
+
+function isMainTabVisible(
+  key: MainTabKey,
+  has: (permission: string) => boolean,
+  isOwner: boolean,
+): boolean {
+  switch (key) {
+    case "overview":
+    case "dependencies":
+    case "sensitiveData":
+    case "processes":
+    case "commands":
+    case "network":
+    case "observe":
+    case "domains":
+      return has("project:view");
+    case "deployments":
+      return has("deploy:view");
+    case "settings":
+      return isOwner || has("project:manage");
+    default:
+      return false;
+  }
+}
 
 // ─── SQL Schema Parser ───
 
@@ -336,7 +361,7 @@ function riskLevelFromScore(score: number): keyof typeof RISK_COLORS {
 
 function riskBadgeCls(level: string): string {
   const rc = RISK_COLORS[level] ?? RISK_COLORS.low;
-  return `rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
+  return `rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -460,7 +485,7 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
                 }`}
               >
                 <span className="truncate">{entity}</span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-semibold ${countStyle.bg} ${countStyle.text}`}>{count}</span>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-sm shrink-0 font-semibold ${countStyle.bg} ${countStyle.text}`}>{count}</span>
               </button>
             );
           })}
@@ -506,14 +531,14 @@ const DEP_STATUS_STYLES: Record<string, { bg: string; text: string; border: stri
   deprecated: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
 };
 
-const DEFAULT_TONE_BADGE = { bg: "bg-gray-500/30", text: "text-gray-300", border: "border-gray-500/45" };
+const DEFAULT_TONE_BADGE = { bg: "bg-secondary-500/30", text: "text-text-secondary", border: "border-border" };
 
 function toneBadgeCls(
   styles: { bg: string; text: string; border: string },
   size: "sm" | "xs" = "sm",
 ): string {
   const textSize = size === "xs" ? "text-[9px]" : "text-[10px]";
-  return `rounded-full border px-1.5 py-0.5 font-semibold shrink-0 ${textSize} ${styles.bg} ${styles.text} ${styles.border}`;
+  return `rounded-sm border px-1.5 py-0.5 font-semibold shrink-0 ${textSize} ${styles.bg} ${styles.text} ${styles.border}`;
 }
 
 type VulnDetail = { id: string; severity: string; title: string; details: string; aliases: string[]; url: string; pkg: string };
@@ -553,11 +578,11 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
     <div className="fixed inset-0 z-99999" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto bg-card rounded-xl border border-border shadow-xl max-w-xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="pointer-events-auto bg-card rounded-xl border border-border shadow-(--shadow-overlay) max-w-xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="px-5 pt-4 pb-3 border-b border-border flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-sm border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
                 <span className="text-[11px] font-mono text-text-muted">{vuln.id}</span>
               </div>
               <h3 className="text-sm/snug font-semibold text-text ">{vuln.title}</h3>
@@ -754,6 +779,24 @@ export default function ProjectDescription({
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canEditOverview = isOwner || has("project:manage");
 
+  const visibleMainTabs = useMemo(() => {
+    if (permissionsLoading) return [];
+    return MAIN_TABS.filter((tab) => isMainTabVisible(tab.key, has, isOwner));
+  }, [has, isOwner, permissionsLoading]);
+
+  const visibleMainTabKeys = useMemo(() => visibleMainTabs.map((t) => t.key), [visibleMainTabs]);
+  const handleMainTabKeyDown = useTabListKeyboard(visibleMainTabKeys, setActiveMainTab);
+
+  const activeMainTabSafe = visibleMainTabs.some((t) => t.key === activeMainTab)
+    ? activeMainTab
+    : (visibleMainTabs[0]?.key ?? "overview");
+
+  useEffect(() => {
+    if (!permissionsLoading && !visibleMainTabs.some((t) => t.key === activeMainTab)) {
+      setActiveMainTab(visibleMainTabs[0]?.key ?? "overview");
+    }
+  }, [activeMainTab, visibleMainTabs, permissionsLoading]);
+
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
 
   const [uploadedSensitiveData, setUploadedSensitiveData] = useState<SensitiveField[] | null>(() => {
@@ -858,7 +901,7 @@ export default function ProjectDescription({
   );
 
   const renderMainTabContent = () => {
-    switch (activeMainTab) {
+    switch (activeMainTabSafe) {
       case "dependencies":
         return renderDependenciesSection();
       case "sensitiveData":
@@ -878,7 +921,7 @@ export default function ProjectDescription({
       case "settings":
         return <ProjectSettingsTab project={project} onProjectUpdate={onProjectUpdate} />;
       default:
-        return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTab)?.label ?? "");
+        return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTabSafe)?.label ?? "");
     }
   };
 
@@ -893,14 +936,23 @@ export default function ProjectDescription({
       <div className="flex h-[600px] flex-col overflow-hidden px-5 pt-4 pb-5">
         {/* Main tab nav */}
         <div className="flex min-h-11 shrink-0 items-center gap-3 border-b border-border mb-4">
-          <div className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none">
-            {MAIN_TABS.map((tab) => (
+          <div
+            className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none"
+            role="tablist"
+          >
+            {visibleMainTabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
+                role="tab"
+                id={tabId(tab.key)}
+                aria-controls={panelId(tab.key)}
+                aria-selected={activeMainTabSafe === tab.key}
+                tabIndex={activeMainTabSafe === tab.key ? 0 : -1}
                 onClick={() => setActiveMainTab(tab.key)}
+                onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
                 className={`flex shrink-0 items-center gap-1.5 p-3  text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                  activeMainTab === tab.key
+                  activeMainTabSafe === tab.key
                     ? tab.key === "sensitiveData"
                       ? "border-red-500 text-text"
                       : tab.key === "dependencies"
@@ -911,12 +963,12 @@ export default function ProjectDescription({
               >
                 {tab.label}
                 {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                  <span className="rounded-full border border-blue-500/40 bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
+                  <span className="rounded-sm border border-blue-500/40 bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
                     {dependencies.length}
                   </span>
                 )}
                 {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                  <span className="rounded-full border border-red-500/40 bg-red-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                  <span className="rounded-sm border border-red-500/40 bg-red-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
                     {uploadedSensitiveData.length}
                   </span>
                 )}
@@ -926,15 +978,14 @@ export default function ProjectDescription({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <div
-              className={
-                activeMainTab === "overview"
-                  ? "flex min-h-0 flex-1 flex-col pl-0 pr-2"
-                  : "hidden"
-              }
-            >
-              {permissionsLoading ? (
+          <div
+            role="tabpanel"
+            id={panelId(activeMainTabSafe)}
+            aria-labelledby={tabId(activeMainTabSafe)}
+            className={`relative flex min-h-0 flex-1 flex-col${activeMainTabSafe === "overview" ? " pl-0 pr-2" : ""}`}
+          >
+            {activeMainTabSafe === "overview" ? (
+              permissionsLoading ? (
                 <TabSpinner label="Loading overview…" />
               ) : (
                 <OverviewEditor
@@ -942,12 +993,9 @@ export default function ProjectDescription({
                   editable={canEditOverview}
                   onProjectUpdate={onProjectUpdate}
                 />
-              )}
-            </div>
-            {activeMainTab !== "overview" && (
-              <div className="flex min-h-0 flex-1 flex-col">
-                {renderMainTabContent()}
-              </div>
+              )
+            ) : (
+              renderMainTabContent()
             )}
           </div>
         </div>

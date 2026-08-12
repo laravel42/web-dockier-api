@@ -1,6 +1,7 @@
 import type { WizardState } from "../types";
 import DockerIcon from "@/components/icons/filled/DockerIcon";
 import Spinner from "@/components/Spinner";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
 import RailpackIcon from "@/components/icons/outlined/RailpackIcon";
 import NixpacksIcon from "@/components/icons/outlined/NixpacksIcon";
@@ -29,15 +30,11 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
             <p className="text-xs text-text-muted">Build and deploy as a container image</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onToggleDocker}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${state.useDocker ? "bg-primary-500" : "bg-border"}`}
-          role="switch"
-          aria-checked={state.useDocker}
-        >
-          <span className={`inline-block size-4  transform rounded-full bg-white transition-transform ${state.useDocker ? "translate-x-6" : "translate-x-1"}`} />
-        </button>
+        <ToggleSwitch
+          checked={state.useDocker}
+          onChange={onToggleDocker}
+          ariaLabel="Build with Docker"
+        />
       </div>
       )}
 

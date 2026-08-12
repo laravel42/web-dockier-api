@@ -106,7 +106,7 @@ export default function FindingsList({
               key={p.key}
               type="button"
               onClick={() => onProviderFilterChange(p.key)}
-              className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-sm border text-xs font-medium transition-colors ${
                 providerFilter === p.key
                   ? segmentActiveCls
                   : `${segmentIdleCls} bg-secondary-50 hover:bg-secondary-100 hover:text-text`
@@ -253,7 +253,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
           <span className="shrink-0 text-[11px] font-mono tabular-nums text-text-muted">L{row.lineNumber}</span>
         </div>
         <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
-          <div className="flex items-start bg-danger-50">
+          <div className="flex items-start bg-danger-500/15">
             <span className="shrink-0 select-none border-r border-border/30 bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums  text-danger-500">
               {row.lineNumber}
             </span>
@@ -289,7 +289,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
       </div>
       <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
         {rows.map((row) => (
-          <div key={row.lineNumber} className="flex items-start bg-danger-50">
+          <div key={row.lineNumber} className="flex items-start bg-danger-500/15">
             <span
               className="shrink-0 select-none border-r border-border/30 bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums  text-danger-500"
               style={{ width: `${gutterWidth + 3}ch` }}

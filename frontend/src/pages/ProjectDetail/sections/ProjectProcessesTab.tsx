@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import type { CreateProcessBody, CreateJobBody } from "@/services/processes";
 import { usePermissions } from "@/context/PermissionsContext";
+import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { getFrameworkById } from "@/config/frameworks";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -17,6 +18,7 @@ import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import { settingsBadgeCls } from "@/utils/styles";
 
 interface Props {
   project: Project;
@@ -114,13 +116,17 @@ function ProcessLogsModal({
 
 function ProcessStatusBadge({ status }: { status: BackgroundProcess["status"] }) {
   const config: Record<BackgroundProcess["status"], { label: string; color: string; dot: string }> = {
-    running: { label: "Running", color: "bg-success-500/10 text-success-500", dot: "bg-success-500" },
-    stopped: { label: "Stopped", color: "bg-text-muted/10 text-text-muted", dot: "bg-text-muted" },
-    errored: { label: "Errored", color: "bg-danger-500/10 text-danger-500", dot: "bg-danger-500" },
+    running: { label: "Running", color: settingsBadgeCls.success, dot: "bg-success-500" },
+    stopped: { label: "Stopped", color: settingsBadgeCls.muted, dot: "bg-text-muted" },
+    errored: {
+      label: "Errored",
+      color: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-[10px] font-medium text-danger-300",
+      dot: "bg-danger-500",
+    },
   };
   const c = config[status];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${c.color}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium ${c.color}`}>
       <span className={`size-2 rounded-full ${c.dot}`} />
       {c.label}
     </span>
@@ -129,12 +135,12 @@ function ProcessStatusBadge({ status }: { status: BackgroundProcess["status"] })
 
 function JobStatusBadge({ status }: { status: ScheduledJob["status"] }) {
   const config: Record<ScheduledJob["status"], { label: string; color: string; dot: string }> = {
-    installed: { label: "Installed", color: "bg-success-500/10 text-success-500", dot: "bg-success-500" },
-    paused: { label: "Paused", color: "bg-amber-500/10 text-amber-500", dot: "bg-amber-500" },
+    installed: { label: "Installed", color: settingsBadgeCls.success, dot: "bg-success-500" },
+    paused: { label: "Paused", color: settingsBadgeCls.warning, dot: "bg-amber-500" },
   };
   const c = config[status];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${c.color}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium ${c.color}`}>
       <span className={`size-2 rounded-full ${c.dot}`} />
       {c.label}
     </span>
@@ -214,36 +220,36 @@ function ProcessActionsMenu({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-secondary-50 transition-colors"
+          className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
           aria-label="Actions"
         >
           <EllipsisVerticalIcon className="size-4 text-text-muted" />
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
-            <button onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1">
+            <button onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <FileTextIcon className="size-4 text-text-muted" />
               View logs
             </button>
-            <button onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <RefreshCwIcon className="size-4 text-text-muted" />
               Restart
             </button>
-            <button onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <PlayIcon className="size-4 text-text-muted" />
               Start
             </button>
-            <button onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <SquareIcon className="size-4 text-text-muted" />
               Stop
             </button>
             <div className="my-1 border-t border-border" />
-            <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <SquarePenIcon className="size-4 text-text-muted" />
               Edit
             </button>
-            <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <CopyIcon className="size-4 text-text-muted"  />
               Copy ID
             </button>
@@ -341,28 +347,28 @@ function JobActionsMenu({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-secondary-50 transition-colors"
+          className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
           aria-label="Actions"
         >
           <EllipsisVerticalIcon className="size-4 text-text-muted" />
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
-            <button onClick={() => handleAction("pause")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1">
+            <button onClick={() => handleAction("pause")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <PauseIcon className="size-4 text-text-muted" />
               Pause
             </button>
-            <button onClick={() => handleAction("run")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button onClick={() => handleAction("run")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <PlayIcon className="size-4 text-text-muted" />
               Run
             </button>
             <div className="my-1 border-t border-border" />
-            <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <SquarePenIcon className="size-4 text-text-muted" />
               Edit
             </button>
-            <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-secondary-50 flex items-center gap-2">
+            <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <CopyIcon className="size-4 text-text-muted" />
               Copy ID
             </button>
@@ -662,7 +668,7 @@ function CreateProcessModal({
                   <button
                     type="button"
                     onClick={() => setForce(!force)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${force ? "bg-primary-500" : "bg-secondary-200"}`}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${force ? "bg-primary-500" : "bg-border"}`}
                   >
                     <span className={`inline-block size-3.5 transform rounded-full bg-white transition-transform ${force ? "translate-x-4.5" : "translate-x-1"}`} />
                   </button>
@@ -690,16 +696,16 @@ function CreateProcessModal({
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-text-muted">Working directory</span>
-                  <Input type="text" className={` !w-48 !h-7 text-xs`} value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} placeholder="/home/app" />
+                  <Input type="text" className={` w-48! h-7! text-xs`} value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} placeholder="/home/app" />
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-text-muted">Processes</span>
-                  <Input type="number" className={` !w-48 !h-7 text-xs`} value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
+                  <Input type="number" className={` w-48! h-7! text-xs`} value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-text-muted">Graceful shutdown</span>
                   <div className="flex items-center gap-1.5">
-                    <Input type="number" className={` !w-36 !h-7 text-xs`} value={gracefulShutdown} onChange={(e) => setGracefulShutdown(Number(e.target.value))} min={0} />
+                    <Input type="number" className={` w-36! h-7! text-xs`} value={gracefulShutdown} onChange={(e) => setGracefulShutdown(Number(e.target.value))} min={0} />
                     <span className="text-primary-500 text-xs">seconds</span>
                   </div>
                 </div>
@@ -820,7 +826,7 @@ function CreateJobModal({
           <button
             type="button"
             onClick={() => setMonitorHeartbeat(!monitorHeartbeat)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${monitorHeartbeat ? "bg-primary-500" : "bg-secondary-200"}`}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${monitorHeartbeat ? "bg-primary-500" : "bg-border"}`}
           >
             <span className={`inline-block size-3.5 transform rounded-full bg-white transition-transform ${monitorHeartbeat ? "translate-x-4.5" : "translate-x-1"}`} />
           </button>
@@ -844,6 +850,8 @@ export default function ProjectProcessesTab({ project }: Props) {
   const canView = has("project:view");
 
   const [subTab, setSubTab] = useState<SubTab>("processes");
+  const subTabKeys: SubTab[] = ["processes", "scheduler"];
+  const handleSubTabKeyDown = useTabListKeyboard(subTabKeys, setSubTab, "vertical");
   const [processes, setProcesses] = useState<BackgroundProcess[]>([]);
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -906,17 +914,42 @@ export default function ProjectProcessesTab({ project }: Props) {
   return (
     <div className="flex gap-6 pr-1">
       {/* Sub-tab sidebar */}
-      <div className="flex shrink-0 flex-col gap-1 w-44">
-        <button type="button" className={subTabCls(subTab === "processes")} onClick={() => setSubTab("processes")}>
+      <div className="flex shrink-0 flex-col gap-1 w-44" role="tablist" aria-orientation="vertical">
+        <button
+          type="button"
+          role="tab"
+          id={tabId("processes")}
+          aria-controls={panelId("processes")}
+          aria-selected={subTab === "processes"}
+          tabIndex={subTab === "processes" ? 0 : -1}
+          className={subTabCls(subTab === "processes")}
+          onClick={() => setSubTab("processes")}
+          onKeyDown={(e) => handleSubTabKeyDown(e, "processes")}
+        >
           Background processes
         </button>
-        <button type="button" className={subTabCls(subTab === "scheduler")} onClick={() => setSubTab("scheduler")}>
+        <button
+          type="button"
+          role="tab"
+          id={tabId("scheduler")}
+          aria-controls={panelId("scheduler")}
+          aria-selected={subTab === "scheduler"}
+          tabIndex={subTab === "scheduler" ? 0 : -1}
+          className={subTabCls(subTab === "scheduler")}
+          onClick={() => setSubTab("scheduler")}
+          onKeyDown={(e) => handleSubTabKeyDown(e, "scheduler")}
+        >
           Scheduler
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div
+        role="tabpanel"
+        id={panelId(subTab)}
+        aria-labelledby={tabId(subTab)}
+        className="flex-1 min-w-0"
+      >
         {subTab === "processes" ? (
           <div className="space-y-4">
             {/* Header */}

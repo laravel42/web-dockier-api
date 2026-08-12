@@ -8,8 +8,10 @@ import { getErrorMessage } from "@/utils/errors";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import { settingsBadgeCls } from "@/utils/styles";
 
 interface Props {
   project: Project;
@@ -88,7 +90,7 @@ function DomainRow({
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-text">{domain.name}</span>
           {domain.isPrimary && (
-            <span className="rounded-full border border-border bg-secondary-50/50 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+            <span className={settingsBadgeCls.muted}>
               Primary
             </span>
           )}
@@ -102,7 +104,7 @@ function DomainRow({
               <button
                 type="button"
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-secondary-50/50 transition-colors"
+                className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
                 aria-label="Domain actions"
               >
                 <EllipsisVerticalIcon className="size-4" />
@@ -110,11 +112,11 @@ function DomainRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-surface shadow-lg py-1">
+                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1">
                   <button
                     type="button"
                     onClick={handleVisit}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
                     <ExternalLinkIcon className="size-3.5" />
                     Visit
@@ -122,7 +124,7 @@ function DomainRow({
                   <button
                     type="button"
                     onClick={handleCopy}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
                     <CopyIcon className="size-3.5" />
                     Copy
@@ -130,7 +132,7 @@ function DomainRow({
                   <button
                     type="button"
                     onClick={handleCopyId}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
                     <HashIcon className="size-3.5" />
                     Copy ID
@@ -139,7 +141,7 @@ function DomainRow({
                     type="button"
                     onClick={handleVerifyDns}
                     disabled={verifying}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors disabled:opacity-50"
                   >
                     <CircleCheckIcon className="size-3.5" />
                     {verifying ? "Verifying…" : "Verify DNS"}
@@ -289,28 +291,17 @@ function DomainsSection({
             <p className="text-sm font-medium text-text">Allow wildcard subdomains</p>
             <p className="text-xs text-text-muted mt-0.5">
               Allow all subdomains to accept traffic, e.g.{" "}
-              <code className="rounded bg-secondary-50/80 px-1.5 py-0.5 text-[11px] font-mono text-text">
+              <code className="rounded border border-border/60 bg-secondary-50/30 px-1.5 py-0.5 text-[11px] font-mono text-text">
                 *.{primaryDomain.name}
               </code>
             </p>
           </div>
           {canManage && (
-            <button
-              type="button"
-              onClick={handleToggleWildcard}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                wildcard ? "bg-primary-500" : "bg-border"
-              }`}
-              role="switch"
-              aria-checked={wildcard}
-              aria-label="Toggle wildcard subdomains"
-            >
-              <span
-                className={`pointer-events-none inline-block size-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  wildcard ? "translate-x-4" : "translate-x-0"
-                }`}
-              />
-            </button>
+            <ToggleSwitch
+              checked={wildcard}
+              onChange={handleToggleWildcard}
+              ariaLabel="Toggle wildcard subdomains"
+            />
           )}
         </div>
       )}
@@ -342,10 +333,10 @@ function CertificateRow({
   };
 
   const statusColors: Record<SslCertificate["status"], string> = {
-    active: "bg-success-500/10 text-success-500 border-success-500/30",
-    pending: "bg-amber-500/10 text-amber-500 border-amber-500/30",
-    expired: "bg-danger-500/10 text-danger-500 border-danger-500/30",
-    failed: "bg-danger-500/10 text-danger-500 border-danger-500/30",
+    active: settingsBadgeCls.success,
+    pending: settingsBadgeCls.warning,
+    expired: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-[10px] font-medium text-danger-300",
+    failed: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-[10px] font-medium text-danger-300",
   };
 
   const statusDotColors: Record<SslCertificate["status"], string> = {
@@ -379,7 +370,7 @@ function CertificateRow({
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-medium capitalize ${statusColors[cert.status]}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-0.5 capitalize ${statusColors[cert.status]}`}>
           <span className={`size-1.5 rounded-full ${statusDotColors[cert.status]}`} />
           {cert.status}
         </span>
@@ -388,7 +379,7 @@ function CertificateRow({
             <button
               type="button"
               onClick={() => setMenuOpen(!menuOpen)}
-              className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-secondary-50/50 transition-colors"
+              className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
               aria-label="Certificate actions"
             >
               <EllipsisVerticalIcon className="size-4" />
@@ -396,11 +387,11 @@ function CertificateRow({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface shadow-lg py-1">
+                <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1">
                   <button
                     type="button"
                     onClick={() => { void navigator.clipboard.writeText(cert.id); setMenuOpen(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
                     Copy ID
                   </button>
@@ -546,7 +537,7 @@ function CreateCertificateModal({
           {typeOptions.map((opt) => (
             <label
               key={opt.value}
-              className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-secondary-50/50 transition-colors"
+              className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-card/60 transition-colors"
             >
               <input
                 type="radio"

@@ -323,7 +323,7 @@ export default function UsersTab() {
                   )}
                 </button>
               </div>
-              <button type="button" onClick={generatePassword} className="h-9 shrink-0 px-3 text-xs font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600 transition-colors whitespace-nowrap">
+              <button type="button" onClick={generatePassword} className="h-9 shrink-0 px-3 text-xs font-medium rounded-md bg-warning-500 text-primary-foreground hover:bg-warning-500/90 transition-colors whitespace-nowrap">
                 Generate
               </button>
             </div>

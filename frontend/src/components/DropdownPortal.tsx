@@ -22,7 +22,7 @@ export default function DropdownPortal({ open, pos, dropdownRef, children, class
   return createPortal(
     <div
       ref={dropdownRef}
-      className={className ?? "bg-card border border-border rounded-(--radius-input) shadow-lg max-h-64 flex flex-col"}
+      className={className ?? "bg-card border border-border rounded-(--radius-input) shadow-(--shadow-overlay) max-h-64 flex flex-col"}
       style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
     >
       {children}

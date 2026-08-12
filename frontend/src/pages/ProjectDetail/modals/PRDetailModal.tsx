@@ -58,14 +58,14 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
           <div className="flex items-start gap-3">
             <GitBranchIcon className="size-5 text-primary-500 mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-text leading-snug">{pr.title}</h3>
+              <h3 className="text-base/snug font-semibold text-text ">{pr.title}</h3>
               <div className="mt-1 text-sm text-text-muted">
                 #{pr.number} opened {timeAgo(pr.createdAt)}
                 {pr.author && ` by ${pr.author}`}
               </div>
             </div>
             {pr.draft && (
-              <span className="rounded-full border border-border bg-secondary-50/50 px-2 py-0.5 text-xs font-medium text-text-muted shrink-0">
+              <span className="rounded-sm border border-border bg-secondary-50/50 px-2 py-0.5 text-xs font-medium text-text-muted shrink-0">
                 Draft
               </span>
             )}
@@ -74,7 +74,7 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
           {/* PR body / description */}
           {pr.body && (
             <div className="rounded-lg border border-border/50 bg-secondary-50/30 p-3 max-h-40 overflow-y-auto">
-              <pre className="text-sm text-text whitespace-pre-wrap break-words font-sans leading-relaxed">
+              <pre className="text-sm/relaxed text-text whitespace-pre-wrap wrap-break-word font-sans ">
                 {pr.body}
               </pre>
             </div>

@@ -225,7 +225,7 @@ function CredentialChip({
   };
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text">
+    <span className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text">
       <span className="font-medium">{cred.username}</span>
       {canManage && (
         <Button
@@ -291,7 +291,7 @@ function CreateSecurityRuleModal({
         >
           ← Back to new security rule
         </Button>
-        <h3 className="mt-4 text-sm font-semibold text-text mb-4">New security credential</h3>
+        <h3 className="my-4 text-sm font-semibold text-text ">New security credential</h3>
         <InlineCredentialForm
           onAdd={(cred) => {
             setCredentials((prev) => [...prev, cred]);
@@ -357,7 +357,7 @@ function CreateSecurityRuleModal({
                 {credentials.map((c, i) => (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text"
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text"
                   >
                     <span className="font-medium">{c.username}</span>
                     <Button
@@ -607,7 +607,7 @@ function RedirectRulesSection({
               <div key={rule.id} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 px-4 py-2.5 items-center">
                 <span className="text-xs font-mono text-text truncate">{rule.fromPath}</span>
                 <span className="text-xs font-mono text-text truncate">{rule.toPath}</span>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-sm ${
                   rule.type === "permanent"
                     ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
                     : "bg-primary-500/10 text-primary-500 border border-primary-500/30"
