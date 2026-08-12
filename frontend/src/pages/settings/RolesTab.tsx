@@ -118,7 +118,7 @@ export default function RolesTab() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-semibold text-text truncate">{r.name}</p>
-                    {r.isSystem && <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
+                    {r.isSystem && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
                   </div>
                   <p className="text-xs text-text-muted truncate">{r.description || "No description"}</p>
                 </div>

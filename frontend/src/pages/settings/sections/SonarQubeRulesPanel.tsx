@@ -181,7 +181,7 @@ export default function SonarQubeRulesPanel() {
                               <span className={`inline-flex items-center gap-1 font-semibold px-2 py-1 ${s.statusBg} ${s.icon}`}>
                                 <span className={`size-4 rounded-full flex items-center justify-center ${s.iconBg}`}>
                                   {i.severity === "INFO" ? (
-                                    <span className="text-[10px] font-bold text-white leading-none">i</span>
+                                    <span className="text-xs font-bold text-white leading-none">i</span>
                                   ) : (
                                     <ChevronDownIcon className={`size-2.5 text-white stroke-3 ${isUp ? "rotate-180" : ""}`} />
                                   )}

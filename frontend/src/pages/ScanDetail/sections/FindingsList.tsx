@@ -201,8 +201,8 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
     <div className="p-3  pl-9">
       <div className="mb-4 flex items-center gap-2">
         <SeverityBadge severity={f.severity as "error" | "warning" | "info"} />
-        <span className="text-[10px] text-text-muted font-mono">L{f.startLine}</span>
-        <span className="text-[10px] text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
+        <span className="text-xs text-text-muted font-mono">L{f.startLine}</span>
+        <span className="text-xs text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
         {canManageScans && (pmIntegrations.length > 0 || hasConnectionId) && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
             <Button
@@ -249,8 +249,8 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
     return (
       <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
         <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-secondary-800/40 px-3 py-2">
-          <span className="min-w-0 truncate text-[11px] font-mono text-text-muted">{relativePath}</span>
-          <span className="shrink-0 text-[11px] font-mono tabular-nums text-text-muted">L{row.lineNumber}</span>
+          <span className="min-w-0 truncate text-xs font-mono text-text-muted">{relativePath}</span>
+          <span className="shrink-0 text-xs font-mono tabular-nums text-text-muted">L{row.lineNumber}</span>
         </div>
         <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
           <div className="flex items-start bg-danger-500/15">
@@ -284,8 +284,8 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
   return (
     <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
       <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-secondary-800/40 px-3 py-2">
-        <span className="min-w-0 truncate text-[11px] font-mono text-text-muted">{relativePath}</span>
-        <span className="shrink-0 text-[11px] font-mono tabular-nums text-text-muted">{lineLabel}</span>
+        <span className="min-w-0 truncate text-xs font-mono text-text-muted">{relativePath}</span>
+        <span className="shrink-0 text-xs font-mono tabular-nums text-text-muted">{lineLabel}</span>
       </div>
       <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
         {rows.map((row) => (

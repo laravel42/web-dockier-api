@@ -108,7 +108,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
           <p className="text-sm font-semibold text-text">Encrypted environment files</p>
           <p className="text-xs/relaxed text-text-muted mt-0.5">
             If you wish to decrypt an environment file during deployment, you may set the value of the{" "}
-            <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-[10px] font-mono text-primary-500">
+            <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-xs font-mono text-primary-500">
               APP_ENV_ENCRYPTION_KEY
             </code>{" "}
             environment variable by providing your encryption key below.{" "}

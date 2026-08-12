@@ -23,6 +23,15 @@ colors:
   legacy-dusk: "#2E1B1A"
   legacy-cream: "#F9F4EE"
 typography:
+  scale:
+    display: "22px"
+    metric: "20px"
+    headline: "18px"
+    title: "16px"
+    body: "15px"
+    prose: "14px"
+    label: "13px"
+    caption: "12px"
   display:
     fontFamily: "Space Grotesk, ui-sans-serif, system-ui, sans-serif"
     fontSize: "22px"
@@ -196,6 +205,23 @@ The dark palette is the default (`:root`); light is the `[data-theme="light"]` o
 - **Label** (500, 13px, 1.45): `--text-ui`, the workhorse for buttons, inputs, table cells, and nav. Most text in this product is this size.
 - **Table Head** (13px→12px, 0.04em tracking, uppercase): The one place the system uses uppercase and positive tracking, in `.table-compact thead th`.
 
+### The Ramp
+
+Eight steps, and nothing between them:
+
+| Step | Size | Role |
+| --- | --- | --- |
+| Display | 22px | `h1` — the largest text in the product |
+| Metric | 20px | Large tabular figures in readouts (`--text-xl`) |
+| Headline | 18px | `h2` — section headers |
+| Title | 16px | `h3` — card and panel headers |
+| Body | 15px | The base document setting |
+| Prose | 14px | Paragraph copy (`--text-sm`) |
+| Label | 13px | `--text-ui` — buttons, inputs, table cells, nav |
+| Caption | 12px | `--text-xs` — table heads, badges, metadata |
+
+**12px is the floor.** Anything smaller is not a step, it is an escape hatch — and at 9–11px it fails legibility for exactly the operator squinting at a dense scan result on a laptop. Dense rows get their compactness from the 13px label and 12px caption, not from inventing a fourth micro-size.
+
 ### Named Rules
 
 **The 22px Ceiling Rule.** Nothing in the app renders larger than 22px. This is enforced in CSS, not convention — `:is(h1…h6)[class*="text-2xl"]` and larger utilities are overridden to `var(--heading-max-size)` with `!important`. Do not fight it with a bigger utility class; if a surface needs more presence, get it from weight, color, or space.
@@ -256,6 +282,8 @@ Borders are always 1px. Depth of a container is expressed by *which* alpha its b
 ### Named Rules
 
 **The Two-Radius Rule.** Controls are 10px, containers are 12px. Reach for 8px or 16px only for genuinely tight details and genuinely large panels. Never introduce a square (`0`).
+
+The custom scrollbar thumb is the one radius exception: a 10px rail takes a 5px thumb radius, because a scrollbar is a rail rather than a control or container.
 
 `rounded-full` is reserved for genuinely circular objects — avatars, status dots, spinners, icon buttons whose height and width are equal. It is **not** a badge shape: status, severity, and count badges take the 8px tight-detail radius, so a badge never reads as a pill.
 

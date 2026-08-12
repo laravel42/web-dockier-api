@@ -39,7 +39,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
             </div>
             <div>
               <h2 className="text-sm font-semibold text-text">Collected Data</h2>
-              <p className="text-[11px] text-text-muted">{entities.length} entities · {totalFields} fields</p>
+              <p className="text-xs text-text-muted">{entities.length} entities · {totalFields} fields</p>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-1.5">
@@ -49,7 +49,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
             }).map(([key, count]) => {
               const s = getSensitivityStyle(key);
               return (
-                <span key={key} className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-sm ${s.bg} ${s.text}`}>
+                <span key={key} className={`inline-flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded-sm ${s.bg} ${s.text}`}>
                   {s.label} ({count})
                 </span>
               );
@@ -69,8 +69,8 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs font-semibold text-text">{entity.name}</h3>
-                      <span className="text-[10px] text-text-muted bg-card border border-border px-1.5 py-0.5 rounded-sm shrink-0">{entity.storage}</span>
-                      <span className="text-[10px] text-text-muted">{entity.fields?.length || 0} fields</span>
+                      <span className="text-xs text-text-muted bg-card border border-border px-1.5 py-0.5 rounded-sm shrink-0">{entity.storage}</span>
+                      <span className="text-xs text-text-muted">{entity.fields?.length || 0} fields</span>
                     </div>
                   </div>
                   <svg className={`size-3.5  text-text-muted shrink-0 ml-3 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -82,7 +82,7 @@ export default function DataFlowDiagram({ dataFlow }: Props) {
                     {entity.fields.map((field, j) => (
                         <div key={j} className="flex items-center px-3 py-1.5 gap-3 hover:bg-secondary-50/50 transition-colors">
                           <span className="text-xs font-mono text-text w-1/3 truncate" title={field.name}>{field.name}</span>
-                          <span className="text-[11px] text-text-muted w-1/4 truncate">{field.type}</span>
+                          <span className="text-xs text-text-muted w-1/4 truncate">{field.type}</span>
                           <span className="ml-auto"><SensitivityBadge level={field.sensitivity} /></span>
                         </div>
                     ))}

@@ -57,7 +57,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 <span>{r.flag}</span>
                 <div className="min-w-0">
                   <span className="font-medium block truncate">{r.name}</span>
-                  <span className="text-text-muted text-[10px]">{r.id}</span>
+                  <span className="text-text-muted text-xs">{r.id}</span>
                 </div>
               </button>
             ))}
@@ -81,7 +81,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${plan.badgeColor}`}>{plan.badge}</span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${plan.badgeColor}`}>{plan.badge}</span>
                   {selected && (
                     <CircleCheckIcon className="size-4  text-primary-500" />
                   )}
@@ -95,7 +95,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 </div>
                 {plan.managedServices.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-border">
-                    <p className="text-[10px] text-text-muted uppercase mb-1">Managed Services</p>
+                    <p className="text-xs text-text-muted uppercase mb-1">Managed Services</p>
                     {plan.managedServices.map((s, j) => (
                       <p key={j} className="text-xs text-primary-600">{s}</p>
                     ))}
@@ -103,12 +103,12 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 )}
                 <div className="mt-3 pt-2 border-t border-border">
                   <p className="text-lg font-bold text-primary-500">{plan.monthlyPrice}</p>
-                  <p className="text-[10px] text-text-muted">estimated monthly</p>
+                  <p className="text-xs text-text-muted">estimated monthly</p>
                 </div>
                 {/* Breakdown tooltip */}
                 <div className="mt-2 space-y-0.5">
                   {plan.breakdown.map((b, j) => (
-                    <div key={j} className="flex justify-between text-[10px] text-text-muted">
+                    <div key={j} className="flex justify-between text-xs text-text-muted">
                       <span>{b.item}</span><span>{b.cost}</span>
                     </div>
                   ))}

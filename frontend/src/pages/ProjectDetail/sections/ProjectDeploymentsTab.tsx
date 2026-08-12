@@ -148,7 +148,7 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
                   onClick={openDeploy}
                 />
                 <span
-                  className={`rounded px-1.5 py-px text-[10px] font-medium capitalize ${statusBadgeColors[deploy.status] || "bg-secondary-100 text-text-muted"}`}
+                  className={`rounded px-1.5 py-px text-xs font-medium capitalize ${statusBadgeColors[deploy.status] || "bg-secondary-100 text-text-muted"}`}
                 >
                   {deploy.status}
                 </span>
@@ -158,7 +158,7 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
                 {deploy.deployStrategy && (
                   <ServiceBadge provider={pk} strategy={deploy.deployStrategy} />
                 )}
-                <time className="ml-auto text-[11px] text-text-muted whitespace-nowrap">
+                <time className="ml-auto text-xs text-text-muted whitespace-nowrap">
                   {formatCardDateTime(deploy.createdAt)}
                 </time>
               </div>
@@ -171,7 +171,7 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
 
       {totalPages > 1 && (
         <div className="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-border/40 pt-3">
-          <span className="text-[11px] text-text-muted">
+          <span className="text-xs text-text-muted">
             {rangeStart}–{rangeEnd} of {total}
           </span>
           <div className="flex items-center gap-2">
@@ -179,7 +179,7 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
               type="button"
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="h-7 rounded-md border border-border px-2.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-7 rounded-md border border-border px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
             >
               Previous
             </button>
@@ -187,7 +187,7 @@ export default function ProjectDeploymentsTab({ project, providers }: Props) {
               type="button"
               disabled={page >= totalPages - 1}
               onClick={() => setPage((p) => p + 1)}
-              className="h-7 rounded-md border border-border px-2.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-7 rounded-md border border-border px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
             >
               Next
             </button>

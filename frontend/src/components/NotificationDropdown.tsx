@@ -75,7 +75,7 @@ function NotificationDropdownItem({
               onNavigate={onNavigate}
             />
             <div className="flex shrink-0 items-center gap-1.5 leading-none">
-              <time className="text-[11px] leading-snug whitespace-nowrap text-text-muted">
+              <time className="text-xs/snug  whitespace-nowrap text-text-muted">
                 {new Date(notification.createdAt).toLocaleString(undefined, {
                   month: "short",
                   day: "numeric",
@@ -158,7 +158,7 @@ export default function NotificationDropdown() {
       >
         <BellIcon className="size-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-danger-700 text-[10px] font-bold text-white">
+          <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-danger-700 text-xs font-bold text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -171,7 +171,7 @@ export default function NotificationDropdown() {
             <Link
               to="/notifications"
               onClick={() => setOpen(false)}
-              className="text-[11px] font-medium text-primary hover:text-primary/80"
+              className="text-xs font-medium text-primary hover:text-primary/80"
             >
               View all
             </Link>

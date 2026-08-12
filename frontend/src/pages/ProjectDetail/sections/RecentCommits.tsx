@@ -93,7 +93,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
                     <div className="relative z-10 flex size-8 shrink-0 items-center justify-center">
                       <span className="size-2.5 rounded-full bg-border ring-4 ring-card" />
                     </div>
-                    <span className="text-[14px] font-bold text-text-muted pt-1.5">{row.label}</span>
+                    <span className="text-sm font-bold text-text-muted pt-1.5">{row.label}</span>
                   </>
                 ) : (
                   <>
@@ -112,7 +112,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
                           href={row.commit.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[14px]/snug font-medium text-text hover:text-primary-500 transition-colors line-clamp-2"
+                          className="text-sm/snug font-medium text-text hover:text-primary-500 transition-colors line-clamp-2"
                         >
                           {row.commit.message.split("\n")[0].trim()}
                         </a>

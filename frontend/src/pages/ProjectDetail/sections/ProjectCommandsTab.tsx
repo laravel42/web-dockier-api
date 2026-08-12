@@ -221,7 +221,7 @@ export default function ProjectCommandsTab({ project }: Props) {
         <h3 className="text-sm font-semibold text-text">Run new command</h3>
         <p className="mt-1 text-xs/relaxed text-text-muted ">
           Easily execute arbitrary commands on your server. All commands are executed from within
-          the site&apos;s root directory. Commands will be executed as the <code className="rounded border border-border/60 bg-card/60 px-1 py-0.5 text-[11px] font-mono">dockier</code> user
+          the site&apos;s root directory. Commands will be executed as the <code className="rounded border border-border/60 bg-card/60 px-1 py-0.5 text-xs font-mono">dockier</code> user
           and may run for two minutes before timing out.
         </p>
         {deployCheckDone && !hasDeployment && (
@@ -284,7 +284,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                     <p className="truncate font-mono text-sm text-text" title={cmd.command}>
                       {cmd.command}
                     </p>
-                    <p className="mt-1 text-[11px] text-text-muted">
+                    <p className="mt-1 text-xs text-text-muted">
                       {formatCardDateTime(cmd.startedAt)}
                     </p>
                   </div>
@@ -357,7 +357,7 @@ export default function ProjectCommandsTab({ project }: Props) {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/40 pt-3">
-              <span className="text-[11px] text-text-muted">
+              <span className="text-xs text-text-muted">
                 {rangeStart}–{rangeEnd} of {total}
               </span>
               <div className="flex items-center gap-2">
@@ -365,7 +365,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                   type="button"
                   disabled={page === 0}
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  className="h-7 rounded-md border border-border px-2.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-7 rounded-md border border-border px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Previous
                 </button>
@@ -373,7 +373,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                   type="button"
                   disabled={page >= totalPages - 1}
                   onClick={() => setPage((p) => p + 1)}
-                  className="h-7 rounded-md border border-border px-2.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-7 rounded-md border border-border px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
@@ -413,7 +413,7 @@ export default function ProjectCommandsTab({ project }: Props) {
             <p className="mb-2 font-mono text-xs text-text-muted break-all">{outputModal.command}</p>
             <div className="flex items-center gap-2 mb-3">
               <StatusBadge status={outputModal.status} />
-              <span className="text-[11px] text-text-muted">{formatCardDateTime(outputModal.startedAt)}</span>
+              <span className="text-xs text-text-muted">{formatCardDateTime(outputModal.startedAt)}</span>
             </div>
             <pre className="max-h-64 overflow-auto rounded-lg border border-border/50 bg-background p-3 font-mono text-xs/relaxed text-text  scrollbar-hide whitespace-pre-wrap break-all">
               {outputModal.output || "No output available."}

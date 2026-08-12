@@ -52,7 +52,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
                 ) : active ? (
                   <div className="size-2  border border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <span className="text-[9px]">{i + 1}</span>
+                  <span className="text-xs">{i + 1}</span>
                 )}
               </div>
               <span className={`hidden sm:block ${active ? "text-text font-medium" : "text-text-muted"}`}>{step}</span>

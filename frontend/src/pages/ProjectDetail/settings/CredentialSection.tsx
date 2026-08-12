@@ -172,7 +172,7 @@ export default function CredentialSection<T extends Credential>({
                 <label className="mb-1.5 block text-sm font-medium text-text-muted">
                   {field.label}
                   {field.optional && (
-                    <span className="inline-flex items-center rounded border border-border/60 bg-card/40 px-1.5 py-0.5 text-[10px] font-medium text-text-muted ml-1">
+                    <span className="inline-flex items-center rounded border border-border/60 bg-card/40 px-1.5 py-0.5 text-xs font-medium text-text-muted ml-1">
                       Optional
                     </span>
                   )}

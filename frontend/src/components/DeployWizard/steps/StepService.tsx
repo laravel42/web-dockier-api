@@ -70,7 +70,7 @@ export default function StepService({ state, templateId, analysis, onChange }: {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`text-sm font-semibold ${selected ? "text-foreground" : "text-text"}`}>{svc.name}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-semibold uppercase ${
                     svc.type === "managed"
                       ? selected ? "bg-primary/15 text-primary" : "bg-primary-50 text-primary-600"
                       : selected ? "bg-warning-500/15 text-warning-500" : "bg-warning-50 text-warning-500"

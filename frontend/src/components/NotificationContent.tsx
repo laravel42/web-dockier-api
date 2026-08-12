@@ -11,7 +11,7 @@ interface Props {
 
 export default function NotificationContent({ notification, compact = false }: Props) {
   const metadata = resolveNotificationMetadata(notification);
-  const textCls = compact ? "text-[11px] leading-snug" : "text-xs/snug";
+  const textCls = compact ? "text-xs leading-snug" : "text-xs/snug";
   const blockMt = compact ? "mt-1" : "mt-1.5";
 
   if (!metadata) {

@@ -58,11 +58,11 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
         {pushToDeploy && (
           <div className="border-t border-border px-4 py-3">
             <p className="text-xs text-text-muted mb-1">Deploy Hook URL</p>
-            <code className="text-[11px] text-text-muted font-mono break-all select-all bg-secondary-50 px-2 py-1 rounded border border-border">
+            <code className="text-xs text-text-muted font-mono break-all select-all bg-secondary-50 px-2 py-1 rounded border border-border">
               {deployHookUrl}
             </code>
-            <p className="text-[10px] text-text-muted mt-1.5">
-              Add this URL as a webhook in your Git provider, or use the HMAC-signed endpoint at <code className="text-[10px]">/deploy/webhook/git-push</code> for production setups.
+            <p className="text-xs text-text-muted mt-1.5">
+              Add this URL as a webhook in your Git provider, or use the HMAC-signed endpoint at <code className="text-xs">/deploy/webhook/git-push</code> for production setups.
             </p>
           </div>
         )}
@@ -94,9 +94,9 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
               className="size-3.5 rounded border-border accent-primary-500"
             />
             <span className="text-xs text-text-muted">
-              Make <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-[10px] font-mono">.env</code> variables available to deployment script
+              Make <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-xs font-mono">.env</code> variables available to deployment script
             </span>
-            <span className="text-[10px] font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
+            <span className="text-xs font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
           </label>
           {canManage && hasScriptChanges && (
             <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
           border={false}
         >
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
+            <span className="text-xs font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
             <ToggleSwitch checked={false} onChange={() => {}} disabled />
           </div>
         </SettingsRow>

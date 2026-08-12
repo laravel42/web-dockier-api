@@ -45,7 +45,7 @@ function OverviewSaveToast({ status }: { status: SaveStatus }) {
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-5 right-5 z-100 flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-[11px] font-medium leading-none shadow-(--shadow-overlay) ${tone}`}
+      className={`fixed bottom-5 right-5 z-100 flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-xs font-medium leading-none shadow-(--shadow-overlay) ${tone}`}
     >
       {status === "saving" && (
         <span className="size-2.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" />

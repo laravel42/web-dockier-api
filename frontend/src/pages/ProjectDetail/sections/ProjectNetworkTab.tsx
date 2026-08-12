@@ -321,7 +321,7 @@ function CreateSecurityRuleModal({
           <label className="mb-1 block text-xs font-medium text-text-muted">
             Path <span className="text-text-muted/60 ml-1 font-normal">Optional</span>
           </label>
-          <p className="text-[11px] text-text-muted mb-1.5">
+          <p className="text-xs text-text-muted mb-1.5">
             Leave blank to password protect all routes within your site. Any valid Nginx location path is acceptable.
           </p>
           <Input
@@ -596,7 +596,7 @@ function RedirectRulesSection({
         </div>
       ) : (
         <div>
-          <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted border-b border-border">
+          <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-text-muted border-b border-border">
             <span>From</span>
             <span>To</span>
             <span>Type</span>
@@ -607,7 +607,7 @@ function RedirectRulesSection({
               <div key={rule.id} className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 px-4 py-2.5 items-center">
                 <span className="text-xs font-mono text-text truncate">{rule.fromPath}</span>
                 <span className="text-xs font-mono text-text truncate">{rule.toPath}</span>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-sm ${
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-sm ${
                   rule.type === "permanent"
                     ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
                     : "bg-primary-500/10 text-primary-500 border border-primary-500/30"

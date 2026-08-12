@@ -30,7 +30,7 @@ function CopyableMonoValue({ value, label }: { value: string; label: string }) {
 
   return (
     <span className="inline-flex items-center gap-1.5 mt-0.5 max-w-full">
-      <span className="inline-block px-2 py-0.5 rounded bg-secondary-50 border border-border text-[11px] text-text-muted font-mono select-all">
+      <span className="inline-block px-2 py-0.5 rounded bg-secondary-50 border border-border text-xs text-text-muted font-mono select-all">
         {value}
       </span>
       <button

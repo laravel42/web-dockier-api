@@ -15,7 +15,7 @@ function Label({ name, color }: { name: string; color: string }) {
   if (color) {
     return (
       <span
-        className="rounded-sm border px-1.5 py-0.5 text-[10px] font-medium"
+        className="rounded-sm border px-1.5 py-0.5 text-xs font-medium"
         style={{ backgroundColor: `${color}20`, borderColor: `${color}55`, color }}
       >
         {name}
@@ -23,7 +23,7 @@ function Label({ name, color }: { name: string; color: string }) {
     );
   }
   return (
-    <span className="rounded-sm border border-border bg-secondary-50/50 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+    <span className="rounded-sm border border-border bg-secondary-50/50 px-1.5 py-0.5 text-xs font-medium text-text-muted">
       {name}
     </span>
   );

@@ -36,7 +36,7 @@ export const typeOverline = "text-xs font-medium uppercase tracking-wider text-t
 
 /** Marketing / empty-state — gold overline pill */
 export const overlinePillCls =
-  "inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-primary";
+  "inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary";
 
 /** Marketing hero headline */
 export const marketingHeroTitle =
@@ -84,7 +84,7 @@ export const labelCls = "mb-1 block text-xs font-medium leading-none text-muted-
 
 /** Sidebar nav link */
 export const navLinkCls =
-  "flex items-center gap-2 rounded-md px-3 py-1.5 text-[14px] font-medium leading-snug transition-colors";
+  "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium leading-snug transition-colors";
 /** Sidebar nav link — active */
 export const navLinkActiveCls = "bg-primary/10 text-foreground";
 /** Sidebar nav link — idle hover */
@@ -181,7 +181,7 @@ export const statusBadgeColors: Record<string, string> = {
 };
 
 const settingsBadgeBase =
-  "inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium";
+  "inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium";
 
 /** Bordered tone badges for settings cards and metadata pills (dark-mode friendly). */
 export const settingsBadgeCls = {

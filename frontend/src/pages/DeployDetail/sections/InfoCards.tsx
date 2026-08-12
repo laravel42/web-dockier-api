@@ -26,18 +26,18 @@ export default function InfoCards({ deploy, provKey, deployUrl }: Props) {
             <ProviderBadge provider={provKey} showName={false} iconSize="w-3.5 h-3.5" />
             <p className="text-sm font-semibold text-text">{providerName}</p>
           </div>
-          <p className="text-[10px] text-text-muted">Provider</p>
+          <p className="text-xs text-text-muted">Provider</p>
         </div>
         <div className={metricCardCls}>
           <p className="text-sm font-semibold text-text">{strategyLabel}</p>
-          <p className="text-[10px] text-text-muted">Strategy</p>
+          <p className="text-xs text-text-muted">Strategy</p>
         </div>
         {hasDocker && (
           <div className={metricCardCls}>
             <p className="text-sm font-semibold text-text truncate" title={deploy.dockerImage}>
               {deploy.dockerImage.split("/").pop()?.split(":")[0] || deploy.dockerImage}
             </p>
-            <p className="text-[10px] text-text-muted">Docker Image</p>
+            <p className="text-xs text-text-muted">Docker Image</p>
           </div>
         )}
       </div>
@@ -51,12 +51,12 @@ export default function InfoCards({ deploy, provKey, deployUrl }: Props) {
           <ProviderBadge provider={provKey} showName={false} iconSize="w-3.5 h-3.5" />
           <p className="text-sm font-semibold text-text">{providerName}</p>
         </div>
-        <p className="text-[10px] text-text-muted">Provider</p>
+        <p className="text-xs text-text-muted">Provider</p>
       </div>
 
       <div className={metricCardCls}>
         <p className="text-sm font-semibold text-text">{strategyLabel}</p>
-        <p className="text-[10px] text-text-muted">Strategy</p>
+        <p className="text-xs text-text-muted">Strategy</p>
       </div>
 
       <div className={`${metricCardCls} col-span-2`}>
@@ -74,7 +74,7 @@ export default function InfoCards({ deploy, provKey, deployUrl }: Props) {
           {deployUrl}
         </a>
         {!infrastructureActive && (
-          <p className="text-[10px] text-text-muted mt-1">Infrastructure no longer active.</p>
+          <p className="text-xs text-text-muted mt-1">Infrastructure no longer active.</p>
         )}
       </div>
 
@@ -83,7 +83,7 @@ export default function InfoCards({ deploy, provKey, deployUrl }: Props) {
           <p className="text-sm font-semibold text-text truncate" title={deploy.dockerImage}>
             {deploy.dockerImage.split("/").pop()?.split(":")[0] || deploy.dockerImage}
           </p>
-          <p className="text-[10px] text-text-muted">Docker Image</p>
+          <p className="text-xs text-text-muted">Docker Image</p>
         </div>
       )}
     </div>

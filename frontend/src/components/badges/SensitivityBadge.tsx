@@ -14,8 +14,8 @@ interface Props {
 export default function SensitivityBadge({ level, size = "xs" }: Props) {
   const s = STYLES[level] || STYLES.internal;
   const cls = size === "sm"
-    ? `text-[11px] px-2 py-0.5`
-    : `text-[10px] px-1.5 py-0.5`;
+    ? `text-xs px-2 py-0.5`
+    : `text-xs px-1.5 py-0.5`;
   return (
     <span className={`font-medium rounded-full shrink-0 ${cls} ${s.bg} ${s.text}`}>
       {s.label}

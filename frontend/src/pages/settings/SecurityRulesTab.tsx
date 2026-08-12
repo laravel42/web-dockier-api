@@ -403,7 +403,7 @@ function CustomRulesPanel({
                   <div className="flex items-center gap-2">
                     <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                     <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
-                    {r.isSystem && <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
+                    {r.isSystem && <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
                     <ToggleSwitch checked={r.enabled} onChange={() => onToggle(r)} />
                   </div>
                   <p className="text-sm/relaxed text-text">{r.message}</p>

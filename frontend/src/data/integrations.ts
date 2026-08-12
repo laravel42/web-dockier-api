@@ -82,7 +82,7 @@ export const INTEGRATION_CATALOG: IntegrationDef[] = [
 ];
 
 const categoryBadgeBase =
-  "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium shrink-0";
+  "inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium shrink-0";
 
 /** Dark-mode-friendly tone badges for integration catalog categories. */
 export const CATEGORY_COLORS: Record<string, string> = {

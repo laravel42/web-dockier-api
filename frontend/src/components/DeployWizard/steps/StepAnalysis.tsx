@@ -148,7 +148,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                       <span className="text-sm font-medium text-text">{SERVICE_DISPLAY_NAMES[svc.type] || svc.name}</span>
                       <span className="text-xs text-text-muted">({svc.type})</span>
                       {svc.confidence >= 0.8 && (
-                        <span className="px-1 py-0.5 bg-success-50 text-success-500 rounded text-[10px] font-medium">high confidence</span>
+                        <span className="px-1 py-0.5 bg-success-50 text-success-500 rounded text-xs font-medium">high confidence</span>
                       )}
                     </div>
                     <div className="flex rounded-md overflow-hidden border border-border shrink-0 ml-3">

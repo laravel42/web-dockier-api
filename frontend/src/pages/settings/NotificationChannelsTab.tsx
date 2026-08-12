@@ -204,7 +204,7 @@ export default function NotificationChannelsTab() {
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-text">{channelNames[ch.type] || ch.type}</p>
                     {ch.type === "in_app" && (
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-text-muted">Default</span>
+                      <span className="text-xs font-medium uppercase tracking-wide text-text-muted">Default</span>
                     )}
                   </div>
                 </div>

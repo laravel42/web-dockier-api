@@ -48,7 +48,7 @@ export default function ScanSidebar({
           </div>
 
           {scanError && (
-            <div className="px-2.5 py-2 border-b border-danger-500/20 bg-danger-500/5 text-[10px] leading-snug text-danger-500">
+            <div className="px-2.5 py-2 border-b border-danger-500/20 bg-danger-500/5 text-xs/snug  text-danger-500">
               {scanError}
             </div>
           )}
@@ -62,7 +62,7 @@ export default function ScanSidebar({
               <Spinner className="size-3.5" />
             </div>
           ) : allScans.length === 0 ? (
-            <p className="text-[10px] text-text-muted text-center py-3">No scans yet</p>
+            <p className="text-xs text-text-muted text-center py-3">No scans yet</p>
           ) : (
             <div className="max-h-[calc(100vh-200px)] overflow-y-auto divide-y divide-border/40">
               {allScans.map((s) => {
@@ -92,7 +92,7 @@ export default function ScanSidebar({
                       </span>
                       <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 py-px px-0.5">
                         {isLive && (
-                          <span className="text-[9px] font-medium text-primary">live</span>
+                          <span className="text-xs font-medium text-primary">live</span>
                         )}
                         <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} size="sidebar" />
                       </div>

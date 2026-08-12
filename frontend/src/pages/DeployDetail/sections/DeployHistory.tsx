@@ -64,7 +64,7 @@ export default function DeployHistory({
               <Spinner className="size-3.5" />
             </div>
           ) : deploys.length === 0 ? (
-            <p className="text-[10px] text-text-muted text-center py-3">No deploys yet</p>
+            <p className="text-xs text-text-muted text-center py-3">No deploys yet</p>
           ) : (
             <div className="max-h-[calc(100vh-200px)] overflow-y-auto divide-y divide-border/40">
               {deploys.map((d) => {

@@ -73,8 +73,8 @@ export default function ScanProgressPanel({ progress }: { progress: ScanProgress
   return (
     <div className="space-y-1.5" aria-live="polite">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium text-text-muted">{stepLabel(progress)}</span>
-        <span className="text-[10px] font-semibold text-primary tabular-nums">{pct}%</span>
+        <span className="text-xs font-medium text-text-muted">{stepLabel(progress)}</span>
+        <span className="text-xs font-semibold text-primary tabular-nums">{pct}%</span>
       </div>
 
       <div className="h-0.5 w-full overflow-hidden rounded-full bg-muted">
@@ -85,7 +85,7 @@ export default function ScanProgressPanel({ progress }: { progress: ScanProgress
       </div>
 
       {detail && (
-        <p key={detail} className="truncate font-mono text-[9px] leading-tight text-text-muted">
+        <p key={detail} className="truncate font-mono text-xs/tight  text-text-muted">
           {detail}
         </p>
       )}

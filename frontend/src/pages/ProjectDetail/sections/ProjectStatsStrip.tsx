@@ -53,7 +53,7 @@ export default function ProjectStatsStrip({ stats, statsLoading, statsError, emb
               <div className="flex items-center justify-center gap-1.5">
                 <span className="shrink-0">{kpi.icon}</span>
                 <span
-                  className={`text-[20px] font-semibold leading-[1.05] tracking-[-0.03em] tabular-nums text-text${
+                  className={`text-xl font-semibold leading-[1.05] tracking-[-0.03em] tabular-nums text-text${
                     isQuiet ? " opacity-70" : ""
                   }`}
                 >

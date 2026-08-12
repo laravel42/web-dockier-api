@@ -63,12 +63,12 @@ export default function StepProvider({ state, providers, onChange }: {
               </div>
               <span className={`text-xs font-medium ${selected ? "text-foreground" : "text-text"}`}>{meta.name}</span>
               {matching.length === 1 && (
-                <span className={`text-[10px] truncate max-w-full ${selected ? "text-primary" : "text-primary-500"}`}>
+                <span className={`text-xs truncate max-w-full ${selected ? "text-primary" : "text-primary-500"}`}>
                   {matching[0].label}
                 </span>
               )}
               {matching.length > 1 && (
-                <span className={`text-[10px] ${selected ? "text-primary" : "text-primary-500"}`}>
+                <span className={`text-xs ${selected ? "text-primary" : "text-primary-500"}`}>
                   {matching.length} accounts
                 </span>
               )}

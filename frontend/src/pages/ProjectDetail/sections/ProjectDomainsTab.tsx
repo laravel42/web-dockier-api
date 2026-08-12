@@ -291,7 +291,7 @@ function DomainsSection({
             <p className="text-sm font-medium text-text">Allow wildcard subdomains</p>
             <p className="text-xs text-text-muted mt-0.5">
               Allow all subdomains to accept traffic, e.g.{" "}
-              <code className="rounded border border-border/60 bg-secondary-50/30 px-1.5 py-0.5 text-[11px] font-mono text-text">
+              <code className="rounded border border-border/60 bg-secondary-50/30 px-1.5 py-0.5 text-xs font-mono text-text">
                 *.{primaryDomain.name}
               </code>
             </p>
@@ -335,8 +335,8 @@ function CertificateRow({
   const statusColors: Record<SslCertificate["status"], string> = {
     active: settingsBadgeCls.success,
     pending: settingsBadgeCls.warning,
-    expired: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-[10px] font-medium text-danger-300",
-    failed: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-[10px] font-medium text-danger-300",
+    expired: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-xs font-medium text-danger-300",
+    failed: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-xs font-medium text-danger-300",
   };
 
   const statusDotColors: Record<SslCertificate["status"], string> = {
@@ -628,7 +628,7 @@ function NginxConfigModal({
               {config}
             </pre>
           </div>
-          <p className="mt-3 text-[11px] text-amber-500 flex items-center gap-1.5">
+          <p className="mt-3 text-xs text-amber-500 flex items-center gap-1.5">
             <InfoIcon className="size-3.5 shrink-0" />
             This is the auto-generated config based on your domains. Changes are applied via Sync.
           </p>

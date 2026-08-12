@@ -115,7 +115,7 @@ export default function TagPicker({
         {selectedTags.map((tag) => (
           <span
             key={tag.id}
-            className="inline-flex items-center gap-1 rounded border border-primary-500/40 bg-primary-500/10 px-1.5 py-0.5 text-[11px] font-medium text-primary-400"
+            className="inline-flex items-center gap-1 rounded border border-primary-500/40 bg-primary-500/10 px-1.5 py-0.5 text-xs font-medium text-primary-400"
           >
             {tag.name}
             {!disabled && (

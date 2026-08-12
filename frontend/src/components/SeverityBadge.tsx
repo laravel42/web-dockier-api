@@ -44,7 +44,7 @@ export default function SeverityBadge({ severity, count, label, size = "default"
     <span
       className={`inline-flex items-center border whitespace-nowrap font-medium ${s.border} ${s.bg} ${s.text} ${
         compact
-          ? "gap-0.5 rounded px-1 py-px text-[10px] leading-tight"
+          ? "gap-0.5 rounded px-1 py-px text-xs/tight "
           : "gap-1 rounded-md px-2 py-0.5 text-xs font-semibold"
       }`}
     >

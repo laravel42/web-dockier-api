@@ -22,13 +22,13 @@ const SIZE_STYLES = {
   compact: {
     pad: "px-1 py-px gap-0.5 rounded-md",
     icon: "size-3",
-    text: "text-[11px]",
+    text: "text-xs",
     showIcon: true,
   },
   sidebar: {
     pad: "branch-badge--sidebar gap-0.5 rounded",
     icon: "size-2.5",
-    text: "text-[10px] leading-none",
+    text: "text-xs leading-none",
     showIcon: true,
   },
 } as const;
@@ -43,7 +43,7 @@ export default function BranchCommitLabel({ branch, commit, onClick, size = "def
       <span className={`font-medium text-text truncate ${styles.text}`}>{branch}</span>
       {commit && (
         <>
-          <span className="text-text-muted/40 shrink-0 text-[10px]">·</span>
+          <span className="text-text-muted/40 shrink-0 text-xs">·</span>
           <span className={`font-mono text-primary-500 shrink-0 tabular-nums ${styles.text}`}>
             {commit.slice(0, 7)}
           </span>

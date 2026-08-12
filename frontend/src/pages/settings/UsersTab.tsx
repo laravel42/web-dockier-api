@@ -260,7 +260,7 @@ export default function UsersTab() {
                     {u.roleName ? (
                       <span className={settingsBadgeCls.primary}>{u.roleName}</span>
                     ) : (
-                      <span className="text-[10px] text-text-muted">No role</span>
+                      <span className="text-xs text-text-muted">No role</span>
                     )}
                     {u.isOwner && (
                       <span className={settingsBadgeCls.warning}>Owner</span>
@@ -395,7 +395,7 @@ export default function UsersTab() {
               return (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {role.permissions.map(p => (
-                    <span key={p} className="px-1.5 py-0.5 bg-secondary-50 text-text-muted rounded text-[10px]">{p}</span>
+                    <span key={p} className="px-1.5 py-0.5 bg-secondary-50 text-text-muted rounded text-xs">{p}</span>
                   ))}
                 </div>
               );

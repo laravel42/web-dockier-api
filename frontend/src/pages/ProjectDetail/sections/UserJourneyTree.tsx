@@ -139,7 +139,7 @@ export default function UserJourneyTree({ journey }: Props) {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-text">User Journey</h2>
-            <p className="text-[11px] text-text-muted">{total} steps</p>
+            <p className="text-xs text-text-muted">{total} steps</p>
           </div>
         </div>
       </div>
