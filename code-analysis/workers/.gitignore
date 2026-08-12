@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node (admin UI)
+admin/node_modules/
+admin/.next/
+admin/tsconfig.tsbuildinfo
+
+# OS
+.DS_Store
