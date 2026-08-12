@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ChevronsUpDown } from "lucide-react";
 
 import {
@@ -36,6 +36,7 @@ interface SearchableComboboxProps {
   allowEmpty?: boolean;
   emptyLabel?: string;
   "aria-invalid"?: boolean;
+  "aria-labelledby"?: string;
 }
 
 export function SearchableCombobox({
@@ -51,8 +52,10 @@ export function SearchableCombobox({
   allowEmpty,
   emptyLabel = "None",
   "aria-invalid": ariaInvalid,
+  "aria-labelledby": ariaLabelledBy,
 }: SearchableComboboxProps) {
   const [open, setOpen] = useState(false);
+  const listId = useId();
 
   const selected = options.find((option) => option.value === value);
   const displayLabel =
@@ -67,6 +70,9 @@ export function SearchableCombobox({
           type="button"
           role="combobox"
           aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-controls={listId}
+          aria-labelledby={ariaLabelledBy}
           disabled={disabled}
           aria-invalid={ariaInvalid}
           className={cn(
@@ -89,7 +95,7 @@ export function SearchableCombobox({
       >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
+          <CommandList id={listId}>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {allowEmpty &&

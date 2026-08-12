@@ -51,7 +51,7 @@ export default function ConfirmModal({
   };
 
   return (
-    <Modal open={open} onClose={pending ? () => {} : onClose} title={title} compact>
+    <Modal open={open} onClose={pending ? () => {} : onClose} title={title}>
       <p className="text-sm text-text-secondary">{message}</p>
 
       {error && (

@@ -592,9 +592,10 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
 
   return createPortal(
     <div className="fixed inset-0 z-99999" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      {/* Mouse-only dismissal; Escape closes this surface as well. */}
+      <div aria-hidden="true" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto bg-card rounded-xl border border-border shadow-(--shadow-overlay) max-w-xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="pointer-events-auto bg-card rounded-xl border border-border shadow-(--shadow-overlay) max-w-xl w-full max-h-[80vh] flex flex-col">
           <div className="px-5 pt-4 pb-3 border-b border-border flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1">

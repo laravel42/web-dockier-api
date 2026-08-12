@@ -17,6 +17,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import { PlusIcon, Grid2X2PlusIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 const PM_TYPES = new Set(["linear", "jira"]);
 
@@ -397,7 +398,7 @@ export default function IntegrationsTab() {
           {integrations.map((intg) => {
             const cat = INTEGRATION_CATALOG.find(c => c.type === intg.type);
             return (
-              <div key={intg.id} onClick={() => canManage && openEdit(intg)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
+              <div key={intg.id} {...clickableProps(() => openEdit(intg), canManage)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <div className="size-8  flex items-center justify-center shrink-0">

@@ -6,6 +6,7 @@ import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
 import { isScanSecurityClean, scanHasSecurityErrors } from "@/utils/scanSummary";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { ShieldCheckIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   project: Project | undefined;
@@ -37,7 +38,7 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
           : "bg-secondary-400";
 
   return (
-    <div onClick={() => onSelect(latest.id)} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
+    <div {...clickableProps(() => onSelect(latest.id))} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
       <div className="flex items-center gap-3 min-w-0">
         <ShieldCheckIcon className="size-5 shrink-0 text-primary-500" />
         <span className={`${typeCardMeta} truncate`}>

@@ -14,6 +14,7 @@ import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 export default function ProvidersTab() {
   const { has } = usePermissions();
@@ -199,7 +200,7 @@ export default function ProvidersTab() {
       ) : (
         <div className={settingsCardGridCls}>
           {providerList.map((p) => (
-            <div key={p.id} onClick={() => canManage && openEdit(p)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
+            <div key={p.id} {...clickableProps(() => openEdit(p), canManage)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="size-8  flex items-center justify-center shrink-0">

@@ -3,6 +3,7 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardMeta, typeCardTitle } from "@/utils/styles";
 import type { Project, TechBadgeInfo } from "@/types";
 import { ShieldCheckIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   project: Project | undefined;
@@ -14,7 +15,7 @@ interface Props {
 
 export default function EmptyProjectCard({ project, projectId, badges, badgeLoading, onSelect }: Props) {
   return (
-    <div onClick={onSelect} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
+    <div {...clickableProps(onSelect)} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
       <div className="flex items-center gap-3 min-w-0">
         <ShieldCheckIcon className="size-5 shrink-0 text-text-muted" />
         <span className={`${typeCardMeta} truncate`}>No scans</span>

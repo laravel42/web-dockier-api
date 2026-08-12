@@ -11,6 +11,7 @@ import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
 import Button from "@/components/ui/Button";
 import { PlusIcon, ShieldCheckIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 function isAdminRole(role: RoleItem | null): boolean {
   if (!role) return false;
@@ -108,7 +109,7 @@ export default function RolesTab() {
           {roleList.map((r) => (
             <div
               key={r.id}
-              onClick={() => r.isEditable && canManage ? setEditingRole(r) : undefined}
+              {...clickableProps(() => setEditingRole(r), Boolean(r.isEditable && canManage))}
               className={`${r.isEditable && canManage ? settingsCardInteractiveCls : settingsCardCls}${r.isEditable && canManage ? "" : " opacity-75"}`}
             >
               <div className="flex items-center gap-3 mb-4">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { observeApi } from "@/services/observe";
 import type {
   Heartbeat,
@@ -15,7 +15,8 @@ import ConfirmModal from "@/components/ConfirmModal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
-import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 
 interface Props {
   project: Project;
@@ -226,6 +227,7 @@ function CreateHeartbeatModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const fid = useId();
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState<HeartbeatFrequency>("every_minute");
   const [gracePeriod, setGracePeriod] = useState<HeartbeatGracePeriod>("after_5_minutes");
@@ -254,8 +256,8 @@ function CreateHeartbeatModal({
     <Modal open onClose={onClose} title="New heartbeat">
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text">Name</label>
-          <Input
+          <label className="mb-1.5 block text-sm font-medium text-text" htmlFor={`${fid}-name`}>Name</label>
+          <Input id={`${fid}-name`}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -265,9 +267,9 @@ function CreateHeartbeatModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-text">Frequency</label>
+          <label className="mb-1 block text-sm font-medium text-text" htmlFor={`${fid}-frequency`}>Frequency</label>
           <p className="mb-1.5 text-xs text-text-muted">How frequently the scheduled task runs.</p>
-          <select value={frequency} onChange={(e) => setFrequency(e.target.value as HeartbeatFrequency)} className={selectCls}>
+          <select id={`${fid}-frequency`} value={frequency} onChange={(e) => setFrequency(e.target.value as HeartbeatFrequency)} className={selectCls}>
             {FREQUENCY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -275,11 +277,11 @@ function CreateHeartbeatModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-text">Notify me after</label>
+          <label className="mb-1 block text-sm font-medium text-text" htmlFor={`${fid}-notify-me-after`}>Notify me after</label>
           <p className="mb-1.5 text-xs text-text-muted">
             The amount of time to wait after a scheduled job's expected run time before sending a notification.
           </p>
-          <select value={gracePeriod} onChange={(e) => setGracePeriod(e.target.value as HeartbeatGracePeriod)} className={selectCls}>
+          <select id={`${fid}-notify-me-after`} value={gracePeriod} onChange={(e) => setGracePeriod(e.target.value as HeartbeatGracePeriod)} className={selectCls}>
             {GRACE_PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -344,6 +346,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
       {/* Header with log type selector and actions */}
       <div className="flex items-center justify-between">
         <select
+          aria-label="Log to view"
           value={activeLogType}
           onChange={(e) => setActiveLogType(e.target.value as LogType)}
           className="h-8 w-auto max-w-48 min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-ui transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 appearance-none"
@@ -360,6 +363,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
               onClick={() => setConfirmClear(true)}
               className="text-xs text-text-muted hover:text-danger-500 transition-colors disabled:opacity-50"
               title="Delete contents"
+            aria-label="Delete log contents"
             >
               <Trash2Icon className="size-4" />
             </button>
@@ -370,6 +374,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
             disabled={!logEntry}
             className="text-xs text-text-muted hover:text-text transition-colors disabled:opacity-50"
             title="Download"
+            aria-label="Download log"
           >
             <DownloadIcon className="size-4" />
           </button>
@@ -378,6 +383,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
             onClick={() => fetchLog(activeLogType)}
             className="text-xs text-text-muted hover:text-text transition-colors"
             title="Refresh"
+            aria-label="Refresh log"
           >
             <RefreshCwIcon className="size-4" />
           </button>
@@ -385,7 +391,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
       </div>
 
       {/* Log content */}
-      <div className="flex-1 min-h-0 max-h-[60vh] rounded-lg border border-border bg-terminal overflow-auto">
+      <div tabIndex={0} role="region" aria-label="Log contents" className="flex-1 min-h-0 max-h-[60vh] rounded-lg border border-border bg-terminal overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner className="size-4" />
@@ -567,76 +573,55 @@ function ActivityDetailModal({
   const timestamp = new Date(entry.createdAt).toLocaleString();
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Event details"
-      tabIndex={-1}
-    >
-      <div
-        className="mx-4 flex w-full max-w-2xl flex-col rounded-xl border border-border bg-card shadow-(--shadow-overlay)"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-border px-5 py-4">
-          <div>
-            <h3 className="text-base font-semibold text-text">Event details</h3>
-            <p className="mt-0.5 text-sm text-text-muted">{subtitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-card/60 hover:text-text"
-            aria-label="Close"
-          >
-            <XIcon className="size-5" />
-          </button>
-        </div>
+    <Modal open onClose={onClose} title="Event details" size="lg">
+      {/* Pulled up under the heading: this is the title's subtitle, not body copy. */}
+      <p className="-mt-3 mb-4 text-sm text-text-muted">{subtitle}</p>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-5">
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Spinner className="size-4" />
-            </div>
-          ) : output ? (
-            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all">
-              {output}
-            </pre>
-          ) : entry.metadata && Object.keys(entry.metadata).length > 0 ? (
-            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all">
-              {JSON.stringify(entry.metadata, null, 2)}
-            </pre>
-          ) : (
-            <p className="text-sm text-text-muted text-center py-6">No additional details available for this event.</p>
-          )}
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <Spinner className="size-4" />
         </div>
+      ) : output ? (
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Event details output"
+          className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all"
+        >
+          {output}
+        </pre>
+      ) : entry.metadata && Object.keys(entry.metadata).length > 0 ? (
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Event details output"
+          className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all"
+        >
+          {JSON.stringify(entry.metadata, null, 2)}
+        </pre>
+      ) : (
+        <p className="py-6 text-center text-sm text-text-muted">No additional details available for this event.</p>
+      )}
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border px-5 py-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded border border-border bg-background px-2 py-0.5 font-mono text-xs text-text">
-              {timestamp}
-            </span>
-            <span className="text-xs text-text-muted">
-              {formatRelativeTime(entry.createdAt)}
-              {entry.actorName && <> by {entry.actorName}</>}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border bg-background px-4 py-1.5 text-sm font-medium text-text transition-colors hover:bg-card"
-          >
-            Close
-          </button>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <div className="flex items-center gap-2">
+          <span className="rounded border border-border bg-background px-2 py-0.5 font-mono text-xs text-text">
+            {timestamp}
+          </span>
+          <span className="text-xs text-text-muted">
+            {formatRelativeTime(entry.createdAt)}
+            {entry.actorName && <> by {entry.actorName}</>}
+          </span>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-border bg-background px-4 py-1.5 text-sm font-medium text-text transition-colors hover:bg-card"
+        >
+          Close
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -657,30 +642,38 @@ function ActivityEventIcon({ eventType }: { eventType: string }) {
   );
 }
 
+const SECTIONS: { key: ObserveSection; label: string }[] = [
+  { key: "heartbeats", label: "Heartbeats" },
+  { key: "logs", label: "Logs" },
+  { key: "activity", label: "Activity" },
+];
+const SECTION_KEYS = SECTIONS.map((s) => s.key);
+
 // ─── Main Component ───
 
 export default function ProjectObserveTab({ project }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
   const [activeSection, setActiveSection] = useState<ObserveSection>("heartbeats");
+  const handleSectionKeyDown = useTabListKeyboard(SECTION_KEYS, setActiveSection);
 
   if (permissionsLoading) return <TabSpinner label="Loading…" />;
-
-  const sections: { key: ObserveSection; label: string }[] = [
-    { key: "heartbeats", label: "Heartbeats" },
-    { key: "logs", label: "Logs" },
-    { key: "activity", label: "Activity" },
-  ];
 
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {/* Section nav as a topbar */}
-      <nav className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide" aria-label="Observe sections">
-        {sections.map((section) => (
+      <div className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide" role="tablist" aria-label="Observe sections">
+        {SECTIONS.map((section) => (
           <button
             key={section.key}
             type="button"
+            role="tab"
+            id={tabId(section.key)}
+            aria-controls={panelId(section.key)}
+            aria-selected={activeSection === section.key}
+            tabIndex={activeSection === section.key ? 0 : -1}
             onClick={() => setActiveSection(section.key)}
+            onKeyDown={(e) => handleSectionKeyDown(e, section.key)}
             className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               activeSection === section.key
                 ? "bg-primary/10 text-text"
@@ -690,10 +683,16 @@ export default function ProjectObserveTab({ project }: Props) {
             {section.label}
           </button>
         ))}
-      </nav>
+      </div>
 
       {/* Content area */}
-      <div className="flex-1 min-w-0 min-h-0 overflow-auto">
+      <div
+        role="tabpanel"
+        id={panelId(activeSection)}
+        aria-labelledby={tabId(activeSection)}
+        tabIndex={0}
+        className="flex-1 min-w-0 min-h-0 overflow-auto"
+      >
         {activeSection === "heartbeats" && <HeartbeatsSection project={project} canManage={canManage} />}
         {activeSection === "logs" && <LogsSection project={project} canManage={canManage} />}
         {activeSection === "activity" && <ActivitySection project={project} />}

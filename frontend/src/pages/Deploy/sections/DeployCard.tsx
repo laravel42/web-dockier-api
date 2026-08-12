@@ -5,6 +5,7 @@ import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   repo: string;
@@ -28,7 +29,7 @@ export default function DeployCard({ repo, deploys, project, badges, badgeLoadin
           : "bg-secondary-400";
 
   return (
-    <div onClick={onClick} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
+    <div {...clickableProps(onClick)} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
       <div className="flex items-center gap-3 min-w-0">
         <RocketIcon className="size-5 shrink-0 text-primary-500" />
         <span className={`${typeCardMeta} truncate`}>

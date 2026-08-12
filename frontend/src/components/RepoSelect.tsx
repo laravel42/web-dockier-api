@@ -8,6 +8,8 @@ import { ArchiveIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 
 interface Props {
   value: string;
+  /** id of the visible <label> that names this control. */
+  labelledBy?: string;
   onChange: (fullName: string) => void;
   repos: Repo[];
   loading?: boolean;
@@ -15,7 +17,7 @@ interface Props {
   refreshing?: boolean;
 }
 
-export default function RepoSelect({ value, onChange, repos, loading, onRefresh, refreshing }: Props) {
+export default function RepoSelect({ value, onChange, repos, loading, onRefresh, refreshing, labelledBy }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,9 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
       <button
         ref={triggerRef}
         type="button"
+        aria-labelledby={labelledBy}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => { if (!open) updatePos(); setOpen(!open); }}
         className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
       >

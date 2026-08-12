@@ -6,6 +6,7 @@ import { getRepoSlug } from "@/utils/parseOwnerRepo";
 import { cardInteractiveCls, typeCardDateCls, typeCardTitle } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import type { Project, TechBadgeInfo } from "@/types";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   project: Project;
@@ -26,7 +27,7 @@ export default function ProjectCard({ project: p, badges, badgeLoading, repoFavi
 
   return (
     <div
-      onClick={() => onSelect(p.id)}
+      {...clickableProps(() => onSelect(p.id))}
       className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}
     >
       {/* Header: avatar + title */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useId } from "react";
 import { processesApi } from "@/services/processes";
 import { deployApi } from "@/services/api";
 import type {
@@ -15,6 +15,7 @@ import { getFrameworkById } from "@/config/frameworks";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import Spinner from "@/components/Spinner";
+import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
@@ -416,6 +417,7 @@ function CreateProcessModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const fid = useId();
   const [name, setName] = useState(editProcess?.name || "");
   const [type, setType] = useState<ProcessType>(editProcess?.type || "queue_worker");
   const [command, setCommand] = useState(editProcess?.command || "");
@@ -535,9 +537,9 @@ function CreateProcessModal({
         )}
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text">Name</label>
+          <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-name`}>Name</label>
           <p className="text-xs text-text-muted mb-1.5">Add a custom display name for the background process.</p>
-          <Input type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="" />
+          <Input id={`${fid}-name`} type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="" />
         </div>
 
         {/* Type tabs */}
@@ -549,74 +551,74 @@ function CreateProcessModal({
         {type === "queue_worker" ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-runtime`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 Runtime
               </label>
-              <select  value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
+              <select id={`${fid}-runtime`}  value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
                 {RUNTIME_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             {currentRuntimeOpts && currentRuntimeOpts.versions.length > 0 && (
               <div className="flex items-center gap-3">
-                <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+                <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-version`}>
                   <InfoIcon className="size-3.5 text-primary-500" />
                   Version
                 </label>
-                <select  value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
+                <select id={`${fid}-version`}  value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
                   {currentRuntimeOpts.versions.map((v) => <option key={v} value={v}>{currentRuntimeOpts.label} {v}</option>)}
                 </select>
               </div>
             )}
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-field-3`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 {runtime === "php" ? "Connection" : "Entry point"}
               </label>
-              <Input type="text"  value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
+              <Input id={`${fid}-field-3`} type="text"  value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
             </div>
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-processes`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 processes
               </label>
-              <Input type="number"  value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
+              <Input id={`${fid}-processes`} type="number"  value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
             </div>
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-queue`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 --queue
               </label>
-              <Input type="text"  value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
+              <Input id={`${fid}-queue`} type="text"  value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
             </div>
 
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-timeout`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 Timeout
               </label>
               <div className="relative flex-1">
-                <Input type="number" className={` pr-16`} value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={0} />
+                <Input id={`${fid}-timeout`} type="number" className={` pr-16`} value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={0} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-tries`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 Tries
               </label>
               <div className="relative flex-1">
-                <Input type="number" className={` pr-12`} value={tries} onChange={(e) => setTries(Number(e.target.value))} min={0} />
+                <Input id={`${fid}-tries`} type="number" className={` pr-12`} value={tries} onChange={(e) => setTries(Number(e.target.value))} min={0} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">tries</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+              <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-memory`}>
                 <InfoIcon className="size-3.5 text-primary-500" />
                 Memory
               </label>
               <div className="relative flex-1">
-                <Input type="number" className={` pr-10`} value={memory} onChange={(e) => setMemory(Number(e.target.value))} min={32} />
+                <Input id={`${fid}-memory`} type="number" className={` pr-10`} value={memory} onChange={(e) => setMemory(Number(e.target.value))} min={32} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">MB</span>
               </div>
             </div>
@@ -624,54 +626,48 @@ function CreateProcessModal({
             {runtime === "php" && (
               <>
                 <div className="flex items-center gap-3">
-                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-backoff`}>
                     <InfoIcon className="size-3.5 text-primary-500" />
                     --backoff
                   </label>
                   <div className="relative flex-1">
-                    <Input type="number" className={` pr-16`} value={backoff} onChange={(e) => setBackoff(Number(e.target.value))} min={0} />
+                    <Input id={`${fid}-backoff`} type="number" className={` pr-16`} value={backoff} onChange={(e) => setBackoff(Number(e.target.value))} min={0} />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-sleep`}>
                     <InfoIcon className="size-3.5 text-primary-500" />
                     --sleep
                   </label>
                   <div className="relative flex-1">
-                    <Input type="number" className={` pr-16`} value={sleep} onChange={(e) => setSleep(Number(e.target.value))} min={0} />
+                    <Input id={`${fid}-sleep`} type="number" className={` pr-16`} value={sleep} onChange={(e) => setSleep(Number(e.target.value))} min={0} />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-rest`}>
                     <InfoIcon className="size-3.5 text-primary-500" />
                     --rest
                   </label>
                   <div className="relative flex-1">
-                    <Input type="number" className={` pr-16`} value={rest} onChange={(e) => setRest(Number(e.target.value))} min={0} />
+                    <Input id={`${fid}-rest`} type="number" className={` pr-16`} value={rest} onChange={(e) => setRest(Number(e.target.value))} min={0} />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5" htmlFor={`${fid}-env`}>
                     <InfoIcon className="size-3.5 text-primary-500" />
                     --env
                   </label>
-                  <Input type="text"  value={env} onChange={(e) => setEnv(e.target.value)} />
+                  <Input id={`${fid}-env`} type="text"  value={env} onChange={(e) => setEnv(e.target.value)} />
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="w-28 text-xs text-text-muted flex items-center gap-1.5">
+                  <span className="w-28 text-xs text-text-muted flex items-center gap-1.5">
                     <InfoIcon className="size-3.5 text-primary-500" />
                     --force
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setForce(!force)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${force ? "bg-primary-500" : "bg-border"}`}
-                  >
-                    <span className={`inline-block size-3.5 transform rounded-full bg-white transition-transform ${force ? "translate-x-4.5" : "translate-x-1"}`} />
-                  </button>
+                  </span>
+                  <ToggleSwitch checked={force} onChange={setForce} ariaLabel="--force" />
                 </div>
               </>
             )}
@@ -685,9 +681,9 @@ function CreateProcessModal({
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-text">Command</label>
+              <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-command`}>Command</label>
               <p className="text-xs text-text-muted mb-1.5">The command that should run for this background process.</p>
-              <Input type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="node worker.js" />
+              <Input id={`${fid}-command`} type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="node worker.js" />
             </div>
             <div className="rounded-lg border border-border p-4">
               <div className="flex items-center justify-between mb-3">
@@ -737,6 +733,7 @@ function CreateJobModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const fid = useId();
   const [name, setName] = useState(editJob?.name || "");
   const [command, setCommand] = useState(editJob?.command || "");
   const [user, setUser] = useState(editJob?.user || "root");
@@ -783,24 +780,24 @@ function CreateJobModal({
         )}
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text">Name</label>
-          <Input type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="My scheduled job" required />
+          <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-name`}>Name</label>
+          <Input id={`${fid}-name`} type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="My scheduled job" required />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text">Command</label>
+          <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-command`}>Command</label>
           <p className="text-xs text-text-muted mb-1.5">Commands should use fully qualified paths.</p>
-          <Input type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="php /home/app/artisan schedule:run" required />
+          <Input id={`${fid}-command`} type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="php /home/app/artisan schedule:run" required />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text">User</label>
-          <Input type="text"  value={user} onChange={(e) => setUser(e.target.value)} placeholder="root" />
+          <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-user`}>User</label>
+          <Input id={`${fid}-user`} type="text"  value={user} onChange={(e) => setUser(e.target.value)} placeholder="root" />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text">Frequency</label>
-          <select  value={frequency} onChange={(e) => setFrequency(e.target.value as JobFrequency)}>
+          <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-frequency`}>Frequency</label>
+          <select id={`${fid}-frequency`}  value={frequency} onChange={(e) => setFrequency(e.target.value as JobFrequency)}>
             <option value="every_minute">Every minute</option>
             <option value="hourly">Hourly</option>
             <option value="nightly">Nightly</option>
@@ -813,8 +810,8 @@ function CreateJobModal({
 
         {frequency === "custom" && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-text">Custom Cron Expression</label>
-            <Input type="text"  value={customCron} onChange={(e) => setCustomCron(e.target.value)} placeholder="*/5 * * * *" />
+            <label className="mb-1 block text-xs font-medium text-text" htmlFor={`${fid}-custom-cron-expression`}>Custom Cron Expression</label>
+            <Input id={`${fid}-custom-cron-expression`} type="text"  value={customCron} onChange={(e) => setCustomCron(e.target.value)} placeholder="*/5 * * * *" />
           </div>
         )}
 
@@ -823,13 +820,7 @@ function CreateJobModal({
             <p className="text-xs font-medium text-text">Monitor with heartbeats</p>
             <p className="text-xs text-text-muted">Generate a URL to ping after the job has run.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setMonitorHeartbeat(!monitorHeartbeat)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${monitorHeartbeat ? "bg-primary-500" : "bg-border"}`}
-          >
-            <span className={`inline-block size-3.5 transform rounded-full bg-white transition-transform ${monitorHeartbeat ? "translate-x-4.5" : "translate-x-1"}`} />
-          </button>
+          <ToggleSwitch checked={monitorHeartbeat} onChange={setMonitorHeartbeat} ariaLabel="Monitor with heartbeats" />
         </div>
 
         {error && <p className="text-xs text-danger-500">{error}</p>}

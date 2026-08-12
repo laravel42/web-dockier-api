@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,7 @@ export default function CredentialSection<T extends Credential>({
   onRemove,
   renderCredential,
 }: CredentialSectionProps<T>) {
+  const fid = useId();
   const [showAddModal, setShowAddModal] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [revealedFields, setRevealedFields] = useState<Set<string>>(new Set());
@@ -169,7 +170,7 @@ export default function CredentialSection<T extends Credential>({
           <div className="flex flex-col gap-4">
             {fields.map((field, idx) => (
               <div key={field.key}>
-                <label className="mb-1.5 block text-sm font-medium text-text-muted">
+                <label className="mb-1.5 block text-sm font-medium text-text-muted" htmlFor={`${fid}-${field.key}`}>
                   {field.label}
                   {field.optional && (
                     <span className="inline-flex items-center rounded border border-border/60 bg-card/40 px-1.5 py-0.5 text-xs font-medium text-text-muted ml-1">
@@ -180,6 +181,7 @@ export default function CredentialSection<T extends Credential>({
                 {field.secret ? (
                   <div className="relative">
                     <Input
+                      id={`${fid}-${field.key}`}
                       type={revealedFields.has(field.key) ? "text" : "password"}
                       value={formValues[field.key] ?? ""}
                       onChange={(e) => setFormValues({ ...formValues, [field.key]: e.target.value })}
@@ -191,6 +193,7 @@ export default function CredentialSection<T extends Credential>({
                       variant="ghost"
                       onClick={() => toggleReveal(field.key)}
                       className="absolute right-0 top-1/2 -translate-y-1/2"
+                      aria-label={`${revealedFields.has(field.key) ? "Hide" : "Show"} ${field.label}`}
                     >
                       {revealedFields.has(field.key) ? (
                         <EyeOffIcon className="size-4" />
@@ -201,6 +204,7 @@ export default function CredentialSection<T extends Credential>({
                   </div>
                 ) : (
                   <Input
+                    id={`${fid}-${field.key}`}
                     type="text"
                     value={formValues[field.key] ?? ""}
                     onChange={(e) => setFormValues({ ...formValues, [field.key]: e.target.value })}

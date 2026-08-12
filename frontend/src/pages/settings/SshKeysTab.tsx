@@ -15,6 +15,7 @@ import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import Alert from "@/components/ui/Alert";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { KeyRoundIcon, PlusIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 export default function SshKeysTab() {
   const { has } = usePermissions();
@@ -104,7 +105,7 @@ export default function SshKeysTab() {
         {viewingKey && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">Algorithm</label>
+              <span className="block text-sm font-medium text-text-secondary mb-1.5">Algorithm</span>
               <p className="text-sm text-text">{keyType(viewingKey.publicKey)}</p>
             </div>
             <div>
@@ -140,7 +141,7 @@ export default function SshKeysTab() {
           {keyList.map((k) => (
             <div
               key={k.id}
-              onClick={() => setViewingKey(k)}
+              {...clickableProps(() => setViewingKey(k))}
               className={settingsCardInteractiveCls}
             >
               <div className="flex items-start gap-3 mb-3">

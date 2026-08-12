@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { projectsApi } from "@/services/projects";
 import { gitApi } from "@/services/git";
 import type { Project, Connection, Repo } from "@/types";
@@ -88,6 +88,7 @@ export function GitRepositoryModal({
   project: Project;
   onProjectUpdate?: (project: Project) => void;
 }) {
+  const fid = useId();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [selectedConnectionId, setSelectedConnectionId] = useState(project.connectionId || "");
@@ -164,8 +165,8 @@ export function GitRepositoryModal({
         <p className="text-sm text-text-muted">Configure the Git repository that should be deployed.</p>
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text-muted">Source control</label>
-          <SourceControlSelect
+          <span id={`${fid}-source-control`} className="mb-1.5 block text-sm font-medium text-text-muted">Source control</span>
+          <SourceControlSelect labelledBy={`${fid}-source-control`}
             value={selectedConnectionId}
             onChange={(id) => { setSelectedConnectionId(id); setSelectedRepo(""); }}
             connections={connections}
@@ -175,8 +176,8 @@ export function GitRepositoryModal({
 
         {selectedConnectionId && (
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-text-muted">Repository</label>
-            <RepoSelect value={selectedRepo} onChange={setSelectedRepo} repos={repos} loading={loadingRepos} />
+            <span id={`${fid}-repository`} className="mb-1.5 block text-sm font-medium text-text-muted">Repository</span>
+            <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={setSelectedRepo} repos={repos} loading={loadingRepos} />
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { networkApi } from "@/services/network";
 import type { SecurityRule, RedirectRule } from "@/types";
 import type { Project } from "@/types";
@@ -257,6 +257,7 @@ function CreateSecurityRuleModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const fid = useId();
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [credentials, setCredentials] = useState<Array<{ username: string; password: string }>>([]);
@@ -309,8 +310,8 @@ function CreateSecurityRuleModal({
     <Modal open onClose={onClose} title="New security rule">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">Name</label>
-          <Input
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-name`}>Name</label>
+          <Input id={`${fid}-name`}
             type="text"
             
             placeholder="Restricted Access"
@@ -321,13 +322,13 @@ function CreateSecurityRuleModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-path-optional`}>
             Path <span className="text-text-muted/60 ml-1 font-normal">Optional</span>
           </label>
           <p className="text-xs text-text-muted mb-1.5">
             Leave blank to password protect all routes within your site. Any valid Nginx location path is acceptable.
           </p>
-          <Input
+          <Input id={`${fid}-path-optional`}
             type="text"
             
             placeholder="/admin"
@@ -407,6 +408,7 @@ function InlineCredentialForm({
 }: {
   onAdd: (cred: { username: string; password: string }) => void;
 }) {
+  const fid = useId();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -420,8 +422,8 @@ function InlineCredentialForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-1 block text-xs font-medium text-text-muted">Username</label>
-        <Input
+        <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-username`}>Username</label>
+        <Input id={`${fid}-username`}
           type="text"
           
           value={username}
@@ -430,9 +432,9 @@ function InlineCredentialForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-text-muted">Password</label>
+        <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-password`}>Password</label>
         <div className="relative">
-          <Input
+          <Input id={`${fid}-password`}
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -473,6 +475,7 @@ function AddCredentialModal({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const fid = useId();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -501,8 +504,8 @@ function AddCredentialModal({
     <Modal open onClose={onClose} title="New security credential">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">Username</label>
-          <Input
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-username`}>Username</label>
+          <Input id={`${fid}-username`}
             type="text"
             
             value={username}
@@ -511,9 +514,9 @@ function AddCredentialModal({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">Password</label>
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-password`}>Password</label>
           <div className="relative">
-            <Input
+            <Input id={`${fid}-password`}
               type={showPassword ? "text" : "password"}
               
               value={password}
@@ -669,6 +672,7 @@ function CreateRedirectRuleModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const fid = useId();
   const [fromPath, setFromPath] = useState("");
   const [toPath, setToPath] = useState("");
   const [type, setType] = useState<"temporary" | "permanent">("temporary");
@@ -698,8 +702,8 @@ function CreateRedirectRuleModal({
     <Modal open onClose={onClose} title="New redirect rule">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">From</label>
-          <Input
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-from`}>From</label>
+          <Input id={`${fid}-from`}
             type="text"
             
             placeholder="/from"
@@ -709,8 +713,8 @@ function CreateRedirectRuleModal({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">To</label>
-          <Input
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-to`}>To</label>
+          <Input id={`${fid}-to`}
             type="text"
             placeholder="/to"
             value={toPath}
@@ -719,8 +723,8 @@ function CreateRedirectRuleModal({
           />
         </div>
         <div>
-          <label className="mb-2 block text-xs font-medium text-text-muted">Type</label>
-          <div className="rounded-lg border border-border divide-y divide-border">
+          <span id={`${fid}-redirect-type`} className="mb-2 block text-xs font-medium text-text-muted">Type</span>
+          <div role="radiogroup" aria-labelledby={`${fid}-redirect-type`} className="rounded-lg border border-border divide-y divide-border">
             <label className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-secondary-50/50 transition-colors">
               <input
                 type="radio"

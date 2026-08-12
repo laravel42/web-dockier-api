@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { tagsApi } from "@/services/tags";
 import type { TagWithCount } from "@/types";
 import { useToast } from "@/context/useToast";
@@ -9,6 +9,7 @@ import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { EllipsisVerticalIcon, SearchIcon } from "lucide-react";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 interface ManageTagsModalProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface ManageTagsModalProps {
 }
 
 export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps) {
+  const fid = useId();
   const toast = useToast();
 
   const { data, loading, reload, setData } = useAsyncData(
@@ -29,6 +31,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
   const [newTagName, setNewTagName] = useState("");
   const [search, setSearch] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  useEscapeKey(menuOpenId !== null, () => setMenuOpenId(null));
   const [deleting, setDeleting] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -81,9 +84,9 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
 
         {/* Add tag */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text">Add tag</label>
+          <label className="mb-1.5 block text-sm font-medium text-text" htmlFor={`${fid}-add-tag`}>Add tag</label>
           <div className="flex items-center gap-2">
-            <Input
+            <Input id={`${fid}-add-tag`}
               type="text"
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
@@ -103,12 +106,12 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
 
         {/* Tags list */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text">Tags</label>
+          <label className="mb-1.5 block text-sm font-medium text-text" htmlFor={`${fid}-tags`}>Tags</label>
           <div className="rounded-lg border border-border">
             {/* Search */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 transition-colors focus-within:border-primary/60">
               <SearchIcon className="size-4 text-text-muted" />
-              <input
+              <input id={`${fid}-tags`}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -182,7 +185,8 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
                         </Button>
                         {menuOpenId === tag.id && (
                           <>
-                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                            {/* Mouse-only dismissal; Escape closes this surface as well. */}
+                        <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
                             <div className="absolute right-0 top-full z-20 mt-1 w-32 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1">
                               <button
                                 type="button"

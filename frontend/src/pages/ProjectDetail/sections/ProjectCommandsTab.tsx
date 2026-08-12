@@ -8,7 +8,8 @@ import { formatCardDateTime } from "@/utils/formatCardDate";
 import { statusBadgeColors } from "@/utils/styles";
 import Spinner from "@/components/Spinner";
 import ConfirmModal from "@/components/ConfirmModal";
-import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react";
+import Modal from "@/components/Modal";
+import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 
 const PAGE_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
@@ -385,41 +386,21 @@ export default function ProjectCommandsTab({ project }: Props) {
 
       {/* Output modal */}
       {outputModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setOutputModal(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setOutputModal(null); }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Command output"
-          tabIndex={-1}
-        >
-          <div
-            className="mx-4 w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-(--shadow-overlay)"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-text">Command Output</h3>
-              <button
-                type="button"
-                onClick={() => setOutputModal(null)}
-                className="flex size-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-card/60 hover:text-text"
-                aria-label="Close"
-              >
-                <XIcon className="size-4" />
-              </button>
-            </div>
-            <p className="mb-2 font-mono text-xs text-text-muted break-all">{outputModal.command}</p>
-            <div className="flex items-center gap-2 mb-3">
-              <StatusBadge status={outputModal.status} />
-              <span className="text-xs text-text-muted">{formatCardDateTime(outputModal.startedAt)}</span>
-            </div>
-            <pre className="max-h-64 overflow-auto rounded-lg border border-border/50 bg-background p-3 font-mono text-xs/relaxed text-text  scrollbar-hide whitespace-pre-wrap break-all">
-              {outputModal.output || "No output available."}
-            </pre>
+        <Modal open onClose={() => setOutputModal(null)} title="Command output">
+          <p className="mb-2 font-mono text-xs text-text-muted break-all">{outputModal.command}</p>
+          <div className="mb-3 flex items-center gap-2">
+            <StatusBadge status={outputModal.status} />
+            <span className="text-xs text-text-muted">{formatCardDateTime(outputModal.startedAt)}</span>
           </div>
-        </div>
+          <pre
+            tabIndex={0}
+            role="region"
+            aria-label="Command output"
+            className="max-h-64 overflow-auto rounded-lg border border-border/50 bg-background p-3 font-mono text-xs/relaxed text-text scrollbar-hide whitespace-pre-wrap break-all"
+          >
+            {outputModal.output || "No output available."}
+          </pre>
+        </Modal>
       )}
 
       <ConfirmModal

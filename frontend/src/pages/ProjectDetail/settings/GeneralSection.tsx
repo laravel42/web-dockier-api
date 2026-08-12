@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
 import { useToast } from "@/context/useToast";
@@ -25,6 +25,7 @@ interface Props {
 }
 
 export default function GeneralSection({ project, canManage, onProjectUpdate }: Props) {
+  const fid = useId();
   const [name] = useState(project.name);
   const [selectedColor, setSelectedColor] = useState(project.settings?.color ?? PROJECT_COLORS[0]);
   const [showNotes, setShowNotes] = useState(!!project.settings?.notes);
@@ -179,12 +180,12 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
 
         <div className="flex flex-col gap-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted">Root directory</label>
+            <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-root-directory`}>Root directory</label>
             <div className="flex items-center gap-0">
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}
               </span>
-              <Input
+              <Input id={`${fid}-root-directory`}
                 type="text"
                 defaultValue="/"
                 disabled={!canManage}
@@ -194,12 +195,12 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted">Web directory</label>
+            <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-web-directory`}>Web directory</label>
             <div className="flex items-center gap-0">
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}
               </span>
-              <Input
+              <Input id={`${fid}-web-directory`}
                 type="text"
                 defaultValue="/current/public"
                 disabled={!canManage}
@@ -318,10 +319,10 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             <span className="font-semibold text-text">{project.name}</span> will be permanently deleted.
           </p>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted">
+            <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-type-to-confirm`}>
               Type <span className="font-mono text-text">{project.name}</span> to confirm
             </label>
-            <Input
+            <Input id={`${fid}-type-to-confirm`}
               type="text"
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}

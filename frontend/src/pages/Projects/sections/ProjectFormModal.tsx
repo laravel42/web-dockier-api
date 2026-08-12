@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import Modal from "@/components/Modal";
 import SourceControlSelect from "@/components/SourceControlSelect";
 import RepoSelect from "@/components/RepoSelect";
@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import type { Connection, Repo } from "@/types";
 import { CheckIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 interface Props {
   open: boolean;
@@ -47,11 +48,13 @@ export default function ProjectFormModal({
   branches, selectedBranch, onBranchChange, loadingBranches,
   error,
 }: Props) {
+  const fid = useId();
   const needsSourceControl = platform !== "wordpress";
   const isRepoReady = !needsSourceControl || (!!selectedRepo && !!selectedBranch);
   const canSubmit = editing || (!!platform && !!form.name && isRepoReady);
 
   const [frameworkOpen, setFrameworkOpen] = useState(false);
+  useEscapeKey(frameworkOpen, () => setFrameworkOpen(false));
   const selectedFramework = FRAMEWORK_CATEGORIES.flatMap((c) => c.frameworks).find((fw) => fw.id === platform);
 
   return (
@@ -60,9 +63,12 @@ export default function ProjectFormModal({
         {/* Framework/Platform selector — first step */}
         {!editing && (
           <div className="relative">
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Framework</label>
+            <span id={`${fid}-framework`} className="block text-sm font-medium text-text-secondary mb-1.5">Framework</span>
             <button
               type="button"
+              aria-labelledby={`${fid}-framework`}
+              aria-haspopup="listbox"
+              aria-expanded={frameworkOpen}
               onClick={() => setFrameworkOpen(!frameworkOpen)}
               className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
             >
@@ -79,7 +85,8 @@ export default function ProjectFormModal({
 
             {frameworkOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setFrameworkOpen(false)} />
+                {/* Mouse-only dismissal; Escape closes this surface as well. */}
+              <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setFrameworkOpen(false)} />
                 <div className="absolute inset-x-0  top-full z-20 mt-1 rounded-(--radius-input) border border-border bg-card shadow-(--shadow-overlay) max-h-64 overflow-y-auto">
                   {FRAMEWORK_CATEGORIES.map((category) => (
                     <div key={category.name}>
@@ -134,8 +141,8 @@ export default function ProjectFormModal({
         {needsSourceControl && !editing && (
           <>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</label>
-              <SourceControlSelect
+              <span id={`${fid}-source-control`} className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</span>
+              <SourceControlSelect labelledBy={`${fid}-source-control`}
                 value={selectedConnectionId}
                 onChange={onConnectionChange}
                 connections={connections}
@@ -155,15 +162,15 @@ export default function ProjectFormModal({
 
             {selectedConnectionId && (
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
-                <RepoSelect value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} onRefresh={onRefreshRepos} refreshing={refreshingRepos} />
+                <span id={`${fid}-repository`} className="block text-sm font-medium text-text-secondary mb-1.5">Repository</span>
+                <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} onRefresh={onRefreshRepos} refreshing={refreshingRepos} />
               </div>
             )}
 
             {selectedRepo && (
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">Branch</label>
-                <BranchSelect value={selectedBranch} onChange={onBranchChange} branches={branches} loading={loadingBranches} />
+                <span id={`${fid}-branch`} className="block text-sm font-medium text-text-secondary mb-1.5">Branch</span>
+                <BranchSelect labelledBy={`${fid}-branch`} value={selectedBranch} onChange={onBranchChange} branches={branches} loading={loadingBranches} />
               </div>
             )}
           </>

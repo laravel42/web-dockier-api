@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { usersApi, rolesApi } from "@/services/api";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -17,6 +17,7 @@ import { useToast } from "@/context/useToast";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 interface UserItem {
   id: string;
@@ -40,6 +41,7 @@ interface RoleItem {
 }
 
 export default function UsersTab() {
+  const fid = useId();
   const { userId } = useAuth();
   const toast = useToast();
   const { has, refresh: refreshPermissions } = usePermissions();
@@ -243,7 +245,7 @@ export default function UsersTab() {
             return (
               <div
                 key={u.id}
-                onClick={() => editable && openEdit(u)}
+                {...clickableProps(() => openEdit(u), editable)}
                 className={editable ? settingsCardInteractiveCls : settingsCardCls}
               >
                 <div className="flex items-start gap-3 mb-4">
@@ -287,10 +289,10 @@ export default function UsersTab() {
           <SettingsTextField id="invite-email" label="Email" requiredMark required type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" />
           <SettingsTextField id="invite-name" label="Name" requiredMark required type="text" value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Password <span className="text-danger-500">*</span></label>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-password`}>Password <span className="text-danger-500">*</span></label>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Input
+                <Input id={`${fid}-password`}
                   type={showPassword ? "text" : "password"}
                   value={inviteForm.password}
                   onChange={(e) => {

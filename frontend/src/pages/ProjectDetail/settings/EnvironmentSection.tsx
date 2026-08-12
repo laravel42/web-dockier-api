@@ -111,8 +111,7 @@ export default function EnvironmentSection({ project, canManage }: Props) {
             <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-xs font-mono text-primary-500">
               APP_ENV_ENCRYPTION_KEY
             </code>{" "}
-            environment variable by providing your encryption key below.{" "}
-            <a href="#" className="text-primary-500 hover:text-primary-400 transition-colors">Learn more</a>
+            environment variable by providing your encryption key below.
           </p>
         </div>
         <Input

@@ -145,7 +145,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">Site public key</label>
+          <span className="mb-1 block text-xs font-medium text-text-muted">Site public key</span>
           <p className="text-xs text-text-muted mb-2">
             Typically, this key will automatically be added to GitHub, GitLab. However, if you need to add it to a source control service manually, you may copy it from here.
           </p>

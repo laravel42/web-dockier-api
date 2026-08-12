@@ -6,13 +6,15 @@ import { CodeXmlIcon, ChevronDownIcon } from "lucide-react";
 
 interface Props {
   value: string;
+  /** id of the visible <label> that names this control. */
+  labelledBy?: string;
   onChange: (branch: string) => void;
   branches: string[];
   loading?: boolean;
   onReload?: () => void;
 }
 
-export default function BranchSelect({ value, onChange, branches, loading, onReload }: Props) {
+export default function BranchSelect({ value, onChange, branches, loading, onReload, labelledBy }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -60,6 +62,9 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
       <button
         ref={triggerRef}
         type="button"
+        aria-labelledby={labelledBy}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => { if (!open) { setSearch(""); updatePos(); } setOpen(!open); }}
         className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
       >

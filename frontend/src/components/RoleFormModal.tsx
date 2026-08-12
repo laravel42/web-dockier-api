@@ -277,14 +277,25 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
                   {!isCollapsed && (
                     <div>
                       {group.permissions.map((perm) => (
-                        <label
+                        <div
                           key={perm.key}
                           className={`flex items-start gap-2.5 px-3 py-2 pl-5 transition-colors hover:bg-muted/50 ${
                             perm.locked ? "cursor-default" : "cursor-pointer"
                           }`}
                         >
                           <span
+                            role="checkbox"
+                            aria-checked={selected.has(perm.key)}
+                            aria-disabled={perm.locked || undefined}
+                            aria-label={perm.key}
+                            tabIndex={perm.locked ? -1 : 0}
                             onClick={(e) => { e.preventDefault(); toggle(perm.key, perm.locked); }}
+                            onKeyDown={(e) => {
+                              if (e.key === " " || e.key === "Enter") {
+                                e.preventDefault();
+                                toggle(perm.key, perm.locked);
+                              }
+                            }}
                             className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors ${
                               selected.has(perm.key)
                                 ? "border-primary bg-primary text-primary-foreground"
@@ -306,7 +317,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
                             </div>
                             <p className="mt-0.5 text-xs text-muted-foreground">{perm.label}</p>
                           </div>
-                        </label>
+                        </div>
                       ))}
                     </div>
                   )}

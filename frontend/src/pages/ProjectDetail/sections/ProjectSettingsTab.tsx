@@ -49,7 +49,7 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {/* Section nav as a topbar; the panel below owns the full width */}
-      <nav className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide" role="tablist" aria-label="Settings sections">
+      <div className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide" role="tablist" aria-label="Settings sections">
         {sections.map((section) => (
           <button
             key={section.key}
@@ -70,7 +70,7 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
             {section.label}
           </button>
         ))}
-      </nav>
+      </div>
 
       {/* Content area */}
       <div

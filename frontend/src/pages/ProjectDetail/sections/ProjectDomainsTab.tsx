@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { domainsApi } from "@/services/domains";
 import type { Domain, SslCertificate } from "@/types";
 import type { Project } from "@/types";
@@ -13,6 +13,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 interface Props {
   project: Project;
@@ -41,6 +42,7 @@ function DomainRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  useEscapeKey(menuOpen, () => setMenuOpen(false));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<{ verified: boolean; message: string } | null>(null);
@@ -110,7 +112,8 @@ function DomainRow({
               </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                {/* Mouse-only dismissal; Escape closes this surface as well. */}
+                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1">
                   <button
                     type="button"
@@ -331,6 +334,7 @@ function CertificateRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  useEscapeKey(menuOpen, () => setMenuOpen(false));
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const typeLabels: Record<SslCertificate["type"], string> = {
@@ -390,7 +394,8 @@ function CertificateRow({
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                {/* Mouse-only dismissal; Escape closes this surface as well. */}
+                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1">
                   <button
                     type="button"
@@ -513,6 +518,7 @@ function CreateCertificateModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const fid = useId();
   const [type, setType] = useState<SslCertificate["type"]>("lets_encrypt");
   const [domainName, setDomainName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -569,8 +575,8 @@ function CreateCertificateModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">Domain</label>
-          <Input
+          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-domain`}>Domain</label>
+          <Input id={`${fid}-domain`}
             type="text"
             placeholder="your-domain.com"
             value={domainName}

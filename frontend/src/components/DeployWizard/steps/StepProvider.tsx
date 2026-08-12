@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Link } from "react-router-dom";
 import type { WizardState, Provider } from "../types";
 import { PROVIDER_META } from "../constants";
@@ -9,6 +10,7 @@ export default function StepProvider({ state, providers, onChange }: {
   providers: Provider[];
   onChange: (provider: string, providerId: string) => void;
 }) {
+  const fid = useId();
   const configuredSlugs = [...new Set(providers.map((p) => p.provider))];
   const configuredProviders = configuredSlugs
     .map((slug) => [slug, PROVIDER_META[slug]] as const)
@@ -84,14 +86,16 @@ export default function StepProvider({ state, providers, onChange }: {
 
       {state.selectedProvider && providersByType(state.selectedProvider).length > 1 && (
         <div className="mt-4">
-          <label className="block text-sm font-medium text-text mb-1.5">Select account</label>
-          <div className="flex flex-col gap-1.5">
+          <span id={`${fid}-account`} className="block text-sm font-medium text-text mb-1.5">Select account</span>
+          <div role="radiogroup" aria-labelledby={`${fid}-account`} className="flex flex-col gap-1.5">
             {providersByType(state.selectedProvider).map((p) => {
               const isActive = state.selectedProviderId === p.id;
               return (
                 <button
                   key={p.id}
                   type="button"
+                  role="radio"
+                  aria-checked={isActive}
                   onClick={() => onChange(state.selectedProvider, p.id)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 text-left transition-all ${
                     isActive ? choiceCardSelectedCls : choiceCardIdleCls

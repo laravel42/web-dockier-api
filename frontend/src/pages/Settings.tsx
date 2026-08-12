@@ -62,7 +62,7 @@ export default function Settings() {
   return (
     <div>
       <PageHeader title="Settings" description="Account, team, and integrations." />
-      <div className="flex flex-wrap gap-2 mb-6" role="tablist">
+      <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Settings sections">
         {visibleTabs.map(({ key, label }) => (
           <button
             key={key}

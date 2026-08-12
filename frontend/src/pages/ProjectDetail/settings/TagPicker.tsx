@@ -6,6 +6,8 @@ import { getErrorMessage } from "@/utils/errors";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { CheckIcon, CirclePlusIcon, XIcon } from "lucide-react";
 import ManageTagsModal from "./ManageTagsModal";
+import { clickableProps } from "@/utils/a11y";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 // ─── Types ───
 
@@ -25,6 +27,7 @@ export default function TagPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  useEscapeKey(open, () => { setOpen(false); setInputValue(""); });
   const [showManage, setShowManage] = useState(false);
   const toast = useToast();
 
@@ -107,7 +110,7 @@ export default function TagPicker({
     <div className="relative">
       {/* Input area with selected tags */}
       <div
-        onClick={() => !disabled && setOpen(true)}
+        {...clickableProps(() => setOpen(true), !disabled)}
         className={`flex min-h-[34px] w-52 flex-wrap items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs cursor-text transition-colors ${
           open ? "border-primary-500 ring-1 ring-primary-500/30" : "border-border"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
@@ -143,7 +146,8 @@ export default function TagPicker({
       {/* Dropdown */}
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setInputValue(""); }} />
+          {/* Mouse-only dismissal; Escape closes this surface as well. */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => { setOpen(false); setInputValue(""); }} />
           <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-card shadow-(--shadow-overlay) overflow-hidden">
             <div className="max-h-48 overflow-y-auto py-1">
               {filteredTags.map((tag) => (

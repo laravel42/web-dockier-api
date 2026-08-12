@@ -1,3 +1,4 @@
+import { useId } from "react";
 import Modal from "@/components/Modal";
 import { SearchableCombobox } from "@/components/ui/combobox";
 import Button from "@/components/ui/Button";
@@ -35,6 +36,7 @@ export default function FixWithAIModal({
   mrReviewer, onReviewerChange,
   onSubmit,
 }: Props) {
+  const fid = useId();
   return (
     <Modal open={open} onClose={onClose} title="Fix with AI">
       {fixResult ? (
@@ -65,18 +67,18 @@ export default function FixWithAIModal({
       ) : finding ? (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
-            <input type="text" value={mrTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
+            <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-title`}>Title</label>
+            <input id={`${fid}-title`} type="text" value={mrTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
               className={`w-full h-11 px-3 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors ${titleGenerating ? "opacity-50 cursor-wait" : ""}`} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
-            <textarea value={mrDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={5}
+            <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-description`}>Description</label>
+            <textarea id={`${fid}-description`} value={mrDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={5}
               className="w-full px-3 py-2 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
-            <SearchableCombobox
+            <span id={`${fid}-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
+            <SearchableCombobox aria-labelledby={`${fid}-assignee`}
               value={mrAssignee}
               onValueChange={onAssigneeChange}
               options={repoMembers.map((m) => ({
@@ -89,8 +91,8 @@ export default function FixWithAIModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">Reviewer</label>
-            <SearchableCombobox
+            <span id={`${fid}-reviewer`} className="block text-sm font-medium text-text-secondary mb-1.5">Reviewer</span>
+            <SearchableCombobox aria-labelledby={`${fid}-reviewer`}
               value={mrReviewer}
               onValueChange={onReviewerChange}
               options={repoMembers.map((m) => ({

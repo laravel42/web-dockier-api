@@ -14,6 +14,7 @@ import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { notifyInAppNotificationsChanged } from "@/hooks/useInAppNotificationsEnabled";
 import { BellIcon, LinkIcon, MailIcon, PlusIcon } from "lucide-react";
+import { clickableProps } from "@/utils/a11y";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
@@ -83,7 +84,7 @@ export default function NotificationChannelsTab() {
         )}
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Channel" compact>
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Channel">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="channel-type" className="block text-sm font-medium text-text-secondary mb-1.5">Channel Type</label>
@@ -195,7 +196,7 @@ export default function NotificationChannelsTab() {
               in_app: <BellIcon className="size-7" />,
             };
             return (
-            <div key={ch.id} onClick={() => canManage && openEditChannel(ch)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
+            <div key={ch.id} {...clickableProps(() => openEditChannel(ch), canManage)} className={canManage ? settingsCardInteractiveCls : settingsCardCls}>
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="size-8  flex items-center justify-center shrink-0 text-text-secondary">

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,7 @@ export default function CreateIssueModal({
   issueCreating, issueSuccess, issueSuccessUrl, issueError, onDismissError,
   onSubmit,
 }: Props) {
+  const fid = useId();
   return (
     <Modal open={open} onClose={onClose} title="Create Issue from Finding">
       {issueSuccess ? (
@@ -97,8 +99,8 @@ export default function CreateIssueModal({
           )}
           {pmIntegrations.length === 0 && repoUrl && (
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">Repository</label>
-              <Input type="text" value={repoUrl} readOnly className="bg-secondary-50 text-text-muted cursor-default" />
+              <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-repository`}>Repository</label>
+              <Input id={`${fid}-repository`} type="text" value={repoUrl} readOnly className="bg-secondary-50 text-text-muted cursor-default" />
             </div>
           )}
           {pmIntegrations.length > 0 && (<>
@@ -179,8 +181,8 @@ export default function CreateIssueModal({
           </div>
           {pmMembers.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
-              <SearchableCombobox
+              <span id={`${fid}-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
+              <SearchableCombobox aria-labelledby={`${fid}-assignee`}
                 value={selectedPmAssignee}
                 onValueChange={onAssigneeChange}
                 options={pmMembers.map((m) => ({
@@ -196,8 +198,9 @@ export default function CreateIssueModal({
           )}
           {pmIntegrations.length === 0 && gitMembers && gitMembers.length > 0 && onGitAssigneeChange && (
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</label>
+              <span id={`${fid}-git-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
               <SearchableCombobox
+                aria-labelledby={`${fid}-git-assignee`}
                 value={selectedGitAssignee || ""}
                 onValueChange={onGitAssigneeChange}
                 options={gitMembers.map((m) => ({
