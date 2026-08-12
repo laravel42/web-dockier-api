@@ -135,8 +135,8 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
                         {((row.commit.additions ?? 0) > 0 || (row.commit.deletions ?? 0) > 0) && (
                           <span className="flex items-center gap-2 tabular-nums">
                             <span>·</span>
-                            <span className="text-emerald-400">{(row.commit.additions ?? 0).toLocaleString()} ++</span>
-                            <span className="text-danger-500">{(row.commit.deletions ?? 0).toLocaleString()} --</span>
+                            <span className="text-success-ink">{(row.commit.additions ?? 0).toLocaleString()} ++<span className="sr-only"> additions</span></span>
+                            <span className="text-danger-ink">{(row.commit.deletions ?? 0).toLocaleString()} --<span className="sr-only"> deletions</span></span>
                           </span>
                         )}
                       </div>

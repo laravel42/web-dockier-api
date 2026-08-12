@@ -85,6 +85,32 @@
   --color-danger-500: #ef4444;
   --color-danger-700: #b91c1c;
 
+  /* ── Signal ramp (F4/B5) ─────────────────────────────────────────────
+     Five ordinal steps for severity, plus success. Each has a fill, a line
+     and an ink; ink clears 4.5:1 on its own fill AND on the bare card, in
+     BOTH themes — measured, see docs/delivery/palette-token-mapping.md.
+     Uniform L/C per theme so the steps read as one family; only hue moves.
+     Dark values live here; [data-theme="light"] overrides below.          */
+  --color-danger-surface: oklch(0.27 0.055 25);
+  --color-danger-line: oklch(0.40 0.075 25);
+  --color-danger-ink: oklch(0.72 0.13 25);
+
+  --color-caution-surface: oklch(0.27 0.055 50);
+  --color-caution-line: oklch(0.40 0.075 50);
+  --color-caution-ink: oklch(0.72 0.13 50);
+
+  --color-warning-surface: oklch(0.27 0.055 75);
+  --color-warning-line: oklch(0.40 0.075 75);
+  --color-warning-ink: oklch(0.72 0.13 75);
+
+  --color-info-surface: oklch(0.27 0.055 240);
+  --color-info-line: oklch(0.40 0.075 240);
+  --color-info-ink: oklch(0.72 0.13 240);
+
+  --color-success-surface: oklch(0.27 0.055 155);
+  --color-success-line: oklch(0.40 0.075 155);
+  --color-success-ink: oklch(0.72 0.13 155);
+
   /* Semantic surfaces — dark-first (matches web-dockier :root) */
   --color-background: oklch(0.17 0.008 50);
   --color-foreground: oklch(0.95 0.008 60);
@@ -201,6 +227,27 @@
   --color-success-50: #ecfdf5;
   --color-warning-50: #fffbeb;
   --color-danger-50: #fef2f2;
+
+  /* Signal ramp — light theme. Same structure, inverted lightness. */
+  --color-danger-surface: oklch(0.955 0.035 25);
+  --color-danger-line: oklch(0.86 0.065 25);
+  --color-danger-ink: oklch(0.50 0.14 25);
+
+  --color-caution-surface: oklch(0.955 0.035 50);
+  --color-caution-line: oklch(0.86 0.065 50);
+  --color-caution-ink: oklch(0.50 0.14 50);
+
+  --color-warning-surface: oklch(0.955 0.035 75);
+  --color-warning-line: oklch(0.86 0.065 75);
+  --color-warning-ink: oklch(0.50 0.14 75);
+
+  --color-info-surface: oklch(0.955 0.035 240);
+  --color-info-line: oklch(0.86 0.065 240);
+  --color-info-ink: oklch(0.50 0.14 240);
+
+  --color-success-surface: oklch(0.955 0.035 155);
+  --color-success-line: oklch(0.86 0.065 155);
+  --color-success-ink: oklch(0.50 0.14 155);
 }
 
 [data-theme="dark"] {

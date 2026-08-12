@@ -103,10 +103,10 @@ export default function SonarQubeRulesPanel() {
       <div className="flex gap-4">
         <RulesFilterSidebar
           severities={[
-            { key: "BLOCKER", label: "Blocker", count: rules.filter(r => r.severity === "BLOCKER").length, color: "text-red-500", icon: "🔴" },
-            { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-orange-500", icon: "🟠" },
-            { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-yellow-500", icon: "🟡" },
-            { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-blue-500", icon: "🔵" },
+            { key: "BLOCKER", label: "Blocker", count: rules.filter(r => r.severity === "BLOCKER").length, color: "text-danger-ink", icon: "🔴" },
+            { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-caution-ink", icon: "🟠" },
+            { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-warning-ink", icon: "🟡" },
+            { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-info-ink", icon: "🔵" },
             { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-text-muted", icon: "⚪" },
           ]}
           activeSeverity={sevFilter}
@@ -167,11 +167,11 @@ export default function SonarQubeRulesPanel() {
                       <div className="flex flex-wrap gap-1.5">
                         {r.impacts.map(i => {
                           const sevColors: Record<string, { statusBg: string; icon: string; iconBg: string; labelBg: string; labelText: string }> = {
-                            BLOCKER: { statusBg: "bg-red-500/30", icon: "text-red-300", iconBg: "bg-red-500", labelBg: "bg-red-500/30 border border-red-500/45", labelText: "text-red-300" },
-                            HIGH: { statusBg: "bg-red-500/30", icon: "text-red-300", iconBg: "bg-red-500", labelBg: "bg-red-500/30 border border-red-500/45", labelText: "text-red-300" },
-                            MEDIUM: { statusBg: "bg-amber-500/30", icon: "text-amber-300", iconBg: "bg-amber-500", labelBg: "bg-amber-500/30 border border-amber-500/45", labelText: "text-amber-300" },
-                            LOW: { statusBg: "bg-emerald-500/30", icon: "text-emerald-300", iconBg: "bg-emerald-500", labelBg: "bg-emerald-500/30 border border-emerald-500/45", labelText: "text-emerald-300" },
-                            INFO: { statusBg: "bg-sky-500/30", icon: "text-sky-300", iconBg: "bg-sky-500", labelBg: "bg-sky-500/30 border border-sky-500/45", labelText: "text-sky-300" },
+                            BLOCKER: { statusBg: "bg-danger-surface", icon: "text-danger-ink", iconBg: "bg-danger-ink", labelBg: "bg-danger-surface border border-danger-line", labelText: "text-danger-ink" },
+                            HIGH: { statusBg: "bg-caution-surface", icon: "text-caution-ink", iconBg: "bg-caution-ink", labelBg: "bg-caution-surface border border-caution-line", labelText: "text-caution-ink" },
+                            MEDIUM: { statusBg: "bg-warning-surface", icon: "text-warning-ink", iconBg: "bg-warning-ink", labelBg: "bg-warning-surface border border-warning-line", labelText: "text-warning-ink" },
+                            LOW: { statusBg: "bg-info-surface", icon: "text-info-ink", iconBg: "bg-info-ink", labelBg: "bg-info-surface border border-info-line", labelText: "text-info-ink" },
+                            INFO: { statusBg: "bg-secondary-500/20", icon: "text-text-muted", iconBg: "bg-secondary-400", labelBg: "bg-secondary-500/20 border border-border/60", labelText: "text-text-muted" },
                           };
                           const s = sevColors[i.severity] || { statusBg: "bg-secondary-500/20", icon: "text-text-muted", iconBg: "bg-secondary-400", labelBg: "bg-secondary-500/20 border border-border/60", labelText: "text-text-muted" };
                           const isUp = i.severity === "HIGH" || i.severity === "MEDIUM" || i.severity === "BLOCKER";

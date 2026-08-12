@@ -175,7 +175,7 @@ export const statusBadgeColors: Record<string, string> = {
   deploying: "bg-primary-500/10 text-primary-500",
   pending: "bg-secondary-100 text-text-muted",
   destroyed: "bg-secondary-100 text-text-muted",
-  cancelled: "bg-amber-500/10 text-amber-600",
+  cancelled: "bg-warning-surface text-warning-ink",
   completed: "bg-success-500/10 text-success-500",
   running: "bg-primary-500/10 text-primary-500",
 };
@@ -186,8 +186,8 @@ const settingsBadgeBase =
 /** Bordered tone badges for settings cards and metadata pills (dark-mode friendly). */
 export const settingsBadgeCls = {
   primary: `${settingsBadgeBase} border-primary-500/45 bg-primary-500/30 text-primary-300`,
-  success: `${settingsBadgeBase} border-success-500/45 bg-success-500/30 text-success-300`,
-  warning: `${settingsBadgeBase} border-amber-500/45 bg-amber-500/30 text-amber-300`,
+  success: `${settingsBadgeBase} border-success-line bg-success-surface text-success-ink`,
+  warning: `${settingsBadgeBase} border-warning-line bg-warning-surface text-warning-ink`,
   muted: `${settingsBadgeBase} border-border/60 bg-secondary-50/30 text-text-muted`,
 } as const;
 

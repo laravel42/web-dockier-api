@@ -362,10 +362,10 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
 // ─── AI Sensitive Data Tab ───
 
 const RISK_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
-  high: { bg: "bg-orange-500/30", text: "text-orange-300", border: "border-orange-500/45" },
-  medium: { bg: "bg-amber-500/30", text: "text-amber-300", border: "border-amber-500/45" },
-  low: { bg: "bg-emerald-500/30", text: "text-emerald-300", border: "border-emerald-500/45" },
+  critical: { bg: "bg-danger-surface", text: "text-danger-ink", border: "border-danger-line" },
+  high: { bg: "bg-caution-surface", text: "text-caution-ink", border: "border-caution-line" },
+  medium: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
+  low: { bg: "bg-info-surface", text: "text-info-ink", border: "border-info-line" },
 };
 
 function riskLevelFromScore(score: number): keyof typeof RISK_COLORS {
@@ -399,11 +399,11 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {/* Summary */}
       {data.summary.criticalFindings.length > 0 && (
-        <div className="mb-3 shrink-0 p-3 rounded-lg bg-red-500/30 border border-red-500/30">
-          <p className="text-xs font-semibold text-red-400 mb-1">Critical Findings</p>
+        <div className="mb-3 shrink-0 p-3 rounded-lg bg-danger-surface border border-danger-line">
+          <p className="text-xs font-semibold text-danger-ink mb-1">Critical Findings</p>
           <ul className="space-y-0.5">
             {data.summary.criticalFindings.map((f, i) => (
-              <li key={i} className="text-xs text-red-300">• {f}</li>
+              <li key={i} className="text-xs text-danger-ink">• {f}</li>
             ))}
           </ul>
         </div>
@@ -535,16 +535,16 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
 // ─── Vulnerability Modal & Dependencies Tab ───
 
 const VULN_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
-  high: { bg: "bg-orange-500/30", text: "text-orange-300", border: "border-orange-500/45" },
-  medium: { bg: "bg-amber-500/30", text: "text-amber-300", border: "border-amber-500/45" },
-  low: { bg: "bg-blue-500/30", text: "text-blue-300", border: "border-blue-500/45" },
+  critical: { bg: "bg-danger-surface", text: "text-danger-ink", border: "border-danger-line" },
+  high: { bg: "bg-caution-surface", text: "text-caution-ink", border: "border-caution-line" },
+  medium: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
+  low: { bg: "bg-info-surface", text: "text-info-ink", border: "border-info-line" },
 };
 
 const DEP_STATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-  active: { bg: "bg-emerald-500/30", text: "text-emerald-300", border: "border-emerald-500/45" },
-  outdated: { bg: "bg-amber-500/30", text: "text-amber-300", border: "border-amber-500/45" },
-  deprecated: { bg: "bg-red-500/30", text: "text-red-300", border: "border-red-500/45" },
+  active: { bg: "bg-success-surface", text: "text-success-ink", border: "border-success-line" },
+  outdated: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
+  deprecated: { bg: "bg-danger-surface", text: "text-danger-ink", border: "border-danger-line" },
 };
 
 const DEFAULT_TONE_BADGE = { bg: "bg-secondary-500/30", text: "text-text-secondary", border: "border-border" };
@@ -670,7 +670,7 @@ function DependencyRow({
       <span className="text-xs font-mono w-[10%] truncate">
         {dependency.latestVersion ? (
           dependency.latestVersion === dependency.version
-            ? <span className="text-emerald-400">{dependency.latestVersion}</span>
+            ? <span className="text-success-ink">{dependency.latestVersion}</span>
             : <span className="text-amber-400">{dependency.latestVersion}</span>
         ) : <span className="text-text-muted">—</span>}
       </span>
@@ -1018,7 +1018,7 @@ export default function ProjectDescription({
                   </span>
                 )}
                 {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                  <span className="rounded-sm border border-red-500/40 bg-red-500/30 px-1.5 py-0.5 text-xs font-semibold text-red-400">
+                  <span className="rounded-sm border border-danger-line bg-danger-surface px-1.5 py-0.5 text-xs font-semibold text-danger-ink">
                     {uploadedSensitiveData.length}
                   </span>
                 )}

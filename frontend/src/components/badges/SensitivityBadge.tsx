@@ -1,9 +1,9 @@
 const STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  public:    { bg: "bg-emerald-500/30", text: "text-emerald-400", label: "Public" },
-  internal:  { bg: "bg-blue-500/30",    text: "text-blue-400",    label: "Internal" },
-  personal:  { bg: "bg-amber-500/30",   text: "text-amber-400",   label: "Personal" },
-  sensitive: { bg: "bg-orange-500/30",  text: "text-orange-400",  label: "Sensitive" },
-  secret:    { bg: "bg-red-500/30",     text: "text-red-400",     label: "Secret" },
+  public:    { bg: "bg-success-surface", text: "text-success-ink", label: "Public" },
+  internal:  { bg: "bg-info-surface",    text: "text-info-ink",    label: "Internal" },
+  personal:  { bg: "bg-warning-surface", text: "text-warning-ink", label: "Personal" },
+  sensitive: { bg: "bg-caution-surface", text: "text-caution-ink", label: "Sensitive" },
+  secret:    { bg: "bg-danger-surface",  text: "text-danger-ink",  label: "Secret" },
 };
 
 interface Props {

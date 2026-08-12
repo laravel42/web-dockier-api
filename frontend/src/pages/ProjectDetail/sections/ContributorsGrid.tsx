@@ -79,8 +79,8 @@ export default function ContributorsGrid({ stats, nameByLogin }: Props) {
                   </div>
                   {(c.additions > 0 || c.deletions > 0) && (
                     <div className="mt-0.5 flex items-center justify-end gap-2 text-xs tabular-nums">
-                      <span className="text-emerald-400">{c.additions.toLocaleString()} ++</span>
-                      <span className="text-danger-500">{c.deletions.toLocaleString()} --</span>
+                      <span className="text-success-ink">{c.additions.toLocaleString()} ++<span className="sr-only"> additions</span></span>
+                      <span className="text-danger-ink">{c.deletions.toLocaleString()} --<span className="sr-only"> deletions</span></span>
                     </div>
                   )}
                 </div>

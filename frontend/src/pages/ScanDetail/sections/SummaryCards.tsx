@@ -29,19 +29,19 @@ const TONE_STYLES: Record<CardTone, { value: string; surface: string; active: st
     active: "ring-2 ring-primary/40 border-primary/35 bg-primary/5",
   },
   error: {
-    value: "text-danger-500",
-    surface: "border-danger-500/25 bg-danger-500/8 hover:bg-danger-500/12",
-    active: "ring-2 ring-danger-500/40 border-danger-500/40 bg-danger-500/12",
+    value: "text-danger-ink",
+    surface: "border-danger-line/50 bg-danger-surface/50 hover:bg-danger-surface",
+    active: "ring-2 ring-danger-line border-danger-line bg-danger-surface",
   },
   warning: {
-    value: "text-warning-500",
-    surface: "border-warning-500/25 bg-warning-500/8 hover:bg-warning-500/12",
-    active: "ring-2 ring-warning-500/40 border-warning-500/40 bg-warning-500/12",
+    value: "text-warning-ink",
+    surface: "border-warning-line/50 bg-warning-surface/50 hover:bg-warning-surface",
+    active: "ring-2 ring-warning-line border-warning-line bg-warning-surface",
   },
   info: {
-    value: "text-sky-400",
-    surface: "border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/15",
-    active: "ring-2 ring-sky-500/40 border-sky-500/40 bg-sky-500/15",
+    value: "text-info-ink",
+    surface: "border-info-line/50 bg-info-surface/50 hover:bg-info-surface",
+    active: "ring-2 ring-info-line border-info-line bg-info-surface",
   },
 };
 

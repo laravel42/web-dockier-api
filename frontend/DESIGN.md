@@ -17,6 +17,21 @@ colors:
   signal-success: "#10b981"
   signal-warning: "#f59e0b"
   signal-danger: "#ef4444"
+  danger-surface: "oklch(0.27 0.055 25)"
+  danger-line: "oklch(0.40 0.075 25)"
+  danger-ink: "oklch(0.72 0.13 25)"
+  caution-surface: "oklch(0.27 0.055 50)"
+  caution-line: "oklch(0.40 0.075 50)"
+  caution-ink: "oklch(0.72 0.13 50)"
+  warning-surface: "oklch(0.27 0.055 75)"
+  warning-line: "oklch(0.40 0.075 75)"
+  warning-ink: "oklch(0.72 0.13 75)"
+  info-surface: "oklch(0.27 0.055 240)"
+  info-line: "oklch(0.40 0.075 240)"
+  info-ink: "oklch(0.72 0.13 240)"
+  success-surface: "oklch(0.27 0.055 155)"
+  success-line: "oklch(0.40 0.075 155)"
+  success-ink: "oklch(0.72 0.13 155)"
   destructive: "oklch(0.65 0.2 25)"
   legacy-berry: "#AB2022"
   legacy-seed: "#E3AF45"
@@ -183,6 +198,41 @@ The graphite ramp is the entire structural vocabulary. Each step is one percepti
 **The Severity Is Not Brand Rule.** Success, Warning, and Danger (`#10b981`, `#f59e0b`, `#ef4444`) are a separate, functional language. They never borrow ochre, and ochre never stands in for them. Likewise the legacy berry (`#AB2022`), seed, dusk, and cream scales are reserved for severity states and marketing accents only — they are not the product's identity and must not return as primary surfaces.
 
 **The Warm Neutral Rule.** No true gray. Every neutral carries hue 50–60 at chroma 0.008–0.012. A `#71717a` dropped into this system reads instantly as foreign.
+
+### The Signal Ramp
+
+Severity is a **five-step ordinal scale plus success**, not four ad-hoc colours. Each step carries
+three tokens — `surface` (fill), `line` (border), `ink` (text and icon).
+
+| Step | Hue | Reads as |
+|---|---|---|
+| `danger` | 25 | Critical · blocker · secret · deprecated |
+| `caution` | 50 | High · sensitive |
+| `warning` | 75 | Medium · personal · outdated · cancelled |
+| `info` | 240 | Low · internal · informational |
+| `success` | 155 | Clean · none · active · public |
+
+Within a theme, **lightness and chroma are identical across all steps**; only hue moves. That is
+what makes six different signals read as one family rather than six opinions. Dark uses
+`surface oklch(0.27 0.055 H)` / `line oklch(0.40 0.075 H)` / `ink oklch(0.72 0.13 H)`; light uses
+`0.955 0.035` / `0.86 0.065` / `0.50 0.14` at the same hues.
+
+**Every ink clears 4.5:1 on its own surface and on the bare card, in both themes.** Worst case is
+4.89:1. This is a hard floor, not an aspiration — the previous raw-palette pills measured as low as
+1.21:1 on the light card.
+
+**Low is `info`, never `success`.** A low-severity finding is still a finding. Green means *there is
+nothing to do here* — clean, none, active, public. Using it for "low" tells the user a problem is a
+non-problem.
+
+**The `-50 / -100 / -500 / -700` signal steps are legacy.** They are light-mode tints and a fixed
+hex text colour; `bg-danger-50` on the dark card is a near-white pill. Do not reach for them for new
+badge work — they remain only for surfaces not yet migrated (see
+`docs/delivery/palette-token-mapping.md`).
+
+**Severity is never carried by colour alone.** Every severity surface pairs its colour with a label,
+a count, or a glyph. The `++`/`--` diff counters keep their punctuation and add a screen-reader-only
+word.
 
 ### Light Theme
 
