@@ -42,14 +42,14 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
     { key: "notifications", label: "Notifications" },
   ], [project.sourceType, project.template]);
   const sectionKeys = useMemo(() => sections.map((s) => s.key), [sections]);
-  const handleSectionKeyDown = useTabListKeyboard(sectionKeys, setActiveSection, "vertical");
+  const handleSectionKeyDown = useTabListKeyboard(sectionKeys, setActiveSection);
 
   if (permissionsLoading) return <TabSpinner label="Loading…" />;
 
   return (
-    <div className="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row">
-      {/* Left sidebar */}
-      <nav className="flex shrink-0 flex-col gap-1 md:w-36" role="tablist" aria-orientation="vertical">
+    <div className="flex min-h-0 flex-col gap-4">
+      {/* Section nav as a topbar; the panel below owns the full width */}
+      <nav className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-none" role="tablist" aria-label="Settings sections">
         {sections.map((section) => (
           <button
             key={section.key}
@@ -61,10 +61,10 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
             tabIndex={activeSection === section.key ? 0 : -1}
             onClick={() => setActiveSection(section.key)}
             onKeyDown={(e) => handleSectionKeyDown(e, section.key)}
-            className={`text-left px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               activeSection === section.key
-                ? "bg-primary-500/10 text-text border-l-2 border-primary-500"
-                : "text-text-muted hover:text-text hover:bg-card/60"
+                ? "bg-primary/10 text-text"
+                : "text-text-muted hover:bg-card/60 hover:text-text"
             }`}
           >
             {section.label}

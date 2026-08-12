@@ -851,7 +851,7 @@ export default function ProjectProcessesTab({ project }: Props) {
 
   const [subTab, setSubTab] = useState<SubTab>("processes");
   const subTabKeys: SubTab[] = ["processes", "scheduler"];
-  const handleSubTabKeyDown = useTabListKeyboard(subTabKeys, setSubTab, "vertical");
+  const handleSubTabKeyDown = useTabListKeyboard(subTabKeys, setSubTab);
   const [processes, setProcesses] = useState<BackgroundProcess[]>([]);
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -907,14 +907,18 @@ export default function ProjectProcessesTab({ project }: Props) {
   }
 
   const subTabCls = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-      active ? "bg-primary-500/10 text-text" : "text-text-muted hover:bg-card/60 hover:text-text"
+    `shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+      active ? "bg-primary/10 text-text" : "text-text-muted hover:bg-card/60 hover:text-text"
     }`;
 
   return (
-    <div className="flex flex-col gap-6 pr-1 md:flex-row">
-      {/* Sub-tab sidebar */}
-      <div className="flex shrink-0 flex-col gap-1 md:w-44" role="tablist" aria-orientation="vertical">
+    <div className="flex min-h-0 flex-col gap-4 pr-1">
+      {/* Sub-tab nav as a topbar */}
+      <div
+        className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-none"
+        role="tablist"
+        aria-label="Process sections"
+      >
         <button
           type="button"
           role="tab"

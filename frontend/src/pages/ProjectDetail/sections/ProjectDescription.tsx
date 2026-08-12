@@ -820,7 +820,7 @@ export default function ProjectDescription({
   }, [has, isOwner, permissionsLoading]);
 
   const visibleMainTabKeys = useMemo(() => visibleMainTabs.map((t) => t.key), [visibleMainTabs]);
-  const handleMainTabKeyDown = useTabListKeyboard(visibleMainTabKeys, setActiveMainTab);
+  const handleMainTabKeyDown = useTabListKeyboard(visibleMainTabKeys, setActiveMainTab, "both");
 
   const activeMainTabSafe = visibleMainTabs.some((t) => t.key === activeMainTab)
     ? activeMainTab
@@ -969,15 +969,25 @@ export default function ProjectDescription({
   );
 
   return (
-    <div className={`${cardCls} mb-8 overflow-hidden`}>
+    <div className={`${cardCls} mb-8`}>
 
-      <div className="flex min-h-[420px] flex-col px-4 pt-4 pb-5 sm:px-5 md:min-h-[600px]">
-        {/* Main tab nav */}
-        <div className="flex min-h-11 shrink-0 items-center gap-3 border-b border-border mb-4">
-          <div
-            className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)]"
-            role="tablist"
-          >
+      <div className="flex min-h-[420px] flex-col md:min-h-[600px] md:flex-row">
+        {/*
+          Tab nav as a sidebar. Twelve peers never fit a horizontal strip — they
+          overflowed behind a mask with no affordance, hiding Security and
+          Settings, the two highest-stakes destinations. A column shows all of
+          them at once and scrolls independently of the panel beside it.
+          Below md it becomes a scrolling strip, since twelve stacked rows would
+          push content ~430px down a phone.
+        */}
+        <div className="shrink-0 border-b border-border md:w-52 md:self-stretch md:border-b-0 md:border-r">
+          <div className="md:sticky md:top-0 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto md:overscroll-contain md:scrollbar-hide">
+            <div
+              className="flex items-stretch gap-0.5 overflow-x-auto overflow-y-hidden p-2 scrollbar-none mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:overflow-x-visible md:mask-none"
+              role="tablist"
+              aria-orientation="vertical"
+              aria-label="Project sections"
+            >
             {visibleMainTabs.map((tab) => (
               <button
                 key={tab.key}
@@ -989,10 +999,10 @@ export default function ProjectDescription({
                 tabIndex={activeMainTabSafe === tab.key ? 0 : -1}
                 onClick={() => setActiveMainTab(tab.key)}
                 onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
-                className={`flex shrink-0 items-center gap-1.5 p-3  text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
                   activeMainTabSafe === tab.key
-                    ? "border-primary-500 text-text"
-                    : "border-transparent text-text-muted hover:text-text"
+                    ? "bg-primary/10 text-text"
+                    : "text-text-muted hover:bg-card/60 hover:text-text"
                 }`}
               >
                 {tab.label}
@@ -1008,10 +1018,11 @@ export default function ProjectDescription({
                 )}
               </button>
             ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col pt-4">
+        <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-5">
           <div
             role="tabpanel"
             id={panelId(activeMainTabSafe)}
