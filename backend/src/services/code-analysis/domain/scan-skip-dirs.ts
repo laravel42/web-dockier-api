@@ -54,11 +54,61 @@ export function isScanSkippedRelativePath(relativePath: string): boolean {
   return segments.some((segment) => isScanSkippedDirName(segment));
 }
 
+
+/**
+ * Filenames that are generated output regardless of where they sit.
+ *
+ * Directory-based skipping misses published vendor assets: Laravel's
+ * `vendor:publish` drops third-party bundles into `public/`, which is a perfectly
+ * ordinary directory name, so `public/js/filament/forms/components/file-upload.js`
+ * was being scanned as if it were hand-written.
+ */
+const GENERATED_FILE_PATTERNS: RegExp[] = [
+  /\.min\.(js|css|mjs|cjs)$/i,
+  /\.bundle\.(js|css|mjs|cjs)$/i,
+  /\.chunk\.(js|mjs|cjs)$/i,
+  /-[0-9a-f]{8,}\.(js|css|mjs|cjs)$/i,   // content-hashed build output
+  /\.map$/i,
+];
+
+/** True when a filename is recognisably build output rather than source. */
+export function isGeneratedAssetName(name: string): boolean {
+  return GENERATED_FILE_PATTERNS.some((re) => re.test(name));
+}
+
+/**
+ * Longest line we will accept in a text asset before treating it as minified.
+ *
+ * Minified bundles put a whole library on one line. A finding on such a file is
+ * unusable — "line 2" of a 400 KB line tells nobody anything, and the code is not
+ * the user's to fix. Hand-written sources essentially never exceed this.
+ */
+export const MAX_SOURCE_LINE_LENGTH = 2_000;
+
+/**
+ * True when the content looks machine-generated: one or more absurdly long lines.
+ *
+ * Catches the bundles that slip past the name patterns — plenty of published
+ * assets are minified without a `.min` in the name.
+ */
+export function looksMinified(content: string): boolean {
+  let lineLength = 0;
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10) {
+      lineLength = 0;
+      continue;
+    }
+    if (++lineLength > MAX_SOURCE_LINE_LENGTH) return true;
+  }
+  return false;
+}
+
 /** Lines for a repo-local `.semgrepignore` (gitignore syntax). */
 export function semgrepIgnoreLines(): string[] {
   const header = "# Dockier — skip dependency and build artifact directories";
   const patterns = [...SCAN_SKIP_DIRS].flatMap((dir) => [`${dir}/`, `**/${dir}/**`]);
-  return [header, ...patterns];
+  const generated = ["*.min.js", "*.min.css", "*.min.mjs", "*.bundle.js", "*.chunk.js", "*.map"];
+  return [header, ...patterns, "# generated assets", ...generated];
 }
 
 /** Write `.semgrepignore` into a cloned repo before Semgrep runs. */
@@ -69,12 +119,15 @@ export async function writeSemgrepIgnore(repoDir: string): Promise<void> {
 
 /** Build Semgrep CLI `--exclude` flags (gitignore-style globs). */
 export function semgrepExcludeArgs(): string[] {
-  return [...SCAN_SKIP_DIRS].flatMap((dir) => [
+  const dirs = [...SCAN_SKIP_DIRS].flatMap((dir) => [
     "--exclude",
     `${dir}/`,
     "--exclude",
     `**/${dir}/**`,
   ]);
+  const generated = ["*.min.js", "*.min.css", "*.min.mjs", "*.bundle.js", "*.chunk.js", "*.map"]
+    .flatMap((glob) => ["--exclude", glob]);
+  return [...dirs, ...generated];
 }
 
 /** Comma-separated SonarQube `sonar.exclusions` glob list. */

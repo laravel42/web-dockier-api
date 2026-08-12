@@ -29,7 +29,12 @@ describe("scan-skip-dirs", () => {
 
   it("builds semgrep exclude globs for every skipped directory", () => {
     const args = semgrepExcludeArgs();
-    expect(args.filter((arg) => arg === "--exclude")).toHaveLength(SCAN_SKIP_DIRS.size * 2);
+    // Assert coverage rather than a total: the list also carries generated-asset
+    // globs, and an exact count would have to be edited every time either grows.
+    for (const dir of SCAN_SKIP_DIRS) {
+      expect(args, dir).toContain(`${dir}/`);
+      expect(args, dir).toContain(`**/${dir}/**`);
+    }
     expect(args).toContain("vendor/");
     expect(args).toContain("**/vendor/**");
   });

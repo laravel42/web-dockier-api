@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, relative } from "node:path";
+import { extname, join, relative } from "node:path";
 import { cloneRepo } from "../../../lib/build-pipeline.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
@@ -38,6 +38,8 @@ import {
   isScanSkippedDirName,
   isScanSkippedRelativePath,
   semgrepExcludeArgs,
+  isGeneratedAssetName,
+  looksMinified,
   writeSemgrepIgnore,
 } from "./scan-skip-dirs.js";
 
@@ -55,6 +57,8 @@ const SEMGREP_TIMEOUT_MS = 600_000;
 const SEMGREP_TARGET_BATCH_SIZE = 1000;
 const MAX_SCAN_FILE_BYTES = 1_000_000;
 const MAX_COMMAND_OUTPUT = 50 * 1024 * 1024;
+/** Extensions worth a minification check; anything else is left alone. */
+const MINIFIABLE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".css", ".scss"]);
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
 function formatElapsed(ms: number): string {
@@ -231,10 +235,20 @@ async function walkRepoFiles(repoDir: string): Promise<{ allFiles: string[]; rel
 
       const relPath = relative(repoDir, fullPath);
       if (isScanSkippedRelativePath(relPath)) continue;
+      if (isGeneratedAssetName(entry.name)) continue;
 
       try {
         const { size } = await stat(fullPath);
         if (size > MAX_SCAN_FILE_BYTES) continue;
+
+        // Published vendor bundles are often minified without a `.min` in the
+        // name — Laravel's vendor:publish drops them straight into public/. A
+        // finding on one points at line 2 of a single 400 KB line, which nobody
+        // can act on and which is not the user's code anyway.
+        if (MINIFIABLE_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+          const content = await readFile(fullPath, "utf-8");
+          if (looksMinified(content)) continue;
+        }
       } catch {
         continue;
       }
