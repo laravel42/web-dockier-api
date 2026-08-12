@@ -1,41 +1,35 @@
-# Semgrep Service
+# Semgrep Engine
 
-## High Level Description
-The Semgrep Service acts as a downstream worker for the Gateway Service. It listens for newly packaged scan jobs via Redis Pub/Sub, downloads the zipped codebase from object storage, extracts it locally, and executes the native `semgrep` CLI against the codebase. The raw findings are mapped to a standardized `ScanFinding` model and published back to the `scan:results` channel for aggregation.
+## What it does
+Runs semgrep against the repo's own Opengrep rule corpus (`code-analysis/rules/opengrep`) with per-rule and whole-scan timeouts. Rule ids are normalized so they match the catalogue the UI writes overrides against.
 
-## API Doc
-### Input Payload (Redis Pub/Sub `scan:semgrep`)
+## Input — pg-boss queue `scan-semgrep`
+`ScanMessage`:
 ```json
 {
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "uri": "s3://bucket/codebases/abcdef123456.zip",
-  "language": "python",
-  "commit_sha": "abcdef123456"
+  "job_id": "uuid", "scan_id": "uuid",
+  "uri": "s3://bucket/codebases/<scan_id>.zip",
+  "language": "python", "languages": ["python", "javascript"],
+  "commit_sha": "abc123", "tenant_id": "org-id",
+  "options": { "enable_semgrep": true }
 }
 ```
 
-### Output Payload (Redis Pub/Sub `scan:results`)
-```json
-{
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "engine": "semgrep",
-  "findings": [
-    {
-      "rule_id": "python.django.security.injection",
-      "severity": "high",
-      "message": "Detected SQL injection vulnerability",
-      "file_path": "models.py",
-      "line": 42
-    }
-  ]
-}
-```
+## Output — pg-boss queue `scan-results`
+`ScanResult`. `status` is `"ok"` or `"failed"`; a failed engine publishes an
+empty findings list **with `status: "failed"`** so the aggregator never reads it
+as a clean scan.
 
-## LLM Instructions
-This service wraps an external CLI binary (`semgrep`). If suggesting modifications to `run_scan`, do not write custom static analysis AST parsing; rely entirely on Semgrep's JSON output parsing. Ensure that `subprocess.run` captures stderr if debugging is needed, but only `stdout` should be parsed as JSON.
+## Conventions
+- Report an outcome via `self._publish(...)` (`services/base.py`) rather than
+  constructing a payload by hand — the success and failure paths drifted apart
+  when each engine built its own.
+- Engine failures must raise or publish `status: "failed"`. Returning an empty
+  findings list on error is silent under-reporting.
+- Findings carry `line`, `end_line` and `snippet`; the dedupe key is
+  (rule, path, span), so a collapsed span loses cross-engine deduplication.
+- Honour `options.enable_semgrep`: a disabled engine reports `"ok"` with no
+  findings, not a failure.
 
-## MVC Endpoints
-When deployed via FastAPI, this service exposes:
-- `POST /semgrep/scan`: Force the engine to download and scan a specific repository zip payload without waiting for Redis.
+## HTTP
+`POST /semgrep/scan` enqueues onto `scan-semgrep`. It does not run the scan inline.

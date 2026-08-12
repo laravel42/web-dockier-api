@@ -1,7 +1,7 @@
 import json
 import asyncpg
 from typing import Optional
-from src.infrastructure.config import DB_URL
+from src.infrastructure.config import get_db_url
 
 _pool: Optional[asyncpg.Pool] = None
 
@@ -26,7 +26,7 @@ async def get_db_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         _pool = await asyncpg.create_pool(
-            dsn=DB_URL, min_size=2, max_size=10, init=_init_connection
+            dsn=get_db_url(), min_size=2, max_size=10, init=_init_connection
         )
     return _pool
 

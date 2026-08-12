@@ -1,41 +1,35 @@
-# SonarQube Service
+# SonarQube Engine
 
-## High Level Description
-The SonarQube Service integrates with an external SonarQube instance to perform comprehensive code quality and vulnerability analysis. It listens to the `scan:sonarqube` Redis channel, extracts the target codebase, triggers the `sonar-scanner` CLI tool locally, and then asynchronously fetches the generated issues directly from the SonarQube REST API. Findings are normalized into `ScanFinding` payloads and sent to the aggregator.
+## What it does
+Runs sonar-scanner, polls `/api/ce/task` until the server-side analysis finishes, fetches issues, then deletes the per-scan scratch project.
 
-## API Doc
-### Input Payload (Redis Pub/Sub `scan:sonarqube`)
+## Input — pg-boss queue `scan-sonarqube`
+`ScanMessage`:
 ```json
 {
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "uri": "s3://bucket/codebases/abcdef123456.zip",
-  "language": "python",
-  "commit_sha": "abcdef123456"
+  "job_id": "uuid", "scan_id": "uuid",
+  "uri": "s3://bucket/codebases/<scan_id>.zip",
+  "language": "python", "languages": ["python", "javascript"],
+  "commit_sha": "abc123", "tenant_id": "org-id",
+  "options": { "enable_sonarqube": true }
 }
 ```
 
-### Output Payload (Redis Pub/Sub `scan:results`)
-```json
-{
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "engine": "sonarqube",
-  "findings": [
-    {
-      "rule_id": "python:S107",
-      "severity": "major",
-      "message": "Functions should not have too many parameters",
-      "file_path": "utils.py",
-      "line": 40
-    }
-  ]
-}
-```
+## Output — pg-boss queue `scan-results`
+`ScanResult`. `status` is `"ok"` or `"failed"`; a failed engine publishes an
+empty findings list **with `status: "failed"`** so the aggregator never reads it
+as a clean scan.
 
-## LLM Instructions
-When expanding this service, ensure that credentials (`SONAR_HOST_URL` and `SONAR_TOKEN`) are securely fetched from the `src.infrastructure.secret_manager` module and are never logged or hardcoded. The sleep duration simulating Compute Engine execution (`await asyncio.sleep(5)`) should ideally be replaced with proper task polling via the SonarQube Web API (`api/ce/task`) in production.
+## Conventions
+- Report an outcome via `self._publish(...)` (`services/base.py`) rather than
+  constructing a payload by hand — the success and failure paths drifted apart
+  when each engine built its own.
+- Engine failures must raise or publish `status: "failed"`. Returning an empty
+  findings list on error is silent under-reporting.
+- Findings carry `line`, `end_line` and `snippet`; the dedupe key is
+  (rule, path, span), so a collapsed span loses cross-engine deduplication.
+- Honour `options.enable_sonarqube`: a disabled engine reports `"ok"` with no
+  findings, not a failure.
 
-## MVC Endpoints
-When deployed via FastAPI, this service exposes:
-- `POST /sonarqube/scan`: Force the engine to manually invoke the Sonar scanner for a given payload, returning immediately and sending results to the aggregator queue.
+## HTTP
+`POST /sonarqube/scan` enqueues onto `scan-sonarqube`. It does not run the scan inline.

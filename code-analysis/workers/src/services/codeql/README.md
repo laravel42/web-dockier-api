@@ -1,41 +1,35 @@
-# CodeQL Service
+# CodeQL Engine
 
-## High Level Description
-The CodeQL Service integrates GitHub's native CodeQL semantic analysis engine. It subscribes to the `scan:codeql` Redis channel, extracts the source code, compiles it into a relational CodeQL database, and executes language-specific security query suites against that database. Finally, it parses the resulting SARIF output format into the standardized `ScanFinding` model and publishes the findings to the aggregator.
+## What it does
+Builds one CodeQL database per detected language with `--build-mode=none`, analyses with the packaged security-and-quality suite, and maps severity from SARIF rule metadata.
 
-## API Doc
-### Input Payload (Redis Pub/Sub `scan:codeql`)
+## Input — pg-boss queue `scan-codeql`
+`ScanMessage`:
 ```json
 {
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "uri": "s3://bucket/codebases/abcdef123456.zip",
-  "language": "python",
-  "commit_sha": "abcdef123456"
+  "job_id": "uuid", "scan_id": "uuid",
+  "uri": "s3://bucket/codebases/<scan_id>.zip",
+  "language": "python", "languages": ["python", "javascript"],
+  "commit_sha": "abc123", "tenant_id": "org-id",
+  "options": { "enable_codeql": true }
 }
 ```
 
-### Output Payload (Redis Pub/Sub `scan:results`)
-```json
-{
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "engine": "codeql",
-  "findings": [
-    {
-      "rule_id": "py/sql-injection",
-      "severity": "medium",
-      "message": "This query depends on a user-provided value.",
-      "file_path": "main.py",
-      "line": 45
-    }
-  ]
-}
-```
+## Output — pg-boss queue `scan-results`
+`ScanResult`. `status` is `"ok"` or `"failed"`; a failed engine publishes an
+empty findings list **with `status: "failed"`** so the aggregator never reads it
+as a clean scan.
 
-## LLM Instructions
-This service executes a heavy compiled language semantic analysis engine (`codeql`). It has a hard dependency on the detected `language` field from the Gateway. If modifying this service, note that the parsing logic must correctly interpret SARIF format `runs[].results[]`. Also, handle the graceful degradation mock SARIF generation if the CodeQL binary is missing on the host.
+## Conventions
+- Report an outcome via `self._publish(...)` (`services/base.py`) rather than
+  constructing a payload by hand — the success and failure paths drifted apart
+  when each engine built its own.
+- Engine failures must raise or publish `status: "failed"`. Returning an empty
+  findings list on error is silent under-reporting.
+- Findings carry `line`, `end_line` and `snippet`; the dedupe key is
+  (rule, path, span), so a collapsed span loses cross-engine deduplication.
+- Honour `options.enable_codeql`: a disabled engine reports `"ok"` with no
+  findings, not a failure.
 
-## MVC Endpoints
-When deployed via FastAPI, this service exposes:
-- `POST /codeql/scan`: Directly trigger a CodeQL database creation and analysis on a specific project payload without routing through Redis first.
+## HTTP
+`POST /codeql/scan` enqueues onto `scan-codeql`. It does not run the scan inline.

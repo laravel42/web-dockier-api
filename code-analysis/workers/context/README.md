@@ -19,7 +19,7 @@ See [`PRODUCT.md`](PRODUCT.md) for the feature overview and [`DESCRIPTION.md`](D
 | **AI analysis** | Eight-section project overview (OpenAI gpt-5.4-mini), cached per commit SHA. |
 | **Sensitive data** | Pattern-based scanner for migrations, ORM schemas, and model files — no AI credits. |
 | **Dependencies** | Parses npm, Composer, pip, and Bundler manifests; checks OSV.dev. |
-| **Security scans** | Semgrep, optional SonarQube, and 30+ custom regex rules. |
+| **Security scans** | Semgrep, optional SonarQube, and database-backed custom regex rules. |
 | **Remediation** | AI fix suggestions, merge-request drafts, and PM issue creation from findings. |
 | **Deploy** | Auto-generated Dockerfiles, AWS (ECS via CodeBuild/CloudFormation) and GCP (Cloud Run, GCE, static CDN via Pulumi). |
 | **Notifications** | Email, Slack, webhooks, and in-app alerts with structured metadata for deploys and scans. |

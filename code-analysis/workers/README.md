@@ -1,40 +1,98 @@
-# Dockier SAST Workers Architecture
+# Dockier SAST Workers
 
-This repository contains the backend analysis components for Dockier's Static Application Security Testing (SAST) platform. The workers are organized using a microservices-inspired architecture running on top of FastAPI, managed by asynchronous background tasks and a Redis Pub/Sub event bus.
+Backend analysis components for Dockier's Static Application Security Testing (SAST)
+platform: a FastAPI process hosting six pg-boss queue consumers.
 
-## Directory Structure
+> **Status:** this tree replaces `backend/src/services/code-analysis`'s scan worker.
+> **Both must not run at once** — two consumers on the `security-scan` queue split
+> jobs nondeterministically. See [`context/FIX-PLAN.md`](context/FIX-PLAN.md) for the
+> cutover checklist.
+
+## Pipeline
+
+```text
+pgboss:security-scan ──> gateway  ── resolves repo + credentials from the database
+                                  ── clones, zips, uploads to object storage
+                                  ── fans out to four engine queues
+                                        │
+     pgboss:scan-semgrep   ─┐           │
+     pgboss:scan-regex     ─┼──> engine ── downloads, scans, publishes a ScanResult
+     pgboss:scan-sonarqube ─┤                   │
+     pgboss:scan-codeql    ─┘                   ▼
+                                       pgboss:scan-results
+                                                │
+                                          aggregator ── barrier on all four engines
+                                                     ── dedupes across engines
+                                                     ── LLM marks false positives
+                                                     ── writes scans + findings
+```
+
+## Directory structure
 
 ```text
 src/
 ├── infrastructure/
-│   ├── config.py         # Global configuration (Postgres, Redis, APIs)
-│   ├── db_client.py      # AsyncPG connection pooling
-│   ├── redis_client.py   # Redis setup and dependency injection
-│   ├── llm.py            # AI LLM Provider integration (OpenAI/Mock)
-│   ├── secret_manager.py # Mock cloudflare secret retrieval
-│   └── storage.py        # Codebase zip extraction and Object storage (S3/Mock)
-├── models/
-│   ├── schemas.py        # Shared Pydantic data models (ScanFinding, ScanMessage)
-│   └── __init__.py
+│   ├── config.py          # Execution constraints; DATABASE_URL resolved lazily
+│   ├── db_client.py       # asyncpg pool with a jsonb codec
+│   ├── queue.py           # pg-boss v12 client (claim, complete, fail, reap)
+│   ├── redis_client.py    # Process-wide client, used only for the fan-in barrier
+│   ├── git_repo.py        # Repo + per-tenant clone credentials
+│   ├── scans_repo.py      # Canonical scans/findings persistence, quality gates
+│   ├── rules_repo.py      # Custom rules and rule overrides, read from the database
+│   ├── scan_analysis.py   # Path normalization, cross-engine dedupe, rule-id cleanup
+│   ├── scan_skip.py       # Dependency/build/minified exclusions
+│   ├── scan_progress.py   # Progress persistence + NOTIFY, cancellation checks
+│   ├── sensitive_data.py  # Schema/model field classification
+│   ├── llm.py             # False-positive judging (marks, never deletes)
+│   ├── secret_manager.py  # Environment-backed secrets
+│   ├── storage.py         # Zip/unzip and object storage
+│   └── paths.py           # Rule corpus location
+├── models/schemas.py      # ScanMessage, ScanResult, ScanFinding, ScanOptions
 ├── services/
-│   ├── aggregator/       # Collects findings from engines and filters false positives using LLMs
-│   ├── codeql/           # Runs GitHub CodeQL engine locally
-│   ├── gateway/          # Serves as the entrypoint reading from pgboss, cloning repos, broadcasting via Redis
-│   ├── regex/            # Runs extremely fast custom regular expression rules (secrets, basic flaws)
-│   ├── semgrep/          # Executes semantic grep (semgrep) against the extracted zip payload
-│   └── sonarqube/        # Triggers sonar-scanner and calls the SonarQube API for findings
-└── main.py               # The FastAPI application mounting all API endpoints and background workers
+│   ├── base.py            # EnginePublisher — one way to report an outcome
+│   ├── worker_runtime.py  # Poll loop, concurrency cap, supervision, reaping
+│   ├── aggregator/ codeql/ gateway/ regex/ semgrep/ sonarqube/
+└── main.py                # FastAPI app; lifespan starts and stops the workers
 ```
 
-## Running the Application
+## Running
 
-Ensure Redis and PostgreSQL are running, then launch the FastAPI server (which automatically spawns the queue workers in the background).
+Requires PostgreSQL (with the canonical `supabase/migrations/` applied) and Redis.
 
 ```bash
+export DATABASE_URL=postgresql://...
 uvicorn src.main:app --reload
 ```
 
-## Architecture Notes
-- Each engine (e.g. Semgrep, CodeQL) runs as a modular service. It exposes HTTP endpoints (MVC) via FastAPI for manual testing while also polling a dedicated Redis channel (e.g. `scan:semgrep`) for asynchronous job processing.
-- The `gateway` fetches jobs from the Postgres `pgboss` queue, clones repositories, uploads them via `storage`, and fans out messages to the engines.
-- The `aggregator` waits for all expected engines (`EXPECTED_ENGINES`) to complete, merges results, runs LLM false-positive filtering, and finalizes the `security_scans` table.
+Queues are registered on startup. The HTTP endpoints enqueue jobs; they do not
+run scans inline, so a manual scan obeys the same concurrency cap, retry and
+expiry behaviour as any other job.
+
+```bash
+pytest                    # 265 tests
+```
+
+## Configuration
+
+| Variable | Required | Purpose |
+| -------- | -------- | ------- |
+| `DATABASE_URL` | yes | Postgres, for pg-boss and the canonical schema |
+| `REDIS_URL` | no | Fan-in barrier state (default `redis://localhost`) |
+| `LLM_PROVIDER` | no | `openai` or `mock` (default `mock`) |
+| `OPENAI_API_KEY` | with `openai` | False-positive judging |
+| `S3_BUCKET_NAME` | no | Object storage; falls back to a local mock store |
+| `ALLOWED_CLONE_HOSTS` | no | Comma-separated host allowlist; unset means any https host |
+| `OPENGREP_RULES_DIR` | no | Rule corpus location (default `code-analysis/rules/opengrep`) |
+| `SONAR_HOST_URL`, `SONAR_TOKEN` | for SonarQube | Scanner and API access |
+
+## Notes
+
+- **Configuration lives in the database** (`custom_rules`, `opengrep_rules`,
+  `sonarqube_rules`, `quality_gates`), not in this tree. Rule *content* is seeded
+  by the backend's `seedCustomRules()`; duplicating 36 regexes here would drift.
+- **Findings are never deleted by the LLM.** Suppression is a marked state
+  (`findings.suppressed_by_llm` + `suppression_reason`); filtered views select
+  `WHERE NOT suppressed_by_llm`.
+- **A failed engine is never a clean scan.** `scans.engine_status` records each
+  engine's outcome and `summary.partial` flags degradation, because
+  `scans.status` is a closed enum with no room for it.

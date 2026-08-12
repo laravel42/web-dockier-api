@@ -1,33 +1,36 @@
 # Aggregator Service
 
-## High Level Description
-The Aggregator Service collects findings from all running engine scanners (Semgrep, Regex, SonarQube, CodeQL) for a specific job via Redis. Once all configured engines have completed and published their results, the aggregator combines them, sends the combined raw findings to an LLM provider for false-positive filtering, and finally persists the filtered results back to the PostgreSQL database.
+## What it does
+Consumes `scan-results`, waits for all four engines to report for a job, then
+dedupes, judges and persists.
 
-## API Doc
-### Input Payload (Redis Pub/Sub `scan:results`)
-```json
-{
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "engine": "semgrep",
-  "findings": [
-    {
-      "rule_id": "example-rule",
-      "severity": "high",
-      "message": "Potential issue",
-      "file_path": "src/main.py",
-      "line": 15
-    }
-  ]
-}
-```
+1. **Barrier** — Redis set per job, TTL-bounded so an abandoned scan stops
+   leaking keys. Exactly one caller finalizes, claimed with `SET NX`.
+2. **Dedupe** — the same vulnerability found by several engines becomes one
+   finding, at the highest severity any of them assigned.
+3. **LLM judging** — marks false positives; **never removes them**.
+4. **Persist** — `findings` rows and the `scans` row, plus the quality gate.
 
-### Output
-The Aggregator does not publish to Redis; instead, it executes SQL `UPDATE` commands on the `pgboss.job` and `security_scans` tables containing the final filtered JSON payload.
+## Input — pg-boss queue `scan-results`
+`ScanResult`. Malformed messages are rejected rather than aggregated.
 
-## LLM Instructions
-When modifying the Aggregator's LLM prompt in `src/infrastructure/llm.py`, ensure that the output format strictly remains a JSON array of integers (`[0, 1, 3]`). Do not instruct the LLM to return markdown blocks or descriptions, as the JSON parsing logic expects a raw array or a strictly structured JSON object.
+## Output
+Rows in `findings`, and `scans.status` / `summary` / `engine_status` /
+`quality_gate_status`.
 
-## MVC Endpoints
-When deployed via FastAPI, this service exposes:
-- `GET /aggregator/status`: Health check endpoint for monitoring aggregator status.
+## Conventions
+- **Suppression is a marked state, never a deletion.** `LLMProvider.judge()`
+  returns every finding with `suppressed_by_llm` and `suppression_reason` set.
+  A model omitting an index must not silently erase a vulnerability; filtered
+  views select `WHERE NOT suppressed_by_llm`.
+- The LLM contract is a JSON **object** — `{"false_positives": [...], "reason": "..."}`.
+  `response_format: json_object` forbids a top-level array, so a prompt demanding
+  one cannot be satisfied.
+- `scans.status` is a closed enum (`pending|running|completed|failed`). A degraded
+  scan is `completed` with `summary.partial` and `scans.engine_status` carrying
+  the detail — do not invent a status the API will reject.
+- A scan with any failed engine gets **no** quality-gate verdict: the engine that
+  died is exactly the one that might have found the error.
+
+## HTTP
+`GET /aggregator/status` — health check.

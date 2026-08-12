@@ -1,48 +1,41 @@
 # Gateway Service
 
-## High Level Description
-The Gateway Service acts as the entrypoint for all SAST scanning jobs. It pulls pending scanning tasks from the `pgboss` job queue, clones the target repository, zips and uploads the codebase to the configured object storage (S3 or mock storage), and delegates the scanning workload to downstream analysis engines (e.g., Semgrep, Regex, CodeQL, SonarQube) by publishing a message via Redis Pub/Sub.
+## What it does
+Consumes the `security-scan` pg-boss queue — the same queue the backend API
+enqueues onto — resolves what to clone from the database, clones and uploads the
+codebase, and fans the job out to the four engine queues.
 
-## API Doc
-### Input Payload (pgboss)
+## Input — pg-boss queue `security-scan`
+The backend's `ScanJobInput`. Note it carries **no clone URL**:
 ```json
-{
-  "scanId": "uuid-string",
-  "cloneUrl": "https://github.com/org/repo.git",
-  "commitSha": "abcdef123456"
-}
+{ "scanId": "uuid", "tenantId": "org-id", "options": {}, "correlationId": "req-id" }
 ```
+Repo, branch and commit come from the `scans` row; credentials come from
+`git_connections`, scoped to the tenant.
 
-### Pub/Sub Output Payload
-The Gateway publishes to multiple Redis channels (`scan:semgrep`, `scan:regex`, etc.) with the `ScanMessage` schema:
-```json
-{
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "uri": "s3://bucket/codebases/abcdef123456.zip",
-  "language": "python",
-  "commit_sha": "abcdef123456"
-}
-```
+## Output
+A `ScanMessage` on each of `scan-semgrep`, `scan-regex`, `scan-sonarqube`,
+`scan-codeql`.
 
 ## Security
+The gateway is the only component handling untrusted input from outside the
+platform:
+- **Clone URLs are https-only.** `ext::` (arbitrary command execution),
+  `file://`, `ssh://`, `git://` and any value starting with `-` are rejected. Set
+  `ALLOWED_CLONE_HOSTS` to restrict further; unset means any https host, which
+  self-hosted GitLab needs.
+- **Credentials never leave the clone URL.** They are not logged, not published,
+  and not persisted — `redact_credentials()` guards every such path.
+- **Connection lookups are tenant-scoped.** Without that filter a guessed
+  connection id would clone another organization's private repository.
+- Archives exclude `.git` and skip symlinks (`infrastructure/storage.py`).
 
-The gateway is the only component that touches untrusted input from outside the platform, so two
-guards live here:
+## Conventions
+- `detect_languages` must stay bounded and off the event loop. It returns *every*
+  language found: CodeQL builds one database per language, and returning a single
+  value silently skipped the rest of a polyglot repo.
+- Cancellation is checked between phases and completes the job quietly — it is
+  what the user asked for, and failing would make pg-boss retry it.
 
-- **`cloneUrl` validation.** https only. `ext::` (arbitrary command execution), `file://`, `ssh://`,
-  `git://`, and any value beginning with `-` are rejected. Set `ALLOWED_CLONE_HOSTS`
-  (comma-separated) to restrict further; unset means any https host, which self-hosted GitLab needs.
-- **Credentials.** An optional `GIT_CLONE_TOKEN` secret is injected into the clone URL and exists
-  only in that value. It is never logged, never published in the scan message, and never written to
-  the database — `redact_credentials()` guards every such path. Without a token the clone is
-  anonymous, which is correct for public repositories.
-
-Archives exclude `.git` and skip symlinks; see `infrastructure/storage.py`.
-
-## LLM Instructions
-When extending this service, ensure that any new language detection logic added to `_detect_language` does not perform deep file system traversal that would block the asyncio thread. Use lightweight heuristics. When handling repository credentials for `cloneUrl`, use the `SecretManager` (infrastructure) rather than logging or hardcoding tokens.
-
-## MVC Endpoints
-When deployed with FastAPI, this service exposes the following HTTP endpoints:
-- `POST /gateway/scan`: A manual trigger to force the Gateway to process a repository immediately without waiting for the `pgboss` queue polling mechanism. Returns `200 Accepted`.
+## HTTP
+`POST /gateway/scan` enqueues onto `security-scan`.

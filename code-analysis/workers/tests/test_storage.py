@@ -36,7 +36,7 @@ def test_local_mock_store(tmp_path):
     assert dest_file.read_text() == "data"
 
 
-@patch("src.infrastructure.storage.boto3.client")
+@patch("boto3.client")
 def test_s3_store(mock_boto_client, tmp_path):
     mock_s3 = MagicMock()
     mock_boto_client.return_value = mock_s3
@@ -52,7 +52,7 @@ def test_s3_store(mock_boto_client, tmp_path):
 
 @patch.dict(os.environ, {"S3_BUCKET_NAME": "test-bucket"})
 def test_get_store_s3():
-    with patch("src.infrastructure.storage.boto3.client"):
+    with patch("boto3.client"):
         assert isinstance(get_store(), S3Store)
 
 
@@ -207,3 +207,24 @@ def test_extraction_cannot_escape_the_target_directory(tmp_path):
     assert (target / "escaped.txt").exists()
     assert (target / "abs" / "rooted.txt").exists()
     assert (target / "ok.py").read_text() == "clean"
+
+
+def test_storage_imports_without_boto3(monkeypatch):
+    """
+    boto3 was imported at module scope, so the local mock path required AWS
+    libraries to be installed just to run a scan on a laptop.
+    """
+    import importlib
+    import sys
+
+    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name.split(".")[0] in ("boto3", "botocore"):
+            raise ImportError("boto3 unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", blocked)
+    sys.modules.pop("src.infrastructure.storage", None)
+    module = importlib.import_module("src.infrastructure.storage")
+    assert isinstance(module.LocalMockStore(base_dir="/tmp/dockier_import_check"), module.ObjectStore)

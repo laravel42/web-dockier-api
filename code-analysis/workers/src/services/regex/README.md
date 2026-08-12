@@ -1,41 +1,35 @@
-# Regex Service
+# Regex Engine
 
-## High Level Description
-The Regex Service is a lightweight scanner engine that matches a set of pre-compiled regular expressions against plain text files in the target repository. It's designed to catch common edge cases or proprietary secrets that traditional AST-based analyzers like Semgrep might miss. It subscribes to `scan:regex` via Redis Pub/Sub, downloads the zipped source, and performs a line-by-line regex sweep.
+## What it does
+Applies custom rules loaded from the `custom_rules` table and runs sensitive-data classification over schema and model files, in a single walk of the tree.
 
-## API Doc
-### Input Payload (Redis Pub/Sub `scan:regex`)
+## Input — pg-boss queue `scan-regex`
+`ScanMessage`:
 ```json
 {
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "uri": "s3://bucket/codebases/abcdef123456.zip",
-  "language": "python",
-  "commit_sha": "abcdef123456"
+  "job_id": "uuid", "scan_id": "uuid",
+  "uri": "s3://bucket/codebases/<scan_id>.zip",
+  "language": "python", "languages": ["python", "javascript"],
+  "commit_sha": "abc123", "tenant_id": "org-id",
+  "options": { "enable_regex": true }
 }
 ```
 
-### Output Payload (Redis Pub/Sub `scan:results`)
-```json
-{
-  "job_id": "uuid-string",
-  "scan_id": "uuid-string",
-  "engine": "regex",
-  "findings": [
-    {
-      "rule_id": "dockier-hardcoded-secret",
-      "severity": "error",
-      "message": "Potential hardcoded credential or secret key exposed in cleartext.",
-      "file_path": "config.json",
-      "line": 12
-    }
-  ]
-}
-```
+## Output — pg-boss queue `scan-results`
+`ScanResult`. `status` is `"ok"` or `"failed"`; a failed engine publishes an
+empty findings list **with `status: "failed"`** so the aggregator never reads it
+as a clean scan.
 
-## LLM Instructions
-When modifying or extending the rules in `src/services/regex/rules.py`, you must structure them as `CUSTOM_RULES` objects containing `id`, `regex`, `message`, and `severity`. Do not rely on Python's advanced lookbehinds if they are not standard, as they can cause ReDoS issues during large file processing.
+## Conventions
+- Report an outcome via `self._publish(...)` (`services/base.py`) rather than
+  constructing a payload by hand — the success and failure paths drifted apart
+  when each engine built its own.
+- Engine failures must raise or publish `status: "failed"`. Returning an empty
+  findings list on error is silent under-reporting.
+- Findings carry `line`, `end_line` and `snippet`; the dedupe key is
+  (rule, path, span), so a collapsed span loses cross-engine deduplication.
+- Honour `options.enable_regex`: a disabled engine reports `"ok"` with no
+  findings, not a failure.
 
-## MVC Endpoints
-When deployed via FastAPI, this service exposes:
-- `POST /regex/scan`: Forces the Regex engine to download and process a repository directly via an HTTP request, returning findings asynchronously to the aggregator queue.
+## HTTP
+`POST /regex/scan` enqueues onto `scan-regex`. It does not run the scan inline.

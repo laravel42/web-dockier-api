@@ -1,8 +1,7 @@
 import os
+import shutil
 import zipfile
 import tempfile
-import boto3
-from botocore.exceptions import NoCredentialsError
 
 # Directories never archived. `.git` in particular must not ship: uploading it
 # puts the full history of a private repository into object storage on every
@@ -19,10 +18,13 @@ class ObjectStore:
 
 class S3Store(ObjectStore):
     def __init__(self, bucket_name: str):
-        self.s3 = boto3.client('s3')
+        # Imported here so local development without AWS installed still works.
+        import boto3
+        self.s3 = boto3.client("s3")
         self.bucket_name = bucket_name
         
     def upload_file(self, file_path: str, destination_path: str) -> str:
+        from botocore.exceptions import NoCredentialsError
         try:
             self.s3.upload_file(file_path, self.bucket_name, destination_path)
             return f"s3://{self.bucket_name}/{destination_path}"
@@ -44,12 +46,10 @@ class LocalMockStore(ObjectStore):
     def upload_file(self, file_path: str, destination_path: str) -> str:
         dest = os.path.join(self.base_dir, destination_path)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        import shutil
         shutil.copy(file_path, dest)
         return f"local://{dest}"
         
     def download_file(self, remote_path: str, local_path: str):
-        import shutil
         if remote_path.startswith("local://"):
             remote_path = remote_path.replace("local://", "")
         shutil.copy(remote_path, local_path)
