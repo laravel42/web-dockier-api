@@ -71,6 +71,48 @@ def build_summary(findings: List[Dict[str, Any]], files_scanned: int = 0, files_
     }
 
 
+# A condition that MATCHES means the gate FAILED: "errors > 0" reads as
+# "fail when there is any error", which is how the seeded default is written.
+GATE_OPERATORS = {
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+}
+
+
+def evaluate_quality_gate(summary: Dict[str, Any], conditions: List[Dict[str, Any]]) -> str:
+    """'failed' when any condition matches, else 'passed'.
+
+    An unknown metric or operator is ignored rather than failing the gate: a
+    malformed condition should not block every scan in the organization.
+    """
+    for condition in conditions or []:
+        metric = condition.get("metric")
+        op = GATE_OPERATORS.get(condition.get("operator"))
+        if metric not in summary or op is None:
+            print(f"[!] quality gate: ignoring unusable condition {condition!r}")
+            continue
+        try:
+            if op(summary[metric], condition.get("threshold")):
+                return "failed"
+        except TypeError:
+            print(f"[!] quality gate: ignoring condition with bad threshold {condition!r}")
+    return "passed"
+
+
+async def get_default_quality_gate(organization_id: str):
+    """The tenant's default gate, falling back to the system one."""
+    return await fetch_row(
+        "SELECT conditions FROM quality_gates "
+        "WHERE is_default AND organization_id IN ('', COALESCE($1, '')) "
+        "ORDER BY organization_id DESC LIMIT 1",
+        organization_id,
+    )
+
+
 async def get_scan_row(scan_id: str):
     return await fetch_row(
         "SELECT id, organization_id, project_id, connection_id, repo, branch, commit_sha "
@@ -127,12 +169,26 @@ async def persist_scan_results(
 
     failed = [e for e, s in (engine_status or {}).items() if s.get("status") != "ok"]
     status = "partial" if failed else "success"
+    summary = build_summary(findings, files_scanned, files_in_repo)
+
+    # A partial scan cannot pass a gate it was never fully evaluated against:
+    # the engine that failed is exactly the one that might have found the error.
+    gate_status = None
+    if status == "success":
+        gate = await get_default_quality_gate(organization_id)
+        if gate is not None:
+            conditions = gate["conditions"]
+            if isinstance(conditions, str):
+                conditions = json.loads(conditions)
+            gate_status = evaluate_quality_gate(summary, conditions)
 
     await execute_query(
-        "UPDATE scans SET status = $1, summary = $2, engine_status = $3, updated_at = NOW() WHERE id = $4",
+        "UPDATE scans SET status = $1, summary = $2, engine_status = $3, "
+        "quality_gate_status = $4, updated_at = NOW() WHERE id = $5",
         status,
-        json.dumps(build_summary(findings, files_scanned, files_in_repo)),
+        json.dumps(summary),
         json.dumps(engine_status or {}),
+        gate_status,
         scan_id,
     )
     return status

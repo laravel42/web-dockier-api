@@ -19,12 +19,29 @@ class ScanFinding(BaseModel):
     snippet: str = ""
 
 
+class ScanOptions(BaseModel):
+    """Per-scan engine toggles, mirroring RunScanOptions in the TS worker.
+
+    Defaults are permissive: a scan enqueued without options runs everything,
+    which is what the API does today when the caller omits them.
+    """
+    enable_semgrep: bool = True
+    enable_sonarqube: bool = True
+    enable_custom_rules: bool = True
+    enable_sensitive_data: bool = True
+    enable_codeql: bool = True
+
+
 class ScanMessage(BaseModel):
     job_id: str
     scan_id: str
     uri: str
     language: str
     commit_sha: str
+    # Rules and overrides are per-tenant; an engine cannot load its
+    # configuration without knowing whose scan this is.
+    tenant_id: Optional[str] = None
+    options: ScanOptions = Field(default_factory=ScanOptions)
 
 
 class ScanResult(BaseModel):

@@ -51,7 +51,7 @@ def test_build_summary_on_empty_findings():
 @patch("src.infrastructure.scans_repo.execute_query", new_callable=AsyncMock)
 @patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
 async def test_persist_writes_normalized_finding_rows(mock_fetch, mock_exec, mock_many):
-    mock_fetch.return_value = {"id": "scan-1", "organization_id": "org-9"}
+    mock_fetch.side_effect = [{"id": "scan-1", "organization_id": "org-9"}, None]
 
     findings = [
         {"rule_id": "py/sqli", "severity": "blocker", "message": "m",
@@ -82,7 +82,7 @@ async def test_persist_writes_normalized_finding_rows(mock_fetch, mock_exec, moc
 @patch("src.infrastructure.scans_repo.execute_query", new_callable=AsyncMock)
 @patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
 async def test_failed_engine_yields_partial_not_success(mock_fetch, mock_exec, mock_many):
-    mock_fetch.return_value = {"id": "scan-1", "organization_id": "org-9"}
+    mock_fetch.side_effect = [{"id": "scan-1", "organization_id": "org-9"}, None]
 
     status = await persist_scan_results(
         "scan-1", [], {"semgrep": {"status": "ok"}, "codeql": {"status": "failed", "error": "no cli"}}
@@ -99,7 +99,7 @@ async def test_failed_engine_yields_partial_not_success(mock_fetch, mock_exec, m
 @patch("src.infrastructure.scans_repo.execute_query", new_callable=AsyncMock)
 @patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
 async def test_rerun_replaces_previous_findings(mock_fetch, mock_exec, mock_many):
-    mock_fetch.return_value = {"id": "scan-1", "organization_id": "org-9"}
+    mock_fetch.side_effect = [{"id": "scan-1", "organization_id": "org-9"}, None]
     await persist_scan_results("scan-1", [], {})
 
     deletes = [c for c in mock_exec.await_args_list if "DELETE FROM findings" in c[0][0]]
@@ -122,3 +122,79 @@ async def test_fail_scan_preserves_reason(mock_exec):
     assert "status = 'failed'" in sql
     assert reason == "clone failed"
     assert scan_id == "scan-1"
+
+
+# --- quality gates --------------------------------------------------------
+
+from src.infrastructure.scans_repo import evaluate_quality_gate
+
+
+def test_gate_fails_when_a_condition_matches():
+    """A matching condition means failure: "errors > 0" reads as "fail on any error"."""
+    summary = {"errors": 2, "warnings": 0, "infos": 0, "totalFindings": 2}
+    assert evaluate_quality_gate(summary, [{"metric": "errors", "operator": ">", "threshold": 0}]) == "failed"
+
+
+def test_gate_passes_when_no_condition_matches():
+    summary = {"errors": 0, "warnings": 5, "infos": 0, "totalFindings": 5}
+    assert evaluate_quality_gate(summary, [{"metric": "errors", "operator": ">", "threshold": 0}]) == "passed"
+
+
+def test_gate_with_no_conditions_passes():
+    assert evaluate_quality_gate({"errors": 99}, []) == "passed"
+    assert evaluate_quality_gate({"errors": 99}, None) == "passed"
+
+
+@pytest.mark.parametrize("operator,threshold,errors,expected", [
+    (">", 0, 1, "failed"), (">", 0, 0, "passed"),
+    (">=", 1, 1, "failed"), ("<", 1, 0, "failed"),
+    ("<=", 0, 0, "failed"), ("==", 3, 3, "failed"), ("!=", 0, 1, "failed"),
+])
+def test_gate_operators(operator, threshold, errors, expected):
+    summary = {"errors": errors}
+    conditions = [{"metric": operator and "errors", "operator": operator, "threshold": threshold}]
+    assert evaluate_quality_gate(summary, conditions) == expected
+
+
+def test_malformed_conditions_are_ignored_not_fatal():
+    """One bad condition must not block every scan in the organization."""
+    summary = {"errors": 0}
+    conditions = [
+        {"metric": "nonexistent", "operator": ">", "threshold": 0},
+        {"metric": "errors", "operator": "~~", "threshold": 0},
+        {"metric": "errors", "operator": ">", "threshold": "not-a-number"},
+    ]
+    assert evaluate_quality_gate(summary, conditions) == "passed"
+
+
+@pytest.mark.asyncio
+@patch("src.infrastructure.scans_repo.execute_many", new_callable=AsyncMock)
+@patch("src.infrastructure.scans_repo.execute_query", new_callable=AsyncMock)
+@patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
+async def test_partial_scan_is_not_gated(mock_fetch, mock_exec, mock_many):
+    """
+    A scan whose engine failed cannot pass a gate it was never fully evaluated
+    against — the engine that died is exactly the one that might have found the error.
+    """
+    mock_fetch.side_effect = [{"id": "scan-1", "organization_id": "org-9"}, None]
+    await persist_scan_results("scan-1", [], {"codeql": {"status": "failed", "error": "x"}})
+
+    update = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0]
+    assert update[0][4] is None, "a partial scan must not record a gate verdict"
+
+
+@pytest.mark.asyncio
+@patch("src.infrastructure.scans_repo.execute_many", new_callable=AsyncMock)
+@patch("src.infrastructure.scans_repo.execute_query", new_callable=AsyncMock)
+@patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
+async def test_gate_verdict_is_recorded_on_success(mock_fetch, mock_exec, mock_many):
+    mock_fetch.side_effect = [
+        {"id": "scan-1", "organization_id": "org-9"},
+        {"conditions": [{"metric": "errors", "operator": ">", "threshold": 0}]},
+    ]
+    findings = [{"rule_id": "r", "severity": "error", "message": "m",
+                 "file_path": "a.py", "line": 1, "suppressed_by_llm": False}]
+    await persist_scan_results("scan-1", findings, {"semgrep": {"status": "ok"}})
+
+    update = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0]
+    assert update[0][4] == "failed"

@@ -4,11 +4,13 @@ import shutil
 import tempfile
 import subprocess
 import asyncio
-from src.models.schemas import ScanFinding, ScanResult
+from src.services.base import EnginePublisher
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.redis_client import get_redis_client
 
-class CodeQLService:
+class CodeQLService(EnginePublisher):
+    engine_name = "codeql"
+
     def __init__(self):
         self.redis = get_redis_client()
 
@@ -97,6 +99,12 @@ class CodeQLService:
         scratch_dir = tempfile.mkdtemp()
         
         try:
+            options = message.get("options") or {}
+            if options.get("enable_codeql") is False:
+                print(f"[*] CodeQL Service: disabled for {job_id}, reporting no findings")
+                await self._publish(job_id, scan_id, [], "ok", None)
+                return
+
             findings = []
             if language and language != "unknown":
                 await asyncio.to_thread(download_codebase, uri, scratch_dir)
@@ -105,28 +113,13 @@ class CodeQLService:
             else:
                 print(f"[*] CodeQL Service: Skipping {job_id} because language is unknown or unsupported.")
                 
-            result = ScanResult(
-                job_id=job_id,
-                scan_id=scan_id,
-                engine="codeql",
-                findings=[ScanFinding.model_validate(f) for f in findings],
-                status="ok",
-            )
-            await self.redis.publish("scan:results", result.model_dump_json())
+            await self._publish(job_id, scan_id, findings, "ok")
             print(f"[*] CodeQL Service: Finished {job_id} with {len(findings)} findings.")
             
         except Exception as e:
             print(f"[!] CodeQL Service Error on {job_id}: {e}")
             # Publish so the aggregator barrier still clears, but mark the
             # engine failed so an empty result is never read as "clean".
-            failure = ScanResult(
-                job_id=job_id,
-                scan_id=scan_id,
-                engine="codeql",
-                findings=[],
-                status="failed",
-                error=str(e),
-            )
-            await self.redis.publish("scan:results", failure.model_dump_json())
+            await self._publish(job_id, scan_id, [], "failed", str(e))
         finally:
             shutil.rmtree(scratch_dir, ignore_errors=True)
