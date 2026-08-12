@@ -1,0 +1,1042 @@
+<!doctype html>
+<!--
+  DIRECTION CONTRACT
+
+  THESIS: A console you work down, not a dashboard you look at. Refuses the
+  endpoint-rail-plus-response-pane arrangement every API console ships.
+
+  OWN-WORLD: Dockier graphite ground with seed ochre as the only warm accent;
+  laboratory-bench grammar — engraved panel caps, machined hairlines, counts as
+  lit digit banks. Space Grotesk for interface, true mono for payloads only.
+  Status runs on the product's measured signal ramp.
+
+  STORY: An engineer sees which services are alive, sets credentials once at the
+  bench head, then works down numbered exercises that exercise every service,
+  accumulating a transcript of what actually happened.
+
+  FIRST VIEWPORT: Bench head — identity and one-line purpose at left, a live
+  instrument bank of seven service states at right. Beneath it the setup strip
+  (base URL, token, scan id) that every exercise draws from. Primary action:
+  Probe services.
+
+  FORM: Runnable worksheet, candidate 7 of 7, staged as a laboratory bench with
+  instrument readouts (challenger: signals-instruments-nixie-laboratory-counter).
+  Seed key 63bf3246.
+-->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dockier SAST · service bench</title>
+<!-- No webfont request: this console is served by a security product and is
+     meant to load on a restricted or air-gapped host. Space Grotesk is used
+     when the viewer already has it; otherwise the declared system stack. -->
+<style>
+/* ── Tokens ─────────────────────────────────────────────────────────────
+   Mirrored from frontend/src/index.css, which PRODUCT.md declares binding.
+   Values are copied rather than imported: this page is served by the Python
+   router and must render before the SPA exists, or without it at all.       */
+:root, [data-theme="dark"] {
+  --bg:        oklch(0.17 0.008 50);
+  --panel:     oklch(0.21 0.009 50);
+  --panel-2:   oklch(0.23 0.008 50);
+  --ink:       oklch(0.95 0.008 60);
+  --ink-dim:   oklch(0.68 0.012 60);
+  --line:      oklch(0.32 0.008 50 / 60%);
+  --line-firm: oklch(0.38 0.008 50 / 75%);
+  --seed:      oklch(0.78 0.08 70);
+  --seed-ink:  oklch(0.18 0.01 50);
+  --seed-text: oklch(0.78 0.08 70);
+  --field:     oklch(0.28 0.008 50);
+
+  --ok-surface:   oklch(0.27 0.055 155);
+  --ok-line:      oklch(0.40 0.075 155);
+  --ok-ink:       oklch(0.72 0.13 155);
+  --warn-surface: oklch(0.27 0.055 75);
+  --warn-line:    oklch(0.40 0.075 75);
+  --warn-ink:     oklch(0.72 0.13 75);
+  --bad-surface:  oklch(0.27 0.055 25);
+  --bad-line:     oklch(0.40 0.075 25);
+  --bad-ink:      oklch(0.72 0.13 25);
+  --info-surface: oklch(0.27 0.055 240);
+  --info-line:    oklch(0.40 0.075 240);
+  --info-ink:     oklch(0.72 0.13 240);
+
+  --lift: 0 1px 0 oklch(1 0 0 / 4%) inset, 0 8px 24px -14px oklch(0 0 0 / 70%);
+  --radius: 0.75rem;
+}
+[data-theme="light"] {
+  --bg:        oklch(0.97 0.008 60);
+  --panel:     oklch(1 0.005 60);
+  --panel-2:   oklch(0.94 0.008 60);
+  --ink:       oklch(0.22 0.01 50);
+  --ink-dim:   oklch(0.47 0.012 58);
+  --line:      oklch(0.88 0.01 55);
+  --line-firm: oklch(0.80 0.012 55);
+  /* Two ochres on light: a fill dark enough for white text, and a text ink
+     dark enough to clear 4.5:1 at 11–13px. One value cannot do both. */
+  --seed:      oklch(0.55 0.11 62);
+  --seed-ink:  oklch(0.99 0.005 60);
+  --seed-text: oklch(0.47 0.11 60);
+  --field:     oklch(0.96 0.006 60);
+
+  --ok-surface:   oklch(0.94 0.045 155);
+  --ok-line:      oklch(0.78 0.09 155);
+  --ok-ink:       oklch(0.42 0.11 155);
+  --warn-surface: oklch(0.94 0.045 75);
+  --warn-line:    oklch(0.78 0.09 75);
+  --warn-ink:     oklch(0.42 0.11 75);
+  --bad-surface:  oklch(0.94 0.045 25);
+  --bad-line:     oklch(0.78 0.09 25);
+  --bad-ink:      oklch(0.44 0.14 25);
+  --info-surface: oklch(0.94 0.045 240);
+  --info-line:    oklch(0.78 0.09 240);
+  --info-ink:     oklch(0.42 0.11 240);
+
+  --lift: 0 1px 0 oklch(1 0 0 / 60%) inset, 0 8px 22px -16px oklch(0.2 0.01 50 / 45%);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; position: relative; }
+
+/* Engraved panel caps — the bench's labelling system. */
+.cap {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+a { color: var(--seed-text); text-underline-offset: 3px; }
+
+/* ── Bench head ──────────────────────────────────────────────────────── */
+.head { padding: 56px 0 0; }
+.head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+.mark { display: flex; align-items: center; gap: 12px; }
+.mark-glyph {
+  width: 34px; height: 34px; border-radius: 9px; flex: none;
+  border: 1px solid var(--line-firm); background: var(--panel);
+  display: grid; place-items: center; box-shadow: var(--lift);
+}
+.mark-glyph span { width: 12px; height: 12px; border-radius: 3px; background: var(--seed); }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+.head p.lede {
+  margin: 20px 0 0; max-width: 62ch; font-size: 17px; color: var(--ink-dim);
+}
+.head p.lede strong { color: var(--ink); font-weight: 500; }
+
+.head-main {
+  margin-top: 36px; display: grid; gap: 32px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr); align-items: start;
+}
+/* A short definition list, in the panel-engraving register. */
+.facts { margin: 26px 0 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.facts > div { display: grid; grid-template-columns: 110px 1fr; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.facts dt { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); padding-top: 2px; }
+.facts dd { margin: 0; font-size: 13.5px; color: var(--ink); }
+
+/* ── Instrument bank ─────────────────────────────────────────────────── */
+.bank {
+  margin-top: 0; border: 1px solid var(--line-firm); border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  box-shadow: var(--lift); overflow: hidden;
+}
+.bank-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+}
+.bank-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+}
+.gauge {
+  padding: 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.gauge:last-child { border-right: 0; }
+.bank-grid > .gauge:nth-last-child(-n+1) { border-bottom: 0; }
+.gauge-name { font-size: 13px; font-weight: 500; letter-spacing: -0.01em; }
+.gauge-readout { display: flex; align-items: baseline; gap: 8px; }
+/* Lit digits: the only place counts appear at scale. */
+.digits {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 27px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+  color: var(--seed-text); text-shadow: 0 0 18px oklch(0.78 0.10 70 / 35%);
+  line-height: 1;
+}
+.digits.idle { color: var(--ink-dim); text-shadow: none; opacity: 0.5; }
+.digits.roll { animation: roll 320ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes roll {
+  from { opacity: 0; transform: translateY(-0.32em); filter: blur(3px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+.gauge-unit { font-size: 11px; color: var(--ink-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+/* An instrument reads against a range; a bare digit is only a number. */
+.scale { height: 3px; background: var(--field); border-radius: 2px; overflow: hidden; }
+.scale span { display: block; height: 100%; width: 100%; background: var(--seed); transform: scaleX(0); transform-origin: left; transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1); }
+.gauge-sub { font-size: 11.5px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+
+.lamp {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-dim);
+  background: var(--panel-2); white-space: nowrap;
+}
+.lamp::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.lamp.toggle::before { display: none; }
+.lamp.toggle { cursor: pointer; gap: 8px; user-select: none; padding-left: 8px; }
+.lamp.toggle:hover { border-color: var(--seed); color: var(--ink); }
+.lamp.toggle input { accent-color: var(--seed); margin: 0; width: 14px; height: 14px; cursor: pointer; }
+.lamp.toggle:has(input:checked) { color: var(--ink); border-color: var(--line-firm); }
+.lamp.ok   { color: var(--ok-ink);   border-color: var(--ok-line);   background: var(--ok-surface); }
+.lamp.warn { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-surface); }
+.lamp.bad  { color: var(--bad-ink);  border-color: var(--bad-line);  background: var(--bad-surface); }
+.lamp.info { color: var(--info-ink); border-color: var(--info-line); background: var(--info-surface); }
+
+/* ── Controls ────────────────────────────────────────────────────────── */
+button, input, select, textarea { font: inherit; color: inherit; }
+.btn {
+  appearance: none; border: 1px solid var(--line-firm); background: var(--panel-2);
+  color: var(--ink); padding: 9px 15px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 500; letter-spacing: -0.005em;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.btn:hover:not(:disabled) { background: var(--field); border-color: var(--seed); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 1; cursor: not-allowed; background: var(--panel-2); color: var(--ink-dim); border-color: var(--line); border-style: dashed; }
+.btn.primary:disabled { background: var(--panel-2); color: var(--ink-dim); border-color: var(--line); }
+.btn.primary { background: var(--seed); color: var(--seed-ink); border-color: var(--seed); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: oklch(0.83 0.09 70); border-color: oklch(0.83 0.09 70); }
+[data-theme="light"] .btn.primary:hover:not(:disabled) { background: oklch(0.60 0.11 70); border-color: oklch(0.60 0.11 70); }
+.btn.running { color: transparent; position: relative; }
+.btn.running::before { content: "Running"; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.btn.running::after {
+  content: ""; position: absolute; inset: 0; margin: auto; width: 13px; height: 13px;
+  border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
+  color: var(--seed-ink); animation: spin 700ms linear infinite;
+}
+.btn:not(.primary).running::after { color: var(--ink); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+:where(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--seed); outline-offset: 2px; border-radius: 6px;
+}
+
+.field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.field label { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+.field input, .field select {
+  background: var(--field); border: 1px solid var(--line-firm); border-radius: 8px;
+  padding: 9px 12px; font-size: 13px; width: 100%; min-width: 0;
+  transition: border-color 140ms ease;
+}
+.field input::placeholder { color: var(--ink-dim); opacity: 0.72; }
+.field input:hover, .field select:hover { border-color: var(--ink-dim); }
+.field input:focus, .field select:focus { border-color: var(--seed); outline: none; box-shadow: 0 0 0 3px oklch(0.78 0.08 70 / 18%); }
+.field .hint { font-size: 12px; color: var(--ink-dim); }
+.mono-field input { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; }
+
+.mint { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 10px; }
+.mint summary { cursor: pointer; font-size: 12.5px; color: var(--seed-text); width: fit-content; }
+.mint summary:hover { text-decoration: underline; }
+.mint p { margin: 10px 0 0; font-size: 12.5px; color: var(--ink-dim); }
+.mint-cmd { margin-top: 8px; display: flex; gap: 8px; align-items: flex-start; }
+.mint-cmd code {
+  flex: 1; min-width: 0; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px;
+  overflow-x: auto; white-space: pre; color: var(--ink); line-height: 1.5;
+}
+
+/* ── Setup strip ─────────────────────────────────────────────────────── */
+.setup {
+  margin-top: 20px; border: 1px solid var(--line-firm); border-radius: var(--radius);
+  background: var(--panel); box-shadow: var(--lift);
+}
+.setup-body { padding: 20px; display: grid; gap: 18px; grid-template-columns: 1.1fr 1.4fr 0.9fr; align-items: start; }
+.setup-foot {
+  padding: 13px 20px; border-top: 1px solid var(--line); display: flex; gap: 14px;
+  align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* ── Worksheet ───────────────────────────────────────────────────────── */
+.sheet { margin-top: 72px; }
+.sheet > .cap { display: block; margin-bottom: 10px; }
+.sheet h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
+.sheet > p { margin: 14px 0 0; max-width: 68ch; color: var(--ink-dim); }
+
+.step { margin-top: 40px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.step-head { display: flex; gap: 16px; padding: 18px 20px; align-items: flex-start; }
+.step-num {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; font-weight: 500;
+  color: var(--seed-text); padding-top: 3px; flex: none; letter-spacing: 0.04em;
+}
+.step-title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.015em; }
+.step-desc { margin: 7px 0 0; font-size: 14px; color: var(--ink-dim); max-width: 70ch; }
+.step-desc code, .inline-code {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.88em;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
+  color: var(--ink);
+}
+.step-body { padding: 0 20px 20px; }
+.row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+/* Two calls on one line read as one instruction unless each is enclosed. */
+.calls { display: flex; gap: 10px; flex-wrap: wrap; }
+.call {
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2);
+}
+.call .path { flex: 1 1 auto; }
+.row .field { flex: 1 1 190px; }
+
+.verb {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line-firm);
+  color: var(--ink-dim); background: var(--panel-2); flex: none;
+}
+.verb.post { color: var(--seed-text); border-color: color-mix(in oklch, var(--seed) 45%, var(--line-firm)); }
+.path {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+/* Captured output — the transcript each exercise leaves behind. */
+.out { margin-top: 16px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--bg); }
+.out-head {
+  display: flex; align-items: center; gap: 10px; padding: 9px 13px;
+  border-bottom: 1px solid var(--line); background: var(--panel-2); flex-wrap: wrap;
+}
+.out-code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; font-weight: 500; }
+.out-time { font-size: 11px; color: var(--ink-dim); margin-left: auto; font-variant-numeric: tabular-nums; }
+pre.out-body {
+  margin: 0; padding: 14px; overflow-x: auto; max-height: 340px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 12.5px; line-height: 1.65; color: var(--ink); tab-size: 2;
+}
+pre.out-body .k { color: var(--seed-text); }
+pre.out-body .s { color: var(--ok-ink); }
+pre.out-body .n { color: var(--info-ink); }
+pre.out-body .b { color: var(--warn-ink); }
+.empty { padding: 15px 14px; font-size: 13px; color: var(--ink-dim); }
+.entry + .entry { border-top: 1px solid var(--line); opacity: 0.66; }
+.entry + .entry pre.out-body { max-height: 150px; }
+
+/* Worker roster — one row per service, not a card grid. */
+.roster { border-top: 1px solid var(--line); }
+.worker {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center;
+  padding: 13px 20px; border-bottom: 1px solid var(--line);
+}
+.worker:last-child { border-bottom: 0; }
+/* The result belongs under the row that produced it. */
+.worker-out { margin: 0 20px 16px; }
+.worker-id { min-width: 0; }
+.worker-name { font-size: 14px; font-weight: 500; letter-spacing: -0.01em; }
+.worker-queue { font-size: 12.5px; color: var(--ink-dim); }
+.worker-acts { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ── Reference ───────────────────────────────────────────────────────── */
+.ref { margin-top: 76px; }
+.ref h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+.notes { margin-top: 26px; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.note { background: var(--panel); padding: 20px; }
+.note h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.note p { margin: 0; font-size: 13.5px; color: var(--ink-dim); max-width: 64ch; }
+.note p + p { margin-top: 9px; }
+
+table.codes { width: 100%; border-collapse: collapse; margin-top: 26px; font-size: 13px; }
+table.codes th {
+  text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-firm);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim);
+}
+table.codes td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.codes tr:last-child td { border-bottom: 0; }
+table.codes td:first-child { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--seed-text); white-space: nowrap; }
+table.codes td:nth-child(2) { font-variant-numeric: tabular-nums; color: var(--ink-dim); width: 64px; }
+table.codes td:last-child { color: var(--ink-dim); }
+
+footer { margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; font-size: 13px; color: var(--ink-dim); }
+
+.scroll-x { overflow-x: auto; }
+
+@media (max-width: 1040px) {
+  .head-main { grid-template-columns: 1fr; gap: 28px; }
+}
+@media (max-width: 860px) {
+  .setup-body { grid-template-columns: 1fr; }
+  .head-main { grid-template-columns: 1fr; gap: 26px; }
+  .facts > div { grid-template-columns: 96px 1fr; }
+  .worker { grid-template-columns: 1fr; align-items: flex-start; }
+  .worker-acts { justify-content: flex-start; }
+  .head { padding-top: 36px; }
+  h1 { font-size: 18px; }
+  .head p.lede { font-size: 16px; }
+  .sheet h2 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="head">
+    <div class="head-top">
+      <div class="mark">
+        <div class="mark-glyph"><span></span></div>
+        <div>
+          <h1>Dockier SAST</h1>
+          <div class="cap">Service bench</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="lamp" id="router-lamp">router</span>
+        <button class="btn" id="theme-toggle" type="button" aria-label="Switch to light theme">Light</button>
+      </div>
+    </div>
+
+    <div class="head-main">
+      <div>
+        <p class="lede">
+          Static analysis runs as <strong>seven services</strong>, each its own process,
+          behind this router. Everything below is live: set your credentials once, then
+          work down the sheet to exercise the scan API and every worker in turn.
+        </p>
+        <dl class="facts">
+          <div><dt>Entry point</dt><dd>one router port, forwarding by path</dd></div>
+          <div><dt>Auth</dt><dd>tenant JWT, verified by the api service</dd></div>
+          <div><dt>Queue</dt><dd>pg-boss, one queue per engine</dd></div>
+        </dl>
+      </div>
+
+      <!-- Instrument bank: the first viewport's live state -->
+      <section class="bank" aria-label="Service instruments">
+      <div class="bank-head">
+        <span class="cap">Bench readout</span>
+        <span class="cap" id="probe-stamp">not yet probed</span>
+      </div>
+        <div class="bank-grid" id="bank"></div>
+      </section>
+    </div>
+  </header>
+
+  <!-- Setup strip -->
+  <section class="setup" aria-label="Connection setup">
+    <div class="setup-body">
+      <div class="field">
+        <label for="base">Router base URL</label>
+        <input id="base" type="url" spellcheck="false" autocomplete="off">
+        <span class="hint">Defaults to wherever this page is served from.</span>
+      </div>
+      <div class="field mono-field">
+        <label for="token">Tenant token</label>
+        <input id="token" type="password" spellcheck="false" autocomplete="off"
+               placeholder="eyJhbGciOiJIUzI1NiIs…">
+        <span class="hint">
+          HS256 over <code class="inline-code">JWT_SECRET</code>, carrying
+          <code class="inline-code">userId</code>, <code class="inline-code">email</code> and
+          <code class="inline-code">tenantId</code> — all three are required. Sent as a bearer
+          token; kept in this browser only.
+        </span>
+        <details class="mint">
+          <summary>No token? Mint one</summary>
+          <p>Run against the same <code class="inline-code">JWT_SECRET</code> the services use:</p>
+          <div class="mint-cmd">
+            <code id="mint">python -c "import jwt; print(jwt.encode({'userId':'you','email':'you@example.com','tenantId':'YOUR_ORG'}, 'YOUR_JWT_SECRET', algorithm='HS256'))"</code>
+            <button class="btn" id="copy-mint" type="button">Copy</button>
+          </div>
+          <p><code class="inline-code">tenantId</code> must match the scan's
+             <code class="inline-code">organization_id</code>, or every call returns 404.</p>
+        </details>
+      </div>
+      <div class="field mono-field">
+        <label for="scan">Scan ID</label>
+        <input id="scan" type="text" spellcheck="false" autocomplete="off" placeholder="scan-…">
+        <span class="hint">Must belong to your tenant.</span>
+      </div>
+    </div>
+    <div class="setup-foot">
+      <span class="lamp" id="token-lamp">no token set</span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" id="forget" type="button">Forget credentials</button>
+        <button class="btn primary" id="probe" type="button">Probe services</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Worksheet ─────────────────────────────────────────────────── -->
+  <section class="sheet" aria-labelledby="sheet-h">
+    <span class="cap">Worksheet</span>
+    <h2 id="sheet-h">Exercise every service</h2>
+    <p>
+      Steps run independently, but they read best in order: the router tells you what exists,
+      the scan API is what your application calls, and the workers are where a scan actually
+      happens. Each step keeps a short transcript, newest first, so you can compare calls.
+    </p>
+
+    <!-- 01 -->
+    <article class="step">
+      <div class="step-head">
+        <span class="step-num">01</span>
+        <div>
+          <h3 class="step-title">Ask the router what exists</h3>
+          <p class="step-desc">
+            <code>/services</code> returns the registry — every service and the path it answers
+            on. <code>/health</code> probes them all concurrently and returns
+            <code>503</code> if any is unreachable, so a green result here means the whole
+            topology is up. Neither needs a token.
+          </p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="calls">
+          <div class="call">
+            <span class="verb">GET</span><span class="path">/services</span>
+            <button class="btn" data-run="services" type="button">Run</button>
+          </div>
+          <div class="call">
+            <span class="verb">GET</span><span class="path">/health</span>
+            <button class="btn" data-run="router-health" type="button">Run</button>
+          </div>
+        </div>
+        <div class="out" data-out="services" aria-live="polite"><div class="empty">No response yet.</div></div>
+      </div>
+    </article>
+
+    <!-- 02 -->
+    <article class="step">
+      <div class="step-head">
+        <span class="step-num">02</span>
+        <div>
+          <h3 class="step-title">Enqueue a scan</h3>
+          <p class="step-desc">
+            Returns as soon as the job is durably queued — not when the scan finishes. Unknown
+            option keys are rejected rather than ignored, so a typo cannot quietly mean
+            <em>enabled</em>. Try one to see the error shape.
+          </p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="row">
+          <span class="verb post">POST</span>
+          <span class="path">/sast/scans/<span class="scan-slot">…</span>/run</span>
+        </div>
+        <div class="row" style="margin-top:14px" id="engine-toggles"></div>
+        <div class="row" style="margin-top:12px">
+          <div class="field mono-field" style="flex:1 1 300px">
+            <label for="extra-opt">Extra option key <span style="text-transform:none;letter-spacing:0;font-weight:400">(optional — expect 422)</span></label>
+            <input id="extra-opt" type="text" spellcheck="false" autocomplete="off" placeholder="enableSemgrap">
+          </div>
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button class="btn primary" data-run="run-scan" type="button">Enqueue scan</button>
+        </div>
+        <div class="out" data-out="run-scan" aria-live="polite"><div class="empty">No response yet.</div></div>
+      </div>
+    </article>
+
+    <!-- 03 -->
+    <article class="step">
+      <div class="step-head">
+        <span class="step-num">03</span>
+        <div>
+          <h3 class="step-title">Watch it progress</h3>
+          <p class="step-desc">
+            Poll for status, summary, per-engine outcome and live progress. Two fields decide
+            how you present the result: <code>summary.partial</code> means an engine failed, so
+            <strong>zero findings may mean nothing looked</strong>; and
+            <code>qualityGateStatus</code> stays <code>null</code> on a partial scan, because
+            the engine that died is the one that might have found the error.
+          </p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="row">
+          <span class="verb">GET</span>
+          <span class="path">/sast/scans/<span class="scan-slot">…</span></span>
+          <button class="btn" data-run="scan-status" type="button">Fetch status</button>
+          <button class="btn" data-run="scan-poll" type="button" id="poll-btn">Poll until done</button>
+        </div>
+        <div class="out" data-out="scan-status" aria-live="polite"><div class="empty">No response yet.</div></div>
+      </div>
+    </article>
+
+    <!-- 04 -->
+    <article class="step">
+      <div class="step-head">
+        <span class="step-num">04</span>
+        <div>
+          <h3 class="step-title">Read the findings</h3>
+          <p class="step-desc">
+            Suppressed findings are <strong>marked, never deleted</strong> — the LLM filter flags
+            them and they stay queryable. <code>includeSuppressed</code> is how a reviewer audits
+            what was filtered out, and <code>counts.suppressed</code> tells you how much there is
+            to audit even when the list excludes it.
+          </p>
+        </div>
+      </div>
+      <div class="step-body">
+        <div class="row">
+          <span class="verb">GET</span>
+          <span class="path">/sast/scans/<span class="scan-slot">…</span>/findings</span>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <div class="field" style="flex:0 1 170px">
+            <label for="sev">Severity</label>
+            <select id="sev">
+              <option value="">All</option>
+              <option value="error">error</option>
+              <option value="warning">warning</option>
+              <option value="info">info</option>
+            </select>
+          </div>
+          <div class="field" style="flex:0 1 130px">
+            <label for="limit">Limit</label>
+            <input id="limit" type="number" min="1" max="200" value="50">
+          </div>
+          <div class="field" style="flex:0 1 120px">
+            <label for="offset">Offset</label>
+            <input id="offset" type="number" min="0" value="0">
+          </div>
+          <div class="field" style="flex:0 1 210px">
+            <label for="suppressed">Suppressed</label>
+            <select id="suppressed">
+              <option value="">Excluded (default)</option>
+              <option value="true">Included</option>
+            </select>
+          </div>
+          <button class="btn" data-run="findings" type="button">Fetch findings</button>
+        </div>
+        <div class="out" data-out="findings" aria-live="polite"><div class="empty">No response yet.</div></div>
+      </div>
+    </article>
+
+    <!-- 05 -->
+    <article class="step">
+      <div class="step-head">
+        <span class="step-num">05</span>
+        <div>
+          <h3 class="step-title">Reach an individual worker</h3>
+          <p class="step-desc">
+            Each worker answers on <code>/workers/{name}</code> with its own health, metadata and
+            a manual trigger. <em>Trigger</em> enqueues rather than running inline, so a triggered
+            job obeys the same concurrency cap, retries and expiry as any other. Useful for
+            isolating which service is down when aggregate health goes red.
+          </p>
+        </div>
+      </div>
+      <div class="roster" id="roster"></div>
+    </article>
+  </section>
+
+  <!-- ── Reference ─────────────────────────────────────────────────── -->
+  <section class="ref" aria-labelledby="ref-h">
+    <span class="cap">Reference</span>
+    <h2 id="ref-h">What the responses mean</h2>
+
+    <div class="notes">
+      <div class="note">
+        <h3>Authentication is per-tenant, and the router does not do it</h3>
+        <p>
+          The <code class="inline-code">api</code> service verifies the token itself and scopes
+          every query to its <code class="inline-code">tenantId</code>. A router that
+          authenticated on the services' behalf would become one component whose compromise
+          grants access to every tenant's scans.
+        </p>
+        <p>
+          A scan belonging to another tenant returns <strong>404, not 403</strong> — confirming
+          that an id exists is itself a disclosure.
+        </p>
+      </div>
+      <div class="note">
+        <h3>A clean scan and a broken one look alike unless you check</h3>
+        <p>
+          <code class="inline-code">status</code> is a closed enum —
+          <code class="inline-code">pending</code>, <code class="inline-code">running</code>,
+          <code class="inline-code">completed</code>, <code class="inline-code">failed</code> —
+          with no room for <em>degraded</em>. Read
+          <code class="inline-code">summary.partial</code> and
+          <code class="inline-code">engineStatus</code> before presenting a result as clean.
+        </p>
+      </div>
+      <div class="note">
+        <h3>Errors carry a code, not just prose</h3>
+        <p>
+          Every failure returns <code class="inline-code">{ "message", "code" }</code>. The
+          message names the field when a parameter is at fault, so it can be shown to a user
+          directly rather than mapped.
+        </p>
+      </div>
+    </div>
+
+    <div class="scroll-x">
+      <table class="codes">
+        <thead>
+          <tr><th scope="col">Code</th><th scope="col">HTTP</th><th scope="col">When you will see it</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>UNAUTHORIZED</td><td>401</td><td>Missing, malformed, expired, or signed with a different secret.</td></tr>
+          <tr><td>NOT_FOUND</td><td>404</td><td>No such scan <em>for your tenant</em>. Also returned for another tenant's scan.</td></tr>
+          <tr><td>UNKNOWN_SERVICE</td><td>404</td><td>The path named a service that does not exist. The message lists the valid ones.</td></tr>
+          <tr><td>VALIDATION_ERROR</td><td>422</td><td>Bad parameter or unknown option key. The message names the field.</td></tr>
+          <tr><td>UPSTREAM_TIMEOUT</td><td>504</td><td>A service did not answer the router in time.</td></tr>
+          <tr><td>UPSTREAM_UNAVAILABLE</td><td>503</td><td>A service is down. Probe it directly in step 05 to confirm which.</td></tr>
+          <tr><td>AUTH_NOT_CONFIGURED</td><td>500</td><td><code class="inline-code">JWT_SECRET</code> is unset. The API fails closed rather than skipping auth.</td></tr>
+          <tr><td>INTERNAL_ERROR</td><td>500</td><td>Deliberately generic — the underlying message can contain a clone URL with a token.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer>
+      <span>OpenAPI at <a href="/docs">/docs</a> · service registry at <a href="/services">/services</a> · written reference in <code class="inline-code">docs/api/sast-workers.mdx</code></span>
+      <span>Dockier · MPL-2.0</span>
+    </footer>
+  </section>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const WORKERS = [
+    ["gateway",    "Claims scans, clones, fans out"],
+    ["aggregator", "Fans in results, dedupes, persists"],
+    ["semgrep",    "Semgrep engine"],
+    ["regex",      "Custom rules + sensitive data"],
+    ["sonarqube",  "SonarQube engine"],
+    ["codeql",     "CodeQL engine"],
+  ];
+  const ENGINES = [
+    ["enableSemgrep", "Semgrep"], ["enableSonarqube", "SonarQube"],
+    ["enableCodeql", "CodeQL"], ["enableCustomRules", "Custom rules"],
+    ["enableSensitiveData", "Sensitive data"],
+  ];
+  const STORE = "dockier.sast.bench";
+
+  const $  = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const el = (t, cls, txt) => { const n = document.createElement(t); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
+
+  // ── State ───────────────────────────────────────────────────────────
+  const base   = $("#base");
+  const token  = $("#token");
+  const scanId = $("#scan");
+
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } })();
+  base.value   = saved.base || location.origin;
+  token.value  = saved.token || "";
+  scanId.value = saved.scan || "";
+
+  const persist = () => localStorage.setItem(STORE, JSON.stringify({
+    base: base.value, token: token.value, scan: scanId.value,
+  }));
+
+  function syncSetup() {
+    persist();
+    const has = token.value.trim().length > 0;
+    const lamp = $("#token-lamp");
+    lamp.className = "lamp " + (has ? "ok" : "");
+    lamp.textContent = has ? "token set" : "no token set";
+    $$(".scan-slot").forEach(s => s.textContent = scanId.value.trim() || "{scanId}");
+    $$("[data-run]").forEach(b => {
+      const needsToken = ["run-scan", "scan-status", "scan-poll", "findings"].includes(b.dataset.run);
+      const needsScan  = needsToken;
+      b.disabled = (needsToken && !has) || (needsScan && !scanId.value.trim());
+      b.title = b.disabled ? "Set a tenant token and scan ID above" : "";
+    });
+  }
+  [base, token, scanId].forEach(i => i.addEventListener("input", syncSetup));
+
+  // ── Theme ───────────────────────────────────────────────────────────
+  const themeBtn = $("#theme-toggle");
+  const applyTheme = t => {
+    document.documentElement.dataset.theme = t;
+    themeBtn.textContent = t === "dark" ? "Light" : "Dark";
+    themeBtn.setAttribute("aria-label", `Switch to ${t === "dark" ? "light" : "dark"} theme`);
+    localStorage.setItem(STORE + ".theme", t);
+  };
+  applyTheme(localStorage.getItem(STORE + ".theme") || "dark");
+  themeBtn.addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+
+  // ── Rendering ───────────────────────────────────────────────────────
+  function highlight(json) {
+    return json.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]))
+      .replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?)/g,
+        (m, str, colon, bool, num) => {
+          if (str) return colon ? `<span class="k">${str}</span>${colon}` : `<span class="s">${str}</span>`;
+          if (bool) return `<span class="b">${bool}</span>`;
+          if (num) return `<span class="n">${num}</span>`;
+          return m;
+        });
+  }
+
+  const TRANSCRIPT_DEPTH = 5;
+
+  function render(slot, { status, body, ms, error, label }) {
+    const box = $(`[data-out="${slot}"]`);
+    const empty = box.querySelector(".empty");
+    if (empty) empty.remove();
+
+    const entry = el("div", "entry");
+    const head = el("div", "out-head");
+    const lamp = el("span", "lamp " + (error ? "bad" : status < 300 ? "ok" : status < 500 ? "warn" : "bad"));
+    lamp.textContent = error ? "network" : `${status}`;
+    head.append(lamp);
+    if (label) head.append(el("span", "out-code", label));
+    head.append(el("span", "out-time", (error ? "—" : `${ms} ms`) + " · " + new Date().toLocaleTimeString()));
+    entry.append(head);
+
+    const pre = el("pre", "out-body");
+    if (error) {
+      pre.textContent = `${error}\n\nCheck the router base URL, and that the services are running.`;
+    } else {
+      pre.innerHTML = highlight(JSON.stringify(body, null, 2));
+    }
+    entry.append(pre);
+
+    // Newest first, older calls kept so a sequence can be compared.
+    box.prepend(entry);
+    [...box.querySelectorAll(".entry")].slice(TRANSCRIPT_DEPTH).forEach(e => e.remove());
+  }
+
+  async function call(path, { method = "GET", auth = false, json } = {}) {
+    const url = base.value.replace(/\/$/, "") + path;
+    const headers = {};
+    if (auth) headers.Authorization = "Bearer " + token.value.trim();
+    if (json) headers["Content-Type"] = "application/json";
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, { method, headers, body: json ? JSON.stringify(json) : undefined });
+      const text = await res.text();
+      let parsed; try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+      return { status: res.status, body: parsed, ms: Math.round(performance.now() - t0) };
+    } catch (e) {
+      return { error: e.message || "Request failed", ms: Math.round(performance.now() - t0) };
+    }
+  }
+
+  // ── Instrument bank ─────────────────────────────────────────────────
+  const bank = $("#bank");
+  const gauges = new Map();
+  const rosterLamps = new Map();
+  [["api", "Scan API"], ...WORKERS.map(([n]) => [n, n])].forEach(([name, label]) => {
+    const g = el("div", "gauge");
+    g.append(el("div", "gauge-name", label));
+    const readout = el("div", "gauge-readout");
+    const digits = el("span", "digits idle", "––");
+    // The api service serves requests but consumes no queue, so a "queued"
+    // reading there would be a number that cannot exist.
+    const unit = el("span", "gauge-unit", name === "api" ? "no queue" : "queued");
+    readout.append(digits, unit);
+    const hasQueue = name !== "api";
+    const scale = el("div", "scale"); const fill = el("span"); scale.append(fill);
+    const sub = el("div", "gauge-sub", hasQueue ? "—" : "serves requests");
+    if (!hasQueue) scale.style.visibility = "hidden";
+    const lamp = el("span", "lamp", "unknown");
+    g.append(readout, scale, sub, lamp);
+    bank.append(g);
+    gauges.set(name, { digits, lamp, unit, fill, sub });
+  });
+
+  // Full scale for the queue meter. Depth beyond this is a backlog, and the
+  // meter pins rather than rescaling — a moving scale hides exactly that.
+  const QUEUE_FULL = 20;
+
+  function setGauge(name, status, queued, active) {
+    const cls = status === "ok" ? "ok" : status === "unreachable" ? "bad" : "warn";
+    // The roster carries the same truth; leaving it "unknown" after a probe
+    // makes the page disagree with itself.
+    const rl = rosterLamps.get(name);
+    if (rl) { rl.className = "lamp " + cls; rl.textContent = status; }
+
+    const g = gauges.get(name);
+    if (!g) return;
+    g.lamp.className = "lamp " + cls;
+    g.lamp.textContent = status;
+    if (g.fill) g.fill.style.transform = "scaleX(" + (queued == null ? 0 : Math.min(1, queued / QUEUE_FULL)) + ")";
+    if (g.sub) g.sub.textContent = queued == null ? "—" : `${active || 0} active`;
+
+    const next = queued == null ? "––" : String(queued);
+    if (g.digits.textContent !== next) {
+      g.digits.textContent = next;
+      g.digits.classList.toggle("idle", queued == null);
+      g.digits.classList.remove("roll");
+      void g.digits.offsetWidth;      // restart the roll
+      g.digits.classList.add("roll");
+    }
+  }
+
+  async function probe({ quiet = false } = {}) {
+    const btn = $("#probe");
+    if (!quiet) { btn.classList.add("running"); btn.disabled = true; }
+    const res = await call("/health");
+    if (!quiet) { btn.classList.remove("running"); btn.disabled = false; }
+
+    const routerLamp = $("#router-lamp");
+    if (res.error) {
+      routerLamp.className = "lamp bad";
+      routerLamp.textContent = "router unreachable";
+      gauges.forEach((_, n) => setGauge(n, "unreachable", null));
+      $("#probe-stamp").textContent = "probe failed";
+      if (!quiet) render("services", { ...res, label: "GET /health" });
+      return;
+    }
+    const body = res.body || {};
+    if (!Array.isArray(body.services)) {
+      // Reached something, but not this router. Silently showing "unknown"
+      // gauges and a fresh timestamp would look like a successful probe.
+      routerLamp.className = "lamp bad";
+      routerLamp.textContent = "not a router";
+      gauges.forEach((_, n) => setGauge(n, "unknown", null));
+      $("#probe-stamp").textContent = "unexpected response";
+      if (!quiet) render("services", { ...res, label: "GET /health" });
+      return;
+    }
+    routerLamp.className = "lamp " + (body.status === "ok" ? "ok" : "warn");
+    routerLamp.textContent = "router " + (body.status || "unknown");
+    (body.services || []).forEach(s => setGauge(
+      s.service, s.status, s.queue ? s.queue.queued : null, s.queue ? s.queue.active : null));
+    $("#probe-stamp").textContent = "probed " + new Date().toLocaleTimeString();
+  }
+  $("#probe").addEventListener("click", probe);
+
+  $("#copy-mint").addEventListener("click", async function () {
+    try {
+      await navigator.clipboard.writeText($("#mint").textContent.trim());
+      this.textContent = "Copied";
+    } catch {
+      // Clipboard is blocked outside a secure context; select it instead so
+      // the command is still one keystroke away.
+      const r = document.createRange(); r.selectNodeContents($("#mint"));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      this.textContent = "Selected";
+    }
+    setTimeout(() => { this.textContent = "Copy"; }, 1800);
+  });
+
+  $("#forget").addEventListener("click", () => {
+    token.value = ""; scanId.value = "";
+    localStorage.removeItem(STORE);
+    syncSetup();
+  });
+
+  // ── Engine toggles ──────────────────────────────────────────────────
+  const toggles = $("#engine-toggles");
+  ENGINES.forEach(([key, label]) => {
+    const wrap = el("label", "lamp toggle");
+    const cb = el("input");
+    cb.type = "checkbox"; cb.checked = true; cb.dataset.opt = key;
+    wrap.append(cb, document.createTextNode(label));
+    toggles.append(wrap);
+  });
+
+  // ── Worker roster ───────────────────────────────────────────────────
+  const roster = $("#roster");
+  WORKERS.forEach(([name, desc]) => {
+    const row = el("div", "worker");
+    const id = el("div", "worker-id");
+    id.append(el("div", "worker-name", name), el("div", "worker-queue", desc));
+    const lamp = el("span", "lamp", "unknown");
+    rosterLamps.set(name, lamp);
+    const acts = el("div", "worker-acts");
+    [["health", "Health"], ["info", "Info"], ["trigger", "Trigger"]].forEach(([ep, label]) => {
+      const b = el("button", "btn", label);
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        b.classList.add("running");
+        const res = await call(`/workers/${name}/${ep}`, { method: ep === "trigger" ? "POST" : "GET", json: ep === "trigger" ? {} : undefined });
+        b.classList.remove("running");
+        const box = $(`[data-out="worker-${name}"]`);
+        box.hidden = false;
+        render("worker-" + name, { ...res, label: `${ep === "trigger" ? "POST" : "GET"} /workers/${name}/${ep}` });
+        if (ep === "health" && !res.error && res.body) {
+          const s = res.body.status || "unknown";
+          lamp.className = "lamp " + (s === "ok" ? "ok" : "bad");
+          lamp.textContent = s;
+          setGauge(name, s, res.body.queue ? res.body.queue.queued : null,
+                   res.body.queue ? res.body.queue.active : null);
+        }
+      });
+      acts.append(b);
+    });
+    row.append(id, lamp, acts);
+    const out = el("div", "out worker-out");
+    out.dataset.out = "worker-" + name;
+    out.setAttribute("aria-live", "polite");
+    out.hidden = true;
+    roster.append(row, out);
+  });
+
+  // ── Worksheet actions ───────────────────────────────────────────────
+  const actions = {
+    "services":      () => call("/services"),
+    "router-health": () => call("/health"),
+    "run-scan":      () => call(`/sast/scans/${encodeURIComponent(scanId.value.trim())}/run`, {
+                        method: "POST", auth: true,
+                        json: { options: (() => {
+                          const o = Object.fromEntries($$("[data-opt]").map(c => [c.dataset.opt, c.checked]));
+                          const extra = $("#extra-opt").value.trim();
+                          if (extra) o[extra] = true;   // demonstrates extra="forbid"
+                          return o;
+                        })() },
+                      }),
+    "scan-status":   () => call(`/sast/scans/${encodeURIComponent(scanId.value.trim())}`, { auth: true }),
+    "findings":      () => {
+      const p = new URLSearchParams();
+      if ($("#sev").value) p.set("severity", $("#sev").value);
+      if ($("#suppressed").value) p.set("includeSuppressed", "true");
+      if ($("#limit").value) p.set("limit", $("#limit").value);
+      if (Number($("#offset").value) > 0) p.set("offset", $("#offset").value);
+      const qs = p.toString();
+      return call(`/sast/scans/${encodeURIComponent(scanId.value.trim())}/findings${qs ? "?" + qs : ""}`, { auth: true });
+    },
+  };
+  const LABELS = {
+    "services": "GET /services", "router-health": "GET /health",
+    "run-scan": "POST /sast/scans/{id}/run", "scan-status": "GET /sast/scans/{id}",
+    "findings": "GET /sast/scans/{id}/findings",
+  };
+  const SLOT = { "router-health": "services", "scan-poll": "scan-status" };
+
+  $$("[data-run]").forEach(btn => {
+    const key = btn.dataset.run;
+    if (key === "scan-poll") return;
+    btn.addEventListener("click", async () => {
+      btn.classList.add("running"); btn.disabled = true;
+      const res = await actions[key]();
+      btn.classList.remove("running"); syncSetup();
+      render(SLOT[key] || key, { ...res, label: LABELS[key] });
+    });
+  });
+
+  // Poll until the scan reaches a terminal state — the one long-running action.
+  $("#poll-btn").addEventListener("click", async function () {
+    const btn = this;
+    btn.classList.add("running"); btn.disabled = true;
+    let tries = 0;
+    while (tries++ < 40) {
+      const res = await actions["scan-status"]();
+      render("scan-status", { ...res, label: `GET /sast/scans/{id} · poll ${tries}` });
+      if (res.error) break;
+      const s = res.body && res.body.status;
+      if (s === "completed" || s === "failed") break;
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    btn.classList.remove("running"); syncSetup();
+  });
+
+  syncSetup();
+  probe();
+  // The readout claims to be live; a value frozen at page load is not.
+  setInterval(() => { if (!document.hidden) probe({ quiet: true }); }, 15000);
+})();
+</script>
+</body>
+</html>

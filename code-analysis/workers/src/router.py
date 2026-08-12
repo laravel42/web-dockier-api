@@ -1,6 +1,7 @@
 """
 The single public port. Everything else is reached through here.
 
+    /                  -> the service bench (console)
     /sast/…            -> the api service
     /workers/{name}/…  -> that worker service
     /health            -> aggregate health across all services
@@ -20,12 +21,13 @@ access to every tenant's scans.
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Dict, List
 
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from src.api.errors import ApiError, register_error_handlers
 from src.service_registry import BY_NAME, SERVICES, WORKER_SERVICES, get
@@ -100,6 +102,20 @@ async def _forward(request: Request, target_base: str, path: str) -> Response:
         headers=passthrough,
         media_type=upstream.headers.get("content-type"),
     )
+
+
+CONSOLE = Path(__file__).parent / "static" / "console.html"
+
+
+@app.get("/", include_in_schema=False)
+async def console() -> Response:
+    """The service bench: documentation and a live tester for every service.
+
+    Served from the router because it must be reachable before — or without —
+    the SPA, and because a console that cannot load when a service is down is
+    useless exactly when it is needed.
+    """
+    return FileResponse(CONSOLE, media_type="text/html")
 
 
 @app.get("/services", tags=["Router"])

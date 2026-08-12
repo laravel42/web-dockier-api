@@ -77,6 +77,10 @@ export CORS_ALLOW_ORIGINS=http://localhost:5173
 
 Logs land in `logs/<service>.log`, pids in `.run/`.
 
+The router serves a **service bench** at `/` — live documentation plus a runnable
+form for every endpoint on this page. It is self-contained (no build, no
+third-party request) so it loads on a restricted host and before the SPA exists.
+
 One service on its own:
 
 ```bash
