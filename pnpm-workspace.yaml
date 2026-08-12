@@ -9,3 +9,13 @@ allowBuilds:
   workerd: true
 minimumReleaseAgeExclude:
   - '@railway/cli@5.8.0'
+
+# BlockNote/Tiptap pull prosemirror-model and prosemirror-view through two
+# resolution paths (@blocknote/core directly, and @tiptap/pm transitively).
+# Both accept ^1.x, so pnpm is free to install two copies — which breaks
+# ProseMirror's instanceof checks at runtime ("Can not convert <x> to a
+# Fragment (looks like multiple versions of prosemirror-model were loaded)").
+# Force a single instance of each.
+overrides:
+  prosemirror-model: ^1.25.11
+  prosemirror-view: ^1.42.2
