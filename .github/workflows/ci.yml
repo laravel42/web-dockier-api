@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm --filter frontend lint
+
+      - name: Test
+        run: pnpm test
+
+      # Runs after typecheck so a build failure is never mistaken for a type error.
+      # `tsc -b` caches aggressively, and a stale .tsbuildinfo has already hidden a
+      # real error once, so the build stays a separate gate rather than a proxy.
+      - name: Build
+        run: pnpm --filter frontend build
+
+  design:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Exits 2 on any finding. The project's sanctioned exceptions live in
+      # .impeccable/config.json — scoped to the file that earns them, so the same
+      # rules still fail anywhere else. See docs/delivery/design-exceptions.md.
+      - name: Design detector
+        run: pnpm design:check
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm test:e2e:install
+
+      # Renders Project Detail at 375 / 768 / 1440. These cover the rules that
+      # only a rendered page can answer — announced vs rendered tab orientation,
+      # whether a focused control shows one indicator or two, horizontal overflow.
+      - name: Browser evidence
+        run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

@@ -13,6 +13,7 @@
     "lint": "pnpm backend:lint && pnpm frontend:lint",
     "lint:fix": "pnpm backend:lint:fix && pnpm frontend:lint:fix",
     "typecheck": "pnpm backend:typecheck && pnpm frontend:typecheck",
+    "design:check": "npx --yes impeccable@3 detect frontend/src",
     "test:e2e:install": "pnpm --filter frontend test:e2e:install",
     "db:migrate": "bash infra/setup-external-db.sh",
     "supabase": "supabase",

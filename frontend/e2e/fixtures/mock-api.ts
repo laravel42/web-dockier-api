@@ -90,6 +90,21 @@ export async function mockAuthenticatedApi(
     if (!isApiRequest(route)) return route.continue();
     return json(route, { favicon: null, deployId: null });
   });
+
+  // Single project, for the detail route.
+  await page.route(`**/projects/${projects[0]?.id ?? "none"}`, (route) => {
+    if (!isApiRequest(route)) return route.continue();
+    if (route.request().method() === "GET") return json(route, projects[0]);
+    return route.fallback();
+  });
+
+  // Anything else the detail page reaches for resolves empty rather than hanging.
+  // A pending request would leave panels in a loading state and make layout
+  // assertions measure a skeleton instead of the real thing.
+  await page.route("**/api/**", (route) => {
+    if (!isApiRequest(route)) return route.continue();
+    return json(route, {});
+  });
 }
 
 export async function seedAuthStorage(page: Page): Promise<void> {
