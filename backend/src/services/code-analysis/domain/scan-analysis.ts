@@ -134,6 +134,35 @@ export function toRepoRelativePath(filePath: string, repoDir?: string): string {
   return normalized;
 }
 
+/**
+ * Marker for the rules directory inside a semgrep-generated rule id.
+ * Kept as a literal rather than derived from RULES_DIR: ids already stored in the
+ * database were produced on other machines, and must normalize the same way here.
+ */
+const RULES_DIR_MARKER = ".code-analysis.rules.opengrep.";
+
+/**
+ * Strip the scanning machine's filesystem path out of a semgrep rule id.
+ *
+ * Running `semgrep --config <absolute dir>` namespaces every rule with that
+ * directory, dots for slashes, so a finding comes back as
+ *   `Users.oscar.projects.web-dockier-api.code-analysis.rules.opengrep.javascript.browser.security.insecure-document-method`
+ * where the rule's own declared id is just `insecure-document-method` and the
+ * catalogue in semgrep-rules.ts calls it
+ *   `javascript.browser.security.insecure-document-method`.
+ *
+ * The two never matched, so a disabled rule was never actually skipped. This
+ * makes the finding agree with the catalogue.
+ *
+ * Ids without the marker (custom rules, ids already normalized) pass through.
+ */
+export function normalizeSemgrepRuleId(checkId: string): string {
+  if (!checkId) return checkId;
+  const idx = checkId.lastIndexOf(RULES_DIR_MARKER);
+  if (idx === -1) return checkId;
+  return checkId.slice(idx + RULES_DIR_MARKER.length);
+}
+
 export function parseSemgrepOutput(
   stdout: string,
   disabledRuleIds: Set<string>,
@@ -148,10 +177,13 @@ export function parseSemgrepOutput(
 
   const findings: ScanFindingInput[] = [];
   for (const result of parsed.results ?? []) {
-    if (disabledRuleIds.has(result.check_id)) continue;
+    const ruleId = normalizeSemgrepRuleId(result.check_id);
+    // Compare both forms: an override written before this normalization landed
+    // still carries the catalogue id, and nothing should silently start firing again.
+    if (disabledRuleIds.has(ruleId) || disabledRuleIds.has(result.check_id)) continue;
 
     findings.push({
-      ruleId: result.check_id,
+      ruleId,
       severity: resolveSemgrepSeverity(result.extra),
       message: result.extra.message,
       filePath: toRepoRelativePath(result.path, repoDir),
