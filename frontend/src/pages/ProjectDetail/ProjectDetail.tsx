@@ -15,6 +15,9 @@ import ProjectDescription from "./sections/ProjectDescription";
 import PullLogModal from "./modals/PullLogModal";
 import IssueDetailModal from "./modals/IssueDetailModal";
 import PRDetailModal from "./modals/PRDetailModal";
+import FixPreviewModal from "./modals/FixPreviewModal";
+import ReviewPreviewModal, { type GeneratedReview } from "./modals/ReviewPreviewModal";
+import type { FixPlan, ReviewComment } from "@/services/git";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import { useState } from "react";
@@ -64,36 +67,71 @@ export default function ProjectDetail() {
     setOpenIssues((prev) => prev.filter((i) => i.number !== issueNumber));
   };
 
+  const [fixPlan, setFixPlan] = useState<FixPlan | null>(null);
+
+  /** Generates the fix and shows it. Writes nothing — see FixPreviewModal. */
   const handleFixWithAI = async (issue: RepoIssue) => {
     if (!project) return;
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
-    const baseBranch = project.branch || "main";
-    const result = await gitApi.fixIssue(project.connectionId, {
+    const plan = await gitApi.planFix(project.connectionId, {
       owner: parsed.owner,
       repo: parsed.repo,
-      baseBranch,
+      baseBranch: project.branch || "main",
       issueNumber: issue.number,
       issueTitle: issue.title,
       issueBody: issue.body,
     });
+    setFixPlan(plan);
+  };
+
+  /** The only call in this flow that touches the repository. */
+  const handleCreatePullRequest = async (plan: FixPlan) => {
+    if (!project) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) throw new Error("Invalid repository URL");
+    const result = await gitApi.applyFix(project.connectionId, {
+      owner: parsed.owner, repo: parsed.repo, plan,
+    });
     setFixResult(result);
+    setFixPlan(null);
   };
 
   // PR detail modal state
   const [selectedPR, setSelectedPR] = useState<RepoPullRequest | null>(null);
 
+  const [pendingReview, setPendingReview] = useState<GeneratedReview | null>(null);
+
+  /** Generates comments and shows them. Posts nothing. */
   const handleReviewWithAI = async (pr: RepoPullRequest) => {
     if (!project) throw new Error("Project not loaded");
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) throw new Error("Invalid repository URL");
-    return await gitApi.reviewPR(project.connectionId, {
+    const review = await gitApi.generateReview(project.connectionId, {
       owner: parsed.owner,
       repo: parsed.repo,
       prNumber: pr.number,
       prTitle: pr.title,
       prBody: pr.body,
     });
+    setPendingReview(review);
+    return review;
+  };
+
+  /** Posts the subset the author approved, publicly, on their colleague's PR. */
+  const handlePostReview = async (comments: ReviewComment[], approved: boolean) => {
+    if (!project || !selectedPR || !pendingReview) return;
+    const parsed = parseOwnerRepo(project.repository);
+    if (!parsed) throw new Error("Invalid repository URL");
+    await gitApi.postReview(project.connectionId, {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      prNumber: selectedPR.number,
+      summary: pendingReview.summary,
+      approved,
+      comments,
+    });
+    setPendingReview(null);
   };
 
   const lastSuccessfulDeployUrl = recentDeploys
@@ -237,12 +275,28 @@ export default function ProjectDetail() {
 
       <PullLogModal pullLog={pullLog} pullLoading={pullLoading} onClose={() => setPullLog(null)} />
 
+      <FixPreviewModal
+        open={fixPlan !== null}
+        plan={fixPlan}
+        onClose={() => setFixPlan(null)}
+        onCreatePullRequest={handleCreatePullRequest}
+      />
+
+      <ReviewPreviewModal
+        open={pendingReview !== null}
+        review={pendingReview}
+        prNumber={selectedPR?.number ?? 0}
+        onClose={() => setPendingReview(null)}
+        onPost={handlePostReview}
+      />
+
       <IssueDetailModal
         issue={selectedIssue}
         onClose={() => { setSelectedIssue(null); setFixResult(null); }}
         onCloseIssue={handleCloseIssue}
         onFixWithAI={handleFixWithAI}
         fixResult={fixResult}
+        repoLabel={project.repository.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "")}
       />
 
       <PRDetailModal

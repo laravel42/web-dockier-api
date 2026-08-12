@@ -11,6 +11,8 @@ interface Props {
   onCloseIssue: (issueNumber: number) => Promise<void>;
   onFixWithAI: (issue: RepoIssue) => Promise<void>;
   fixResult: { prUrl: string; prNumber: number; summary: string; filesChanged: number } | null;
+  /** owner/repo, so the disclosure can name what would be written to. */
+  repoLabel?: string;
 }
 
 function Label({ name, color }: { name: string; color: string }) {
@@ -31,7 +33,7 @@ function Label({ name, color }: { name: string; color: string }) {
   );
 }
 
-export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWithAI, fixResult }: Props) {
+export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWithAI, fixResult, repoLabel }: Props) {
   const [closing, setClosing] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [error, setError] = useState("");
@@ -147,27 +149,41 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 pt-4 border-t border-border/50">
-            <Button
-              variant="primary"
-              onClick={handleFixWithAI}
-              disabled={fixing || closing || !!fixResult}
-              loading={fixing}
-            >
-              {fixResult ? "Fix Created" : "Fix with AI"}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={handleClose}
-              disabled={closing || fixing}
-              loading={closing}
-            >
-              Close Issue
-            </Button>
-            <div className="flex-1" />
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
+          <div className="flex flex-col gap-2 pt-4 border-t border-border/50">
+            {/* Readable before the click, not once the model is already running. */}
+            <p className="text-xs/relaxed text-text-muted">
+              Reads the files related to this issue and drafts a code change. You see the full
+              diff first — nothing is written to{" "}
+              <span className="font-mono">{repoLabel ?? "your repository"}</span> until you choose
+              to open a pull request.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={handleFixWithAI}
+                disabled={fixing || closing || !!fixResult}
+                loading={fixing}
+              >
+                {fixResult ? "Fix created" : "Draft a fix with AI"}
+              </Button>
+              {/*
+                Was "Close Issue" sitting beside "Cancel", where Cancel means
+                "dismiss this dialog" — two buttons a word apart, one of which
+                writes to the tracker.
+              */}
+              <Button
+                variant="danger"
+                onClick={handleClose}
+                disabled={closing || fixing}
+                loading={closing}
+              >
+                Mark issue closed
+              </Button>
+              <div className="flex-1" />
+              <Button variant="outline" onClick={onClose}>
+                Dismiss
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -13,8 +13,8 @@ import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-cli
 import { getGitProvider, type RepoStats } from "../domain/providers/git-provider.js";
 import { parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
-import { fixIssueWithAI } from "../domain/ai/fix-issue-ai.js";
-import { reviewPRWithAI } from "../domain/ai/review-pr-ai.js";
+import { planIssueFix, applyIssueFix, type FixIssuePlan } from "../domain/ai/fix-issue-ai.js";
+import { generatePRReview, postPRReview } from "../domain/ai/review-pr-ai.js";
 import { env } from "../../../shared/config.js";
 
 export async function registerRepositoryRoutes(app: FastifyInstance) {
@@ -421,7 +421,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
   );
 
   typed.post(
-    "/git/connections/:connectionId/fix-issue",
+    "/git/connections/:connectionId/fix-issue/plan",
     {
       preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-fix-issue" })],
       schema: {
@@ -438,12 +438,14 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         }),
         response: {
           200: z.object({
-            prUrl: z.string(),
-            prNumber: z.number(),
-            branchName: z.string(),
-            filesChanged: z.number(),
-            summary: z.string(),
-          }),
+  summary: z.string(),
+  prDescription: z.string(),
+  branchName: z.string(),
+  baseBranch: z.string(),
+  issueNumber: z.number().int(),
+  issueTitle: z.string(),
+  files: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
+}),
         },
       },
     },
@@ -456,7 +458,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       }
 
       try {
-        return await fixIssueWithAI(conn, {
+        return await planIssueFix(conn, {
           owner: request.body.owner,
           repo: request.body.repo,
           baseBranch: request.body.baseBranch,
@@ -474,12 +476,57 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
 
 
   typed.post(
-    "/git/connections/:connectionId/review-pr",
+    "/git/connections/:connectionId/fix-issue/apply",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-fix-apply" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Open a pull request from a previously generated fix plan",
+        params: z.object({ connectionId: z.uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          plan: z.object({
+  summary: z.string(),
+  prDescription: z.string(),
+  branchName: z.string(),
+  baseBranch: z.string(),
+  issueNumber: z.number().int(),
+  issueTitle: z.string(),
+  files: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
+}),
+        }),
+        response: {
+          200: z.object({
+            prUrl: z.string(),
+            prNumber: z.number(),
+            branchName: z.string(),
+            filesChanged: z.number(),
+            summary: z.string(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      try {
+        return await applyIssueFix(conn, request.body.owner, request.body.repo, request.body.plan as FixIssuePlan);
+      } catch (err: unknown) {
+        request.log.error({ err }, "[AI-FixIssue] Apply failed");
+        throw app.httpErrors.badRequest(err instanceof Error ? err.message : "Failed to open the pull request");
+      }
+    },
+  );
+
+
+  typed.post(
+    "/git/connections/:connectionId/review-pr/generate",
     {
       preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-review-pr" })],
       schema: {
         tags: ["git-integration"],
-        summary: "Review a pull request using AI",
+        summary: "Generate review comments for a pull request. Posts nothing.",
         params: z.object({ connectionId: z.uuid() }),
         body: z.object({
           owner: z.string(),
@@ -498,7 +545,6 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
               severity: z.enum(["critical", "warning", "suggestion", "praise"]),
             })),
             approved: z.boolean(),
-            reviewUrl: z.string(),
           }),
         },
       },
@@ -512,7 +558,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       }
 
       try {
-        return await reviewPRWithAI(conn, {
+        return await generatePRReview(conn, {
           owner: request.body.owner,
           repo: request.body.repo,
           prNumber: request.body.prNumber,
@@ -523,6 +569,46 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         request.log.error({ err }, "[AI-ReviewPR] Pipeline failed");
         const message = err instanceof Error ? err.message : "AI review pipeline failed";
         throw app.httpErrors.badRequest(message);
+      }
+    },
+  );
+
+
+  typed.post(
+    "/git/connections/:connectionId/review-pr/post",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-review-post" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Post an approved set of review comments to a pull request",
+        params: z.object({ connectionId: z.uuid() }),
+        body: z.object({
+          owner: z.string(),
+          repo: z.string(),
+          prNumber: z.number().int(),
+          summary: z.string(),
+          approved: z.boolean(),
+          comments: z.array(z.object({
+            path: z.string(),
+            line: z.number(),
+            body: z.string(),
+            severity: z.enum(["critical", "warning", "suggestion", "praise"]),
+          })),
+        }),
+        response: { 200: z.object({ reviewUrl: z.string() }) },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      try {
+        return await postPRReview(
+          conn, request.body.owner, request.body.repo, request.body.prNumber,
+          request.body.summary, request.body.comments, request.body.approved,
+        );
+      } catch (err: unknown) {
+        request.log.error({ err }, "[AI-ReviewPR] Post failed");
+        throw app.httpErrors.badRequest(err instanceof Error ? err.message : "Failed to post the review");
       }
     },
   );

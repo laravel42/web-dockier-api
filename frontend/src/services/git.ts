@@ -1,3 +1,20 @@
+export interface FixPlanFile { path: string; before: string; after: string }
+export interface FixPlan {
+  summary: string;
+  prDescription: string;
+  branchName: string;
+  baseBranch: string;
+  issueNumber: number;
+  issueTitle: string;
+  files: FixPlanFile[];
+}
+export interface ReviewComment {
+  path: string;
+  line: number;
+  body: string;
+  severity: "critical" | "warning" | "suggestion" | "praise";
+}
+
 import { request } from "./request";
 import { buildQuery } from "./query";
 import type {
@@ -143,26 +160,40 @@ export const gitApi = {
       body: JSON.stringify({ owner, repo, branchName, ...(baseBranch ? { baseBranch } : {}) }),
     }),
 
-  fixIssue: (connectionId: string, data: {
+  /** Generates a fix and returns it for review. Writes nothing. */
+  planFix: (connectionId: string, data: {
     owner: string; repo: string; baseBranch: string;
     issueNumber: number; issueTitle: string; issueBody: string;
   }) =>
-    request<{ prUrl: string; prNumber: number; branchName: string; filesChanged: number; summary: string }>(
-      `/git/connections/${connectionId}/fix-issue`,
+    request<FixPlan>(
+      `/git/connections/${connectionId}/fix-issue/plan`,
       { method: "POST", body: JSON.stringify(data) },
     ),
 
-  reviewPR: (connectionId: string, data: {
+  /** Opens the pull request. The only call in this flow that touches the repo. */
+  applyFix: (connectionId: string, data: { owner: string; repo: string; plan: FixPlan }) =>
+    request<{ prUrl: string; prNumber: number; branchName: string; filesChanged: number; summary: string }>(
+      `/git/connections/${connectionId}/fix-issue/apply`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  /** Generates review comments and returns them. Posts nothing. */
+  generateReview: (connectionId: string, data: {
     owner: string; repo: string;
     prNumber: number; prTitle: string; prBody: string;
   }) =>
-    request<{
-      summary: string;
-      comments: Array<{ path: string; line: number; body: string; severity: "critical" | "warning" | "suggestion" | "praise" }>;
-      approved: boolean;
-      reviewUrl: string;
-    }>(
-      `/git/connections/${connectionId}/review-pr`,
+    request<{ summary: string; comments: ReviewComment[]; approved: boolean }>(
+      `/git/connections/${connectionId}/review-pr/generate`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  /** Posts the approved subset publicly on the pull request. */
+  postReview: (connectionId: string, data: {
+    owner: string; repo: string; prNumber: number;
+    summary: string; approved: boolean; comments: ReviewComment[];
+  }) =>
+    request<{ reviewUrl: string }>(
+      `/git/connections/${connectionId}/review-pr/post`,
       { method: "POST", body: JSON.stringify(data) },
     ),
 

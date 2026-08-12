@@ -208,12 +208,18 @@ async function postGitHubReview(
 
 // ─── Main pipeline ───────────────────────────────────────────────────────────
 
-export async function reviewPRWithAI(
+/**
+ * Steps 1-3: read the PR and generate review comments.
+ *
+ * Performs **no writes**. Review comments land publicly on a colleague's pull
+ * request; their author should see them first.
+ */
+export async function generatePRReview(
   connection: ConnectionLike,
   input: ReviewPRInput,
   apiKey: string,
   model: string,
-): Promise<ReviewPRResult> {
+): Promise<Omit<ReviewPRResult, "reviewUrl">> {
   const { owner, repo, prNumber, prTitle, prBody } = input;
 
   logger.info(`[AI-ReviewPR] Starting review for PR #${prNumber}: ${prTitle}`);
@@ -302,24 +308,32 @@ Rules:
     throw new Error("AI failed to produce a valid review");
   }
 
-  // 4. Post review to GitHub/GitLab
-  let reviewUrl = "";
-  try {
-    if (connection.provider === "github" || connection.provider?.toLowerCase()?.includes("github")) {
-      reviewUrl = await postGitHubReview(connection, owner, repo, prNumber, parsed.summary, parsed.comments, parsed.approved);
-    }
-    // GitLab review posting can be added later
-  } catch (err) {
-    logger.warn(`[AI-ReviewPR] Failed to post review: ${(err as Error).message}`);
-    // Don't throw — still return the review content even if posting fails
+  logger.info(`[AI-ReviewPR] Generated ${parsed.comments.length} comments, approved: ${parsed.approved} (nothing posted)`);
+
+  return { summary: parsed.summary, comments: parsed.comments, approved: parsed.approved };
+}
+
+/**
+ * Step 4: post the review publicly.
+ *
+ * Runs only on an explicit second action, with the comment set the user
+ * approved — which may be a subset of what was generated.
+ */
+export async function postPRReview(
+  connection: ConnectionLike,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  summary: string,
+  comments: ReviewComment[],
+  approved: boolean,
+): Promise<{ reviewUrl: string }> {
+  if (connection.provider === "github" || connection.provider?.toLowerCase()?.includes("github")) {
+    // Unlike the old combined pipeline, a failure here is surfaced rather than
+    // swallowed: the user asked to post, so they must learn if it did not.
+    const reviewUrl = await postGitHubReview(connection, owner, repo, prNumber, summary, comments, approved);
+    logger.info(`[AI-ReviewPR] Posted ${comments.length} comments to PR #${prNumber}`);
+    return { reviewUrl };
   }
-
-  logger.info(`[AI-ReviewPR] Review complete: ${parsed.comments.length} comments, approved: ${parsed.approved}`);
-
-  return {
-    summary: parsed.summary,
-    comments: parsed.comments,
-    approved: parsed.approved,
-    reviewUrl,
-  };
+  throw new Error(`Posting reviews is not supported for provider: ${connection.provider}`);
 }

@@ -11,4 +11,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    // Cloudflare named tunnel → localhost:5173
+    // Note: the DNS label "local" does not publish on public DNS for this zone;
+    // use localdev.dockier.dev (local.dockier.dev kept for hosts-file / DoH clients).
+    allowedHosts: ["local.dockier.dev", "localdev.dockier.dev"],
+  },
 });

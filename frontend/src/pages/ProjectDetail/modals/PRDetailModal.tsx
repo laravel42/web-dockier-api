@@ -6,22 +6,21 @@ import type { RepoPullRequest } from "@/types";
 import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
 import Spinner from "@/components/Spinner";
 
-interface ReviewResult {
+interface GeneratedReview {
   summary: string;
   comments: Array<{ path: string; line: number; body: string; severity: string }>;
   approved: boolean;
-  reviewUrl: string;
 }
 
 interface Props {
   pr: RepoPullRequest | null;
   onClose: () => void;
-  onReviewWithAI: (pr: RepoPullRequest) => Promise<ReviewResult>;
+  onReviewWithAI: (pr: RepoPullRequest) => Promise<GeneratedReview>;
 }
 
 export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
   const [reviewing, setReviewing] = useState(false);
-  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
+  const [reviewResult, setReviewResult] = useState<GeneratedReview | null>(null);
   const [error, setError] = useState("");
 
   // Reset state when a different PR is selected
@@ -107,20 +106,11 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
                   {reviewResult.approved ? "✓ Approved" : "⚠ Changes requested"}
                 </span>
                 <span className="text-xs text-text-muted">
-                  {reviewResult.comments.length} comment{reviewResult.comments.length !== 1 ? "s" : ""} posted on PR
+                  {reviewResult.comments.length} comment{reviewResult.comments.length !== 1 ? "s" : ""} ready to review
                 </span>
               </div>
               <p className="text-sm text-text mt-1">{reviewResult.summary}</p>
-              {reviewResult.reviewUrl && (
-                <a
-                  href={reviewResult.reviewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block mt-2 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
-                >
-                  View review on repository →
-                </a>
-              )}
+
             </div>
           )}
 
@@ -129,26 +119,37 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
             <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-secondary-50/30 p-4">
               <Spinner className="size-5" />
               <div>
-                <p className="text-sm font-medium text-text">Reviewing pull request…</p>
-                <p className="text-xs text-text-muted mt-0.5">AI is analyzing the diff and posting comments directly on the PR</p>
+                <p className="text-sm font-medium text-text">Reading the diff…</p>
+                <p className="mt-0.5 text-xs text-text-muted">Comments are generated for your review. Nothing is posted yet.</p>
               </div>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+          <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+            {/*
+              Readable before it is true. This used to appear only in the spinner,
+              which is to say only once the model was already running.
+            */}
+            <p className="text-xs/relaxed text-text-muted">
+              Reads the full diff and drafts review comments. You see every comment and
+              choose which to post — comments appear publicly on this pull request, under
+              your account, only after you confirm.
+            </p>
+            <div className="flex items-center gap-2">
             <Button
               variant="primary"
               onClick={handleReview}
               disabled={reviewing || !!reviewResult}
               loading={reviewing}
             >
-              {reviewResult ? "Review Posted" : "Review with AI"}
+              {reviewResult ? "Comments generated" : "Draft review with AI"}
             </Button>
             <div className="flex-1" />
             <Button variant="outline" onClick={handleClose}>
               Close
             </Button>
+            </div>
           </div>
         </div>
       )}

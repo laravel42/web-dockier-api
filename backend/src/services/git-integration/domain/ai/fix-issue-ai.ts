@@ -24,6 +24,24 @@ export interface FixIssueInput {
   issueBody: string;
 }
 
+export interface FixIssuePlanFile {
+  path: string;
+  /** Content currently on the base branch — empty for a new file. */
+  before: string;
+  after: string;
+}
+
+/** A generated fix that has not been written anywhere yet. */
+export interface FixIssuePlan {
+  summary: string;
+  prDescription: string;
+  branchName: string;
+  baseBranch: string;
+  issueNumber: number;
+  issueTitle: string;
+  files: FixIssuePlanFile[];
+}
+
 export interface FixIssueResult {
   prUrl: string;
   prNumber: number;
@@ -646,12 +664,19 @@ async function createPullRequest(
 
 // ─── Main pipeline ───────────────────────────────────────────────────────────
 
-export async function fixIssueWithAI(
+/**
+ * Steps 1-4 of the fix pipeline: read the repo, pick files, generate changes.
+ *
+ * Performs **no writes**. Split out so the user can see a diff before anything
+ * touches their repository — PRODUCT.md promises a preview, and the combined
+ * pipeline opened a pull request before anyone had seen a line of it.
+ */
+export async function planIssueFix(
   connection: ConnectionLike,
   input: FixIssueInput,
   apiKey: string,
   model: string,
-): Promise<FixIssueResult> {
+): Promise<FixIssuePlan> {
   const { owner, repo, baseBranch, issueNumber, issueTitle, issueBody } = input;
 
   logger.info(`[AI-FixIssue] Starting fix for issue #${issueNumber}: ${issueTitle}`);
@@ -751,16 +776,50 @@ export async function fixIssueWithAI(
   const fixPlan = await generateFixes(apiKey, fixModel, issueTitle, issueBody, fileContents);
   logger.info(`[AI-FixIssue] Generated fixes for ${fixPlan.fixes.length} files (model: ${fixModel})`);
 
-  // 5. Create branch + commit
+  // Pair each proposed file with the content it replaces, so the client can
+  // render a real diff rather than just the new file.
+  const originals = new Map(fileContents.map((f) => [f.path, f.content]));
   const branchName = buildBranchName(issueNumber, issueTitle);
-  const commitMessage = `fix: ${issueTitle}\n\n${fixPlan.summary}\n\nCloses #${issueNumber}`;
 
-  await commitMultipleFiles(connection, owner, repo, baseBranch, branchName, fixPlan.fixes, commitMessage);
+  logger.info(`[AI-FixIssue] Planned ${fixPlan.fixes.length} file changes (no writes performed)`);
 
-  // 6. Open PR
+  return {
+    summary: fixPlan.summary,
+    prDescription: fixPlan.prDescription,
+    branchName,
+    baseBranch,
+    issueNumber,
+    issueTitle,
+    files: fixPlan.fixes.map((f) => ({
+      path: f.path,
+      before: originals.get(f.path) ?? "",
+      after: f.content,
+    })),
+  };
+}
+
+/**
+ * Steps 5-6: branch, commit, open the pull request.
+ *
+ * Everything here writes to the user's repository, and it runs only on an
+ * explicit second action from the client.
+ */
+export async function applyIssueFix(
+  connection: ConnectionLike,
+  owner: string,
+  repo: string,
+  plan: FixIssuePlan,
+): Promise<FixIssueResult> {
+  const { baseBranch, branchName, issueNumber, issueTitle, summary, prDescription, files } = plan;
+
+  const commitMessage = `fix: ${issueTitle}\n\n${summary}\n\nCloses #${issueNumber}`;
+  const fixes = files.map((f) => ({ path: f.path, content: f.after }));
+
+  await commitMultipleFiles(connection, owner, repo, baseBranch, branchName, fixes, commitMessage);
+
   const prTitle = `fix: ${issueTitle} (#${issueNumber})`;
   const prBody = [
-    fixPlan.prDescription,
+    prDescription,
     "",
     "---",
     `Closes #${issueNumber}`,
@@ -774,11 +833,5 @@ export async function fixIssueWithAI(
 
   logger.info(`[AI-FixIssue] Created PR #${prNumber}: ${prUrl}`);
 
-  return {
-    prUrl,
-    prNumber,
-    branchName,
-    filesChanged: fixPlan.fixes.length,
-    summary: fixPlan.summary,
-  };
+  return { prUrl, prNumber, branchName, filesChanged: fixes.length, summary };
 }
