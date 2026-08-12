@@ -160,6 +160,8 @@ export default function ProjectDetail() {
       <ProjectDescription
         analysis={analysis}
         analysisLoading={analysisLoading}
+        recentScans={recentScans}
+        recentDeploys={recentDeploys}
         projectId={project.id}
         project={project}
         onProjectUpdate={setProject}

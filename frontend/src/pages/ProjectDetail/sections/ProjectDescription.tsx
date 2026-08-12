@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } fro
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
+import type { Scan } from "@/types/scan";
+import {
+  dependencyAlarm,
+  isRuntimeTabVisible,
+  securityAlarm,
+  sensitiveDataAlarm,
+  type Alarm,
+} from "../navAlarms";
+import type { Deployment } from "@/types";
 import MDEditor from "@uiw/react-md-editor";
 import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "@/components/badges/SensitivityBadge";
@@ -22,6 +31,10 @@ import { FileTextIcon, XIcon } from "lucide-react";
 interface Props {
   analysis: RepoAnalysis | null;
   analysisLoading: boolean;
+  /** Latest scans — sources the Security alarm count. */
+  recentScans?: Scan[];
+  /** Deploy history — gates the Runtime cluster on ever having shipped. */
+  recentDeploys?: Deployment[];
   projectId?: string;
   project: Project;
   onProjectUpdate: (project: Project) => void;
@@ -33,20 +46,43 @@ interface Props {
   deploysPanel?: ReactNode;
 }
 
-const MAIN_TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "activity", label: "Activity" },
-  { key: "dependencies", label: "Dependencies" },
-  { key: "sensitiveData", label: "Sensitive Data" },
-  { key: "security", label: "Security" },
-  { key: "deployments", label: "Deployments" },
-  { key: "processes", label: "Processes" },
-  { key: "commands", label: "Commands" },
-  { key: "network", label: "Network" },
-  { key: "observe", label: "Observe" },
-  { key: "domains", label: "Domains" },
-  { key: "settings", label: "Settings" },
+/**
+ * Five clusters, decided in docs/delivery/project-detail-ia.md. Twelve equal nouns
+ * in a column are still twelve equal nouns; the grouping is what gives the nav a
+ * point of view. Order within MAIN_TABS is the tab order, so arrow-key traversal
+ * runs top to bottom across group boundaries without special handling.
+ */
+const CLUSTERS = [
+  { key: "understand", label: "Understand" },
+  { key: "risk", label: "Risk" },
+  { key: "ship", label: "Ship" },
+  { key: "runtime", label: "Runtime" },
+  { key: "configure", label: "Configure" },
 ] as const;
+
+type ClusterKey = typeof CLUSTERS[number]["key"];
+
+/** Written out in full: Tailwind cannot see `border-${tone}-line`. */
+const ALARM_TONE = {
+  danger: "border-danger-line bg-danger-surface text-danger-ink",
+  caution: "border-caution-line bg-caution-surface text-caution-ink",
+  warning: "border-warning-line bg-warning-surface text-warning-ink",
+} as const;
+
+const MAIN_TABS = [
+  { key: "overview", label: "Overview", cluster: "understand" },
+  { key: "activity", label: "Activity", cluster: "understand" },
+  { key: "security", label: "Security", cluster: "risk" },
+  { key: "sensitiveData", label: "Sensitive Data", cluster: "risk" },
+  { key: "dependencies", label: "Dependencies", cluster: "risk" },
+  { key: "deployments", label: "Deployments", cluster: "ship" },
+  { key: "commands", label: "Commands", cluster: "ship" },
+  { key: "processes", label: "Processes", cluster: "runtime" },
+  { key: "network", label: "Network", cluster: "runtime" },
+  { key: "domains", label: "Domains", cluster: "runtime" },
+  { key: "observe", label: "Observe", cluster: "runtime" },
+  { key: "settings", label: "Settings", cluster: "configure" },
+] as const satisfies ReadonlyArray<{ key: string; label: string; cluster: ClusterKey }>;
 
 type MainTabKey = typeof MAIN_TABS[number]["key"];
 
@@ -54,7 +90,13 @@ function isMainTabVisible(
   key: MainTabKey,
   has: (permission: string) => boolean,
   isOwner: boolean,
+  runtimeVisible: boolean,
 ): boolean {
+  // Processes, Network, Domains and Observe describe a running server. On a
+  // repository that has never deployed they are four dead ends, so the whole
+  // Runtime cluster stays out of the nav until there is a runtime to describe.
+  if (!runtimeVisible) return false;
+
   switch (key) {
     case "overview":
     case "activity":
@@ -787,6 +829,8 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
 export default function ProjectDescription({
   analysis,
   analysisLoading,
+  recentScans,
+  recentDeploys,
   projectId,
   project,
   onProjectUpdate,
@@ -820,10 +864,14 @@ export default function ProjectDescription({
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canEditOverview = isOwner || has("project:manage");
 
+  const tabListRef = useRef<HTMLDivElement>(null);
+
   const visibleMainTabs = useMemo(() => {
     if (permissionsLoading) return [];
-    return MAIN_TABS.filter((tab) => isMainTabVisible(tab.key, has, isOwner));
-  }, [has, isOwner, permissionsLoading]);
+    return MAIN_TABS.filter((tab) =>
+      isMainTabVisible(tab.key, has, isOwner, isRuntimeTabVisible(tab.key, recentDeploys)),
+    );
+  }, [has, isOwner, permissionsLoading, recentDeploys]);
 
   const visibleMainTabKeys = useMemo(() => visibleMainTabs.map((t) => t.key), [visibleMainTabs]);
   const handleMainTabKeyDown = useTabListKeyboard(visibleMainTabKeys, setActiveMainTab, "both");
@@ -831,6 +879,14 @@ export default function ProjectDescription({
   const activeMainTabSafe = visibleMainTabs.some((t) => t.key === activeMainTab)
     ? activeMainTab
     : (visibleMainTabs[0]?.key ?? "overview");
+
+  // A deep link can select a tab that sits outside the visible scroll area —
+  // on a phone the strip shows ~3 of twelve. Bring it into view without
+  // scrolling the page itself.
+  useEffect(() => {
+    const el = tabListRef.current?.querySelector<HTMLElement>(`#${CSS.escape(tabId(activeMainTabSafe))}`);
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeMainTabSafe]);
 
   useEffect(() => {
     if (!permissionsLoading && !visibleMainTabs.some((t) => t.key === activeMainTab)) {
@@ -897,6 +953,16 @@ export default function ProjectDescription({
   };
 
   const dependencies = analysis?.dependencies;
+
+  // Rules live in navAlarms.ts so they are testable without mounting this surface.
+  const tabAlarms = useMemo(
+    (): Partial<Record<MainTabKey, Alarm>> => ({
+      security: securityAlarm(recentScans) ?? undefined,
+      sensitiveData: sensitiveDataAlarm(uploadedSensitiveData) ?? undefined,
+      dependencies: dependencyAlarm(dependencies) ?? undefined,
+    }),
+    [recentScans, uploadedSensitiveData, dependencies],
+  );
 
   const renderDependenciesSection = () => (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -989,41 +1055,65 @@ export default function ProjectDescription({
         <div className="shrink-0 border-b border-border md:w-52 md:self-stretch md:border-b-0 md:border-r">
           <div className="md:sticky md:top-0 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto md:overscroll-contain md:scrollbar-hide">
             <div
+              ref={tabListRef}
               className="flex items-stretch gap-0.5 overflow-x-auto overflow-y-hidden p-2 scrollbar-hide mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:overflow-x-visible md:mask-none"
               role="tablist"
               aria-orientation={isSidebar ? "vertical" : "horizontal"}
               aria-label="Project sections"
             >
-            {visibleMainTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                id={tabId(tab.key)}
-                aria-controls={panelId(tab.key)}
-                aria-selected={activeMainTabSafe === tab.key}
-                tabIndex={activeMainTabSafe === tab.key ? 0 : -1}
-                onClick={() => setActiveMainTab(tab.key)}
-                onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
-                className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
-                  activeMainTabSafe === tab.key
-                    ? "bg-primary/10 text-text"
-                    : "text-text-muted hover:bg-card/60 hover:text-text"
-                }`}
-              >
-                {tab.label}
-                {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                  <span className="rounded-sm border border-border bg-secondary-100/60 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-text-muted">
-                    {dependencies.length}
-                  </span>
-                )}
-                {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                  <span className="rounded-sm border border-danger-line bg-danger-surface px-1.5 py-0.5 text-xs font-semibold text-danger-ink">
-                    {uploadedSensitiveData.length}
-                  </span>
-                )}
-              </button>
-            ))}
+            {CLUSTERS.map((cluster) => {
+              const tabs = visibleMainTabs.filter((t) => t.cluster === cluster.key);
+              if (tabs.length === 0) return null;
+              return (
+                /*
+                  role="presentation" keeps the wrapper out of the accessibility tree,
+                  so the tablist still owns its tabs directly — ARIA has no notion of a
+                  group inside a tablist. `contents` collapses the wrapper on mobile so
+                  the buttons stay in the scrolling row.
+                */
+                <div key={cluster.key} role="presentation" className="contents md:mb-3 md:block md:last:mb-0">
+                  <p
+                    aria-hidden="true"
+                    className="hidden px-3 pt-1 pb-1.5 text-xs font-semibold tracking-wide text-text-muted/70 uppercase md:block"
+                  >
+                    {cluster.label}
+                  </p>
+                  {tabs.map((tab) => {
+                    const alarm = tabAlarms[tab.key];
+                    const selected = activeMainTabSafe === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        id={tabId(tab.key)}
+                        aria-controls={panelId(tab.key)}
+                        aria-selected={selected}
+                        tabIndex={selected ? 0 : -1}
+                        onClick={() => setActiveMainTab(tab.key)}
+                        onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
+                        className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
+                          selected
+                            ? "bg-primary/10 text-text"
+                            : "text-text-muted hover:bg-card/60 hover:text-text"
+                        }`}
+                      >
+                        {tab.label}
+                        {alarm && (
+                          <span
+                            className={`rounded-sm border px-1.5 py-0.5 text-xs font-semibold tabular-nums ${ALARM_TONE[alarm.tone]}`}
+                          >
+                            {alarm.count}
+                            {/* The number alone is colour-coded shorthand; name what it counts. */}
+                            <span className="sr-only"> {alarm.label}</span>
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
             </div>
           </div>
         </div>
