@@ -39,6 +39,7 @@ export default function ProjectDetail() {
     pullLog, setPullLog, pullLoading,
     recentDeploys,
     recentScans,
+    deploysError, scansError, fetchScans, hasLiveDeploy,
   } = useProjectDetail();
 
   const nameByLogin: Record<string, string> = {};
@@ -144,6 +145,7 @@ export default function ProjectDetail() {
         onNameSave={handleUpdateName}
         nameSaving={nameSaving}
         nameError={nameError}
+        liveDeploy={hasLiveDeploy}
       />
 
       <div className="mb-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
@@ -193,9 +195,20 @@ export default function ProjectDetail() {
             allProviders={allProviders}
             navigate={navigate}
             fallbackCommitHash={stats?.lastCommitHash}
+            error={deploysError}
+            onRetry={fetchLastDeploy}
+            onDeploy={() => setShowDeployWizard(true)}
           />
         }
-        securityPanel={<RecentScans scans={recentScans} navigate={navigate} projectId={project.id} />}
+        securityPanel={
+          <RecentScans
+            scans={recentScans}
+            navigate={navigate}
+            projectId={project.id}
+            error={scansError}
+            onRetry={fetchScans}
+          />
+        }
       />
 
       <DeployWizard

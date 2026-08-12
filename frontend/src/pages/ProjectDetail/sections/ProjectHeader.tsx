@@ -17,6 +17,8 @@ interface Props {
   onNameSave: (name: string) => Promise<void>;
   nameSaving?: boolean;
   nameError?: string;
+  /** A deploy is running right now. */
+  liveDeploy?: boolean;
 }
 
 export default function ProjectHeader({
@@ -28,6 +30,7 @@ export default function ProjectHeader({
   onNameSave,
   nameSaving = false,
   nameError = "",
+  liveDeploy = false,
 }: Props) {
   const { has, isOwner } = usePermissions();
   const canDeploy = has("deploy:create");
@@ -107,6 +110,23 @@ export default function ProjectHeader({
             ) : (
               <div className="flex items-center gap-1.5 min-w-0 group">
                 <h1 className={`${typePageTitle} truncate`}>{project.name}</h1>
+                {liveDeploy && (
+                  /*
+                    Beside the name, not inside the deploy panel: the point is that
+                    it is visible from any tab. aria-live announces the transition
+                    once; the dot alone would be colour-only.
+                  */
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary-500/40 bg-primary-500/10 px-2 py-0.5 text-xs font-medium text-primary-500"
+                    aria-live="polite"
+                  >
+                    <span className="relative flex size-1.5">
+                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary-500 opacity-75" />
+                      <span className="relative inline-flex size-1.5 rounded-full bg-primary-500" />
+                    </span>
+                    Deploying
+                  </span>
+                )}
                 {canEditName && (
                   <button
                     type="button"

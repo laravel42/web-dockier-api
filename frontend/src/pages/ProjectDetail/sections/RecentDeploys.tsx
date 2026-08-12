@@ -13,6 +13,11 @@ interface Props {
   allProviders: ProviderInfo[];
   navigate: (path: string) => void;
   fallbackCommitHash?: string;
+  /** Non-empty when the fetch failed — never conflated with "no deploys". */
+  error?: string;
+  onRetry?: () => void;
+  /** Opens the deploy wizard from the empty state. */
+  onDeploy?: () => void;
 }
 
 function dayLabel(dateStr: string): string {
@@ -48,16 +53,39 @@ export default function RecentDeploys({
   allProviders,
   navigate,
   fallbackCommitHash,
+  error,
+  onRetry,
+  onDeploy,
 }: Props) {
 
   const providerKey = (providerId: string) =>
     allProviders.find((p) => p.id === providerId)?.provider || "";
 
+  // A failed request is not an empty history. Saying "hasn't been deployed yet"
+  // because the network dropped tells the user something false about their project.
+  if (error) {
+    return (
+      <div className="flex h-full flex-col">
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
+        <EmptyState
+          compact
+          title="Couldn't load deploys"
+          description={error}
+          action={onRetry ? { label: "Retry", onClick: onRetry } : undefined}
+        />
+      </div>
+    );
+  }
+
   if (!deploys.length) {
     return (
       <div className="flex h-full flex-col">
         <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
-        <EmptyState compact description="This project hasn't been deployed yet. Use Deploy above to ship the current branch." />
+        <EmptyState
+          compact
+          description="This project hasn't been deployed yet. Deploying ships the current branch."
+          action={onDeploy ? { label: "Deploy this project", onClick: onDeploy } : undefined}
+        />
       </div>
     );
   }

@@ -98,5 +98,10 @@ export function useProjectDetail() {
     // Recent deploys
     recentDeploys: deploys.recentDeploys,
     recentScans: deploys.recentScans,
+    deploysError: deploys.deploysError,
+    scansError: deploys.scansError,
+    fetchScans: deploys.fetchScans,
+    hasLiveDeploy: deploys.hasLiveDeploy,
+    hasLiveScan: deploys.hasLiveScan,
   };
 }

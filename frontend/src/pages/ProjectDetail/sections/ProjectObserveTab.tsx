@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useUrlSection } from "@/hooks/useUrlSection";
+import { getErrorMessage } from "@/utils/errors";
 
 interface Props {
   project: Project;
@@ -88,13 +89,15 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   const fetchHeartbeats = useCallback(async () => {
     try {
       const res = await observeApi.listHeartbeats(project.id);
       setHeartbeats(res.heartbeats);
-    } catch {
-      /* silent */
+      setError("");
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -130,8 +133,14 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
         </p>
       </div>
 
-      {/* List or empty state */}
-      {heartbeats.length === 0 ? (
+      {/* Error, then list or empty state — never an empty list standing in for a failure */}
+      {error ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-danger-line bg-danger-surface py-10">
+          <p className="text-sm font-medium text-danger-ink">Couldn't load heartbeats</p>
+          <p className="px-4 text-center text-xs text-text-muted">{error}</p>
+          <Button variant="outline" onClick={() => void fetchHeartbeats()}>Retry</Button>
+        </div>
+      ) : heartbeats.length === 0 ? (
         <div className="rounded-lg border border-border flex flex-col items-center justify-center py-10 gap-3">
           <p className="text-sm font-medium text-text">No heartbeats yet</p>
           <p className="text-xs text-text-muted">Get started and create your first heartbeat.</p>
@@ -304,6 +313,7 @@ function CreateHeartbeatModal({
 function LogsSection({ project, canManage }: { project: Project; canManage: boolean }) {
   const [activeLogType, setActiveLogType] = useState<LogType>("site");
   const [logEntry, setLogEntry] = useState<LogEntry | null>(null);
+  const [logError, setLogError] = useState("");
   const [loading, setLoading] = useState(true);
 
   const fetchLog = useCallback(async (logType: LogType) => {
@@ -311,8 +321,10 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
     try {
       const res = await observeApi.getLog(project.id, logType);
       setLogEntry(res);
-    } catch {
+      setLogError("");
+    } catch (err) {
       setLogEntry(null);
+      setLogError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -397,6 +409,12 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
           <div className="flex items-center justify-center py-10">
             <Spinner className="size-4" />
           </div>
+        ) : logError ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-10">
+            <p className="text-sm font-medium text-danger-ink">Couldn't load this log</p>
+            <p className="px-4 text-center text-xs text-text-muted">{logError}</p>
+            <Button variant="outline" onClick={() => void fetchLog(activeLogType)}>Retry</Button>
+          </div>
         ) : (
           <pre className="p-4 text-xs/relaxed font-mono text-strong whitespace-pre-wrap wrap-break-word">
             {logEntry?.content || "No log data available."}
@@ -420,6 +438,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
 
 function ActivitySection({ project }: { project: Project }) {
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [activityError, setActivityError] = useState("");
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -442,8 +461,9 @@ function ActivitySection({ project }: { project: Project }) {
       });
       setActivity(res.activity);
       setTotal(res.pagination.total);
-    } catch {
-      /* silent */
+      setActivityError("");
+    } catch (err) {
+      setActivityError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -492,8 +512,14 @@ function ActivitySection({ project }: { project: Project }) {
         />
       </div>
 
-      {/* Activity list */}
-      {activity.length === 0 ? (
+      {/* Activity list — an error is never allowed to read as "no recent events" */}
+      {activityError ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-danger-line bg-danger-surface py-14">
+          <p className="text-sm font-medium text-danger-ink">Couldn't load activity</p>
+          <p className="px-4 text-center text-xs text-text-muted">{activityError}</p>
+          <Button variant="outline" onClick={() => void fetchActivity()}>Retry</Button>
+        </div>
+      ) : activity.length === 0 ? (
         <div className="rounded-lg border border-border flex flex-col items-center justify-center py-14 gap-3">
           <ArchiveXIcon className="size-12 text-text-muted/40" />
           <p className="text-sm font-medium text-text">No recent events</p>

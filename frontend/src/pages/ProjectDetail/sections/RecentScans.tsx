@@ -12,6 +12,9 @@ interface Props {
   navigate: (path: string) => void;
   /** Enables the "Run first scan" action on the empty state. */
   projectId?: string;
+  /** Non-empty when the fetch failed — never conflated with "no scans". */
+  error?: string;
+  onRetry?: () => void;
 }
 
 function dayLabel(dateStr: string): string {
@@ -42,7 +45,21 @@ function buildRows(scans: Scan[]): TimelineRow[] {
   return rows;
 }
 
-export default function RecentScans({ scans, navigate, projectId }: Props) {
+export default function RecentScans({ scans, navigate, projectId, error, onRetry }: Props) {
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col">
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
+        <EmptyState
+          compact
+          title="Couldn't load scans"
+          description={error}
+          action={onRetry ? { label: "Retry", onClick: onRetry } : undefined}
+        />
+      </div>
+    );
+  }
 
   if (!scans.length) {
     return (
