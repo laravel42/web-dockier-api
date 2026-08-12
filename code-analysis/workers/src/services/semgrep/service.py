@@ -4,6 +4,8 @@ import tempfile
 import subprocess
 import asyncio
 from src.models.schemas import ScanFinding, ScanResult
+from src.infrastructure.scan_analysis import to_repo_relative_path
+from src.infrastructure.scan_skip import semgrep_exclude_args, write_semgrep_ignore
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.redis_client import get_redis_client
 
@@ -13,7 +15,12 @@ class SemgrepService:
 
     def run_scan(self, repo_path: str) -> list:
         try:
-            cmd = ["semgrep", "scan", "--json", "--quiet", repo_path]
+            # Dependency and build directories are excluded twice over: via
+            # .semgrepignore (which semgrep honours for target selection) and via
+            # explicit --exclude flags. Scanning a vendored bundle produces
+            # findings the user cannot act on.
+            write_semgrep_ignore(repo_path)
+            cmd = ["semgrep", "scan", "--json", "--quiet", *semgrep_exclude_args(), repo_path]
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
             
             if not result.stdout.strip():
@@ -22,12 +29,15 @@ class SemgrepService:
             data = json.loads(result.stdout)
             findings = []
             for match in data.get("results", []):
+                start_line = match.get("start", {}).get("line", 0)
                 findings.append({
                     "rule_id": match.get("check_id"),
                     "severity": match.get("extra", {}).get("severity", "WARNING").lower(),
                     "message": match.get("extra", {}).get("message"),
-                    "file_path": match.get("path", "").replace(repo_path + "/", ""),
-                    "line": match.get("start", {}).get("line", 0)
+                    "file_path": to_repo_relative_path(match.get("path", ""), repo_path),
+                    "line": start_line,
+                    "end_line": match.get("end", {}).get("line", start_line),
+                    "snippet": (match.get("extra", {}).get("lines") or "").strip(),
                 })
             return findings
         except Exception as e:

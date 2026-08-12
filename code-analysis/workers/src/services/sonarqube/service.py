@@ -4,6 +4,7 @@ import subprocess
 import httpx
 import asyncio
 from src.models.schemas import ScanFinding, ScanResult
+from src.infrastructure.scan_skip import sonar_exclusion_globs
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.secret_manager import get_cloudflare_secret
 from src.infrastructure.redis_client import get_redis_client
@@ -29,12 +30,18 @@ class SonarQubeService:
                 
                 findings = []
                 for issue in data.get("issues", []):
+                    line = issue.get("line", 0)
+                    text_range = issue.get("textRange") or {}
                     findings.append({
                         "rule_id": issue.get("rule"),
                         "severity": issue.get("severity", "WARNING").lower(),
                         "message": issue.get("message"),
                         "file_path": issue.get("component", "").replace(f"{project_key}:", ""),
-                        "line": issue.get("line", 0)
+                        "line": text_range.get("startLine", line),
+                        "end_line": text_range.get("endLine", line),
+                        # The issues API does not return source text; snippets for
+                        # SonarQube findings would need a second /api/sources call.
+                        "snippet": "",
                     })
                 return findings
             except Exception as e:
@@ -46,6 +53,7 @@ class SonarQubeService:
             "sonar-scanner",
             f"-Dsonar.projectKey={project_key}",
             f"-Dsonar.sources=.",
+            f"-Dsonar.exclusions={sonar_exclusion_globs()}",
             f"-Dsonar.host.url={sonar_url}",
             f"-Dsonar.login={sonar_token}"
         ]

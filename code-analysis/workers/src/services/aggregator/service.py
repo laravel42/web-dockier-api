@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from src.models.schemas import ScanResult
 from src.infrastructure.llm import get_llm_provider
+from src.infrastructure.scan_analysis import dedupe_findings
 from src.infrastructure.scans_repo import persist_scan_results
 from src.infrastructure.redis_client import get_redis_client
 
@@ -28,6 +29,15 @@ class AggregatorService:
 
     async def complete_job(self, job_id: str, scan_id: str, all_findings: list, engine_status: dict):
         print(f"[*] AggregatorService: Finalizing job {job_id} with {len(all_findings)} raw findings")
+
+        # Four engines scan the same tree and overlap heavily — Semgrep and CodeQL
+        # both report SQL injection, SonarQube and the regex rules both report
+        # hardcoded secrets. Without this the same vulnerability is persisted once
+        # per engine and the KPI counts are inflated by however many ran.
+        deduped = dedupe_findings(all_findings)
+        if len(deduped) != len(all_findings):
+            print(f"[*] AggregatorService: deduped {len(all_findings)} -> {len(deduped)} findings")
+        all_findings = deduped
 
         # The filter MARKS findings; it never removes them. Suppressed rows are
         # still persisted so a wrong judgement is auditable and reversible.

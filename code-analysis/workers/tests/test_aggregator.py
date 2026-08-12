@@ -49,7 +49,7 @@ async def test_findings_survive_the_redis_round_trip(fake_redis, finding):
     assert len(captured["findings"]) == len(EXPECTED_ENGINES)
     for item in captured["findings"]:
         assert isinstance(item, dict), f"expected finding object, got {item!r}"
-        assert set(item) == {"rule_id", "severity", "message", "file_path", "line"}
+        assert {"rule_id", "severity", "message", "file_path", "line"} <= set(item)
     assert {f["rule_id"] for f in captured["findings"]} == {"rule-0", "rule-1", "rule-2", "rule-3"}
 
 
@@ -133,8 +133,8 @@ async def test_all_engines_ok_persists_every_finding(fake_redis, finding):
     service = _service(fake_redis)
 
     with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
-        for engine in EXPECTED_ENGINES:
-            await service.process_result(_result(engine, [finding()]))
+        for i, engine in enumerate(sorted(EXPECTED_ENGINES)):
+            await service.process_result(_result(engine, [finding(rule_id=f"r-{i}", line=i + 1)]))
 
         _, judged, engine_status = persist.await_args[0]
         assert len(judged) == len(EXPECTED_ENGINES)
@@ -155,8 +155,8 @@ async def test_suppressed_findings_are_still_persisted(fake_redis, finding):
     service = _service(fake_redis, llm=llm)
 
     with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
-        for engine in EXPECTED_ENGINES:
-            await service.process_result(_result(engine, [finding()]))
+        for i, engine in enumerate(sorted(EXPECTED_ENGINES)):
+            await service.process_result(_result(engine, [finding(rule_id=f"r-{i}", line=i + 1)]))
 
         _, judged, _ = persist.await_args[0]
         assert len(judged) == len(EXPECTED_ENGINES), "suppressed findings must not be dropped"
@@ -185,3 +185,22 @@ async def test_keys_are_cleaned_up_after_completion(fake_redis, finding):
     assert "job:job-1:findings" not in fake_redis.lists
     assert "job:job-1:engines_done" not in fake_redis.sets
     assert "job:job-1:engine_status" not in fake_redis.hashes
+
+
+@pytest.mark.asyncio
+async def test_identical_findings_from_different_engines_collapse(fake_redis, finding):
+    """
+    Semgrep and CodeQL both report SQL injection; SonarQube and the regex rules
+    both report hardcoded secrets. Persisting one row per engine inflates the KPI
+    counts by however many scanners happened to run.
+    """
+    service = _service(fake_redis)
+
+    with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
+        for engine in EXPECTED_ENGINES:
+            await service.process_result(
+                _result(engine, [finding(rule_id="py/sqli", line=12, file_path="app.py")])
+            )
+
+        _, judged, _ = persist.await_args[0]
+        assert len(judged) == 1, "the same issue reported by four engines is one finding"

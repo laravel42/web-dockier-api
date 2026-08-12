@@ -11,23 +11,31 @@ def _service(fake_redis):
 
 
 @patch("src.services.semgrep.service.subprocess.run")
-def test_run_scan_parses_semgrep_json(mock_run):
+def test_run_scan_parses_semgrep_json(mock_run, tmp_path):
     mock_run.return_value = MagicMock(stdout=json.dumps({
         "results": [{
             "check_id": "rule-1",
             "extra": {"severity": "ERROR", "message": "msg"},
-            "path": "/tmp/repo/file.py",
+            "path": str(tmp_path / "file.py"),
             "start": {"line": 10},
+            "end": {"line": 14},
         }]
     }))
 
     with patch("src.services.semgrep.service.get_redis_client", return_value=MagicMock()):
-        findings = SemgrepService().run_scan("/tmp/repo")
+        findings = SemgrepService().run_scan(str(tmp_path))
 
     assert len(findings) == 1
     assert findings[0]["rule_id"] == "rule-1"
     assert findings[0]["severity"] == "error"
     assert findings[0]["line"] == 10
+    assert findings[0]["end_line"] == 14, "the reported span must survive"
+    assert findings[0]["file_path"] == "file.py", "scratch path must not leak into findings"
+
+    # excludes are passed to the CLI and .semgrepignore is written into the repo
+    argv = mock_run.call_args[0][0]
+    assert "--exclude" in argv and "node_modules/" in argv
+    assert (tmp_path / ".semgrepignore").exists()
 
 
 @pytest.mark.asyncio

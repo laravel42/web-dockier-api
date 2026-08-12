@@ -32,17 +32,24 @@ class CodeQLService:
                     if locations:
                         phys_loc = locations[0].get("physicalLocation", {})
                         file_path = phys_loc.get("artifactLocation", {}).get("uri", "")
-                        line = phys_loc.get("region", {}).get("startLine", 0)
+                        region = phys_loc.get("region", {})
+                        line = region.get("startLine", 0)
+                        end_line = region.get("endLine", line)
+                        snippet = (region.get("snippet", {}).get("text") or "").strip()
                     else:
                         file_path = ""
                         line = 0
-                        
+                        end_line = 0
+                        snippet = ""
+
                     findings.append({
                         "rule_id": rule_id,
                         "severity": severity,
                         "message": message,
                         "file_path": file_path,
-                        "line": line
+                        "line": line,
+                        "end_line": end_line,
+                        "snippet": snippet,
                     })
             return findings
         except Exception as e:

@@ -3,11 +3,20 @@ from typing import List, Literal, Optional
 
 
 class ScanFinding(BaseModel):
+    """A single issue located in the scanned tree.
+
+    `line` is the start of the span; `end_line` defaults to it for engines that
+    only report a point. Both are persisted (findings.start_line / end_line) and
+    both participate in the cross-engine dedupe key, so an engine that reports a
+    range must not silently collapse it to a point.
+    """
     rule_id: str
     severity: str
     message: str
     file_path: str
     line: int
+    end_line: Optional[int] = None
+    snippet: str = ""
 
 
 class ScanMessage(BaseModel):

@@ -289,23 +289,26 @@ and the `lifespan` migration. Deferred deliberately: the poll loop they modify i
 queue rewrite, so doing them first is throwaway work.
 
 **Parity gap — blocks retiring the TS worker.** `backend/src/services/code-analysis/` implements
-these; this tree does not:
+these; this tree does not, except where marked.
 
-| Capability | Where it lives today |
-| ---------- | -------------------- |
-| Repo/credential resolution per tenant | `shared/service-clients/git-connections.ts` |
-| `RunScanOptions` toggles (semgrep / sonarqube / custom rules / sensitive data) | `scan-worker.ts` |
-| DB-backed custom rules and rule overrides | `custom-rules.ts`, `rule-overrides.ts` |
-| Live scan progress + websocket broadcast | `scan-progress.ts`, `scan-events.ts`, `routes/websocket.ts` |
-| Sensitive-data scanning | `scan-analysis.ts` |
-| Skip-dirs / generated-asset / minified detection | `scan-skip-dirs.ts` |
-| Finding snippets and `end_line` | `scan-analysis.ts` |
-| Scan cancellation and queue reconcile | `scan-reconcile.ts`, `scan-queue-reconcile.ts` |
-| Finding dedupe across engines | `scan-analysis.ts` (`dedupeScanFindings`) |
+| Capability | Status | Where it lives today |
+| ---------- | ------ | -------------------- |
+| Finding snippets and `end_line` | **DONE** | `scan-analysis.ts` |
+| Cross-engine dedupe | **DONE** — `src/infrastructure/scan_analysis.py` | `dedupeScanFindings` |
+| Skip-dirs / generated-asset / minified detection | **DONE** — `src/infrastructure/scan_skip.py` | `scan-skip-dirs.ts` |
+| DB-backed custom rules and rule overrides | open | `custom-rules.ts`, `rule-overrides.ts` |
+| `RunScanOptions` toggles (semgrep / sonarqube / custom rules / sensitive data) | open | `scan-worker.ts` |
+| Sensitive-data scanning | open | `scan-analysis.ts` |
+| Repo/credential resolution per tenant | open — couples to the queue rewrite | `git-connections.ts` |
+| Live scan progress + websocket broadcast | open | `scan-progress.ts`, `routes/websocket.ts` |
+| Scan cancellation and queue reconcile | open — couples to the queue rewrite | `scan-reconcile.ts` |
 
-Note the last two rows in particular: this tree writes `start_line == end_line` and an empty
-`snippet`, and does no cross-engine dedupe, so four engines reporting the same vulnerability produce
-four rows. Both are regressions against current behaviour and must close before cutover.
+Both outright regressions are now closed: findings carry real spans and snippets, and the same
+issue reported by four engines is persisted once, at the highest severity any of them assigned.
+
+The three remaining independent items are §6.1 work (custom rules and overrides must come from the
+database per decision §7.4), `RunScanOptions`, and sensitive-data scanning. The last three couple to
+the queue rewrite and should be done with it.
 
 ## 5. Phase 3 — P2 engine quality
 
