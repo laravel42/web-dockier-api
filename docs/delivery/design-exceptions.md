@@ -2,8 +2,11 @@
 
 **AIL — task G1.** What `.impeccable/config.json` allows, and why.
 
-The detector runs in CI over `frontend/src` and **exits 2 on any finding**, so the
-exception list *is* the baseline. There is no recorded finding count to drift against: a new
+The detector **exits 2 on any finding**, so the exception list *is* the baseline.
+
+> **CI is currently disabled** — `.github/workflows/ci.yml` is `workflow_dispatch` only, because it
+> has never run on GitHub's runners. The gate still works locally (`pnpm design:check`); restoring
+> the `push` / `pull_request` triggers turns it back on. There is no recorded finding count to drift against: a new
 violation anywhere fails the build.
 
 Every exception is scoped to the file that earns it, so the same rule still fires everywhere else.
@@ -32,6 +35,8 @@ fixed instead. Two findings during this remediation looked like exceptions and w
 in a two-elevation system). Both were fixed.
 
 ## What CI runs
+
+Manual only for now (`workflow_dispatch`). Each runs locally today.
 
 | Job | Gate |
 |---|---|
