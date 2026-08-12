@@ -23,7 +23,8 @@ class FakeRedis:
         self.lists: dict[str, list[bytes]] = {}
         self.hashes: dict[str, dict[bytes, bytes]] = {}
         self.strings: dict[str, bytes] = {}
-        self.published: list[tuple[str, str]] = []
+        self.published: list = []
+        self.ttls: dict = {}
 
     @staticmethod
     def _b(v):
@@ -72,6 +73,10 @@ class FakeRedis:
             self.strings.pop(key, None)
         return len(keys)
 
+    async def expire(self, key, seconds):
+        self.ttls[key] = seconds
+        return True
+
     async def publish(self, channel, message):
         self.published.append((channel, message))
         return 1
@@ -94,3 +99,22 @@ def finding():
             "line": line,
         }
     return _make
+
+
+@pytest.fixture
+def published(monkeypatch):
+    """Capture what engines publish onto the results queue.
+
+    Engines moved from Redis Pub/Sub to pg-boss, so their outcome is now a
+    queue.send rather than a redis.publish. `published` is a list of
+    (queue_name, payload_dict).
+    """
+    sent = []
+
+    async def fake_send(name, data, *args, **kwargs):
+        sent.append((name, data))
+        return "job-fake"
+
+    import src.infrastructure.queue as queue_module
+    monkeypatch.setattr(queue_module, "send", fake_send)
+    return sent

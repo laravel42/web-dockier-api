@@ -8,13 +8,9 @@ from src.infrastructure.scan_skip import sonar_exclusion_globs
 from src.infrastructure.rules_repo import load_disabled_rule_ids
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.secret_manager import get_cloudflare_secret
-from src.infrastructure.redis_client import get_redis_client
 
 class SonarQubeService(EnginePublisher):
     engine_name = "sonarqube"
-
-    def __init__(self):
-        self.redis = get_redis_client()
 
     async def fetch_sonar_issues(self, sonar_url: str, sonar_token: str, project_key: str,
                                  disabled_rule_ids: set = frozenset()) -> list:

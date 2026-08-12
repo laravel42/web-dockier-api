@@ -1,20 +1,22 @@
 import asyncio
-import json
-from src.infrastructure.redis_client import get_redis_client, get_redis_pubsub
+
+from src.infrastructure import queue
+from src.services.worker_runtime import QueueWorker, supervise
 from src.services.semgrep.service import SemgrepService
 
-async def start_semgrep_worker():
-    print("[*] Semgrep Service listening on Redis channel 'scan:semgrep'...")
-    redis_client = get_redis_client()
-    pubsub = get_redis_pubsub(redis_client)
-    await pubsub.subscribe("scan:semgrep")
-    
+
+def build_worker() -> QueueWorker:
     service = SemgrepService()
-    
-    async for message in pubsub.listen():
-        if message["type"] == "message":
-            data = json.loads(message["data"])
-            asyncio.create_task(service.process_job(data))
+    return QueueWorker(
+        queue.ENGINE_QUEUES["semgrep"],
+        lambda job_id, data: service.process_job({**data, "job_id": data.get("job_id") or job_id}),
+        label="semgrep",
+    )
+
+
+async def start_semgrep_worker():
+    await supervise(build_worker())
+
 
 if __name__ == "__main__":
     asyncio.run(start_semgrep_worker())

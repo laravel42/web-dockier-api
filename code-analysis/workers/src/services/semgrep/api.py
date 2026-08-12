@@ -1,14 +1,17 @@
-from fastapi import APIRouter, BackgroundTasks
-from src.models.schemas import ScanMessage
-from src.services.semgrep.service import SemgrepService
+from fastapi import APIRouter
 
-router = APIRouter(prefix="/semgrep", tags=["Semgrep Engine"])
+from src.infrastructure import queue
+from src.models.schemas import ScanMessage
+
+router = APIRouter(prefix="/semgrep", tags=["semgrep Engine"])
+
 
 @router.post("/scan")
-async def trigger_scan(request: ScanMessage, background_tasks: BackgroundTasks):
+async def trigger_scan(request: ScanMessage):
+    """Enqueue a scan on this engine's queue.
+
+    Previously this ran the job inline as a FastAPI BackgroundTask, bypassing the
+    concurrency cap and retry semantics that every queued job gets.
     """
-    MVC Endpoint to trigger a semgrep scan directly.
-    """
-    service = SemgrepService()
-    background_tasks.add_task(service.process_job, request.model_dump())
-    return {"status": "accepted", "engine": "semgrep", "job_id": request.job_id}
+    job_id = await queue.send(queue.ENGINE_QUEUES["semgrep"], request.model_dump())
+    return {"status": "accepted", "engine": "semgrep", "job_id": job_id}

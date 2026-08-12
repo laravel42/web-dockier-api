@@ -91,7 +91,7 @@ async def test_failed_engine_yields_partial_not_success(mock_fetch, mock_exec, m
     assert status == "partial", "an engine failure must never read as a clean scan"
     update = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0]
     assert update[0][1] == "partial"
-    assert json.loads(update[0][3])["codeql"]["status"] == "failed"
+    assert update[0][3]["codeql"]["status"] == "failed"
 
 
 @pytest.mark.asyncio

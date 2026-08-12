@@ -1,14 +1,17 @@
-from fastapi import APIRouter, BackgroundTasks
-from src.models.schemas import ScanMessage
-from src.services.sonarqube.service import SonarQubeService
+from fastapi import APIRouter
 
-router = APIRouter(prefix="/sonarqube", tags=["SonarQube Engine"])
+from src.infrastructure import queue
+from src.models.schemas import ScanMessage
+
+router = APIRouter(prefix="/sonarqube", tags=["sonarqube Engine"])
+
 
 @router.post("/scan")
-async def trigger_scan(request: ScanMessage, background_tasks: BackgroundTasks):
+async def trigger_scan(request: ScanMessage):
+    """Enqueue a scan on this engine's queue.
+
+    Previously this ran the job inline as a FastAPI BackgroundTask, bypassing the
+    concurrency cap and retry semantics that every queued job gets.
     """
-    MVC Endpoint to trigger a sonarqube scan directly.
-    """
-    service = SonarQubeService()
-    background_tasks.add_task(service.process_job, request.model_dump())
-    return {"status": "accepted", "engine": "sonarqube", "job_id": request.job_id}
+    job_id = await queue.send(queue.ENGINE_QUEUES["sonarqube"], request.model_dump())
+    return {"status": "accepted", "engine": "sonarqube", "job_id": job_id}

@@ -9,6 +9,11 @@ from src.infrastructure.redis_client import get_redis_client
 
 EXPECTED_ENGINES = {"semgrep", "regex", "sonarqube", "codeql"}
 
+# Barrier state must not outlive the scan it coordinates. Without a TTL the keys
+# leaked for every job that never completed; with one, an abandoned barrier
+# disappears instead of pinning memory forever (§4.2).
+BARRIER_TTL_SECONDS = 24 * 60 * 60
+
 
 class AggregatorService:
     def __init__(self):
@@ -70,6 +75,7 @@ class AggregatorService:
         # that reports twice (redelivery, duplicate subscriber) must not have
         # its findings counted twice.
         newly_added = await self.redis.sadd(self._engines_key(job_id), result.engine)
+        await self.redis.expire(self._engines_key(job_id), BARRIER_TTL_SECONDS)
         if not newly_added:
             print(f"[*] AggregatorService: ignoring duplicate result from {result.engine} for {job_id}")
             return
@@ -79,11 +85,13 @@ class AggregatorService:
                 self._findings_key(job_id),
                 *[f.model_dump_json() for f in result.findings]
             )
+            await self.redis.expire(self._findings_key(job_id), BARRIER_TTL_SECONDS)
         await self.redis.hset(
             self._status_key(job_id),
             result.engine,
             json.dumps({"status": result.status, "error": result.error}),
         )
+        await self.redis.expire(self._status_key(job_id), BARRIER_TTL_SECONDS)
 
         engines_done = await self.redis.smembers(self._engines_key(job_id))
         engines_done_decoded = {e.decode("utf-8") for e in engines_done}

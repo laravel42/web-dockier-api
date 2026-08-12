@@ -1,20 +1,22 @@
 import asyncio
-import json
-from src.infrastructure.redis_client import get_redis_client, get_redis_pubsub
+
+from src.infrastructure import queue
+from src.services.worker_runtime import QueueWorker, supervise
 from src.services.codeql.service import CodeQLService
 
-async def start_codeql_worker():
-    print("[*] CodeQL Service listening on Redis channel 'scan:codeql'...")
-    redis_client = get_redis_client()
-    pubsub = get_redis_pubsub(redis_client)
-    await pubsub.subscribe("scan:codeql")
-    
+
+def build_worker() -> QueueWorker:
     service = CodeQLService()
-    
-    async for message in pubsub.listen():
-        if message["type"] == "message":
-            data = json.loads(message["data"])
-            asyncio.create_task(service.process_job(data))
+    return QueueWorker(
+        queue.ENGINE_QUEUES["codeql"],
+        lambda job_id, data: service.process_job({**data, "job_id": data.get("job_id") or job_id}),
+        label="codeql",
+    )
+
+
+async def start_codeql_worker():
+    await supervise(build_worker())
+
 
 if __name__ == "__main__":
     asyncio.run(start_codeql_worker())

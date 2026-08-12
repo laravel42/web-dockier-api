@@ -5,14 +5,12 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from src.services.sonarqube.service import SonarQubeService
 
 
-def _service(fake_redis):
-    with patch("src.services.sonarqube.service.get_redis_client", return_value=fake_redis):
-        return SonarQubeService()
+def _service():
+    return SonarQubeService()
 
 
 def _bare_service():
-    with patch("src.services.sonarqube.service.get_redis_client", return_value=MagicMock()):
-        return SonarQubeService()
+    return SonarQubeService()
 
 
 @pytest.mark.asyncio
@@ -53,16 +51,16 @@ def test_run_sonar_scanner(mock_run, mock_which):
 @pytest.mark.asyncio
 @patch("src.services.sonarqube.service.asyncio.to_thread")
 @patch("src.services.sonarqube.service.get_cloudflare_secret")
-async def test_process_job_publishes_ok_result(mock_secret, mock_to_thread, fake_redis, finding):
+async def test_process_job_publishes_ok_result(mock_secret, mock_to_thread, published, finding):
     mock_secret.side_effect = ["http://localhost", "token"]
     mock_to_thread.return_value = None
 
-    service = _service(fake_redis)
+    service = _service()
     with patch.object(service, "fetch_sonar_issues", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = [finding(rule_id="sonar-rule")]
         await service.process_job({"uri": "s3://t/t.zip", "job_id": "job-1", "scan_id": "scan-1"})
 
-    body = json.loads(fake_redis.published[0][1])
+    body = published[0][1]
     assert body["engine"] == "sonarqube"
     assert body["status"] == "ok"
     assert len(body["findings"]) == 1
@@ -70,12 +68,12 @@ async def test_process_job_publishes_ok_result(mock_secret, mock_to_thread, fake
 
 @pytest.mark.asyncio
 @patch("src.services.sonarqube.service.get_cloudflare_secret")
-async def test_process_job_publishes_failed_status_on_error(mock_secret, fake_redis):
+async def test_process_job_publishes_failed_status_on_error(mock_secret, published):
     mock_secret.side_effect = ValueError("Secret 'SONAR_TOKEN' not found")
 
-    service = _service(fake_redis)
+    service = _service()
     await service.process_job({"uri": "s3://t/t.zip", "job_id": "job-1", "scan_id": "scan-1"})
 
-    body = json.loads(fake_redis.published[0][1])
+    body = published[0][1]
     assert body["status"] == "failed"
     assert "SONAR_TOKEN" in body["error"]

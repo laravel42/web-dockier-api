@@ -1,20 +1,22 @@
 import asyncio
-import json
-from src.infrastructure.redis_client import get_redis_client, get_redis_pubsub
+
+from src.infrastructure import queue
+from src.services.worker_runtime import QueueWorker, supervise
 from src.services.regex.service import RegexService
 
-async def start_regex_worker():
-    print("[*] Regex Service listening on Redis channel 'scan:regex'...")
-    redis_client = get_redis_client()
-    pubsub = get_redis_pubsub(redis_client)
-    await pubsub.subscribe("scan:regex")
-    
+
+def build_worker() -> QueueWorker:
     service = RegexService()
-    
-    async for message in pubsub.listen():
-        if message["type"] == "message":
-            data = json.loads(message["data"])
-            asyncio.create_task(service.process_job(data))
+    return QueueWorker(
+        queue.ENGINE_QUEUES["regex"],
+        lambda job_id, data: service.process_job({**data, "job_id": data.get("job_id") or job_id}),
+        label="regex",
+    )
+
+
+async def start_regex_worker():
+    await supervise(build_worker())
+
 
 if __name__ == "__main__":
     asyncio.run(start_regex_worker())

@@ -6,13 +6,9 @@ import subprocess
 import asyncio
 from src.services.base import EnginePublisher
 from src.infrastructure.storage import download_codebase
-from src.infrastructure.redis_client import get_redis_client
 
 class CodeQLService(EnginePublisher):
     engine_name = "codeql"
-
-    def __init__(self):
-        self.redis = get_redis_client()
 
     def parse_codeql_sarif(self, sarif_path: str) -> list:
         if not os.path.exists(sarif_path):

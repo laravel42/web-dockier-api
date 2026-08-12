@@ -4,7 +4,6 @@ import tempfile
 import asyncio
 from src.services.base import EnginePublisher
 from src.infrastructure.storage import download_codebase
-from src.infrastructure.redis_client import get_redis_client
 from src.infrastructure.rules_repo import compile_rules, load_custom_rules, matches_extension
 from src.infrastructure.sensitive_data import run_sensitive_data_scan
 from src.infrastructure.scan_skip import (
@@ -17,9 +16,6 @@ from src.infrastructure.scan_skip import (
 
 class RegexService(EnginePublisher):
     engine_name = "regex"
-
-    def __init__(self):
-        self.redis = get_redis_client()
 
     def run_scan(self, repo_path: str, rules: list, scan_sensitive: bool = True) -> list:
         findings = []
