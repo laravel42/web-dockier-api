@@ -1,6 +1,7 @@
 import TechBadge from "./TechBadge";
 import PlatformBadge from "./PlatformBadge";
 import type { TechBadgeInfo } from "../types";
+import { techBadgeHasIcon } from "../utils/techBadgeIcon";
 
 interface Props {
   badges: TechBadgeInfo[] | undefined;
@@ -43,10 +44,14 @@ export default function ProjectTechBadges({
     );
   }
 
-  if (badges && badges.length > 0) {
+  // Filter before slicing: a stack with no icon would otherwise spend one of the
+  // few available slots on a chip with an empty square in it.
+  const withIcons = badges?.filter((b) => techBadgeHasIcon(b.name)) ?? [];
+
+  if (withIcons.length > 0) {
     return (
       <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
-        {badges.slice(0, limit).map((b) => (
+        {withIcons.slice(0, limit).map((b) => (
           <TechBadge key={b.name} name={b.name} iconSize="size-3.5" />
         ))}
       </div>
