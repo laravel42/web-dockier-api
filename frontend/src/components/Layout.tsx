@@ -7,7 +7,7 @@ export default function Layout() {
     <div className="flex min-h-screen flex-col">
       <TopNavbar />
 
-      <main className="flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-[1600px] flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8">
         <div className="w-full min-w-0">
           <ErrorBoundary title="This page encountered an error">
             <Outlet />

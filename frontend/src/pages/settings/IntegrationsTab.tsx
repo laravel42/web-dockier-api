@@ -178,9 +178,9 @@ export default function IntegrationsTab() {
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Integration" size="xl">
         {!selectedType ? (
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-4 md:flex-row">
             {/* Sidebar filters */}
-            <div className="w-44 shrink-0 border-r border-border pr-4">
+            <div className="shrink-0 border-b border-border pb-3 md:w-44 md:border-b-0 md:border-r md:pb-0 md:pr-4">
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">Categories</p>
               <label className="flex items-center gap-2 py-1.5 cursor-pointer group">
                 <input

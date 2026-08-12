@@ -667,9 +667,9 @@ export default function ProjectObserveTab({ project }: Props) {
   ];
 
   return (
-    <div className="flex gap-4 h-full min-h-0">
+    <div className="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row">
       {/* Left sidebar */}
-      <nav className="flex shrink-0 flex-col gap-1 w-32">
+      <nav className="flex shrink-0 flex-col gap-1 md:w-32">
         {sections.map((section) => (
           <button
             key={section.key}

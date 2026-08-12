@@ -47,9 +47,9 @@ export default function ProjectSettingsTab({ project, onProjectUpdate }: Props) 
   if (permissionsLoading) return <TabSpinner label="Loading…" />;
 
   return (
-    <div className="flex gap-4 h-full min-h-0">
+    <div className="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row">
       {/* Left sidebar */}
-      <nav className="flex shrink-0 flex-col gap-1 w-36" role="tablist" aria-orientation="vertical">
+      <nav className="flex shrink-0 flex-col gap-1 md:w-36" role="tablist" aria-orientation="vertical">
         {sections.map((section) => (
           <button
             key={section.key}

@@ -120,7 +120,7 @@ function ProcessStatusBadge({ status }: { status: BackgroundProcess["status"] })
     stopped: { label: "Stopped", color: settingsBadgeCls.muted, dot: "bg-text-muted" },
     errored: {
       label: "Errored",
-      color: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-[10px] font-medium text-danger-300",
+      color: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-xs font-medium text-danger-300",
       dot: "bg-danger-500",
     },
   };
@@ -536,7 +536,7 @@ function CreateProcessModal({
 
         <div>
           <label className="mb-1 block text-xs font-medium text-text">Name</label>
-          <p className="text-[11px] text-text-muted mb-1.5">Add a custom display name for the background process.</p>
+          <p className="text-xs text-text-muted mb-1.5">Add a custom display name for the background process.</p>
           <Input type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="" />
         </div>
 
@@ -678,7 +678,7 @@ function CreateProcessModal({
 
             {/* Preview */}
             <div className="mt-4 rounded-lg border border-border p-3">
-              <span className="text-[10px] uppercase tracking-wide font-semibold text-text-muted">Preview</span>
+              <span className="text-xs uppercase tracking-wide font-semibold text-text-muted">Preview</span>
               <p className="mt-1 text-xs font-mono text-primary-500 break-all">{buildPreviewCommand()}</p>
             </div>
           </div>
@@ -686,7 +686,7 @@ function CreateProcessModal({
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-text">Command</label>
-              <p className="text-[11px] text-text-muted mb-1.5">The command that should run for this background process.</p>
+              <p className="text-xs text-text-muted mb-1.5">The command that should run for this background process.</p>
               <Input type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="node worker.js" />
             </div>
             <div className="rounded-lg border border-border p-4">
@@ -789,7 +789,7 @@ function CreateJobModal({
 
         <div>
           <label className="mb-1 block text-xs font-medium text-text">Command</label>
-          <p className="text-[11px] text-text-muted mb-1.5">Commands should use fully qualified paths.</p>
+          <p className="text-xs text-text-muted mb-1.5">Commands should use fully qualified paths.</p>
           <Input type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="php /home/app/artisan schedule:run" required />
         </div>
 
@@ -821,7 +821,7 @@ function CreateJobModal({
         <div className="flex items-center justify-between rounded-lg border border-border p-3">
           <div>
             <p className="text-xs font-medium text-text">Monitor with heartbeats</p>
-            <p className="text-[11px] text-text-muted">Generate a URL to ping after the job has run.</p>
+            <p className="text-xs text-text-muted">Generate a URL to ping after the job has run.</p>
           </div>
           <button
             type="button"
@@ -912,9 +912,9 @@ export default function ProjectProcessesTab({ project }: Props) {
     }`;
 
   return (
-    <div className="flex gap-6 pr-1">
+    <div className="flex flex-col gap-6 pr-1 md:flex-row">
       {/* Sub-tab sidebar */}
-      <div className="flex shrink-0 flex-col gap-1 w-44" role="tablist" aria-orientation="vertical">
+      <div className="flex shrink-0 flex-col gap-1 md:w-44" role="tablist" aria-orientation="vertical">
         <button
           type="button"
           role="tab"

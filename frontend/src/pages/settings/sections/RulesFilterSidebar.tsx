@@ -44,7 +44,7 @@ export default function RulesFilterSidebar({
   );
 
   return (
-    <div className="w-52 shrink-0 space-y-1.5 self-start sticky top-6">
+    <div className="shrink-0 space-y-1.5 self-start md:sticky md:top-6 md:w-52">
       {/* Severity */}
       <div className="rounded-lg overflow-hidden border border-border/50 bg-card/40">
         <button onClick={() => setSevOpen(!sevOpen)} className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-text hover:bg-card/60 transition-colors">
@@ -54,7 +54,7 @@ export default function RulesFilterSidebar({
           <div className="px-2 pb-2 space-y-0.5">
             {severities.map(s => (
               <button key={s.key} onClick={() => onSeverityChange(activeSeverity === s.key ? "" : s.key)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${activeSeverity === s.key ? "bg-primary-500 text-primary-foreground font-medium" : "text-text-muted hover:bg-card/60"}`}>
-                <span className="flex items-center gap-2">{s.icon && <span className="text-[10px]">{s.icon}</span>}{s.label}</span>
+                <span className="flex items-center gap-2">{s.icon && <span className="text-xs">{s.icon}</span>}{s.label}</span>
                 <span className={`text-xs ${activeSeverity === s.key ? "text-white/70" : s.color}`}>{s.count}</span>
               </button>
             ))}
