@@ -6,9 +6,8 @@ import MDEditor from "@uiw/react-md-editor";
 import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "@/components/badges/SensitivityBadge";
 import { gitApi } from "@/services/api";
-import type { Project, Provider } from "@/types";
+import type { Project } from "@/types";
 import OverviewEditor from "./OverviewEditor";
-import ProjectDeploymentsTab from "./ProjectDeploymentsTab";
 import ProjectCommandsTab from "./ProjectCommandsTab";
 import ProjectProcessesTab from "./ProjectProcessesTab";
 import ProjectNetworkTab from "./ProjectNetworkTab";
@@ -24,13 +23,12 @@ interface Props {
   analysisLoading: boolean;
   projectId?: string;
   project: Project;
-  providers: Provider[];
   onProjectUpdate: (project: Project) => void;
   /** Commits, contributors, issues and pull requests. */
   activityPanel?: ReactNode;
   /** Recent security scans. */
   securityPanel?: ReactNode;
-  /** Recent deploys, folded in beneath the deployments tab. */
+  /** Deploy history timeline for the deployments tab. */
   deploysPanel?: ReactNode;
 }
 
@@ -789,7 +787,6 @@ export default function ProjectDescription({
   analysisLoading,
   projectId,
   project,
-  providers,
   onProjectUpdate,
   activityPanel,
   securityPanel,
@@ -949,12 +946,7 @@ export default function ProjectDescription({
       case "security":
         return securityPanel ?? renderMainTabPlaceholder("Security");
       case "deployments":
-        return (
-          <div className="flex flex-col">
-            <ProjectDeploymentsTab project={project} providers={providers} />
-            {deploysPanel}
-          </div>
-        );
+        return deploysPanel ?? renderMainTabPlaceholder("Deployments");
       case "processes":
         return <ProjectProcessesTab project={project} />;
       case "commands":

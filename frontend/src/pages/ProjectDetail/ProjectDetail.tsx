@@ -162,7 +162,6 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         projectId={project.id}
         project={project}
-        providers={allProviders}
         onProjectUpdate={setProject}
         activityPanel={
           <div>
