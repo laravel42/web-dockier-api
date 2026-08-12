@@ -59,6 +59,7 @@ UPDATE opengrep_rules
 SET rule_id = pg_temp.normalize_opengrep_rule_id(rule_id)
 WHERE rule_id LIKE '%.code-analysis.rules.opengrep.%';
 
+ALTER TABLE opengrep_rules DROP CONSTRAINT IF EXISTS opengrep_rules_org_rule_id_key;
 ALTER TABLE opengrep_rules
   ADD CONSTRAINT opengrep_rules_org_rule_id_key UNIQUE (organization_id, rule_id);
 
@@ -81,5 +82,6 @@ WHERE id IN (
   WHERE rn > 1
 );
 
+ALTER TABLE sonarqube_rules DROP CONSTRAINT IF EXISTS sonarqube_rules_org_rule_id_key;
 ALTER TABLE sonarqube_rules
   ADD CONSTRAINT sonarqube_rules_org_rule_id_key UNIQUE (organization_id, rule_id);
