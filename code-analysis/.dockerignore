@@ -1,0 +1,10 @@
+workers/.venv/
+workers/venv/
+workers/.pytest_cache/
+workers/admin/
+workers/tests/
+workers/context/
+**/__pycache__/
+**/*.pyc
+.git/
+.DS_Store

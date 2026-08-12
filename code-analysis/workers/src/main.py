@@ -1,8 +1,13 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import os
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from src.api.errors import register_error_handlers
+from src.api.routes import router as sast_router
 from src.services.gateway.api import router as gateway_router
 from src.services.aggregator.api import router as aggregator_router
 from src.services.semgrep.api import router as semgrep_router
@@ -65,6 +70,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Dockier SAST Workers", version="1.0.0", lifespan=lifespan)
 
+# The browser calls this service directly, so the allowlist is explicit rather
+# than "*": with credentials in play a wildcard origin is both rejected by the
+# spec and a way for any site to drive the API with a user's token.
+_origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+if _origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
+register_error_handlers(app)
+
+# Public, authenticated API.
+app.include_router(sast_router)
+
+# Internal engine triggers. Retained for manual testing; they enqueue rather
+# than running inline.
 app.include_router(gateway_router)
 app.include_router(aggregator_router)
 app.include_router(semgrep_router)

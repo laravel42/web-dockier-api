@@ -72,6 +72,44 @@ expiry behaviour as any other job.
 pytest                    # 265 tests
 ```
 
+## HTTP API
+
+Authenticated with the platform's tenant JWT (`Authorization: Bearer <token>`,
+HS256 over `JWT_SECRET`) — the same token the frontend already holds. Every query
+is scoped to the `tenantId` claim, so a valid token for one organization cannot
+read or trigger another's scans; a mismatch returns 404, because confirming an id
+exists is itself a disclosure.
+
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| `POST` | `/sast/scans/{scanId}/run` | Enqueue a scan. Body: `{ options?: {...} }` |
+| `GET` | `/sast/scans/{scanId}` | Status, summary, per-engine outcome, quality gate, live progress |
+| `GET` | `/sast/scans/{scanId}/findings` | Paginated findings. `severity`, `includeSuppressed`, `limit` (≤200), `offset` |
+| `GET` | `/sast/health` | Liveness and queue depth. No auth |
+
+Request *and* response models live in [`src/api/schemas.py`](src/api/schemas.py) and
+are attached to every route via `response_model=`, so FastAPI validates outbound
+payloads too — a field silently going missing fails at the boundary instead of
+arriving in the UI as `undefined`. Errors use `{ "message", "code" }`, which is
+what the frontend's `request()` helper reads.
+
+Interactive docs at `/docs` when running.
+
+## Docker
+
+```bash
+# Build context is code-analysis/, because the image needs rules/ as well as workers/
+cd code-analysis
+JWT_SECRET=... docker compose -f workers/docker-compose.yml up --build
+```
+
+The container restrictions are the point, not incidental — the engines execute
+untrusted source. `read_only` rootfs, `noexec` tmpfs for clones, all capabilities
+dropped, `no-new-privileges`, pid and memory caps, and **no cloud credentials in
+the environment**. Data stores sit on an `internal: true` network with no route
+out; only the workers get an egress network, for cloning and API calls. See the
+comments in [`docker-compose.yml`](docker-compose.yml) before changing any of it.
+
 ## Configuration
 
 | Variable | Required | Purpose |
@@ -84,6 +122,8 @@ pytest                    # 265 tests
 | `ALLOWED_CLONE_HOSTS` | no | Comma-separated host allowlist; unset means any https host |
 | `OPENGREP_RULES_DIR` | no | Rule corpus location (default `code-analysis/rules/opengrep`) |
 | `SONAR_HOST_URL`, `SONAR_TOKEN` | for SonarQube | Scanner and API access |
+| `JWT_SECRET` | yes, for the API | Verifies tenant tokens; the API fails closed without it |
+| `CORS_ALLOW_ORIGINS` | for browser access | Comma-separated origins. No wildcard — credentials are in play |
 
 ## Notes
 

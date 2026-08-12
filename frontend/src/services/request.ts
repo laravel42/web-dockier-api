@@ -29,13 +29,20 @@ export interface RequestOptions extends RequestInit {
   timeout?: number;
   /** Disable automatic retry for this request. */
   noRetry?: boolean;
+  /**
+   * Override the API base for this request. Used by services that live outside
+   * the Fastify gateway (e.g. the SAST workers) so they inherit the same auth
+   * header, timeout, retry and 401 session handling rather than reimplementing it.
+   */
+  baseUrl?: string;
 }
 
 export async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { timeout = DEFAULT_TIMEOUT_MS, noRetry = false, ...fetchOptions } = options;
+  const { timeout = DEFAULT_TIMEOUT_MS, noRetry = false, baseUrl, ...fetchOptions } = options;
+  const base = baseUrl ?? API_BASE;
   const method = (fetchOptions.method || "GET").toUpperCase();
   const canRetry = !noRetry && RETRYABLE_METHODS.has(method);
 
@@ -64,7 +71,7 @@ export async function request<T>(
 
     let res: Response;
     try {
-      res = await fetchWithTimeout(`${API_BASE}${path}`, { ...fetchOptions, headers }, timeout);
+      res = await fetchWithTimeout(`${base}${path}`, { ...fetchOptions, headers }, timeout);
     } catch (err) {
       // Network, timeout, or caller-initiated abort.
       const isAbort = err instanceof DOMException && err.name === "AbortError";

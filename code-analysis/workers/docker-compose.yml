@@ -1,0 +1,101 @@
+# Local stack for the SAST workers.
+#
+#   docker compose -f workers/docker-compose.yml up --build   (run from code-analysis/)
+#
+# The security posture of the `sast-workers` service is the point, not incidental:
+# it executes semgrep, sonar-scanner and codeql against source from repositories
+# the platform does not control.
+#
+#   read_only          the image is immutable at runtime; only the tmpfs mounts
+#                      below are writable, so a compromised engine cannot leave
+#                      anything behind for the next scan to pick up.
+#   tmpfs /scratch     clones and databases live in memory-backed storage that
+#                      vanishes with the container. `noexec` means a payload
+#                      written into a cloned repo cannot be executed from there.
+#   cap_drop: ALL      no capabilities. Nothing here needs to bind low ports,
+#                      change ownership, or load modules.
+#   no-new-privileges  a setuid binary inside a cloned repo cannot escalate.
+#   pids/mem limits    a fork bomb or a memory-hungry rule takes down the
+#                      container, not the host.
+#
+# Deliberately absent: AWS_*, GCP_*, and any deploy credentials. This service
+# needs Postgres, Redis and object storage — nothing that can provision
+# infrastructure. Do not add cloud credentials here; if S3 upload is required in
+# production, scope a dedicated key to PutObject on the codebases prefix only.
+
+name: dockier-sast
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dockier
+      POSTGRES_PASSWORD: dockier
+      POSTGRES_DB: dockier
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dockier"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  sast-workers:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://dockier:dockier@postgres:5432/dockier
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — the API fails closed without it}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ALLOWED_CLONE_HOSTS: ${ALLOWED_CLONE_HOSTS:-}
+      SONAR_HOST_URL: ${SONAR_HOST_URL:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+    ports: ["8100:8000"]
+
+    read_only: true
+    tmpfs:
+      - /scratch:rw,noexec,nosuid,size=8g
+      - /tmp:rw,noexec,nosuid,size=512m
+      - /home/scanner:rw,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # Under `docker compose up` these apply directly; under Swarm the
+    # deploy.resources block is the equivalent.
+    pids_limit: 512
+    mem_limit: 6g
+    cpus: 4.0
+    networks: [internal, egress]
+    restart: unless-stopped
+
+networks:
+  # Postgres and Redis are reachable only from here. `internal: true` means no
+  # route to the outside world on this network at all.
+  internal:
+    internal: true
+  # Cloning repos and calling the OpenAI/Sonar APIs need outbound access. Kept as
+  # a separate network so the data stores are not exposed alongside it.
+  egress: {}
+
+volumes:
+  pgdata:
