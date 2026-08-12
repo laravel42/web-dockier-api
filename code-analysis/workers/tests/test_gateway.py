@@ -15,6 +15,15 @@ SCAN_ROW = {
 PAYLOAD = {"scanId": "scan-1", "tenantId": "org-9", "options": {}}
 
 
+@pytest.fixture(autouse=True)
+def _no_db_side_effects():
+    """Progress and cancellation checks hit the database; stub them per test."""
+    with patch("src.services.gateway.service.start_scan", new_callable=AsyncMock), \
+         patch("src.services.gateway.service.publish_progress", new_callable=AsyncMock), \
+         patch("src.services.gateway.service.assert_not_cancelled", new_callable=AsyncMock):
+        yield
+
+
 # --- clone URL validation -------------------------------------------------
 
 @pytest.mark.parametrize("url", [

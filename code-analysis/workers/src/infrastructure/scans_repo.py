@@ -37,6 +37,14 @@ SEVERITY_MAP = {
 
 DEFAULT_SEVERITY = "warning"
 
+# scans.status is validated by the API against
+# z.enum(["pending", "running", "completed", "failed"])
+# (backend/src/services/code-analysis/schemas.ts). Inventing "success" or
+# "partial" here would make the scan unreadable through the API, so a degraded
+# scan is "completed" with the degradation recorded in summary.partial /
+# summary.failedEngines and in scans.engine_status.
+SCAN_STATUSES = frozenset({"pending", "running", "completed", "failed"})
+
 
 def normalize_severity(raw: Optional[str]) -> str:
     """Map an engine's severity onto the canonical vocabulary.
@@ -49,7 +57,8 @@ def normalize_severity(raw: Optional[str]) -> str:
     return SEVERITY_MAP.get(str(raw).strip().lower(), DEFAULT_SEVERITY)
 
 
-def build_summary(findings: List[Dict[str, Any]], files_scanned: int = 0, files_in_repo: int = 0) -> Dict[str, Any]:
+def build_summary(findings: List[Dict[str, Any]], files_scanned: int = 0,
+                  files_in_repo: int = 0, failed_engines: Optional[List[str]] = None) -> Dict[str, Any]:
     """Compute scans.summary in the shape mappers.ts expects.
 
     Suppressed findings are excluded from the counts: the summary drives the KPI
@@ -61,7 +70,7 @@ def build_summary(findings: List[Dict[str, Any]], files_scanned: int = 0, files_
     for f in active:
         counts[normalize_severity(f.get("severity"))] += 1
 
-    return {
+    summary = {
         "totalFindings": len(active),
         "errors": counts["error"],
         "warnings": counts["warning"],
@@ -69,6 +78,13 @@ def build_summary(findings: List[Dict[str, Any]], files_scanned: int = 0, files_
         "filesScanned": files_scanned,
         "filesInRepo": files_in_repo,
     }
+    if failed_engines:
+        # The status enum has no room for "degraded", so it lives here: an
+        # engine that crashed found nothing, and nothing is not the same as
+        # clean.
+        summary["partial"] = True
+        summary["failedEngines"] = sorted(failed_engines)
+    return summary
 
 
 # A condition that MATCHES means the gate FAILED: "errors > 0" reads as
@@ -168,13 +184,13 @@ async def persist_scan_results(
     )
 
     failed = [e for e, s in (engine_status or {}).items() if s.get("status") != "ok"]
-    status = "partial" if failed else "success"
-    summary = build_summary(findings, files_scanned, files_in_repo)
+    status = "completed"
+    summary = build_summary(findings, files_scanned, files_in_repo, failed)
 
     # A partial scan cannot pass a gate it was never fully evaluated against:
     # the engine that failed is exactly the one that might have found the error.
     gate_status = None
-    if status == "success":
+    if not failed:
         gate = await get_default_quality_gate(organization_id)
         if gate is not None:
             gate_status = evaluate_quality_gate(summary, gate["conditions"])
@@ -188,7 +204,14 @@ async def persist_scan_results(
         gate_status,
         scan_id,
     )
-    return status
+    return "partial" if failed else "completed"
+
+
+async def start_scan(scan_id: str) -> None:
+    """Mark a scan running, so the UI does not show it as pending while it works."""
+    await execute_query(
+        "UPDATE scans SET status = 'running', updated_at = NOW() WHERE id = $1", scan_id
+    )
 
 
 async def fail_scan(scan_id: str, error: str) -> None:

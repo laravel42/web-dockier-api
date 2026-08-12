@@ -16,6 +16,13 @@ def _service(fake_redis, llm=None):
         return AggregatorService()
 
 
+@pytest.fixture(autouse=True)
+def _no_progress_writes():
+    """publish_progress writes to scans; stub it for the unit tests."""
+    with patch("src.services.aggregator.service.publish_progress", new_callable=AsyncMock):
+        yield
+
+
 def _result(engine, findings, job_id="job-1", scan_id="scan-1", status="ok", error=None):
     return {
         "job_id": job_id,
@@ -110,7 +117,7 @@ async def test_malformed_result_is_discarded(fake_redis):
 
 
 @pytest.mark.asyncio
-async def test_failed_engine_yields_partial_status(fake_redis, finding):
+async def test_failed_engine_is_recorded(fake_redis, finding):
     service = _service(fake_redis)
 
     with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:

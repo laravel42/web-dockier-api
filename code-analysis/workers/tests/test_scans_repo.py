@@ -63,7 +63,7 @@ async def test_persist_writes_normalized_finding_rows(mock_fetch, mock_exec, moc
     ]
     status = await persist_scan_results("scan-1", findings, {"semgrep": {"status": "ok"}})
 
-    assert status == "success"
+    assert status == "completed"
     rows = mock_many.await_args[0][1]
     assert len(rows) == 2
 
@@ -88,9 +88,13 @@ async def test_failed_engine_yields_partial_not_success(mock_fetch, mock_exec, m
         "scan-1", [], {"semgrep": {"status": "ok"}, "codeql": {"status": "failed", "error": "no cli"}}
     )
 
-    assert status == "partial", "an engine failure must never read as a clean scan"
+    assert status == "partial", "the caller must be told the scan was degraded"
     update = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0]
-    assert update[0][1] == "partial"
+    # scans.status is a closed enum in the API schema; degradation is recorded
+    # in the summary instead of inventing a status the API would reject.
+    assert update[0][1] == "completed"
+    assert update[0][2]["partial"] is True
+    assert update[0][2]["failedEngines"] == ["codeql"]
     assert update[0][3]["codeql"]["status"] == "failed"
 
 
@@ -198,3 +202,23 @@ async def test_gate_verdict_is_recorded_on_success(mock_fetch, mock_exec, mock_m
 
     update = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0]
     assert update[0][4] == "failed"
+
+
+from src.infrastructure.scans_repo import SCAN_STATUSES
+
+
+@pytest.mark.asyncio
+@patch("src.infrastructure.scans_repo.execute_many", new_callable=AsyncMock)
+@patch("src.infrastructure.scans_repo.execute_query", new_callable=AsyncMock)
+@patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
+async def test_persisted_status_is_always_api_valid(mock_fetch, mock_exec, mock_many):
+    """
+    scans.status is validated against z.enum(["pending","running","completed","failed"]).
+    A status outside it makes the scan unreadable through the API.
+    """
+    for engine_status in ({}, {"semgrep": {"status": "ok"}}, {"codeql": {"status": "failed"}}):
+        mock_exec.reset_mock()
+        mock_fetch.side_effect = [{"id": "s", "organization_id": "o"}, None]
+        await persist_scan_results("s", [], engine_status)
+        written = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0][0][1]
+        assert written in SCAN_STATUSES, written

@@ -11,7 +11,10 @@ from src.infrastructure import queue
 from src.infrastructure.storage import upload_codebase
 from src.infrastructure.git_repo import resolve_clone_url, get_scan_target
 from src.infrastructure.scan_skip import is_scan_skipped_dir_name
-from src.infrastructure.scans_repo import fail_scan
+from src.infrastructure.scans_repo import fail_scan, start_scan
+from src.infrastructure.scan_progress import (
+    ScanCancelled, assert_not_cancelled, make_progress, publish_progress,
+)
 from src.models.schemas import ScanMessage, ScanOptions
 
 SCRATCHPAD_PREFIX = "dockier-gateway-"
@@ -140,12 +143,15 @@ class GatewayService:
             if scan is None:
                 raise ValueError(f"scan {scan_id!r} not found")
 
+            await start_scan(scan_id)
+            await publish_progress(scan_id, make_progress("cloning", scanner="cloning"))
             clone_url = validate_clone_url(await resolve_clone_url(scan, tenant_id))
 
             await asyncio.to_thread(
                 self._shallow_clone, clone_url, scan.get("commit_sha") or "",
                 scan.get("branch") or "", scratch_dir,
             )
+            await assert_not_cancelled(scan_id)
             languages = await asyncio.to_thread(self.detect_languages, scratch_dir)
             uri = await asyncio.to_thread(upload_codebase, scratch_dir, scan_id)
 
@@ -164,9 +170,14 @@ class GatewayService:
             for engine_queue in queue.ENGINE_QUEUES.values():
                 await queue.send(engine_queue, body)
 
+            await publish_progress(scan_id, make_progress("scanning"))
             print(f"[*] GatewayService: scan {scan_id} delegated to "
                   f"{len(queue.ENGINE_QUEUES)} engines. languages={languages} uri={uri}")
 
+        except ScanCancelled as cancelled:
+            # Not a failure: the user asked for this. Complete the job quietly so
+            # pg-boss does not retry work nobody wants.
+            print(f"[*] GatewayService: {cancelled}")
         except Exception as err:
             # Redact before this reaches stdout or the job output: the failing
             # URL carries the tenant's git token.
