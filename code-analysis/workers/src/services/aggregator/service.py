@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 from src.models.schemas import ScanResult
 from src.infrastructure.llm import get_llm_provider
-from src.infrastructure.db_client import execute_query
+from src.infrastructure.scans_repo import persist_scan_results
 from src.infrastructure.redis_client import get_redis_client
 
 EXPECTED_ENGINES = {"semgrep", "regex", "sonarqube", "codeql"}
@@ -29,31 +29,21 @@ class AggregatorService:
     async def complete_job(self, job_id: str, scan_id: str, all_findings: list, engine_status: dict):
         print(f"[*] AggregatorService: Finalizing job {job_id} with {len(all_findings)} raw findings")
 
-        filtered_findings = await self.llm.filter_false_positives(all_findings)
-        print(f"[*] AggregatorService: Kept {len(filtered_findings)} findings after LLM filtering")
+        # The filter MARKS findings; it never removes them. Suppressed rows are
+        # still persisted so a wrong judgement is auditable and reversible.
+        judged = await self.llm.judge(all_findings)
+        suppressed = sum(1 for f in judged if f.get("suppressed_by_llm"))
+        print(f"[*] AggregatorService: {suppressed}/{len(judged)} findings marked as false positives")
 
         failed = [e for e, s in engine_status.items() if s.get("status") != "ok"]
         if failed:
             print(f"[!] AggregatorService: job {job_id} completed with failed engines: {failed}")
 
-        results_json = json.dumps(filtered_findings)
-        status_json = json.dumps(engine_status)
-        # A scan where an engine failed is not a clean bill of health.
-        scan_status = "partial" if failed else "success"
-
         try:
-            await execute_query(
-                "UPDATE pgboss.job SET state = 'completed', completedon = now(), output = $1 WHERE id = $2",
-                results_json, job_id
-            )
-            if scan_id:
-                await execute_query(
-                    "UPDATE security_scans SET status = $1, findings = $2, engine_status = $3, "
-                    "completed_at = now() WHERE id = $4",
-                    scan_status, results_json, status_json, scan_id
-                )
+            status = await persist_scan_results(scan_id, judged, engine_status)
+            print(f"[*] AggregatorService: scan {scan_id} persisted with status {status!r}")
         except Exception as e:
-            print(f"[!] AggregatorService: Failed to save to DB: {e}")
+            print(f"[!] AggregatorService: Failed to persist scan {scan_id}: {e}")
 
     async def process_result(self, message: dict):
         try:

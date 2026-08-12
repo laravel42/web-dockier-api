@@ -20,6 +20,15 @@ async def fetch_row(query: str, *args):
     async with pool.acquire() as conn:
         return await conn.fetchrow(query, *args)
 
+async def execute_many(query: str, args_seq):
+    """Batch-execute one statement over many parameter tuples in a transaction."""
+    if not args_seq:
+        return
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.executemany(query, args_seq)
+
 async def close_pool():
     global _pool
     if _pool:

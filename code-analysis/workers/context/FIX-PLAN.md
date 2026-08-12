@@ -33,9 +33,9 @@ against customer repositories.
 | ----- | ----- |
 | **Phase 0 — verifiable** (§2) | **Done.** Tree committed, 42 tests passing, scratch file removed. |
 | **Phase 1 — P0 correctness** (§3) | **Done.** All four items fixed, each guarded by a mutation-verified test. |
-| Phase 2 — P1 delivery (§4) | Not started. Blocked on decisions §7.1, §7.3, §7.5. |
+| Phase 2 — P1 delivery (§4) | **In progress.** Persistence + LLM policy landed; queue rewrite outstanding (§4b). |
 | Phase 3 — P2 engines (§5) | Not started. |
-| Phase 4 — config drift (§6) | Not started. Blocked on decision §7.4. |
+| Phase 4 — config drift (§6) | §6.3 (LLM contract) done. Config tables outstanding. |
 | **Phase 5 — security** (§8) | **Done**, except engine sandboxing (§8.6), which is an ops decision. |
 | Phase 6 — hygiene (§9) | Not started. |
 
@@ -258,6 +258,55 @@ per-engine failure recorded; two app replicas process each job exactly once.
 
 ---
 
+## 4b. Phase 2 — what has landed
+
+- **Canonical persistence** (`src/infrastructure/scans_repo.py`). Findings are written as rows to
+  `findings` and the scan is finalized on `scans` with a computed `summary`. Engine severities are
+  normalized to the strict `error|warning|info` vocabulary the table uses; unknown values map to
+  `warning`, never to the quietest bucket. Verified end to end against a live Postgres carrying the
+  real 0015/0016 schema.
+- **`scans.status = 'partial'`** whenever any engine failed, so an engine crash cannot present as a
+  clean repository.
+- **Migration 0063** — `findings.suppressed_by_llm` + `suppression_reason`, with a partial index on
+  the active-findings read path.
+- **Migration 0064** — `scans.engine_status`.
+- **LLM suppression is now a marked state** (decision §7.2). `LLMProvider.judge()` replaces
+  `filter_false_positives()`: it annotates every finding and returns all of them. Real batching
+  replaces the comment that claimed batching, and the prompt/`response_format` contradiction in
+  §6.3 is resolved in favour of a JSON object.
+- **`init_db.sql` retired** — it created shadow tables that nothing reads.
+
+## 4c. Phase 2 — outstanding, and the parity gap
+
+**Queue rewrite (§4.1, §4.4, §4.6) — not started.** The gateway still polls `pgboss.job` with
+hand-rolled SQL and still fans out over Redis Pub/Sub. Replacing the TS scanner means consuming the
+real payload it is enqueued with — `{scanId, tenantId, options, correlationId}` — which carries **no
+clone URL**. The repo, branch and connection are read from the `scans` row, and credentials come
+from `git_connections` via the tenant. The current `ScanMessage` contract cannot express any of this.
+
+**§4.5, §4.7, §4.8** — pool connection per iteration, `MAX_WORKERS` semaphore, worker supervision
+and the `lifespan` migration. Deferred deliberately: the poll loop they modify is replaced by the
+queue rewrite, so doing them first is throwaway work.
+
+**Parity gap — blocks retiring the TS worker.** `backend/src/services/code-analysis/` implements
+these; this tree does not:
+
+| Capability | Where it lives today |
+| ---------- | -------------------- |
+| Repo/credential resolution per tenant | `shared/service-clients/git-connections.ts` |
+| `RunScanOptions` toggles (semgrep / sonarqube / custom rules / sensitive data) | `scan-worker.ts` |
+| DB-backed custom rules and rule overrides | `custom-rules.ts`, `rule-overrides.ts` |
+| Live scan progress + websocket broadcast | `scan-progress.ts`, `scan-events.ts`, `routes/websocket.ts` |
+| Sensitive-data scanning | `scan-analysis.ts` |
+| Skip-dirs / generated-asset / minified detection | `scan-skip-dirs.ts` |
+| Finding snippets and `end_line` | `scan-analysis.ts` |
+| Scan cancellation and queue reconcile | `scan-reconcile.ts`, `scan-queue-reconcile.ts` |
+| Finding dedupe across engines | `scan-analysis.ts` (`dedupeScanFindings`) |
+
+Note the last two rows in particular: this tree writes `start_line == end_line` and an empty
+`snippet`, and does no cross-engine dedupe, so four engines reporting the same vulnerability produce
+four rows. Both are regressions against current behaviour and must close before cutover.
+
 ## 5. Phase 3 — P2 engine quality
 
 ### 5.1 Semgrep
@@ -361,20 +410,59 @@ that does not exist.
 
 ---
 
-## 7. Decisions required (blocking)
+## 7. Decisions — ANSWERED 2026-08-12
 
-These are not mine to make; Phase 2 onward depends on them.
+1. **Does this tree ship, or stay a spike?** → **It ships.** All phases are in scope.
+2. **LLM suppression policy.** → **Mark, never delete.** Suppressed findings are retained with a
+   `suppressed_by_llm` field (and the model's reason), not dropped from the array. See §6.3.
+3. **Queue substrate.** → **pg-boss.**
+4. **Config source of truth.** → **The database.** Rules, rulesets, and quality gates are read from
+   Postgres; migrations and seeders to be prepared. See §6.1.
+5. **Deployment topology.** → **One process running all six workers.**
 
-1. **Does this tree ship, or stay a spike?** Determines whether Phases 2–5 are worth doing at all.
-2. **LLM suppression policy.** Filtered findings are currently *deleted* from the array — no
-   `suppressed_by_llm` flag, no reason, no record. A model omitting one index silently erases a real
-   vulnerability. Recommendation: suppression becomes a **marked state** with the model's reason
-   stored, never a deletion. This is a security-product correctness question, not a refactor.
-3. **Queue substrate.** pg-boss (reuses existing Postgres and backend convention) vs. Redis Streams
-   (keeps Redis in the path). Recommendation: pg-boss.
-4. **Config source of truth** for rules and quality gates (§6.1).
-5. **Deployment topology.** One process running all six workers, or one process per engine? Affects
-   how §4.1 and §4.7 are implemented.
+Decision 3 makes decision 5 safe: pg-boss claims jobs with `FOR UPDATE SKIP LOCKED`, so each job
+goes to exactly one consumer and replicas no longer duplicate scans the way Pub/Sub broadcast did
+(§4.1).
+
+---
+
+## 7b. BLOCKER discovered while acting on decision 1
+
+Deciding that this tree ships collides with something already in production. This was not visible
+when the plan was written and invalidates part of §4.1 as specified.
+
+**The `security-scan` queue already has a consumer.**
+`backend/src/services/code-analysis/domain/worker.ts` registers a pg-boss worker on
+`SECURITY_SCAN_QUEUE = "security-scan"`. The Python gateway
+(`src/services/gateway/worker.py:20`) polls `pgboss.job WHERE name = 'security-scan'`. They are the
+same queue. Today nothing collides only because the Python tree is not deployed; the moment it
+ships, every scan job is claimed nondeterministically by whichever consumer gets there first, and
+scans silently split between two different scanners.
+
+**The target table does not exist.**
+The canonical schema has `scans` (migration 0015: TEXT id, organization_id, project_id,
+connection_id, repo, branch, status, summary JSONB) and a normalized `findings` table (0016:
+scan_id FK, rule_id, severity, message, file_path, start_line, end_line, snippet). The Python tree
+writes to `security_scans` with a `findings JSONB` blob — a table that appears nowhere in
+`supabase/migrations/`. As written, shipping it would write to a nonexistent table.
+
+**Also relevant:** the TypeScript scanner already implements much of what this tree does — Semgrep,
+SonarQube, custom regex rules, sensitive-data scanning, rule overrides, scan progress broadcasting.
+`code-analysis/rules/opengrep/` is its rule corpus and is already tracked.
+
+**Consequence for Phase 2.** §4.1 says "use per-engine pg-boss queues". That is still right for the
+engine fan-out, but the *intake* queue and the *result* tables have to be settled first, because
+every one of those choices is a different integration. Phase 2 is paused pending §7c.
+
+### §7c — ANSWERED
+
+- **Queue ownership** → **the Python pipeline replaces the TypeScript scanner** on `security-scan`.
+- **Result tables** → **canonical `scans` + `findings`.**
+
+Replacing the TS scanner is a bigger programme than §4.1 described, because that worker does
+substantially more than this tree does. The parity gap is enumerated in §4c and **must close before
+the TS worker is retired**. Until then both must not run: two consumers on `security-scan` split
+jobs nondeterministically.
 
 ---
 

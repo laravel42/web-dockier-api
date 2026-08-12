@@ -9,7 +9,9 @@ def _service(fake_redis, llm=None):
     with patch("src.services.aggregator.service.get_redis_client", return_value=fake_redis), \
          patch("src.services.aggregator.service.get_llm_provider") as mock_llm:
         mock_llm.return_value = llm or AsyncMock(
-            filter_false_positives=AsyncMock(side_effect=lambda f: f)
+            judge=AsyncMock(side_effect=lambda f: [
+                {**x, "suppressed_by_llm": False, "suppression_reason": None} for x in f
+            ])
         )
         return AggregatorService()
 
@@ -108,10 +110,10 @@ async def test_malformed_result_is_discarded(fake_redis):
 
 
 @pytest.mark.asyncio
-async def test_failed_engine_marks_scan_partial(fake_redis, finding):
+async def test_failed_engine_yields_partial_status(fake_redis, finding):
     service = _service(fake_redis)
 
-    with patch("src.services.aggregator.service.execute_query", new_callable=AsyncMock) as mock_exec:
+    with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
         await service.process_result(_result("semgrep", [finding()]))
         await service.process_result(_result("regex", []))
         await service.process_result(_result("sonarqube", []))
@@ -119,42 +121,57 @@ async def test_failed_engine_marks_scan_partial(fake_redis, finding):
             _result("codeql", [], status="failed", error="codeql CLI not found on PATH")
         )
 
-        assert mock_exec.await_count == 2
-        pgboss_sql = mock_exec.await_args_list[0][0][0]
-        assert "pgboss.job" in pgboss_sql
-
-        scan_args = mock_exec.await_args_list[1][0]
-        assert "security_scans" in scan_args[0]
-        assert scan_args[1] == "partial", "a failed engine must not read as a clean scan"
-        engine_status = json.loads(scan_args[3])
+        persist.assert_awaited_once()
+        scan_id, judged, engine_status = persist.await_args[0]
+        assert scan_id == "scan-1"
         assert engine_status["codeql"]["status"] == "failed"
         assert engine_status["semgrep"]["status"] == "ok"
 
 
 @pytest.mark.asyncio
-async def test_all_engines_ok_marks_scan_success(fake_redis, finding):
+async def test_all_engines_ok_persists_every_finding(fake_redis, finding):
     service = _service(fake_redis)
 
-    with patch("src.services.aggregator.service.execute_query", new_callable=AsyncMock) as mock_exec:
+    with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
         for engine in EXPECTED_ENGINES:
             await service.process_result(_result(engine, [finding()]))
 
-        scan_args = mock_exec.await_args_list[1][0]
-        assert scan_args[1] == "success"
+        _, judged, engine_status = persist.await_args[0]
+        assert len(judged) == len(EXPECTED_ENGINES)
+        assert all(s["status"] == "ok" for s in engine_status.values())
 
 
 @pytest.mark.asyncio
-async def test_llm_filter_is_applied(fake_redis, finding):
+async def test_suppressed_findings_are_still_persisted(fake_redis, finding):
+    """
+    Decision: suppression is a marked state, never a deletion. The aggregator
+    must hand every finding to the persistence layer, flagged, not a filtered
+    subset.
+    """
     llm = AsyncMock()
-    llm.filter_false_positives = AsyncMock(return_value=[])
+    llm.judge = AsyncMock(side_effect=lambda f: [
+        {**x, "suppressed_by_llm": True, "suppression_reason": "looks synthetic"} for x in f
+    ])
     service = _service(fake_redis, llm=llm)
 
-    with patch("src.services.aggregator.service.execute_query", new_callable=AsyncMock) as mock_exec:
+    with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
         for engine in EXPECTED_ENGINES:
             await service.process_result(_result(engine, [finding()]))
 
-        llm.filter_false_positives.assert_awaited_once()
-        assert json.loads(mock_exec.await_args_list[1][0][2]) == []
+        _, judged, _ = persist.await_args[0]
+        assert len(judged) == len(EXPECTED_ENGINES), "suppressed findings must not be dropped"
+        assert all(f["suppressed_by_llm"] for f in judged)
+        assert all(f["suppression_reason"] == "looks synthetic" for f in judged)
+
+
+@pytest.mark.asyncio
+async def test_persistence_failure_does_not_crash_the_worker(fake_redis, finding):
+    service = _service(fake_redis)
+
+    with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
+        persist.side_effect = Exception("connection reset")
+        for engine in EXPECTED_ENGINES:
+            await service.process_result(_result(engine, [finding()]))
 
 
 @pytest.mark.asyncio
