@@ -42,7 +42,7 @@ def test_parse_sarif(tmp_path):
 def test_run_codeql_invokes_create_then_analyze(mock_run, mock_which):
     mock_which.return_value = "/usr/bin/codeql"
 
-    _bare_service().run_codeql("/tmp/repo", "javascript")
+    _bare_service().run_codeql("/tmp/repo", "javascript", "/tmp/work")
 
     assert mock_run.call_count == 2
     create_call = mock_run.call_args_list[0][0][0]
@@ -50,6 +50,9 @@ def test_run_codeql_invokes_create_then_analyze(mock_run, mock_which):
     assert "create" in create_call
     assert "--language=javascript" in create_call
     assert "analyze" in analyze_call
+    assert "--build-mode=none" in create_call, "compiled languages need this to build a database"
+    assert any("codeql/javascript-queries:codeql-suites/" in a for a in analyze_call), \
+        "a bare <lang>-security-and-quality.qls does not resolve"
 
 
 @patch("src.services.codeql.service.shutil.which", return_value=None)
@@ -60,7 +63,7 @@ def test_missing_cli_raises_instead_of_fabricating_findings(mock_which):
     every scan run from an image without codeql installed.
     """
     with pytest.raises(RuntimeError, match="codeql CLI not found"):
-        _bare_service().run_codeql("/tmp/repo", "javascript")
+        _bare_service().run_codeql("/tmp/repo", "javascript", "/tmp/work")
 
 
 @pytest.mark.asyncio
@@ -88,14 +91,19 @@ async def test_missing_cli_publishes_failed_not_clean(mock_to_thread, mock_which
 @patch("src.services.codeql.service.asyncio.to_thread")
 async def test_process_job_publishes_ok_result(mock_to_thread, published, finding):
     async def runner(func, *args, **kwargs):
-        return "/tmp/repo/codeql-results.sarif" if func.__name__ == "run_codeql" else None
+        name = getattr(func, "__name__", "")
+        if name == "run_codeql":
+            return "/tmp/work/codeql-results-javascript.sarif"
+        if name == "parse_codeql_sarif":
+            return [finding(rule_id="js/sql-injection")]
+        return None
     mock_to_thread.side_effect = runner
 
     service = _service()
-    with patch.object(service, "parse_codeql_sarif", return_value=[finding(rule_id="js/sql-injection")]):
-        await service.process_job({
-            "uri": "s3://t/t.zip", "job_id": "job-1", "scan_id": "scan-1", "language": "javascript",
-        })
+    await service.process_job({
+        "uri": "s3://t/t.zip", "job_id": "job-1", "scan_id": "scan-1",
+        "language": "javascript", "languages": ["javascript"],
+    })
 
     body = published[0][1]
     assert body["engine"] == "codeql"
@@ -114,3 +122,62 @@ async def test_unknown_language_is_skipped_not_failed(published):
     assert body["engine"] == "codeql"
     assert body["status"] == "ok"
     assert body["findings"] == []
+
+
+def test_severity_comes_from_sarif_rule_metadata(tmp_path):
+    """
+    Every finding was hardcoded to "medium", so a critical RCE and a style note
+    landed identically.
+    """
+    sarif = tmp_path / "r.sarif"
+    sarif.write_text(json.dumps({"runs": [{
+        "tool": {"driver": {"rules": [
+            {"id": "js/rce", "properties": {"security-severity": "9.8"}},
+            {"id": "js/medium", "properties": {"security-severity": "5.0"}},
+            {"id": "js/note", "defaultConfiguration": {"level": "note"}},
+        ]}},
+        "results": [
+            {"ruleId": "js/rce", "message": {"text": "m"}, "locations": []},
+            {"ruleId": "js/medium", "message": {"text": "m"}, "locations": []},
+            {"ruleId": "js/note", "message": {"text": "m"}, "locations": []},
+            {"ruleId": "js/unknown", "level": "error", "message": {"text": "m"}, "locations": []},
+        ],
+    }]}))
+
+    by_rule = {f["rule_id"]: f["severity"] for f in _bare_service().parse_codeql_sarif(str(sarif))}
+    assert by_rule == {"js/rce": "error", "js/medium": "warning",
+                       "js/note": "info", "js/unknown": "error"}
+
+
+@pytest.mark.asyncio
+@patch("src.services.codeql.service.asyncio.to_thread")
+async def test_every_supported_language_gets_a_database(mock_to_thread, published, finding):
+    """Analysing only the first language silently skipped the rest of a polyglot repo."""
+    analysed = []
+
+    async def runner(func, *args, **kwargs):
+        name = getattr(func, "__name__", "")
+        if name == "run_codeql":
+            analysed.append(args[1])
+            return f"/tmp/{args[1]}.sarif"
+        if name == "parse_codeql_sarif":
+            return [finding(rule_id=f"rule-{len(analysed)}")]
+        return None
+    mock_to_thread.side_effect = runner
+
+    await _service().process_job({
+        "uri": "s3://t/t.zip", "job_id": "job-1", "scan_id": "scan-1",
+        "languages": ["python", "javascript", "cobol"],
+    })
+
+    assert analysed == ["python", "javascript"], "unsupported languages are skipped, not failed"
+    assert len(published[0][1]["findings"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_no_supported_language_reports_ok_not_failed(published):
+    await _service().process_job({
+        "uri": "s3://t/t.zip", "job_id": "job-1", "scan_id": "scan-1", "languages": ["cobol"],
+    })
+    body = published[0][1]
+    assert body["status"] == "ok" and body["findings"] == []

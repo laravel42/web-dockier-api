@@ -16,6 +16,26 @@ from typing import Any, Dict, List, Optional
 # Which severity wins when the same issue is reported at different levels.
 SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}
 
+# `semgrep --config <absolute dir>` namespaces every rule with that directory,
+# dots for slashes, so a finding is stored as
+#   Users.someone.projects.web-dockier-api.code-analysis.rules.opengrep.javascript.…
+# while the catalogue the UI lists — and writes rule overrides against — calls
+# the same rule `javascript.…`. The two never compared equal, so disabling a rule
+# silently had no effect. Migration 0062 repaired the stored rows; this keeps new
+# ones correct. Kept as a literal rather than derived from the rules directory:
+# ids produced on another machine must normalize the same way here.
+RULES_DIR_MARKER = ".code-analysis.rules.opengrep."
+
+
+def normalize_semgrep_rule_id(check_id: str) -> str:
+    """Strip the scanning machine's filesystem path out of a semgrep rule id."""
+    if not check_id:
+        return check_id
+    idx = check_id.find(RULES_DIR_MARKER)
+    if idx < 0:
+        return check_id
+    return check_id[idx + len(RULES_DIR_MARKER):]
+
 
 def to_repo_relative_path(file_path: str, repo_dir: Optional[str] = None) -> str:
     """Reduce an engine's path to a repo-relative one.

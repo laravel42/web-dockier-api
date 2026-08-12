@@ -102,3 +102,31 @@ def test_empty_input():
 
 def test_severity_rank_ordering():
     assert SEVERITY_RANK["error"] > SEVERITY_RANK["warning"] > SEVERITY_RANK["info"]
+
+
+# --- semgrep rule id normalization ----------------------------------------
+
+from src.infrastructure.scan_analysis import normalize_semgrep_rule_id
+
+
+def test_machine_path_is_stripped_from_rule_ids():
+    noisy = ("Users.someone.projects.web-dockier-api.code-analysis.rules.opengrep"
+             ".javascript.browser.security.insecure-document-method")
+    assert normalize_semgrep_rule_id(noisy) == \
+        "javascript.browser.security.insecure-document-method"
+
+
+def test_catalogue_ids_pass_through_unchanged():
+    plain = "javascript.browser.security.insecure-document-method"
+    assert normalize_semgrep_rule_id(plain) == plain
+
+
+@pytest.mark.parametrize("value", ["", None])
+def test_empty_rule_ids_are_preserved(value):
+    assert normalize_semgrep_rule_id(value) == value
+
+
+def test_normalization_is_idempotent():
+    noisy = "a.b.code-analysis.rules.opengrep.python.lang.security.audit"
+    once = normalize_semgrep_rule_id(noisy)
+    assert normalize_semgrep_rule_id(once) == once

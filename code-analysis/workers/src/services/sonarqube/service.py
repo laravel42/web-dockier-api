@@ -1,13 +1,24 @@
+import os
 import shutil
 import tempfile
 import subprocess
 import httpx
 import asyncio
+from typing import Optional
 from src.services.base import EnginePublisher
 from src.infrastructure.scan_skip import sonar_exclusion_globs
 from src.infrastructure.rules_repo import load_disabled_rule_ids
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.secret_manager import get_cloudflare_secret
+
+# Sonar analysis is asynchronous server-side: sonar-scanner uploads a report and
+# returns, then the Compute Engine processes it. The previous implementation slept
+# 5 seconds and queried anyway, so on any non-trivial repo it read the issues API
+# before the report existed and reported zero findings.
+SCANNER_TIMEOUT_SECONDS = 1800
+CE_POLL_INTERVAL_SECONDS = 3
+CE_POLL_TIMEOUT_SECONDS = 900
+
 
 class SonarQubeService(EnginePublisher):
     engine_name = "sonarqube"
@@ -20,7 +31,6 @@ class SonarQubeService(EnginePublisher):
             "resolved": "false"
         }
         
-        await asyncio.sleep(5)
         
         async with httpx.AsyncClient() as client:
             try:
@@ -47,26 +57,81 @@ class SonarQubeService(EnginePublisher):
                     })
                 return findings
             except Exception as e:
-                print(f"[!] Failed to fetch SonarQube issues: {e}")
-                return []
+                # Propagate: an unreachable Sonar server is an engine failure,
+                # not a repository with no issues.
+                raise RuntimeError(f"failed to fetch SonarQube issues: {e}") from None
 
-    def run_sonar_scanner(self, repo_path: str, project_key: str, sonar_url: str, sonar_token: str):
+    def run_sonar_scanner(self, repo_path: str, project_key: str, sonar_url: str,
+                          sonar_token: str) -> Optional[str]:
+        """Run sonar-scanner and return the Compute Engine task id.
+
+        The token goes in the environment, not argv: `-Dsonar.login=<token>` is
+        visible to every process on the host via the process list, and
+        sonar.login is deprecated in favour of sonar.token.
+        """
+        if not shutil.which("sonar-scanner"):
+            raise RuntimeError("sonar-scanner CLI not found on PATH")
+
         cmd = [
             "sonar-scanner",
             f"-Dsonar.projectKey={project_key}",
-            f"-Dsonar.sources=.",
+            "-Dsonar.sources=.",
             f"-Dsonar.exclusions={sonar_exclusion_globs()}",
             f"-Dsonar.host.url={sonar_url}",
-            f"-Dsonar.login={sonar_token}"
         ]
+        env = {**os.environ, "SONAR_TOKEN": sonar_token}
         try:
-            if shutil.which("sonar-scanner"):
-                subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True, check=True)
-            else:
-                print("[!] sonar-scanner CLI not found. Skipping actual execution.")
+            subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True,
+                           check=True, env=env, timeout=SCANNER_TIMEOUT_SECONDS)
         except subprocess.CalledProcessError as e:
-            print(f"[!] Sonar scanner error: {e.stderr}")
-            raise e
+            raise RuntimeError(f"sonar-scanner failed: {(e.stderr or '')[:400]}") from None
+
+        return self._read_ce_task_id(repo_path)
+
+    @staticmethod
+    def _read_ce_task_id(repo_path: str) -> Optional[str]:
+        """Parse ceTaskId out of the report-task.txt the scanner leaves behind."""
+        report = os.path.join(repo_path, ".scannerwork", "report-task.txt")
+        if not os.path.exists(report):
+            return None
+        with open(report, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("ceTaskId="):
+                    return line.split("=", 1)[1].strip()
+        return None
+
+    async def wait_for_analysis(self, sonar_url: str, sonar_token: str, task_id: str) -> None:
+        """Block until the Compute Engine task finishes, or give up loudly."""
+        url = f"{sonar_url.rstrip('/')}/api/ce/task"
+        waited = 0
+        async with httpx.AsyncClient() as client:
+            while waited < CE_POLL_TIMEOUT_SECONDS:
+                resp = await client.get(url, params={"id": task_id}, auth=(sonar_token, ""))
+                resp.raise_for_status()
+                status = resp.json().get("task", {}).get("status")
+                if status == "SUCCESS":
+                    return
+                if status in ("FAILED", "CANCELED"):
+                    raise RuntimeError(f"SonarQube analysis {status.lower()}")
+                await asyncio.sleep(CE_POLL_INTERVAL_SECONDS)
+                waited += CE_POLL_INTERVAL_SECONDS
+        raise RuntimeError(
+            f"SonarQube analysis did not finish within {CE_POLL_TIMEOUT_SECONDS}s")
+
+    async def delete_project(self, sonar_url: str, sonar_token: str, project_key: str) -> None:
+        """Remove the per-scan project.
+
+        A project per scan is created and never deleted otherwise, so the Sonar
+        server accumulates one dead project per scan forever.
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{sonar_url.rstrip('/')}/api/projects/delete",
+                    params={"project": project_key}, auth=(sonar_token, ""),
+                )
+        except Exception as e:
+            print(f"[!] SonarQube: could not delete scratch project {project_key}: {e}")
 
     async def process_job(self, message: dict):
         uri = message.get("uri")
@@ -89,8 +154,12 @@ class SonarQubeService(EnginePublisher):
             project_key = f"dockier_{scan_id}"
             
             await asyncio.to_thread(download_codebase, uri, scratch_dir)
-            await asyncio.to_thread(self.run_sonar_scanner, scratch_dir, project_key, sonar_url, sonar_token)
+            task_id = await asyncio.to_thread(
+                self.run_sonar_scanner, scratch_dir, project_key, sonar_url, sonar_token)
+            if task_id:
+                await self.wait_for_analysis(sonar_url, sonar_token, task_id)
             findings = await self.fetch_sonar_issues(sonar_url, sonar_token, project_key, disabled)
+            await self.delete_project(sonar_url, sonar_token, project_key)
             
             await self._publish(job_id, scan_id, findings, "ok")
             print(f"[*] SonarQube Service: Finished {job_id} with {len(findings)} findings.")
