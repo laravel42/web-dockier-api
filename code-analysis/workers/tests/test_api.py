@@ -16,10 +16,14 @@ def _token(tenant="org-9", user="u1", email="a@b.c", **overrides):
 def client(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", SECRET)
     monkeypatch.setenv("DATABASE_URL", "postgresql://t/t")
-    from src.main import app
+    # The `api` service app, not src.main — src.main is now the router, which
+    # forwards to this rather than serving /sast itself.
+    from src.service_app import build_app
+    from src.service_registry import BY_NAME
+
     # Not used as a context manager on purpose: entering it runs the lifespan,
-    # which registers queues and starts six workers against a real database.
-    return TestClient(app, raise_server_exceptions=False)
+    # which registers queues against a real database.
+    return TestClient(build_app(BY_NAME["api"]), raise_server_exceptions=False)
 
 
 SCAN_ROW = {

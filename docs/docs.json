@@ -14,7 +14,10 @@
         "groups": [
           {
             "group": "Getting Started",
-            "pages": ["index", "migration-plan"]
+            "pages": [
+              "index",
+              "migration-plan"
+            ]
           },
           {
             "group": "API",
@@ -28,6 +31,7 @@
               "api/notifications",
               "api/integrations",
               "api/code-analysis",
+              "api/sast-workers",
               "api/git-integration",
               "api/image-builder",
               "api/migration-status"
@@ -35,7 +39,10 @@
           },
           {
             "group": "Operations",
-            "pages": ["operations/cloudflare", "operations/migrations"]
+            "pages": [
+              "operations/cloudflare",
+              "operations/migrations"
+            ]
           }
         ]
       }

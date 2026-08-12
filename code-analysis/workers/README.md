@@ -1,7 +1,7 @@
 # Dockier SAST Workers
 
-Backend analysis components for Dockier's Static Application Security Testing (SAST)
-platform: a FastAPI process hosting six pg-boss queue consumers.
+Backend analysis components for Dockier's Static Application Security Testing
+(SAST) platform. Seven services, each its own process, behind one router port.
 
 > **Status:** this tree replaces `backend/src/services/code-analysis`'s scan worker.
 > **Both must not run at once** — two consumers on the `security-scan` queue split
@@ -47,12 +47,18 @@ src/
 │   ├── secret_manager.py  # Environment-backed secrets
 │   ├── storage.py         # Zip/unzip and object storage
 │   └── paths.py           # Rule corpus location
+├── api/                   # Public tenant-facing API (auth, schemas, routes)
 ├── models/schemas.py      # ScanMessage, ScanResult, ScanFinding, ScanOptions
+├── router.py              # Single public port; forwards to the services below
+├── service_registry.py    # Names, ports and URLs of every service
+├── service_app.py         # Builds one service's app (health, info, trigger, worker)
+├── service_entrypoints.py # Importable app objects, one per service
+├── run.py                 # `python -m src.run <service>`
 ├── services/
 │   ├── base.py            # EnginePublisher — one way to report an outcome
 │   ├── worker_runtime.py  # Poll loop, concurrency cap, supervision, reaping
 │   ├── aggregator/ codeql/ gateway/ regex/ semgrep/ sonarqube/
-└── main.py                # FastAPI app; lifespan starts and stops the workers
+└── main.py                # Default ASGI target — the router
 ```
 
 ## Running
@@ -61,54 +67,51 @@ Requires PostgreSQL (with the canonical `supabase/migrations/` applied) and Redi
 
 ```bash
 export DATABASE_URL=postgresql://...
-uvicorn src.main:app --reload
+export JWT_SECRET=...                      # the API fails closed without it
+export CORS_ALLOW_ORIGINS=http://localhost:5173
+
+./scripts/run-services.sh start            # seven services + router
+./scripts/run-services.sh status
+./scripts/run-services.sh stop
 ```
 
-Queues are registered on startup. The HTTP endpoints enqueue jobs; they do not
-run scans inline, so a manual scan obeys the same concurrency cap, retry and
-expiry behaviour as any other job.
+Logs land in `logs/<service>.log`, pids in `.run/`.
+
+One service on its own:
 
 ```bash
-pytest                    # 265 tests
+python -m src.run semgrep     # :8004
+python -m src.run router      # :8000
+uvicorn src.main:app          # equivalent to the router
 ```
 
-## HTTP API
+### Topology
 
-Authenticated with the platform's tenant JWT (`Authorization: Bearer <token>`,
-HS256 over `JWT_SECRET`) — the same token the frontend already holds. Every query
-is scoped to the `tenantId` claim, so a valid token for one organization cannot
-read or trigger another's scans; a mismatch returns 404, because confirming an id
-exists is itself a disclosure.
+```text
+                       ┌── /sast/*           → api        :8001
+client ─→ router :8000 ┤
+                       └── /workers/{name}/* → gateway    :8002
+                                               aggregator :8003
+                                               semgrep    :8004
+                                               regex      :8005
+                                               sonarqube  :8006
+                                               codeql     :8007
+```
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| `POST` | `/sast/scans/{scanId}/run` | Enqueue a scan. Body: `{ options?: {...} }` |
-| `GET` | `/sast/scans/{scanId}` | Status, summary, per-engine outcome, quality gate, live progress |
-| `GET` | `/sast/scans/{scanId}/findings` | Paginated findings. `severity`, `includeSuppressed`, `limit` (≤200), `offset` |
-| `GET` | `/sast/health` | Liveness and queue depth. No auth |
+Separate processes so one engine wedging on a pathological repository cannot take
+the API down with it, and so an engine can be restarted without interrupting
+in-flight API traffic. The router forwards and nothing more — it holds no queue
+consumer and performs **no authentication**, because the `api` service verifies
+the tenant token itself; a router that authenticated on its behalf would become a
+component whose compromise grants access to every tenant's scans.
 
-Request *and* response models live in [`src/api/schemas.py`](src/api/schemas.py) and
-are attached to every route via `response_model=`, so FastAPI validates outbound
-payloads too — a field silently going missing fails at the boundary instead of
-arriving in the UI as `undefined`. Errors use `{ "message", "code" }`, which is
-what the frontend's `request()` helper reads.
-
-Interactive docs at `/docs` when running.
-
-## Docker
+`./scripts/run-services.sh` is a development convenience. In production each
+service is its own supervised unit; the registry reads `SAST_PORT_<SERVICE>` and
+`SAST_URL_<SERVICE>` so services can live on different hosts.
 
 ```bash
-# Build context is code-analysis/, because the image needs rules/ as well as workers/
-cd code-analysis
-JWT_SECRET=... docker compose -f workers/docker-compose.yml up --build
+pytest                    # 309 tests
 ```
-
-The container restrictions are the point, not incidental — the engines execute
-untrusted source. `read_only` rootfs, `noexec` tmpfs for clones, all capabilities
-dropped, `no-new-privileges`, pid and memory caps, and **no cloud credentials in
-the environment**. Data stores sit on an `internal: true` network with no route
-out; only the workers get an egress network, for cloning and API calls. See the
-comments in [`docker-compose.yml`](docker-compose.yml) before changing any of it.
 
 ## Configuration
 

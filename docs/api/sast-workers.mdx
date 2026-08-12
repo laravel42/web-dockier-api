@@ -1,0 +1,213 @@
+# SAST Workers API
+
+Static analysis runs in a set of standalone Python services (`code-analysis/workers`),
+separate from the Fastify gateway. A **router** exposes a single port and forwards
+to whichever service the path names.
+
+```text
+                       ┌── /sast/*           → api service
+client ─→ router :8000 ┤
+                       └── /workers/{name}/* → that worker service
+```
+
+Each service is its own process, so one engine wedging on a pathological
+repository cannot take the API down with it.
+
+## Base URL
+
+| Variable | Purpose |
+| -------- | ------- |
+| `VITE_SAST_API_BASE` | Frontend base URL for the router (e.g. `http://127.0.0.1:8000`) |
+| `SAST_PORT_ROUTER` | Router port (default `8000`) |
+| `SAST_PORT_<SERVICE>` | Override an individual service port |
+| `SAST_URL_<SERVICE>` | Point the router at a service on another host |
+
+## Authentication
+
+Tenant JWT, the same token the rest of the platform issues:
+
+```http
+Authorization: Bearer <token>
+```
+
+HS256 over `JWT_SECRET`, carrying `{ userId, email, tenantId }`.
+
+The **router does not authenticate** — the `api` service verifies the token
+itself and scopes every query to the `tenantId` claim. A router that
+authenticated on the services' behalf would become a component whose compromise
+grants access to every tenant's scans.
+
+Consequences worth knowing:
+
+- A valid token for one organization cannot read or trigger another's scans.
+- A scan belonging to another tenant returns **404, not 403** — confirming that
+  an id exists is itself a disclosure.
+- A missing `JWT_SECRET` makes the API fail closed (`500 AUTH_NOT_CONFIGURED`).
+  It never means "skip authentication".
+
+## Errors
+
+Every error uses the same envelope, which is what the frontend's `request()`
+helper reads:
+
+```json
+{ "message": "limit: Input should be less than or equal to 200", "code": "VALIDATION_ERROR" }
+```
+
+| Code | Status | Meaning |
+| ---- | ------ | ------- |
+| `UNAUTHORIZED` | 401 | Missing, malformed, expired or wrongly-signed token |
+| `NOT_FOUND` | 404 | No such scan **for this tenant** |
+| `UNKNOWN_SERVICE` | 404 | `/workers/{name}` named a service that does not exist |
+| `VALIDATION_ERROR` | 422 | Bad parameter; the message names the field |
+| `UPSTREAM_TIMEOUT` | 504 | A service did not respond in time |
+| `UPSTREAM_UNAVAILABLE` | 503 | A service is down |
+| `INTERNAL_ERROR` | 500 | Unexpected. Deliberately generic — the underlying message may contain a clone URL with a token |
+
+---
+
+## Scan API
+
+### `POST /sast/scans/{scanId}/run`
+
+Enqueue a scan. Returns as soon as the job is durably queued — **not** when the
+scan finishes. Poll `GET /sast/scans/{scanId}` for progress.
+
+```json
+{ "options": { "enableSonarqube": false } }
+```
+
+All options default to `true`. Unknown keys are rejected rather than ignored, so
+a typo like `enableSemgrap` is a 422 instead of silently meaning "enabled".
+
+| Option | Effect when false |
+| ------ | ----------------- |
+| `enableSemgrep` | Skip the Semgrep engine |
+| `enableSonarqube` | Skip SonarQube |
+| `enableCodeql` | Skip CodeQL |
+| `enableCustomRules` | Skip database-backed regex rules |
+| `enableSensitiveData` | Skip schema/model field classification |
+
+```json
+{ "jobId": "d3950fbf-…", "scanId": "scan-R", "status": "queued" }
+```
+
+A disabled engine reports `ok` with no findings — it is not treated as a failure.
+
+### `GET /sast/scans/{scanId}`
+
+```json
+{
+  "scanId": "scan-R",
+  "status": "completed",
+  "summary": {
+    "totalFindings": 2, "errors": 1, "warnings": 1, "infos": 0,
+    "filesScanned": 9, "filesInRepo": 20,
+    "partial": true, "failedEngines": ["codeql"]
+  },
+  "engineStatus": {
+    "semgrep": { "status": "ok", "error": null },
+    "codeql": { "status": "failed", "error": "codeql CLI not found on PATH" }
+  },
+  "qualityGateStatus": null,
+  "progress": { "phase": "done", "filesScanned": 9, "filesInRepo": 20, "findingsCount": 2 },
+  "updatedAt": "2026-08-12T15:26:53Z"
+}
+```
+
+`status` is `pending | running | completed | failed` — a closed enum with no room
+for "degraded". **A scan reporting zero findings may simply not have looked**, so
+read `summary.partial` and `engineStatus` before presenting a result as clean.
+
+`qualityGateStatus` is `null` for a partial scan by design: the engine that
+failed is exactly the one that might have found the error, so no verdict is
+issued.
+
+`progress.phase` moves `cloning → scanning → persisting → done`.
+
+### `GET /sast/scans/{scanId}/findings`
+
+| Parameter | Default | Notes |
+| --------- | ------- | ----- |
+| `severity` | — | `error`, `warning` or `info` |
+| `includeSuppressed` | `false` | Include findings the LLM judged false positives |
+| `limit` | `50` | Max `200` |
+| `offset` | `0` | |
+
+```json
+{
+  "findings": [{
+    "id": "f1", "ruleId": "py/sqli", "severity": "error",
+    "message": "SQL injection", "filePath": "app.py",
+    "startLine": 12, "endLine": 14, "snippet": "q = f\"…\"",
+    "suppressedByLlm": false, "suppressionReason": null,
+    "createdAt": "2026-08-12T15:26:53Z"
+  }],
+  "total": 1, "hasMore": false,
+  "counts": { "error": 1, "warning": 0, "info": 0, "suppressed": 3 }
+}
+```
+
+**Suppression is a marked state, never a deletion.** The LLM false-positive
+filter flags findings; it does not remove them. `includeSuppressed=true` is how a
+reviewer audits what was filtered out, and `counts.suppressed` tells you how much
+there is to audit even when the list excludes it.
+
+`counts` always describes the whole scan, not the current page.
+
+---
+
+## Service endpoints
+
+### `GET /services`
+
+Registry of every service and the path it is reachable on. No auth.
+
+### `GET /health` (router)
+
+Aggregate health, probed concurrently. Returns **503** when any service is
+unreachable — a router reporting `ok` while an engine is down would make the
+outage invisible to whatever watches this endpoint.
+
+```json
+{
+  "status": "degraded",
+  "services": [
+    { "service": "api", "status": "ok", "queue": {} },
+    { "service": "semgrep", "status": "unreachable", "queue": {} }
+  ]
+}
+```
+
+### `GET /workers/{service}/health` · `/info` · `POST /trigger`
+
+Per-service liveness with queue depth, service metadata, and a manual enqueue for
+testing. `trigger` enqueues rather than running inline, so a triggered job obeys
+the same concurrency cap, retries and expiry as any other.
+
+Services: `gateway`, `aggregator`, `semgrep`, `regex`, `sonarqube`, `codeql`.
+
+---
+
+## Running
+
+```bash
+cd code-analysis/workers
+export DATABASE_URL=postgresql://…
+export JWT_SECRET=…                       # the API fails closed without it
+export CORS_ALLOW_ORIGINS=http://localhost:5173
+
+./scripts/run-services.sh start           # eight processes: seven services + router
+./scripts/run-services.sh status
+./scripts/run-services.sh stop
+```
+
+One service on its own:
+
+```bash
+python -m src.run semgrep     # :8004
+python -m src.run router      # :8000
+```
+
+Interactive OpenAPI docs are at `/docs` on the router, and on each service's own
+port.

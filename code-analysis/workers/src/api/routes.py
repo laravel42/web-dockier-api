@@ -35,7 +35,16 @@ async def _get_owned_scan(scan_id: str, tenant_id: str):
     return row
 
 
-@router.post("/scans/{scan_id}/run", response_model=RunScanResponse)
+@router.post(
+    "/scans/{scan_id}/run",
+    response_model=RunScanResponse,
+    summary="Enqueue a scan",
+    responses={
+        401: {"description": "Missing, expired or wrongly-signed token"},
+        404: {"description": "No such scan for this tenant"},
+        422: {"description": "Unknown option key, or a malformed body"},
+    },
+)
 async def run_scan(
     body: RunScanRequest,
     scan_id: str = Path(min_length=1, max_length=128),
@@ -52,7 +61,13 @@ async def run_scan(
     return RunScanResponse(job_id=job_id, scan_id=scan_id, status="queued")
 
 
-@router.get("/scans/{scan_id}", response_model=ScanStatusResponse)
+@router.get(
+    "/scans/{scan_id}",
+    response_model=ScanStatusResponse,
+    summary="Scan status, summary and progress",
+    responses={401: {"description": "Unauthenticated"},
+               404: {"description": "No such scan for this tenant"}},
+)
 async def get_scan(
     scan_id: str = Path(min_length=1, max_length=128),
     auth: AuthContext = Depends(require_auth),
@@ -82,7 +97,14 @@ async def get_scan(
     })
 
 
-@router.get("/scans/{scan_id}/findings", response_model=FindingsResponse)
+@router.get(
+    "/scans/{scan_id}/findings",
+    response_model=FindingsResponse,
+    summary="Findings for a scan",
+    responses={401: {"description": "Unauthenticated"},
+               404: {"description": "No such scan for this tenant"},
+               422: {"description": "Invalid severity, limit or offset"}},
+)
 async def list_findings(
     scan_id: str = Path(min_length=1, max_length=128),
     severity: Optional[Literal["error", "warning", "info"]] = Query(default=None),
@@ -159,7 +181,12 @@ async def list_findings(
     )
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    summary="Liveness and queue depth",
+    description="Unauthenticated. Reports reachability and queue depth, never scan data.",
+)
 async def health() -> HealthResponse:
     """Unauthenticated liveness probe — reports reachability, never scan data."""
     try:
