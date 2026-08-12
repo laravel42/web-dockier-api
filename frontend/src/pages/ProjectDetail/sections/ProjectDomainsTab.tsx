@@ -168,7 +168,7 @@ function DomainRow({
       <div className={`mx-4 mb-2 rounded-md px-3 py-2 text-xs ${
         dnsStatus.verified
           ? "bg-success-500/10 text-success-500 border border-success-500/30"
-          : "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+          : "bg-warning-surface text-warning-ink border border-warning-line"
       }`}>
         {dnsStatus.message}
       </div>
@@ -352,7 +352,7 @@ function CertificateRow({
 
   const statusDotColors: Record<SslCertificate["status"], string> = {
     active: "bg-success-500",
-    pending: "animate-pulse bg-amber-500",
+    pending: "animate-pulse bg-warning-ink",
     expired: "bg-danger-500",
     failed: "bg-danger-500",
   };
@@ -647,7 +647,7 @@ function NginxConfigModal({
               {config}
             </pre>
           </div>
-          <p className="mt-3 text-xs text-amber-500 flex items-center gap-1.5">
+          <p className="mt-3 text-xs text-warning-ink flex items-center gap-1.5">
             <InfoIcon className="size-3.5 shrink-0" />
             This is the auto-generated config based on your domains. Changes are applied via Sync.
           </p>

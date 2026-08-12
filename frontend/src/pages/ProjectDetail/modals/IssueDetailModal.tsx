@@ -69,7 +69,7 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
         <div className="space-y-4">
           {/* Issue header */}
           <div className="flex items-start gap-3">
-            <CircleAlertIcon className="size-5 text-emerald-500 mt-0.5 shrink-0" />
+            <CircleAlertIcon className="size-5 text-success-ink mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <h3 className="text-base/snug font-semibold text-text ">{issue.title}</h3>
               <div className="mt-1 text-sm text-text-muted">

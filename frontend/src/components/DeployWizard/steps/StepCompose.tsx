@@ -24,7 +24,7 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
       {!isTemplate && state.deployStrategy !== "static" && (
       <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface">
         <div className="flex items-center gap-2">
-          <DockerIcon className="size-5  text-blue-500" />
+          <DockerIcon className="size-5  text-primary-500" />
           <div>
             <span className="text-sm font-medium text-text">Docker Build</span>
             <p className="text-xs text-text-muted">Build and deploy as a container image</p>
@@ -53,7 +53,7 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
-                <DockerfileIcon className="size-4 text-blue-500" />
+                <DockerfileIcon className="size-4 text-primary-500" />
                 <span className="text-sm font-medium text-text">Let Dockier generate</span>
               </div>
               <p className="text-xs text-text-muted">
@@ -70,7 +70,7 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
-                <DockerfileIcon className="size-4 text-blue-500" />
+                <DockerfileIcon className="size-4 text-primary-500" />
                 <span className="text-sm font-medium text-text">Use repository Dockerfile</span>
               </div>
               <p className="text-xs text-text-muted">
@@ -85,10 +85,10 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
       {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (() => {
         const isAws = state.selectedProvider === "aws";
         const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
-          { id: "dockerfile", label: "Auto-generate", desc: "Dockier writes and auto-fixes the Dockerfile on build failure", icon: <DockerfileIcon className="size-4  text-blue-500" /> },
-          { id: "railpack", label: "Railpack", desc: "Zero-config builder by Railway, falls back to Dockerfile", icon: <RailpackIcon className="size-4  text-purple-500" /> },
-          { id: "nixpacks", label: "Nixpacks", desc: "Nix-based builder by Railway, falls back to Dockerfile", icon: <NixpacksIcon className="size-4  text-cyan-500" /> },
-          { id: "codebuild", label: "CodeBuild", desc: "AWS CodeBuild with BuildKit + ECR cache, no local Docker needed", icon: <CodeBuildIcon className="size-4  text-orange-500" />, awsOnly: true },
+          { id: "dockerfile", label: "Auto-generate", desc: "Dockier writes and auto-fixes the Dockerfile on build failure", icon: <DockerfileIcon className="size-4  text-primary-500" /> },
+          { id: "railpack", label: "Railpack", desc: "Zero-config builder by Railway, falls back to Dockerfile", icon: <RailpackIcon className="size-4  text-primary-500" /> },
+          { id: "nixpacks", label: "Nixpacks", desc: "Nix-based builder by Railway, falls back to Dockerfile", icon: <NixpacksIcon className="size-4  text-primary-500" /> },
+          { id: "codebuild", label: "CodeBuild", desc: "AWS CodeBuild with BuildKit + ECR cache, no local Docker needed", icon: <CodeBuildIcon className="size-4  text-caution-ink" />, awsOnly: true },
         ];
         const filtered = methods.filter(m => !m.awsOnly || isAws);
         return (
@@ -135,7 +135,7 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
             }`}
           >
             <div className="flex items-center gap-2 mb-1">
-              <CodeBuildIcon className="size-4  text-orange-500" />
+              <CodeBuildIcon className="size-4  text-caution-ink" />
               <span className="text-sm font-medium text-text">CodeBuild</span>
               {state.buildMethod === "codebuild" && (
                 <span className="ml-auto text-xs text-primary-500 font-medium">Active</span>

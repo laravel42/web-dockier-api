@@ -59,7 +59,7 @@ function token(name: string, theme: "dark" | "light"): string {
   return m[1].trim();
 }
 
-const SIGNALS = ["danger", "caution", "warning", "info", "success"] as const;
+const SIGNALS = ["danger", "caution", "warning", "info", "success", "ai"] as const;
 const CARD = { dark: "oklch(0.21 0.009 50)", light: "oklch(1 0.005 60)" };
 const PAGE = { dark: "oklch(0.17 0.008 50)", light: "oklch(0.97 0.008 60)" };
 const AA = 4.5;

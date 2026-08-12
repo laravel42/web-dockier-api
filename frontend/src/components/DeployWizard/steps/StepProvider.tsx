@@ -57,7 +57,7 @@ export default function StepProvider({ state, providers, onChange }: {
                 }
               }}
               className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                selected ? `${choiceCardSelectedCls} shadow-sm` : `${choiceCardIdleCls} cursor-pointer`
+                selected ? `${choiceCardSelectedCls} shadow-(--shadow-xs)` : `${choiceCardIdleCls} cursor-pointer`
               }`}
             >
               <div className={`size-10 rounded-lg ${meta.color} flex items-center justify-center text-white text-xs font-bold`}>

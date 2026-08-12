@@ -120,7 +120,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
 
       {analysis.hasDocker && (
         <div className="flex items-start gap-2 p-3 bg-secondary-50 border border-border rounded-lg">
-          <DockerfileIcon className="size-4 text-blue-500 mt-0.5 shrink-0" />
+          <DockerfileIcon className="size-4 text-primary-500 mt-0.5 shrink-0" />
           <div className="text-xs text-text-secondary">
             <span className="font-semibold text-text">Dockerfile detected.</span>{" "}
             You can choose whether to use it or let Dockier generate one in the Deploy script step.

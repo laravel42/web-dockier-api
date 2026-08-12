@@ -50,7 +50,7 @@ export default function StatusRingIcon({ status, className = "" }: Props) {
           <path d="M18 6 6 18M6 6l12 12" />
         </svg>
       )}
-      {kind === "pending" && <span className="size-1.5 rounded-full bg-white" />}
+      {kind === "pending" && <span className="size-1.5 rounded-full bg-text" />}
     </span>
   );
 }

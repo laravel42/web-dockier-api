@@ -87,8 +87,8 @@ export default function DeployDetail() {
 
         {/* VPS warm-up notice */}
         {deploy.status === "success" && deploy.deployStrategy === "vps" && deployUrl && (
-          <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 mb-6">
-            <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
+          <div className="rounded-lg bg-warning-surface border border-warning-line p-3 mb-6">
+            <p className="text-xs text-warning-ink font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
             <p className="text-xs/relaxed text-text-muted ">
               If you see an nginx welcome page when visiting the URL, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes.
             </p>

@@ -16,7 +16,7 @@ export default function PullLogModal({ pullLog, pullLoading, onClose }: Props) {
         ))}
         {pullLoading && (
           <div className="flex items-center gap-2 mt-1 text-text-muted">
-            <div className="size-3  border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+            <div className="size-3  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             Fetching…
           </div>
         )}

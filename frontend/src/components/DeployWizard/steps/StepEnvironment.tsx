@@ -77,7 +77,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 type="button"
                 onClick={() => onChange(state.environment, i)}
                 className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${
-                  selected ? "border-primary-500 bg-primary/10 shadow-sm" : "border-border bg-card hover:border-primary-300"
+                  selected ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">

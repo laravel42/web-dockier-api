@@ -18,7 +18,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
     deploying: "bg-primary-100 text-primary-700",
     success: "bg-success-50 text-success-500",
     failed: "bg-danger-50 text-danger-500",
-    cancelled: "bg-amber-50 text-amber-600",
+    cancelled: "bg-warning-surface text-warning-ink",
   };
 
   const isRunning = ["pending", "building", "deploying"].includes(state.deployStatus);
@@ -69,11 +69,11 @@ export default function StepDeploy({ state }: { state: WizardState }) {
             <div key={i} className={
               line.includes("✓") ? "text-green-400" :
               line.includes("✗") ? "text-red-400" :
-              line.includes("──") ? "text-cyan-400" :
-              line.includes("ℹ") ? "text-blue-300" :
-              line.includes("▶") ? "text-yellow-300" :
-              line.includes("⚠") ? "text-amber-400" :
-              "text-gray-300"
+              line.includes("──") ? "text-primary-500" :
+              line.includes("ℹ") ? "text-primary-500" :
+              line.includes("▶") ? "text-warning-ink" :
+              line.includes("⚠") ? "text-warning-ink" :
+              "text-text-secondary"
             }>
               {line}
             </div>
@@ -83,15 +83,15 @@ export default function StepDeploy({ state }: { state: WizardState }) {
 
       {state.deployLogs.length === 0 && isRunning && (
         <div className="rounded-lg bg-terminal p-6 flex items-center justify-center gap-2">
-          <div className="size-4  border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-text-muted">Waiting for logs…</span>
         </div>
       )}
 
       {/* CodeBuild logs link */}
       {state.codebuildLogsUrl && (
-        <div className="rounded-lg bg-orange-500/10 border border-orange-500/20 p-3">
-          <p className="text-xs text-orange-600 font-semibold uppercase tracking-wide mb-1">CodeBuild Logs</p>
+        <div className="rounded-lg bg-caution-surface border border-caution-line p-3">
+          <p className="text-xs text-caution-ink font-semibold uppercase tracking-wide mb-1">CodeBuild Logs</p>
           <a href={state.codebuildLogsUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
             <ExternalLinkIcon className="size-4 shrink-0" />
             View in CloudWatch
@@ -120,8 +120,8 @@ export default function StepDeploy({ state }: { state: WizardState }) {
 
       {/* VPS warm-up notice — shown when deploy succeeds on a VPS strategy */}
       {state.deployAppUrl && state.deployStatus === "success" && state.deployStrategy === "vps" && (
-        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-          <p className="text-sm text-amber-500 font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
+        <div className="rounded-lg bg-warning-surface border border-warning-line p-3">
+          <p className="text-sm text-warning-ink font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
           <p className="text-xs/relaxed text-text-muted ">
             If you see an nginx welcome page, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes as the container starts and configures itself.
           </p>

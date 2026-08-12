@@ -4,7 +4,9 @@ How we ship Dockier app UX parity and hardening while minimizing Cursor premium 
 
 **Linear project:** [Dockier App — UX Parity & Hardening](https://linear.app/ailterego/project/dockier-app-ux-parity-and-hardening-fa524631fcdd)
 
-**Design system (UX source of truth):** [`../web-berry/docs/design-guidelines.html`](../web-berry/docs/design-guidelines.html) — sibling repo `web-berry` (legacy platform name *Berry*; product is *Dockier*). Absolute path: `/Users/secret/Web/L42/web-berry/docs/design-guidelines.html`. Tokens in the app use `dockier-*` (brand red), `dusk`, `cream`, and `seed` scales.
+**Design system (UX source of truth):** [`frontend/DESIGN.md`](../../frontend/DESIGN.md) — the visual system this product actually ships, plus its sidecar `frontend/src/index.css` for the tokens themselves.
+
+> **Superseded:** `../web-berry/docs/design-guidelines.html` (the Berry system — Bely/Soleil, `dockier-*` brand red, dusk/cream/seed) no longer describes this product. The same correction was already made in `AGENTS.md`. Berry red survives only as `legacy-berry`, reserved for severity states and marketing accents; it is not the product's identity.
 
 ---
 
@@ -40,7 +42,7 @@ How we ship Dockier app UX parity and hardening while minimizing Cursor premium 
 | Cursor explore subagents | Unlimited (readonly) | Parallel gap analysis |
 | Claude API | Planning + review | Use for issue bodies, matrices, PR comments |
 | OpenAI API | ~$5 | Test generation, microcopy drafts |
-| Human | Visual QA, sign-off | Screenshot compare vs design-guidelines.html |
+| Human | Visual QA, sign-off | Screenshot compare vs `frontend/DESIGN.md` |
 
 **Story point total (initial epics):** 47 points → ~19 points suitable for Cursor implementation per sprint.
 
@@ -115,15 +117,20 @@ Track in **AIL-163**. Initial snapshot:
 
 ---
 
-## UX alignment checklist (design-guidelines.html)
+## UX alignment checklist (`frontend/DESIGN.md`)
+
+North Star: **The Lamplit Control Room** — warm graphite surfaces, one ochre light source, no true gray.
 
 | Element | Design system | App today | Action |
 |---------|---------------|-----------|--------|
-| Fonts | Bely / Bely Display + Soleil (Adobe Typekit) | Loaded via `use.typekit.net/how0krv.css`; `--font-sans`, `--font-display`, `--font-heading` in `@theme` | Verify weights/sizes |
-| Brand | Dockier red `#8B1819` (`dockier-600` / `primary-600`) | `dockier-*` + `primary-*` alias in `@theme` | Audit CTAs and active states |
-| Accent | Seed gold (`seed-400`–`seed-500`, `#E3AF45`) | `--color-accent`, `btnAccent` | Match hover/secondary highlights |
-| Surfaces | Dusk (dark) + cream (light) scales | `dusk-*`, `cream-*`, semantic `--color-surface` / `--color-card` | Audit all pages |
-| Dark mode | Yes | `data-theme=dark` (default) | Audit remaining pages |
+| Fonts | Space Grotesk, one family across sans/display/heading/mono | `--font-family` in `@theme`; self-hosted | Verify weights against the type ramp |
+| Type ramp | 8 steps, 22px→12px; **12px is the floor** | `typography.scale` in DESIGN.md frontmatter | No `text-[Npx]` below 12px |
+| Brand | Lamplight Ochre `oklch(0.78 0.08 70)` — the **One Light Rule**: ≤10% of any screen | `--color-primary-*`, `--color-accent` | Audit that ochre marks interaction only, never decoration |
+| Neutrals | Warm graphite, hue 50–60 at chroma 0.008–0.012 — **no true gray** | `--color-secondary-*`, surfaces | A `#71717a` reads instantly as foreign |
+| Severity | Five ordinal signal steps + success, each `surface`/`line`/`ink`, ≥4.5:1 in both themes | `--color-{danger,caution,warning,info,success}-*` | See `palette-token-mapping.md`; low is `info`, never `success` |
+| AI actions | `--color-ai-*` marks work a model performs on the user's behalf | `ai-surface`/`line`/`ink` | Use for AI triggers and previews (epic E) |
+| Elevation | Exactly two: `--shadow-xs` resting, `--shadow-overlay` floating | `index.css` | `shadow-sm/md/lg/xl` are banned |
+| Dark mode | Dark-first `:root`; light is the `[data-theme="light"]` override | Both themed | Every colour decision must hold in both |
 | Four-step journey | Connect → Analyze → Fix → Deploy | **Done** — dashboard `GettingStarted` stepper (**AIL-169**) | — |
 | Integration logos | Strip on homepage | Missing in app | Add component |
 | Auth pages | Design system sign-in patterns | `AuthLayout`, `btnPrimaryAuth`, `labelCls` | Verify parity |
@@ -154,7 +161,7 @@ Track in **AIL-163**. Initial snapshot:
 
 | ID | Title | Points |
 |----|-------|--------|
-| AIL-162 | Design system alignment with `web-berry/docs/design-guidelines.html` (dockier/dusk/cream/seed tokens) | 8 |
+| AIL-162 | Design system alignment with `frontend/DESIGN.md` (graphite + ochre, Space Grotesk, signal ramp) | 8 |
 | AIL-166 | Core app flows UX | 13 |
 | AIL-163 | Feature parity audit | 13 |
 | AIL-164 | Test infrastructure & smoke E2E | 8 |

@@ -14,7 +14,7 @@ const variants = {
   secondary:
     "bg-secondary-100 text-text hover:bg-secondary-200",
   outline:
-    "border border-border bg-background shadow-sm hover:bg-card/60",
+    "border border-border bg-background shadow-(--shadow-xs) hover:bg-card/60",
   "outline-primary":
     "border border-primary text-primary bg-transparent hover:bg-primary/10",
   "outline-danger":

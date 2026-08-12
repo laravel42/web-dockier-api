@@ -39,14 +39,14 @@ function StatusBadge({ status }: { status: Command["status"] }) {
     running: statusBadgeColors.running || "bg-primary-500/10 text-primary-500",
     finished: statusBadgeColors.success || "bg-success-500/10 text-success-500",
     failed: statusBadgeColors.failed || "bg-danger-500/10 text-danger-500",
-    timed_out: "bg-amber-500/10 text-amber-500",
+    timed_out: "bg-warning-surface text-warning-ink",
   };
 
   const dotColorMap: Record<Command["status"], string> = {
     running: "animate-pulse bg-primary-500",
     finished: "bg-success-500",
     failed: "bg-danger-500",
-    timed_out: "bg-amber-500",
+    timed_out: "bg-warning-ink",
   };
 
   return (
@@ -226,7 +226,7 @@ export default function ProjectCommandsTab({ project }: Props) {
           and may run for two minutes before timing out.
         </p>
         {deployCheckDone && !hasDeployment && (
-          <p className="mt-2 text-xs text-amber-400">
+          <p className="mt-2 text-xs text-warning-ink">
             Deploy your project first to enable command execution.
           </p>
         )}

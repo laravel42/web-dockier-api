@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Project } from "../types";
 import { getSiteFaviconUrl, isSuitableAvatarFaviconAspectRatio, isValidFaviconUrl } from "@/utils/projectFavicon";
 
+// Same value as PROJECT_COLORS[0]; both mirror --color-primary-500.
 const DEFAULT_COLOR = "#d9af7f";
 
 interface Props {

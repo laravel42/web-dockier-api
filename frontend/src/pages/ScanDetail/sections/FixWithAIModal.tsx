@@ -56,8 +56,8 @@ export default function FixWithAIModal({
       ) : fixLoading ? (
         <div className="flex flex-col items-center py-10 gap-4">
           <div className="relative">
-            <div className="size-12  border-[3px] border-violet-200 rounded-full" />
-            <div className="absolute inset-0 size-12  border-[3px] border-violet-500 border-t-transparent rounded-full animate-spin" />
+            <div className="size-12  border-[3px] border-ai-line rounded-full" />
+            <div className="absolute inset-0 size-12  border-[3px] border-ai-ink border-t-transparent rounded-full animate-spin" />
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-text">AI is analyzing the vulnerability…</p>

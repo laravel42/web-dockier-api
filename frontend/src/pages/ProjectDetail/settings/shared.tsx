@@ -2,6 +2,13 @@ import { useState } from "react";
 import Spinner from "@/components/Spinner";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
+/**
+ * Sanctioned categorical palette — see docs/delivery/palette-token-mapping.md.
+ *
+ * These are persisted per project, so they are data rather than design tokens: a
+ * CSS variable cannot round-trip through the database. The first entry mirrors
+ * `--color-primary-500` so an unpicked project reads as brand rather than random.
+ */
 export const PROJECT_COLORS = [
   "#d9af7f", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
   "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",

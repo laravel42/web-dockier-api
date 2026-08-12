@@ -308,7 +308,7 @@ Responsive behavior is currently a two-step: `sm:` carries the overwhelming majo
 --shadow-overlay: 0 8px 24px -4px oklch(0 0 0 / 40%), 0 2px 6px -2px oklch(0 0 0 / 30%);
 ```
 
-The light theme redefines it far weaker (12% / 8%), because 40% black over near-white reads as dirt rather than depth. This is the *only* elevation value in the system; there is no scale, and `shadow-lg` / `shadow-xl` / `shadow-md` must never reappear.
+The light theme redefines it far weaker (12% / 8%), because 40% black over near-white reads as dirt rather than depth. This is the *only* elevation value in the system; there is no scale, and `shadow-lg` / `shadow-xl` / `shadow-md` / `shadow-sm` must never reappear. `shadow-sm` resolves to Tailwind's stock shadow, which is a third elevation wearing a system-looking name — use `shadow-(--shadow-xs)` for a resting lift and `shadow-(--shadow-overlay)` for anything floating.
 
 The only blur in the system is the sticky navbar's `backdrop-blur`, behind a `supports-backdrop-filter:` guard.
 
@@ -411,6 +411,6 @@ Global and deliberate: 10px wide, `thin` via `scrollbar-width`, thumb in ochre a
 - **Don't** add transforms, scaling, or press animations to controls. State is communicated through color alone.
 - **Don't** introduce a second typeface, including a monospace family for code. Code is distinguished by surface and token color.
 - **Don't** put Warm Bone text on an ochre fill — ochre carries Ink-on-Ochre (`oklch(0.18 0.01 50)`).
-- **Don't** invent a shadow utility. `shadow-lg`, `shadow-xl`, `shadow-md` and ad-hoc values are banned; overlays use `shadow-(--shadow-overlay)` and nothing else.
+- **Don't** invent a shadow utility. `shadow-lg`, `shadow-xl`, `shadow-md`, `shadow-sm` and ad-hoc values are banned; overlays use `shadow-(--shadow-overlay)` and nothing else.
 - **Don't** use `rounded-full` on anything with horizontal padding. If it has `px-`, it is a badge, and badges are 8px.
 - **Don't** put white text on a solid ochre fill — `oklch(0.78 0.08 70)` against `#fff` is about 1.75:1. Ochre carries `text-primary-foreground`.

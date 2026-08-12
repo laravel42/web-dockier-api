@@ -127,7 +127,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               type="button"
               onClick={cancelDeploy}
               disabled={cancellingDeploy}
-              className="h-9 px-4 text-sm font-medium text-amber-500 border border-amber-500/30 rounded-(--radius-btn) hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+              className="h-9 px-4 text-sm font-medium text-warning-ink border border-warning-line rounded-(--radius-btn) hover:bg-warning-surface transition-colors disabled:opacity-50"
             >
               {cancellingDeploy ? "Cancelling…" : "Cancel Deploy"}
             </button>

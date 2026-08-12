@@ -609,7 +609,7 @@ function RedirectRulesSection({
                 <span className="text-xs font-mono text-text truncate">{rule.toPath}</span>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-sm ${
                   rule.type === "permanent"
-                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                    ? "bg-warning-surface text-warning-ink border border-warning-line"
                     : "bg-primary-500/10 text-primary-500 border border-primary-500/30"
                 }`}>
                   {rule.type === "permanent" ? "301" : "302"}

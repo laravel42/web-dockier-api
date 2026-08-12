@@ -140,7 +140,7 @@ function ProcessStatusBadge({ status }: { status: BackgroundProcess["status"] })
 function JobStatusBadge({ status }: { status: ScheduledJob["status"] }) {
   const config: Record<ScheduledJob["status"], { label: string; color: string; dot: string }> = {
     installed: { label: "Installed", color: settingsBadgeCls.success, dot: "bg-success-500" },
-    paused: { label: "Paused", color: settingsBadgeCls.warning, dot: "bg-amber-500" },
+    paused: { label: "Paused", color: settingsBadgeCls.warning, dot: "bg-warning-ink" },
   };
   const c = config[status];
   return (
@@ -959,7 +959,7 @@ export default function ProjectProcessesTab({ project }: Props) {
                     Background processes are managed using Supervisor, which monitors your processes and automatically restarts them if they crash or stop unexpectedly. Supports Node.js, PHP, Python, and Go queue workers.
                   </p>
                   {!hasDeployment && (
-                    <p className="mt-2 text-xs text-amber-400">
+                    <p className="mt-2 text-xs text-warning-ink">
                       Processes won't run until this project has an active deployment. You can pre-configure them now.
                     </p>
                   )}
@@ -1009,7 +1009,7 @@ export default function ProjectProcessesTab({ project }: Props) {
                     <span className="text-primary-500 cursor-pointer hover:underline">Learn more</span>
                   </p>
                   {!hasDeployment && (
-                    <p className="mt-2 text-xs text-amber-400">
+                    <p className="mt-2 text-xs text-warning-ink">
                       Scheduled jobs won't run until this project has an active deployment. You can pre-configure them now.
                     </p>
                   )}

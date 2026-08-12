@@ -713,7 +713,7 @@ function DependencyRow({
         {dependency.latestVersion ? (
           dependency.latestVersion === dependency.version
             ? <span className="text-success-ink">{dependency.latestVersion}</span>
-            : <span className="text-amber-400">{dependency.latestVersion}</span>
+            : <span className="text-warning-ink">{dependency.latestVersion}</span>
         ) : <span className="text-text-muted">—</span>}
       </span>
       <span className="w-[12%]">
