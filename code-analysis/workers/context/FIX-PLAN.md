@@ -27,40 +27,47 @@ against customer repositories.
 
 ---
 
-## 0b. Progress
+## 0b. Progress — all phases complete
 
 | Phase | State |
 | ----- | ----- |
-| **Phase 0 — verifiable** (§2) | **Done.** Tree committed, 42 tests passing, scratch file removed. |
-| **Phase 1 — P0 correctness** (§3) | **Done.** All four items fixed, each guarded by a mutation-verified test. |
-| Phase 2 — P1 delivery (§4) | **In progress.** Persistence + LLM policy landed; queue rewrite outstanding (§4b). |
-| Phase 3 — P2 engines (§5) | Not started. |
-| Phase 4 — config drift (§6) | §6.3 (LLM contract) done. Config tables outstanding. |
-| **Phase 5 — security** (§8) | **Done**, except engine sandboxing (§8.6), which is an ops decision. |
-| Phase 6 — hygiene (§9) | Not started. |
+| Phase 0 — verifiable (§2) | **Done.** |
+| Phase 1 — P0 correctness (§3) | **Done.** |
+| Phase 2 — P1 delivery (§4) | **Done.** pg-boss replaces Pub/Sub; runtime hardened. |
+| Phase 3 — P2 engines (§5) | **Done.** |
+| Phase 4 — config drift (§6) | **Done.** Config reads from the database; docs corrected. |
+| Phase 5 — security (§8) | **Done** except engine sandboxing (§8.6), an ops decision. |
+| Phase 6 — hygiene (§9) | **Done.** |
+| Parity with the TS worker (§4c) | **7 of 9 done.** Two remain — see below. |
 
-### Deviations from plan as written
+265 tests. Migrations 0063–0065 applied and re-applied against a live Postgres;
+the pg-boss client verified against a real v12 schema, consuming a job enqueued
+by the JavaScript client.
 
-Two Phase 2 items were pulled forward because Phase 1 could not be completed correctly without them:
+### Still open — these block cutover
 
-1. **`ScanResult.status` / `.error` (part of §4.3).** §3.2 requires a missing CodeQL binary to
-   surface as an engine failure rather than findings *or* a silent empty result. That needs a
-   status field, so it landed now along with a `security_scans.engine_status` column and a
-   `"partial"` scan status. The remaining §4.3 work — surfacing per-engine failure in the backend
-   and UI — is still Phase 2.
-2. **Atomic completion claim (half of §4.2).** The `SET NX` claim landed because the fan-in
-   rewrite in §3.1 touched exactly those lines and leaving a known double-finalize race in
-   freshly-written code was not worth the scope discipline. The other half of §4.2 — barrier
-   deadline and key TTLs — is still Phase 2.
+1. **§8.6 engine sandboxing.** semgrep, sonar-scanner and codeql execute against
+   attacker-supplied source and this tree has no container configuration, so they
+   run unsandboxed with whatever credentials the process environment holds. An
+   ops decision, to be settled with the deployment topology.
+2. **Websocket progress delivery.** The workers persist progress into
+   `scans.summary.progress` and emit `NOTIFY dockier_scan_progress`. The backend
+   holds the websockets and does not LISTEN on that channel yet — a backend
+   change, deliberately not made from here. Progress is visible on reload but
+   does not stream.
+3. **Degraded scans are invisible in the UI.** `scans.status` is a closed enum
+   with no room for "partial", so degradation lives in `summary.partial` and
+   `scans.engine_status`. Surfacing it is a frontend change.
+4. **Queue reconcile parity.** `scan-queue-reconcile.ts` cancels orphaned jobs
+   from the backend side; the Python workers reap expired *active* jobs but do
+   not implement the cancel-orphans sweep.
 
-### Deliberately left alone
+### The cutover itself
 
-- **Inner blanket `except` clauses** in `SemgrepService.run_scan` and friends still convert a
-  crashed tool into `[]`, so those engines cannot yet report `status="failed"`. Assigned to §5.1.
-- **`fix-lint.js`** at the tree root is a one-off codemod for the `admin/` Next.js app. Out of
-  scope for §0.3, which named only `fix_test.py`; flagged rather than deleted.
-- **Pre-existing `sonar-scanner` token-in-argv exposure** (§5.2, Phase 3). Symlink capture and
-  `.git` upload were addressed in Phase 5; zip-slip proved not to be a defect (§8.3).
+**Both scanners must not run at once** — two consumers on `security-scan` split
+jobs nondeterministically. Retiring the TypeScript worker means not registering
+`registerScanWorker`, which is a backend change and has not been made. Nothing in
+this tree changes production behaviour until it is.
 
 ---
 
