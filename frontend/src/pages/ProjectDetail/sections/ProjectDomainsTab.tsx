@@ -13,7 +13,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
-import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 
 interface Props {
   project: Project;
@@ -42,7 +42,8 @@ function DomainRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  useEscapeKey(menuOpen, () => setMenuOpen(false));
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<{ verified: boolean; message: string } | null>(null);
@@ -114,9 +115,17 @@ function DomainRow({
               <>
                 {/* Mouse-only dismissal; Escape closes this surface as well. */}
                 <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1">
+                <div
+                  ref={menuRef}
+                  onKeyDown={onMenuKeyDown}
+                  role="menu"
+                  tabIndex={-1}
+                  aria-label="Domain actions"
+                  className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1"
+                >
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={handleVisit}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
@@ -125,6 +134,7 @@ function DomainRow({
                   </button>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={handleCopy}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
@@ -133,6 +143,7 @@ function DomainRow({
                   </button>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={handleCopyId}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >
@@ -141,6 +152,7 @@ function DomainRow({
                   </button>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={handleVerifyDns}
                     disabled={verifying}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors disabled:opacity-50"
@@ -334,7 +346,8 @@ function CertificateRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  useEscapeKey(menuOpen, () => setMenuOpen(false));
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const typeLabels: Record<SslCertificate["type"], string> = {
@@ -396,9 +409,17 @@ function CertificateRow({
               <>
                 {/* Mouse-only dismissal; Escape closes this surface as well. */}
                 <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1">
+                <div
+                  ref={menuRef}
+                  onKeyDown={onMenuKeyDown}
+                  role="menu"
+                  tabIndex={-1}
+                  aria-label="Certificate actions"
+                  className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1"
+                >
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => { void navigator.clipboard.writeText(cert.id); setMenuOpen(false); }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                   >

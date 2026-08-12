@@ -10,6 +10,8 @@ import Spinner from "@/components/Spinner";
 import ConfirmModal from "@/components/ConfirmModal";
 import Modal from "@/components/Modal";
 import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { destructiveReason } from "../destructiveCommand";
+import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 
 const PAGE_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
@@ -70,12 +72,16 @@ export default function ProjectCommandsTab({ project }: Props) {
 
   const [commandInput, setCommandInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [hasDeployment, setHasDeployment] = useState(false);
   const [deployCheckDone, setDeployCheckDone] = useState(false);
 
   const [outputModal, setOutputModal] = useState<Command | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const closeMenu = useCallback(() => setOpenMenuId(null), []);
+  // `menuRef` wraps trigger + menu for outside-click; `menuListRef` is the menu itself.
   const menuRef = useRef<HTMLDivElement>(null);
+  const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(openMenuId !== null, closeMenu);
 
   const canRunCommands = hasDeployment && canManage;
 
@@ -153,19 +159,31 @@ export default function ProjectCommandsTab({ project }: Props) {
     return () => clearInterval(interval);
   }, [hasRunning, fetchCommands]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  /**
+   * Enter no longer executes. Arbitrary shell against production gets one
+   * deliberate second step that echoes exactly what will run, and where.
+   */
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!commandInput.trim() || submitting || !canRunCommands) return;
+    setPendingCommand(commandInput.trim());
+  };
+
+  const runPendingCommand = async () => {
+    const command = pendingCommand;
+    if (!command) return;
     setSubmitting(true);
     try {
-      await commandsApi.run(project.id, commandInput.trim());
+      await commandsApi.run(project.id, command);
       setCommandInput("");
+      setPendingCommand(null);
       setPage(0);
       // Fetch page 0 explicitly to avoid stale closure on `page`
       await fetchCommands(0);
       // Polling will start automatically via the hasRunning effect
     } catch {
       setError("Failed to run command");
+      throw new Error("Failed to run command");
     } finally {
       setSubmitting(false);
     }
@@ -303,7 +321,14 @@ export default function ProjectCommandsTab({ project }: Props) {
                       <EllipsisVerticalIcon className="size-4" />
                     </button>
                     {openMenuId === cmd.id && (
-                      <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-(--shadow-overlay)" role="menu">
+                      <div
+                        ref={menuListRef}
+                        onKeyDown={onMenuKeyDown}
+                        role="menu"
+                        tabIndex={-1}
+                        aria-label="Command actions"
+                        className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-(--shadow-overlay)"
+                      >
                         <button
                           type="button"
                           role="menuitem"
@@ -340,7 +365,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                               type="button"
                               role="menuitem"
                               onClick={() => { setOpenMenuId(null); setConfirmCmd(cmd); }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-500 transition-colors hover:bg-danger-500/10"
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-ink transition-colors hover:bg-danger-surface"
                             >
                               <Trash2Icon className="size-3.5" />
                               Delete
@@ -402,6 +427,34 @@ export default function ProjectCommandsTab({ project }: Props) {
           </pre>
         </Modal>
       )}
+
+      <ConfirmModal
+        open={pendingCommand !== null}
+        onClose={() => setPendingCommand(null)}
+        onConfirm={runPendingCommand}
+        title={destructiveReason(pendingCommand ?? "") ? "Run a destructive command?" : "Run this command?"}
+        confirmLabel={destructiveReason(pendingCommand ?? "") ? "Run it anyway" : "Run command"}
+        destructive={Boolean(destructiveReason(pendingCommand ?? ""))}
+        message={
+          <>
+            {destructiveReason(pendingCommand ?? "") && (
+              <span className="mb-3 block rounded-md border border-danger-line bg-danger-surface px-3 py-2 text-danger-ink">
+                This command {destructiveReason(pendingCommand ?? "")}. It runs against production and
+                cannot be undone from here.
+              </span>
+            )}
+            <span className="mb-3 block font-mono text-xs break-all rounded-md border border-border bg-terminal px-3 py-2 text-strong">
+              {pendingCommand}
+            </span>
+            {/* Restated here, not only in the paragraph above the field. */}
+            <span className="block text-xs text-text-muted">
+              Runs on <span className="font-medium text-text">{project.name}</span> as the{" "}
+              <span className="font-mono">dockier</span> user, from the site root, timing out after
+              two minutes.
+            </span>
+          </>
+        }
+      />
 
       <ConfirmModal
         open={confirmCmd !== null}

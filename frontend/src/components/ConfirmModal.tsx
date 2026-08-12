@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Modal from "./Modal";
 import Button from "./ui/Button";
 import { getErrorMessage } from "@/utils/errors";
@@ -12,7 +12,8 @@ interface ConfirmModalProps {
    */
   onConfirm: () => void | Promise<void>;
   title?: string;
-  message?: string;
+  /** Structured content is allowed: a destructive confirm often has to echo what will run. */
+  message?: ReactNode;
   confirmLabel?: string;
   /** Destructive tier — see docs/delivery/blast-radius-tiers.md. */
   destructive?: boolean;
@@ -52,7 +53,7 @@ export default function ConfirmModal({
 
   return (
     <Modal open={open} onClose={pending ? () => {} : onClose} title={title}>
-      <p className="text-sm text-text-secondary">{message}</p>
+      <div className="text-sm text-text-secondary">{message}</div>
 
       {error && (
         <p

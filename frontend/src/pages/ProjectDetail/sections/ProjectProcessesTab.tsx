@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
 import { useUrlSection } from "@/hooks/useUrlSection";
+import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 
 interface Props {
   project: Project;
@@ -181,6 +182,8 @@ function ProcessActionsMenu({
   const [showDelete, setShowDelete] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(open, closeMenu);
 
   useEffect(() => {
     if (!open) return;
@@ -231,34 +234,41 @@ function ProcessActionsMenu({
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1">
-            <button onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+          <div
+            ref={menuListRef}
+            onKeyDown={onMenuKeyDown}
+            role="menu"
+            tabIndex={-1}
+            aria-label="Row actions"
+            className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1"
+          >
+            <button role="menuitem" onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <FileTextIcon className="size-4 text-text-muted" />
               View logs
             </button>
-            <button onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button role="menuitem" onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <RefreshCwIcon className="size-4 text-text-muted" />
               Restart
             </button>
-            <button onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button role="menuitem" onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <PlayIcon className="size-4 text-text-muted" />
               Start
             </button>
-            <button onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button role="menuitem" onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <SquareIcon className="size-4 text-text-muted" />
               Stop
             </button>
             <div className="my-1 border-t border-border" />
-            <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
+            <button role="menuitem" onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <SquarePenIcon className="size-4 text-text-muted" />
               Edit
             </button>
-            <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
+            <button role="menuitem" onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <CopyIcon className="size-4 text-text-muted"  />
               Copy ID
             </button>
             <div className="my-1 border-t border-border" />
-            <button onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
+            <button role="menuitem" onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
               <Trash2Icon className="size-4" />
               Delete
             </button>
@@ -313,6 +323,8 @@ function JobActionsMenu({
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(open, closeMenu);
 
   useEffect(() => {
     if (!open) return;
@@ -358,26 +370,33 @@ function JobActionsMenu({
         </button>
 
         {open && (
-          <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1">
-            <button onClick={() => handleAction("pause")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+          <div
+            ref={menuListRef}
+            onKeyDown={onMenuKeyDown}
+            role="menu"
+            tabIndex={-1}
+            aria-label="Row actions"
+            className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1"
+          >
+            <button role="menuitem" onClick={() => handleAction("pause")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <PauseIcon className="size-4 text-text-muted" />
               Pause
             </button>
-            <button onClick={() => handleAction("run")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            <button role="menuitem" onClick={() => handleAction("run")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
               <PlayIcon className="size-4 text-text-muted" />
               Run
             </button>
             <div className="my-1 border-t border-border" />
-            <button onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
+            <button role="menuitem" onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <SquarePenIcon className="size-4 text-text-muted" />
               Edit
             </button>
-            <button onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
+            <button role="menuitem" onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
               <CopyIcon className="size-4 text-text-muted" />
               Copy ID
             </button>
             <div className="my-1 border-t border-border" />
-            <button onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
+            <button role="menuitem" onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
               <Trash2Icon className="size-4" />
               Delete
             </button>
