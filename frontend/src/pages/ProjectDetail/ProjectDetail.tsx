@@ -4,7 +4,6 @@ import Button from "@/components/ui/Button";
 import ProjectHeader from "./sections/ProjectHeader";
 import RepoInfoCard from "./sections/RepoInfoCard";
 import ProjectDetailsCard from "./sections/ProjectDetailsCard";
-import KpiDashboard from "./sections/KpiDashboard";
 import ContributorsGrid from "./sections/ContributorsGrid";
 import OpenIssues from "./sections/OpenIssues";
 import PullRequests from "./sections/PullRequests";
@@ -18,7 +17,10 @@ import PRDetailModal from "./modals/PRDetailModal";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import { useState } from "react";
+import { useProjectSiteUrl } from "@/hooks/useProjectSiteUrl";
+import { useProjectRepoFavicon } from "@/hooks/useProjectRepoFavicon";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { resolveDeployUrl } from "@/utils/resolveDeployUrl";
 import { gitApi } from "@/services/api";
 import type { RepoIssue, RepoPullRequest } from "@/types";
 import { ChevronLeftIcon } from "lucide-react";
@@ -91,9 +93,16 @@ export default function ProjectDetail() {
     });
   };
 
-  const lastSuccessfulDeployUrl = recentDeploys.find(
-    (d) => d.status === "success" && d.appUrl,
-  )?.appUrl;
+  const lastSuccessfulDeployUrl = recentDeploys
+    .filter((d) => d.status === "success")
+    .map((d) => resolveDeployUrl(d))
+    .find(Boolean);
+  const siteUrl = useProjectSiteUrl(
+    project?.id,
+    lastSuccessfulDeployUrl,
+    project?.infraState === "torn_down",
+  );
+  const repoFaviconUrl = useProjectRepoFavicon(project ?? undefined);
 
   if (loading) {
     return <PageLoading />;
@@ -112,6 +121,8 @@ export default function ProjectDetail() {
     );
   }
 
+  const hasRepo = Boolean(project.connectionId && project.repository);
+
   return (
     <div>
       <Button
@@ -126,15 +137,23 @@ export default function ProjectDetail() {
 
       <ProjectHeader
         project={project}
+        siteUrl={siteUrl}
+        repoFaviconUrl={repoFaviconUrl}
         onDeploy={() => setShowDeployWizard(true)}
         onNameSave={handleUpdateName}
         nameSaving={nameSaving}
         nameError={nameError}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 items-stretch">
+      <div className="mb-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
         <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
-        <ProjectDetailsCard project={project} deployUrl={lastSuccessfulDeployUrl} />
+        <ProjectDetailsCard
+          project={project}
+          deployUrl={lastSuccessfulDeployUrl}
+          stats={stats}
+          statsLoading={statsLoading}
+          statsError={statsError}
+        />
       </div>
 
       <ProjectDescription
@@ -144,40 +163,38 @@ export default function ProjectDetail() {
         project={project}
         providers={allProviders}
         onProjectUpdate={setProject}
-      />
-
-      {/* UserJourneyTree hidden for now */}
-
-      {project.connectionId && project.repository && (
-        <KpiDashboard stats={stats} statsLoading={statsLoading} statsError={statsError} />
-      )}
-
-      <ContributorsGrid stats={stats} nameByLogin={nameByLogin} />
-
-      {project.connectionId && project.repository && (
-        <>
-          <OpenIssues issues={openIssues} issuesLoading={issuesLoading} issuesError={issuesError} onIssueClick={setSelectedIssue} />
-          <PullRequests
-            pullRequests={pullRequests}
-            pullRequestsLoading={pullRequestsLoading}
-            pullRequestsError={pullRequestsError}
-            onPRClick={setSelectedPR}
+        activityPanel={
+          <div>
+            <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
+            {hasRepo && (
+              <div className="grid grid-cols-1 gap-4">
+                <OpenIssues
+                  issues={openIssues}
+                  issuesLoading={issuesLoading}
+                  issuesError={issuesError}
+                  onIssueClick={setSelectedIssue}
+                />
+                <PullRequests
+                  pullRequests={pullRequests}
+                  pullRequestsLoading={pullRequestsLoading}
+                  pullRequestsError={pullRequestsError}
+                  onPRClick={setSelectedPR}
+                />
+              </div>
+            )}
+            <ContributorsGrid stats={stats} nameByLogin={nameByLogin} />
+          </div>
+        }
+        deploysPanel={
+          <RecentDeploys
+            deploys={recentDeploys}
+            allProviders={allProviders}
+            navigate={navigate}
+            fallbackCommitHash={stats?.lastCommitHash}
           />
-        </>
-      )}
-
-      <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8 items-stretch">
-        <RecentDeploys
-          deploys={recentDeploys}
-          allProviders={allProviders}
-          navigate={navigate}
-          fallbackCommitHash={stats?.lastCommitHash}
-        />
-
-        <RecentScans scans={recentScans} navigate={navigate} />
-      </div>
+        }
+        securityPanel={<RecentScans scans={recentScans} navigate={navigate} />}
+      />
 
       <DeployWizard
         open={showDeployWizard}

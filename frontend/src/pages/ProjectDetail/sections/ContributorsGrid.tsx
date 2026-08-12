@@ -1,4 +1,5 @@
 import type { RepoStats } from "@/types";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface Props {
   stats: RepoStats | null;
@@ -17,7 +18,14 @@ function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
 }
 
 export default function ContributorsGrid({ stats, nameByLogin }: Props) {
-  if (!stats?.topContributors?.length) return null;
+  if (!stats?.topContributors?.length) {
+    return (
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-text mb-3">Contributors</h2>
+        <EmptyState compact description="No contributor activity recorded for this repository yet." />
+      </div>
+    );
+  }
 
   const contributors = stats.topContributors;
   const maxCommits = Math.max(...contributors.map((c) => c.commits), 1);

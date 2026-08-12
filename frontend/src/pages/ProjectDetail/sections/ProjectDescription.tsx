@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
 import MDEditor from "@uiw/react-md-editor";
@@ -25,12 +26,20 @@ interface Props {
   project: Project;
   providers: Provider[];
   onProjectUpdate: (project: Project) => void;
+  /** Commits, contributors, issues and pull requests. */
+  activityPanel?: ReactNode;
+  /** Recent security scans. */
+  securityPanel?: ReactNode;
+  /** Recent deploys, folded in beneath the deployments tab. */
+  deploysPanel?: ReactNode;
 }
 
 const MAIN_TABS = [
   { key: "overview", label: "Overview" },
+  { key: "activity", label: "Activity" },
   { key: "dependencies", label: "Dependencies" },
   { key: "sensitiveData", label: "Sensitive Data" },
+  { key: "security", label: "Security" },
   { key: "deployments", label: "Deployments" },
   { key: "processes", label: "Processes" },
   { key: "commands", label: "Commands" },
@@ -49,6 +58,7 @@ function isMainTabVisible(
 ): boolean {
   switch (key) {
     case "overview":
+    case "activity":
     case "dependencies":
     case "sensitiveData":
     case "processes":
@@ -57,6 +67,8 @@ function isMainTabVisible(
     case "observe":
     case "domains":
       return has("project:view");
+    case "security":
+      return has("scan:view");
     case "deployments":
       return has("deploy:view");
     case "settings":
@@ -774,8 +786,29 @@ export default function ProjectDescription({
   project,
   providers,
   onProjectUpdate,
+  activityPanel,
+  securityPanel,
+  deploysPanel,
 }: Props) {
-  const [activeMainTab, setActiveMainTab] = useState<MainTabKey>("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeMainTab: MainTabKey = MAIN_TABS.some((t) => t.key === tabParam)
+    ? (tabParam as MainTabKey)
+    : "overview";
+
+  const setActiveMainTab = useCallback(
+    (key: MainTabKey, replace = false) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("tab", key);
+          return next;
+        },
+        { replace },
+      );
+    },
+    [setSearchParams],
+  );
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canEditOverview = isOwner || has("project:manage");
 
@@ -793,9 +826,9 @@ export default function ProjectDescription({
 
   useEffect(() => {
     if (!permissionsLoading && !visibleMainTabs.some((t) => t.key === activeMainTab)) {
-      setActiveMainTab(visibleMainTabs[0]?.key ?? "overview");
+      setActiveMainTab(visibleMainTabs[0]?.key ?? "overview", true);
     }
-  }, [activeMainTab, visibleMainTabs, permissionsLoading]);
+  }, [activeMainTab, visibleMainTabs, permissionsLoading, setActiveMainTab]);
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
 
@@ -906,8 +939,17 @@ export default function ProjectDescription({
         return renderDependenciesSection();
       case "sensitiveData":
         return renderSensitiveDataSection();
+      case "activity":
+        return activityPanel ?? renderMainTabPlaceholder("Activity");
+      case "security":
+        return securityPanel ?? renderMainTabPlaceholder("Security");
       case "deployments":
-        return <ProjectDeploymentsTab project={project} providers={providers} />;
+        return (
+          <div className="flex flex-col">
+            <ProjectDeploymentsTab project={project} providers={providers} />
+            {deploysPanel}
+          </div>
+        );
       case "processes":
         return <ProjectProcessesTab project={project} />;
       case "commands":
@@ -931,13 +973,12 @@ export default function ProjectDescription({
 
   return (
     <div className={`${cardCls} mb-8 overflow-hidden`}>
-      <div className="h-1 bg-linear-to-r from-primary-500 via-primary-400 to-primary-300" />
 
-      <div className="flex h-[600px] flex-col overflow-hidden px-5 pt-4 pb-5">
+      <div className="flex min-h-[600px] flex-col px-5 pt-4 pb-5">
         {/* Main tab nav */}
         <div className="flex min-h-11 shrink-0 items-center gap-3 border-b border-border mb-4">
           <div
-            className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none"
+            className="flex min-h-11 flex-1 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden scrollbar-none mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)]"
             role="tablist"
           >
             {visibleMainTabs.map((tab) => (
@@ -953,17 +994,13 @@ export default function ProjectDescription({
                 onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
                 className={`flex shrink-0 items-center gap-1.5 p-3  text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                   activeMainTabSafe === tab.key
-                    ? tab.key === "sensitiveData"
-                      ? "border-red-500 text-text"
-                      : tab.key === "dependencies"
-                        ? "border-blue-500 text-text"
-                        : "border-primary-500 text-text"
+                    ? "border-primary-500 text-text"
                     : "border-transparent text-text-muted hover:text-text"
                 }`}
               >
                 {tab.label}
                 {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                  <span className="rounded-sm border border-blue-500/40 bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
+                  <span className="rounded-sm border border-border bg-secondary-100/60 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-text-muted">
                     {dependencies.length}
                   </span>
                 )}
@@ -977,7 +1014,7 @@ export default function ProjectDescription({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
+        <div className="flex min-h-0 flex-1 flex-col pt-4">
           <div
             role="tabpanel"
             id={panelId(activeMainTabSafe)}

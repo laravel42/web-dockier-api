@@ -10,6 +10,8 @@ interface EmptyStateProps {
     label: string;
     onClick: () => void;
   };
+  /** Section-scale spacing for empties nested inside a panel or tab. */
+  compact?: boolean;
 }
 
 export default function EmptyState({
@@ -17,9 +19,10 @@ export default function EmptyState({
   title,
   description,
   action,
+  compact = false,
 }: EmptyStateProps) {
   return (
-    <div className={`${cardCls} p-12 text-center`}>
+    <div className={`${cardCls} ${compact ? "p-6" : "p-12"} text-center`}>
       {icon && <div className="mb-4 flex justify-center text-text-muted">{icon}</div>}
       {title && <h2 className={`${typePanelTitle} mb-2`}>{title}</h2>}
       <p className={typeBodyMuted}>{description}</p>

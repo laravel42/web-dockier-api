@@ -99,13 +99,13 @@ function ProcessLogsModal({
           <RefreshCwIcon className="size-4" />
         </button>
       </div>
-      <div className="rounded-lg border border-border bg-[#0d1117] overflow-auto max-h-80">
+      <div className="rounded-lg border border-border bg-terminal overflow-auto max-h-80">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner className="size-4" />
           </div>
         ) : (
-          <pre className="p-4 text-xs/relaxed font-mono text-[#c9d1d9] whitespace-pre-wrap break-all">
+          <pre className="p-4 text-xs/relaxed font-mono text-strong whitespace-pre-wrap break-all">
             {logs || "No logs available yet."}
           </pre>
         )}

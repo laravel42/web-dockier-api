@@ -388,13 +388,13 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
       </div>
 
       {/* Log content */}
-      <div className="flex-1 min-h-0 rounded-lg border border-border bg-[#0d1117] overflow-auto">
+      <div className="flex-1 min-h-0 max-h-[60vh] rounded-lg border border-border bg-terminal overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner className="size-4" />
           </div>
         ) : (
-          <pre className="p-4 text-xs/relaxed font-mono text-[#c9d1d9] whitespace-pre-wrap wrap-break-word">
+          <pre className="p-4 text-xs/relaxed font-mono text-strong whitespace-pre-wrap wrap-break-word">
             {logEntry?.content || "No log data available."}
           </pre>
         )}
@@ -598,11 +598,11 @@ function ActivityDetailModal({
               <Spinner className="size-4" />
             </div>
           ) : output ? (
-            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-[#0d1117] p-4 font-mono text-xs/relaxed text-[#c9d1d9] whitespace-pre-wrap break-all">
+            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all">
               {output}
             </pre>
           ) : entry.metadata && Object.keys(entry.metadata).length > 0 ? (
-            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-[#0d1117] p-4 font-mono text-xs/relaxed text-[#c9d1d9] whitespace-pre-wrap break-all">
+            <pre className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all">
               {JSON.stringify(entry.metadata, null, 2)}
             </pre>
           ) : (

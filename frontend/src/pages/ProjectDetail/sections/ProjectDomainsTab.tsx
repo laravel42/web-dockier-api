@@ -623,7 +623,7 @@ function NginxConfigModal({
       {error && <p className="text-xs text-danger-500 py-4">{error}</p>}
       {config !== null && !loading && (
         <>
-          <div className="rounded-lg border border-border bg-[#1e1e2e] p-3 max-h-80 overflow-auto">
+          <div className="rounded-lg border border-border bg-terminal p-3 max-h-80 overflow-auto">
             <pre className="text-xs/relaxed font-mono text-text whitespace-pre-wrap">
               {config}
             </pre>

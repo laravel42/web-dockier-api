@@ -1,13 +1,18 @@
-import { useState, useEffect } from "react";
-import type { Project } from "@/types";
+import { useState } from "react";
+import type { Project, RepoStats } from "@/types";
 import { cardCls } from "@/utils/styles";
 import { getRepoKey } from "@/utils/parseOwnerRepo";
-import { domainsApi } from "@/services/domains";
+import { useProjectSiteUrl } from "@/hooks/useProjectSiteUrl";
 import { CheckIcon, ClipboardIcon, ExternalLinkIcon } from "lucide-react";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
+import ProjectStatsStrip from "./ProjectStatsStrip";
 
 interface Props {
   project: Project;
   deployUrl?: string;
+  stats?: RepoStats | null;
+  statsLoading?: boolean;
+  statsError?: string;
 }
 
 function CopyableMonoValue({ value, label }: { value: string; label: string }) {
@@ -40,31 +45,25 @@ function CopyableMonoValue({ value, label }: { value: string; label: string }) {
   );
 }
 
-export default function ProjectDetailsCard({ project, deployUrl }: Props) {
+export default function ProjectDetailsCard({
+  project,
+  deployUrl,
+  stats = null,
+  statsLoading = false,
+  statsError = "",
+}: Props) {
   const repoKey = project.repository ? getRepoKey(project.repository) : null;
-  const [siteUrl, setSiteUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    domainsApi.listDomains(project.id).then((res) => {
-      if (cancelled) return;
-      const primary = res.domains.find((d) => d.isPrimary) || res.domains[0];
-      if (primary) {
-        setSiteUrl(`https://${primary.name}`);
-      }
-    }).catch(() => { /* silent — fall back to deployUrl */ });
-    return () => { cancelled = true; };
-  }, [project.id]);
-
-  // When infrastructure has been torn down, the app URL points at resources
-  // that no longer exist — don't present it as though the app were reachable.
-  const infraTornDown = project.infraState === "torn_down";
-  const viewUrl = infraTornDown ? undefined : siteUrl || deployUrl;
+  const hasRepo = Boolean(project.connectionId && project.repository);
+  const viewUrl = useProjectSiteUrl(
+    project.id,
+    deployUrl,
+    project.infraState === "torn_down",
+  );
 
   return (
     <div className={`${cardCls} p-5 h-full flex flex-col`}>
       <h2 className="text-sm font-semibold text-text mb-4">Details</h2>
-      <div className="flex-1 flex flex-col space-y-3">
+      <div className="flex-1 flex flex-col space-y-4">
         <div>
           <p className="text-xs text-text-muted">Project ID</p>
           <CopyableMonoValue value={project.id} label="project ID" />
@@ -75,7 +74,29 @@ export default function ProjectDetailsCard({ project, deployUrl }: Props) {
             <CopyableMonoValue value={repoKey} label="repository path" />
           </div>
         )}
-        {infraTornDown && (
+        {hasRepo && (
+          <div>
+            <p className="text-xs text-text-muted">Branch</p>
+            <div className="mt-0.5">
+              <BranchCommitLabel
+                branch={project.branch || "main"}
+                commit={stats?.lastCommitHash || undefined}
+              />
+            </div>
+          </div>
+        )}
+        {hasRepo && (
+          <div>
+            <p className="text-xs text-text-muted mb-2">Statistics</p>
+            <ProjectStatsStrip
+              stats={stats}
+              statsLoading={statsLoading}
+              statsError={statsError}
+              embedded
+            />
+          </div>
+        )}
+        {project.infraState === "torn_down" && (
           <div className="mt-auto pt-3 border-t border-border">
             <p className="text-xs text-text-muted">Site URL</p>
             <p className="mt-0.5 text-sm text-text-muted">
@@ -83,7 +104,7 @@ export default function ProjectDetailsCard({ project, deployUrl }: Props) {
             </p>
           </div>
         )}
-        {!infraTornDown && viewUrl && (
+        {project.infraState !== "torn_down" && viewUrl && (
           <div className="mt-auto pt-3 border-t border-border">
             <p className="text-xs text-text-muted">Site URL</p>
             <a

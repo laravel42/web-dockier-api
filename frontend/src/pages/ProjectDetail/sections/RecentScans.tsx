@@ -4,6 +4,7 @@ import StatusRingIcon from "@/components/badges/StatusRingIcon";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { isScanSecurityClean } from "@/utils/scanSummary";
+import EmptyState from "@/components/ui/EmptyState";
 import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {
@@ -41,6 +42,15 @@ function buildRows(scans: Scan[]): TimelineRow[] {
 
 export default function RecentScans({ scans, navigate }: Props) {
   if (!scans.length) return null;
+
+  if (!scans.length) {
+    return (
+      <div className="flex h-full flex-col">
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
+        <EmptyState compact description="No security scans have been run for this project yet." />
+      </div>
+    );
+  }
 
   const rows = buildRows(scans);
 

@@ -2,6 +2,7 @@ import type { CommitInfo } from "@/types";
 import { cardCls } from "@/utils/styles";
 import { timeAgo } from "@/utils/timeAgo";
 import Spinner from "@/components/Spinner";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface Props {
   commits: CommitInfo[];
@@ -60,7 +61,14 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
     );
   }
 
-  if (!commits.length) return null;
+  if (!commits.length) {
+    return (
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
+        <EmptyState compact description="No commits on this branch yet." />
+      </div>
+    );
+  }
 
   const rows = buildRows(commits);
 

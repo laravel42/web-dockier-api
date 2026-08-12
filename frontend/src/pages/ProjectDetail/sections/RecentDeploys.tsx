@@ -4,6 +4,7 @@ import { formatCardDateTime } from "@/utils/formatCardDate";
 import { getDeployServiceLabel } from "@/utils/deployService";
 import { getProviderStyle } from "@/data/providers";
 import ProviderBadge from "@/components/ProviderBadge";
+import EmptyState from "@/components/ui/EmptyState";
 import StatusRingIcon from "@/components/badges/StatusRingIcon";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 
@@ -52,6 +53,15 @@ export default function RecentDeploys({
 
   const providerKey = (providerId: string) =>
     allProviders.find((p) => p.id === providerId)?.provider || "";
+
+  if (!deploys.length) {
+    return (
+      <div className="flex h-full flex-col">
+        <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
+        <EmptyState compact description="This project hasn't been deployed yet. Use Deploy above to ship the current branch." />
+      </div>
+    );
+  }
 
   const rows = buildRows(deploys);
 
