@@ -915,7 +915,7 @@ export default function ProjectProcessesTab({ project }: Props) {
     <div className="flex min-h-0 flex-col gap-4 pr-1">
       {/* Sub-tab nav as a topbar */}
       <div
-        className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-none"
+        className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide"
         role="tablist"
         aria-label="Process sections"
       >

@@ -7,8 +7,9 @@
  * pasting cannot do — wires the blocks/blocked-by relations from the dependency
  * lines, so nobody picks up A2 before A3 has landed.
  *
- *   pnpm linear:import              # dry run: prints exactly what it would create
- *   pnpm linear:import --apply      # actually creates
+ *   pnpm linear:import                        # dry run: prints what it would create
+ *   pnpm linear:import --apply                # create the issues
+ *   pnpm linear:import --set Done A1 A2 A3    # move existing issues to a state
  *
  * Requires LINEAR_API_KEY (Linear → Settings → Security & access → Personal API keys).
  * Idempotent: an issue whose title already exists in the project is skipped, so a
@@ -26,6 +27,11 @@ const TASKS_MD = resolve(
 );
 
 const APPLY = process.argv.includes("--apply");
+
+/** `--set <StateName> <TaskId...>` moves already-imported issues to a workflow state. */
+const setIdx = process.argv.indexOf("--set");
+const SET_STATE = setIdx !== -1 ? process.argv[setIdx + 1] : null;
+const SET_IDS = setIdx !== -1 ? process.argv.slice(setIdx + 2).filter((a) => /^[A-G]\d$/.test(a)) : [];
 const KEY = process.env.LINEAR_API_KEY;
 
 interface Task {
@@ -97,7 +103,7 @@ async function main() {
   const edges = tasks.flatMap((t) => t.dependsOn.map((d) => `${d} → ${t.id}`));
   console.log(`Dependency edges: ${edges.length}\n  ${edges.join("\n  ")}\n`);
 
-  if (!APPLY) {
+  if (!APPLY && !SET_STATE) {
     for (const t of tasks) {
       console.log(`  [${t.id}] ${t.title}`);
       console.log(`        labels: ${labelsFor(t).join(", ")}${t.dependsOn.length ? ` · blocked by ${t.dependsOn.join(", ")}` : ""}`);
@@ -133,6 +139,47 @@ async function main() {
   if (!team) throw new Error(`Project ${project.name} has no team`);
   const teamId = team.id;
   console.log(`Project: ${project.name}\nTeam:    ${team.key}\n`);
+
+  // ── `--set` path: move existing issues and exit before any creation. ──
+  if (SET_STATE) {
+    if (SET_IDS.length === 0) throw new Error("--set needs a state name and at least one task id, e.g. --set Done A1 A2");
+
+    const { team: teamStates } = await gql<{ team: { states: { nodes: { id: string; name: string }[] } } }>(
+      `query($id:String!){ team(id:$id){ states(first:50){ nodes { id name } } } }`,
+      { id: teamId },
+    );
+    const target = teamStates.states.nodes.find((st) => st.name.toLowerCase() === SET_STATE.toLowerCase());
+    if (!target) {
+      throw new Error(`No state "${SET_STATE}". Available: ${teamStates.states.nodes.map((st) => st.name).join(", ")}`);
+    }
+
+    const byId = new Map<string, string>();
+    let c: string | null = null;
+    do {
+      const page: { issues: { nodes: { id: string; title: string; identifier: string }[]; pageInfo: { hasNextPage: boolean; endCursor: string } } } =
+        await gql(
+          `query($id:ID!,$after:String){ issues(filter:{project:{id:{eq:$id}}}, first:50, after:$after){ nodes { id title identifier } pageInfo { hasNextPage endCursor } } }`,
+          { id: project.id, after: c },
+        );
+      for (const i of page.issues.nodes) {
+        const m = /^\[([A-G]\d)\]/.exec(i.title);
+        if (m) byId.set(m[1]!, i.id);
+      }
+      c = page.issues.pageInfo.hasNextPage ? page.issues.pageInfo.endCursor : null;
+    } while (c);
+
+    for (const id of SET_IDS) {
+      const issueId = byId.get(id);
+      if (!issueId) { console.warn(`  ! ${id} not found in the project`); continue; }
+      await gql(
+        `mutation($id:String!,$stateId:String!){ issueUpdate(id:$id, input:{stateId:$stateId}){ success } }`,
+        { id: issueId, stateId: target.id },
+      );
+      console.log(`  → ${id} set to ${target.name}`);
+    }
+    console.log(`\nDone: ${SET_IDS.length} issue(s) moved to ${target.name}.`);
+    return;
+  }
 
   // Labels scoped to the team, paginated.
   const labelId = new Map<string, string>();

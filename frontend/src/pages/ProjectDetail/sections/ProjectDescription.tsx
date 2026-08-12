@@ -16,6 +16,7 @@ import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
+import { useIsMdUp } from "@/hooks/useMediaQuery";
 import { FileTextIcon, XIcon } from "lucide-react";
 
 interface Props {
@@ -792,6 +793,10 @@ export default function ProjectDescription({
   securityPanel,
   deploysPanel,
 }: Props) {
+  // The tab strip is a sidebar at md+ and a horizontal scroller below it, so the
+  // announced orientation has to track the breakpoint. The keyboard handler
+  // accepts both axes either way.
+  const isSidebar = useIsMdUp();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const activeMainTab: MainTabKey = MAIN_TABS.some((t) => t.key === tabParam)
@@ -983,9 +988,9 @@ export default function ProjectDescription({
         <div className="shrink-0 border-b border-border md:w-52 md:self-stretch md:border-b-0 md:border-r">
           <div className="md:sticky md:top-0 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto md:overscroll-contain md:scrollbar-hide">
             <div
-              className="flex items-stretch gap-0.5 overflow-x-auto overflow-y-hidden p-2 scrollbar-none mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:overflow-x-visible md:mask-none"
+              className="flex items-stretch gap-0.5 overflow-x-auto overflow-y-hidden p-2 scrollbar-hide mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:overflow-x-visible md:mask-none"
               role="tablist"
-              aria-orientation="vertical"
+              aria-orientation={isSidebar ? "vertical" : "horizontal"}
               aria-label="Project sections"
             >
             {visibleMainTabs.map((tab) => (
@@ -1027,6 +1032,7 @@ export default function ProjectDescription({
             role="tabpanel"
             id={panelId(activeMainTabSafe)}
             aria-labelledby={tabId(activeMainTabSafe)}
+            tabIndex={0}
             className={`relative flex min-h-0 flex-1 flex-col${activeMainTabSafe === "overview" ? " pl-0 pr-2" : ""}`}
           >
             {activeMainTabSafe === "overview" ? (

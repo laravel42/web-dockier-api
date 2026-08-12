@@ -675,7 +675,7 @@ export default function ProjectObserveTab({ project }: Props) {
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {/* Section nav as a topbar */}
-      <nav className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-none" aria-label="Observe sections">
+      <nav className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide" aria-label="Observe sections">
         {sections.map((section) => (
           <button
             key={section.key}

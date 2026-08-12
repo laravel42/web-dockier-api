@@ -353,22 +353,27 @@ strong, b {
  *
  * A bare `outline: none` here left every control in the product with no focus
  * affordance whatsoever — including Deploy, Tear down infrastructure and
- * Delete permanently. Components that supply their own ring set `outline-none`
- * in their own class list, which overrides this rule, so the two never double up.
+ * Delete permanently.
+ *
+ * It lives in @layer base deliberately. Unlayered CSS outranks every layer, so
+ * an unlayered version of this rule would beat Tailwind's `.outline-none` in
+ * @layer utilities and double up with the components that supply their own ring.
  */
-input:focus-visible,
-button:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-a:focus-visible,
-summary:focus-visible,
-[role="tab"]:focus-visible,
-[role="switch"]:focus-visible,
-[role="button"]:focus-visible,
-[tabindex]:not([tabindex="-1"]):focus-visible {
-  outline: 2px solid var(--color-ring);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
+@layer base {
+  input:focus-visible,
+  button:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  a:focus-visible,
+  summary:focus-visible,
+  [role="tab"]:focus-visible,
+  [role="switch"]:focus-visible,
+  [role="button"]:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
 }
 
 /* List filter search — widen on focus, horizontal only */
