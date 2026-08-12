@@ -2,8 +2,11 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 // ─── Variant Styles ────────────────────────────────────────────────
 
+// Native outlines are suppressed globally in index.css, so the ring here is the
+// only focus affordance every button in the app has. Removing it makes the
+// entire product unusable by keyboard.
 const base =
-  "inline-flex items-center justify-center gap-1.5 font-medium tracking-tight rounded-md transition-colors disabled:opacity-50 disabled:pointer-events-none";
+  "inline-flex items-center justify-center gap-1.5 font-medium tracking-tight rounded-md transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 disabled:pointer-events-none";
 
 const variants = {
   primary:

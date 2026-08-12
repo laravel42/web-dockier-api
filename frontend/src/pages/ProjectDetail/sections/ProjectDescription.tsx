@@ -17,7 +17,7 @@ import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
-import { XIcon } from "lucide-react";
+import { FileTextIcon, XIcon } from "lucide-react";
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -318,29 +318,34 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
 
   return (
     <div>
-      <div
+      {/* A real button, not a div: this is the only way to start a sensitive-data
+          scan, and as a div over a display:none input it was unreachable by
+          keyboard and announced as nothing by a screen reader. */}
+      <button
+        type="button"
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
+        className={`w-full border-2 border-dashed rounded-card p-10 text-center cursor-pointer transition-all ${
           dragOver
-            ? "border-primary-500 bg-primary-500/30"
+            ? "border-primary-500 bg-primary-500/10"
             : "border-border hover:border-primary-500/50 hover:bg-secondary-50/50"
         }`}
       >
-        <div className="text-3xl mb-3">📄</div>
+        <FileTextIcon className="mx-auto mb-3 size-7 text-text-muted" aria-hidden />
         <p className="text-sm font-medium text-text mb-1">Drop your schema.sql here</p>
         <p className="text-xs text-text-muted mb-3">or click to browse</p>
-        <p className="text-[11px] text-text-muted">Accepts .sql files · pattern-based scanner</p>
+        <p className="text-xs text-text-muted">Accepts .sql files</p>
         <input
           ref={inputRef}
           type="file"
           accept=".sql"
           onChange={handleChange}
-          className="hidden"
+          className="sr-only"
+          tabIndex={-1}
         />
-      </div>
+      </button>
       {aiLoading && (
         <div className="flex items-center gap-2 mt-3 justify-center">
           <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -373,7 +378,7 @@ function riskLevelFromScore(score: number): keyof typeof RISK_COLORS {
 
 function riskBadgeCls(level: string): string {
   const rc = RISK_COLORS[level] ?? RISK_COLORS.low;
-  return `rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
+  return `rounded-sm border px-1.5 py-0.5 text-xs font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -405,9 +410,9 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
         </div>
       )}
 
-      <div className="flex h-0 min-h-0 flex-1 overflow-hidden gap-3">
+      <div className="flex min-h-0 flex-col gap-3 md:h-0 md:flex-1 md:flex-row md:overflow-hidden">
         {/* Left nav — tables */}
-        <div className="w-48 shrink-0 min-h-0 self-stretch overflow-y-auto overscroll-contain scrollbar-hide border-r border-border pr-3 space-y-0.5">
+        <div className="max-h-40 shrink-0 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide border-b border-border pb-2 space-y-0.5 md:max-h-none md:self-stretch md:border-b-0 md:border-r md:pb-0 md:pr-3 md:w-48">
           {data.tables.map((t) => {
             const risk = riskLevelFromScore(t.riskScore);
             return (
@@ -437,7 +442,7 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
                   <span className={riskBadgeCls(riskLevelFromScore(table.riskScore))}>
                     Risk: {table.riskScore}
                   </span>
-                  <span className="text-[10px] text-text-muted">{table.columns.length} columns</span>
+                  <span className="text-xs text-text-muted">{table.columns.length} columns</span>
                 </div>
               </div>
               <div className="divide-y divide-border">
@@ -446,10 +451,10 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
                   return (
                     <div key={i} className="flex items-center px-3 py-1.5 gap-2">
                       <span className="text-xs font-mono text-text w-1/4 truncate">{c.name}</span>
-                      <span className="text-[10px] text-text-muted w-16 truncate">{c.type}</span>
+                      <span className="text-xs text-text-muted w-16 truncate">{c.type}</span>
                       <span className={riskBadgeCls(severity)}>{c.sensitivity}</span>
-                      <span className="text-[10px] text-text-muted">{CATEGORY_LABELS[c.category] || c.category}</span>
-                      <span className="text-[10px] text-text-muted flex-1 truncate text-right">{c.reason}</span>
+                      <span className="text-xs text-text-muted">{CATEGORY_LABELS[c.category] || c.category}</span>
+                      <span className="text-xs text-text-muted flex-1 truncate text-right">{c.reason}</span>
                     </div>
                   );
                 })}
@@ -477,9 +482,9 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex h-0 min-h-0 flex-1 overflow-hidden gap-3">
+      <div className="flex min-h-0 flex-col gap-3 md:h-0 md:flex-1 md:flex-row md:overflow-hidden">
         {/* Left nav */}
-        <div className="w-44 shrink-0 min-h-0 self-stretch overflow-y-auto overscroll-contain scrollbar-hide border-r border-border pr-3 space-y-0.5">
+        <div className="max-h-40 shrink-0 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide border-b border-border pb-2 space-y-0.5 md:max-h-none md:self-stretch md:border-b-0 md:border-r md:pb-0 md:pr-3 md:w-44">
           {entities.map((entity) => {
             const count = grouped[entity].length;
             const hasSecret = grouped[entity].some((f: { sensitivity: string; }) => f.sensitivity === "secret");
@@ -497,7 +502,7 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
                 }`}
               >
                 <span className="truncate">{entity}</span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-sm shrink-0 font-semibold ${countStyle.bg} ${countStyle.text}`}>{count}</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-sm shrink-0 font-semibold ${countStyle.bg} ${countStyle.text}`}>{count}</span>
               </button>
             );
           })}
@@ -509,13 +514,13 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
             <div className="border border-border rounded-lg overflow-hidden">
               <div className="bg-secondary-50 px-3 py-1.5 border-b border-border flex items-center justify-between">
                 <span className="text-xs font-semibold text-text">{selected}</span>
-                <span className="text-[10px] text-text-muted">{fields.length} fields</span>
+                <span className="text-xs text-text-muted">{fields.length} fields</span>
               </div>
               <div className="divide-y divide-border">
                 {fields.map((f, i) => (
                     <div key={i} className="flex items-center px-3 py-1.5 gap-2">
                       <span className="text-xs font-mono text-text w-2/5 truncate">{f.field}</span>
-                      <span className="text-[11px] text-text-muted flex-1 truncate">{f.reason}</span>
+                      <span className="text-xs text-text-muted flex-1 truncate">{f.reason}</span>
                       <SensitivityBadge level={f.sensitivity} />
                     </div>
                 ))}
@@ -549,7 +554,7 @@ function toneBadgeCls(
   styles: { bg: string; text: string; border: string },
   size: "sm" | "xs" = "sm",
 ): string {
-  const textSize = size === "xs" ? "text-[9px]" : "text-[10px]";
+  const textSize = size === "xs" ? "text-xs" : "text-xs";
   return `rounded-sm border px-1.5 py-0.5 font-semibold shrink-0 ${textSize} ${styles.bg} ${styles.text} ${styles.border}`;
 }
 
@@ -594,11 +599,11 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
           <div className="px-5 pt-4 pb-3 border-b border-border flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-sm border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
-                <span className="text-[11px] font-mono text-text-muted">{vuln.id}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-sm border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
+                <span className="text-xs font-mono text-text-muted">{vuln.id}</span>
               </div>
               <h3 className="text-sm/snug font-semibold text-text ">{vuln.title}</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">Package: {vuln.pkg}</p>
+              <p className="text-xs text-text-muted mt-0.5">Package: {vuln.pkg}</p>
             </div>
             <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors shrink-0">
               <XIcon className="size-4" />
@@ -614,16 +619,16 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
               <>
                 {aliases.length > 0 && (
                   <div className="mb-3">
-                    <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Aliases</p>
+                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Aliases</p>
                     <div className="flex flex-wrap gap-1">
-                      {aliases.map(a => <span key={a} className="text-[11px] font-mono text-text-muted bg-secondary-50 border border-border px-1.5 py-0.5 rounded">{a}</span>)}
+                      {aliases.map(a => <span key={a} className="text-xs font-mono text-text-muted bg-secondary-50 border border-border px-1.5 py-0.5 rounded">{a}</span>)}
                     </div>
                   </div>
                 )}
                 {details ? (
                   <div>
-                    <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
-                    <MDEditor.Markdown source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.75rem" }} />
+                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
+                    <MDEditor.Markdown source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
                   </div>
                 ) : (
                   <p className="text-xs text-text-muted py-2">No additional details available.</p>
@@ -659,7 +664,7 @@ function DependencyRow({
     <div className="px-3 py-1.5 flex items-start gap-3 hover:bg-secondary-50/50 transition-colors">
       <div className="w-2/5 min-w-0">
         <a href={dependency.repoUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-primary-500 hover:text-primary-400 truncate block">{dependency.name}</a>
-        <span className="text-[10px] text-text-muted">{dependency.ecosystem} · {dependency.type}</span>
+        <span className="text-xs text-text-muted">{dependency.ecosystem} · {dependency.type}</span>
       </div>
       <span className="text-xs font-mono text-text w-[10%] truncate">{dependency.version}</span>
       <span className="text-xs font-mono w-[10%] truncate">
@@ -694,7 +699,7 @@ function DependencyRow({
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => !prev)}
-                className="inline-flex h-5 shrink-0 items-center px-1 text-[10px] font-bold leading-none text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
+                className="inline-flex h-5 shrink-0 items-center px-1 text-xs font-bold leading-none text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
                 aria-expanded={expanded}
               >
                 {expanded ? "Show less" : `+${hiddenVulnCount} more`}
@@ -702,7 +707,7 @@ function DependencyRow({
             )}
           </div>
         ) : (
-          <span className="text-[10px] text-text-muted">—</span>
+          <span className="text-xs text-text-muted">—</span>
         )}
       </div>
     </div>
@@ -737,7 +742,7 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${
+            className={`text-xs px-2 py-1 rounded-md border font-medium transition-colors ${
               filter === f.key
                 ? f.key === "vulnerable"
                   ? "border-danger-500/40 bg-danger-500/15 text-danger-400"
@@ -752,7 +757,7 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
 
       {/* Table */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
-        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-secondary-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-secondary-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
           <span className="w-2/5">Package</span>
           <span className="w-[10%]">Version</span>
           <span className="w-[10%]">Latest</span>
@@ -974,7 +979,7 @@ export default function ProjectDescription({
   return (
     <div className={`${cardCls} mb-8 overflow-hidden`}>
 
-      <div className="flex min-h-[600px] flex-col px-5 pt-4 pb-5">
+      <div className="flex min-h-[420px] flex-col px-4 pt-4 pb-5 sm:px-5 md:min-h-[600px]">
         {/* Main tab nav */}
         <div className="flex min-h-11 shrink-0 items-center gap-3 border-b border-border mb-4">
           <div
@@ -1000,12 +1005,12 @@ export default function ProjectDescription({
               >
                 {tab.label}
                 {tab.key === "dependencies" && dependencies && dependencies.length > 0 && (
-                  <span className="rounded-sm border border-border bg-secondary-100/60 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-text-muted">
+                  <span className="rounded-sm border border-border bg-secondary-100/60 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-text-muted">
                     {dependencies.length}
                   </span>
                 )}
                 {tab.key === "sensitiveData" && uploadedSensitiveData && uploadedSensitiveData.length > 0 && (
-                  <span className="rounded-sm border border-red-500/40 bg-red-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                  <span className="rounded-sm border border-red-500/40 bg-red-500/30 px-1.5 py-0.5 text-xs font-semibold text-red-400">
                     {uploadedSensitiveData.length}
                   </span>
                 )}

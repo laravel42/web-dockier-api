@@ -348,11 +348,27 @@ strong, b {
   font-weight: 600;
 }
 
+/*
+ * Replace the native outline; never remove it outright.
+ *
+ * A bare `outline: none` here left every control in the product with no focus
+ * affordance whatsoever — including Deploy, Tear down infrastructure and
+ * Delete permanently. Components that supply their own ring set `outline-none`
+ * in their own class list, which overrides this rule, so the two never double up.
+ */
 input:focus-visible,
 button:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: none;
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="tab"]:focus-visible,
+[role="switch"]:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 /* List filter search — widen on focus, horizontal only */
@@ -672,7 +688,7 @@ textarea:focus-visible {
 }
 
 .overview-editor .bn-collaboration-cursor__label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
