@@ -7,6 +7,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { statusBadgeColors } from "@/utils/styles";
 import Spinner from "@/components/Spinner";
+import ConfirmModal from "@/components/ConfirmModal";
 import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react";
 
 const PAGE_SIZE = 10;
@@ -183,14 +184,13 @@ export default function ProjectCommandsTab({ project }: Props) {
     }
   };
 
+  const [confirmCmd, setConfirmCmd] = useState<Command | null>(null);
+
+  // Errors propagate to ConfirmModal rather than into a banner the closing menu
+  // would have hidden.
   const handleDelete = async (cmd: Command) => {
-    setOpenMenuId(null);
-    try {
-      await commandsApi.delete(project.id, cmd.id);
-      await fetchCommands(page);
-    } catch {
-      setError("Failed to delete command");
-    }
+    await commandsApi.delete(project.id, cmd.id);
+    await fetchCommands(page);
   };
 
   const handleCopy = (cmd: Command) => {
@@ -338,7 +338,7 @@ export default function ProjectCommandsTab({ project }: Props) {
                             <button
                               type="button"
                               role="menuitem"
-                              onClick={() => void handleDelete(cmd)}
+                              onClick={() => { setOpenMenuId(null); setConfirmCmd(cmd); }}
                               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-500 transition-colors hover:bg-danger-500/10"
                             >
                               <Trash2Icon className="size-3.5" />
@@ -421,6 +421,15 @@ export default function ProjectCommandsTab({ project }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmCmd !== null}
+        onClose={() => setConfirmCmd(null)}
+        onConfirm={async () => { if (confirmCmd) await handleDelete(confirmCmd); }}
+        title="Delete command record"
+        message={`Delete the record of \`${confirmCmd?.command ?? ""}\`? The audit history for that run is lost. The command itself is not re-run or undone.`}
+        confirmLabel="Delete record"
+      />
     </div>
   );
 }

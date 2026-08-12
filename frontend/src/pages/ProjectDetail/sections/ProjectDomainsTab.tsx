@@ -9,6 +9,7 @@ import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
+import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
@@ -40,19 +41,16 @@ function DomainRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<{ verified: boolean; message: string } | null>(null);
-  const toast = useToast();
 
+  // Errors propagate so ConfirmModal can surface them in place; a toast behind a
+  // closing modal is how a failed delete became invisible.
   const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await domainsApi.deleteDomain(projectId, domain.id);
-      onRefresh();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete domain"));
-    } finally { setDeleting(false); setMenuOpen(false); }
+    await domainsApi.deleteDomain(projectId, domain.id);
+    onRefresh();
+    setMenuOpen(false);
   };
 
   const handleVerifyDns = async () => {
@@ -85,6 +83,7 @@ function DomainRow({
   };
 
   return (
+    <>
     <div className="px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -149,12 +148,11 @@ function DomainRow({
                   <div className="my-1 border-t border-border" />
                   <button
                     type="button"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors disabled:opacity-50"
+                    onClick={() => { setMenuOpen(false); setConfirmOpen(true); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors"
                   >
                     <Trash2Icon className="size-3.5" />
-                    {deleting ? "Deleting…" : "Delete"}
+                    Delete
                   </button>
                 </div>
               </>
@@ -172,7 +170,17 @@ function DomainRow({
         {dnsStatus.message}
       </div>
     )}
-  </div>
+    </div>
+
+    <ConfirmModal
+      open={confirmOpen}
+      onClose={() => setConfirmOpen(false)}
+      onConfirm={handleDelete}
+      title="Delete domain"
+      message={`Delete ${domain.name}? Traffic to this domain stops immediately. You can add it back, but DNS will need to propagate again.`}
+      confirmLabel="Delete domain"
+    />
+    </>
   );
 }
 
@@ -323,8 +331,7 @@ function CertificateRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const toast = useToast();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const typeLabels: Record<SslCertificate["type"], string> = {
     lets_encrypt: "Let's Encrypt",
@@ -347,13 +354,9 @@ function CertificateRow({
   };
 
   const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await domainsApi.deleteCertificate(projectId, cert.id);
-      onRefresh();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete certificate"));
-    } finally { setDeleting(false); setMenuOpen(false); }
+    await domainsApi.deleteCertificate(projectId, cert.id);
+    onRefresh();
+    setMenuOpen(false);
   };
 
   const expiresLabel = cert.expiresAt
@@ -361,6 +364,7 @@ function CertificateRow({
     : null;
 
   return (
+    <>
     <div className="flex items-center justify-between px-4 py-3">
       <div className="flex flex-col gap-0.5">
         <span className="text-sm font-medium text-text">{typeLabels[cert.type]}</span>
@@ -398,11 +402,10 @@ function CertificateRow({
                   <div className="my-1 border-t border-border" />
                   <button
                     type="button"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors disabled:opacity-50"
+                    onClick={() => { setMenuOpen(false); setConfirmOpen(true); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors"
                   >
-                    {deleting ? "Deleting…" : "Delete"}
+                    Delete
                   </button>
                 </div>
               </>
@@ -411,6 +414,16 @@ function CertificateRow({
         )}
       </div>
     </div>
+
+    <ConfirmModal
+      open={confirmOpen}
+      onClose={() => setConfirmOpen(false)}
+      onConfirm={handleDelete}
+      title="Delete SSL certificate"
+      message={`Delete the certificate for ${cert.domainName}? HTTPS stops working for the domains it covers until a new certificate is issued.`}
+      confirmLabel="Delete certificate"
+    />
+    </>
   );
 }
 

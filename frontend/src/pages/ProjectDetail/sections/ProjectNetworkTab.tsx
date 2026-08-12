@@ -3,11 +3,10 @@ import { networkApi } from "@/services/network";
 import type { SecurityRule, RedirectRule } from "@/types";
 import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
-import { useToast } from "@/context/useToast";
-import { getErrorMessage } from "@/utils/errors";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 
@@ -38,17 +37,13 @@ function SecurityRulesSection({
   onRefresh: () => void;
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const toast = useToast();
+  // Errors propagate to ConfirmModal, which keeps them on screen rather than
+  // firing a toast behind a modal that already closed.
+  const [confirmRule, setConfirmRule] = useState<SecurityRule | null>(null);
 
   const handleDelete = async (ruleId: string) => {
-    setDeleting(ruleId);
-    try {
-      await networkApi.deleteSecurityRule(projectId, ruleId);
-      onRefresh();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete security rule"));
-    } finally { setDeleting(null); }
+    await networkApi.deleteSecurityRule(projectId, ruleId);
+    onRefresh();
   };
 
   return (
@@ -85,11 +80,18 @@ function SecurityRulesSection({
               rule={rule}
               projectId={projectId}
               canManage={canManage}
-              deleting={deleting === rule.id}
-              onDelete={() => handleDelete(rule.id)}
+              onDelete={() => setConfirmRule(rule)}
               onRefresh={onRefresh}
             />
           ))}
+          <ConfirmModal
+            open={confirmRule !== null}
+            onClose={() => setConfirmRule(null)}
+            onConfirm={async () => { if (confirmRule) await handleDelete(confirmRule.id); }}
+            title="Delete security rule"
+            message={`Delete the rule protecting ${confirmRule?.path ?? "this path"}? Access restrictions on it are lifted immediately.`}
+            confirmLabel="Delete rule"
+          />
           {canManage && (
             <div className="px-4 py-3">
               <Button
@@ -120,14 +122,12 @@ function SecurityRuleRow({
   rule,
   projectId,
   canManage,
-  deleting,
   onDelete,
   onRefresh,
 }: {
   rule: SecurityRule;
   projectId: string;
   canManage: boolean;
-  deleting: boolean;
   onDelete: () => void;
   onRefresh: () => void;
 }) {
@@ -149,9 +149,8 @@ function SecurityRuleRow({
             type="button"
             variant="danger" size="sm"
             onClick={onDelete}
-            disabled={deleting}
           >
-            {deleting ? "Deleting…" : "Delete"}
+            Delete
           </Button>
         )}
       </div>
@@ -211,28 +210,22 @@ function CredentialChip({
   canManage: boolean;
   onDeleted: () => void;
 }) {
-  const [deleting, setDeleting] = useState(false);
-  const toast = useToast();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await networkApi.deleteCredential(projectId, ruleId, cred.id);
-      onDeleted();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete credential"));
-    } finally { setDeleting(false); }
+    await networkApi.deleteCredential(projectId, ruleId, cred.id);
+    onDeleted();
   };
 
   return (
+    <>
     <span className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-secondary-50/50 px-2.5 py-1 text-xs text-text">
       <span className="font-medium">{cred.username}</span>
       {canManage && (
         <Button
           type="button"
           variant="ghost"
-          onClick={handleDelete}
-          disabled={deleting}
+          onClick={() => setConfirmOpen(true)}
           className="px-0! hover:text-danger-500!"
           aria-label={`Remove ${cred.username}`}
         >
@@ -240,6 +233,16 @@ function CredentialChip({
         </Button>
       )}
     </span>
+
+    <ConfirmModal
+      open={confirmOpen}
+      onClose={() => setConfirmOpen(false)}
+      onConfirm={handleDelete}
+      title="Remove credential"
+      message={`Remove ${cred.username}? Anything authenticating with this credential starts failing immediately.`}
+      confirmLabel="Remove credential"
+    />
+    </>
   );
 }
 
@@ -555,17 +558,11 @@ function RedirectRulesSection({
   onRefresh: () => void;
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const toast = useToast();
+  const [confirmRedirect, setConfirmRedirect] = useState<RedirectRule | null>(null);
 
   const handleDelete = async (ruleId: string) => {
-    setDeleting(ruleId);
-    try {
-      await networkApi.deleteRedirectRule(projectId, ruleId);
-      onRefresh();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to delete redirect rule"));
-    } finally { setDeleting(null); }
+    await networkApi.deleteRedirectRule(projectId, ruleId);
+    onRefresh();
   };
 
   return (
@@ -618,10 +615,9 @@ function RedirectRulesSection({
                   <Button
                     type="button"
                     variant="danger" size="sm"
-                    onClick={() => handleDelete(rule.id)}
-                    disabled={deleting === rule.id}
+                    onClick={() => setConfirmRedirect(rule)}
                   >
-                    {deleting === rule.id ? "…" : "Delete"}
+                    Delete
                   </Button>
                 )}
               </div>
@@ -649,6 +645,15 @@ function RedirectRulesSection({
           onCreated={() => { setShowCreateModal(false); onRefresh(); }}
         />
       )}
+
+      <ConfirmModal
+        open={confirmRedirect !== null}
+        onClose={() => setConfirmRedirect(null)}
+        onConfirm={async () => { if (confirmRedirect) await handleDelete(confirmRedirect.id); }}
+        title="Delete redirect rule"
+        message={`Delete the redirect from ${confirmRedirect?.fromPath ?? "this path"}? Links relying on it start returning 404 immediately.`}
+        confirmLabel="Delete redirect"
+      />
     </div>
   );
 }

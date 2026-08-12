@@ -11,6 +11,7 @@ import type {
 } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
 import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
@@ -84,7 +85,6 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchHeartbeats = useCallback(async () => {
@@ -102,16 +102,11 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
     fetchHeartbeats();
   }, [fetchHeartbeats]);
 
+  const [confirmHeartbeat, setConfirmHeartbeat] = useState<Heartbeat | null>(null);
+
   const handleDelete = async (id: string) => {
-    setDeleting(id);
-    try {
-      await observeApi.deleteHeartbeat(project.id, id);
-      fetchHeartbeats();
-    } catch {
-      /* silent */
-    } finally {
-      setDeleting(null);
-    }
+    await observeApi.deleteHeartbeat(project.id, id);
+    fetchHeartbeats();
   };
 
   const handleCopyUrl = (heartbeat: Heartbeat) => {
@@ -169,11 +164,11 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
                 {canManage && (
                   <button
                     type="button"
-                    onClick={() => handleDelete(hb.id)}
-                    disabled={deleting === hb.id}
+                    onClick={() => setConfirmHeartbeat(hb)}
+
                     className="text-xs text-danger-500 hover:text-danger-400 transition-colors disabled:opacity-50"
                   >
-                    {deleting === hb.id ? "…" : "Delete"}
+                    Delete
                   </button>
                 )}
               </div>
@@ -200,6 +195,15 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
           }}
         />
       )}
+
+      <ConfirmModal
+        open={confirmHeartbeat !== null}
+        onClose={() => setConfirmHeartbeat(null)}
+        onConfirm={async () => { if (confirmHeartbeat) await handleDelete(confirmHeartbeat.id); }}
+        title="Delete heartbeat"
+        message={`Delete the ${confirmHeartbeat?.name ?? "this"} heartbeat? Monitoring stops immediately and failures will go unnoticed.`}
+        confirmLabel="Delete heartbeat"
+      />
     </div>
   );
 }
@@ -298,7 +302,6 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
   const [activeLogType, setActiveLogType] = useState<LogType>("site");
   const [logEntry, setLogEntry] = useState<LogEntry | null>(null);
   const [loading, setLoading] = useState(true);
-  const [clearing, setClearing] = useState(false);
 
   const fetchLog = useCallback(async (logType: LogType) => {
     setLoading(true);
@@ -316,16 +319,11 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
     fetchLog(activeLogType);
   }, [activeLogType, fetchLog]);
 
+  const [confirmClear, setConfirmClear] = useState(false);
+
   const handleClear = async () => {
-    setClearing(true);
-    try {
-      await observeApi.clearLog(project.id, activeLogType);
-      await fetchLog(activeLogType);
-    } catch {
-      /* silent */
-    } finally {
-      setClearing(false);
-    }
+    await observeApi.clearLog(project.id, activeLogType);
+    await fetchLog(activeLogType);
   };
 
   const handleDownload = () => {
@@ -359,8 +357,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
           {canManage && (
             <button
               type="button"
-              onClick={handleClear}
-              disabled={clearing}
+              onClick={() => setConfirmClear(true)}
               className="text-xs text-text-muted hover:text-danger-500 transition-colors disabled:opacity-50"
               title="Delete contents"
             >
@@ -399,6 +396,15 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
           </pre>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        onConfirm={handleClear}
+        title="Clear this log"
+        message={`Permanently delete the ${activeLogType} log? This is the record you would use to explain a failed deploy, and it cannot be recovered.`}
+        confirmLabel="Clear log permanently"
+      />
     </div>
   );
 }
