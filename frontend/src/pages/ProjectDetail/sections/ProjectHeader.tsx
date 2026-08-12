@@ -9,6 +9,8 @@ import { SquarePenIcon } from "lucide-react";
 
 interface Props {
   project: Project;
+  siteUrl?: string;
+  repoFaviconUrl?: string;
   onDeploy: () => void;
   onNameSave: (name: string) => Promise<void>;
   nameSaving?: boolean;
@@ -17,6 +19,8 @@ interface Props {
 
 export default function ProjectHeader({
   project,
+  siteUrl,
+  repoFaviconUrl,
   onDeploy,
   onNameSave,
   nameSaving = false,
@@ -72,7 +76,7 @@ export default function ProjectHeader({
   return (
     <div className="flex items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3 min-w-0">
-        <ProjectAvatar project={project} size="lg" />
+        <ProjectAvatar project={project} size="lg" siteUrl={siteUrl} repoFaviconUrl={repoFaviconUrl} />
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {editing ? (

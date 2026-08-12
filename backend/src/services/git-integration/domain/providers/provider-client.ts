@@ -231,6 +231,16 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
 }
 
 export async function fetchRepoFile(connection: ConnectionLike, ref: RepoRef, path: string): Promise<string | null> {
+  const file = await fetchRepoFileBuffer(connection, ref, path);
+  if (!file) return null;
+  return file.buffer.toString("utf8");
+}
+
+export async function fetchRepoFileBuffer(
+  connection: ConnectionLike,
+  ref: RepoRef,
+  path: string,
+): Promise<{ buffer: Buffer } | null> {
   const headers = authHeaders(connection);
   const origin = baseUrl(connection.provider, connection.endpoint);
 
@@ -239,7 +249,7 @@ export async function fetchRepoFile(connection: ConnectionLike, ref: RepoRef, pa
       headers: { ...headers, Accept: "application/vnd.github.v3.raw" },
     });
     if (!response.ok) return null;
-    return await response.text();
+    return { buffer: Buffer.from(await response.arrayBuffer()) };
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
@@ -247,10 +257,10 @@ export async function fetchRepoFile(connection: ConnectionLike, ref: RepoRef, pa
     const filePath = encodeURIComponent(path);
     const response = await fetch(`${origin}/api/v4/projects/${projectPath}/repository/files/${filePath}/raw?ref=${encodeURIComponent(ref.branch)}`, { headers });
     if (!response.ok) return null;
-    return await response.text();
+    return { buffer: Buffer.from(await response.arrayBuffer()) };
   }
 
   const response = await fetch(`${origin}/2.0/repositories/${ref.owner}/${ref.repo}/src/${encodeURIComponent(ref.branch)}/${path}`, { headers });
   if (!response.ok) return null;
-  return await response.text();
+  return { buffer: Buffer.from(await response.arrayBuffer()) };
 }

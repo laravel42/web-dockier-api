@@ -5,6 +5,8 @@ import { DeployError } from "./providers.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { emitDeploySuccessNotification, emitDeployFailureNotification } from "./pipeline/helpers.js";
 import { markProjectInfraLive } from "./lifecycle/project-teardown.js";
+import { clearRepoFaviconFromAnalysisCache } from "../../git-integration/domain/cache.js";
+import { logger } from "../../../shared/logger.js";
 import { deriveAppName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { logTimestamp, nowIso } from "../../../shared/utils/time.js";
@@ -258,6 +260,9 @@ export async function applyDeploymentWebhookUpdate(
   // Infrastructure is now provisioned — mark the project's infra state live.
   if (payload.status === "success") {
     await markProjectInfraLive(current?.project_id);
+    if (current?.repo && current?.branch) {
+      await clearRepoFaviconFromAnalysisCache(current.repo, current.branch, logger);
+    }
   }
 
   if (payload.status === "success" && current?.organization_id) {

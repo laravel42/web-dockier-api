@@ -86,6 +86,10 @@ export async function mockAuthenticatedApi(
     if (!isApiRequest(route)) return route.continue();
     return json(route, { badges: [] });
   });
+  await page.route("**/git/repo-favicon**", (route) => {
+    if (!isApiRequest(route)) return route.continue();
+    return json(route, { favicon: null, deployId: null });
+  });
 }
 
 export async function seedAuthStorage(page: Page): Promise<void> {

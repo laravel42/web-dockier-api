@@ -10,6 +10,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, runRepoAnalysis } from "../domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
 import { getFindingById } from "../../../shared/service-clients/findings.js";
 import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "../domain/ai/ai-analysis.js";
@@ -25,6 +26,7 @@ import {
   writeAnalysisCache,
   updateAnalysisCache,
   writeSensitiveCache,
+  getLatestSuccessfulDeployId,
 } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
 
@@ -243,6 +245,90 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       }
 
       return { badges: [] };
+    },
+  );
+
+  typed.get(
+    "/git/repo-favicon",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 30, windowMs: 60_000, prefix: "git-favicon" })],
+      handlerTimeout: 45_000,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get repository favicon from source files",
+        querystring: z.object({
+          repo: z.string(),
+          branch: z.string().optional(),
+          connectionId: z.string().optional(),
+          rootDirectory: z.string().optional(),
+          webDirectory: z.string().optional(),
+        }),
+        response: { 200: z.object({ favicon: z.string().nullable(), deployId: z.string().nullable() }) },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const branch = request.query.branch || "main";
+      const repo = request.query.repo;
+      const directoryOptions = {
+        rootDirectory: request.query.rootDirectory,
+        webDirectory: request.query.webDirectory,
+      };
+
+      type FaviconCache = { repoFavicon?: RepoFaviconCacheEntry };
+      const latestDeployId = await getLatestSuccessfulDeployId(repo, branch);
+      const analysisCached = await db.from("analysis_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      const cachedResult = parseJsonField<FaviconCache>(analysisCached.data?.result);
+      if (isRepoFaviconCacheValid(cachedResult?.repoFavicon, latestDeployId)) {
+        const cachedUrl = cachedResult!.repoFavicon!.dataUrl;
+        return {
+          favicon: cachedUrl && isValidFaviconDataUrl(cachedUrl) ? cachedUrl : null,
+          deployId: latestDeployId,
+        };
+      }
+
+      if (!request.query.connectionId) {
+        return { favicon: null, deployId: latestDeployId };
+      }
+
+      const parts = repo.split("/").filter(Boolean);
+      if (parts.length < 2) {
+        return { favicon: null, deployId: latestDeployId };
+      }
+
+      const owner = parts.slice(0, -1).join("/");
+      const repoName = parts[parts.length - 1]!;
+      const conn = await requireConnection(request.query.connectionId, auth.tenantId);
+      const favicon = await resolveRepoFaviconDataUrl(
+        conn,
+        { owner, repo: repoName, branch },
+        directoryOptions,
+      );
+
+      const mergedResult = {
+        ...(cachedResult ?? {}),
+        repoFavicon: {
+          dataUrl: favicon,
+          resolvedAt: new Date().toISOString(),
+          deployId: latestDeployId,
+          version: REPO_FAVICON_RESOLVER_VERSION,
+        } satisfies RepoFaviconCacheEntry,
+      };
+
+      if (cachedResult) {
+        await updateAnalysisCache(repo, branch, mergedResult as Json, log);
+      } else {
+        await writeAnalysisCache({
+          tenantId: auth.tenantId,
+          repoKey: repo,
+          branch,
+          result: mergedResult as Json,
+        }, log);
+      }
+
+      // deployId is the same key the server cache invalidates on, so the client
+      // can hold this favicon until the project's next successful deploy.
+      return { favicon, deployId: latestDeployId };
     },
   );
 

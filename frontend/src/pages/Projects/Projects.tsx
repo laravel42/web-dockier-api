@@ -59,6 +59,7 @@ export default function Projects() {
     confirmDelete,
     projectLangs,
     projectBadgeLoading,
+    projectFavicons,
   } = useProjects();
 
   return (
@@ -143,6 +144,7 @@ export default function Projects() {
                   project={p}
                   badges={projectLangs[p.id]}
                   badgeLoading={projectBadgeLoading.has(p.id)}
+                  repoFaviconUrl={projectFavicons[p.id]}
                   onSelect={(id) => navigate(`/projects/${id}`)}
                 />
               ))}

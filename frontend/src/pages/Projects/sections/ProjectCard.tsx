@@ -11,6 +11,7 @@ interface Props {
   project: Project;
   badges: TechBadgeInfo[] | undefined;
   badgeLoading?: boolean;
+  repoFaviconUrl?: string;
   onSelect: (id: string) => void;
 }
 
@@ -20,7 +21,7 @@ function getGitProvider(repository: string): string {
   return "github";
 }
 
-export default function ProjectCard({ project: p, badges, badgeLoading, onSelect }: Props) {
+export default function ProjectCard({ project: p, badges, badgeLoading, repoFaviconUrl, onSelect }: Props) {
   const provider = p.repository ? getGitProvider(p.repository) : "github";
 
   return (
@@ -30,7 +31,7 @@ export default function ProjectCard({ project: p, badges, badgeLoading, onSelect
     >
       {/* Header: avatar + title */}
       <div className="flex items-center gap-3 min-w-0">
-        <ProjectAvatar project={p} size="sm" />
+        <ProjectAvatar project={p} size="sm" repoFaviconUrl={repoFaviconUrl} />
         <h3 className={`${typeCardTitle} truncate`}>{p.name}</h3>
       </div>
 

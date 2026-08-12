@@ -28,6 +28,8 @@ import { parseEnvContent } from "../../../../shared/env/parse-env.js";
 
 import { appendLog, updateStatus, emitDeploySuccessNotification } from "./helpers.js";
 import { markProjectInfraLive } from "../lifecycle/project-teardown.js";
+import { clearRepoFaviconFromAnalysisCache } from "../../../git-integration/domain/cache.js";
+import { logger } from "../../../../shared/logger.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 import { waitForAppReady } from "./health.js";
 
@@ -280,6 +282,7 @@ export async function finalizeDeploy(ctx: {
 
   // Infrastructure is now provisioned — mark the project's infra state live.
   await markProjectInfraLive(ctx.event.projectId);
+  await clearRepoFaviconFromAnalysisCache(ctx.event.repo, ctx.event.branch, logger);
 
   // Non-blocking notification
   emitDeploySuccessNotification({

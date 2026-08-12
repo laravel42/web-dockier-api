@@ -57,6 +57,17 @@ export const gitApi = {
       badges: TechBadgeInfo[];
     }>(`/git/repo-badges${buildQuery({ repo, branch, connectionId })}`),
 
+  getRepoFavicon: (
+    repo: string,
+    branch?: string,
+    connectionId?: string,
+    rootDirectory?: string,
+    webDirectory?: string,
+  ) =>
+    request<{ favicon: string | null; deployId: string | null }>(
+      `/git/repo-favicon${buildQuery({ repo, branch, connectionId, rootDirectory, webDirectory })}`,
+    ),
+
   getRecentCommits: (connectionId: string, owner: string, repo: string, branch?: string, limit?: number) =>
     request<{
       commits: Array<{ hash: string; shortHash: string; message: string; author: string; authorAvatar: string; date: string; url: string }>;

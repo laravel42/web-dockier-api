@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi } from "@/services/api";
 import { useProjectBadges } from "@/hooks/useProjectBadges";
+import { useProjectRepoFavicons } from "@/hooks/useProjectRepoFavicon";
 import { useViewMode } from "@/hooks/useViewMode";
 import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { useProjectForm } from "./useProjectForm";
@@ -34,6 +35,7 @@ export function useProjects() {
 
   const { viewMode, changeViewMode } = useViewMode("projects-view");
   const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projects);
+  const { favicons: projectFavicons } = useProjectRepoFavicons(projects);
 
   // ── Delete ─────────────────────────────────────────────────────
 
@@ -69,5 +71,6 @@ export function useProjects() {
     ...projectForm,
     // Derived
     projectLangs, projectBadgeLoading,
+    projectFavicons,
   };
 }

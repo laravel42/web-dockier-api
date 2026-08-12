@@ -155,6 +155,53 @@ export async function updateAnalysisCache(
 }
 
 /**
+ * Latest successful deployment for a repo+branch.
+ * Used to scope favicon cache validity until the next deploy.
+ */
+export async function getLatestSuccessfulDeployId(
+  repoKey: string,
+  branch: string,
+): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("deployments")
+    .select("id")
+    .eq("repo", repoKey)
+    .eq("branch", branch)
+    .eq("status", "success")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.id ?? null;
+}
+
+/**
+ * Remove repoFavicon from analysis_cache so the next request re-resolves from source.
+ * Called when a deployment succeeds (repo content may have changed).
+ */
+export async function clearRepoFaviconFromAnalysisCache(
+  repoKey: string,
+  branch: string,
+  logger: CacheLogger,
+): Promise<void> {
+  const db = supabaseAdmin;
+  const { data } = await db
+    .from("analysis_cache")
+    .select("result")
+    .eq("repo", repoKey)
+    .eq("branch", branch)
+    .maybeSingle();
+
+  if (!data?.result) return;
+
+  const parsed = parseJsonField<Record<string, unknown>>(data.result);
+  if (!parsed || !("repoFavicon" in parsed)) return;
+
+  const { repoFavicon: _removed, ...rest } = parsed;
+  await updateAnalysisCache(repoKey, branch, rest as Json, logger);
+}
+
+/**
  * Write to the repo_cache table (connection-scoped repository list).
  */
 export async function writeRepoListCache(
