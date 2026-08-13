@@ -130,7 +130,7 @@ pytest                    # 309 tests
 | `OPENGREP_RULES_DIR` | no | Rule corpus location (default `code-analysis/rules/opengrep`) |
 | `SONAR_HOST_URL`, `SONAR_TOKEN` | for SonarQube | Scanner and API access |
 | `JWT_SECRET` | yes, for the API | Verifies tenant tokens; the API fails closed without it |
-| `CORS_ALLOW_ORIGINS` | for browser access | Comma-separated origins. No wildcard — credentials are in play |
+| `CORS_ALLOW_ORIGINS` | for any non-local origin | Comma-separated. Defaults to `http://localhost:5173` and the 127.0.0.1 equivalent so local dev works unconfigured; setting it replaces that default entirely. No wildcard — credentials are in play |
 
 ## Notes
 

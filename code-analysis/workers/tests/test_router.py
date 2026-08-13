@@ -187,3 +187,43 @@ def test_aggregate_health_degrades_when_a_service_is_down(client):
     assert body["status"] == "degraded"
     assert any(s["service"] == "semgrep" and s["status"] == "unreachable"
                for s in body["services"])
+
+
+# ── CORS ───────────────────────────────────────────────────────────────────
+
+def test_local_dev_origin_is_allowed_without_configuration(monkeypatch):
+    """
+    An unset CORS_ALLOW_ORIGINS used to install no middleware at all, so the
+    browser blocked every request and reported an opaque network error —
+    indistinguishable from the service being down.
+    """
+    import importlib
+    monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://t/t")
+    import src.router as router
+    importlib.reload(router)
+
+    client = TestClient(router.app, raise_server_exceptions=False)
+    r = client.options("/sast/settings", headers={
+        "Origin": "http://localhost:5173",
+        "Access-Control-Request-Method": "GET",
+    })
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+def test_configured_origins_replace_the_dev_default(monkeypatch):
+    import importlib
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://t/t")
+    import src.router as router
+    importlib.reload(router)
+
+    client = TestClient(router.app, raise_server_exceptions=False)
+    ok = client.options("/sast/settings", headers={
+        "Origin": "https://app.example.com", "Access-Control-Request-Method": "GET"})
+    assert ok.headers.get("access-control-allow-origin") == "https://app.example.com"
+
+    # A deployed instance must not keep the loopback convenience.
+    dev = client.options("/sast/settings", headers={
+        "Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"})
+    assert dev.headers.get("access-control-allow-origin") is None

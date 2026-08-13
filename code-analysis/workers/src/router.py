@@ -49,6 +49,12 @@ _HOP_BY_HOP = {
 async def lifespan(app: FastAPI):
     app.state.client = httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT_SECONDS)
     print(f"[*] router listening; {len(SERVICES)} services registered")
+    if _configured:
+        print(f"[*] CORS: {', '.join(_configured)}")
+    else:
+        print(f"[*] CORS: no CORS_ALLOW_ORIGINS set, allowing local dev only "
+              f"({', '.join(DEV_ORIGINS)}). Set it for any other origin, or the "
+              f"browser will block requests and report a network error.")
     try:
         yield
     finally:
@@ -66,15 +72,23 @@ app = FastAPI(
 )
 register_error_handlers(app)
 
-_origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
-if _origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
-    )
+# Local dev origins are allowed by default. Without CORS the browser blocks every
+# request and reports it as an opaque network error, which is indistinguishable
+# from the service being down — so an unset variable used to look like a broken
+# service. Defaulting to loopback only keeps that convenience local: a deployed
+# instance must still name its origins.
+DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+_configured = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+_origins = _configured or DEV_ORIGINS
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 async def _forward(request: Request, target_base: str, path: str) -> Response:
