@@ -265,10 +265,24 @@ export function SonarQubeSettingsPanel() {
         />
       </div>
 
-      <p className="text-xs text-text-muted">
-        The authentication token is not stored here. It is read from the secret store at scan time —
-        the service refuses to persist credentials in settings.
-      </p>
+      {/* Three components address the same server under three different names.
+          Until they are unified, saying so here is the only thing that stops a
+          reader pointing this at one host and browsing rules from another. */}
+      <div className="space-y-2 rounded-card border border-border bg-background/40 p-4 text-xs text-text-muted">
+        <p>
+          <span className="font-medium text-text">The token is not stored here.</span> It is read
+          from the secret store when a scan runs — the service refuses to persist credentials in
+          settings.
+        </p>
+        <p>
+          <span className="font-medium text-text">This host applies to scans only.</span> Browsing
+          quality profiles and rules under <em>SonarQube Rules</em> goes through the backend, which
+          reads <code className="rounded bg-card px-1 py-0.5">SONARQUBE_URL</code> and{" "}
+          <code className="rounded bg-card px-1 py-0.5">SONARQUBE_TOKEN</code> from its own
+          environment. Point both at the same server, or the rules you browse will not be the rules
+          your scans run.
+        </p>
+      </div>
 
       <SaveRow saving={saving} dirty={dirty} onSave={save} />
     </div>

@@ -44,6 +44,24 @@ against customer repositories.
 the pg-boss client verified against a real v12 schema, consuming a job enqueued
 by the JavaScript client.
 
+### Open — SonarQube is configured in three places
+
+One server, three names, no cross-check:
+
+| Component | Reads | Used for |
+| --------- | ----- | -------- |
+| Fastify backend | `SONARQUBE_URL` / `SONARQUBE_TOKEN` | Browsing quality profiles and the rule catalogue |
+| SAST service | `SONAR_HOST_URL` / `SONAR_TOKEN` | Running the scanner and fetching issues |
+| `engine_settings` | `hostUrl` (per tenant) | Overrides the SAST service's host |
+
+Nothing reconciles them, so a tenant can browse rules on one server while scans
+run against another and neither surface says a word. Both panels now name the
+variable they actually read, which makes the split visible rather than fixing it.
+
+The resolution is for `engine_settings.hostUrl` to be the single source of truth
+and the backend to read it, with the environment values as fallback only. That is
+a backend change and has not been made.
+
 ### Still open — these block cutover
 
 1. **§8.6 engine sandboxing.** semgrep, sonar-scanner and codeql execute against

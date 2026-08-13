@@ -94,7 +94,29 @@ export default function SonarQubeRulesPanel() {
   };
 
   if (loading) return <PageLoading />;
-  if (error && profiles.length === 0) return <div className="bg-card rounded-xl border border-border p-6 text-center"><p className="text-sm text-danger-500">{error}</p><p className="text-xs text-text-muted mt-2">Check that SonarQubeUrl and SonarQubeToken secrets are configured correctly.</p></div>;
+  // Rule browsing goes through the Fastify backend, which reads its own
+  // environment — not the per-tenant host in SonarQube Settings, and not the
+  // SAST service's SONAR_HOST_URL. Naming the real variables matters: the
+  // previous copy pointed at "SonarQubeUrl"/"SonarQubeToken", which exist
+  // nowhere, so anyone following it went looking for settings that do not exist.
+  if (error && profiles.length === 0)
+    return (
+      <div className="rounded-xl border border-border bg-card p-6">
+        <p className="text-sm text-danger-500">{error}</p>
+        <p className="mt-2 text-sm text-text-muted">
+          Browsing quality profiles and rules reads{" "}
+          <code className="rounded bg-background px-1 py-0.5 text-xs">SONARQUBE_URL</code> and{" "}
+          <code className="rounded bg-background px-1 py-0.5 text-xs">SONARQUBE_TOKEN</code> from
+          the backend environment. Set both in the root{" "}
+          <code className="rounded bg-background px-1 py-0.5 text-xs">.env</code> and restart the
+          backend.
+        </p>
+        <p className="mt-2 text-sm text-text-muted">
+          If you do not run a SonarQube server, turn SonarQube off in the header above and this
+          section disappears.
+        </p>
+      </div>
+    );
 
   return (
     <div className="space-y-4">
