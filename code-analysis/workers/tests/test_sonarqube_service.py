@@ -59,7 +59,7 @@ def test_run_sonar_scanner(mock_run, mock_which):
 
 @pytest.mark.asyncio
 @patch("src.services.sonarqube.service.asyncio.to_thread")
-@patch("src.services.sonarqube.service.get_cloudflare_secret")
+@patch("src.services.sonarqube.service.first_secret")
 async def test_process_job_publishes_ok_result(mock_secret, mock_to_thread, published, finding):
     mock_secret.side_effect = ["http://localhost", "token"]
     mock_to_thread.return_value = None
@@ -76,7 +76,7 @@ async def test_process_job_publishes_ok_result(mock_secret, mock_to_thread, publ
 
 
 @pytest.mark.asyncio
-@patch("src.services.sonarqube.service.get_cloudflare_secret")
+@patch("src.services.sonarqube.service.first_secret")
 async def test_process_job_publishes_failed_status_on_error(mock_secret, published):
     mock_secret.side_effect = ValueError("Secret 'SONAR_TOKEN' not found")
 

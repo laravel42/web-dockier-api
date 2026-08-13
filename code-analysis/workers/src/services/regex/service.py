@@ -2,10 +2,13 @@ import os
 import shutil
 import tempfile
 import asyncio
+from fnmatch import fnmatch
+from typing import Optional
 from src.services.base import EnginePublisher
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.rules_repo import compile_rules, load_custom_rules, matches_extension
 from src.infrastructure.sensitive_data import run_sensitive_data_scan
+from src.infrastructure.engine_settings import get_settings
 from src.infrastructure.scan_skip import (
     MAX_SOURCE_FILE_BYTES,
     is_generated_asset_name,
@@ -17,7 +20,9 @@ from src.infrastructure.scan_skip import (
 class RegexService(EnginePublisher):
     engine_name = "regex"
 
-    def run_scan(self, repo_path: str, rules: list, scan_sensitive: bool = True) -> list:
+    def run_scan(self, repo_path: str, rules: list, scan_sensitive: bool = True,
+                 max_file_bytes: int = MAX_SOURCE_FILE_BYTES,
+                 extra_excludes: Optional[list] = None) -> list:
         findings = []
         # Collected during the same walk: reading the tree twice for two
         # pattern scanners is wasted IO on large repos.
@@ -36,13 +41,16 @@ class RegexService(EnginePublisher):
 
                 if is_scan_skipped_relative_path(rel_path):
                     continue
+                # Tenant globs narrow further; they never widen what is scanned.
+                if any(fnmatch(rel_path, g) for g in (extra_excludes or [])):
+                    continue
                 # Published vendor bundles live in ordinary directories such as
                 # public/, so name-based detection is needed on top of pruning.
                 if is_generated_asset_name(file):
                     continue
 
                 try:
-                    if os.path.getsize(file_path) > MAX_SOURCE_FILE_BYTES:
+                    if os.path.getsize(file_path) > max_file_bytes:
                         continue
 
                     with open(file_path, "r", encoding="utf-8") as f:
@@ -91,8 +99,14 @@ class RegexService(EnginePublisher):
         scratch_dir = tempfile.mkdtemp()
         
         try:
+            settings = await get_settings(message.get("tenant_id") or "", "regex")
             options = message.get("options") or {}
-            if options.get("enable_custom_rules") is False:
+            if not settings.get("enabled", True):
+                print(f"[*] RegexService: disabled in settings for {job_id}")
+                await self._publish(job_id, scan_id, [], "ok")
+                return
+
+            if options.get("enable_custom_rules") is False or not settings.get("customRules", True):
                 print(f"[*] RegexService: custom rules disabled for {job_id}, skipping")
                 rules = []
             else:
@@ -105,10 +119,14 @@ class RegexService(EnginePublisher):
                           "(has the backend's seedCustomRules() run?)")
                 rules = compile_rules(raw_rules)
 
-            scan_sensitive = options.get("enable_sensitive_data") is not False
+            scan_sensitive = (options.get("enable_sensitive_data") is not False
+                              and settings.get("sensitiveData", True))
 
             await asyncio.to_thread(download_codebase, uri, scratch_dir)
-            findings = await asyncio.to_thread(self.run_scan, scratch_dir, rules, scan_sensitive)
+            findings = await asyncio.to_thread(
+                self.run_scan, scratch_dir, rules, scan_sensitive,
+                settings.get("maxFileBytes", MAX_SOURCE_FILE_BYTES),
+                settings.get("extraExcludes") or [])
             
             await self._publish(job_id, scan_id, findings, "ok")
             print(f"[*] RegexService: Finished {job_id} with {len(findings)} findings.")

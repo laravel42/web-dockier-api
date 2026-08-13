@@ -30,6 +30,23 @@ CODEQL_LANGUAGES = ["python", "javascript", "go", "ruby", "java", "csharp", "cpp
 CODEQL_SUITES = ["security-and-quality", "security-extended", "code-scanning"]
 
 DEFAULTS: Dict[str, Dict[str, Any]] = {
+    "semgrep": {
+        "enabled": True,
+        # Seconds a single rule may spend on one file, and the whole scan.
+        "ruleTimeoutSeconds": 30,
+        "scanTimeoutSeconds": 1800,
+        # Files above this are not analysed. Minified bundles blow past it.
+        "maxTargetBytes": 2_000_000,
+        "extraExcludes": [],
+    },
+    "regex": {
+        "enabled": True,
+        # The two pattern scanners that share the regex engine's tree walk.
+        "customRules": True,
+        "sensitiveData": True,
+        "maxFileBytes": 2 * 1024 * 1024,
+        "extraExcludes": [],
+    },
     "sonarqube": {
         "enabled": True,
         "hostUrl": "",

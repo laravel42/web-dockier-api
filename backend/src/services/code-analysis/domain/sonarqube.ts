@@ -43,9 +43,22 @@ interface SonarApiIssue {
   textRange?: { startLine?: number; endLine?: number };
 }
 
+/**
+ * Resolve the SonarQube server, accepting either naming.
+ *
+ * The standalone SAST service (code-analysis/workers) has always read
+ * SONAR_HOST_URL / SONAR_TOKEN, while this backend read SONARQUBE_URL /
+ * SONARQUBE_TOKEN. One server under two names meant an operator could configure
+ * scanning and rule browsing against different servers without either surface
+ * noticing. Both pairs now work here, so a single pair configures the whole
+ * platform; SONARQUBE_* wins when both are set.
+ *
+ * Per-tenant overrides live in `engine_settings.hostUrl` and apply to scans
+ * only — this function is process-wide and has no tenant in scope.
+ */
 export function getSonarConfig(): SonarConfig | null {
-  const baseUrl = process.env.SONARQUBE_URL?.trim();
-  const token = process.env.SONARQUBE_TOKEN?.trim();
+  const baseUrl = process.env.SONARQUBE_URL?.trim() || process.env.SONAR_HOST_URL?.trim();
+  const token = process.env.SONARQUBE_TOKEN?.trim() || process.env.SONAR_TOKEN?.trim();
   if (!baseUrl || !token) return null;
   return { baseUrl, token };
 }
@@ -294,7 +307,7 @@ export async function runSonarScanner(
 
   const config = getSonarConfig();
   if (!config) {
-    log("SonarQube not configured (SONARQUBE_URL/SONARQUBE_TOKEN missing), skipping");
+    log("SonarQube not configured (set SONARQUBE_URL and SONARQUBE_TOKEN), skipping");
     return [];
   }
 

@@ -141,7 +141,28 @@ export interface CodeQLSettings {
   timeoutSeconds: number;
 }
 
+export interface SemgrepSettings {
+  enabled: boolean;
+  ruleTimeoutSeconds: number;
+  scanTimeoutSeconds: number;
+  /** Files larger than this are not analysed. Minified bundles blow past it. */
+  maxTargetBytes: number;
+  /** Added to the built-in dependency and build globs, never instead of them. */
+  extraExcludes: string[];
+}
+
+export interface RegexSettings {
+  enabled: boolean;
+  /** The two pattern scanners share one walk but switch independently. */
+  customRules: boolean;
+  sensitiveData: boolean;
+  maxFileBytes: number;
+  extraExcludes: string[];
+}
+
 export interface EngineSettings {
+  semgrep: SemgrepSettings;
+  regex: RegexSettings;
   sonarqube: SonarQubeSettings;
   codeql: CodeQLSettings;
 }

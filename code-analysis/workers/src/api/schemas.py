@@ -111,6 +111,25 @@ class FindingsResponse(ApiModel):
     counts: FindingCounts
 
 
+class SemgrepSettings(ApiModel):
+    enabled: bool = True
+    rule_timeout_seconds: int = Field(default=30, ge=5, le=600)
+    scan_timeout_seconds: int = Field(default=1800, ge=60, le=21600)
+    max_target_bytes: int = Field(default=2_000_000, ge=10_000, le=50_000_000)
+    # Appended to the built-in dependency and build globs, never instead of them.
+    extra_excludes: List[str] = Field(default_factory=list, max_length=100)
+
+
+class RegexSettings(ApiModel):
+    """The engine that runs custom rules and sensitive-data classification in
+    one pass over the tree. Either half can be switched off independently."""
+    enabled: bool = True
+    custom_rules: bool = True
+    sensitive_data: bool = True
+    max_file_bytes: int = Field(default=2 * 1024 * 1024, ge=10_000, le=50_000_000)
+    extra_excludes: List[str] = Field(default_factory=list, max_length=100)
+
+
 class SonarQubeSettings(ApiModel):
     """SonarQube configuration. The token is deliberately absent — it lives in
     the secret store, and the table rejects credential-shaped keys."""
@@ -144,11 +163,13 @@ class CodeQLSettings(ApiModel):
 
 
 class EngineSettingsResponse(ApiModel):
-    engine: Literal["sonarqube", "codeql"]
+    engine: Literal["semgrep", "regex", "sonarqube", "codeql"]
     config: Dict[str, Any]
 
 
 class AllEngineSettingsResponse(ApiModel):
+    semgrep: SemgrepSettings
+    regex: RegexSettings
     sonarqube: SonarQubeSettings
     codeql: CodeQLSettings
 

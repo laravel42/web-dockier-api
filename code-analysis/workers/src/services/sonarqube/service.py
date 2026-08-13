@@ -10,7 +10,7 @@ from src.infrastructure.scan_skip import sonar_exclusion_globs
 from src.infrastructure.rules_repo import load_disabled_rule_ids
 from src.infrastructure.engine_settings import get_settings
 from src.infrastructure.storage import download_codebase
-from src.infrastructure.secret_manager import get_cloudflare_secret
+from src.infrastructure.secret_manager import first_secret
 
 # Sonar analysis is asynchronous server-side: sonar-scanner uploads a report and
 # returns, then the Compute Engine processes it. The previous implementation slept
@@ -164,8 +164,12 @@ class SonarQubeService(EnginePublisher):
             disabled = await load_disabled_rule_ids(message.get("tenant_id"), "sonarqube")
             # A stored host wins over the environment: it is the tenant's own
             # server, and the env value is only a deployment-wide fallback.
-            sonar_url = settings.get("hostUrl") or await get_cloudflare_secret("SONAR_HOST_URL")
-            sonar_token = await get_cloudflare_secret("SONAR_TOKEN")
+            # Same server, historically two namings: this service used SONAR_*
+            # and the backend SONARQUBE_*. Both are accepted on both sides now,
+            # so one pair configures the whole platform.
+            sonar_url = settings.get("hostUrl") or await first_secret(
+                "SONARQUBE_URL", "SONAR_HOST_URL")
+            sonar_token = await first_secret("SONARQUBE_TOKEN", "SONAR_TOKEN")
             project_key = f"dockier_{scan_id}"
             
             await asyncio.to_thread(download_codebase, uri, scratch_dir)

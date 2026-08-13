@@ -3,12 +3,14 @@ import shutil
 import tempfile
 import subprocess
 import asyncio
+from typing import Optional
 
 from src.infrastructure.paths import get_rules_dir
 from src.services.base import EnginePublisher
 from src.infrastructure.scan_analysis import normalize_semgrep_rule_id, to_repo_relative_path
 from src.infrastructure.scan_skip import semgrep_exclude_args, write_semgrep_ignore
 from src.infrastructure.rules_repo import load_disabled_rule_ids
+from src.infrastructure.engine_settings import get_settings
 from src.infrastructure.storage import download_codebase
 
 # A single pathological rule/file pair can hang for minutes; bound both the
@@ -22,7 +24,11 @@ MAX_TARGET_BYTES = 2_000_000
 class SemgrepService(EnginePublisher):
     engine_name = "semgrep"
 
-    def run_scan(self, repo_path: str, disabled_rule_ids: set = frozenset()) -> list:
+    def run_scan(self, repo_path: str, disabled_rule_ids: set = frozenset(),
+                 rule_timeout: int = RULE_TIMEOUT_SECONDS,
+                 scan_timeout: int = SCAN_TIMEOUT_SECONDS,
+                 max_target_bytes: int = MAX_TARGET_BYTES,
+                 extra_excludes: Optional[list] = None) -> list:
         """Run semgrep and parse its JSON. Raises when semgrep itself failed.
 
         The blanket `except: return []` this replaces made a crashed scanner
@@ -40,13 +46,15 @@ class SemgrepService(EnginePublisher):
         cmd = [
             "semgrep", "scan", "--json", "--quiet",
             "--config", get_rules_dir(),
-            "--timeout", str(RULE_TIMEOUT_SECONDS),
-            "--max-target-bytes", str(MAX_TARGET_BYTES),
+            "--timeout", str(rule_timeout),
+            "--max-target-bytes", str(max_target_bytes),
             *semgrep_exclude_args(),
+            # Tenant excludes are added to the built-in ones, never substituted.
+            *[arg for glob in (extra_excludes or []) for arg in ("--exclude", glob)],
             repo_path,
         ]
         result = subprocess.run(
-            cmd, capture_output=True, text=True, check=False, timeout=SCAN_TIMEOUT_SECONDS
+            cmd, capture_output=True, text=True, check=False, timeout=scan_timeout
         )
 
         if not result.stdout.strip():
@@ -90,15 +98,23 @@ class SemgrepService(EnginePublisher):
         scratch_dir = tempfile.mkdtemp()
         
         try:
+            settings = await get_settings(message.get("tenant_id") or "", "semgrep")
             options = message.get("options") or {}
-            if options.get("enable_semgrep") is False:
+            # Either switch turns the engine off: the per-scan option and the
+            # tenant's standing setting.
+            if options.get("enable_semgrep") is False or not settings.get("enabled", True):
                 print(f"[*] SemgrepService: disabled for {job_id}, reporting no findings")
                 await self._publish(job_id, scan_id, [], "ok", None)
                 return
 
             disabled = await load_disabled_rule_ids(message.get("tenant_id"), "semgrep")
             await asyncio.to_thread(download_codebase, uri, scratch_dir)
-            findings = await asyncio.to_thread(self.run_scan, scratch_dir, disabled)
+            findings = await asyncio.to_thread(
+                self.run_scan, scratch_dir, disabled,
+                settings.get("ruleTimeoutSeconds", RULE_TIMEOUT_SECONDS),
+                settings.get("scanTimeoutSeconds", SCAN_TIMEOUT_SECONDS),
+                settings.get("maxTargetBytes", MAX_TARGET_BYTES),
+                settings.get("extraExcludes") or [])
             
             await self._publish(job_id, scan_id, findings, "ok")
             print(f"[*] SemgrepService: Finished {job_id} with {len(findings)} findings.")

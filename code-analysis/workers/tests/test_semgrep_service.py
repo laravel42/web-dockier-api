@@ -5,6 +5,15 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from src.services.semgrep.service import SemgrepService
 
 
+@pytest.fixture(autouse=True)
+def _stubbed_settings():
+    """process_job reads per-tenant engine settings; give it the defaults."""
+    from src.infrastructure.engine_settings import DEFAULTS
+    with patch("src.services.semgrep.service.get_settings", new_callable=AsyncMock) as g:
+        g.return_value = dict(DEFAULTS["semgrep"])
+        yield g
+
+
 def _service():
     return SemgrepService()
 
@@ -138,3 +147,33 @@ def test_scan_is_configured_and_bounded(mock_run, tmp_path):
     assert "--config" in argv, "without --config semgrep falls back to the registry"
     assert "--timeout" in argv and "--max-target-bytes" in argv
     assert mock_run.call_args[1]["timeout"] > 0
+
+
+@pytest.mark.asyncio
+async def test_disabled_in_settings_reports_ok(published, _stubbed_settings):
+    _stubbed_settings.return_value = {"enabled": False}
+    await _service().process_job({"uri": "s3://t/t.zip", "job_id": "j", "scan_id": "s"})
+    body = published[0][1]
+    assert body["status"] == "ok" and body["findings"] == []
+
+
+@patch("src.services.semgrep.service.subprocess.run")
+def test_tenant_excludes_are_appended(mock_run, tmp_path):
+    """Built-in dependency globs are not the tenant's to remove."""
+    mock_run.return_value = MagicMock(stdout=json.dumps({"results": []}), stderr="", returncode=0)
+    SemgrepService().run_scan(str(tmp_path), extra_excludes=["**/fixtures/**"])
+
+    argv = mock_run.call_args[0][0]
+    assert "node_modules/" in argv, "built-in excludes must survive"
+    assert "**/fixtures/**" in argv, "tenant excludes must be added"
+
+
+@patch("src.services.semgrep.service.subprocess.run")
+def test_settings_drive_the_limits(mock_run, tmp_path):
+    mock_run.return_value = MagicMock(stdout=json.dumps({"results": []}), stderr="", returncode=0)
+    SemgrepService().run_scan(str(tmp_path), rule_timeout=7, scan_timeout=99, max_target_bytes=4242)
+
+    argv = mock_run.call_args[0][0]
+    assert argv[argv.index("--timeout") + 1] == "7"
+    assert argv[argv.index("--max-target-bytes") + 1] == "4242"
+    assert mock_run.call_args[1]["timeout"] == 99

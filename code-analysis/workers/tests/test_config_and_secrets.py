@@ -66,3 +66,33 @@ async def test_secret_manager_makes_no_network_calls(monkeypatch):
     import src.infrastructure.secret_manager as sm
     assert not hasattr(sm, "httpx"), "secret manager should not import an HTTP client"
     assert await get_cloudflare_secret("X") == "y"
+
+
+@pytest.mark.asyncio
+async def test_first_secret_prefers_the_earlier_name(monkeypatch):
+    """One server, two historical variable names — either configures it."""
+    from src.infrastructure.secret_manager import first_secret
+    clear_secret_cache()
+    monkeypatch.setenv("SONARQUBE_URL", "https://new")
+    monkeypatch.setenv("SONAR_HOST_URL", "https://legacy")
+    assert await first_secret("SONARQUBE_URL", "SONAR_HOST_URL") == "https://new"
+
+
+@pytest.mark.asyncio
+async def test_first_secret_falls_back(monkeypatch):
+    from src.infrastructure.secret_manager import first_secret
+    clear_secret_cache()
+    monkeypatch.delenv("SONARQUBE_URL", raising=False)
+    monkeypatch.setenv("SONAR_HOST_URL", "https://legacy")
+    assert await first_secret("SONARQUBE_URL", "SONAR_HOST_URL") == "https://legacy"
+
+
+@pytest.mark.asyncio
+async def test_first_secret_error_names_every_variable(monkeypatch):
+    """Nobody should have to guess which of several names this caller wanted."""
+    from src.infrastructure.secret_manager import first_secret
+    clear_secret_cache()
+    for n in ("SONARQUBE_TOKEN", "SONAR_TOKEN"):
+        monkeypatch.delenv(n, raising=False)
+    with pytest.raises(ValueError, match="SONARQUBE_TOKEN, SONAR_TOKEN"):
+        await first_secret("SONARQUBE_TOKEN", "SONAR_TOKEN")

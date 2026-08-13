@@ -15,8 +15,9 @@ from src.api.auth import AuthContext, require_auth
 from src.api.errors import ApiError
 from src.api.schemas import (
     AllEngineSettingsResponse, CodeQLSettings, EngineSettingsResponse, FindingCounts,
-    FindingItem, FindingsResponse, HealthResponse, QueueDepth, RunScanRequest,
-    RunScanResponse, ScanStatusResponse, SonarQubeSettings,
+    FindingItem, FindingsResponse, HealthResponse, QueueDepth, RegexSettings,
+    RunScanRequest, RunScanResponse, ScanStatusResponse, SemgrepSettings,
+    SonarQubeSettings,
 )
 from src.infrastructure import engine_settings
 from src.infrastructure import queue
@@ -186,7 +187,12 @@ async def list_findings(
 
 # ── Engine settings ────────────────────────────────────────────────────────
 
-SETTINGS_MODELS = {"sonarqube": SonarQubeSettings, "codeql": CodeQLSettings}
+SETTINGS_MODELS = {
+    "semgrep": SemgrepSettings,
+    "regex": RegexSettings,
+    "sonarqube": SonarQubeSettings,
+    "codeql": CodeQLSettings,
+}
 
 
 @router.get(
@@ -199,10 +205,9 @@ SETTINGS_MODELS = {"sonarqube": SonarQubeSettings, "codeql": CodeQLSettings}
 )
 async def get_all_settings(auth: AuthContext = Depends(require_auth)) -> AllEngineSettingsResponse:
     stored = await engine_settings.get_all_settings(auth.tenant_id)
-    return AllEngineSettingsResponse.model_validate({
-        "sonarqube": stored["sonarqube"],
-        "codeql": stored["codeql"],
-    })
+    return AllEngineSettingsResponse.model_validate(
+        {engine: stored[engine] for engine in SETTINGS_MODELS}
+    )
 
 
 @router.put(

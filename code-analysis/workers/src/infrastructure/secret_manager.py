@@ -29,3 +29,19 @@ async def get_cloudflare_secret(secret_name: str) -> str:
 
 def clear_secret_cache() -> None:
     _cache.clear()
+
+
+async def first_secret(*names: str) -> str:
+    """Return the first of `names` that is set.
+
+    Exists because one service is addressed under more than one variable name
+    across the platform. Trying each in order lets a single environment satisfy
+    every component, and the error names all of them so nobody has to guess
+    which one this caller wanted.
+    """
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            _cache[name] = value
+            return value
+    raise ValueError(f"None of {', '.join(names)} is set in the environment")

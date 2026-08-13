@@ -213,3 +213,38 @@ describe("runSonarScanner", () => {
     rmSync(repoDir, { recursive: true, force: true });
   });
 });
+
+describe("getSonarConfig — variable naming", () => {
+  const saved = { ...process.env };
+  afterEach(() => { process.env = { ...saved }; });
+
+  it("accepts the SAST service's naming so one pair configures the platform", () => {
+    delete process.env.SONARQUBE_URL;
+    delete process.env.SONARQUBE_TOKEN;
+    process.env.SONAR_HOST_URL = "https://sonar.example.com";
+    process.env.SONAR_TOKEN = "squ_legacy";
+
+    expect(getSonarConfig()).toEqual({
+      baseUrl: "https://sonar.example.com",
+      token: "squ_legacy",
+    });
+  });
+
+  it("prefers SONARQUBE_* when both namings are present", () => {
+    process.env.SONARQUBE_URL = "https://new.example.com";
+    process.env.SONARQUBE_TOKEN = "squ_new";
+    process.env.SONAR_HOST_URL = "https://old.example.com";
+    process.env.SONAR_TOKEN = "squ_old";
+
+    expect(getSonarConfig()).toEqual({ baseUrl: "https://new.example.com", token: "squ_new" });
+  });
+
+  it("stays unconfigured when a naming is only half present", () => {
+    delete process.env.SONARQUBE_URL;
+    delete process.env.SONARQUBE_TOKEN;
+    delete process.env.SONAR_TOKEN;
+    process.env.SONAR_HOST_URL = "https://sonar.example.com";
+
+    expect(getSonarConfig()).toBeNull();
+  });
+});

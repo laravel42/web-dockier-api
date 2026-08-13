@@ -1,8 +1,8 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
 import type {
-  CodeQLSettings, EngineName, EngineSettings, SastFindingsPage, SastHealth,
-  SastRunResponse, SastScanOptions, SastScanState, SastSeverity, SonarQubeSettings,
+  EngineName, EngineSettings, SastFindingsPage, SastHealth, SastRunResponse,
+  SastScanOptions, SastScanState, SastSeverity,
 } from "../types/sast";
 
 /**
@@ -86,10 +86,7 @@ export const sastApi = {
    * The body must not contain a token, secret, password or apiKey — the service
    * returns 422 SECRET_NOT_ALLOWED rather than storing a credential.
    */
-  saveSettings: <E extends EngineName>(
-    engine: E,
-    config: E extends "sonarqube" ? SonarQubeSettings : CodeQLSettings,
-  ) =>
+  saveSettings: <E extends EngineName>(engine: E, config: EngineSettings[E]) =>
     request<{ engine: E; config: EngineSettings[E] }>(
       `/sast/settings/${engine}`,
       { method: "PUT", body: JSON.stringify(config), baseUrl: SAST_BASE },

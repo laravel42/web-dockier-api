@@ -16,7 +16,10 @@ import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
 import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
 import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
-import { CodeQLSettingsPanel, SonarQubeSettingsPanel } from "./sections/EngineSettingsPanels";
+import {
+  CodeQLSettingsPanel, CustomRulesSettingsPanel, SemgrepSettingsPanel,
+  SonarQubeSettingsPanel,
+} from "./sections/EngineSettingsPanels";
 import { severityDotCls } from "./sections/shared";
 
 // ─── Types ───
@@ -159,7 +162,7 @@ export default function SecurityRulesTab() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-semibold text-text">Security Tools</p>
-            <p className="text-xs text-text-muted mt-0.5">Manage tools and rules used during security scans.</p>
+            <p className="text-xs text-text-muted mt-0.5">Rules run during a scan, and how each engine is configured.</p>
           </div>
           {toolMessage && <span className="text-xs text-primary-500 font-medium">{toolMessage}</span>}
         </div>
@@ -183,7 +186,8 @@ export default function SecurityRulesTab() {
         // listing its rules — those stay reachable even when the engine's own
         // scan toggle is off, since turning it back on is done from there.
         const sources: Array<{
-          key: "custom" | "sonarqube" | "semgrep" | "sonarqube-settings" | "codeql-settings";
+          key: "custom" | "sonarqube" | "semgrep"
+             | "semgrep-settings" | "custom-settings" | "sonarqube-settings" | "codeql-settings";
           label: string;
           toolKey: string | null;
         }> = [
@@ -191,6 +195,8 @@ export default function SecurityRulesTab() {
           { key: "custom", label: "Custom Rules", toolKey: "customRules" },
           // Reachable at last: the panel existed but no entry ever pointed at it.
           { key: "sonarqube", label: "SonarQube Rules", toolKey: "sonarqube" },
+          { key: "semgrep-settings", label: "Semgrep Settings", toolKey: null },
+          { key: "custom-settings", label: "Custom Rule Settings", toolKey: null },
           { key: "sonarqube-settings", label: "SonarQube Settings", toolKey: null },
           { key: "codeql-settings", label: "CodeQL Settings", toolKey: null },
         ];
@@ -226,7 +232,11 @@ export default function SecurityRulesTab() {
               )}
             </div>
 
-            {effectiveSource === "sonarqube-settings" ? (
+            {effectiveSource === "semgrep-settings" ? (
+              <SemgrepSettingsPanel />
+            ) : effectiveSource === "custom-settings" ? (
+              <CustomRulesSettingsPanel />
+            ) : effectiveSource === "sonarqube-settings" ? (
               <SonarQubeSettingsPanel />
             ) : effectiveSource === "codeql-settings" ? (
               <CodeQLSettingsPanel />

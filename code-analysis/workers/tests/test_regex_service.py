@@ -6,6 +6,15 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from src.services.regex.service import RegexService
 
 
+@pytest.fixture(autouse=True)
+def _stubbed_settings():
+    """process_job reads per-tenant engine settings; give it the defaults."""
+    from src.infrastructure.engine_settings import DEFAULTS
+    with patch("src.services.regex.service.get_settings", new_callable=AsyncMock) as g:
+        g.return_value = dict(DEFAULTS["regex"])
+        yield g
+
+
 def _service():
     return RegexService()
 
@@ -96,3 +105,51 @@ async def test_process_job_publishes_failed_status_on_error(mock_to_thread, mock
     body = published[0][1]
     assert body["status"] == "failed"
     assert "boom" in body["error"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_in_settings_reports_ok(published, _stubbed_settings):
+    _stubbed_settings.return_value = {"enabled": False}
+    await _service().process_job({"uri": "s3://t/t.zip", "job_id": "j", "scan_id": "s"})
+    body = published[0][1]
+    assert body["status"] == "ok" and body["findings"] == []
+
+
+def test_tenant_excludes_narrow_the_walk(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "fixtures").mkdir()
+    (tmp_path / "src" / "a.py").write_text("hashlib.md5()\n")
+    (tmp_path / "fixtures" / "b.py").write_text("hashlib.md5()\n")
+
+    findings = RegexService().run_scan(
+        str(tmp_path), _rules(), scan_sensitive=False, extra_excludes=["fixtures/*"])
+
+    assert [f["file_path"] for f in findings] == ["src/a.py"]
+
+
+def test_file_size_cap_is_honoured(tmp_path):
+    (tmp_path / "big.py").write_text("hashlib.md5()\n" + "x" * 5000)
+    assert RegexService().run_scan(str(tmp_path), _rules(), False, max_file_bytes=100) == []
+
+
+@pytest.mark.asyncio
+@patch("src.services.regex.service.load_custom_rules", new_callable=AsyncMock)
+@patch("src.services.regex.service.asyncio.to_thread")
+async def test_sensitive_data_can_be_switched_off_alone(mock_thread, mock_rules, published,
+                                                        _stubbed_settings):
+    """The two pattern scanners share a walk but are independently switchable."""
+    _stubbed_settings.return_value = {"enabled": True, "customRules": True,
+                                      "sensitiveData": False, "maxFileBytes": 1000,
+                                      "extraExcludes": []}
+    mock_rules.return_value = []
+    captured = {}
+
+    async def runner(func, *args, **kwargs):
+        if getattr(func, "__name__", "") == "run_scan":
+            captured["scan_sensitive"] = args[2]
+            return []
+        return None
+    mock_thread.side_effect = runner
+
+    await _service().process_job({"uri": "s3://t/t.zip", "job_id": "j", "scan_id": "s"})
+    assert captured["scan_sensitive"] is False

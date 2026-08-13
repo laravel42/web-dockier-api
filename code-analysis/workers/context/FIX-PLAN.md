@@ -44,23 +44,25 @@ against customer repositories.
 the pg-boss client verified against a real v12 schema, consuming a job enqueued
 by the JavaScript client.
 
-### Open — SonarQube is configured in three places
+### SonarQube configuration — resolved, with one caveat
 
-One server, three names, no cross-check:
+Both components now accept **either** naming, so a single environment pair
+configures the whole platform:
 
 | Component | Reads | Used for |
 | --------- | ----- | -------- |
-| Fastify backend | `SONARQUBE_URL` / `SONARQUBE_TOKEN` | Browsing quality profiles and the rule catalogue |
-| SAST service | `SONAR_HOST_URL` / `SONAR_TOKEN` | Running the scanner and fetching issues |
-| `engine_settings` | `hostUrl` (per tenant) | Overrides the SAST service's host |
+| Fastify backend | `SONARQUBE_URL`/`TOKEN`, falling back to `SONAR_HOST_URL`/`SONAR_TOKEN` | Browsing profiles and rules |
+| SAST service | `SONARQUBE_URL`/`TOKEN`, falling back to `SONAR_HOST_URL`/`SONAR_TOKEN` | Running scans |
+| `engine_settings.hostUrl` | per tenant | Overrides the host **for scans only** |
 
-Nothing reconciles them, so a tenant can browse rules on one server while scans
-run against another and neither surface says a word. Both panels now name the
-variable they actually read, which makes the split visible rather than fixing it.
+**Caveat that remains.** A tenant-level `hostUrl` still applies only to scanning;
+rule browsing is process-wide, because `listSonarProfiles` and friends take no
+tenant and threading one through would touch four functions and their routes.
+So a tenant pointing scans at their own server still browses the deployment's
+rule catalogue. The settings panel says so in as many words.
 
-The resolution is for `engine_settings.hostUrl` to be the single source of truth
-and the backend to read it, with the environment values as fallback only. That is
-a backend change and has not been made.
+Closing it properly means making the backend's Sonar helpers tenant-aware. That
+is a contained refactor, but it is a backend change and has not been made.
 
 ### Still open — these block cutover
 
