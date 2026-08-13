@@ -8,7 +8,7 @@ import Button from "@/components/ui/Button";
 import PageLoading from "@/components/ui/PageLoading";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import TechBadge from "@/components/TechBadge";
-import { TriangleAlertIcon, PlusIcon, XIcon } from "lucide-react";
+import { TriangleAlertIcon, InfoIcon, PlusIcon, XIcon } from "lucide-react";
 import type {
   CodeQLLanguage, CodeQLSettings, CodeQLSuite, EngineSettings, SonarQubeSettings,
 } from "@/types/sast";
@@ -21,6 +21,15 @@ import type {
  * that base is not configured the panels say so plainly rather than showing
  * controls that cannot save.
  */
+
+/**
+ * Vite reads .env once at startup, so a variable added to a running dev server
+ * is absent until it restarts. That produced a confusing failure — the panel
+ * called the Fastify gateway, got a 404, and reported the service unreachable —
+ * so the unconfigured case is now named separately from the unreachable one.
+ */
+const SAST_BASE = import.meta.env.VITE_SAST_API_BASE as string | undefined;
+const CONFIGURED = Boolean(SAST_BASE);
 
 const LANGUAGES: Array<{ id: CodeQLLanguage; label: string; icon: string }> = [
   { id: "python", label: "Python", icon: "python" },
@@ -40,10 +49,11 @@ const SUITES: Array<{ id: CodeQLSuite; label: string; note: string }> = [
 
 function useEngineSettings() {
   const [settings, setSettings] = useState<EngineSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(CONFIGURED);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!CONFIGURED) { setLoading(false); return; }
     const ac = new AbortController();
     sastApi
       .getSettings(ac.signal)
@@ -56,18 +66,37 @@ function useEngineSettings() {
   return { settings, setSettings, loading, error };
 }
 
-/** Shown when the service is unreachable — the panels cannot invent a state. */
+/** No base configured — a different problem from the service being down. */
+function NotConfigured() {
+  return (
+    <div className="flex gap-3 rounded-card border border-border bg-card p-4">
+      <InfoIcon className="mt-0.5 size-4 shrink-0 text-text-muted" aria-hidden />
+      <div className="text-sm">
+        <p className="font-medium text-text">SonarQube and CodeQL run in a separate service.</p>
+        <p className="mt-1 text-text-muted">
+          Set <code className="rounded bg-background px-1 py-0.5 text-xs">VITE_SAST_API_BASE</code>{" "}
+          to that service&rsquo;s router — for example{" "}
+          <code className="rounded bg-background px-1 py-0.5 text-xs">http://127.0.0.1:8000</code> —
+          then restart the dev server. Vite reads the env file once at startup, so adding the
+          variable to a running server has no effect until it is restarted.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Configured, but the call failed — the panels cannot invent a state. */
 function Unreachable({ message }: { message: string }) {
   return (
     <div className="flex gap-3 rounded-card border border-warning-500/40 bg-warning-500/5 p-4">
       <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning-500" aria-hidden />
       <div className="text-sm">
-        <p className="font-medium text-text">The SAST service is not reachable.</p>
+        <p className="font-medium text-text">The SAST service did not respond.</p>
         <p className="mt-1 text-text-muted">{message}</p>
         <p className="mt-2 text-text-muted">
-          These engines run in a standalone service. Check that it is running and that{" "}
-          <code className="rounded bg-card px-1 py-0.5 text-xs">VITE_SAST_API_BASE</code> points at
-          its router.
+          Configured base:{" "}
+          <code className="rounded bg-card px-1 py-0.5 text-xs">{SAST_BASE}</code>. Check that the
+          service is running there.
         </p>
       </div>
     </div>
@@ -111,6 +140,7 @@ export function SonarQubeSettingsPanel() {
     }
   }, [form, toast]);
 
+  if (!CONFIGURED) return <NotConfigured />;
   if (loading) return <PageLoading />;
   if (error) return <Unreachable message={error} />;
   if (!form) return null;
@@ -270,6 +300,7 @@ export function CodeQLSettingsPanel() {
     }
   }, [form, toast]);
 
+  if (!CONFIGURED) return <NotConfigured />;
   if (loading) return <PageLoading />;
   if (error) return <Unreachable message={error} />;
   if (!form) return null;

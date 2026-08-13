@@ -167,6 +167,7 @@ export default function SecurityRulesTab() {
           {([
             { key: "semgrep", name: "Semgrep" },
             { key: "customRules", name: "Custom Rules" },
+            { key: "sonarqube", name: "SonarQube" },
           ] as const).map(({ key, name }) => (
             <div key={key} className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
@@ -186,10 +187,12 @@ export default function SecurityRulesTab() {
           label: string;
           toolKey: string | null;
         }> = [
-          { key: "semgrep", label: "Semgrep", toolKey: "semgrep" },
+          { key: "semgrep", label: "Semgrep Rules", toolKey: "semgrep" },
           { key: "custom", label: "Custom Rules", toolKey: "customRules" },
-          { key: "sonarqube-settings", label: "SonarQube", toolKey: null },
-          { key: "codeql-settings", label: "CodeQL", toolKey: null },
+          // Reachable at last: the panel existed but no entry ever pointed at it.
+          { key: "sonarqube", label: "SonarQube Rules", toolKey: "sonarqube" },
+          { key: "sonarqube-settings", label: "SonarQube Settings", toolKey: null },
+          { key: "codeql-settings", label: "CodeQL Settings", toolKey: null },
         ];
         const enabled = sources.filter(s => s.toolKey === null || scanTools[s.toolKey]);
         const activeVisible = enabled.some(s => s.key === ruleSource);
@@ -201,7 +204,7 @@ export default function SecurityRulesTab() {
           <>
             <div className="flex items-center gap-2 mb-4">
               {enabled.map(s => (
-                <button key={s.key} onClick={() => setRuleSource(s.key)} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? segmentActiveCls : segmentIdleCls}`}>
+                <button key={s.key} type="button" onClick={() => setRuleSource(s.key)} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? segmentActiveCls : segmentIdleCls}`}>
                   {s.label}
                 </button>
               ))}

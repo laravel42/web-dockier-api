@@ -18,6 +18,9 @@ import type { SastFinding, SastScanState } from "@/types/sast";
  *  - any other failure degrades to one quiet line, never a broken page.
  */
 
+// Vite reads .env at startup, so a variable added to a running dev server is
+// absent until it restarts. Rendering nothing is right here either way: this
+// panel is additive to a page that already works.
 const CONFIGURED = Boolean(import.meta.env.VITE_SAST_API_BASE);
 
 const ENGINE_LABEL: Record<string, string> = {
