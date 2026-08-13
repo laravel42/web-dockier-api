@@ -7,6 +7,7 @@ import SummaryCards from "./sections/SummaryCards";
 import FindingsList from "./sections/FindingsList";
 import ScanSidebar from "./sections/ScanSidebar";
 import ScanProgressPanel from "./sections/ScanProgressPanel";
+import EngineOutcomePanel from "./sections/EngineOutcomePanel";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
@@ -83,6 +84,8 @@ export default function ScanDetail() {
             progress={core.scanProgress}
           />
         )}
+
+        <EngineOutcomePanel scanId={core.scanId} />
 
         <FindingsList
           findings={core.findings}
