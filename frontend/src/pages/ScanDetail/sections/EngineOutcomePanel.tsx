@@ -42,17 +42,20 @@ export default function EngineOutcomePanel({ scanId }: { scanId: string }) {
     if (!CONFIGURED || !scanId) return;
     const ac = new AbortController();
     setLoading(true);
+    let done = false;
     sastApi
       .getScan(scanId, ac.signal)
-      .then(setState)
+      .then((s) => { done = true; setState(s); setLoading(false); })
       .catch((e: unknown) => {
+        // An abort is not an outcome — see EngineSettingsPanels for why.
         if (ac.signal.aborted) return;
+        done = true;
         // The service not knowing this scan is an ordinary outcome.
         if ((e as { status?: number })?.status === 404) setAbsent(true);
         else setError(getErrorMessage(e));
-      })
-      .finally(() => { if (!ac.signal.aborted) setLoading(false); });
-    return () => ac.abort();
+        setLoading(false);
+      });
+    return () => { if (!done) ac.abort(); };
   }, [scanId]);
 
   const loadSuppressed = async () => {

@@ -56,12 +56,21 @@ function useEngineSettings() {
   useEffect(() => {
     if (!CONFIGURED) { setLoading(false); return; }
     const ac = new AbortController();
+    let done = false;
     sastApi
       .getSettings(ac.signal)
-      .then(setSettings)
-      .catch((e) => { if (!ac.signal.aborted) setError(getErrorMessage(e)); })
-      .finally(() => { if (!ac.signal.aborted) setLoading(false); });
-    return () => ac.abort();
+      .then((s) => { done = true; setSettings(s); setLoading(false); })
+      .catch((e) => {
+        // An abort is not an outcome. StrictMode mounts, cleans up and mounts
+        // again in development, so the first request is always aborted; ending
+        // the loading state there left settings null with no error, and the
+        // panel rendered nothing at all.
+        if (ac.signal.aborted) return;
+        done = true;
+        setError(getErrorMessage(e));
+        setLoading(false);
+      });
+    return () => { if (!done) ac.abort(); };
   }, []);
 
   return { settings, setSettings, loading, error };

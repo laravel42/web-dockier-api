@@ -72,16 +72,23 @@ export default function SecurityRulesTab() {
     });
   };
 
-  // Auto-switch rule source when current engine is disabled
+  // Auto-switch away from a rule list whose engine has been switched off.
+  //
+  // Only rule lists are gated on a scan toggle. The engine *settings* sections
+  // have no entry in toolKeyForSource, and an unmapped key made this read
+  // scanTools[undefined] — falsy — so selecting any settings section bounced
+  // straight back to Semgrep Rules, aborting the request it had just started.
   useEffect(() => {
-    if (!scanTools[toolKeyForSource[ruleSource]]) {
-      const sources = [
-        { key: "semgrep" as const, toolKey: "semgrep" },
-        { key: "custom" as const, toolKey: "customRules" },
-      ];
-      const first = sources.find(s => scanTools[s.toolKey]);
-      if (first) setRuleSource(first.key);
-    }
+    const toolKey = toolKeyForSource[ruleSource];
+    if (!toolKey || scanTools[toolKey]) return;
+
+    const sources = [
+      { key: "semgrep" as const, toolKey: "semgrep" },
+      { key: "custom" as const, toolKey: "customRules" },
+      { key: "sonarqube" as const, toolKey: "sonarqube" },
+    ];
+    const first = sources.find(s => scanTools[s.toolKey]);
+    if (first) setRuleSource(first.key);
   }, [scanTools, ruleSource]);
 
   // ─── Custom Rules state ───
