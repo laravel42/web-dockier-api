@@ -6,16 +6,19 @@ belonging to another by guessing an id. A mismatch returns 404 rather than 403 �
 confirming that an id exists is itself a disclosure.
 """
 
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, Path, Query
+from pydantic import ValidationError
 
 from src.api.auth import AuthContext, require_auth
 from src.api.errors import ApiError
 from src.api.schemas import (
-    FindingCounts, FindingItem, FindingsResponse, HealthResponse, QueueDepth,
-    RunScanRequest, RunScanResponse, ScanStatusResponse,
+    AllEngineSettingsResponse, CodeQLSettings, EngineSettingsResponse, FindingCounts,
+    FindingItem, FindingsResponse, HealthResponse, QueueDepth, RunScanRequest,
+    RunScanResponse, ScanStatusResponse, SonarQubeSettings,
 )
+from src.infrastructure import engine_settings
 from src.infrastructure import queue
 from src.infrastructure.db_client import fetch_all, fetch_row
 
@@ -179,6 +182,75 @@ async def list_findings(
             "suppressed": int(counts_row["suppressed"]) if counts_row else 0,
         }),
     )
+
+
+# ── Engine settings ────────────────────────────────────────────────────────
+
+SETTINGS_MODELS = {"sonarqube": SonarQubeSettings, "codeql": CodeQLSettings}
+
+
+@router.get(
+    "/settings",
+    response_model=AllEngineSettingsResponse,
+    summary="Configuration for every engine",
+    description="A tenant with nothing stored gets fully-populated defaults, "
+                "never a partial object.",
+    responses={401: {"description": "Unauthenticated"}},
+)
+async def get_all_settings(auth: AuthContext = Depends(require_auth)) -> AllEngineSettingsResponse:
+    stored = await engine_settings.get_all_settings(auth.tenant_id)
+    return AllEngineSettingsResponse.model_validate({
+        "sonarqube": stored["sonarqube"],
+        "codeql": stored["codeql"],
+    })
+
+
+@router.put(
+    "/settings/{engine}",
+    response_model=EngineSettingsResponse,
+    summary="Replace one engine's configuration",
+    description="The body is validated against that engine's schema, and "
+                "credential-shaped keys are rejected — tokens belong in the "
+                "secret store, not in a settings row.",
+    responses={
+        401: {"description": "Unauthenticated"},
+        404: {"description": "No such engine"},
+        422: {"description": "Invalid configuration for this engine"},
+    },
+)
+async def put_settings(
+    body: Dict[str, Any],
+    engine: str = Path(min_length=1, max_length=32),
+    auth: AuthContext = Depends(require_auth),
+) -> EngineSettingsResponse:
+    model = SETTINGS_MODELS.get(engine)
+    if model is None:
+        raise ApiError(
+            f"Unknown engine {engine!r}. Configurable: {', '.join(SETTINGS_MODELS)}.",
+            "NOT_FOUND", 404,
+        )
+
+    rejected = sorted(set(body) & engine_settings.SECRET_KEYS)
+    if rejected:
+        raise ApiError(
+            f"{', '.join(rejected)} cannot be stored here. Credentials belong in the "
+            f"secret store; this endpoint records configuration only.",
+            "SECRET_NOT_ALLOWED", 422,
+        )
+
+    # Validated then dumped by alias, so what reaches the database is exactly
+    # the camelCase document the frontend reads back. Validating by hand means
+    # the ValidationError is ours to translate: unconverted, it would reach the
+    # catch-all handler and surface as an opaque 500.
+    try:
+        validated = model.model_validate(body).model_dump(by_alias=True)
+    except ValidationError as e:
+        first = (e.errors() or [{}])[0]
+        field = ".".join(str(x) for x in first.get("loc", ()))
+        detail = first.get("msg", "Invalid configuration")
+        raise ApiError(f"{field}: {detail}" if field else detail, "VALIDATION_ERROR", 422)
+    stored = await engine_settings.save_settings(auth.tenant_id, engine, validated)
+    return EngineSettingsResponse(engine=engine, config=stored)
 
 
 @router.get(

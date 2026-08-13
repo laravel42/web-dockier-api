@@ -11,7 +11,7 @@ Field names are camelCase to match the rest of the platform's API surface
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _camel(name: str) -> str:
@@ -109,6 +109,48 @@ class FindingsResponse(ApiModel):
     total: int
     has_more: bool
     counts: FindingCounts
+
+
+class SonarQubeSettings(ApiModel):
+    """SonarQube configuration. The token is deliberately absent — it lives in
+    the secret store, and the table rejects credential-shaped keys."""
+    enabled: bool = True
+    host_url: str = ""
+    quality_profile: str = ""
+    # Added to the built-in dependency/build exclusions rather than replacing
+    # them, so a tenant cannot accidentally start scanning node_modules.
+    extra_exclusions: List[str] = Field(default_factory=list, max_length=100)
+    ce_timeout_seconds: int = Field(default=900, ge=30, le=7200)
+    delete_scratch_project: bool = True
+
+    @field_validator("host_url")
+    @classmethod
+    def _https_only(cls, v: str) -> str:
+        v = (v or "").strip().rstrip("/")
+        if v and not v.startswith("https://"):
+            raise ValueError("must be an https:// URL")
+        return v
+
+
+class CodeQLSettings(ApiModel):
+    enabled: bool = True
+    languages: List[Literal["python", "javascript", "go", "ruby", "java", "csharp", "cpp"]] = Field(
+        default_factory=lambda: ["python", "javascript", "go", "ruby"]
+    )
+    query_suite: Literal["security-and-quality", "security-extended", "code-scanning"] = \
+        "security-and-quality"
+    build_mode: Literal["none", "autobuild"] = "none"
+    timeout_seconds: int = Field(default=3600, ge=60, le=21600)
+
+
+class EngineSettingsResponse(ApiModel):
+    engine: Literal["sonarqube", "codeql"]
+    config: Dict[str, Any]
+
+
+class AllEngineSettingsResponse(ApiModel):
+    sonarqube: SonarQubeSettings
+    codeql: CodeQLSettings
 
 
 class QueueDepth(ApiModel):

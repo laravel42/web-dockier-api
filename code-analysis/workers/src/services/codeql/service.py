@@ -6,10 +6,12 @@ import subprocess
 import asyncio
 from src.services.base import EnginePublisher
 from src.infrastructure.storage import download_codebase
+from src.infrastructure.engine_settings import get_settings
 
 # CodeQL supports these; anything else is skipped rather than failed, since an
 # unsupported language is a property of the repo, not an engine fault.
 SUPPORTED_LANGUAGES = {"python", "javascript", "go", "ruby", "java", "csharp", "cpp"}
+CODEQL_LANGUAGES = SUPPORTED_LANGUAGES
 
 SARIF_LEVELS = {"error": "error", "warning": "warning", "note": "info", "none": "info"}
 
@@ -95,7 +97,9 @@ class CodeQLService(EnginePublisher):
             print(f"[!] Error parsing SARIF: {e}")
             return []
 
-    def run_codeql(self, repo_path: str, language: str, work_dir: str) -> str:
+    def run_codeql(self, repo_path: str, language: str, work_dir: str,
+                   suite: str = "security-and-quality", build_mode: str = "none",
+                   timeout_seconds: int = CODEQL_TIMEOUT_SECONDS) -> str:
         # The database and SARIF live outside --source-root: writing them inside
         # made CodeQL index its own database as if it were the user's code.
         db_path = os.path.join(work_dir, f"codeql-db-{language}")
@@ -106,14 +110,14 @@ class CodeQLService(EnginePublisher):
             f"--language={language}",
             f"--source-root={repo_path}",
             # Compiled languages otherwise need a build command and fail outright.
-            "--build-mode=none",
+            f"--build-mode={build_mode}",
             "--overwrite",
         ]
 
         analyze_cmd = [
             "codeql", "database", "analyze", db_path,
             # Pack form: a bare `<lang>-security-and-quality.qls` does not resolve.
-            f"codeql/{language}-queries:codeql-suites/{language}-security-and-quality.qls",
+            f"codeql/{language}-queries:codeql-suites/{language}-{suite}.qls",
             "--format=sarif-latest",
             f"--output={sarif_path}",
         ]
@@ -125,9 +129,9 @@ class CodeQLService(EnginePublisher):
 
         try:
             subprocess.run(create_cmd, capture_output=True, text=True, check=True,
-                           timeout=CODEQL_TIMEOUT_SECONDS)
+                           timeout=timeout_seconds)
             subprocess.run(analyze_cmd, capture_output=True, text=True, check=True,
-                           timeout=CODEQL_TIMEOUT_SECONDS)
+                           timeout=timeout_seconds)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(
                 f"codeql {language} analysis failed: {(e.stderr or '')[:400]}") from None
@@ -150,12 +154,20 @@ class CodeQLService(EnginePublisher):
                 await self._publish(job_id, scan_id, [], "ok", None)
                 return
 
+            settings = await get_settings(message.get("tenant_id") or "", "codeql")
+            if not settings.get("enabled", True):
+                print(f"[*] CodeQL Service: disabled in settings for {job_id}")
+                await self._publish(job_id, scan_id, [], "ok")
+                return
+
             # One database per language: analysing only whichever language the
             # gateway happened to list first silently skipped the rest of a
-            # polyglot repo.
+            # polyglot repo. The tenant's list narrows what was detected; it
+            # cannot add a language the repo does not contain.
+            allowed = set(settings.get("languages") or CODEQL_LANGUAGES) & SUPPORTED_LANGUAGES
             languages = [
                 lang for lang in (message.get("languages") or ([language] if language else []))
-                if lang in SUPPORTED_LANGUAGES
+                if lang in allowed
             ]
 
             findings = []
@@ -165,7 +177,10 @@ class CodeQLService(EnginePublisher):
                     await asyncio.to_thread(download_codebase, uri, scratch_dir)
                     for lang in languages:
                         sarif_path = await asyncio.to_thread(
-                            self.run_codeql, scratch_dir, lang, work_dir)
+                            self.run_codeql, scratch_dir, lang, work_dir,
+                            settings.get("querySuite", "security-and-quality"),
+                            settings.get("buildMode", "none"),
+                            settings.get("timeoutSeconds", CODEQL_TIMEOUT_SECONDS))
                         # SARIF can be tens of megabytes; parsing it on the event
                         # loop blocks every other worker in the process.
                         findings.extend(

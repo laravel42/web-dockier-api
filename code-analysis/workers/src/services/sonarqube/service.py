@@ -8,6 +8,7 @@ from typing import Optional
 from src.services.base import EnginePublisher
 from src.infrastructure.scan_skip import sonar_exclusion_globs
 from src.infrastructure.rules_repo import load_disabled_rule_ids
+from src.infrastructure.engine_settings import get_settings
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.secret_manager import get_cloudflare_secret
 
@@ -62,7 +63,8 @@ class SonarQubeService(EnginePublisher):
                 raise RuntimeError(f"failed to fetch SonarQube issues: {e}") from None
 
     def run_sonar_scanner(self, repo_path: str, project_key: str, sonar_url: str,
-                          sonar_token: str) -> Optional[str]:
+                          sonar_token: str, extra_exclusions: Optional[list] = None,
+                          quality_profile: str = "") -> Optional[str]:
         """Run sonar-scanner and return the Compute Engine task id.
 
         The token goes in the environment, not argv: `-Dsonar.login=<token>` is
@@ -72,13 +74,18 @@ class SonarQubeService(EnginePublisher):
         if not shutil.which("sonar-scanner"):
             raise RuntimeError("sonar-scanner CLI not found on PATH")
 
+        # Tenant exclusions are appended, never substituted: the built-in
+        # dependency and build globs are not theirs to remove.
+        exclusions = ",".join(filter(None, [sonar_exclusion_globs(), *(extra_exclusions or [])]))
         cmd = [
             "sonar-scanner",
             f"-Dsonar.projectKey={project_key}",
             "-Dsonar.sources=.",
-            f"-Dsonar.exclusions={sonar_exclusion_globs()}",
+            f"-Dsonar.exclusions={exclusions}",
             f"-Dsonar.host.url={sonar_url}",
         ]
+        if quality_profile:
+            cmd.append(f"-Dsonar.profile={quality_profile}")
         env = {**os.environ, "SONAR_TOKEN": sonar_token}
         try:
             subprocess.run(cmd, cwd=repo_path, capture_output=True, text=True,
@@ -100,12 +107,13 @@ class SonarQubeService(EnginePublisher):
                     return line.split("=", 1)[1].strip()
         return None
 
-    async def wait_for_analysis(self, sonar_url: str, sonar_token: str, task_id: str) -> None:
+    async def wait_for_analysis(self, sonar_url: str, sonar_token: str, task_id: str,
+                                timeout_seconds: int = CE_POLL_TIMEOUT_SECONDS) -> None:
         """Block until the Compute Engine task finishes, or give up loudly."""
         url = f"{sonar_url.rstrip('/')}/api/ce/task"
         waited = 0
         async with httpx.AsyncClient() as client:
-            while waited < CE_POLL_TIMEOUT_SECONDS:
+            while waited < timeout_seconds:
                 resp = await client.get(url, params={"id": task_id}, auth=(sonar_token, ""))
                 resp.raise_for_status()
                 status = resp.json().get("task", {}).get("status")
@@ -115,8 +123,7 @@ class SonarQubeService(EnginePublisher):
                     raise RuntimeError(f"SonarQube analysis {status.lower()}")
                 await asyncio.sleep(CE_POLL_INTERVAL_SECONDS)
                 waited += CE_POLL_INTERVAL_SECONDS
-        raise RuntimeError(
-            f"SonarQube analysis did not finish within {CE_POLL_TIMEOUT_SECONDS}s")
+        raise RuntimeError(f"SonarQube analysis did not finish within {timeout_seconds}s")
 
     async def delete_project(self, sonar_url: str, sonar_token: str, project_key: str) -> None:
         """Remove the per-scan project.
@@ -148,18 +155,30 @@ class SonarQubeService(EnginePublisher):
                 await self._publish(job_id, scan_id, [], "ok", None)
                 return
 
+            settings = await get_settings(message.get("tenant_id") or "", "sonarqube")
+            if not settings.get("enabled", True):
+                print(f"[*] SonarQube Service: disabled in settings for {job_id}")
+                await self._publish(job_id, scan_id, [], "ok")
+                return
+
             disabled = await load_disabled_rule_ids(message.get("tenant_id"), "sonarqube")
-            sonar_url = await get_cloudflare_secret("SONAR_HOST_URL")
+            # A stored host wins over the environment: it is the tenant's own
+            # server, and the env value is only a deployment-wide fallback.
+            sonar_url = settings.get("hostUrl") or await get_cloudflare_secret("SONAR_HOST_URL")
             sonar_token = await get_cloudflare_secret("SONAR_TOKEN")
             project_key = f"dockier_{scan_id}"
             
             await asyncio.to_thread(download_codebase, uri, scratch_dir)
             task_id = await asyncio.to_thread(
-                self.run_sonar_scanner, scratch_dir, project_key, sonar_url, sonar_token)
+                self.run_sonar_scanner, scratch_dir, project_key, sonar_url, sonar_token,
+                settings.get("extraExclusions") or [], settings.get("qualityProfile") or "")
             if task_id:
-                await self.wait_for_analysis(sonar_url, sonar_token, task_id)
+                await self.wait_for_analysis(
+                    sonar_url, sonar_token, task_id,
+                    timeout_seconds=settings.get("ceTimeoutSeconds", CE_POLL_TIMEOUT_SECONDS))
             findings = await self.fetch_sonar_issues(sonar_url, sonar_token, project_key, disabled)
-            await self.delete_project(sonar_url, sonar_token, project_key)
+            if settings.get("deleteScratchProject", True):
+                await self.delete_project(sonar_url, sonar_token, project_key)
             
             await self._publish(job_id, scan_id, findings, "ok")
             print(f"[*] SonarQube Service: Finished {job_id} with {len(findings)} findings.")

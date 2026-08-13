@@ -688,6 +688,7 @@ footer { margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line);
           <tr><td>VALIDATION_ERROR</td><td>422</td><td>Bad parameter or unknown option key. The message names the field.</td></tr>
           <tr><td>UPSTREAM_TIMEOUT</td><td>504</td><td>A service did not answer the router in time.</td></tr>
           <tr><td>UPSTREAM_UNAVAILABLE</td><td>503</td><td>A service is down. Probe it directly in step 05 to confirm which.</td></tr>
+          <tr><td>SECRET_NOT_ALLOWED</td><td>422</td><td>A settings payload carried a token, secret, password or apiKey. Credentials belong in the secret store.</td></tr>
           <tr><td>AUTH_NOT_CONFIGURED</td><td>500</td><td><code class="inline-code">JWT_SECRET</code> is unset. The API fails closed rather than skipping auth.</td></tr>
           <tr><td>INTERNAL_ERROR</td><td>500</td><td>Deliberately generic — the underlying message can contain a clone URL with a token.</td></tr>
         </tbody>

@@ -16,6 +16,7 @@ import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
 import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
 import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
+import { CodeQLSettingsPanel, SonarQubeSettingsPanel } from "./sections/EngineSettingsPanels";
 import { severityDotCls } from "./sections/shared";
 
 // ─── Types ───
@@ -48,7 +49,9 @@ const extIconMap: Record<string, string> = {
 // ─── Main Component ───
 
 export default function SecurityRulesTab() {
-  const [ruleSource, setRuleSource] = useState<"custom" | "sonarqube" | "semgrep">("semgrep");
+  const [ruleSource, setRuleSource] = useState<
+    "custom" | "sonarqube" | "semgrep" | "sonarqube-settings" | "codeql-settings"
+  >("semgrep");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
     const savedTools = localStorage.getItem("scan_tools");
     if (savedTools) { try { return JSON.parse(savedTools); } catch { /* ignore */ } }
@@ -175,11 +178,20 @@ export default function SecurityRulesTab() {
 
       {/* Source selector + content */}
       {(() => {
-        const sources: Array<{ key: "custom" | "sonarqube" | "semgrep"; label: string; toolKey: string }> = [
+        // `toolKey: null` marks a section that configures an engine rather than
+        // listing its rules — those stay reachable even when the engine's own
+        // scan toggle is off, since turning it back on is done from there.
+        const sources: Array<{
+          key: "custom" | "sonarqube" | "semgrep" | "sonarqube-settings" | "codeql-settings";
+          label: string;
+          toolKey: string | null;
+        }> = [
           { key: "semgrep", label: "Semgrep", toolKey: "semgrep" },
           { key: "custom", label: "Custom Rules", toolKey: "customRules" },
+          { key: "sonarqube-settings", label: "SonarQube", toolKey: null },
+          { key: "codeql-settings", label: "CodeQL", toolKey: null },
         ];
-        const enabled = sources.filter(s => scanTools[s.toolKey]);
+        const enabled = sources.filter(s => s.toolKey === null || scanTools[s.toolKey]);
         const activeVisible = enabled.some(s => s.key === ruleSource);
         const effectiveSource = activeVisible ? ruleSource : (enabled[0]?.key ?? "custom");
 
@@ -211,7 +223,11 @@ export default function SecurityRulesTab() {
               )}
             </div>
 
-            {effectiveSource === "sonarqube" ? (
+            {effectiveSource === "sonarqube-settings" ? (
+              <SonarQubeSettingsPanel />
+            ) : effectiveSource === "codeql-settings" ? (
+              <CodeQLSettingsPanel />
+            ) : effectiveSource === "sonarqube" ? (
               <SonarQubeRulesPanel />
             ) : effectiveSource === "semgrep" ? (
               <SemgrepRulesPanel filter={semgrepFilter} adding={semgrepAdding} onAddingDone={() => setSemgrepAdding(false)} />

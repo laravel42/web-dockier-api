@@ -1,8 +1,8 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
 import type {
-  SastFindingsPage, SastHealth, SastRunResponse, SastScanOptions, SastScanState,
-  SastSeverity,
+  CodeQLSettings, EngineName, EngineSettings, SastFindingsPage, SastHealth,
+  SastRunResponse, SastScanOptions, SastScanState, SastSeverity, SonarQubeSettings,
 } from "../types/sast";
 
 /**
@@ -70,4 +70,28 @@ export const sastApi = {
   /** Liveness and queue depth. Unauthenticated. */
   health: () =>
     request<SastHealth>("/sast/health", { baseUrl: SAST_BASE }),
+
+  /**
+   * Per-engine configuration for the current tenant.
+   *
+   * A tenant with nothing stored gets fully-populated defaults, so callers
+   * never have to reason about partially-configured engines.
+   */
+  getSettings: (signal?: AbortSignal) =>
+    request<EngineSettings>("/sast/settings", { baseUrl: SAST_BASE, signal }),
+
+  /**
+   * Replace one engine's configuration.
+   *
+   * The body must not contain a token, secret, password or apiKey — the service
+   * returns 422 SECRET_NOT_ALLOWED rather than storing a credential.
+   */
+  saveSettings: <E extends EngineName>(
+    engine: E,
+    config: E extends "sonarqube" ? SonarQubeSettings : CodeQLSettings,
+  ) =>
+    request<{ engine: E; config: EngineSettings[E] }>(
+      `/sast/settings/${engine}`,
+      { method: "PUT", body: JSON.stringify(config), baseUrl: SAST_BASE },
+    ),
 };

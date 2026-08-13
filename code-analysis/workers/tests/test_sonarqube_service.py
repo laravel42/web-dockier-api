@@ -5,6 +5,15 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from src.services.sonarqube.service import SonarQubeService
 
 
+@pytest.fixture(autouse=True)
+def _stubbed_settings():
+    """process_job reads per-tenant engine settings; give it the defaults."""
+    from src.infrastructure.engine_settings import DEFAULTS
+    with patch("src.services.sonarqube.service.get_settings", new_callable=AsyncMock) as g:
+        g.return_value = dict(DEFAULTS["sonarqube"])
+        yield g
+
+
 def _service():
     return SonarQubeService()
 
@@ -152,3 +161,25 @@ async def test_unreachable_sonar_is_an_engine_failure(mock_cls):
 
     with pytest.raises(RuntimeError, match="failed to fetch"):
         await _bare_service().fetch_sonar_issues("https://sonar", "t", "k")
+
+
+def test_tenant_exclusions_are_appended_not_substituted(tmp_path):
+    """A tenant must not be able to un-exclude node_modules by supplying a list."""
+    with patch("src.services.sonarqube.service.shutil.which", return_value="/usr/bin/sonar-scanner"), \
+         patch("src.services.sonarqube.service.subprocess.run") as mock_run:
+        _bare_service().run_sonar_scanner(str(tmp_path), "k", "https://sonar", "t",
+                                          ["**/legacy/**"], "Sonar way")
+
+    argv = mock_run.call_args[0][0]
+    exclusions = next(a for a in argv if a.startswith("-Dsonar.exclusions="))
+    assert "**/node_modules/**" in exclusions, "built-in exclusions must survive"
+    assert "**/legacy/**" in exclusions, "tenant exclusions must be added"
+    assert "-Dsonar.profile=Sonar way" in argv
+
+
+@pytest.mark.asyncio
+async def test_disabled_in_settings_reports_ok(published, _stubbed_settings):
+    _stubbed_settings.return_value = {"enabled": False}
+    await _service().process_job({"uri": "s3://t/t.zip", "job_id": "j", "scan_id": "s"})
+    body = published[0][1]
+    assert body["status"] == "ok" and body["findings"] == []

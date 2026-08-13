@@ -5,6 +5,15 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from src.services.codeql.service import CodeQLService
 
 
+@pytest.fixture(autouse=True)
+def _stubbed_settings():
+    """process_job reads per-tenant engine settings; give it the defaults."""
+    from src.infrastructure.engine_settings import DEFAULTS
+    with patch("src.services.codeql.service.get_settings", new_callable=AsyncMock) as g:
+        g.return_value = dict(DEFAULTS["codeql"])
+        yield g
+
+
 def _service():
     return CodeQLService()
 
@@ -53,6 +62,51 @@ def test_run_codeql_invokes_create_then_analyze(mock_run, mock_which):
     assert "--build-mode=none" in create_call, "compiled languages need this to build a database"
     assert any("codeql/javascript-queries:codeql-suites/" in a for a in analyze_call), \
         "a bare <lang>-security-and-quality.qls does not resolve"
+
+
+@patch("src.services.codeql.service.shutil.which", return_value="/usr/bin/codeql")
+@patch("src.services.codeql.service.subprocess.run")
+def test_settings_drive_suite_and_build_mode(mock_run, mock_which):
+    _bare_service().run_codeql("/tmp/repo", "go", "/tmp/work",
+                               suite="security-extended", build_mode="autobuild")
+    create_call, analyze_call = (mock_run.call_args_list[i][0][0] for i in (0, 1))
+    assert "--build-mode=autobuild" in create_call
+    assert any("go-security-extended.qls" in a for a in analyze_call)
+
+
+@pytest.mark.asyncio
+@patch("src.services.codeql.service.asyncio.to_thread")
+async def test_tenant_language_list_narrows_but_cannot_add(mock_to_thread, published, finding,
+                                                          _stubbed_settings):
+    """A tenant may switch a language off; it cannot make CodeQL scan one the repo lacks."""
+    _stubbed_settings.return_value = {"enabled": True, "languages": ["python", "java"],
+                                      "querySuite": "security-and-quality",
+                                      "buildMode": "none", "timeoutSeconds": 3600}
+    analysed = []
+
+    async def runner(func, *args, **kwargs):
+        name = getattr(func, "__name__", "")
+        if name == "run_codeql":
+            analysed.append(args[1]); return "/tmp/x.sarif"
+        if name == "parse_codeql_sarif":
+            return [finding()]
+        return None
+    mock_to_thread.side_effect = runner
+
+    await _service().process_job({
+        "uri": "s3://t/t.zip", "job_id": "j", "scan_id": "s",
+        "languages": ["python", "javascript"],   # java is enabled but not present
+    })
+    assert analysed == ["python"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_in_settings_reports_ok(published, _stubbed_settings):
+    _stubbed_settings.return_value = {"enabled": False}
+    await _service().process_job({"uri": "s3://t/t.zip", "job_id": "j", "scan_id": "s",
+                                  "languages": ["python"]})
+    body = published[0][1]
+    assert body["status"] == "ok" and body["findings"] == []
 
 
 @patch("src.services.codeql.service.shutil.which", return_value=None)

@@ -72,7 +72,7 @@ if _origins:
         CORSMiddleware,
         allow_origins=_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
@@ -158,7 +158,7 @@ async def aggregate_health(request: Request) -> JSONResponse:
     )
 
 
-@app.api_route("/sast/{path:path}", methods=["GET", "POST", "OPTIONS"], tags=["Router"])
+@app.api_route("/sast/{path:path}", methods=["GET", "POST", "PUT", "OPTIONS"], tags=["Router"])
 async def route_api(request: Request, path: str) -> Response:
     """Forward to the tenant-facing API service."""
     return await _forward(request, BY_NAME["api"].base_url, f"/sast/{path}")

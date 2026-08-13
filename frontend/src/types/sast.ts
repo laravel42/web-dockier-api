@@ -107,3 +107,43 @@ export interface SastHealth {
   database: boolean;
   queues: SastQueueDepth[];
 }
+
+
+// ─── Engine settings ───
+//
+// Credentials are deliberately absent. The service refuses to store a token,
+// secret, password or apiKey in a settings row — those live in the secret
+// store — and the database enforces it with a CHECK constraint.
+
+export interface SonarQubeSettings {
+  enabled: boolean;
+  /** Must be https. Empty falls back to the deployment-wide SONAR_HOST_URL. */
+  hostUrl: string;
+  qualityProfile: string;
+  /** Added to the built-in dependency/build exclusions, never instead of them. */
+  extraExclusions: string[];
+  ceTimeoutSeconds: number;
+  deleteScratchProject: boolean;
+}
+
+export type CodeQLLanguage =
+  | "python" | "javascript" | "go" | "ruby" | "java" | "csharp" | "cpp";
+
+export type CodeQLSuite =
+  | "security-and-quality" | "security-extended" | "code-scanning";
+
+export interface CodeQLSettings {
+  enabled: boolean;
+  /** Narrows what the gateway detected; cannot add a language the repo lacks. */
+  languages: CodeQLLanguage[];
+  querySuite: CodeQLSuite;
+  buildMode: "none" | "autobuild";
+  timeoutSeconds: number;
+}
+
+export interface EngineSettings {
+  sonarqube: SonarQubeSettings;
+  codeql: CodeQLSettings;
+}
+
+export type EngineName = keyof EngineSettings;

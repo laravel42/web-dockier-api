@@ -310,3 +310,72 @@ def test_unhandled_errors_do_not_leak_internals(mock_row, client):
     assert r.status_code == 500
     assert r.json() == {"message": "An unexpected error occurred.", "code": "INTERNAL_ERROR"}
     assert "ghp_secret" not in r.text
+
+
+# ── engine settings ────────────────────────────────────────────────────────
+
+@patch("src.api.routes.engine_settings.get_all_settings", new_callable=AsyncMock)
+def test_settings_returns_defaults_for_a_fresh_tenant(mock_get, client):
+    from src.infrastructure.engine_settings import DEFAULTS
+    mock_get.return_value = {k: dict(v) for k, v in DEFAULTS.items()}
+
+    body = client.get("/sast/settings", headers={"Authorization": f"Bearer {_token()}"}).json()
+    assert body["sonarqube"]["enabled"] is True
+    assert body["codeql"]["querySuite"] == "security-and-quality"
+    assert mock_get.await_args[0][0] == "org-9", "scoped to the token's tenant"
+
+
+def test_settings_requires_a_token(client):
+    assert client.get("/sast/settings").status_code == 401
+
+
+@patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
+def test_put_settings_validates_against_the_engine_schema(mock_save, client):
+    mock_save.side_effect = lambda t, e, c: c
+    r = client.put("/sast/settings/codeql",
+                   json={"languages": ["python"], "querySuite": "security-extended"},
+                   headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 200
+    assert r.json()["config"]["querySuite"] == "security-extended"
+
+
+@pytest.mark.parametrize("body,why", [
+    ({"languages": ["cobol"]}, "language not supported by codeql"),
+    ({"querySuite": "everything"}, "suite not in the catalogue"),
+    ({"timeoutSeconds": 5}, "below the floor"),
+    ({"buildMode": "make"}, "not a valid build mode"),
+])
+@patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
+def test_put_settings_rejects_bad_codeql_config(mock_save, client, body, why):
+    r = client.put("/sast/settings/codeql", json=body,
+                   headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 422, why
+    mock_save.assert_not_awaited()
+
+
+@patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
+def test_sonar_host_must_be_https(mock_save, client):
+    r = client.put("/sast/settings/sonarqube", json={"hostUrl": "http://sonar.internal"},
+                   headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 422
+    assert "https" in r.json()["message"]
+    mock_save.assert_not_awaited()
+
+
+@pytest.mark.parametrize("key", ["token", "secret", "password", "apiKey"])
+@patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
+def test_credentials_are_refused_with_an_explanation(mock_save, client, key):
+    """A token in a settings row would land in every backup and every SELECT."""
+    r = client.put("/sast/settings/sonarqube", json={"hostUrl": "https://s", key: "leak"},
+                   headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 422
+    assert r.json()["code"] == "SECRET_NOT_ALLOWED"
+    assert "secret store" in r.json()["message"]
+    mock_save.assert_not_awaited()
+
+
+def test_unknown_engine_names_the_configurable_ones(client):
+    r = client.put("/sast/settings/nessus", json={},
+                   headers={"Authorization": f"Bearer {_token()}"})
+    assert r.status_code == 404
+    assert "sonarqube" in r.json()["message"]
