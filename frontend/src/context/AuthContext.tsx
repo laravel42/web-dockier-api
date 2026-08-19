@@ -2,9 +2,11 @@ import {
   createContext,
   useContext,
   useState,
+  useEffect,
   type ReactNode,
 } from "react";
 import { getToken, getUserId, setSession } from "../services/session";
+import { usersApi } from "../services/api";
 
 interface UserProfile {
   name: string;
@@ -75,6 +77,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.setItem("userProfile", JSON.stringify(profile));
     setUserProfileState(profile);
   };
+
+  // Eagerly fetch user profile on app load when authenticated
+  useEffect(() => {
+    if (!token || !userId || userProfile) return;
+    let cancelled = false;
+    usersApi.get(userId).then((u) => {
+      if (cancelled) return;
+      setUserProfile({
+        name: u.name,
+        country: u.country || "",
+        language: u.language || "en",
+        timezone: u.timezone || "UTC",
+      });
+    }).catch(() => {
+      // Silently degrade — profile will show email fallback
+    });
+    return () => { cancelled = true; };
+  }, [token, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AuthContext.Provider
