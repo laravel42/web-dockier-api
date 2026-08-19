@@ -107,8 +107,8 @@ export default function SourceControlSelect({ value, onChange, connections, load
                 key={c.id}
                 type="button"
                 onClick={() => { onChange(c.id); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                  value === c.id ? "bg-primary-50 text-primary-600" : "text-text"
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted transition-colors ${
+                  value === c.id ? "bg-muted text-primary-600" : "text-text"
                 }`}
               >
                 <SourceControlBadge provider={c.provider} showName={false} />

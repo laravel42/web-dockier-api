@@ -9,8 +9,6 @@ interface Props {
 
 const labelBaseCls =
   "inline-flex items-center border border-border/60 bg-secondary-50/50 min-w-0 max-w-full";
-const labelInteractiveCls =
-  "hover:border-primary/30 hover:bg-primary/5 transition-colors";
 
 const SIZE_STYLES = {
   default: {
@@ -67,7 +65,7 @@ export default function BranchCommitLabel({ branch, commit, onClick, size = "def
         event.stopPropagation();
         onClick();
       }}
-      className={`${labelBaseCls} ${labelInteractiveCls} ${styles.pad} m-0 appearance-none cursor-pointer text-left`}
+      className={`${labelBaseCls} ${styles.pad} m-0 appearance-none cursor-pointer text-left`}
     >
       {content}
     </button>

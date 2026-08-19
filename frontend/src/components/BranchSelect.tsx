@@ -99,8 +99,8 @@ export default function BranchSelect({ value, onChange, branches, loading, onRel
                 key={b}
                 type="button"
                 onClick={() => { onChange(b); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                  value === b ? "bg-primary-50 text-primary-600" : "text-text"
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted transition-colors ${
+                  value === b ? "bg-muted text-primary-600" : "text-text"
                 }`}
               >
                 <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
