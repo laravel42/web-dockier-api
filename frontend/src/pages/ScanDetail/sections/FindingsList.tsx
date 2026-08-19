@@ -248,7 +248,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
 
     return (
       <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
-        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-secondary-800/40 px-3 py-2">
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted px-3 py-2">
           <span className="min-w-0 truncate text-xs font-mono text-text-muted">{relativePath}</span>
           <span className="shrink-0 text-xs font-mono tabular-nums text-text-muted">L{row.lineNumber}</span>
         </div>
@@ -283,15 +283,15 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
 
   return (
     <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
-      <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-secondary-800/40 px-3 py-2">
+      <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted px-3 py-2">
         <span className="min-w-0 truncate text-xs font-mono text-text-muted">{relativePath}</span>
         <span className="shrink-0 text-xs font-mono tabular-nums text-text-muted">{lineLabel}</span>
       </div>
       <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
         {rows.map((row) => (
-          <div key={row.lineNumber} className="flex items-start bg-danger-500/15">
+          <div key={row.lineNumber} className="flex items-start bg-danger-surface">
             <span
-              className="shrink-0 select-none border-r border-border/30 bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums  text-danger-500"
+              className="shrink-0 select-none border-r border-danger-line bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums text-danger-ink"
               style={{ width: `${gutterWidth + 3}ch` }}
             >
               {row.lineNumber}

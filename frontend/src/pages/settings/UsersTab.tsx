@@ -325,9 +325,12 @@ export default function UsersTab() {
                   )}
                 </button>
               </div>
-              <button type="button" onClick={generatePassword} className="h-9 shrink-0 px-3 text-xs font-medium rounded-md bg-warning-500 text-primary-foreground hover:bg-warning-500/90 transition-colors whitespace-nowrap">
+              <Button
+                variant="link"
+                onClick={generatePassword}
+              >
                 Generate
-              </button>
+              </Button>
             </div>
             {inviteForm.password && (
               <div className="mt-2 space-y-1">

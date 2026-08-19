@@ -78,7 +78,7 @@ export default function NotificationChannelsTab() {
           <p className="text-sm text-text-muted mt-0.5">Configure where alerts and notifications are delivered.</p>
         </div>
         {canManage && (
-          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon />}>
+          <Button onClick={() => setShowForm(true)} iconLeft={<PlusIcon className="size-4" />}>
             Add Channel
           </Button>
         )}

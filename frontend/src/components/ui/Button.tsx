@@ -12,7 +12,7 @@ const variants = {
   primary:
     "bg-primary text-primary-foreground shadow hover:bg-primary/90",
   secondary:
-    "bg-secondary-100 text-text hover:bg-secondary-200",
+    "bg-secondary-100 text-text hover:bg-muted",
   outline:
     "border border-border bg-background shadow-(--shadow-xs) hover:bg-card/60",
   "outline-primary":

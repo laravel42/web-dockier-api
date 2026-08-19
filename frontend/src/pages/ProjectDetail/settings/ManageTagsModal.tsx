@@ -191,7 +191,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
                               <button
                                 type="button"
                                 onClick={() => handleStartRename(tag)}
-                                className="flex w-full items-center px-3 py-2 text-xs text-text hover:bg-secondary-50/50 transition-colors"
+                                className="flex w-full items-center px-3 py-1.5 text-xs text-text hover:bg-secondary-50/50 transition-colors"
                               >
                                 Rename
                               </button>
@@ -200,7 +200,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
                                 type="button"
                                 onClick={() => void handleDelete(tag.id)}
                                 disabled={deleting === tag.id}
-                                className="flex w-full items-center px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors disabled:opacity-50"
+                                className="flex w-full items-center px-3 py-1.5 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors disabled:opacity-50"
                               >
                                 {deleting === tag.id ? "Deleting..." : "Delete"}
                               </button>

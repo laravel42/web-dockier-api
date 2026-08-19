@@ -89,7 +89,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="size-11  shrink-0 rounded-(--radius-input) border border-border bg-card flex items-center justify-center text-text-muted hover:text-primary-500 hover:border-primary-500/30 transition-colors disabled:opacity-50"
+          className="size-9 shrink-0 rounded-(--radius-input) border border-border bg-card flex items-center justify-center text-text-muted hover:text-primary-500 hover:border-primary-500/30 transition-colors disabled:opacity-50"
           title="Refresh repository list"
         >
           <RefreshCwIcon className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
