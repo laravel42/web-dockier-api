@@ -25,7 +25,6 @@ interface Props {
 export default function GeneralSection({ project, canManage, onProjectUpdate }: Props) {
   const fid = useId();
   const [name] = useState(project.name);
-  const [showNotes, setShowNotes] = useState(!!project.settings?.notes);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
   const [showGitModal, setShowGitModal] = useState(false);
 
@@ -78,43 +77,30 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
 
         {/* Notes */}
         <div className="px-4 py-3">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-medium text-text">Notes</p>
-            {canManage && !showNotes && !noteValue && (
-              <Button
-                variant="link"
-                onClick={() => setShowNotes(true)}
-              >
-                Add note
-              </Button>
-            )}
-          </div>
+          <p className="text-sm font-medium text-text mb-1">Notes</p>
           <p className="text-xs text-text-muted mb-2">You may add notes to your project to help you remember important information about it.</p>
 
-          {(showNotes || !!noteValue) && (
-            <div className="flex flex-col gap-2">
-              <Textarea
-                name="notes"
-                value={noteValue}
-                onChange={(e) => setNoteValue(e.target.value)}
-                disabled={!canManage}
-                rows={3}
-                className="text-xs resize-none"
-                placeholder="Write a note…"
-                autoFocus={showNotes && !noteValue}
-              />
-              {noteValue !== (project.settings?.notes ?? "") && (
-                <div className="flex items-center justify-end gap-3">
-                  <Button variant="ghost" size="sm" onClick={() => { setNoteValue(project.settings?.notes ?? ""); setShowNotes(false); }}>
-                    Reset
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={() => void handleSaveNote()} loading={savingNote}>
+          <div className="flex flex-col gap-2">
+            <Textarea
+              name="notes"
+              value={noteValue}
+              onChange={(e) => setNoteValue(e.target.value)}
+              disabled={!canManage}
+              rows={3}
+              className="text-xs resize-none"
+              placeholder="Write a note…"
+            />
+            {noteValue !== (project.settings?.notes ?? "") && (
+              <div className="flex items-center justify-end gap-3">
+                <Button variant="ghost" size="sm" onClick={() => setNoteValue(project.settings?.notes ?? "")}>
+                  Reset
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => void handleSaveNote()} loading={savingNote}>
                     Save
                   </Button>
                 </div>
               )}
             </div>
-          )}
         </div>
       </SettingsCard>
 
