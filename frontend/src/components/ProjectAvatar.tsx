@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { Project } from "../types";
 import { getSiteFaviconUrl, isSuitableAvatarFaviconAspectRatio, isValidFaviconUrl } from "@/utils/projectFavicon";
 
-// Same value as PROJECT_COLORS[0]; both mirror --color-primary-500.
-const DEFAULT_COLOR = "#d9af7f";
+// Consistent muted background for all project letter fallbacks.
+const FALLBACK_BG = "var(--color-secondary-100)";
+const FALLBACK_TEXT = "var(--color-text-muted)";
 
 interface Props {
   project: Project;
@@ -25,17 +26,15 @@ function LetterFallback({
   project,
   size,
   className,
-  color,
 }: {
   project: Project;
   size: NonNullable<Props["size"]>;
   className: string;
-  color: string;
 }) {
   return (
     <div
       className={`${sizeClasses[size]} flex items-center justify-center font-semibold shrink-0 ${className}`}
-      style={{ backgroundColor: `${color}20`, color }}
+      style={{ backgroundColor: FALLBACK_BG, color: FALLBACK_TEXT }}
     >
       {project.name.charAt(0).toUpperCase()}
     </div>
@@ -121,7 +120,6 @@ export default function ProjectAvatar({
   siteUrl,
   repoFaviconUrl,
 }: Props) {
-  const color = project.settings?.color ?? DEFAULT_COLOR;
   const avatarUrl = project.settings?.avatar;
 
   // Order is most-authoritative first. The repo favicon is resolved from the
@@ -179,6 +177,6 @@ export default function ProjectAvatar({
   }
 
   return (
-    <LetterFallback project={project} size={size} className={className} color={color} />
+    <LetterFallback project={project} size={size} className={className} />
   );
 }

@@ -1,10 +1,8 @@
 import { useState, useId } from "react";
 import { projectsApi } from "@/services/projects";
 import type { Project } from "@/types";
-import { useToast } from "@/context/useToast";
-import { getErrorMessage } from "@/utils/errors";
 import { useSaveAction } from "@/hooks/useSaveAction";
-import { ChevronDownIcon, ServerOffIcon, Trash2Icon } from "lucide-react";
+import { ServerOffIcon, Trash2Icon } from "lucide-react";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import Button from "@/components/ui/Button";
@@ -13,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import TagPicker from "./TagPicker";
 import { GitRepositoryModal } from "./GitSettings";
 import BranchPickerInline from "./GitSettings";
-import { SectionTitle, SettingsRow, PROJECT_COLORS } from "./shared";
+import { SectionTitle, SettingsRow } from "./shared";
 import SettingsCard from "./SettingsCard";
 import { useProjectDelete } from "../hooks/useProjectDelete";
 import { useInfraTeardown } from "../hooks/useInfraTeardown";
@@ -27,11 +25,9 @@ interface Props {
 export default function GeneralSection({ project, canManage, onProjectUpdate }: Props) {
   const fid = useId();
   const [name] = useState(project.name);
-  const [selectedColor, setSelectedColor] = useState(project.settings?.color ?? PROJECT_COLORS[0]);
   const [showNotes, setShowNotes] = useState(!!project.settings?.notes);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
   const [showGitModal, setShowGitModal] = useState(false);
-  const toast = useToast();
 
   const {
     showDeleteModal, confirmName, setConfirmName, deleting,
@@ -50,18 +46,6 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     },
     { errorFallback: "Failed to save project" },
   );
-
-  const handleColorChange = async (color: string) => {
-    const prev = selectedColor;
-    setSelectedColor(color);
-    try {
-      const updated = await projectsApi.update(project.id, { settings: { color } });
-      onProjectUpdate?.(updated);
-    } catch (err) {
-      setSelectedColor(prev);
-      toast.error(getErrorMessage(err, "Failed to update color"));
-    }
-  };
 
   const { saving: savingNote, save: handleSaveNote } = useSaveAction(
     async () => {
@@ -92,41 +76,6 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
           <TagPicker projectId={project.id} disabled={!canManage} />
         </SettingsRow>
 
-        {/* Avatar */}
-        <SettingsRow label="Avatar" description="Click on the avatar to upload a custom one.">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex size-10 items-center justify-center rounded-md text-sm font-semibold"
-              style={{ backgroundColor: `${selectedColor}33`, color: selectedColor }}
-            >
-              {project.name.charAt(0).toUpperCase()}
-            </div>
-            {canManage && (
-              <Button variant="outline" size="sm">
-                Upload image
-              </Button>
-            )}
-          </div>
-        </SettingsRow>
-
-        {/* Color */}
-        <SettingsRow label="Color" description="Select a color to identify your project in Dockier.">
-          <div className="flex items-center gap-1.5">
-            {PROJECT_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => void handleColorChange(color)}
-                disabled={!canManage}
-                className={`size-5 rounded-full transition-all ${
-                  selectedColor === color ? "ring-2 ring-offset-1 ring-offset-background ring-primary-500 scale-110" : "hover:scale-110"
-                }`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </SettingsRow>
-
         {/* Notes */}
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-1">
@@ -150,7 +99,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
                 onChange={(e) => setNoteValue(e.target.value)}
                 disabled={!canManage}
                 rows={3}
-                className="text-xs"
+                className="text-xs resize-none"
                 placeholder="Write a note…"
                 autoFocus={showNotes && !noteValue}
               />
@@ -183,11 +132,11 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-root-directory`}>Root directory</label>
             <div className="flex items-center gap-0">
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
-                /home/dockier/{project.name}
+                /home/dockier/{project.name}/
               </span>
               <Input id={`${fid}-root-directory`}
                 type="text"
-                defaultValue="/"
+                defaultValue=""
                 disabled={!canManage}
                 className="grow rounded-l-none w-20 h-9 text-xs font-mono"
               />
@@ -198,11 +147,11 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-web-directory`}>Web directory</label>
             <div className="flex items-center gap-0">
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
-                /home/dockier/{project.name}
+                /home/dockier/{project.name}/
               </span>
               <Input id={`${fid}-web-directory`}
                 type="text"
-                defaultValue="/current/public"
+                defaultValue="current/public"
                 disabled={!canManage}
                 className="grow rounded-l-none w-36 h-9 text-xs font-mono"
               />
@@ -219,15 +168,20 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
         </div>
 
         <SettingsRow label="Repository" description="Configure the Git repository that should be deployed.">
-          <button
-            type="button"
-            onClick={() => canManage && setShowGitModal(true)}
-            disabled={!canManage}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-text font-mono max-w-3xs truncate hover:border-primary-500/30 transition-colors disabled:hover:border-border"
-          >
-            {project.repository || "Select repository…"}
-            <ChevronDownIcon className="size-3 text-text-muted shrink-0" />
-          </button>
+          <div className="inline-flex items-center rounded-md border border-border bg-background overflow-clip">
+            <span className="px-3 py-2 text-xs font-mono text-text">
+              {project.repository || "Not connected"}
+            </span>
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => setShowGitModal(true)}
+                className="border-l border-border px-2.5 py-2 text-xs font-medium text-text-muted hover:bg-muted hover:text-text transition-colors"
+              >
+                Edit
+              </button>
+            )}
+          </div>
         </SettingsRow>
 
         <SettingsRow label="Branch" description="Configure the Git branch that should be deployed." border={false}>
@@ -243,12 +197,12 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
         onProjectUpdate={onProjectUpdate}
       />
 
-      {/* Danger zone */}
-      <div className="rounded-lg border border-danger-500/30 bg-danger-500/5 p-4">
-        <p className="text-sm font-semibold text-danger-500 mb-1">Danger</p>
-        <p className="text-xs text-text-muted mb-4">Destructive actions. Review carefully before proceeding.</p>
+      {/* Warning zone */}
+      <div className="rounded-lg border border-warning-500/30 bg-warning-500/5 p-4">
+        <p className="text-sm font-semibold text-warning-500 mb-1">Warning</p>
+        <p className="text-xs text-text-muted mb-4">These actions are reversible but may cause temporary downtime.</p>
 
-        <div className="flex items-center justify-between gap-4 pb-4 mb-4 border-b border-danger-500/20">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-text">Tear down infrastructure</p>
             <p className="text-xs text-text-muted mt-0.5">
@@ -258,7 +212,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
           </div>
           {canManage && (
             <Button
-              variant="outline-danger"
+              variant="outline-warning"
               size="sm"
               loading={tearingDown}
               disabled={infraState !== "live"}
@@ -270,6 +224,12 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Danger zone */}
+      <div className="rounded-lg border border-danger-500/30 bg-danger-500/5 p-4">
+        <p className="text-sm font-semibold text-danger-500 mb-1">Danger</p>
+        <p className="text-xs text-text-muted mb-4">Destructive actions. Review carefully before proceeding.</p>
 
         <div className="flex items-center justify-between">
           <div>

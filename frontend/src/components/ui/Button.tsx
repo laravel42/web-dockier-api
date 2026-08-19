@@ -19,6 +19,8 @@ const variants = {
     "border border-primary text-primary bg-transparent hover:bg-primary/10",
   "outline-danger":
     "border border-danger-500 text-danger-500 bg-transparent hover:bg-danger-500/10",
+  "outline-warning":
+    "border border-warning-500 text-warning-500 bg-transparent hover:bg-warning-500/10",
   ghost:
     "text-text-muted hover:bg-card/60 hover:text-text",
   danger:

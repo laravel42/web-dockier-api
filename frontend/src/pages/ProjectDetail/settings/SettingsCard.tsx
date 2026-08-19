@@ -17,7 +17,7 @@ interface SettingsCardProps {
 export default function SettingsCard({ children, padded = false, className = "" }: SettingsCardProps) {
   return (
     <div
-      className={`rounded-lg border border-border bg-card/40 ${padded ? "p-4" : "overflow-hidden"} ${className}`}
+      className={`rounded-lg border border-border bg-card/40 ${padded ? "p-4" : ""} ${className}`}
     >
       {children}
     </div>
