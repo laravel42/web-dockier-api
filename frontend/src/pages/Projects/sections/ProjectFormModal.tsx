@@ -20,6 +20,7 @@ interface Props {
   // platform/framework
   platform: string;
   onPlatformChange: (id: string) => void;
+  detectingPlatform?: boolean;
   // selection state
   connections: Connection[];
   selectedConnectionId: string;
@@ -41,7 +42,7 @@ interface Props {
 
 export default function ProjectFormModal({
   open, editing, form, onFormChange, onClose, onSubmit,
-  platform, onPlatformChange,
+  platform, onPlatformChange, detectingPlatform,
   connections, selectedConnectionId, onConnectionChange, loadingConnections,
   repos, selectedRepo, onRepoChange, loadingRepos,
   onRefreshRepos, refreshingRepos, submitting,
@@ -49,8 +50,7 @@ export default function ProjectFormModal({
   error,
 }: Props) {
   const fid = useId();
-  const needsSourceControl = platform !== "wordpress";
-  const isRepoReady = !needsSourceControl || (!!selectedRepo && !!selectedBranch);
+  const isRepoReady = !!selectedRepo && !!selectedBranch;
   const canSubmit = editing || (!!platform && !!form.name && isRepoReady);
 
   const [frameworkOpen, setFrameworkOpen] = useState(false);
@@ -60,65 +60,6 @@ export default function ProjectFormModal({
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edit Project" : "New Project"} size="lg">
       <form onSubmit={onSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
-        {/* Framework/Platform selector — first step */}
-        {!editing && (
-          <div className="relative">
-            <span id={`${fid}-framework`} className="block text-sm font-medium text-text-secondary mb-1.5">Framework</span>
-            <button
-              type="button"
-              aria-labelledby={`${fid}-framework`}
-              aria-haspopup="listbox"
-              aria-expanded={frameworkOpen}
-              onClick={() => setFrameworkOpen(!frameworkOpen)}
-              className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
-            >
-              {selectedFramework ? (
-                <>
-                  <img src={selectedFramework.icon} alt={selectedFramework.name} className="size-5 shrink-0" />
-                  <span className="truncate">{selectedFramework.name}</span>
-                </>
-              ) : (
-                <span className="text-text-muted">Select a framework…</span>
-              )}
-              <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
-            </button>
-
-            {frameworkOpen && (
-              <>
-                {/* Mouse-only dismissal; Escape closes this surface as well. */}
-              <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setFrameworkOpen(false)} />
-                <div className="absolute inset-x-0  top-full z-20 mt-1 rounded-(--radius-input) border border-border bg-card shadow-(--shadow-overlay) max-h-64 overflow-y-auto">
-                  {FRAMEWORK_CATEGORIES.map((category) => (
-                    <div key={category.name}>
-                      <div className="sticky top-0 bg-card/95 backdrop-blur px-3 py-1.5 border-b border-border/50">
-                        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{category.name}</span>
-                      </div>
-                      {category.frameworks.map((fw) => (
-                        <button
-                          key={fw.id}
-                          type="button"
-                          onClick={() => { onPlatformChange(fw.id); setFrameworkOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${
-                            platform === fw.id
-                              ? "bg-primary-500/10 text-primary-500"
-                              : "text-text hover:bg-secondary-50"
-                          }`}
-                        >
-                          <img src={fw.icon} alt={fw.name} className="size-5 shrink-0" />
-                          <span className="font-medium">{fw.name}</span>
-                          {platform === fw.id && (
-                            <CheckIcon className="size-4 ml-auto text-primary-500" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
         <div>
           <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
           <Input
@@ -138,7 +79,7 @@ export default function ProjectFormModal({
         )}
 
         {/* ── Source Control flow ── */}
-        {needsSourceControl && !editing && (
+        {!editing && (
           <>
             <div>
               <span id={`${fid}-source-control`} className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</span>
@@ -174,6 +115,69 @@ export default function ProjectFormModal({
               </div>
             )}
           </>
+        )}
+
+        {/* Framework/Platform selector — shown after repo+branch are chosen */}
+        {!editing && selectedBranch && (
+          <div className="relative">
+            <span id={`${fid}-framework`} className="block text-sm font-medium text-text-secondary mb-1.5">
+              Framework
+              {detectingPlatform && (
+                <span className="ml-2 text-xs font-normal text-text-muted">Detecting…</span>
+              )}
+            </span>
+            <button
+              type="button"
+              aria-labelledby={`${fid}-framework`}
+              aria-haspopup="listbox"
+              aria-expanded={frameworkOpen}
+              onClick={() => setFrameworkOpen(!frameworkOpen)}
+              className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
+            >
+              {selectedFramework ? (
+                <>
+                  <img src={selectedFramework.icon} alt={selectedFramework.name} className="size-5 shrink-0" />
+                  <span className="truncate">{selectedFramework.name}</span>
+                </>
+              ) : (
+                <span className="text-text-muted">{detectingPlatform ? "Analyzing repository…" : "Select a framework…"}</span>
+              )}
+              <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
+            </button>
+
+            {frameworkOpen && (
+              <>
+                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setFrameworkOpen(false)} />
+                <div className="absolute inset-x-0 bottom-full z-20 mb-1 rounded-(--radius-input) border border-border bg-card shadow-(--shadow-overlay) max-h-64 overflow-y-auto">
+                  {FRAMEWORK_CATEGORIES.map((category) => (
+                    <div key={category.name}>
+                      <div className="sticky top-0 bg-card/95 backdrop-blur px-3 py-1.5 border-b border-border/50">
+                        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{category.name}</span>
+                      </div>
+                      {category.frameworks.map((fw) => (
+                        <button
+                          key={fw.id}
+                          type="button"
+                          onClick={() => { onPlatformChange(fw.id); setFrameworkOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${
+                            platform === fw.id
+                              ? "bg-primary-500/10 text-primary-500"
+                              : "text-text hover:bg-secondary-50"
+                          }`}
+                        >
+                          <img src={fw.icon} alt={fw.name} className="size-5 shrink-0" />
+                          <span className="font-medium">{fw.name}</span>
+                          {platform === fw.id && (
+                            <CheckIcon className="size-4 ml-auto text-primary-500" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         <div className="flex items-center justify-end gap-3 pt-4 mt-2 border-t border-border sticky bottom-0 bg-card">

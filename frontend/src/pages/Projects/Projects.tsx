@@ -37,6 +37,7 @@ export default function Projects() {
     handleSearch,
     platform,
     setPlatform,
+    detectingPlatform,
     connections,
     selectedConnectionId,
     setSelectedConnectionId,
@@ -85,6 +86,7 @@ export default function Projects() {
         onSubmit={handleSubmit}
         platform={platform}
         onPlatformChange={setPlatform}
+        detectingPlatform={detectingPlatform}
         connections={connections}
         selectedConnectionId={selectedConnectionId}
         onConnectionChange={setSelectedConnectionId}

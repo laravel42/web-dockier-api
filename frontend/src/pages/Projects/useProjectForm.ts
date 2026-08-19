@@ -3,7 +3,7 @@ import { projectsApi, gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { getErrorMessage } from "@/utils/errors";
 import { useToast } from "@/context/useToast";
-import { getDefaultDeployScript } from "@/config/frameworks";
+import { getDefaultDeployScript, FRAMEWORKS } from "@/config/frameworks";
 import { PROJECT_TEMPLATES } from "./templates";
 import type { Connection, Repo, Project } from "@/types";
 
@@ -125,6 +125,45 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
     return () => { cancelled = true; };
   }, [selectedConnectionId, selectedRepo, repos]);
 
+  // ── Auto-detect framework from repo badges ─────────────────────
+
+  const [detectingPlatform, setDetectingPlatform] = useState(false);
+
+  useEffect(() => {
+    if (!selectedRepo || !selectedBranch || !selectedConnectionId) return;
+    let cancelled = false;
+
+    const detect = async () => {
+      setDetectingPlatform(true);
+      try {
+        const res = await gitApi.getRepoBadges(selectedRepo, selectedBranch, selectedConnectionId);
+        if (cancelled) return;
+        // Match the highest-confidence badge against known frameworks
+        const badgeNames = res.badges
+          .sort((a, b) => b.confidence - a.confidence)
+          .map((b) => b.name.toLowerCase());
+
+        const match = FRAMEWORKS.find((fw) =>
+          badgeNames.some((badge) =>
+            badge === fw.id ||
+            badge === fw.name.toLowerCase() ||
+            badge.replace(/[.\s]/g, "") === fw.id.replace(/[.\s]/g, ""),
+          ),
+        );
+        if (match && !cancelled) {
+          setPlatform(match.id);
+        }
+      } catch {
+        // Silently degrade — user can still pick manually
+      } finally {
+        if (!cancelled) setDetectingPlatform(false);
+      }
+    };
+
+    detect();
+    return () => { cancelled = true; };
+  }, [selectedRepo, selectedBranch, selectedConnectionId]);
+
   // ── Actions ────────────────────────────────────────────────────
 
   const resetSelections = () => {
@@ -199,7 +238,7 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
   return {
     // Form state
     showForm, editing, form, setForm,
-    platform, setPlatform,
+    platform, setPlatform, detectingPlatform,
     // Connection / repo / branch
     connections, selectedConnectionId, setSelectedConnectionId,
     repos, selectedRepo, setSelectedRepo,

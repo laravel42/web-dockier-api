@@ -72,7 +72,7 @@ export const FRAMEWORKS: Framework[] = [
   // PHP
   { id: "laravel", name: "Laravel", category: "PHP", icon: "/devicons/laravel.svg", defaultDeployScript: LARAVEL_DEPLOY },
   { id: "symfony", name: "Symfony", category: "PHP", icon: "/devicons/symfony.svg", defaultDeployScript: SYMFONY_DEPLOY },
-  { id: "wordpress", name: "WordPress", category: "PHP", icon: "/devicons/wordpress.svg", defaultDeployScript: WORDPRESS_DEPLOY },
+  /* { id: "wordpress", name: "WordPress", category: "PHP", icon: "/devicons/wordpress.svg", defaultDeployScript: WORDPRESS_DEPLOY }, */
   { id: "statamic", name: "Statamic", category: "PHP", icon: "/devicons/statamic.svg", defaultDeployScript: LARAVEL_DEPLOY },
   { id: "php", name: "PHP", category: "PHP", icon: "/devicons/php.svg", defaultDeployScript: PHP_DEPLOY },
 
