@@ -1,10 +1,15 @@
-export const STEPS = [
-  { label: "Provider", icon: "☁️" },
-  { label: "Service", icon: "⚙️" },
-  { label: "Analysis", icon: "🔍" },
-  { label: "Plan", icon: "📋" },
-  { label: "Build", icon: "📜" },
-  { label: "Deploy", icon: "🚀" },
+import { CloudIcon, CogIcon, SearchIcon, ClipboardListIcon, FileTextIcon, RocketIcon } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
+
+export type StepDef = { label: string; icon: ComponentType<SVGProps<SVGSVGElement>> };
+
+export const STEPS: StepDef[] = [
+  { label: "Provider", icon: CloudIcon },
+  { label: "Service", icon: CogIcon },
+  { label: "Analysis", icon: SearchIcon },
+  { label: "Plan", icon: ClipboardListIcon },
+  { label: "Build", icon: FileTextIcon },
+  { label: "Deploy", icon: RocketIcon },
 ];
 
 /**

@@ -7,7 +7,6 @@ export interface SeverityItem {
   label: string;
   count: number;
   color: string;
-  icon?: string;
 }
 
 export interface LanguageItem {
@@ -54,7 +53,7 @@ export default function RulesFilterSidebar({
           <div className="px-2 pb-2 space-y-0.5">
             {severities.map(s => (
               <button key={s.key} onClick={() => onSeverityChange(activeSeverity === s.key ? "" : s.key)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${activeSeverity === s.key ? "bg-primary-500 text-primary-foreground font-medium" : "text-text-muted hover:bg-card/60"}`}>
-                <span className="flex items-center gap-2">{s.icon && <span className="text-xs">{s.icon}</span>}{s.label}</span>
+                <span className="flex items-center gap-2"><span className={`size-2.5 rounded-full ${s.color.replace("text-", "bg-")}`} />{s.label}</span>
                 <span className={`text-xs ${activeSeverity === s.key ? "text-white/70" : s.color}`}>{s.count}</span>
               </button>
             ))}

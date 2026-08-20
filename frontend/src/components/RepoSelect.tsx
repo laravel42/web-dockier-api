@@ -4,7 +4,7 @@ import DropdownPortal from "./DropdownPortal";
 import Spinner from "./Spinner";
 import { Input } from "./ui/input";
 import type { Repo } from "../types";
-import { ArchiveIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react";
+import { ArchiveIcon, ChevronDownIcon, LockIcon, RefreshCwIcon } from "lucide-react";
 
 interface Props {
   value: string;
@@ -77,7 +77,12 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
         {selected ? (
           <>
             <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
-            <span className="truncate">{selected.fullName}{selected.private ? " 🔒" : ""}</span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate">{selected.fullName}</span>
+              {selected.private && (
+                <LockIcon className="size-3.5 shrink-0" aria-label="Private" />
+              )}
+            </div>
           </>
         ) : (
           <span className="text-text-muted">Select a repository…</span>
@@ -116,12 +121,17 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
                 key={r.fullName}
                 type="button"
                 onClick={() => { onChange(r.fullName); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary-50 transition-colors ${
-                  value === r.fullName ? "bg-primary-50 text-primary-600" : "text-text"
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary transition-colors ${
+                  value === r.fullName ? "bg-primary/10 text-primary-600" : "text-text"
                 }`}
               >
                 <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
-                <span>{r.fullName}{r.private ? " 🔒" : ""}</span>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate">{r.fullName}</span>
+                  {r.private && (
+                    <LockIcon className="size-3.5 shrink-0" aria-label="Private" />
+                  )}
+                </div>
               </button>
             ))
           )}

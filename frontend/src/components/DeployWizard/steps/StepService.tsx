@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { RepoAnalysis, WizardState } from "../types";
 import { PROVIDER_META } from "../constants";
 import { choiceCardIdleCls, choiceCardSelectedCls } from "@/utils/styles";
-import { CircleCheckIcon } from "lucide-react";
+import { CircleCheckIcon, MonitorIcon, CloudIcon, PackageIcon } from "lucide-react";
 
 /** Templates that cannot use static hosting (they need a server runtime). */
 const STATIC_INCOMPATIBLE_TEMPLATES = ["wordpress"];
@@ -44,9 +44,9 @@ export default function StepService({ state, templateId, analysis, onChange }: {
 
   const services = hideStatic ? meta.services.filter((svc) => svc.type !== "static") : meta.services;
 
-  const typeIcons: Record<string, string> = {
-    vps: "🖥️",
-    managed: "☁️",
+  const typeIcons: Record<string, typeof MonitorIcon> = {
+    vps: MonitorIcon,
+    managed: CloudIcon,
   };
 
   return (
@@ -57,6 +57,7 @@ export default function StepService({ state, templateId, analysis, onChange }: {
       <div className="space-y-2">
         {services.map((svc) => {
           const selected = state.deployStrategy === svc.type;
+          const SvcIcon = typeIcons[svc.type] || PackageIcon;
           return (
             <button
               key={svc.type}
@@ -66,7 +67,7 @@ export default function StepService({ state, templateId, analysis, onChange }: {
                 selected ? choiceCardSelectedCls : choiceCardIdleCls
               }`}
             >
-              <span className="text-2xl mt-0.5">{typeIcons[svc.type] || "📦"}</span>
+              <SvcIcon className="size-6 mt-0.5 shrink-0 text-text-muted" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`text-sm font-semibold ${selected ? "text-foreground" : "text-text"}`}>{svc.name}</span>

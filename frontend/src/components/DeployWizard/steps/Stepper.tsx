@@ -1,7 +1,7 @@
 import { CheckIcon } from "lucide-react";
-import { STEPS } from "../constants";
+import type { StepDef } from "../constants";
 
-export default function Stepper({ current, steps }: { current: number; steps: typeof STEPS }) {
+export default function Stepper({ current, steps }: { current: number; steps: StepDef[] }) {
   return (
     <div className="flex items-center gap-1 mb-6">
       {steps.map((s, i) => {

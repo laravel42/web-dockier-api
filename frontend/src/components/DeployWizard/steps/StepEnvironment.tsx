@@ -1,7 +1,7 @@
 import type { WizardState } from "../types";
 import { PROVIDER_REGIONS } from "../constants";
 import { getPlans } from "../plans";
-import { CircleCheckIcon } from "lucide-react";
+import { CircleCheckIcon, FlaskConicalIcon, RocketIcon } from "lucide-react";
 
 export default function StepEnvironment({ state, templateId, onChange, onRegionChange }: {
   state: WizardState;
@@ -32,7 +32,10 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
                 state.environment === env ? "bg-primary/30 text-white" : "bg-card text-text-secondary hover:bg-secondary-50"
               }`}
             >
-              {env === "staging" ? "🧪 Staging" : "🚀 Production"}
+              {env === "staging"
+                ? <span className="inline-flex items-center gap-1.5"><FlaskConicalIcon className="size-3.5" />Staging</span>
+                : <span className="inline-flex items-center gap-1.5"><RocketIcon className="size-3.5" />Production</span>
+              }
             </button>
           ))}
         </div>

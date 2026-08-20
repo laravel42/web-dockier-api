@@ -340,9 +340,9 @@ function CustomRulesPanel({
       <div className="flex gap-4">
         <RulesFilterSidebar
           severities={[
-            { key: "error", label: "Error", count: counts.error, color: "text-danger-500", icon: "🔴" },
-            { key: "warning", label: "Warning", count: counts.warning, color: "text-warning-500", icon: "🟡" },
-            { key: "info", label: "Info", count: counts.info, color: "text-primary-500", icon: "🔵" },
+            { key: "error", label: "Error", count: counts.error, color: "text-danger-500" },
+            { key: "warning", label: "Warning", count: counts.warning, color: "text-warning-500" },
+            { key: "info", label: "Info", count: counts.info, color: "text-primary-500" },
           ]}
           activeSeverity={sevTab}
           onSeverityChange={(k) => onSevTabChange(k)}

@@ -125,11 +125,11 @@ export default function SonarQubeRulesPanel() {
       <div className="flex gap-4">
         <RulesFilterSidebar
           severities={[
-            { key: "BLOCKER", label: "Blocker", count: rules.filter(r => r.severity === "BLOCKER").length, color: "text-danger-ink", icon: "🔴" },
-            { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-caution-ink", icon: "🟠" },
-            { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-warning-ink", icon: "🟡" },
-            { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-info-ink", icon: "🔵" },
-            { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-text-muted", icon: "⚪" },
+            { key: "BLOCKER", label: "Blocker", count: rules.filter(r => r.severity === "BLOCKER").length, color: "text-danger-ink" },
+            { key: "CRITICAL", label: "High", count: rules.filter(r => r.severity === "CRITICAL").length, color: "text-caution-ink" },
+            { key: "MAJOR", label: "Medium", count: rules.filter(r => r.severity === "MAJOR").length, color: "text-warning-ink" },
+            { key: "MINOR", label: "Low", count: rules.filter(r => r.severity === "MINOR").length, color: "text-info-ink" },
+            { key: "INFO", label: "Info", count: rules.filter(r => r.severity === "INFO").length, color: "text-text-muted" },
           ]}
           activeSeverity={sevFilter}
           onSeverityChange={(k) => { setSevFilter(k); setSqVisible(30); }}

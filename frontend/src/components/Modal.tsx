@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   size?: "default" | "lg" | "xl";
   /** When false, modal body does not scroll — content must manage its own overflow. */

@@ -2,7 +2,8 @@ import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
 import Spinner from "@/components/Spinner";
 import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
-import { TriangleAlertIcon } from "lucide-react";
+import { TriangleAlertIcon, ClockIcon, MailIcon, PlugIcon, SparklesIcon } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
 const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
@@ -62,12 +63,12 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   );
 
   // Build deployment requirements from aiAnalysis flags + auto-configured services
-  const deployRequirements: Array<{ icon: string; label: string }> = [];
+  const deployRequirements: Array<{ icon: ComponentType<SVGProps<SVGSVGElement>>; label: string }> = [];
   const isLaravel = analysis.techStack.some(t => t.name.toLowerCase() === "laravel");
 
   if (analysis.aiAnalysis?.needsScheduler || autoConfiguredServices.some(s => s.type === "scheduler")) {
     deployRequirements.push({
-      icon: "⏱️",
+      icon: ClockIcon,
       label: isLaravel
         ? "Task Scheduler detected — a cron entry will be configured on the instance"
         : "Task Scheduler detected — manual configuration may be required after deployment",
@@ -75,14 +76,14 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   }
   if (analysis.aiAnalysis?.needsQueueWorker) {
     deployRequirements.push({
-      icon: "📨",
+      icon: MailIcon,
       label: isLaravel
         ? "Queue Worker detected — a background worker process will be configured"
         : "Queue Worker detected — manual configuration may be required after deployment",
     });
   }
   if (analysis.aiAnalysis?.needsWebsockets) {
-    deployRequirements.push({ icon: "🔌", label: "WebSockets detected — a WebSocket server will be configured" });
+    deployRequirements.push({ icon: PlugIcon, label: "WebSockets detected — a WebSocket server will be configured" });
   }
 
   return (
@@ -90,7 +91,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
       {/* AI Summary */}
       {analysis.aiAnalysis?.summary && (
         <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary-200 rounded-lg">
-          <span className="text-base mt-0.5">✨</span>
+          <SparklesIcon className="size-4 shrink-0 text-primary-500" />
           <div className="text-xs text-text-secondary">
             <span className="font-semibold">AI Analysis:</span> {analysis.aiAnalysis.summary}
             {analysis.aiAnalysis.runtime && (
@@ -208,12 +209,15 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
             These will be automatically configured on your instance during deployment.
           </p>
           <div className="space-y-1.5">
-            {deployRequirements.map((req, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary-50 border border-border">
-                <span className="text-sm">{req.icon}</span>
-                <span className="text-xs text-text-secondary">{req.label}</span>
-              </div>
-            ))}
+            {deployRequirements.map((req, i) => {
+              const ReqIcon = req.icon;
+              return (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary-50 border border-border">
+                  <ReqIcon className="size-4 shrink-0 text-text-muted" />
+                  <span className="text-xs text-text-secondary">{req.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

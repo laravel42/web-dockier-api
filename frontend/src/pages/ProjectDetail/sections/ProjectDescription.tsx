@@ -26,7 +26,7 @@ import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useIsMdUp } from "@/hooks/useMediaQuery";
-import { FileTextIcon, XIcon } from "lucide-react";
+import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon } from "lucide-react";
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -422,15 +422,15 @@ function riskBadgeCls(level: string): string {
   return `rounded-sm border px-1.5 py-0.5 text-xs font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  credentials: "🔑 Credentials",
-  personal_identifiable: "👤 PII",
-  financial: "💳 Financial",
-  authentication: "🔐 Auth",
-  health: "🏥 Health",
-  location: "📍 Location",
-  internal: "⚙️ Internal",
-  unknown: "❓ Unknown",
+const CATEGORY_LABELS: Record<string, { icon: typeof KeyRoundIcon; label: string }> = {
+  credentials: { icon: KeyRoundIcon, label: "Credentials" },
+  personal_identifiable: { icon: UserIcon, label: "PII" },
+  financial: { icon: CreditCardIcon, label: "Financial" },
+  authentication: { icon: LockKeyholeIcon, label: "Auth" },
+  health: { icon: HeartPulseIcon, label: "Health" },
+  location: { icon: MapPinIcon, label: "Location" },
+  internal: { icon: SettingsIcon, label: "Internal" },
+  unknown: { icon: CircleHelpIcon, label: "Unknown" },
 };
 
 function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
@@ -494,7 +494,7 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
                       <span className="text-xs font-mono text-text w-1/4 truncate">{c.name}</span>
                       <span className="text-xs text-text-muted w-16 truncate">{c.type}</span>
                       <span className={riskBadgeCls(severity)}>{c.sensitivity}</span>
-                      <span className="text-xs text-text-muted">{CATEGORY_LABELS[c.category] || c.category}</span>
+                      <span className="text-xs text-text-muted inline-flex items-center gap-1">{(() => { const cat = CATEGORY_LABELS[c.category]; if (!cat) return c.category; const CatIcon = cat.icon; return <><CatIcon className="size-3" />{cat.label}</>; })()}</span>
                       <span className="text-xs text-text-muted flex-1 truncate text-right">{c.reason}</span>
                     </div>
                   );

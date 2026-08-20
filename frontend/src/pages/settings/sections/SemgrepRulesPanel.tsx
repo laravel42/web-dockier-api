@@ -206,9 +206,9 @@ export default function SemgrepRulesPanel({ filter, adding, onAddingDone }: Prop
     <div className="flex gap-4">
       <RulesFilterSidebar
         severities={[
-          { key: "error", label: "Error", count: sevCounts.error, color: "text-danger-500", icon: "🔴" },
-          { key: "warning", label: "Warning", count: sevCounts.warning, color: "text-warning-500", icon: "🟡" },
-          { key: "info", label: "Info", count: sevCounts.info, color: "text-primary-500", icon: "🔵" },
+          { key: "error", label: "Error", count: sevCounts.error, color: "text-danger-500" },
+          { key: "warning", label: "Warning", count: sevCounts.warning, color: "text-warning-500" },
+          { key: "info", label: "Info", count: sevCounts.info, color: "text-primary-500" },
         ]}
         activeSeverity={sevFilter}
         onSeverityChange={(k) => { setSevFilter(k); setVisible(30); }}

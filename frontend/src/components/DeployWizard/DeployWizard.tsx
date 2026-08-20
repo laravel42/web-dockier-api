@@ -23,11 +23,13 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     isDeploying, isFinished,
   } = useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete });
 
+  const StepIcon = STEPS[step].icon;
+
   return (
     <Modal
       open={open}
       onClose={() => { if (!isDeploying) onClose(); }}
-      title={step === 5 ? "Deploying…" : `Deploy — ${STEPS[step].icon} ${STEPS[step].label}`}
+      title={step === 5 ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
       size="xl"
     >
       <Stepper current={step} steps={STEPS} />
