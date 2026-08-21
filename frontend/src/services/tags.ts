@@ -26,7 +26,7 @@ export const tagsApi = {
 
   /** Delete a tag */
   delete: (tagId: string) =>
-    request(`/projects/tags/${tagId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/projects/tags/${tagId}`, { method: "DELETE" }),
 
   /** Get tags assigned to a project */
   getProjectTags: (projectId: string) =>

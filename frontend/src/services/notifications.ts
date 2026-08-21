@@ -18,19 +18,19 @@ export const notificationsApi = {
     type: string;
     config: Record<string, string>;
   }) =>
-    request("/notifications/channels", {
+    request<{ id: string; type: string; config: Record<string, string>; enabled: boolean }>("/notifications/channels", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   toggleChannel: (channelId: string, enabled: boolean) =>
-    request(`/notifications/channels/${channelId}/toggle`, {
+    request<{ success: true }>(`/notifications/channels/${channelId}/toggle`, {
       method: "PUT",
       body: JSON.stringify({ enabled }),
     }),
 
   deleteChannel: (channelId: string) =>
-    request(`/notifications/channels/${channelId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/notifications/channels/${channelId}`, { method: "DELETE" }),
 
   list: (params?: { unreadOnly?: boolean; limit?: number; offset?: number }) =>
     request<{
@@ -39,7 +39,7 @@ export const notificationsApi = {
     }>(`/notifications${buildQuery({ unreadOnly: params?.unreadOnly ? "true" : undefined, limit: params?.limit, offset: params?.offset })}`),
 
   markRead: (notificationId: string) =>
-    request(`/notifications/${notificationId}/read`, { method: "PUT" }),
+    request<{ success: true }>(`/notifications/${notificationId}/read`, { method: "PUT" }),
 
   markAllRead: () =>
     request<{ success: boolean; updated: number }>("/notifications/mark-all-read", { method: "PUT" }),
@@ -50,7 +50,7 @@ export const notificationsApi = {
     message: string;
     channels?: string[];
   }) =>
-    request("/notifications/send", {
+    request<{ success: true }>("/notifications/send", {
       method: "POST",
       body: JSON.stringify(data),
     }),

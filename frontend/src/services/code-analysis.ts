@@ -36,7 +36,7 @@ export const codeAnalysisApi = {
     })}`),
 
   deleteScan: (scanId: string) =>
-    request(`/code-analysis/scans/${scanId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/code-analysis/scans/${scanId}`, { method: "DELETE" }),
 
   listCustomRules: (type?: string) =>
     request<{ rules: Array<{
@@ -49,10 +49,10 @@ export const codeAnalysisApi = {
     request<{ id: string; ruleId: string }>("/code-analysis/custom-rules", { method: "POST", body: JSON.stringify(data) }),
 
   updateCustomRule: (ruleDbId: string, data: { ruleId?: string; severity?: string; message?: string; pattern?: string; extensions?: string[]; enabled?: boolean; yamlContent?: string }) =>
-    request(`/code-analysis/custom-rules/${ruleDbId}`, { method: "PUT", body: JSON.stringify({ ruleDbId, ...data }) }),
+    request<{ success: true }>(`/code-analysis/custom-rules/${ruleDbId}`, { method: "PUT", body: JSON.stringify({ ruleDbId, ...data }) }),
 
   deleteCustomRule: (ruleDbId: string) =>
-    request(`/code-analysis/custom-rules/${ruleDbId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/code-analysis/custom-rules/${ruleDbId}`, { method: "DELETE" }),
 
   listOpengrepRules: () =>
     request<{ rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>; languages: string[] }>("/code-analysis/semgrep-rules"),
@@ -61,7 +61,7 @@ export const codeAnalysisApi = {
     request<{ content: string }>(`/code-analysis/semgrep-rules/content${buildQuery({ path })}`),
 
   updateOpengrepRuleContent: (path: string, content: string) =>
-    request("/code-analysis/semgrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
+    request<{ success: true }>("/code-analysis/semgrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
 
   listSonarProfiles: () =>
     request<{ profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }> }>("/code-analysis/sonar/profiles"),
@@ -72,11 +72,11 @@ export const codeAnalysisApi = {
     ),
 
   toggleSonarRule: (profileKey: string, ruleKey: string, activate: boolean) =>
-    request("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
+    request<{ success: true }>("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
 
   listRuleOverrides: (tool: "semgrep" | "sonarqube") =>
     request<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }>(`/code-analysis/rule-overrides${buildQuery({ tool })}`),
 
   toggleRule: (tool: "semgrep" | "sonarqube", ruleId: string, enabled: boolean) =>
-    request("/code-analysis/rule-overrides", { method: "POST", body: JSON.stringify({ tool, ruleId, enabled }) }),
+    request<{ success: true }>("/code-analysis/rule-overrides", { method: "POST", body: JSON.stringify({ tool, ruleId, enabled }) }),
 };

@@ -26,7 +26,7 @@ export const integrationsApi = {
     }),
 
   deletePMIntegration: (integrationId: string) =>
-    request(`/integrations/pm/${integrationId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/integrations/pm/${integrationId}`, { method: "DELETE" }),
 
   listPMTeams: (integrationId: string) =>
     request<{

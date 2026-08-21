@@ -15,16 +15,16 @@ export const deployApi = {
     apiSecret: string;
     region?: string;
   }) =>
-    request("/deploy/providers", {
+    request<{ id: string; provider: string; label: string }>("/deploy/providers", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   deleteProvider: (providerId: string) =>
-    request(`/deploy/providers/${providerId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/deploy/providers/${providerId}`, { method: "DELETE" }),
 
   updateProvider: (providerId: string, data: { label?: string; apiSecret?: string }) =>
-    request(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
+    request<{ success: true }>(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listDeployments: (params?: {
     providerId?: string;

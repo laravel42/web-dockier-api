@@ -34,16 +34,16 @@ export const gitApi = {
     repoUrl: string;
     endpoint: string;
   }) =>
-    request("/git/connections", {
+    request<Connection>("/git/connections", {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   deleteConnection: (connectionId: string) =>
-    request(`/git/connections/${connectionId}`, { method: "DELETE" }),
+    request<{ success: true }>(`/git/connections/${connectionId}`, { method: "DELETE" }),
 
   updateConnection: (connectionId: string, data: { label: string; personalToken?: string }) =>
-    request(`/git/connections/${connectionId}`, { method: "PUT", body: JSON.stringify({ connectionId, ...data }) }),
+    request<{ success: true }>(`/git/connections/${connectionId}`, { method: "PUT", body: JSON.stringify({ connectionId, ...data }) }),
 
   listRepos: (connectionId: string, refresh?: boolean) =>
     request<{ repos: Repo[]; cached: boolean }>(`/git/connections/${connectionId}/repos${buildQuery({ refresh: refresh ? "true" : undefined })}`),
