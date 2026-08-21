@@ -24,9 +24,8 @@ export default function Projects() {
     loadError,
     reload,
     showForm,
-    editing,
-    form,
-    setForm,
+    openCreate,
+    closeForm,
     deleteId,
     setDeleteId,
     viewMode,
@@ -35,28 +34,6 @@ export default function Projects() {
     goToPage,
     search,
     handleSearch,
-    platform,
-    setPlatform,
-    detectingPlatform,
-    connections,
-    selectedConnectionId,
-    setSelectedConnectionId,
-    repos,
-    selectedRepo,
-    setSelectedRepo,
-    branches,
-    selectedBranch,
-    setSelectedBranch,
-    loadingRepos,
-    loadingBranches,
-    loadingConnections,
-    refreshRepos,
-    refreshingRepos,
-    error,
-    submitting,
-    openCreate,
-    closeForm,
-    handleSubmit,
     confirmDelete,
     projectLangs,
     projectBadgeLoading,
@@ -79,36 +56,8 @@ export default function Projects() {
 
       <ProjectFormModal
         open={showForm}
-        editing={!!editing}
-        form={form}
-        onFormChange={setForm}
         onClose={closeForm}
-        onSubmit={handleSubmit}
-        platform={platform}
-        onPlatformChange={setPlatform}
-        detectingPlatform={detectingPlatform}
-        connections={connections}
-        selectedConnectionId={selectedConnectionId}
-        onConnectionChange={setSelectedConnectionId}
-        loadingConnections={loadingConnections}
-        repos={repos}
-        selectedRepo={selectedRepo}
-        onRepoChange={(val) => {
-          setSelectedRepo(val);
-          if (!form.name && val) {
-            const repo = repos.find((r) => r.fullName === val);
-            if (repo) setForm((f) => ({ ...f, name: repo.name }));
-          }
-        }}
-        loadingRepos={loadingRepos}
-        onRefreshRepos={refreshRepos}
-        refreshingRepos={refreshingRepos}
-        submitting={submitting}
-        branches={branches}
-        selectedBranch={selectedBranch}
-        onBranchChange={setSelectedBranch}
-        loadingBranches={loadingBranches}
-        error={error}
+        onSuccess={reload}
       />
 
       {loading && projects.length === 0 && !search ? (

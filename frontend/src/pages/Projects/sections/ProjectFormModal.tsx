@@ -1,4 +1,4 @@
-import { useState, useId } from "react";
+import { useState, useId, useEffect } from "react";
 import Modal from "@/components/Modal";
 import SourceControlSelect from "@/components/SourceControlSelect";
 import RepoSelect from "@/components/RepoSelect";
@@ -6,67 +6,66 @@ import BranchSelect from "@/components/BranchSelect";
 import { FRAMEWORK_CATEGORIES } from "@/config/frameworks";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
-import type { Connection, Repo } from "@/types";
 import { CheckIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { useProjectForm } from "../useProjectForm";
 
 interface Props {
   open: boolean;
-  editing: boolean;
-  form: { name: string; repository: string; branch: string };
-  onFormChange: (form: { name: string; repository: string; branch: string }) => void;
   onClose: () => void;
-  onSubmit: (e: React.FormEvent) => void;
-  // platform/framework
-  platform: string;
-  onPlatformChange: (id: string) => void;
-  detectingPlatform?: boolean;
-  // selection state
-  connections: Connection[];
-  selectedConnectionId: string;
-  onConnectionChange: (id: string) => void;
-  loadingConnections: boolean;
-  repos: Repo[];
-  selectedRepo: string;
-  onRepoChange: (val: string) => void;
-  loadingRepos: boolean;
-  onRefreshRepos?: () => void;
-  refreshingRepos?: boolean;
-  submitting?: boolean;
-  branches: string[];
-  selectedBranch: string;
-  onBranchChange: (val: string) => void;
-  loadingBranches: boolean;
-  error: string;
+  onSuccess: () => void;
 }
 
-export default function ProjectFormModal({
-  open, editing, form, onFormChange, onClose, onSubmit,
-  platform, onPlatformChange, detectingPlatform,
-  connections, selectedConnectionId, onConnectionChange, loadingConnections,
-  repos, selectedRepo, onRepoChange, loadingRepos,
-  onRefreshRepos, refreshingRepos, submitting,
-  branches, selectedBranch, onBranchChange, loadingBranches,
-  error,
-}: Props) {
+export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
+  const {
+    form, setForm,
+    platform, setPlatform, detectingPlatform,
+    connections, selectedConnectionId, setSelectedConnectionId,
+    repos, selectedRepo, setSelectedRepo,
+    branches, selectedBranch, setSelectedBranch,
+    loadingRepos, loadingBranches, loadingConnections,
+    refreshRepos, refreshingRepos,
+    error, submitting,
+    openCreate, closeForm, handleSubmit,
+  } = useProjectForm({ onSuccess: () => { onClose(); onSuccess(); } });
+
+  // Trigger internal open/reset when the modal opens
+  useEffect(() => {
+    if (open) openCreate();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleClose = () => {
+    closeForm();
+    onClose();
+  };
+
   const fid = useId();
   const isRepoReady = !!selectedRepo && !!selectedBranch;
-  const canSubmit = editing || (!!platform && !!form.name && isRepoReady);
+  const canSubmit = !!platform && !!form.name && isRepoReady;
 
   const [frameworkOpen, setFrameworkOpen] = useState(false);
   useEscapeKey(frameworkOpen, () => setFrameworkOpen(false));
   const selectedFramework = FRAMEWORK_CATEGORIES.flatMap((c) => c.frameworks).find((fw) => fw.id === platform);
 
+  // Auto-fill project name from repo selection
+  const handleRepoChange = (val: string) => {
+    setSelectedRepo(val);
+    if (!form.name && val) {
+      const repo = repos.find((r) => r.fullName === val);
+      if (repo) setForm((f) => ({ ...f, name: repo.name }));
+    }
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title={editing ? "Edit Project" : "New Project"} size="lg">
-      <form onSubmit={onSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
+    <Modal open={open} onClose={handleClose} title="New Project" size="lg">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
         <div>
           <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
           <Input
             id="project-name"
             type="text"
             value={form.name}
-            onChange={(e) => onFormChange({ ...form, name: e.target.value })}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="My App"
             required
           />
@@ -79,46 +78,42 @@ export default function ProjectFormModal({
         )}
 
         {/* ── Source Control flow ── */}
-        {!editing && (
-          <>
-            <div>
-              <span id={`${fid}-source-control`} className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</span>
-              <SourceControlSelect labelledBy={`${fid}-source-control`}
-                value={selectedConnectionId}
-                onChange={onConnectionChange}
-                connections={connections}
-                loading={loadingConnections}
-              />
+        <div>
+          <span id={`${fid}-source-control`} className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</span>
+          <SourceControlSelect labelledBy={`${fid}-source-control`}
+            value={selectedConnectionId}
+            onChange={setSelectedConnectionId}
+            connections={connections}
+            loading={loadingConnections}
+          />
+        </div>
+
+        {!selectedConnectionId && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
+            <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <LinkIcon className="size-7" />
             </div>
+            <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
+            <p className="text-xs text-text-muted max-w-xs">Select a source control provider above to browse your repositories and pick a branch.</p>
+          </div>
+        )}
 
-            {!selectedConnectionId && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-3">
-                <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <LinkIcon className="size-7" />
-                </div>
-                <p className="text-sm font-medium text-text-secondary">Connect your source control</p>
-                <p className="text-xs text-text-muted max-w-xs">Select a source control provider above to browse your repositories and pick a branch.</p>
-              </div>
-            )}
+        {selectedConnectionId && (
+          <div>
+            <span id={`${fid}-repository`} className="block text-sm font-medium text-text-secondary mb-1.5">Repository</span>
+            <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={handleRepoChange} repos={repos} loading={loadingRepos} onRefresh={refreshRepos} refreshing={refreshingRepos} />
+          </div>
+        )}
 
-            {selectedConnectionId && (
-              <div>
-                <span id={`${fid}-repository`} className="block text-sm font-medium text-text-secondary mb-1.5">Repository</span>
-                <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={onRepoChange} repos={repos} loading={loadingRepos} onRefresh={onRefreshRepos} refreshing={refreshingRepos} />
-              </div>
-            )}
-
-            {selectedRepo && (
-              <div>
-                <span id={`${fid}-branch`} className="block text-sm font-medium text-text-secondary mb-1.5">Branch</span>
-                <BranchSelect labelledBy={`${fid}-branch`} value={selectedBranch} onChange={onBranchChange} branches={branches} loading={loadingBranches} />
-              </div>
-            )}
-          </>
+        {selectedRepo && (
+          <div>
+            <span id={`${fid}-branch`} className="block text-sm font-medium text-text-secondary mb-1.5">Branch</span>
+            <BranchSelect labelledBy={`${fid}-branch`} value={selectedBranch} onChange={setSelectedBranch} branches={branches} loading={loadingBranches} />
+          </div>
         )}
 
         {/* Framework/Platform selector — shown after repo+branch are chosen */}
-        {!editing && selectedBranch && (
+        {selectedBranch && (
           <div className="relative">
             <span id={`${fid}-framework`} className="block text-sm font-medium text-text-secondary mb-1.5">
               Framework
@@ -158,7 +153,7 @@ export default function ProjectFormModal({
                         <button
                           key={fw.id}
                           type="button"
-                          onClick={() => { onPlatformChange(fw.id); setFrameworkOpen(false); }}
+                          onClick={() => { setPlatform(fw.id); setFrameworkOpen(false); }}
                           className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${
                             platform === fw.id
                               ? "bg-primary-500/10 text-primary-500"
@@ -181,13 +176,13 @@ export default function ProjectFormModal({
         )}
 
         <div className="flex items-center justify-end gap-3 pt-4 mt-2 border-t border-border sticky bottom-0 bg-card">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="secondary" onClick={handleClose}>Cancel</Button>
           <Button
             type="submit"
             disabled={!canSubmit || submitting}
             loading={submitting}
           >
-            {submitting ? "Analyzing…" : editing ? "Save Changes" : "Create Project"}
+            {submitting ? "Analyzing…" : "Create Project"}
           </Button>
         </div>
       </form>

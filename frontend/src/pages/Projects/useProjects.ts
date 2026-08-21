@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { projectsApi } from "@/services/api";
 import { useProjectBadges } from "@/hooks/useProjectBadges";
 import { useProjectRepoFavicons } from "@/hooks/useProjectRepoFavicon";
 import { useViewMode } from "@/hooks/useViewMode";
 import { usePaginatedData } from "@/hooks/usePaginatedData";
-import { useProjectForm } from "./useProjectForm";
 
 const PAGE_SIZE = 50;
 
@@ -45,17 +44,20 @@ export function useProjects() {
     if (deleteId) projectsApi.delete(deleteId).then(fetchProjects);
   };
 
-  // ── Form (create / edit) ───────────────────────────────────────
+  // ── Form modal ─────────────────────────────────────────────────
 
-  const projectForm = useProjectForm({ onSuccess: fetchProjects });
+  const [showForm, setShowForm] = useState(false);
+
+  const openCreate = useCallback(() => setShowForm(true), []);
+  const closeForm = useCallback(() => setShowForm(false), []);
 
   // Auto-open create modal when navigated with state
   useEffect(() => {
     if ((location.state as { openCreate?: boolean })?.openCreate) {
-      projectForm.openCreate();
+      openCreate();
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location.state, location.pathname, navigate, projectForm.openCreate]);
+  }, [location.state, location.pathname, navigate, openCreate]);
 
   // ── Public API ─────────────────────────────────────────────────
 
@@ -67,8 +69,8 @@ export function useProjects() {
     pagination, goToPage, search, handleSearch,
     // Delete
     deleteId, setDeleteId, confirmDelete,
-    // Form (spread all form state for backward-compatible access)
-    ...projectForm,
+    // Form modal
+    showForm, openCreate, closeForm,
     // Derived
     projectLangs, projectBadgeLoading,
     projectFavicons,
