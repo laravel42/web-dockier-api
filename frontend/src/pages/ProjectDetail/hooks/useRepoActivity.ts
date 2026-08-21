@@ -1,64 +1,67 @@
-import { useState, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
-import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import type { Project, CommitInfo, RepoIssue, RepoPullRequest } from "@/types";
 
 /**
  * Recent commits, open issues, and pull requests for the project.
+ *
+ * Uses `useAsyncData` for each domain (commits, issues, PRs), which handles
+ * loading/error state, stale-request cancellation, and manual reload.
  */
 export function useRepoActivity(project: Project | null) {
-  const [recentCommits, setRecentCommits] = useState<CommitInfo[]>([]);
-  const [commitsLoading, setCommitsLoading] = useState(false);
-  const [commitsError, setCommitsError] = useState("");
+  const parsed = useMemo(
+    () => (project?.repository ? parseOwnerRepo(project.repository) : null),
+    [project?.repository],
+  );
 
-  const [openIssues, setOpenIssues] = useState<RepoIssue[]>([]);
-  const [issuesLoading, setIssuesLoading] = useState(false);
-  const [issuesError, setIssuesError] = useState("");
+  const enabled = !!(
+    project?.connectionId &&
+    project.repository &&
+    project.sourceType !== "template" &&
+    parsed
+  );
 
-  const [pullRequests, setPullRequests] = useState<RepoPullRequest[]>([]);
-  const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
-  const [pullRequestsError, setPullRequestsError] = useState("");
+  const { data: recentCommits, loading: commitsLoading, error: commitsError } = useAsyncData<CommitInfo[]>(
+    () => gitApi.getRecentCommits(project!.connectionId, parsed!.owner, parsed!.repo, project!.branch || undefined, 5)
+      .then((res) => res.commits),
+    [project?.id, project?.connectionId, project?.repository, project?.branch],
+    { enabled },
+  );
 
-  useEffect(() => {
-    if (!project?.connectionId || !project.repository) return;
-    if (project.sourceType === "template") return;
+  const { data: openIssues, loading: issuesLoading, error: issuesError, setData: setOpenIssuesRaw } = useAsyncData<RepoIssue[]>(
+    () => gitApi.getOpenIssues(project!.connectionId, parsed!.owner, parsed!.repo, 10)
+      .then((res) => res.issues),
+    [project?.id, project?.connectionId, project?.repository],
+    { enabled },
+  );
 
-    const parsed = parseOwnerRepo(project.repository);
-    if (!parsed) return;
+  // Wrap setData to match the consumer's expected signature: (updater: (prev) => next) => void
+  const setOpenIssues = useCallback(
+    (updater: (prev: RepoIssue[]) => RepoIssue[]) => {
+      setOpenIssuesRaw((prev) => updater(prev ?? []));
+    },
+    [setOpenIssuesRaw],
+  );
 
-    setCommitsLoading(true);
-    setCommitsError("");
-    gitApi.getRecentCommits(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, 5)
-      .then((res) => setRecentCommits(res.commits))
-      .catch((err: unknown) => setCommitsError(getErrorMessage(err, "Failed to load commits")))
-      .finally(() => setCommitsLoading(false));
-
-    setIssuesLoading(true);
-    setIssuesError("");
-    gitApi.getOpenIssues(project.connectionId, parsed.owner, parsed.repo, 10)
-      .then((res) => setOpenIssues(res.issues))
-      .catch((err: unknown) => setIssuesError(getErrorMessage(err, "Failed to load issues")))
-      .finally(() => setIssuesLoading(false));
-
-    setPullRequestsLoading(true);
-    setPullRequestsError("");
-    gitApi.getPullRequests(project.connectionId, parsed.owner, parsed.repo, 10)
-      .then((res) => setPullRequests(res.pullRequests))
-      .catch((err: unknown) => setPullRequestsError(getErrorMessage(err, "Failed to load pull requests")))
-      .finally(() => setPullRequestsLoading(false));
-  }, [project?.id, project?.connectionId, project?.repository, project?.branch, project?.sourceType]);
+  const { data: pullRequests, loading: pullRequestsLoading, error: pullRequestsError } = useAsyncData<RepoPullRequest[]>(
+    () => gitApi.getPullRequests(project!.connectionId, parsed!.owner, parsed!.repo, 10)
+      .then((res) => res.pullRequests),
+    [project?.id, project?.connectionId, project?.repository],
+    { enabled },
+  );
 
   return {
-    recentCommits,
+    recentCommits: recentCommits ?? [],
     commitsLoading,
-    commitsError,
-    openIssues,
+    commitsError: commitsError ?? "",
+    openIssues: openIssues ?? [],
     setOpenIssues,
     issuesLoading,
-    issuesError,
-    pullRequests,
+    issuesError: issuesError ?? "",
+    pullRequests: pullRequests ?? [],
     pullRequestsLoading,
-    pullRequestsError,
+    pullRequestsError: pullRequestsError ?? "",
   };
 }

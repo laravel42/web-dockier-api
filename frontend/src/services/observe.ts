@@ -7,6 +7,7 @@ import type {
   LogType,
   LogEntry,
   ActivityEntry,
+  PaginationMeta,
 } from "../types";
 
 export const observeApi = {
@@ -43,7 +44,7 @@ export const observeApi = {
 
   // Activity
   listActivity: (projectId: string, params?: { limit?: number; offset?: number; search?: string }) =>
-    request<{ activity: ActivityEntry[]; pagination: { total: number; limit: number; offset: number } }>(
+    request<{ activity: ActivityEntry[]; pagination: PaginationMeta }>(
       `/projects/${encodeURIComponent(projectId)}/activity${buildQuery({ limit: params?.limit ?? 50, offset: params?.offset ?? 0, search: params?.search })}`,
     ),
 };

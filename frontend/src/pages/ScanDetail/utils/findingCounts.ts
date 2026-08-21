@@ -1,4 +1,4 @@
-import type { ProviderSeverityCounts, SecurityFindingCounts } from "../types";
+import type { ProviderSeverityCounts, SecurityFindingCounts } from "@/types";
 
 export function resolveFilteredCounts(
   findingCounts: SecurityFindingCounts | null,

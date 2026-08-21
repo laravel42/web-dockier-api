@@ -7,6 +7,7 @@ import type {
   BuildLogs,
   BuildDeployStatus,
   StartBuildInput,
+  PaginationMeta,
 } from "../types";
 
 export const imageBuilderApi = {
@@ -22,7 +23,7 @@ export const imageBuilderApi = {
   listBuilds: (params?: { sourceRepo?: string; status?: string; limit?: number; offset?: number }) =>
     request<{
       builds: BuildListItem[];
-      pagination: { total: number; limit: number; offset: number };
+      pagination: PaginationMeta;
     }>(`/image-builder/builds${buildQuery(params)}`),
 
   getImageForRevision: (revision: string) =>

@@ -1,5 +1,6 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
+import type { PaginationMeta } from "../types";
 
 export const usersApi = {
   list: (params?: { limit?: number; offset?: number; search?: string }) =>
@@ -14,7 +15,7 @@ export const usersApi = {
         isOwner: boolean;
         createdAt: string;
       }>;
-      pagination: { total: number; limit: number; offset: number };
+      pagination: PaginationMeta;
     }>(`/users${buildQuery(params)}`),
 
   get: (userId: string) =>

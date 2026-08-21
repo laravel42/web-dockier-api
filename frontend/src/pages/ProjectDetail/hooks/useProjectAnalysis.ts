@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { clearProjectBadgeCache } from "@/utils/projectBadgeCache";
-import { SessionCache } from "@/utils/sessionCache";
+import { SessionCache } from "@/pages/ProjectDetail/utils/sessionCache";
 import { getErrorMessage } from "@/utils/errors";
 import type { Project } from "@/types";
 import type { RepoAnalysis } from "@/components/DeployWizard";

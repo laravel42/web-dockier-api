@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import FixPreviewModal from "../pages/ProjectDetail/modals/FixPreviewModal";
 import ReviewPreviewModal from "../pages/ProjectDetail/modals/ReviewPreviewModal";
-import { diffLines, diffStats } from "../utils/lineDiff";
+import { diffLines, diffStats } from "../pages/ProjectDetail/utils/lineDiff";
 import type { FixPlan, ReviewComment } from "@/services/git";
 
 /**

@@ -1,6 +1,6 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-import type { Deployment, Provider } from "../types";
+import type { Deployment, Provider, PaginationMeta } from "../types";
 
 export const deployApi = {
   listProviders: () =>
@@ -32,7 +32,7 @@ export const deployApi = {
     limit?: number;
     offset?: number;
   }) =>
-    request<{ deployments: Deployment[]; pagination: { total: number; limit: number; offset: number } }>(
+    request<{ deployments: Deployment[]; pagination: PaginationMeta }>(
       `/deploy/deployments${buildQuery(params)}`,
     ),
 

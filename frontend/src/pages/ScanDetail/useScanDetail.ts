@@ -7,8 +7,8 @@ import { getErrorMessage } from "@/utils/errors";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { useScanLiveState, useScanProgress } from "@/context/ScanProgressContext";
 import type { Scan, Finding, Project, ScanProgress, ScanSummary, SecurityFindingCounts } from "@/types";
-import { displayFindingPath } from "@/utils/scanPaths";
-import { dedupeFindings } from "@/utils/dedupeFindings";
+import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
+import { dedupeFindings } from "@/pages/ScanDetail/utils/dedupeFindings";
 
 const DEFAULT_SCAN_PROGRESS: ScanProgress = {
   phase: "cloning",

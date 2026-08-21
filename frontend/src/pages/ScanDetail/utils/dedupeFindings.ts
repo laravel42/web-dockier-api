@@ -1,4 +1,4 @@
-import type { Finding } from "../types";
+import type { Finding } from "@/types";
 
 /** Collapse duplicate issue rows (same rule, file, and line span). */
 export function dedupeFindings(findings: Finding[]): Finding[] {

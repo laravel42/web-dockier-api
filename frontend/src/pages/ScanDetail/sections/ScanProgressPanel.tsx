@@ -1,5 +1,5 @@
 import type { ScanProgress } from "@/types";
-import { displayFindingPath } from "@/utils/scanPaths";
+import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
 
 const SCANNER_LABELS: Record<string, string> = {
   cloning: "Cloning",

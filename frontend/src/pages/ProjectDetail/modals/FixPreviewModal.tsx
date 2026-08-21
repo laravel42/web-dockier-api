@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
 import { getErrorMessage } from "@/utils/errors";
-import { diffLines, diffStats } from "@/utils/lineDiff";
+import { diffLines, diffStats } from "@/pages/ProjectDetail/utils/lineDiff";
 import type { FixPlan } from "@/services/git";
 
 /**

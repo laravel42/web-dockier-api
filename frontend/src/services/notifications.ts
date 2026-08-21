@@ -1,6 +1,6 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-import type { Notification } from "../types";
+import type { Notification, PaginationMeta } from "../types";
 
 export const notificationsApi = {
   listChannels: () =>
@@ -35,7 +35,7 @@ export const notificationsApi = {
   list: (params?: { unreadOnly?: boolean; limit?: number; offset?: number }) =>
     request<{
       notifications: Notification[];
-      pagination: { total: number; limit: number; offset: number };
+      pagination: PaginationMeta;
     }>(`/notifications${buildQuery({ unreadOnly: params?.unreadOnly ? "true" : undefined, limit: params?.limit, offset: params?.offset })}`),
 
   markRead: (notificationId: string) =>
