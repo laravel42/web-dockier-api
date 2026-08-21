@@ -15,6 +15,8 @@ import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
+import MetadataBar from "./components/MetadataBar";
+import SettingsHeroHeader from "./components/SettingsHeroHeader";
 
 export default function ProvidersTab() {
   const { has } = usePermissions();
@@ -132,39 +134,26 @@ export default function ProvidersTab() {
         {editingProvider && (
             <form onSubmit={handleEditSave} className="space-y-5">
               {/* Hero header */}
-              <div className="flex items-center gap-5">
-                <div className="size-14  rounded-xl flex items-center justify-center shrink-0">
-                  <ProviderBadge provider={editingProvider.provider} showName={false} iconSize="w-10 h-10" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-lg font-semibold text-text">{getProviderStyle(editingProvider.provider).name || editingProvider.provider}</p>
-                  <p className="text-sm text-text-muted">{getProviderStyle(editingProvider.provider).description}</p>
-                </div>
-              </div>
+              <SettingsHeroHeader
+                icon={<ProviderBadge provider={editingProvider.provider} showName={false} iconSize="w-10 h-10" />}
+                title={getProviderStyle(editingProvider.provider).name || editingProvider.provider}
+                description={getProviderStyle(editingProvider.provider).description}
+              />
 
               {/* Metadata bar */}
-              <div className="flex items-center gap-6 py-3 px-4 rounded-lg bg-secondary-50 border border-border text-xs">
-                <div>
-                  <span className="uppercase tracking-wide text-text-muted font-semibold">Added</span>
-                  <p className="text-text font-medium mt-0.5">{editingProvider.createdAt ? new Date(editingProvider.createdAt).toLocaleDateString() : "—"}</p>
-                </div>
-                <div className="w-px h-8 bg-border" />
-                <div>
-                  <span className="uppercase tracking-wide text-text-muted font-semibold">Status</span>
-                  <p className={`font-medium mt-0.5 ${editEnabled ? "text-success-500" : "text-text-muted"}`}>{editEnabled ? "Connected" : "Disabled"}</p>
-                </div>
-                <div className="w-px h-8 bg-border" />
-                <div>
-                  <span className="uppercase tracking-wide text-text-muted font-semibold">Provider</span>
-                  <p className="text-text font-medium mt-0.5 capitalize">{editingProvider.provider}</p>
-                </div>
-                <div className="ml-auto">
+              <MetadataBar
+                items={[
+                  { label: "Added", value: editingProvider.createdAt ? new Date(editingProvider.createdAt).toLocaleDateString() : "—" },
+                  { label: "Status", value: <span className={editEnabled ? "text-success-500" : "text-text-muted"}>{editEnabled ? "Connected" : "Disabled"}</span> },
+                  { label: "Provider", value: <span className="capitalize">{editingProvider.provider}</span> },
+                ]}
+                action={
                   <button id="edit-provider-enabled" type="button" onClick={() => setEditEnabled(!editEnabled)}
                     className={`px-4 py-1.5 rounded-(--radius-btn) text-xs font-medium transition-colors ${editEnabled ? "bg-secondary-200 text-secondary-800 hover:bg-secondary-300" : "bg-primary-500 text-primary-foreground hover:bg-primary-600"}`}>
                     {editEnabled ? "Disable" : "Enable"}
                   </button>
-                </div>
-              </div>
+                }
+              />
 
               {/* Overview */}
               <div>

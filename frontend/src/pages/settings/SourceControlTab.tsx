@@ -16,6 +16,8 @@ import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
+import MetadataBar from "./components/MetadataBar";
+import SettingsHeroHeader from "./components/SettingsHeroHeader";
 
 export default function SourceControlTab() {
   const { has } = usePermissions();
@@ -121,33 +123,20 @@ export default function SourceControlTab() {
         {editingConn && (
           <form onSubmit={handleEditSave} className="space-y-5">
             {/* Hero header */}
-            <div className="flex items-center gap-5">
-              <div className="size-14  rounded-xl flex items-center justify-center shrink-0">
-                <SourceControlBadge provider={editingConn.provider} showName={false} iconSize="w-10 h-10" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-semibold text-text capitalize">{editingConn.provider.replace("_", " ")}</p>
-                <p className="text-sm text-text-muted">{getSourceControl(editingConn.provider).description}</p>
-              </div>
-            </div>
+            <SettingsHeroHeader
+              icon={<SourceControlBadge provider={editingConn.provider} showName={false} iconSize="w-10 h-10" />}
+              title={editingConn.provider.replace("_", " ")}
+              description={getSourceControl(editingConn.provider).description}
+            />
 
             {/* Metadata bar */}
-            <div className="flex items-center gap-6 py-3 px-4 rounded-lg bg-secondary-50 border border-border text-xs">
-              <div>
-                <span className="uppercase tracking-wide text-text-muted font-semibold">Connected</span>
-                <p className="text-text font-medium mt-0.5">{editingConn.createdAt ? new Date(editingConn.createdAt).toLocaleDateString() : "—"}</p>
-              </div>
-              <div className="w-px h-8 bg-border" />
-              <div>
-                <span className="uppercase tracking-wide text-text-muted font-semibold">Status</span>
-                <p className="font-medium mt-0.5 text-success-500">Connected</p>
-              </div>
-              <div className="w-px h-8 bg-border" />
-              <div>
-                <span className="uppercase tracking-wide text-text-muted font-semibold">Provider</span>
-                <p className="text-text font-medium mt-0.5 capitalize">{editingConn.provider.replace("_", " ")}</p>
-              </div>
-            </div>
+            <MetadataBar
+              items={[
+                { label: "Connected", value: editingConn.createdAt ? new Date(editingConn.createdAt).toLocaleDateString() : "—" },
+                { label: "Status", value: <span className="text-success-500">Connected</span> },
+                { label: "Provider", value: <span className="capitalize">{editingConn.provider.replace("_", " ")}</span> },
+              ]}
+            />
 
             {/* Overview */}
             <div>
