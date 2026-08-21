@@ -14,12 +14,15 @@
  *   buildQuery({ repo, branch: undefined })    // "?repo=app"
  *   buildQuery({})                             // ""
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function buildQuery(params?: Record<string, any> | null): string {
+export type QueryParamValue = string | number | boolean | null | undefined;
+
+// Accepts any object whose values are serializable primitives.
+// Uses a mapped type to avoid the index-signature incompatibility with named interfaces.
+export function buildQuery<T extends object>(params?: T | null): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value === undefined || value === null || value === "") continue;
-    search.append(key, String(value));
+    search.append(key, String(value as QueryParamValue));
   }
   const qs = search.toString();
   return qs ? `?${qs}` : "";

@@ -1,21 +1,21 @@
 import { request } from "./request";
 import type { TenantMembership } from "../types";
 
+/** Response shape shared by all login/verify endpoints. */
+interface AuthSessionResponse {
+  session: { token: string; userId: string; tenantId: string };
+  memberships: TenantMembership[];
+}
+
 export const authApi = {
   demoLogin: () =>
-    request<{
-      session: { token: string; userId: string; tenantId: string };
-      memberships: TenantMembership[];
-    }>("/auth/demo-login", {
+    request<AuthSessionResponse>("/auth/demo-login", {
       method: "POST",
       headers: { Authorization: "" },
     }),
 
   passwordLogin: (data: { email: string; password: string }) =>
-    request<{
-      session: { token: string; userId: string; tenantId: string };
-      memberships: TenantMembership[];
-    }>("/auth/password/login", {
+    request<AuthSessionResponse>("/auth/password/login", {
       method: "POST",
       body: JSON.stringify(data),
       headers: { Authorization: "" },
@@ -29,10 +29,7 @@ export const authApi = {
     }),
 
   verifyRegistration: (data: { email: string; token: string; tenantName?: string }) =>
-    request<{
-      session: { token: string; userId: string; tenantId: string };
-      memberships: TenantMembership[];
-    }>("/auth/passwordless/verify", {
+    request<AuthSessionResponse>("/auth/passwordless/verify", {
       method: "POST",
       body: JSON.stringify({
         ...data,
@@ -55,10 +52,7 @@ export const authApi = {
     tenantSlug?: string;
     tenantName?: string;
   }) =>
-    request<{
-      session: { token: string; userId: string; tenantId: string };
-      memberships: TenantMembership[];
-    }>("/auth/passwordless/verify", {
+    request<AuthSessionResponse>("/auth/passwordless/verify", {
       method: "POST",
       body: JSON.stringify(data),
       headers: { Authorization: "" },
