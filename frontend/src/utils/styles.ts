@@ -188,6 +188,7 @@ export const settingsBadgeCls = {
   primary: `${settingsBadgeBase} border-primary-500/45 bg-primary-500/30 text-primary-300`,
   success: `${settingsBadgeBase} border-success-line bg-success-surface text-success-ink`,
   warning: `${settingsBadgeBase} border-warning-line bg-warning-surface text-warning-ink`,
+  danger: `${settingsBadgeBase} border-danger-line bg-danger-surface text-danger-ink`,
   muted: `${settingsBadgeBase} border-border/60 bg-secondary-50/30 text-text-muted`,
 } as const;
 

@@ -8,20 +8,35 @@ interface Props {
   suffix?: string;
   iconSize?: string;
   showName?: boolean;
+  size?: "default" | "compact";
 }
 
-export default function ProviderBadge({ provider, suffix, iconSize = "w-2.5 h-2.5", showName = true }: Props) {
+export default function ProviderBadge({
+  provider,
+  suffix,
+  iconSize,
+  showName = true,
+  size = "default",
+}: Props) {
   const ps = getProviderStyle(provider);
+  const compact = size === "compact";
+  const glyph = iconSize ?? (compact ? "size-2.5" : "w-2.5 h-2.5");
 
   if (!showName) {
-    return ps.icon ? <DevIcon src={ps.icon} alt="" className={iconSize} /> : null;
+    return ps.icon ? <DevIcon src={ps.icon} alt="" className={glyph} /> : null;
   }
 
   const label = ps.name || provider.toUpperCase();
 
   return (
-    <span className={`${chipCls} whitespace-nowrap`}>
-      {ps.icon && <DevIcon src={ps.icon} alt="" className={iconSize} />}
+    <span
+      className={
+        compact
+          ? "inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-border/60 bg-card/40 px-1 py-px text-xs/tight text-text-muted"
+          : `${chipCls} whitespace-nowrap`
+      }
+    >
+      {ps.icon && <DevIcon src={ps.icon} alt="" className={glyph} />}
       {label}
       {suffix && <>{suffix}</>}
     </span>
