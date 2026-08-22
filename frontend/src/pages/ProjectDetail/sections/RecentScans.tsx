@@ -1,17 +1,18 @@
 import type { Scan } from "@/types";
-import { cardCls } from "@/utils/styles";
-import StatusRingIcon from "@/components/badges/StatusRingIcon";
+import { cardCls, typeCardDateCls } from "@/utils/styles";
+import { formatCardDateTime } from "@/utils/formatCardDate";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
-import { isScanSecurityClean } from "@/utils/scanSummary";
+import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import EmptyState from "@/components/ui/EmptyState";
-import { ShieldCheckIcon } from "lucide-react";
 
 interface Props {
   scans: Scan[];
   navigate: (path: string) => void;
   /** Enables the "Run first scan" action on the empty state. */
   projectId?: string;
+  /** Shown when a scan recorded no SHA of its own — the branch head stands in. */
+  fallbackCommitHash?: string;
   /** Non-empty when the fetch failed — never conflated with "no scans". */
   error?: string;
   onRetry?: () => void;
@@ -45,11 +46,21 @@ function buildRows(scans: Scan[]): TimelineRow[] {
   return rows;
 }
 
-export default function RecentScans({ scans, navigate, projectId, error, onRetry }: Props) {
+const rowCls =
+  "flex min-w-0 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-card/40";
+
+export default function RecentScans({
+  scans,
+  navigate,
+  projectId,
+  fallbackCommitHash,
+  error,
+  onRetry,
+}: Props) {
 
   if (error) {
     return (
-      <div className="flex h-full flex-col">
+      <div>
         <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
         <EmptyState
           compact
@@ -63,7 +74,7 @@ export default function RecentScans({ scans, navigate, projectId, error, onRetry
 
   if (!scans.length) {
     return (
-      <div className="flex h-full flex-col">
+      <div>
         <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
         <EmptyState
           compact
@@ -79,66 +90,79 @@ export default function RecentScans({ scans, navigate, projectId, error, onRetry
   }
 
   const rows = buildRows(scans);
+  const open = (id: string) => navigate(`/security/${id}`);
 
   return (
-    <div className="flex h-full flex-col">
+    /* No min-h-0 anywhere in this chain: the card should fill spare panel height
+       but never be squeezed below its own rows. */
+    <div className="flex min-w-0 flex-1 flex-col">
       <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
-      <div className={`${cardCls} p-4 flex-1`}>
-        <ol className="relative">
-          {rows.map((row, i) => {
-            const isLast = i === rows.length - 1;
-            const lineTop = row.type === "header" ? "top-6" : "top-9";
-            return (
-              <li key={row.key} className="relative flex gap-4 pb-4 last:pb-0">
-                {!isLast && (
-                  <span
-                    aria-hidden
-                    className={`absolute left-4 ${lineTop} bottom-0 w-px -translate-x-1/2 bg-border`}
-                  />
-                )}
-                {row.type === "header" ? (
-                  <>
-                    <div className="relative z-10 flex size-8 shrink-0 items-center justify-center">
-                      <span className="size-2.5 rounded-full bg-border ring-4 ring-card" />
-                    </div>
-                    <span className="text-sm font-bold text-text-muted pt-1.5">{row.label}</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="relative z-10 shrink-0 flex size-8 items-center justify-center rounded-full bg-card ring-2 ring-border">
-                      <ShieldCheckIcon className="size-4 text-primary-500" />
-                      <StatusRingIcon status={row.scan.status} />
-                    </div>
-                    <div className="min-w-0 flex-1 pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <BranchCommitLabel
-                          branch={row.scan.branch}
-                          onClick={() => navigate(`/security/${row.scan.id}`)}
-                        />
-                      </div>
-                      {row.scan.summary && row.scan.status === "completed" && (
-                        <div className="flex items-center flex-wrap gap-1 mt-1.5">
-                          {row.scan.summary.errors > 0 && (
-                            <SeverityBadge severity="error" count={row.scan.summary.errors} size="compact" />
-                          )}
-                          {row.scan.summary.warnings > 0 && (
-                            <SeverityBadge severity="warning" count={row.scan.summary.warnings} size="compact" />
-                          )}
-                          {row.scan.summary.infos > 0 && (
-                            <SeverityBadge severity="info" count={row.scan.summary.infos} size="compact" />
-                          )}
-                          {isScanSecurityClean(row.scan.summary) && (
-                            <SeverityBadge severity="clean" label="Clean" size="compact" />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+      {/* Vertical-only card padding so hover bands and day rules reach the card edges. */}
+      <div className={`${cardCls} flex-1 py-2`}>
+      <ul className="min-w-0">
+      {rows.map((row, i) =>
+        row.type === "header" ? (
+          <li
+            key={row.key}
+            className={`flex items-center gap-3 px-4 pt-3 pb-1.5 ${i > 0 ? "mt-1 border-t border-border/40" : ""}`}
+          >
+            <span className="flex w-2 shrink-0 justify-center">
+              <span className="size-2.5 rounded-full bg-border" />
+            </span>
+            <span className="text-sm font-bold text-text-muted">{row.label}</span>
+          </li>
+        ) : (
+          /* No rule directly under a day heading — the heading is the divider. */
+          <li key={row.key} className={rows[i - 1]?.type === "scan" ? "border-t border-border/40" : ""}>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => open(row.scan.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  open(row.scan.id);
+                }
+              }}
+              className={rowCls}
+            >
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  row.scan.status === "completed"
+                    ? scanFindingSeverityDotClass(row.scan.summary)
+                    : row.scan.status === "failed"
+                      ? "bg-danger-500"
+                      : "bg-primary-500"
+                }`}
+              />
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <BranchCommitLabel
+                  branch={row.scan.branch}
+                  commit={row.scan.commitSha || fallbackCommitHash}
+                />
+              </div>
+              {row.scan.summary && row.scan.status === "completed" && (
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                  {row.scan.summary.errors > 0 && (
+                    <SeverityBadge severity="error" count={row.scan.summary.errors} />
+                  )}
+                  {row.scan.summary.warnings > 0 && (
+                    <SeverityBadge severity="warning" count={row.scan.summary.warnings} />
+                  )}
+                  {row.scan.summary.infos > 0 && (
+                    <SeverityBadge severity="info" count={row.scan.summary.infos} />
+                  )}
+                  {isScanSecurityClean(row.scan.summary) && (
+                    <SeverityBadge severity="clean" label="Clean" />
+                  )}
+                </div>
+              )}
+              <span className={`${typeCardDateCls} shrink-0`}>{formatCardDateTime(row.scan.createdAt)}</span>
+            </div>
+          </li>
+        ),
+      )}
+      </ul>
       </div>
     </div>
   );

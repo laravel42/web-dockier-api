@@ -1,11 +1,10 @@
 import type { Deployment as DeployInfo, Provider as ProviderInfo } from "@/types";
-import { cardCls } from "@/utils/styles";
+import { cardCls, typeCardDateCls } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { getDeployServiceLabel } from "@/utils/deployService";
 import { getProviderStyle } from "@/data/providers";
 import ProviderBadge from "@/components/ProviderBadge";
 import EmptyState from "@/components/ui/EmptyState";
-import StatusRingIcon from "@/components/badges/StatusRingIcon";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 
 interface Props {
@@ -48,6 +47,16 @@ function buildRows(deploys: DeployInfo[]): TimelineRow[] {
   return rows;
 }
 
+function statusDot(status: string): string {
+  if (status === "failed") return "bg-danger-500";
+  if (status === "success") return "bg-success-500";
+  if (status === "destroyed" || status === "cancelled") return "bg-secondary-400";
+  return "bg-primary-500";
+}
+
+const rowCls =
+  "flex min-w-0 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-card/40";
+
 export default function RecentDeploys({
   deploys,
   allProviders,
@@ -65,7 +74,7 @@ export default function RecentDeploys({
   // because the network dropped tells the user something false about their project.
   if (error) {
     return (
-      <div className="flex h-full flex-col">
+      <div>
         <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
         <EmptyState
           compact
@@ -79,7 +88,7 @@ export default function RecentDeploys({
 
   if (!deploys.length) {
     return (
-      <div className="flex h-full flex-col">
+      <div>
         <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
         <EmptyState
           compact
@@ -91,72 +100,68 @@ export default function RecentDeploys({
   }
 
   const rows = buildRows(deploys);
+  const open = (id: string) => navigate(`/deploy/${id}`);
 
   return (
-    <div className="flex h-full flex-col">
+    /* No min-h-0 anywhere in this chain: the card should fill spare panel height
+       but never be squeezed below its own rows. */
+    <div className="flex min-w-0 flex-1 flex-col">
       <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
-      <div className={`${cardCls} p-4 flex-1`}>
-        <ol className="relative">
-          {rows.map((row, i) => {
-            const isLast = i === rows.length - 1;
-            const lineTop = row.type === "header" ? "top-6" : "top-9";
-            const pk = row.type === "deploy" ? providerKey(row.deploy.providerId) : "";
-            const providerName = pk ? getProviderStyle(pk).name || pk.toUpperCase() : "";
-            const service = row.type === "deploy" ? getDeployServiceLabel(pk, row.deploy.deployStrategy) : "";
-            return (
-              <li key={row.key} className="relative flex gap-4 pb-4 last:pb-0">
-                {!isLast && (
-                  <span
-                    aria-hidden
-                    className={`absolute left-4 ${lineTop} bottom-0 w-px -translate-x-1/2 bg-border`}
-                  />
-                )}
-                {row.type === "header" ? (
-                  <>
-                    <div className="relative z-10 flex size-8 shrink-0 items-center justify-center">
-                      <span className="size-2.5 rounded-full bg-border ring-4 ring-card" />
-                    </div>
-                    <span className="text-sm font-bold text-text-muted pt-1.5">{row.label}</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="relative z-10 shrink-0 flex size-8 items-center justify-center rounded-full bg-card ring-2 ring-border">
-                      <ProviderBadge provider={pk} showName={false} iconSize="size-4" />
-                      <StatusRingIcon status={row.deploy.status} />
-                    </div>
-                    <div className="min-w-0 flex-1 pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <BranchCommitLabel
-                          branch={row.deploy.branch}
-                          onClick={() => navigate(`/deploy/${row.deploy.id}`)}
-                        />
-                      </div>
-                      <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-text-muted mt-1">
-                        {providerName && <span className="font-medium text-text-secondary">{providerName}</span>}
-                        {service && (
-                          <>
-                            <span>·</span>
-                            <span>{service}</span>
-                          </>
-                        )}
-                        <span>·</span>
-                        <span>{formatCardDateTime(row.deploy.createdAt)}</span>
-                        {row.deploy.dockerImage && (
-                          <>
-                            <span>·</span>
-                            <span className="font-mono truncate max-w-40" title={row.deploy.dockerImage}>
-                              {row.deploy.dockerImage.split("/").pop()?.split(":")[0] || row.deploy.dockerImage}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+      {/* Vertical-only card padding so hover bands and day rules reach the card edges. */}
+      <div className={`${cardCls} flex-1 py-2`}>
+      <ul className="min-w-0">
+      {rows.map((row, i) => {
+        if (row.type === "header") {
+          return (
+            <li
+              key={row.key}
+              className={`flex items-center gap-3 px-4 pt-3 pb-1.5 ${i > 0 ? "mt-1 border-t border-border/40" : ""}`}
+            >
+              <span className="flex w-2 shrink-0 justify-center">
+                <span className="size-2.5 rounded-full bg-border" />
+              </span>
+              <span className="text-sm font-bold text-text-muted">{row.label}</span>
+            </li>
+          );
+        }
+        const pk = providerKey(row.deploy.providerId);
+        const providerName = pk ? getProviderStyle(pk).name || pk.toUpperCase() : "";
+        const service = getDeployServiceLabel(pk, row.deploy.deployStrategy);
+        const infraLabel = [providerName, service].filter(Boolean).join(" · ");
+        return (
+          /* No rule directly under a day heading — the heading is the divider. */
+          <li key={row.key} className={rows[i - 1]?.type === "deploy" ? "border-t border-border/40" : ""}>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => open(row.deploy.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  open(row.deploy.id);
+                }
+              }}
+              className={rowCls}
+            >
+              <span className={`size-2 shrink-0 rounded-full ${statusDot(row.deploy.status)}`} />
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <BranchCommitLabel
+                  branch={row.deploy.branch}
+                  commit={row.deploy.commitHash || fallbackCommitHash}
+                />
+              </div>
+              {infraLabel && (
+                <span className="hidden min-w-0 max-w-48 shrink-0 items-center gap-1.5 truncate text-ui text-text sm:inline-flex">
+                  {pk ? <ProviderBadge provider={pk} showName={false} iconSize="size-3.5" /> : null}
+                  <span className="truncate">{infraLabel}</span>
+                </span>
+              )}
+              <span className={`${typeCardDateCls} shrink-0`}>{formatCardDateTime(row.deploy.createdAt)}</span>
+            </div>
+          </li>
+        );
+      })}
+      </ul>
       </div>
     </div>
   );
