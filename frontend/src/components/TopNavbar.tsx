@@ -71,11 +71,11 @@ export default function TopNavbar() {
 
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-card/30 backdrop-blur supports-backdrop-filter:bg-card/60">
-      <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
-        <AppBrand size="sm" className="shrink-0" />
+      <div className="mx-auto grid h-14 w-full max-w-[1600px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
+        <AppBrand size="sm" className="justify-self-start" />
 
         <nav
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide"
+          className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto scrollbar-hide"
           aria-label="Main navigation"
         >
           {visibleNavItems.map((item) => (
@@ -87,7 +87,7 @@ export default function TopNavbar() {
           ))}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex items-center justify-end gap-1">
           {inAppEnabled && <NotificationDropdown />}
 
           <DropdownMenu>
