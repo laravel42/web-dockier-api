@@ -584,6 +584,16 @@ const VULN_STYLES: Record<string, { bg: string; text: string; border: string }> 
   low: { bg: "bg-info-surface", text: "text-info-ink", border: "border-info-line" },
 };
 
+// Unknown severities rank 0, below "low", so a bad value can never outrank a
+// real critical and push it down the table.
+const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+
+const severityRank = (severity: string): number => SEVERITY_RANK[severity] ?? 0;
+
+/** A package is as urgent as its worst vulnerability; 0 when it has none. */
+const worstSeverity = (dependency: Dependency): number =>
+  dependency.vulnerabilities.reduce((worst, v) => Math.max(worst, severityRank(v.severity)), 0);
+
 const DEP_STATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
   active: { bg: "bg-success-surface", text: "text-success-ink", border: "border-success-line" },
   outdated: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
@@ -701,7 +711,12 @@ function DependencyRow({
   const [expanded, setExpanded] = useState(false);
   const hasVulns = dependency.vulnerabilities.length > 0;
   const hiddenVulnCount = Math.max(0, dependency.vulnerabilities.length - 3);
-  const visibleVulns = expanded ? dependency.vulnerabilities : dependency.vulnerabilities.slice(0, 3);
+  // Worst-first within the row too: only three badges show before collapsing to
+  // "+N more", and a critical hidden behind three lows is the one that matters.
+  const sortedVulns = [...dependency.vulnerabilities].sort(
+    (a, b) => severityRank(b.severity) - severityRank(a.severity),
+  );
+  const visibleVulns = expanded ? sortedVulns : sortedVulns.slice(0, 3);
 
   return (
     <div className="px-3 py-1.5 flex items-start gap-3 hover:bg-secondary-50/50 transition-colors">
@@ -761,13 +776,23 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
   const [filter, setFilter] = useState<"all" | "production" | "dev" | "vulnerable" | "outdated">("all");
   const [selectedVuln, setSelectedVuln] = useState<VulnDetail | null>(null);
 
-  const filtered = data.filter(d => {
-    if (filter === "production") return d.type === "production";
-    if (filter === "dev") return d.type === "dev";
-    if (filter === "vulnerable") return d.vulnerabilities.length > 0;
-    if (filter === "outdated") return d.status === "outdated";
-    return true;
-  });
+  const filtered = data
+    .filter(d => {
+      if (filter === "production") return d.type === "production";
+      if (filter === "dev") return d.type === "dev";
+      if (filter === "vulnerable") return d.vulnerabilities.length > 0;
+      if (filter === "outdated") return d.status === "outdated";
+      return true;
+    })
+    // Most urgent first. Name breaks remaining ties so the order is stable
+    // across renders rather than dependent on the scanner's output order.
+    .sort((a, b) => {
+      const bySeverity = worstSeverity(b) - worstSeverity(a);
+      if (bySeverity !== 0) return bySeverity;
+      const byCount = b.vulnerabilities.length - a.vulnerabilities.length;
+      if (byCount !== 0) return byCount;
+      return a.name.localeCompare(b.name);
+    });
 
   const vulnCount = data.reduce((sum, d) => sum + d.vulnerabilities.length, 0);
   const outdatedCount = data.filter(d => d.status === "outdated").length;
@@ -777,7 +802,7 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Filter bar */}
-      <div className="mb-3 flex shrink-0 items-center gap-1.5">
+      <div className="mb-4 flex shrink-0 items-center gap-1.5">
         {([
           { key: "all", label: `All (${data.length})` },
           { key: "production", label: `Production (${prodCount})` },
@@ -804,15 +829,17 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
       </div>
 
       {/* Table */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
-        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-secondary-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <div className={`${cardCls} flex min-h-0 flex-1 flex-col`}>
+        <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-secondary-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
           <span className="w-2/5">Package</span>
           <span className="w-[10%]">Version</span>
           <span className="w-[10%]">Latest</span>
           <span className="w-[12%]">Status</span>
           <span className="flex-1">Vulnerabilities</span>
         </div>
-        <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto scrollbar-hide">
+        {/* No scrollbar-hide: the whole list is here, so the app's own scrollbar
+            is what tells you there is more of it below. */}
+        <div className="min-h-0 flex-1 divide-y divide-border/40 overflow-y-auto">
           {filtered.map((d) => (
             <DependencyRow
               key={`${d.name}@${d.version}@${d.type}`}
@@ -871,6 +898,7 @@ export default function ProjectDescription({
   const canEditOverview = isOwner || has("project:manage");
 
   const tabListRef = useRef<HTMLDivElement>(null);
+  const navScrollRef = useRef<HTMLDivElement>(null);
   const overviewClipRef = useRef<HTMLDivElement>(null);
   const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [overviewClipPx, setOverviewClipPx] = useState<number | null>(null);
@@ -910,9 +938,10 @@ export default function ProjectDescription({
     setOverviewExpanded(false);
   }, [project.id]);
 
-  // Clip the overview at the Settings tab's top so a long README cannot stretch
-  // the card thousands of pixels. On the horizontal (mobile) strip Settings sits
-  // above the panel, so the delta is useless — fall back to a preview height.
+  // Clip the overview at the nav column's bottom so a long README cannot stretch
+  // the card thousands of pixels, while a collapsed one still fills it. On the
+  // horizontal (mobile) strip the nav sits above the panel, so the delta is
+  // useless — fall back to a preview height.
   useLayoutEffect(() => {
     if (activeMainTabSafe !== "overview") return;
 
@@ -920,16 +949,16 @@ export default function ProjectDescription({
     if (!panel) return;
 
     const measure = () => {
-      const foldEl =
-        document.getElementById(tabId("settings")) ??
-        tabListRef.current?.querySelector<HTMLElement>('[role="tab"]:last-of-type');
       const panelRect = panel.getBoundingClientRect();
-      let clipPx =
-        isSidebar && foldEl
-          ? Math.round(foldEl.getBoundingClientRect().top - panelRect.top)
+      // Measured on the nav's own scroll box, never the column around it: that
+      // column is self-stretch, so its height is the panel's and feeding it back
+      // in would ratchet. Floored by the row's min-h so a short nav (most tabs
+      // hidden by permissions) still can't leave dead space under the fold.
+      const navEl = navScrollRef.current;
+      const clipPx =
+        isSidebar && navEl
+          ? Math.max(Math.round(navEl.getBoundingClientRect().bottom - panelRect.top), 420)
           : 360;
-
-      if (clipPx < 160) clipPx = 360;
 
       const editor = panel.querySelector<HTMLElement>(".overview-editor");
       const styles = getComputedStyle(panel);
@@ -941,6 +970,9 @@ export default function ProjectDescription({
 
     const ro = new ResizeObserver(measure);
     ro.observe(panel);
+    // The nav now sets the fold, so its height changing (tabs revealed once
+    // permissions land, alarm badges wrapping) has to re-measure too.
+    if (navScrollRef.current) ro.observe(navScrollRef.current);
 
     const watchEditor = () => {
       const editor = panel.querySelector(".overview-editor");
@@ -1116,7 +1148,11 @@ export default function ProjectDescription({
   return (
     <div className={`${cardCls} mb-8`}>
 
-      <div className="flex min-h-[420px] flex-col md:min-h-[600px] md:flex-row">
+      <div
+        className={`flex flex-col md:flex-row${
+          activeMainTabSafe === "overview" ? " min-h-[420px]" : ""
+        }`}
+      >
         {/*
           Tab nav as a sidebar. Twelve peers never fit a horizontal strip — they
           overflowed behind a mask with no affordance, hiding Security and
@@ -1124,9 +1160,15 @@ export default function ProjectDescription({
           them at once and scrolls independently of the panel beside it.
           Below md it becomes a scrolling strip, since twelve stacked rows would
           push content ~430px down a phone.
+
+          A plain flex row, so the card is exactly as tall as the taller of nav
+          and panel. No fixed floor: 600px left a five-row list floating in air.
         */}
         <div className="shrink-0 border-b border-border md:w-52 md:self-stretch md:border-b-0 md:border-r">
-          <div className="md:sticky md:top-0 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto md:overscroll-contain md:scrollbar-hide">
+          <div
+            ref={navScrollRef}
+            className="md:sticky md:top-0 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto md:overscroll-contain md:scrollbar-hide"
+          >
             <div
               ref={tabListRef}
               className="flex items-stretch gap-0.5 overflow-x-auto overflow-y-hidden p-2 scrollbar-hide mask-[linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:overflow-x-visible md:mask-none"
@@ -1144,10 +1186,10 @@ export default function ProjectDescription({
                   group inside a tablist. `contents` collapses the wrapper on mobile so
                   the buttons stay in the scrolling row.
                 */
-                <div key={cluster.key} role="presentation" className="contents md:mb-3 md:block md:last:mb-0">
+                <div key={cluster.key} role="presentation" className="contents md:mb-2 md:block md:last:mb-0">
                   <p
                     aria-hidden="true"
-                    className="hidden px-3 pt-1 pb-1.5 text-xs font-semibold tracking-wide text-text-muted/70 uppercase md:block"
+                    className="hidden px-3 pt-0.5 pb-1 text-xs font-semibold tracking-wide text-text-muted/70 uppercase md:block"
                   >
                     {cluster.label}
                   </p>
@@ -1165,16 +1207,16 @@ export default function ProjectDescription({
                         tabIndex={selected ? 0 : -1}
                         onClick={() => setActiveMainTab(tab.key)}
                         onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
-                        className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
+                        className={`flex min-w-0 shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
                           selected
                             ? "bg-primary/10 text-text"
                             : "text-text-muted hover:bg-card/60 hover:text-text"
                         }`}
                       >
-                        {tab.label}
+                        <span className="min-w-0 truncate">{tab.label}</span>
                         {alarm && (
                           <span
-                            className={`rounded-sm border px-1.5 py-0.5 text-xs font-semibold tabular-nums ${ALARM_TONE[alarm.tone]}`}
+                            className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-xs font-semibold tabular-nums ${ALARM_TONE[alarm.tone]}`}
                           >
                             {alarm.count}
                             {/* The number alone is colour-coded shorthand; name what it counts. */}
@@ -1193,7 +1235,7 @@ export default function ProjectDescription({
 
         <div
           ref={overviewClipRef}
-          className={`relative flex min-h-0 flex-1 flex-col p-4 sm:p-5${clipOverview ? " overflow-hidden" : ""}`}
+          className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-4 sm:p-5${clipOverview ? " overflow-hidden" : ""}`}
           style={overviewMaxHeight != null ? { maxHeight: overviewMaxHeight } : undefined}
         >
           <div
@@ -1201,7 +1243,7 @@ export default function ProjectDescription({
             id={panelId(activeMainTabSafe)}
             aria-labelledby={tabId(activeMainTabSafe)}
             tabIndex={0}
-            className={`relative flex min-h-0 flex-1 flex-col${activeMainTabSafe === "overview" ? " pl-0 pr-2" : ""}`}
+            className={`relative flex min-h-0 min-w-0 flex-1 flex-col${activeMainTabSafe === "overview" ? " pl-0 pr-2" : ""}`}
           >
             {activeMainTabSafe === "overview" ? (
               permissionsLoading ? (
