@@ -33,7 +33,6 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
           {scans.map((s) => {
             const proj = projectMap[s.projectId];
             const summary = s.summary;
-            const isClean = summary ? isScanSecurityClean(summary) : false;
             const statusDot =
               s.status === "completed"
                 ? scanFindingSeverityDotClass(summary)
