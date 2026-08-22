@@ -28,7 +28,7 @@ export default function Settings() {
       { key: "ssh-keys", label: "SSH Keys", visible: has("credential:view") || has("credential:manage") },
       { key: "source-control", label: "Source Control", visible: has("credential:view") || has("credential:manage") },
       { key: "channels", label: "Notification Channels", visible: has("notification:view") || has("notification:manage") },
-      { key: "integrations", label: "Integrations", visible: has("credential:view") || has("credential:manage") },
+      { key: "integrations", label: "Integrations", visible: false },
       { key: "security-rules", label: "Security Tools", visible: has("scan:manage") },
     ],
     [has],
@@ -48,7 +48,7 @@ export default function Settings() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Settings" description="Account, team, and integrations." />
+        <PageHeader title="Settings" description="Account, team, and workspace." />
         <PageLoading />
       </div>
     );
@@ -61,7 +61,7 @@ export default function Settings() {
 
   return (
     <div>
-      <PageHeader title="Settings" description="Account, team, and integrations." />
+      <PageHeader title="Settings" description="Account, team, and workspace." />
       <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Settings sections">
         {visibleTabs.map(({ key, label }) => (
           <button
