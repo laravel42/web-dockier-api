@@ -20,7 +20,7 @@ export async function registerFindingRoutes(app: FastifyInstance) {
         params: z.object({ scanId: z.uuid() }),
         querystring: paginationQuerySchema.extend({
           severity: z.string().optional(),
-          provider: z.enum(["semgrep", "sonar", "custom"]).optional(),
+          provider: z.enum(["semgrep", "bearer", "custom", "codeql"]).optional(),
         }),
         response: {
           200: z.object({
@@ -33,8 +33,9 @@ export async function registerFindingRoutes(app: FastifyInstance) {
               warnings: z.number().int().nonnegative(),
               infos: z.number().int().nonnegative(),
               semgrep: z.number().int().nonnegative(),
-              sonar: z.number().int().nonnegative(),
+              bearer: z.number().int().nonnegative(),
               custom: z.number().int().nonnegative(),
+              codeql: z.number().int().nonnegative(),
               byProvider: z.object({
                 semgrep: z.object({
                   total: z.number().int().nonnegative(),
@@ -42,13 +43,19 @@ export async function registerFindingRoutes(app: FastifyInstance) {
                   warnings: z.number().int().nonnegative(),
                   infos: z.number().int().nonnegative(),
                 }),
-                sonar: z.object({
+                bearer: z.object({
                   total: z.number().int().nonnegative(),
                   errors: z.number().int().nonnegative(),
                   warnings: z.number().int().nonnegative(),
                   infos: z.number().int().nonnegative(),
                 }),
                 custom: z.object({
+                  total: z.number().int().nonnegative(),
+                  errors: z.number().int().nonnegative(),
+                  warnings: z.number().int().nonnegative(),
+                  infos: z.number().int().nonnegative(),
+                }),
+                codeql: z.object({
                   total: z.number().int().nonnegative(),
                   errors: z.number().int().nonnegative(),
                   warnings: z.number().int().nonnegative(),

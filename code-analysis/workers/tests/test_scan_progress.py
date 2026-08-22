@@ -30,11 +30,14 @@ def test_all_phases_are_representable(phase):
 @patch("src.infrastructure.scan_progress.execute_query", new_callable=AsyncMock)
 async def test_progress_merges_into_summary_rather_than_replacing_it(mock_exec):
     """The summary also carries finding counts; a progress update must not blank them."""
-    await publish_progress("scan-1", make_progress("scanning"))
+    payload = make_progress("scanning")
+    await publish_progress("scan-1", payload)
 
-    update_sql = mock_exec.await_args_list[0][0][0]
+    update_sql, progress_arg, scan_id = mock_exec.await_args_list[0][0]
     assert "||" in update_sql and "jsonb_build_object('progress'" in update_sql
     assert "SET summary = COALESCE(summary" in update_sql
+    assert progress_arg == payload, "pass dict directly — json.dumps double-encodes via the jsonb codec"
+    assert scan_id == "scan-1"
 
 
 @pytest.mark.asyncio

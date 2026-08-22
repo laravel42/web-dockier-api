@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { sastApi } from "@/services/api";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
@@ -9,9 +9,10 @@ import PageLoading from "@/components/ui/PageLoading";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import TechBadge from "@/components/TechBadge";
 import { TriangleAlertIcon, InfoIcon, PlusIcon, XIcon } from "lucide-react";
+import { segmentActiveCls, segmentIdleCls, typeSectionHeading } from "@/utils/styles";
 import type {
-  CodeQLLanguage, CodeQLSettings, CodeQLSuite, EngineSettings, RegexSettings,
-  SemgrepSettings, SonarQubeSettings,
+  BearerSettings, CodeQLLanguage, CodeQLSettings, CodeQLSuite, EngineSettings, RegexSettings,
+  SemgrepSettings,
 } from "@/types/sast";
 
 /**
@@ -82,7 +83,7 @@ function NotConfigured() {
     <div className="flex gap-3 rounded-card border border-border bg-card p-4">
       <InfoIcon className="mt-0.5 size-4 shrink-0 text-text-muted" aria-hidden />
       <div className="text-sm">
-        <p className="font-medium text-text">SonarQube and CodeQL run in a separate service.</p>
+        <p className="font-medium text-text">Bearer and CodeQL run in a separate service.</p>
         <p className="mt-1 text-text-muted">
           Set <code className="rounded bg-background px-1 py-0.5 text-xs">VITE_SAST_API_BASE</code>{" "}
           to that service&rsquo;s router — for example{" "}
@@ -164,194 +165,315 @@ function ExcludeList({
 
 function SaveRow({ saving, dirty, onSave }: { saving: boolean; dirty: boolean; onSave: () => void }) {
   return (
-    <div className="flex items-center gap-3 border-t border-border pt-4">
+    <div className="flex flex-wrap items-center justify-end gap-3">
+      {dirty && !saving && <span className="text-xs text-text-muted">Unsaved changes</span>}
       <Button onClick={onSave} disabled={saving || !dirty}>
         {saving ? "Saving…" : "Save changes"}
       </Button>
-      {dirty && !saving && <span className="text-xs text-text-muted">Unsaved changes</span>}
     </div>
   );
 }
 
-// ─── SonarQube ───
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  if (seconds < 60) return `${seconds} seconds`;
+  if (seconds < 3600) {
+    const m = Math.round(seconds / 60);
+    return m === 1 ? "1 minute" : `${m} minutes`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  if (m === 0) return h === 1 ? "1 hour" : `${h} hours`;
+  return `${h}h ${m}m`;
+}
 
-export function SonarQubeSettingsPanel() {
-  const { settings, loading, error } = useEngineSettings();
-  const [form, setForm] = useState<SonarQubeSettings | null>(null);
+function EnginePanelShell({
+  title,
+  description,
+  children,
+  footer,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-card border border-border bg-card shadow-(--shadow-card)">
+      <div className="border-b border-border px-5 py-4">
+        <h3 className={typeSectionHeading}>{title}</h3>
+        <p className="mt-1 max-w-prose text-sm text-text-muted">{description}</p>
+        <p className="mt-2 text-xs text-text-muted">
+          Turn this engine on or off in <span className="font-medium text-text-secondary">Security Tools</span> above.
+        </p>
+      </div>
+      <div className="space-y-8 p-5">
+        {children}
+      </div>
+      {footer && (
+        <div className="border-t border-border bg-background/40 px-5 py-4">
+          {footer}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettingsGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <h4 className="text-xs font-medium uppercase tracking-wider text-text-muted">{title}</h4>
+      {description ? (
+        <p className="mt-1.5 mb-4 max-w-prose text-sm text-text-muted">{description}</p>
+      ) : (
+        <div className="mb-4" aria-hidden />
+      )}
+      <div className="space-y-6">{children}</div>
+    </section>
+  );
+}
+
+function DurationField({
+  id,
+  label,
+  hint,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (seconds: number) => void;
+}) {
+  return (
+    <SettingsField id={id} label={label}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          id={id}
+          type="number"
+          min={min}
+          max={max}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="max-w-36 tabular-nums"
+        />
+        <span className="text-sm text-text-muted">{formatDuration(value)}</span>
+      </div>
+      <p className="mt-1.5 text-xs text-text-muted">{hint}</p>
+    </SettingsField>
+  );
+}
+
+const BEARER_SEVERITIES = ["critical", "high", "medium", "low", "warning"] as const;
+
+function parseSeverities(raw: string): Set<string> {
+  return new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+}
+
+function serializeSeverities(active: Set<string>): string {
+  return BEARER_SEVERITIES.filter((s) => active.has(s)).join(",");
+}
+
+function SeverityPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const active = parseSeverities(value);
+
+  const toggle = (sev: (typeof BEARER_SEVERITIES)[number]) => {
+    const next = new Set(active);
+    if (next.has(sev)) {
+      next.delete(sev);
+      if (next.size === 0) next.add(sev);
+    } else {
+      next.add(sev);
+    }
+    onChange(serializeSeverities(next));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {BEARER_SEVERITIES.map((sev) => {
+          const on = active.has(sev);
+          return (
+            <button
+              key={sev}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(sev)}
+              className={`rounded-lg border px-3 py-1.5 text-sm capitalize transition-colors ${
+                on ? segmentActiveCls : segmentIdleCls
+              }`}
+            >
+              {sev}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-3 text-xs">
+        <button
+          type="button"
+          className="font-medium text-primary hover:text-primary/80"
+          onClick={() => onChange(BEARER_SEVERITIES.join(","))}
+        >
+          All severities
+        </button>
+        <button
+          type="button"
+          className="font-medium text-primary hover:text-primary/80"
+          onClick={() => onChange("critical,high,medium")}
+        >
+          High and above
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const CODEQL_BUILD_MODES: Array<{
+  id: CodeQLSettings["buildMode"];
+  label: string;
+  note: string;
+}> = [
+  { id: "none", label: "No build", note: "Database without compiling — right for most repos." },
+  { id: "autobuild", label: "Auto-build", note: "Compile first; slower, needed for some Java and C++ projects." },
+];
+
+// ─── Bearer ───
+
+const BEARER_SCANNERS: Array<{ id: "sast" | "secrets"; label: string; note: string }> = [
+  { id: "sast", label: "SAST", note: "Static analysis rules from Bearer’s built-in rule set." },
+  { id: "secrets", label: "Secrets", note: "Hard-coded credentials, API keys, and similar leaks." },
+];
+
+export function BearerSettingsPanel() {
+  const { settings, setSettings, loading, error } = useEngineSettings();
+  const [form, setForm] = useState<BearerSettings | null>(null);
   const [saving, setSaving] = useState(false);
-  const [newExclusion, setNewExclusion] = useState("");
   const toast = useToast();
 
-  useEffect(() => { if (settings) setForm(settings.sonarqube); }, [settings]);
+  useEffect(() => { if (settings) setForm(settings.bearer); }, [settings]);
 
-  const dirty = !!form && !!settings && JSON.stringify(form) !== JSON.stringify(settings.sonarqube);
+  const dirty = !!form && !!settings && JSON.stringify(form) !== JSON.stringify(settings.bearer);
 
   const save = useCallback(async () => {
     if (!form) return;
     setSaving(true);
     try {
-      await sastApi.saveSettings("sonarqube", form);
-      toast.success("SonarQube settings saved");
+      await sastApi.saveSettings("bearer", form);
+      setSettings((prev) => (prev ? { ...prev, bearer: form } : prev));
+      toast.success("Bearer settings saved");
     } catch (e) {
       toast.error(getErrorMessage(e));
     } finally {
       setSaving(false);
     }
-  }, [form, toast]);
+  }, [form, setSettings, toast]);
 
   if (!CONFIGURED) return <NotConfigured />;
   if (loading) return <PageLoading />;
   if (error) return <Unreachable message={error} />;
   if (!form) return null;
 
-  const set = <K extends keyof SonarQubeSettings>(k: K, v: SonarQubeSettings[K]) =>
+  const set = <K extends keyof BearerSettings>(k: K, v: BearerSettings[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f));
 
+  const toggleScanner = (id: "sast" | "secrets") => {
+    const next = form.scanners.includes(id)
+      ? form.scanners.filter((s) => s !== id)
+      : [...form.scanners, id];
+    set("scanners", next.length > 0 ? next : [id === "sast" ? "secrets" : "sast"]);
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-text">SonarQube</h3>
-          <p className="mt-1 max-w-prose text-sm text-text-muted">
-            Runs <code className="rounded bg-card px-1 py-0.5 text-xs">sonar-scanner</code>, waits
-            for the server-side analysis to finish, then reads the issues back. Disabling it here
-            makes the engine report no findings rather than fail the scan.
-          </p>
-        </div>
-        <ToggleSwitch
-          checked={form.enabled}
-          onChange={(v) => set("enabled", v)}
-          ariaLabel="Enable SonarQube"
-        />
-      </div>
-
-      <SettingsField label="Server URL">
-        <Input
-          value={form.hostUrl}
-          onChange={(e) => set("hostUrl", e.target.value)}
-          placeholder="https://sonarqube.example.com"
-          spellCheck={false}
-        />
-        <p className="mt-1.5 text-xs text-text-muted">Must be https. Leave empty to use the deployment-wide SONAR_HOST_URL.</p>
-      </SettingsField>
-
-      <SettingsField label="Quality profile">
-        <Input
-          value={form.qualityProfile}
-          onChange={(e) => set("qualityProfile", e.target.value)}
-          placeholder="Sonar way"
-        />
-        <p className="mt-1.5 text-xs text-text-muted">Optional. Passed as sonar.profile; the server default applies when empty.</p>
-      </SettingsField>
-
-      <SettingsField label="Additional exclusions">
-        <div className="space-y-2">
-          {form.extraExclusions.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
-              {form.extraExclusions.map((glob) => (
-                <li
-                  key={glob}
-                  className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs"
-                >
-                  <code>{glob}</code>
-                  <button
-                    type="button"
-                    aria-label={`Remove exclusion ${glob}`}
-                    onClick={() => set("extraExclusions", form.extraExclusions.filter((g) => g !== glob))}
-                    className="text-text-muted hover:text-danger-500"
-                  >
-                    <XIcon className="size-3" aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <Input
-              value={newExclusion}
-              onChange={(e) => setNewExclusion(e.target.value)}
-              placeholder="**/legacy/**"
-              spellCheck={false}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                const g = newExclusion.trim();
-                if (g && !form.extraExclusions.includes(g)) {
-                  set("extraExclusions", [...form.extraExclusions, g]);
-                  setNewExclusion("");
-                }
-              }}
-            />
-            <Button
-              variant="secondary"
-              disabled={!newExclusion.trim() || form.extraExclusions.includes(newExclusion.trim())}
-              onClick={() => {
-                set("extraExclusions", [...form.extraExclusions, newExclusion.trim()]);
-                setNewExclusion("");
-              }}
-            >
-              <PlusIcon className="size-4" aria-hidden /> Add
-            </Button>
+    <EnginePanelShell
+      title="Bearer"
+      description="Static analysis and secret detection via the Bearer CLI on each repository checkout."
+      footer={<SaveRow saving={saving} dirty={dirty} onSave={save} />}
+    >
+      <SettingsGroup title="What to scan" description="Choose which Bearer scanners run and how findings are filtered.">
+        <SettingsField label="Scanners">
+          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+            {BEARER_SCANNERS.map(({ id, label, note }) => (
+              <div key={id} className="flex items-start justify-between gap-4 bg-background/20 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text">{label}</p>
+                  <p className="mt-0.5 text-sm text-text-muted">{note}</p>
+                </div>
+                <ToggleSwitch
+                  checked={form.scanners.includes(id)}
+                  onChange={() => toggleScanner(id)}
+                  ariaLabel={`Enable Bearer ${label}`}
+                />
+              </div>
+            ))}
           </div>
-        </div>
-        <p className="mt-1.5 text-xs text-text-muted">Added to the built-in dependency and build-output globs, never instead of them.</p>
-      </SettingsField>
+        </SettingsField>
 
-      <SettingsField label="Analysis timeout">
-        <Input
-          type="number"
-          min={30}
-          max={7200}
-          value={form.ceTimeoutSeconds}
-          onChange={(e) => set("ceTimeoutSeconds", Number(e.target.value))}
-          className="max-w-40"
-        />
-        <p className="mt-1.5 text-xs text-text-muted">How long to wait for the server to finish processing a submitted report, in seconds.</p>
-      </SettingsField>
-
-      <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
-        <div>
-          <p className="text-sm font-medium text-text">Delete the scratch project after each scan</p>
-          <p className="mt-1 max-w-prose text-sm text-text-muted">
-            Each scan creates a project on the Sonar server. Leaving this off accumulates one dead
-            project per scan.
+        <SettingsField label="Minimum severity">
+          <SeverityPicker value={form.severities} onChange={(v) => set("severities", v)} />
+          <p className="mt-1.5 text-xs text-text-muted">
+            Only findings at or above a selected level are reported.
           </p>
+        </SettingsField>
+      </SettingsGroup>
+
+      <SettingsGroup title="Scope" description="Narrow what Bearer walks; built-in excludes always apply.">
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-background/20 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-text">Skip test directories</p>
+            <p className="mt-0.5 text-sm text-text-muted">
+              Ignores common test and fixture paths to reduce noise.
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={form.skipTest}
+            onChange={(v) => set("skipTest", v)}
+            ariaLabel="Skip test directories"
+          />
         </div>
-        <ToggleSwitch
-          checked={form.deleteScratchProject}
-          onChange={(v) => set("deleteScratchProject", v)}
-          ariaLabel="Delete scratch project"
+
+        <SettingsField label="Additional skip paths">
+          <ExcludeList globs={form.skipPaths} onChange={(v) => set("skipPaths", v)} />
+        </SettingsField>
+      </SettingsGroup>
+
+      <SettingsGroup title="Limits">
+        <DurationField
+          id="bearer-timeout"
+          label="Scan timeout"
+          hint="Bearer is aborted after this duration so a stuck scan cannot block the pipeline."
+          value={form.timeoutSeconds}
+          min={60}
+          max={7200}
+          onChange={(v) => set("timeoutSeconds", v)}
         />
-      </div>
-
-      {/* Three components address the same server under three different names.
-          Until they are unified, saying so here is the only thing that stops a
-          reader pointing this at one host and browsing rules from another. */}
-      <div className="space-y-2 rounded-card border border-border bg-background/40 p-4 text-xs text-text-muted">
-        <p>
-          <span className="font-medium text-text">The token is not stored here.</span> It is read
-          from the secret store when a scan runs — the service refuses to persist credentials in
-          settings.
-        </p>
-        <p>
-          <span className="font-medium text-text">This host applies to scans only.</span> Browsing
-          quality profiles and rules under <em>SonarQube Rules</em> goes through the backend, which
-          reads <code className="rounded bg-card px-1 py-0.5">SONARQUBE_URL</code> and{" "}
-          <code className="rounded bg-card px-1 py-0.5">SONARQUBE_TOKEN</code> from its own
-          environment. Point both at the same server, or the rules you browse will not be the rules
-          your scans run.
-        </p>
-      </div>
-
-      <SaveRow saving={saving} dirty={dirty} onSave={save} />
-    </div>
+      </SettingsGroup>
+    </EnginePanelShell>
   );
 }
 
 // ─── CodeQL ───
 
 export function CodeQLSettingsPanel() {
-  const { settings, loading, error } = useEngineSettings();
+  const { settings, setSettings, loading, error } = useEngineSettings();
   const [form, setForm] = useState<CodeQLSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -365,13 +487,14 @@ export function CodeQLSettingsPanel() {
     setSaving(true);
     try {
       await sastApi.saveSettings("codeql", form);
+      setSettings((prev) => (prev ? { ...prev, codeql: form } : prev));
       toast.success("CodeQL settings saved");
     } catch (e) {
       toast.error(getErrorMessage(e));
     } finally {
       setSaving(false);
     }
-  }, [form, toast]);
+  }, [form, setSettings, toast]);
 
   if (!CONFIGURED) return <NotConfigured />;
   if (loading) return <PageLoading />;
@@ -389,20 +512,39 @@ export function CodeQLSettingsPanel() {
         : [...form.languages, id],
     );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-text">CodeQL</h3>
-          <p className="mt-1 max-w-prose text-sm text-text-muted">
-            Builds one database per detected language and runs a query suite over it. Thorough and
-            slow — a large repository can take tens of minutes per language.
-          </p>
-        </div>
-        <ToggleSwitch checked={form.enabled} onChange={(v) => set("enabled", v)} label="Enable CodeQL" />
-      </div>
+  const allLanguageIds = LANGUAGES.map((l) => l.id);
 
-      <SettingsField label="Languages">
+  return (
+    <EnginePanelShell
+      title="CodeQL"
+      description="Builds a query database per language, then runs a security query suite. Thorough and slow — large repos can take tens of minutes per language."
+      footer={<SaveRow saving={saving} dirty={dirty} onSave={save} />}
+    >
+      <SettingsGroup
+        title="Languages"
+        description="Narrows analysis to selected languages. Languages not present in the repo are skipped automatically."
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm text-text-muted">
+            {form.languages.length} of {LANGUAGES.length} selected
+          </span>
+          <div className="flex gap-3 text-xs font-medium">
+            <button
+              type="button"
+              className="text-primary hover:text-primary/80"
+              onClick={() => set("languages", [...allLanguageIds])}
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              className="text-primary hover:text-primary/80"
+              onClick={() => set("languages", [])}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
         <ul className="flex flex-wrap gap-2">
           {LANGUAGES.map(({ id, label, icon }) => {
             const on = form.languages.includes(id);
@@ -412,10 +554,8 @@ export function CodeQLSettingsPanel() {
                   type="button"
                   onClick={() => toggleLang(id)}
                   aria-pressed={on}
-                  className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                    on
-                      ? "border-primary-500/50 bg-primary-500/10 text-text"
-                      : "border-border bg-card text-text-muted hover:text-text"
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                    on ? segmentActiveCls : segmentIdleCls
                   }`}
                 >
                   <TechBadge name={label} icon={icon} iconOnly iconSize="w-4 h-4" />
@@ -426,74 +566,78 @@ export function CodeQLSettingsPanel() {
           })}
         </ul>
         {form.languages.length === 0 && (
-          <p className="mt-2 text-xs text-warning-500">
-            No languages selected — CodeQL will report no findings for every scan.
+          <p className="text-sm text-warning-500" role="status">
+            No languages selected — CodeQL will not report findings.
           </p>
         )}
-        <p className="mt-1.5 text-xs text-text-muted">Narrows what a scan analyses. A language the repository does not contain is skipped regardless.</p>
-      </SettingsField>
+      </SettingsGroup>
 
-      <SettingsField label="Query suite">
-        <div className="space-y-2">
-          {SUITES.map(({ id, label, note }) => (
-            <label
-              key={id}
-              className={`flex cursor-pointer gap-3 rounded-md border p-3 transition-colors ${
-                form.querySuite === id ? "border-primary-500/50 bg-primary-500/5" : "border-border"
-              }`}
-            >
-              <input
-                type="radio"
-                name="codeql-suite"
-                checked={form.querySuite === id}
-                onChange={() => set("querySuite", id)}
-                className="mt-1 accent-primary-500"
-              />
-              <span className="text-sm">
-                <span className="font-medium text-text">{label}</span>
-                <span className="mt-0.5 block text-text-muted">{note}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-        <p className="mt-1.5 text-xs text-text-muted">Which set of queries to run against each database.</p>
-      </SettingsField>
+      <SettingsGroup title="Analysis" description="Query depth and how databases are built.">
+        <SettingsField label="Query suite">
+          <div className="space-y-2">
+            {SUITES.map(({ id, label, note }) => {
+              const selected = form.querySuite === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => set("querySuite", id)}
+                  className={`flex w-full cursor-pointer gap-3 rounded-lg border p-3 text-left transition-colors ${
+                    selected ? segmentActiveCls : segmentIdleCls
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 size-4 shrink-0 rounded-full border-2 ${
+                      selected ? "border-primary bg-primary" : "border-border bg-card"
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium text-text">{label}</span>
+                    <span className="mt-0.5 block text-text-muted">{note}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </SettingsField>
 
-      <SettingsField label="Build mode">
-        <div className="flex gap-2">
-          {(["none", "autobuild"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => set("buildMode", mode)}
-              aria-pressed={form.buildMode === mode}
-              className={`rounded-md border px-3 py-1.5 text-sm capitalize transition-colors ${
-                form.buildMode === mode
-                  ? "border-primary-500/50 bg-primary-500/10 text-text"
-                  : "border-border bg-card text-text-muted hover:text-text"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-        <p className="mt-1.5 text-xs text-text-muted">“None” builds a database without compiling, which is what most repositories need. “Autobuild” compiles first and is slower, but is required for some compiled projects.</p>
-      </SettingsField>
+        <SettingsField label="Build mode">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {CODEQL_BUILD_MODES.map(({ id, label, note }) => {
+              const selected = form.buildMode === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => set("buildMode", id)}
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    selected ? segmentActiveCls : segmentIdleCls
+                  }`}
+                >
+                  <span className="block text-sm font-medium text-text">{label}</span>
+                  <span className="mt-0.5 block text-sm text-text-muted">{note}</span>
+                </button>
+              );
+            })}
+          </div>
+        </SettingsField>
+      </SettingsGroup>
 
-      <SettingsField label="Timeout per language">
-        <Input
-          type="number"
+      <SettingsGroup title="Limits">
+        <DurationField
+          id="codeql-timeout"
+          label="Timeout per language"
+          hint="Building and analysing one database stops after this duration."
+          value={form.timeoutSeconds}
           min={60}
           max={21600}
-          value={form.timeoutSeconds}
-          onChange={(e) => set("timeoutSeconds", Number(e.target.value))}
-          className="max-w-40"
+          onChange={(v) => set("timeoutSeconds", v)}
         />
-        <p className="mt-1.5 text-xs text-text-muted">Seconds allowed for building and analysing one database before the engine gives up.</p>
-      </SettingsField>
-
-      <SaveRow saving={saving} dirty={dirty} onSave={save} />
-    </div>
+      </SettingsGroup>
+    </EnginePanelShell>
   );
 }
 

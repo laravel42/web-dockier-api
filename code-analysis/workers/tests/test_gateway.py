@@ -126,7 +126,7 @@ async def test_fans_out_to_every_engine_queue(mock_thread, mock_scan, mock_url, 
     await GatewayService().process_job("job-1", PAYLOAD)
 
     queues = [q for q, _ in published]
-    assert set(queues) == {"scan-semgrep", "scan-regex", "scan-sonarqube", "scan-codeql"}
+    assert set(queues) == {"scan-semgrep", "scan-regex", "scan-bearer", "scan-codeql"}
 
     body = published[0][1]
     assert body["scan_id"] == "scan-1"

@@ -31,7 +31,7 @@ CODEQL_SUITES = ["security-and-quality", "security-extended", "code-scanning"]
 
 DEFAULTS: Dict[str, Dict[str, Any]] = {
     "semgrep": {
-        "enabled": True,
+        "enabled": False,
         # Seconds a single rule may spend on one file, and the whole scan.
         "ruleTimeoutSeconds": 30,
         "scanTimeoutSeconds": 1800,
@@ -47,16 +47,14 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         "maxFileBytes": 2 * 1024 * 1024,
         "extraExcludes": [],
     },
-    "sonarqube": {
+    "bearer": {
         "enabled": True,
-        "hostUrl": "",
-        "qualityProfile": "",
-        # Applied on top of the built-in dependency/build exclusions, never
-        # instead of them — a tenant should not be able to un-exclude
-        # node_modules by supplying an empty list.
-        "extraExclusions": [],
-        "ceTimeoutSeconds": 900,
-        "deleteScratchProject": True,
+        # sast = static analysis rules; secrets = hard-coded credentials and similar.
+        "scanners": ["sast", "secrets"],
+        "severities": "critical,high,medium,low,warning",
+        "skipTest": True,
+        "skipPaths": [],
+        "timeoutSeconds": 1800,
     },
     "codeql": {
         "enabled": True,

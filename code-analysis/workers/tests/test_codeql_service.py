@@ -2,7 +2,7 @@ import json
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from src.services.codeql.service import CodeQLService
+from src.services.codeql.service import CodeQLService, tag_codeql_rule_ids
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +44,12 @@ def test_parse_sarif(tmp_path):
     assert findings[0]["rule_id"] == "js/sql-injection"
     assert findings[0]["file_path"] == "app.js"
     assert findings[0]["line"] == 12
+
+
+def test_tag_codeql_rule_ids_prefixes_rule_ids():
+    tagged = tag_codeql_rule_ids([{"rule_id": "js/sql-injection"}])
+    assert tagged[0]["rule_id"] == "codeql.js/sql-injection"
+    assert tag_codeql_rule_ids([{"rule_id": "codeql.py/xss"}])[0]["rule_id"] == "codeql.py/xss"
 
 
 @patch("src.services.codeql.service.shutil.which")

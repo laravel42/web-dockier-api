@@ -1,5 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from typing import List, Literal, Optional
+
+
+def _camel(name: str) -> str:
+    head, *rest = name.split("_")
+    return head + "".join(word.capitalize() for word in rest)
 
 
 class ScanFinding(BaseModel):
@@ -25,8 +30,13 @@ class ScanOptions(BaseModel):
     Defaults are permissive: a scan enqueued without options runs everything,
     which is what the API does today when the caller omits them.
     """
-    enable_semgrep: bool = True
-    enable_sonarqube: bool = True
+    model_config = ConfigDict(alias_generator=_camel, populate_by_name=True)
+
+    enable_semgrep: bool = False
+    enable_bearer: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("enable_bearer", "enableBearer", "enable_sonarqube", "enableSonarqube"),
+    )
     enable_custom_rules: bool = True
     enable_sensitive_data: bool = True
     enable_codeql: bool = True

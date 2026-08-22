@@ -41,6 +41,11 @@ const envSchema = z
     RESEND_FROM_EMAIL: z.string().optional(),
     DATABASE_URL: z.string().min(1).optional(),
     ENV_ENCRYPTION_KEY: z.string().min(32).optional(),
+    /** When true, the Fastify backend does not consume `security-scan` — SAST workers do. */
+    DISABLE_TS_SCAN_WORKER: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((v) => v === "true"),
   })
   .superRefine((data, ctx) => {
     if (!data.SUPABASE_SECRET_KEY && !data.SUPABASE_SERVICE_ROLE_KEY) {

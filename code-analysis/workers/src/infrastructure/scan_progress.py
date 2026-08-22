@@ -38,7 +38,7 @@ async def publish_progress(scan_id: str, progress: Dict[str, Any]) -> None:
         "SET summary = COALESCE(summary, '{}'::jsonb) || jsonb_build_object('progress', $1::jsonb), "
         "    updated_at = NOW() "
         "WHERE id = $2",
-        json.dumps(progress), scan_id,
+        progress, scan_id,
     )
     await execute_query(
         "SELECT pg_notify($1, $2)",

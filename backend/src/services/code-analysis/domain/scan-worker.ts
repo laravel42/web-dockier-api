@@ -46,8 +46,10 @@ import {
 export interface RunScanOptions {
   enableSemgrep?: boolean;
   enableSonarqube?: boolean;
+  enableBearer?: boolean;
   enableCustomRules?: boolean;
   enableSensitiveData?: boolean;
+  enableCodeql?: boolean;
 }
 
 const RULES_DIR = getOpengrepRulesDir();

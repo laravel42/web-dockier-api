@@ -11,7 +11,7 @@ Field names are camelCase to match the rest of the platform's API surface
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 def _camel(name: str) -> str:
@@ -26,9 +26,12 @@ class ApiModel(BaseModel):
 # ── Requests ───────────────────────────────────────────────────────────────
 
 class ScanOptionsInput(ApiModel):
-    """Engine toggles. Omitted means enabled, matching the backend's behaviour."""
-    enable_semgrep: bool = True
-    enable_sonarqube: bool = True
+    """Engine toggles. Omitted keys use server defaults (Semgrep off unless enabled)."""
+    enable_semgrep: bool = False
+    enable_bearer: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("enable_bearer", "enableBearer", "enable_sonarqube", "enableSonarqube"),
+    )
     enable_codeql: bool = True
     enable_custom_rules: bool = True
     enable_sensitive_data: bool = True
@@ -112,7 +115,7 @@ class FindingsResponse(ApiModel):
 
 
 class SemgrepSettings(ApiModel):
-    enabled: bool = True
+    enabled: bool = False
     rule_timeout_seconds: int = Field(default=30, ge=5, le=600)
     scan_timeout_seconds: int = Field(default=1800, ge=60, le=21600)
     max_target_bytes: int = Field(default=2_000_000, ge=10_000, le=50_000_000)
@@ -130,25 +133,13 @@ class RegexSettings(ApiModel):
     extra_excludes: List[str] = Field(default_factory=list, max_length=100)
 
 
-class SonarQubeSettings(ApiModel):
-    """SonarQube configuration. The token is deliberately absent — it lives in
-    the secret store, and the table rejects credential-shaped keys."""
+class BearerSettings(ApiModel):
     enabled: bool = True
-    host_url: str = ""
-    quality_profile: str = ""
-    # Added to the built-in dependency/build exclusions rather than replacing
-    # them, so a tenant cannot accidentally start scanning node_modules.
-    extra_exclusions: List[str] = Field(default_factory=list, max_length=100)
-    ce_timeout_seconds: int = Field(default=900, ge=30, le=7200)
-    delete_scratch_project: bool = True
-
-    @field_validator("host_url")
-    @classmethod
-    def _https_only(cls, v: str) -> str:
-        v = (v or "").strip().rstrip("/")
-        if v and not v.startswith("https://"):
-            raise ValueError("must be an https:// URL")
-        return v
+    scanners: List[Literal["sast", "secrets"]] = Field(default_factory=lambda: ["sast", "secrets"])
+    severities: str = "critical,high,medium,low,warning"
+    skip_test: bool = True
+    skip_paths: List[str] = Field(default_factory=list, max_length=100)
+    timeout_seconds: int = Field(default=1800, ge=60, le=21600)
 
 
 class CodeQLSettings(ApiModel):
@@ -163,14 +154,14 @@ class CodeQLSettings(ApiModel):
 
 
 class EngineSettingsResponse(ApiModel):
-    engine: Literal["semgrep", "regex", "sonarqube", "codeql"]
+    engine: Literal["semgrep", "regex", "bearer", "codeql"]
     config: Dict[str, Any]
 
 
 class AllEngineSettingsResponse(ApiModel):
     semgrep: SemgrepSettings
     regex: RegexSettings
-    sonarqube: SonarQubeSettings
+    bearer: BearerSettings
     codeql: CodeQLSettings
 
 

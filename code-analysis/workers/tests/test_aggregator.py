@@ -67,7 +67,7 @@ async def test_barrier_waits_for_all_engines(fake_redis, finding):
 
     await service.process_result(_result("semgrep", [finding()]))
     await service.process_result(_result("regex", []))
-    await service.process_result(_result("sonarqube", []))
+    await service.process_result(_result("bearer", []))
 
     service.complete_job.assert_not_called()
 
@@ -100,7 +100,7 @@ async def test_only_one_caller_finalizes(fake_redis, finding):
     # A late duplicate that re-populates the set must not finalize a second time.
     await service.process_result(_result("semgrep", [finding()]))
     await service.process_result(_result("regex", []))
-    await service.process_result(_result("sonarqube", []))
+    await service.process_result(_result("bearer", []))
     await service.process_result(_result("codeql", []))
     assert service.complete_job.await_count == 1
 
@@ -123,7 +123,7 @@ async def test_failed_engine_is_recorded(fake_redis, finding):
     with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
         await service.process_result(_result("semgrep", [finding()]))
         await service.process_result(_result("regex", []))
-        await service.process_result(_result("sonarqube", []))
+        await service.process_result(_result("bearer", []))
         await service.process_result(
             _result("codeql", [], status="failed", error="codeql CLI not found on PATH")
         )

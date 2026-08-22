@@ -40,7 +40,7 @@ SERVICES: List[ServiceSpec] = [
     ServiceSpec("aggregator", "Fans in engine results, dedupes, persists", 8003, "RESULTS_QUEUE"),
     ServiceSpec("semgrep", "Semgrep engine", 8004, "semgrep"),
     ServiceSpec("regex", "Custom-rule and sensitive-data engine", 8005, "regex"),
-    ServiceSpec("sonarqube", "SonarQube engine", 8006, "sonarqube"),
+    ServiceSpec("bearer", "Bearer SAST engine", 8006, "bearer"),
     ServiceSpec("codeql", "CodeQL engine", 8007, "codeql"),
 ]
 

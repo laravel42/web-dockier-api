@@ -114,3 +114,24 @@ def write_semgrep_ignore(repo_dir: str) -> None:
     """Write .semgrepignore into a cloned repo before Semgrep runs."""
     with open(os.path.join(repo_dir, ".semgrepignore"), "w", encoding="utf-8") as f:
         f.write("\n".join(semgrep_ignore_lines()) + "\n")
+
+
+def count_scannable_files(repo_path: str, max_file_bytes: int = MAX_SOURCE_FILE_BYTES) -> int:
+    """Count repo files the regex/semgrep walk would consider, without reading bodies."""
+    count = 0
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if not is_scan_skipped_dir_name(d)]
+        for file in files:
+            if is_generated_asset_name(file):
+                continue
+            file_path = os.path.join(root, file)
+            rel_path = os.path.relpath(file_path, repo_path)
+            if is_scan_skipped_relative_path(rel_path):
+                continue
+            try:
+                if os.path.getsize(file_path) > max_file_bytes:
+                    continue
+            except OSError:
+                continue
+            count += 1
+    return count

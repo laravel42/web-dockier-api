@@ -8,6 +8,7 @@
 
 export interface SastScanOptions {
   enableSemgrep?: boolean;
+  enableBearer?: boolean;
   enableSonarqube?: boolean;
   enableCodeql?: boolean;
   enableCustomRules?: boolean;
@@ -18,7 +19,7 @@ export type SastScanStatus = "pending" | "running" | "completed" | "failed";
 
 export type SastSeverity = "error" | "warning" | "info";
 
-export type SastEngine = "semgrep" | "regex" | "sonarqube" | "codeql";
+export type SastEngine = "semgrep" | "regex" | "bearer" | "codeql";
 
 export interface SastEngineStatus {
   status: "ok" | "failed";
@@ -115,15 +116,13 @@ export interface SastHealth {
 // secret, password or apiKey in a settings row — those live in the secret
 // store — and the database enforces it with a CHECK constraint.
 
-export interface SonarQubeSettings {
+export interface BearerSettings {
   enabled: boolean;
-  /** Must be https. Empty falls back to the deployment-wide SONAR_HOST_URL. */
-  hostUrl: string;
-  qualityProfile: string;
-  /** Added to the built-in dependency/build exclusions, never instead of them. */
-  extraExclusions: string[];
-  ceTimeoutSeconds: number;
-  deleteScratchProject: boolean;
+  scanners: Array<"sast" | "secrets">;
+  severities: string;
+  skipTest: boolean;
+  skipPaths: string[];
+  timeoutSeconds: number;
 }
 
 export type CodeQLLanguage =
@@ -163,7 +162,7 @@ export interface RegexSettings {
 export interface EngineSettings {
   semgrep: SemgrepSettings;
   regex: RegexSettings;
-  sonarqube: SonarQubeSettings;
+  bearer: BearerSettings;
   codeql: CodeQLSettings;
 }
 

@@ -77,7 +77,12 @@ register_error_handlers(app)
 # from the service being down — so an unset variable used to look like a broken
 # service. Defaulting to loopback only keeps that convenience local: a deployed
 # instance must still name its origins.
-DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+DEV_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://local.dockier.dev",
+    "https://localdev.dockier.dev",
+]
 
 _configured = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
 _origins = _configured or DEV_ORIGINS

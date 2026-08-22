@@ -4,11 +4,11 @@ from pydantic import ValidationError
 from src.models.schemas import ScanResult
 from src.infrastructure.llm import get_llm_provider
 from src.infrastructure.scan_analysis import dedupe_findings
-from src.infrastructure.scans_repo import persist_scan_results
+from src.infrastructure.scans_repo import persist_scan_results, resolve_file_counts
 from src.infrastructure.scan_progress import make_progress, publish_progress
 from src.infrastructure.redis_client import get_redis_client
 
-EXPECTED_ENGINES = {"semgrep", "regex", "sonarqube", "codeql"}
+EXPECTED_ENGINES = {"semgrep", "regex", "bearer", "codeql"}
 
 # Barrier state must not outlive the scan it coordinates. Without a TTL the keys
 # leaked for every job that never completed; with one, an abandoned barrier
@@ -56,10 +56,23 @@ class AggregatorService:
             print(f"[!] AggregatorService: job {job_id} completed with failed engines: {failed}")
 
         try:
+            files_scanned, files_in_repo = await resolve_file_counts(scan_id, judged)
             await publish_progress(scan_id, make_progress(
-                "persisting", findings_count=len(judged), scanner="persisting"))
-            status = await persist_scan_results(scan_id, judged, engine_status)
-            await publish_progress(scan_id, make_progress("done", findings_count=len(judged)))
+                "persisting",
+                files_scanned=files_scanned,
+                files_in_repo=files_in_repo,
+                findings_count=len(judged),
+                scanner="persisting",
+            ))
+            status = await persist_scan_results(
+                scan_id, judged, engine_status, files_scanned, files_in_repo,
+            )
+            await publish_progress(scan_id, make_progress(
+                "done",
+                files_scanned=files_scanned,
+                files_in_repo=files_in_repo,
+                findings_count=len(judged),
+            ))
             print(f"[*] AggregatorService: scan {scan_id} persisted with status {status!r}")
         except Exception as e:
             print(f"[!] AggregatorService: Failed to persist scan {scan_id}: {e}")

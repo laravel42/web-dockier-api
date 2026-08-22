@@ -32,7 +32,7 @@ WORKER_BUILDERS = {
     "aggregator": ("src.services.aggregator.worker", queue.RESULTS_QUEUE),
     "semgrep": ("src.services.semgrep.worker", queue.ENGINE_QUEUES["semgrep"]),
     "regex": ("src.services.regex.worker", queue.ENGINE_QUEUES["regex"]),
-    "sonarqube": ("src.services.sonarqube.worker", queue.ENGINE_QUEUES["sonarqube"]),
+    "bearer": ("src.services.bearer.worker", queue.ENGINE_QUEUES["bearer"]),
     "codeql": ("src.services.codeql.worker", queue.ENGINE_QUEUES["codeql"]),
 }
 

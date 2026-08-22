@@ -12,7 +12,7 @@ export const codeAnalysisApi = {
   getScan: (scanId: string) =>
     request<Scan>(`/code-analysis/scans/${scanId}`),
 
-  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSonarqube?: boolean; enableCustomRules?: boolean; enableSensitiveData?: boolean }) =>
+  runScan: (scanId: string, tools?: { enableOpengrep?: boolean; enableSemgrep?: boolean; enableSonarqube?: boolean; enableBearer?: boolean; enableCustomRules?: boolean; enableCodeql?: boolean; enableSensitiveData?: boolean }) =>
     request<{
       id: string;
       status: string;
@@ -21,7 +21,7 @@ export const codeAnalysisApi = {
 
   listFindings: (
     scanId: string,
-    options?: { severity?: string; provider?: "semgrep" | "sonar" | "custom"; limit?: number; offset?: number },
+    options?: { severity?: string; provider?: "semgrep" | "bearer" | "custom" | "codeql"; limit?: number; offset?: number },
   ) =>
     request<{
       findings: Array<Finding & { createdAt: string }>;

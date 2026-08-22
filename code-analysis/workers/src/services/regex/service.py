@@ -3,12 +3,13 @@ import shutil
 import tempfile
 import asyncio
 from fnmatch import fnmatch
-from typing import Optional
+from typing import Callable, Optional
 from src.services.base import EnginePublisher
 from src.infrastructure.storage import download_codebase
 from src.infrastructure.rules_repo import compile_rules, load_custom_rules, matches_extension
 from src.infrastructure.sensitive_data import run_sensitive_data_scan
 from src.infrastructure.engine_settings import get_settings
+from src.infrastructure.db_client import fetch_row
 from src.infrastructure.scan_skip import (
     MAX_SOURCE_FILE_BYTES,
     is_generated_asset_name,
@@ -16,17 +17,22 @@ from src.infrastructure.scan_skip import (
     is_scan_skipped_relative_path,
     looks_minified,
 )
+from src.infrastructure.scan_progress import make_progress, publish_progress
+
+ProgressCallback = Callable[[int, int, str], None]
 
 class RegexService(EnginePublisher):
     engine_name = "regex"
 
     def run_scan(self, repo_path: str, rules: list, scan_sensitive: bool = True,
                  max_file_bytes: int = MAX_SOURCE_FILE_BYTES,
-                 extra_excludes: Optional[list] = None) -> list:
+                 extra_excludes: Optional[list] = None,
+                 files_in_repo: int = 0,
+                 on_progress: Optional[ProgressCallback] = None) -> list:
         findings = []
-        # Collected during the same walk: reading the tree twice for two
-        # pattern scanners is wasted IO on large repos.
         collected = []
+        files_scanned = 0
+        total_files = files_in_repo
 
         for root, dirs, files in os.walk(repo_path):
             # Prune in place so os.walk never descends into node_modules, vendor,
@@ -52,6 +58,10 @@ class RegexService(EnginePublisher):
                 try:
                     if os.path.getsize(file_path) > max_file_bytes:
                         continue
+
+                    files_scanned += 1
+                    if on_progress and (files_scanned == 1 or files_scanned % 20 == 0):
+                        on_progress(files_scanned, total_files or files_scanned, rel_path)
 
                     with open(file_path, "r", encoding="utf-8") as f:
                         content = f.read()
@@ -123,10 +133,39 @@ class RegexService(EnginePublisher):
                               and settings.get("sensitiveData", True))
 
             await asyncio.to_thread(download_codebase, uri, scratch_dir)
+
+            summary_row = await fetch_row("SELECT summary FROM scans WHERE id = $1", scan_id)
+            summary = summary_row.get("summary") if summary_row else {}
+            progress = (summary or {}).get("progress") or {}
+            files_in_repo = int((summary or {}).get("filesInRepo") or progress.get("filesInRepo") or 0)
+
+            loop = asyncio.get_running_loop()
+
+            def on_progress(files_scanned: int, total: int, current_file: str) -> None:
+                asyncio.run_coroutine_threadsafe(
+                    publish_progress(
+                        scan_id,
+                        make_progress(
+                            "scanning",
+                            files_scanned=files_scanned,
+                            files_in_repo=total,
+                            scanner="custom",
+                            current_file=current_file,
+                        ),
+                    ),
+                    loop,
+                )
+
             findings = await asyncio.to_thread(
-                self.run_scan, scratch_dir, rules, scan_sensitive,
+                self.run_scan,
+                scratch_dir,
+                rules,
+                scan_sensitive,
                 settings.get("maxFileBytes", MAX_SOURCE_FILE_BYTES),
-                settings.get("extraExcludes") or [])
+                settings.get("extraExcludes") or [],
+                files_in_repo,
+                on_progress,
+            )
             
             await self._publish(job_id, scan_id, findings, "ok")
             print(f"[*] RegexService: Finished {job_id} with {len(findings)} findings.")

@@ -18,6 +18,17 @@ SARIF_LEVELS = {"error": "error", "warning": "warning", "note": "info", "none": 
 CODEQL_TIMEOUT_SECONDS = 3600
 
 
+def tag_codeql_rule_ids(findings: list) -> list:
+    """Prefix rule ids so findings filters can distinguish CodeQL from Semgrep."""
+    tagged = []
+    for finding in findings:
+        rule_id = finding.get("rule_id") or "unknown"
+        if not rule_id.startswith("codeql."):
+            finding = {**finding, "rule_id": f"codeql.{rule_id}"}
+        tagged.append(finding)
+    return tagged
+
+
 class CodeQLService(EnginePublisher):
     engine_name = "codeql"
 
@@ -191,7 +202,7 @@ class CodeQLService(EnginePublisher):
                 print(f"[*] CodeQL Service: Skipping {job_id}: no supported language "
                       f"(saw {message.get('languages') or language!r})")
                 
-            await self._publish(job_id, scan_id, findings, "ok")
+            await self._publish(job_id, scan_id, tag_codeql_rule_ids(findings), "ok")
             print(f"[*] CodeQL Service: Finished {job_id} with {len(findings)} findings.")
             
         except Exception as e:

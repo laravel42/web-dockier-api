@@ -222,3 +222,26 @@ async def test_persisted_status_is_always_api_valid(mock_fetch, mock_exec, mock_
         await persist_scan_results("s", [], engine_status)
         written = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0][0][1]
         assert written in SCAN_STATUSES, written
+
+
+@pytest.mark.asyncio
+@patch("src.infrastructure.scans_repo.fetch_row", new_callable=AsyncMock)
+async def test_resolve_file_counts_uses_progress_then_findings(mock_fetch):
+    from src.infrastructure.scans_repo import resolve_file_counts
+
+    mock_fetch.return_value = {
+        "summary": {
+            "progress": {"filesInRepo": 42, "filesScanned": 10},
+        },
+    }
+    scanned, in_repo = await resolve_file_counts("scan-1", [])
+    assert in_repo == 42
+    assert scanned == 10
+
+    mock_fetch.return_value = {"summary": {}}
+    scanned, in_repo = await resolve_file_counts(
+        "scan-1",
+        [{"file_path": "a.js"}, {"file_path": "b.js"}, {"file_path": "a.js"}],
+    )
+    assert in_repo == 2
+    assert scanned == 2

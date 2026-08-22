@@ -95,10 +95,9 @@ export default function SonarQubeRulesPanel() {
 
   if (loading) return <PageLoading />;
   // Rule browsing goes through the Fastify backend, which reads its own
-  // environment — not the per-tenant host in SonarQube Settings, and not the
-  // SAST service's SONAR_HOST_URL. Naming the real variables matters: the
-  // previous copy pointed at "SonarQubeUrl"/"SonarQubeToken", which exist
-  // nowhere, so anyone following it went looking for settings that do not exist.
+  // environment — not the SAST service's SONAR_HOST_URL. Naming the real
+  // variables matters: the previous copy pointed at "SonarQubeUrl"/
+  // "SonarQubeToken", which exist nowhere.
   if (error && profiles.length === 0)
     return (
       <div className="rounded-xl border border-border bg-card p-6">

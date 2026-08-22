@@ -35,7 +35,7 @@ SECURITY_SCAN_QUEUE = "security-scan"
 ENGINE_QUEUES = {
     "semgrep": "scan-semgrep",
     "regex": "scan-regex",
-    "sonarqube": "scan-sonarqube",
+    "bearer": "scan-bearer",
     "codeql": "scan-codeql",
 }
 

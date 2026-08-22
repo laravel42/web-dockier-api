@@ -10,7 +10,7 @@ from git import Repo
 from src.infrastructure import queue
 from src.infrastructure.storage import upload_codebase
 from src.infrastructure.git_repo import resolve_clone_url, get_scan_target
-from src.infrastructure.scan_skip import is_scan_skipped_dir_name
+from src.infrastructure.scan_skip import is_scan_skipped_dir_name, count_scannable_files
 from src.infrastructure.scans_repo import fail_scan, start_scan
 from src.infrastructure.scan_progress import (
     ScanCancelled, assert_not_cancelled, make_progress, publish_progress,
@@ -144,7 +144,11 @@ class GatewayService:
                 raise ValueError(f"scan {scan_id!r} not found")
 
             await start_scan(scan_id)
-            await publish_progress(scan_id, make_progress("cloning", scanner="cloning"))
+            repo_label = scan.get("repo") or ""
+            await publish_progress(
+                scan_id,
+                make_progress("cloning", scanner="cloning", current_file=repo_label),
+            )
             clone_url = validate_clone_url(await resolve_clone_url(scan, tenant_id))
 
             await asyncio.to_thread(
@@ -152,6 +156,7 @@ class GatewayService:
                 scan.get("branch") or "", scratch_dir,
             )
             await assert_not_cancelled(scan_id)
+            files_in_repo = await asyncio.to_thread(count_scannable_files, scratch_dir)
             languages = await asyncio.to_thread(self.detect_languages, scratch_dir)
             uri = await asyncio.to_thread(upload_codebase, scratch_dir, scan_id)
 
@@ -167,12 +172,24 @@ class GatewayService:
             )
             body = message.model_dump()
 
-            for engine_queue in queue.ENGINE_QUEUES.values():
-                await queue.send(engine_queue, body)
+            await asyncio.gather(*[
+                queue.send(engine_queue, body)
+                for engine_queue in queue.ENGINE_QUEUES.values()
+            ])
 
-            await publish_progress(scan_id, make_progress("scanning"))
+            await publish_progress(
+                scan_id,
+                make_progress(
+                    "scanning",
+                    files_in_repo=files_in_repo,
+                    files_scanned=0,
+                    scanner="scanning",
+                    current_file="Starting security engines…",
+                ),
+            )
             print(f"[*] GatewayService: scan {scan_id} delegated to "
-                  f"{len(queue.ENGINE_QUEUES)} engines. languages={languages} uri={uri}")
+                  f"{len(queue.ENGINE_QUEUES)} engines. languages={languages} "
+                  f"files={files_in_repo} uri={uri}")
 
         except ScanCancelled as cancelled:
             # Not a failure: the user asked for this. Complete the job quietly so

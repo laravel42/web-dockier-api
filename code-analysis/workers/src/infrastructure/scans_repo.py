@@ -137,6 +137,53 @@ async def get_scan_row(scan_id: str):
     )
 
 
+def _coerce_summary_object(raw: Any) -> Dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+async def resolve_file_counts(scan_id: str, findings: List[Dict[str, Any]]) -> tuple[int, int]:
+    """Best-effort file totals for scans.summary.
+
+    Prefer counts published during the gateway scan phase; fall back to distinct
+    finding paths when older scans never recorded a walk total.
+    """
+    row = await fetch_row("SELECT summary FROM scans WHERE id = $1", scan_id)
+    summary = _coerce_summary_object(row.get("summary") if row else None)
+    progress = _coerce_summary_object(summary.get("progress"))
+
+    files_in_repo = int(
+        summary.get("filesInRepo")
+        or summary.get("files_in_repo")
+        or progress.get("filesInRepo")
+        or progress.get("files_in_repo")
+        or 0
+    )
+    files_scanned = int(
+        summary.get("filesScanned")
+        or summary.get("files_scanned")
+        or progress.get("filesScanned")
+        or progress.get("files_scanned")
+        or 0
+    )
+
+    if files_in_repo == 0:
+        unique_paths = {f.get("file_path") for f in findings if f.get("file_path")}
+        if unique_paths:
+            files_in_repo = len(unique_paths)
+
+    if files_scanned == 0 and files_in_repo > 0:
+        files_scanned = files_in_repo
+
+    return files_scanned, files_in_repo
+
+
 async def persist_scan_results(
     scan_id: str,
     findings: List[Dict[str, Any]],
@@ -154,6 +201,9 @@ async def persist_scan_results(
         raise ValueError(f"scan {scan_id!r} not found")
 
     organization_id = scan_row["organization_id"]
+
+    if files_scanned == 0 and files_in_repo == 0:
+        files_scanned, files_in_repo = await resolve_file_counts(scan_id, findings)
 
     # Re-running a scan replaces its findings rather than accumulating duplicates.
     await execute_query("DELETE FROM findings WHERE scan_id = $1", scan_id)

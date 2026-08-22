@@ -123,8 +123,10 @@ export async function registerScanRoutes(app: FastifyInstance) {
             enableSemgrep: z.boolean().optional(),
             enableOpengrep: z.boolean().optional(),
             enableSonarqube: z.boolean().optional(),
+            enableBearer: z.boolean().optional(),
             enableCustomRules: z.boolean().optional(),
             enableSensitiveData: z.boolean().optional(),
+            enableCodeql: z.boolean().optional(),
           })
           .optional(),
         response: { 200: scanSchema },
@@ -134,9 +136,11 @@ export async function registerScanRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       const body = request.body ?? {};
       const enableSemgrep = body.enableOpengrep ?? body.enableSemgrep;
+      const enableBearer = body.enableBearer ?? body.enableSonarqube;
       return await runScan(request.params.scanId, auth.tenantId, {
         ...body,
         enableSemgrep,
+        enableBearer,
       }, request.id);
     },
   );

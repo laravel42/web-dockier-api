@@ -6,6 +6,8 @@ belonging to another by guessing an id. A mismatch returns 404 rather than 403 â
 confirming that an id exists is itself a disclosure.
 """
 
+import json
+from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -14,10 +16,9 @@ from pydantic import ValidationError
 from src.api.auth import AuthContext, require_auth
 from src.api.errors import ApiError
 from src.api.schemas import (
-    AllEngineSettingsResponse, CodeQLSettings, EngineSettingsResponse, FindingCounts,
+    AllEngineSettingsResponse, BearerSettings, CodeQLSettings, EngineSettingsResponse, FindingCounts,
     FindingItem, FindingsResponse, HealthResponse, QueueDepth, RegexSettings,
     RunScanRequest, RunScanResponse, ScanStatusResponse, SemgrepSettings,
-    SonarQubeSettings,
 )
 from src.infrastructure import engine_settings
 from src.infrastructure import queue
@@ -26,6 +27,131 @@ from src.infrastructure.db_client import fetch_all, fetch_row
 router = APIRouter(prefix="/sast", tags=["SAST"])
 
 MAX_PAGE_SIZE = 200
+
+
+def _coerce_json_object(value: Any) -> Optional[Dict[str, Any]]:
+    """Some writers store JSON objects as strings inside jsonb; normalize for the API."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    return value if isinstance(value, dict) else None
+
+
+def _summary_int(summary: Dict[str, Any], *keys: str) -> int:
+    for key in keys:
+        raw = summary.get(key)
+        if raw is not None:
+            return int(raw)
+    return 0
+
+
+def _normalize_engine_status(raw: Any) -> Dict[str, Dict[str, Any]]:
+    data = _coerce_json_object(raw) or {}
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for engine, status in data.items():
+        if not isinstance(status, dict):
+            continue
+        state = status.get("status")
+        if state not in ("ok", "failed"):
+            continue
+        err = status.get("error")
+        normalized[str(engine)] = {
+            "status": state,
+            "error": str(err) if err else None,
+        }
+    return normalized
+
+
+def _format_updated_at(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _rule_id_engine(rule_id: str) -> str:
+    """Map a persisted rule id to the engine that produced it."""
+    rid = rule_id or ""
+    if rid.startswith("bearer.") or rid.startswith("sonar."):
+        return "bearer"
+    if rid.startswith("custom.") or rid.startswith("sensitive-data."):
+        return "regex"
+    if rid.startswith("codeql."):
+        return "codeql"
+    return "semgrep"
+
+
+_ENGINE_ALIASES = {"sonarqube": "bearer", "custom": "regex"}
+
+
+async def _infer_engine_status(scan_id: str, row: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Backfill engine outcomes for scans persisted before engine_status was written."""
+    summary = row.get("summary") or {}
+    failed_raw = summary.get("failedEngines") or summary.get("failed_engines") or []
+    failed = {_ENGINE_ALIASES.get(str(e), str(e)) for e in failed_raw}
+
+    rows = await fetch_all(
+        "SELECT DISTINCT rule_id FROM findings WHERE scan_id = $1",
+        scan_id,
+    )
+    seen = {_rule_id_engine(r["rule_id"]) for r in rows}
+
+    if not seen and not failed:
+        return {}
+
+    inferred: Dict[str, Dict[str, Any]] = {}
+    for engine in ("semgrep", "regex", "bearer", "codeql"):
+        if engine in failed:
+            inferred[engine] = {"status": "failed", "error": None}
+        elif engine in seen:
+            inferred[engine] = {"status": "ok", "error": None}
+    return inferred
+
+
+async def _scan_status_payload_async(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _scan_status_payload(row)
+    if not payload["engineStatus"] and payload["status"] in ("completed", "failed"):
+        payload["engineStatus"] = await _infer_engine_status(row["id"], row)
+    return payload
+
+
+def _scan_status_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    summary = dict(row.get("summary") or {})
+    progress = _coerce_json_object(summary.pop("progress", None))
+
+    scan_status = row.get("status") or "pending"
+    if scan_status not in ("pending", "running", "completed", "failed"):
+        scan_status = "failed" if scan_status else "pending"
+
+    gate = row.get("quality_gate_status")
+    if gate not in (None, "passed", "failed"):
+        gate = None
+
+    return {
+        "scanId": row["id"],
+        "status": scan_status,
+        "summary": {
+            "totalFindings": _summary_int(summary, "totalFindings", "total_findings"),
+            "errors": _summary_int(summary, "errors"),
+            "warnings": _summary_int(summary, "warnings"),
+            "infos": _summary_int(summary, "infos"),
+            "filesScanned": _summary_int(summary, "filesScanned", "files_scanned"),
+            "filesInRepo": _summary_int(summary, "filesInRepo", "files_in_repo"),
+            "partial": bool(summary.get("partial", False)),
+            "failedEngines": summary.get("failedEngines") or summary.get("failed_engines") or [],
+        },
+        "engineStatus": _normalize_engine_status(row.get("engine_status")),
+        "qualityGateStatus": gate,
+        "progress": progress,
+        "updatedAt": _format_updated_at(row.get("updated_at")),
+    }
 
 
 async def _get_owned_scan(scan_id: str, tenant_id: str):
@@ -78,27 +204,10 @@ async def get_scan(
 ) -> ScanStatusResponse:
     row = await _get_owned_scan(scan_id, auth.tenant_id)
 
-    summary = dict(row["summary"] or {})
-    progress = summary.pop("progress", None)
-
-    return ScanStatusResponse.model_validate({
-        "scanId": row["id"],
-        "status": row["status"] or "pending",
-        "summary": {
-            "totalFindings": summary.get("totalFindings", 0),
-            "errors": summary.get("errors", 0),
-            "warnings": summary.get("warnings", 0),
-            "infos": summary.get("infos", 0),
-            "filesScanned": summary.get("filesScanned", 0),
-            "filesInRepo": summary.get("filesInRepo", 0),
-            "partial": bool(summary.get("partial", False)),
-            "failedEngines": summary.get("failedEngines", []),
-        },
-        "engineStatus": row["engine_status"] or {},
-        "qualityGateStatus": row["quality_gate_status"],
-        "progress": progress,
-        "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
-    })
+    try:
+        return ScanStatusResponse.model_validate(await _scan_status_payload_async(row))
+    except ValidationError as exc:
+        raise ApiError(f"Scan status is malformed: {exc.errors()[0]['msg']}", "INVALID_SCAN_STATE", 422) from exc
 
 
 @router.get(
@@ -190,7 +299,7 @@ async def list_findings(
 SETTINGS_MODELS = {
     "semgrep": SemgrepSettings,
     "regex": RegexSettings,
-    "sonarqube": SonarQubeSettings,
+    "bearer": BearerSettings,
     "codeql": CodeQLSettings,
 }
 

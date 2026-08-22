@@ -25,8 +25,15 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
 async def get_db_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
+        # Supabase Supavisor / PgBouncer transaction pooling reuses connections
+        # across clients; asyncpg's default prepared-statement cache then raises
+        # DuplicatePreparedStatementError and the API service exits on startup.
         _pool = await asyncpg.create_pool(
-            dsn=get_db_url(), min_size=2, max_size=10, init=_init_connection
+            dsn=get_db_url(),
+            min_size=2,
+            max_size=10,
+            init=_init_connection,
+            statement_cache_size=0,
         )
     return _pool
 

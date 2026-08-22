@@ -14,11 +14,8 @@ import PageLoading from "@/components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
-import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
-import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
 import {
-  CodeQLSettingsPanel, CustomRulesSettingsPanel, SemgrepSettingsPanel,
-  SonarQubeSettingsPanel,
+  BearerSettingsPanel, CodeQLSettingsPanel,
 } from "./sections/EngineSettingsPanels";
 import { severityDotCls } from "./sections/shared";
 
@@ -37,9 +34,29 @@ interface CRule {
 
 const toolKeyForSource: Record<string, string> = {
   custom: "customRules",
-  sonarqube: "sonarqube",
-  semgrep: "semgrep",
 };
+
+const DEFAULT_SCAN_TOOLS = {
+  semgrep: false,
+  bearer: true,
+  customRules: true,
+  codeql: true,
+} as const;
+
+function loadScanTools(): Record<string, boolean> {
+  const savedTools = localStorage.getItem("scan_tools");
+  if (savedTools) {
+    try {
+      const parsed = JSON.parse(savedTools) as Record<string, boolean>;
+      if (parsed.sonarqube !== undefined && parsed.bearer === undefined) {
+        parsed.bearer = parsed.sonarqube;
+        delete parsed.sonarqube;
+      }
+      return { ...DEFAULT_SCAN_TOOLS, ...parsed, semgrep: false };
+    } catch { /* ignore */ }
+  }
+  return { ...DEFAULT_SCAN_TOOLS };
+}
 
 const extIconMap: Record<string, string> = {
   ".php": "php", ".blade.php": "php", ".js": "javascript", ".ts": "typescript",
@@ -53,13 +70,9 @@ const extIconMap: Record<string, string> = {
 
 export default function SecurityRulesTab() {
   const [ruleSource, setRuleSource] = useState<
-    "custom" | "sonarqube" | "semgrep" | "sonarqube-settings" | "codeql-settings"
-  >("semgrep");
-  const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
-    const savedTools = localStorage.getItem("scan_tools");
-    if (savedTools) { try { return JSON.parse(savedTools); } catch { /* ignore */ } }
-    return { semgrep: true, sonarqube: true, customRules: true };
-  });
+    "custom" | "bearer-settings" | "codeql-settings"
+  >("custom");
+  const [scanTools, setScanTools] = useState<Record<string, boolean>>(loadScanTools);
   const [toolMessage, setToolMessage] = useState("");
 
   const toggleTool = (key: string) => {
@@ -73,19 +86,12 @@ export default function SecurityRulesTab() {
   };
 
   // Auto-switch away from a rule list whose engine has been switched off.
-  //
-  // Only rule lists are gated on a scan toggle. The engine *settings* sections
-  // have no entry in toolKeyForSource, and an unmapped key made this read
-  // scanTools[undefined] — falsy — so selecting any settings section bounced
-  // straight back to Semgrep Rules, aborting the request it had just started.
   useEffect(() => {
     const toolKey = toolKeyForSource[ruleSource];
     if (!toolKey || scanTools[toolKey]) return;
 
     const sources = [
-      { key: "semgrep" as const, toolKey: "semgrep" },
       { key: "custom" as const, toolKey: "customRules" },
-      { key: "sonarqube" as const, toolKey: "sonarqube" },
     ];
     const first = sources.find(s => scanTools[s.toolKey]);
     if (first) setRuleSource(first.key);
@@ -101,8 +107,6 @@ export default function SecurityRulesTab() {
   const [error, setError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
-  const [semgrepFilter, setSemgrepFilter] = useState("");
-  const [semgrepAdding, setSemgrepAdding] = useState(false);
   const [sevTab, setSevTab] = useState<string>("");
   const [langFilter, setLangFilter] = useState<Set<string>>(new Set());
   const toast = useToast();
@@ -173,11 +177,11 @@ export default function SecurityRulesTab() {
           </div>
           {toolMessage && <span className="text-xs text-primary-500 font-medium">{toolMessage}</span>}
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-x-8 gap-y-4">
           {([
-            { key: "semgrep", name: "Semgrep" },
             { key: "customRules", name: "Custom Rules" },
-            { key: "sonarqube", name: "SonarQube" },
+            { key: "bearer", name: "Bearer" },
+            { key: "codeql", name: "CodeQL" },
           ] as const).map(({ key, name }) => (
             <div key={key} className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
@@ -189,23 +193,14 @@ export default function SecurityRulesTab() {
 
       {/* Source selector + content */}
       {(() => {
-        // `toolKey: null` marks a section that configures an engine rather than
-        // listing its rules — those stay reachable even when the engine's own
-        // scan toggle is off, since turning it back on is done from there.
         const sources: Array<{
-          key: "custom" | "sonarqube" | "semgrep"
-             | "semgrep-settings" | "custom-settings" | "sonarqube-settings" | "codeql-settings";
+          key: "custom" | "bearer-settings" | "codeql-settings";
           label: string;
           toolKey: string | null;
         }> = [
-          { key: "semgrep", label: "Semgrep Rules", toolKey: "semgrep" },
           { key: "custom", label: "Custom Rules", toolKey: "customRules" },
-          // Reachable at last: the panel existed but no entry ever pointed at it.
-          { key: "sonarqube", label: "SonarQube Rules", toolKey: "sonarqube" },
-          { key: "semgrep-settings", label: "Semgrep Settings", toolKey: null },
-          { key: "custom-settings", label: "Custom Rule Settings", toolKey: null },
-          { key: "sonarqube-settings", label: "SonarQube Settings", toolKey: null },
-          { key: "codeql-settings", label: "CodeQL Settings", toolKey: null },
+          { key: "bearer-settings", label: "Bearer", toolKey: null },
+          { key: "codeql-settings", label: "CodeQL", toolKey: null },
         ];
         const enabled = sources.filter(s => s.toolKey === null || scanTools[s.toolKey]);
         const activeVisible = enabled.some(s => s.key === ruleSource);
@@ -215,42 +210,26 @@ export default function SecurityRulesTab() {
           <p className="text-sm text-text-muted text-center py-12">Enable at least one scan engine above to manage its rules.</p>
         ) : (
           <>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               {enabled.map(s => (
-                <button key={s.key} type="button" onClick={() => setRuleSource(s.key)} className={`h-9 px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? segmentActiveCls : segmentIdleCls}`}>
+                <button key={s.key} type="button" onClick={() => setRuleSource(s.key)} className={`h-9 shrink-0 whitespace-nowrap px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? segmentActiveCls : segmentIdleCls}`}>
                   {s.label}
                 </button>
               ))}
               {effectiveSource === "custom" && (
-                <div className="ml-auto flex items-center gap-2">
-                  <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" style={{ width: 280 }} />
-                  <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="shrink-0">
-                    Add Rule
-                  </Button>
-                </div>
-              )}
-              {effectiveSource === "semgrep" && (
-                <div className="ml-auto flex items-center gap-2">
-                  <Input type="text" value={semgrepFilter} onChange={e => setSemgrepFilter(e.target.value)} placeholder="Filter rules…" style={{ width: 280 }} />
-                  <Button onClick={() => setSemgrepAdding(true)} iconLeft={<PlusIcon className="size-4" />} className="shrink-0">
+                <div className="flex w-full min-w-0 basis-full flex-col gap-2 sm:ml-auto sm:w-auto sm:basis-auto sm:flex-row sm:items-center">
+                  <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className="w-full min-w-0 sm:w-[280px]" />
+                  <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="w-full shrink-0 sm:w-auto">
                     Add Rule
                   </Button>
                 </div>
               )}
             </div>
 
-            {effectiveSource === "semgrep-settings" ? (
-              <SemgrepSettingsPanel />
-            ) : effectiveSource === "custom-settings" ? (
-              <CustomRulesSettingsPanel />
-            ) : effectiveSource === "sonarqube-settings" ? (
-              <SonarQubeSettingsPanel />
+            {effectiveSource === "bearer-settings" ? (
+              <BearerSettingsPanel />
             ) : effectiveSource === "codeql-settings" ? (
               <CodeQLSettingsPanel />
-            ) : effectiveSource === "sonarqube" ? (
-              <SonarQubeRulesPanel />
-            ) : effectiveSource === "semgrep" ? (
-              <SemgrepRulesPanel filter={semgrepFilter} adding={semgrepAdding} onAddingDone={() => setSemgrepAdding(false)} />
             ) : (
               <CustomRulesPanel
                 rules={rules}
