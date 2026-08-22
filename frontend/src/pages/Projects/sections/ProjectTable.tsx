@@ -22,7 +22,7 @@ export default function ProjectTable({ projects, projectLangs, projectBadgeLoadi
             <td className={`${tableCellCls} font-medium`}>{p.name}</td>
             <td className={`${tableCellMutedCls} lowercase`}>{p.repository ? getRepoSlug(p.repository) : "—"}</td>
             <td>
-              <BranchCommitLabel branch={p.branch || "main"} commit={p.lastCommitHash || undefined} onClick={() => onSelect(p.id)} />
+              <BranchCommitLabel branch={p.branch || "main"} onClick={() => onSelect(p.id)} />
             </td>
             <td>
               <TechCell

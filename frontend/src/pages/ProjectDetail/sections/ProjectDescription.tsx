@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
@@ -26,7 +26,8 @@ import ProjectSettingsTab from "./ProjectSettingsTab";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useIsMdUp } from "@/hooks/useMediaQuery";
-import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon } from "lucide-react";
+import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import Button from "@/components/ui/Button";
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -757,17 +758,19 @@ function DependencyRow({
 }
 
 function DependenciesTab({ data }: { data: Dependency[] }) {
-  const [filter, setFilter] = useState<"all" | "production" | "dev" | "vulnerable">("all");
+  const [filter, setFilter] = useState<"all" | "production" | "dev" | "vulnerable" | "outdated">("all");
   const [selectedVuln, setSelectedVuln] = useState<VulnDetail | null>(null);
 
   const filtered = data.filter(d => {
     if (filter === "production") return d.type === "production";
     if (filter === "dev") return d.type === "dev";
     if (filter === "vulnerable") return d.vulnerabilities.length > 0;
+    if (filter === "outdated") return d.status === "outdated";
     return true;
   });
 
   const vulnCount = data.reduce((sum, d) => sum + d.vulnerabilities.length, 0);
+  const outdatedCount = data.filter(d => d.status === "outdated").length;
   const prodCount = data.filter(d => d.type === "production").length;
   const devCount = data.filter(d => d.type === "dev").length;
 
@@ -780,6 +783,7 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
           { key: "production", label: `Production (${prodCount})` },
           { key: "dev", label: `Dev (${devCount})` },
           { key: "vulnerable", label: `Vulnerable (${vulnCount > 0 ? vulnCount : 0})` },
+          { key: "outdated", label: `Outdated (${outdatedCount})` },
         ] as const).map(f => (
           <button
             key={f.key}
@@ -788,7 +792,9 @@ function DependenciesTab({ data }: { data: Dependency[] }) {
               filter === f.key
                 ? f.key === "vulnerable"
                   ? "border-danger-500/40 bg-danger-500/15 text-danger-400"
-                  : segmentActiveCls
+                  : f.key === "outdated"
+                    ? "border-warning-500/40 bg-warning-500/15 text-warning-ink"
+                    : segmentActiveCls
                 : `${segmentIdleCls} hover:bg-secondary-50 hover:text-text`
             }`}
           >
@@ -865,6 +871,10 @@ export default function ProjectDescription({
   const canEditOverview = isOwner || has("project:manage");
 
   const tabListRef = useRef<HTMLDivElement>(null);
+  const overviewClipRef = useRef<HTMLDivElement>(null);
+  const [overviewExpanded, setOverviewExpanded] = useState(false);
+  const [overviewClipPx, setOverviewClipPx] = useState<number | null>(null);
+  const [overviewOverflows, setOverviewOverflows] = useState(true);
 
   const visibleMainTabs = useMemo(() => {
     if (permissionsLoading) return [];
@@ -895,6 +905,69 @@ export default function ProjectDescription({
   }, [activeMainTab, visibleMainTabs, permissionsLoading, setActiveMainTab]);
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
+
+  useEffect(() => {
+    setOverviewExpanded(false);
+  }, [project.id]);
+
+  // Clip the overview at the Settings tab's top so a long README cannot stretch
+  // the card thousands of pixels. On the horizontal (mobile) strip Settings sits
+  // above the panel, so the delta is useless — fall back to a preview height.
+  useLayoutEffect(() => {
+    if (activeMainTabSafe !== "overview") return;
+
+    const panel = overviewClipRef.current;
+    if (!panel) return;
+
+    const measure = () => {
+      const foldEl =
+        document.getElementById(tabId("settings")) ??
+        tabListRef.current?.querySelector<HTMLElement>('[role="tab"]:last-of-type');
+      const panelRect = panel.getBoundingClientRect();
+      let clipPx =
+        isSidebar && foldEl
+          ? Math.round(foldEl.getBoundingClientRect().top - panelRect.top)
+          : 360;
+
+      if (clipPx < 160) clipPx = 360;
+
+      const editor = panel.querySelector<HTMLElement>(".overview-editor");
+      const styles = getComputedStyle(panel);
+      const padY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+      const natural = editor?.scrollHeight ?? panel.scrollHeight;
+      setOverviewClipPx(clipPx);
+      setOverviewOverflows(natural > clipPx - padY + 24);
+    };
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(panel);
+
+    const watchEditor = () => {
+      const editor = panel.querySelector(".overview-editor");
+      if (editor) ro.observe(editor);
+    };
+    watchEditor();
+
+    const mo = new MutationObserver(() => {
+      watchEditor();
+      measure();
+    });
+    mo.observe(panel, { childList: true, subtree: true });
+
+    measure();
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [activeMainTabSafe, overviewExpanded, isSidebar, visibleMainTabs, project.id]);
+
+  const clipOverview =
+    activeMainTabSafe === "overview" && !overviewExpanded && overviewOverflows;
+  const overviewMaxHeight = clipOverview
+    ? (overviewClipPx ?? (isSidebar ? 520 : 360))
+    : undefined;
 
   const [uploadedSensitiveData, setUploadedSensitiveData] = useState<SensitiveField[] | null>(() => {
     if (!cacheKey) return null;
@@ -1118,7 +1191,11 @@ export default function ProjectDescription({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-5">
+        <div
+          ref={overviewClipRef}
+          className={`relative flex min-h-0 flex-1 flex-col p-4 sm:p-5${clipOverview ? " overflow-hidden" : ""}`}
+          style={overviewMaxHeight != null ? { maxHeight: overviewMaxHeight } : undefined}
+        >
           <div
             role="tabpanel"
             id={panelId(activeMainTabSafe)}
@@ -1134,12 +1211,45 @@ export default function ProjectDescription({
                   project={project}
                   editable={canEditOverview}
                   onProjectUpdate={onProjectUpdate}
+                  clipOverflow={clipOverview}
                 />
               )
             ) : (
               renderMainTabContent()
             )}
+            {activeMainTabSafe === "overview" && overviewOverflows && overviewExpanded && (
+              <div className="flex justify-center pt-4 pb-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  iconLeft={<ChevronUpIcon className="size-3.5" />}
+                  onClick={() => {
+                    setOverviewExpanded(false);
+                    overviewClipRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                  }}
+                  aria-expanded
+                >
+                  Show less
+                </Button>
+              </div>
+            )}
           </div>
+          {clipOverview && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-linear-to-t from-card via-card/85 to-transparent pt-16 pb-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="pointer-events-auto"
+                iconRight={<ChevronDownIcon className="size-3.5" />}
+                onClick={() => setOverviewExpanded(true)}
+                aria-expanded={false}
+              >
+                Show all
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

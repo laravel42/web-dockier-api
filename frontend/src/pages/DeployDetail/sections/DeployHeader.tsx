@@ -12,7 +12,6 @@ interface Props {
   onCancel: () => void;
   canRedeploy: boolean;
   redeploying: boolean;
-  onRedeploy: () => void;
   onRollback: () => void;
   /** True when this deployment is the most recent successful one (rollback is a no-op → hide it). */
   isLatestSuccessful: boolean;
@@ -21,10 +20,9 @@ interface Props {
 export default function DeployHeader({
   deploy, project, onNavigateProject,
   canCancel, cancelling, onCancel,
-  canRedeploy, redeploying, onRedeploy, onRollback,
+  canRedeploy, redeploying, onRollback,
   isLatestSuccessful,
 }: Props) {
-  const isTerminal = ["success", "failed", "cancelled"].includes(deploy.status);
   const isInProgress = ["pending", "building", "deploying"].includes(deploy.status);
 
   return (
@@ -55,13 +53,6 @@ export default function DeployHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Redeploy — available on terminal deployments (success, failed, cancelled) */}
-        {canRedeploy && isTerminal && deploy.status !== "destroyed" && (
-          <Button variant="primary" size="sm" loading={redeploying} onClick={onRedeploy} iconLeft={<RocketIcon />}>
-            Redeploy
-          </Button>
-        )}
-
         {/* Rollback — only on a PAST successful deployment (not the latest live one) with a commit hash */}
         {canRedeploy && deploy.status === "success" && deploy.commitHash && !isLatestSuccessful && (
           <Button variant="outline" size="sm" loading={redeploying} onClick={onRollback}>

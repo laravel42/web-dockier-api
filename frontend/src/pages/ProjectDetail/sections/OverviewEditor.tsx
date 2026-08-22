@@ -60,6 +60,8 @@ interface Props {
   project: Project;
   editable: boolean;
   onProjectUpdate: (project: Project) => void;
+  /** Hide overflow instead of scrolling — used when the parent clips with Show all. */
+  clipOverflow?: boolean;
 }
 
 function OverviewSpinner({ label = "Loading overview…" }: { label?: string }) {
@@ -101,7 +103,7 @@ function markdownToBlocks(markdown: string): PartialBlock[] {
   return normalizeOverviewBlocks(temp.tryParseMarkdownToBlocks(markdown));
 }
 
-export default function OverviewEditor({ project, editable, onProjectUpdate }: Props) {
+export default function OverviewEditor({ project, editable, onProjectUpdate, clipOverflow = false }: Props) {
   const cacheKey = getOverviewCacheKey(project);
   const cachedOnMount = getCachedOverview(cacheKey);
   const savedOnMount = project.config?.overviewBlocks;
@@ -329,7 +331,7 @@ export default function OverviewEditor({ project, editable, onProjectUpdate }: P
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {editable && saveStatus && <OverviewSaveToast status={saveStatus} />}
-      <div ref={overviewRef} className="overview-editor min-h-0 flex-1 overflow-y-auto">
+      <div ref={overviewRef} className={`overview-editor min-h-0 flex-1 ${clipOverflow ? "overflow-hidden" : "overflow-y-auto"}`}>
         <BlockNoteView
           editor={editor}
           editable={editable}

@@ -113,7 +113,6 @@ export default function RecentScans({ scans, navigate, projectId, error, onRetry
                       <div className="flex items-center gap-2 flex-wrap">
                         <BranchCommitLabel
                           branch={row.scan.branch}
-                          commit={row.scan.commitSha || undefined}
                           onClick={() => navigate(`/security/${row.scan.id}`)}
                         />
                       </div>

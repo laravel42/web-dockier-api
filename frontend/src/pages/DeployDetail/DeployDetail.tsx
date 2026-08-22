@@ -25,7 +25,6 @@ export default function DeployDetail() {
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
     handleCancel,
-    handleRedeploy,
     handleRollback,
   } = useDeployDetail();
   const { has } = usePermissions();
@@ -78,7 +77,6 @@ export default function DeployDetail() {
           onCancel={handleCancel}
           canRedeploy={canRedeploy}
           redeploying={redeploying}
-          onRedeploy={handleRedeploy}
           onRollback={() => deploy && handleRollback(deploy.id)}
           isLatestSuccessful={isLatestSuccessful}
         />

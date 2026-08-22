@@ -56,7 +56,7 @@ export default function ProjectCard({ project: p, badges, badgeLoading, repoFavi
         <span className={typeCardDateCls}>
           Created: {formatCardDateTime(p.createdAt)}
         </span>
-        <BranchCommitLabel branch={p.branch || "main"} commit={p.lastCommitHash || undefined} onClick={() => onSelect(p.id)} />
+        <BranchCommitLabel branch={p.branch || "main"} onClick={() => onSelect(p.id)} />
       </div>
     </div>
   );

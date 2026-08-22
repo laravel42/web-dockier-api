@@ -210,6 +210,8 @@ export default function ProjectDetail() {
         />
       </div>
 
+      <ContributorsGrid stats={stats} nameByLogin={nameByLogin} />
+
       <ProjectDescription
         analysis={analysis}
         analysisLoading={analysisLoading}
@@ -237,7 +239,6 @@ export default function ProjectDetail() {
                 />
               </div>
             )}
-            <ContributorsGrid stats={stats} nameByLogin={nameByLogin} />
           </div>
         }
         deploysPanel={

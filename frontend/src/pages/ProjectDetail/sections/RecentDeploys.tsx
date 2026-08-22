@@ -128,7 +128,6 @@ export default function RecentDeploys({
                       <div className="flex items-center gap-2 flex-wrap">
                         <BranchCommitLabel
                           branch={row.deploy.branch}
-                          commit={row.deploy.commitHash || fallbackCommitHash || undefined}
                           onClick={() => navigate(`/deploy/${row.deploy.id}`)}
                         />
                       </div>

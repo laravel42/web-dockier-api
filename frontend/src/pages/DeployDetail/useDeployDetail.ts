@@ -174,19 +174,6 @@ export function useDeployDetail() {
 
   const [redeploying, setRedeploying] = useState(false);
 
-  const handleRedeploy = useCallback(async () => {
-    if (!deploy) return;
-    setRedeploying(true);
-    try {
-      const newDeploy = await deployApi.redeployLatest(deploy.id);
-      navigate(`/deploy/${newDeploy.id}`);
-    } catch {
-      // Error handled by global toast or silently
-    } finally {
-      setRedeploying(false);
-    }
-  }, [deploy, navigate]);
-
   const handleRollback = useCallback(async (deploymentId: string) => {
     setRedeploying(true);
     try {
@@ -216,7 +203,6 @@ export function useDeployDetail() {
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
     handleCancel,
-    handleRedeploy,
     handleRollback,
   };
 }
