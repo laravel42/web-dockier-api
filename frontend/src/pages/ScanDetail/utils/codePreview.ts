@@ -26,6 +26,7 @@ import "prismjs/components/prism-markdown";
 import "prismjs/components/prism-docker";
 
 export const CODE_PREVIEW_MAX_CHARS = 2000;
+export const CODE_PREVIEW_CONTEXT_LINES = 2;
 
 const EXT_TO_LANG: Record<string, string> = {
   js: "javascript",
@@ -71,6 +72,8 @@ export interface CodePreviewRow {
   lineNumber: number;
   text: string;
   html: string;
+  /** True for the finding's line span; false for surrounding context lines. */
+  highlighted: boolean;
 }
 
 export function languageFromPath(filePath: string): string {
@@ -91,34 +94,38 @@ export function highlightCode(code: string, language: string): string {
   }
 }
 
-function sliceAffectedLines(
+function slicePreviewLines(
   lines: string[],
   startLine: number,
   endLine: number,
   maxChars: number,
-): { lineNumber: number; text: string }[] {
-  const start = Math.max(0, startLine - 1);
-  const end = Math.min(lines.length, endLine);
-  const affected = lines.slice(start, end);
+  contextLines: number = CODE_PREVIEW_CONTEXT_LINES,
+): { lineNumber: number; text: string; highlighted: boolean }[] {
+  const affectedStart = Math.max(0, startLine - 1);
+  const affectedEnd = Math.min(lines.length, endLine);
+  const sliceStart = Math.max(0, affectedStart - contextLines);
+  const sliceEnd = Math.min(lines.length, affectedEnd + contextLines);
+  const slice = lines.slice(sliceStart, sliceEnd);
 
-  const rows: { lineNumber: number; text: string }[] = [];
+  const rows: { lineNumber: number; text: string; highlighted: boolean }[] = [];
   let charCount = 0;
 
-  for (let i = 0; i < affected.length; i++) {
-    const line = affected[i] ?? "";
-    const lineNumber = start + i + 1;
+  for (let i = 0; i < slice.length; i++) {
+    const line = slice[i] ?? "";
+    const lineNumber = sliceStart + i + 1;
+    const highlighted = lineNumber >= startLine && lineNumber <= endLine;
     const separator = rows.length > 0 ? 1 : 0;
     const remaining = maxChars - charCount - separator;
 
     if (remaining <= 0) break;
 
     if (line.length > remaining) {
-      rows.push({ lineNumber, text: `${line.slice(0, remaining)}…` });
+      rows.push({ lineNumber, text: `${line.slice(0, remaining)}…`, highlighted });
       break;
     }
 
     charCount += separator + line.length;
-    rows.push({ lineNumber, text: line || " " });
+    rows.push({ lineNumber, text: line || " ", highlighted });
   }
 
   return rows;
@@ -132,12 +139,14 @@ export function buildCodePreviewRows(
   maxChars: number = CODE_PREVIEW_MAX_CHARS,
 ): { rows: CodePreviewRow[]; truncated: boolean } {
   const language = languageFromPath(filePath);
-  const start = Math.max(0, startLine - 1);
-  const end = Math.min(lines.length, endLine);
-  const affectedLineCount = Math.max(0, end - start);
-  const source = sliceAffectedLines(lines, startLine, endLine, maxChars);
+  const affectedStart = Math.max(0, startLine - 1);
+  const affectedEnd = Math.min(lines.length, endLine);
+  const sliceStart = Math.max(0, affectedStart - CODE_PREVIEW_CONTEXT_LINES);
+  const sliceEnd = Math.min(lines.length, affectedEnd + CODE_PREVIEW_CONTEXT_LINES);
+  const expectedLineCount = sliceEnd - sliceStart;
+  const source = slicePreviewLines(lines, startLine, endLine, maxChars);
   const truncated =
-    source.length < affectedLineCount || source.some((row) => row.text.endsWith("…"));
+    source.length < expectedLineCount || source.some((row) => row.text.endsWith("…"));
 
   return {
     truncated,
@@ -161,5 +170,6 @@ export function buildSnippetPreviewRow(
     lineNumber: startLine,
     text,
     html: highlightCode(text, language),
+    highlighted: true,
   };
 }

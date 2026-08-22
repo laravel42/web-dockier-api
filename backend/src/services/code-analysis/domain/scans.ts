@@ -8,7 +8,7 @@ import { enqueueScan } from "./worker.js";
 import type { RunScanOptions } from "./scan-worker.js";
 import { persistScanProgress } from "./scan-progress.js";
 import { reconcileStaleScanById } from "./scan-reconcile.js";
-import { getSecurityFindingCounts, getSecurityFindingCountsForScans } from "./findings.js";
+import { getSecurityFindingCounts, getSecurityFindingCountsForScans, countDistinctFindingFiles } from "./findings.js";
 
 export type { RunScanOptions };
 
@@ -150,6 +150,18 @@ export async function getScan(scanId: string, tenantId: string) {
       warnings: counts.warnings,
       infos: counts.infos,
     };
+
+    if (mapped.summary.filesInRepo === 0) {
+      const distinctFiles = await countDistinctFindingFiles(scanId);
+      if (distinctFiles > 0) {
+        mapped.summary.filesInRepo = distinctFiles;
+        if (mapped.summary.filesScanned === 0) {
+          mapped.summary.filesScanned = distinctFiles;
+        }
+      }
+    } else if (mapped.summary.filesScanned === 0) {
+      mapped.summary.filesScanned = mapped.summary.filesInRepo;
+    }
   }
   return mapped;
 }

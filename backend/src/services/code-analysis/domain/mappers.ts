@@ -73,8 +73,12 @@ export function parseSummary(raw: unknown): ScanSummary {
     errors: Number(meta.errors ?? 0),
     warnings: Number(meta.warnings ?? 0),
     infos: Number(meta.infos ?? 0),
-    filesScanned: Number(meta.filesScanned ?? 0),
-    filesInRepo: Number(meta.filesInRepo ?? 0),
+    filesScanned: Number(
+      meta.filesScanned ?? (progressParsed.success ? progressParsed.data.filesScanned : 0) ?? 0,
+    ),
+    filesInRepo: Number(
+      meta.filesInRepo ?? (progressParsed.success ? progressParsed.data.filesInRepo : 0) ?? 0,
+    ),
     error: typeof meta.error === "string" ? meta.error : undefined,
     progress: progressParsed.success ? progressParsed.data : undefined,
   };

@@ -9,6 +9,7 @@ import { useScanLiveState, useScanProgress } from "@/context/ScanProgressContext
 import type { Scan, Finding, Project, ScanProgress, ScanSummary, SecurityFindingCounts } from "@/types";
 import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
 import { dedupeFindings } from "@/pages/ScanDetail/utils/dedupeFindings";
+import { withFindingCounts, countsFromSummary, severityBucketTotal } from "@/pages/ScanDetail/utils/findingCounts";
 
 const DEFAULT_SCAN_PROGRESS: ScanProgress = {
   phase: "cloning",
@@ -48,16 +49,23 @@ export function useScanDetail() {
   const findingsFetchOffsetRef = useRef(0);
 
   const [runScanError, setRunScanError] = useState("");
+  const [runScanStarting, setRunScanStarting] = useState(false);
   const terminalHandledRef = useRef<string | null>(null);
   const missingFilesStorageKeyRef = useRef<string>("");
+  const scanRef = useRef(scan);
+  scanRef.current = scan;
 
+  const scanMatchesUrl = !scan || !scanId || scan.id === scanId;
   const scanRunning =
-    scan?.status === "running"
-    || scan?.status === "pending"
+    (scanMatchesUrl && (scan?.status === "running" || scan?.status === "pending"))
     || live?.status === "running"
     || live?.status === "pending";
+  const runScanBusy =
+    runScanStarting
+    || scanRunning
+    || allScans.some((s) => s.status === "running" || s.status === "pending");
   const scanProgress = scanRunning
-    ? (live?.progress ?? live?.summary?.progress ?? scan?.summary?.progress ?? DEFAULT_SCAN_PROGRESS)
+    ? (live?.progress ?? live?.summary?.progress ?? (scanMatchesUrl ? scan?.summary?.progress : undefined) ?? DEFAULT_SCAN_PROGRESS)
     : null;
 
   const displaySummary = useMemo((): ScanSummary | null => {
@@ -66,39 +74,58 @@ export function useScanDetail() {
     if (!apiSummary && !liveSummary) return null;
 
     if (scanRunning) {
-      const progress = live?.progress ?? liveSummary?.progress ?? apiSummary?.progress;
-      const base = liveSummary ?? apiSummary!;
+      const progress = live?.progress ?? liveSummary?.progress ?? (scanMatchesUrl ? apiSummary?.progress : undefined);
+      const base = liveSummary ?? (scanMatchesUrl ? apiSummary : null);
+      if (!base && !progress) return null;
       return {
-        ...base,
-        filesScanned: progress?.filesScanned ?? base.filesScanned ?? 0,
-        filesInRepo: progress?.filesInRepo ?? base.filesInRepo ?? 0,
-        totalFindings: progress?.findingsCount ?? base.totalFindings ?? 0,
+        totalFindings: progress?.findingsCount ?? base?.totalFindings ?? 0,
+        errors: base?.errors ?? 0,
+        warnings: base?.warnings ?? 0,
+        infos: base?.infos ?? 0,
+        filesScanned: progress?.filesScanned ?? base?.filesScanned ?? 0,
+        filesInRepo: progress?.filesInRepo ?? base?.filesInRepo ?? 0,
+        error: base?.error,
         progress,
       };
     }
 
     if (liveSummary && live?.status && TERMINAL_STATUSES.has(live.status)) {
-      return { ...apiSummary, ...liveSummary, progress: undefined };
+      const merged = { ...apiSummary, ...liveSummary, progress: undefined };
+      const apiBuckets = apiSummary ? severityBucketTotal(apiSummary) : 0;
+      const liveBuckets = severityBucketTotal(liveSummary);
+      if (apiSummary && apiBuckets > liveBuckets) {
+        return {
+          ...merged,
+          errors: apiSummary.errors,
+          warnings: apiSummary.warnings,
+          infos: apiSummary.infos,
+          totalFindings: Math.max(merged.totalFindings, apiSummary.totalFindings, apiBuckets),
+        };
+      }
+      return merged;
     }
 
     return apiSummary ?? liveSummary ?? null;
-  }, [scan?.summary, live?.summary, live?.progress, live?.status, scanRunning]);
+  }, [scan?.summary, live?.summary, live?.progress, live?.status, scanRunning, scanMatchesUrl]);
 
   const scanError =
     runScanError
     || live?.error
     || (scan?.status === "failed" ? scan.summary?.error || "Scan failed" : "");
 
+  const findingsRequestIdRef = useRef(0);
+
   const fetchFindings = useCallback(async (
     id: string,
     options: {
       severity?: string;
-      provider?: "semgrep" | "sonar" | "custom";
+      provider?: "semgrep" | "bearer" | "custom" | "codeql";
       append?: boolean;
       offset?: number;
     } = {},
   ) => {
     const { severity, provider, append = false, offset = 0 } = options;
+    const requestId = ++findingsRequestIdRef.current;
     if (append) {
       setFindingsLoadingMore(true);
     } else {
@@ -116,6 +143,7 @@ export function useScanDetail() {
         limit: FINDINGS_PAGE_SIZE,
         offset,
       });
+      if (requestId !== findingsRequestIdRef.current) return;
       setFindings((prev) => {
         const deduped = dedupeFindings(append ? [...prev, ...res.findings] : res.findings);
         setFindingsTotal(res.hasMore ? res.total : deduped.length);
@@ -125,8 +153,10 @@ export function useScanDetail() {
       setFindingCounts(res.counts);
       setHasMoreFindings(res.hasMore);
     } catch (err) {
+      if (requestId !== findingsRequestIdRef.current) return;
       setFindingsError(getErrorMessage(err, "Failed to load findings"));
     } finally {
+      if (requestId !== findingsRequestIdRef.current) return;
       setFindingsLoading(false);
       setFindingsLoadingMore(false);
     }
@@ -136,14 +166,14 @@ export function useScanDetail() {
     if (!scanId || findingsLoading || findingsLoadingMore || !hasMoreFindings) return;
     fetchFindings(scanId, {
       severity: severityFilter || undefined,
-      provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "bearer" | "custom" | "codeql" | undefined,
       append: true,
       offset: findingsFetchOffsetRef.current,
     });
   }, [scanId, findingsLoading, findingsLoadingMore, hasMoreFindings, fetchFindings, severityFilter, providerFilter]);
 
-  const refreshAllScans = useCallback(async (projectId: string) => {
-    setAllScansLoading(true);
+  const refreshAllScans = useCallback(async (projectId: string, options?: { silent?: boolean }) => {
+    if (!options?.silent) setAllScansLoading(true);
     try {
       const res = await codeAnalysisApi.listScans(projectId);
       setAllScans(res.scans);
@@ -187,11 +217,12 @@ export function useScanDetail() {
 
   useEffect(() => {
     if (!scanId) return;
+    if (scan?.id === scanId && (scan.status === "running" || scan.status === "pending")) return;
     fetchFindings(scanId, {
       severity: severityFilter || undefined,
-      provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "bearer" | "custom" | "codeql" | undefined,
     });
-  }, [scanId, severityFilter, providerFilter, fetchFindings]);
+  }, [scanId, scan?.id, scan?.status, severityFilter, providerFilter, fetchFindings]);
 
   useEffect(() => {
     if (!findingCounts || !providerFilter) return;
@@ -203,6 +234,10 @@ export function useScanDetail() {
 
   useEffect(() => {
     if (scanId) {
+      if (scanRef.current?.id === scanId) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       codeAnalysisApi.getScan(scanId)
         .then(async (s) => {
@@ -290,31 +325,49 @@ export function useScanDetail() {
       setScan((prev) => {
         if (!prev || prev.id !== scanId) return prev;
         if (prev.status === live.status && prev.summary === live.summary) return prev;
-        return { ...prev, status: live.status, summary: live.summary! };
+        const liveBuckets = severityBucketTotal(live.summary!);
+        const prevBuckets = severityBucketTotal(prev.summary);
+        return {
+          ...prev,
+          status: live.status,
+          summary: {
+            ...prev.summary,
+            ...live.summary!,
+            errors: liveBuckets >= prevBuckets ? live.summary!.errors : prev.summary.errors,
+            warnings: liveBuckets >= prevBuckets ? live.summary!.warnings : prev.summary.warnings,
+            infos: liveBuckets >= prevBuckets ? live.summary!.infos : prev.summary.infos,
+            totalFindings: Math.max(prev.summary.totalFindings, live.summary!.totalFindings),
+            progress: undefined,
+          },
+        };
       });
-    }
-
-    if (scan?.status === live.status && scan?.summary?.totalFindings === live.summary?.totalFindings) {
-      return;
     }
 
     const key = `${scanId}:${live.status}`;
     if (terminalHandledRef.current === key) return;
     terminalHandledRef.current = key;
 
-    codeAnalysisApi.getScan(scanId).then((s) => {
-      setScan(s);
-      seedFromScan(s);
-    }).catch(() => {});
+    void (async () => {
+      try {
+        const s = await codeAnalysisApi.getScan(scanId);
+        setScan(s);
+        seedFromScan(s);
+        setAllScans((prev) =>
+          prev.map((row) => (row.id === s.id ? { ...row, status: s.status, summary: s.summary } : row)),
+        );
+      } catch {
+        /* ignore */
+      }
 
-    if (live.status === "completed") {
-      fetchFindings(scanId, {
-        severity: severityFilter || undefined,
-        provider: (providerFilter || undefined) as "semgrep" | "sonar" | "custom" | undefined,
-      });
-    }
-    if (project) refreshAllScans(project.id);
-  }, [live, scanId, scan?.status, scan?.summary?.totalFindings, severityFilter, providerFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
+      if (live.status === "completed") {
+        await fetchFindings(scanId, {
+          severity: severityFilter || undefined,
+          provider: (providerFilter || undefined) as "semgrep" | "bearer" | "custom" | "codeql" | undefined,
+        });
+      }
+      if (project) await refreshAllScans(project.id, { silent: true });
+    })();
+  }, [live, scanId, severityFilter, providerFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
 
   useEffect(() => {
     if (!project || findings.length === 0) return;
@@ -363,8 +416,9 @@ export function useScanDetail() {
   };
 
   const handleRunScan = async () => {
-    if (!project) return;
+    if (!project || runScanBusy) return;
     setRunScanError("");
+    setRunScanStarting(true);
     let createdScanId: string | undefined;
     try {
       const parsed = parseOwnerRepo(project.repository);
@@ -376,33 +430,58 @@ export function useScanDetail() {
         branch: project.branch || "main",
       });
       createdScanId = newScan.id;
+      const runningScan: Scan = { ...newScan, status: "running" };
 
       setOptimisticRunning(newScan.id);
+      setAllScans((prev) => [runningScan, ...prev.filter((s) => s.id !== runningScan.id)]);
+      if (scanId !== newScan.id) {
+        navigate(`/security/${newScan.id}`);
+      }
+      setScan(runningScan);
 
-      await codeAnalysisApi.runScan(newScan.id, (() => {
+      const started = await codeAnalysisApi.runScan(newScan.id, (() => {
         try {
           const t = JSON.parse(localStorage.getItem("scan_tools") || "{}");
           return {
-            enableSemgrep: t.semgrep !== false,
-            enableSonarqube: t.sonarqube !== false,
+            enableSemgrep: false,
+            enableBearer: t.bearer !== false,
+            enableSonarqube: t.bearer !== false,
             enableCustomRules: t.customRules !== false,
+            enableCodeql: t.codeql !== false,
             enableSensitiveData: false,
           };
         } catch {
           return {};
         }
       })());
+      const confirmed: Scan = {
+        ...runningScan,
+        status: started.status === "pending" ? "pending" : "running",
+        summary: started.summary ?? runningScan.summary,
+      };
+      setScan(confirmed);
+      seedFromScan(confirmed);
 
-      setScan({ ...newScan, status: "running" });
-      if (scanId !== newScan.id) {
-        navigate(`/security/${newScan.id}`);
-      }
-      await refreshAllScans(project.id);
+      await refreshAllScans(project.id, { silent: true });
     } catch (err: unknown) {
       setRunScanError(getErrorMessage(err, "Scan failed"));
       if (createdScanId) clearScanState(createdScanId);
+    } finally {
+      setRunScanStarting(false);
     }
   };
+
+  const sidebarScans = useMemo(
+    () => allScans.map((s) => {
+      if (s.id !== scanId) return s;
+      const status = (scan?.id === s.id ? scan.status : s.status);
+      let next = status === s.status ? s : { ...s, status };
+      if (scan?.id === s.id) next = withFindingCounts(next, countsFromSummary(scan.summary));
+      if (live?.summary) next = withFindingCounts(next, countsFromSummary(live.summary));
+      return withFindingCounts(next, findingCounts);
+    }),
+    [allScans, scanId, scan, live?.summary, findingCounts],
+  );
 
   return {
     scanId,
@@ -424,7 +503,7 @@ export function useScanDetail() {
     handleSeverityFilter,
     providerFilter,
     setProviderFilter,
-    allScans,
+    allScans: sidebarScans,
     allScansLoading,
     scanRunning,
     scanProgress,
@@ -432,5 +511,6 @@ export function useScanDetail() {
     liveStatus: live?.status,
     scanError,
     handleRunScan,
+    runScanBusy,
   };
 }

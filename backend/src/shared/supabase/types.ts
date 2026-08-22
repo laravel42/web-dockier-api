@@ -249,6 +249,8 @@ export type Database = {
           start_line: number;
           end_line: number;
           snippet: string;
+          suppressed_by_llm: boolean;
+          suppression_reason: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["findings"]["Row"]> &

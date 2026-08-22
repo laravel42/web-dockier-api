@@ -14,13 +14,14 @@ interface Props {
   scanError: string;
   onRunScan: () => void;
   onSelectScan: (id: string) => void;
+  runScanBusy?: boolean;
 }
 
 export default function EmptyScanState({
   project, onBack,
   scanId, allScans, allScansLoading,
   scanError,
-  onRunScan, onSelectScan,
+  onRunScan, onSelectScan, runScanBusy,
 }: Props) {
   return (
     <div className="flex gap-6">
@@ -43,6 +44,7 @@ export default function EmptyScanState({
         hasConnectionId={!!project.connectionId}
         onRunScan={onRunScan}
         onSelectScan={onSelectScan}
+        runScanBusy={runScanBusy}
       />
     </div>
   );

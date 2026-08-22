@@ -1,93 +1,98 @@
+import { useEffect, useRef, useState } from "react";
 import type { ScanProgress } from "@/types";
 import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
+import {
+  clampProgressPercent,
+  finalizeProgressPercent,
+  progressDetailLine,
+  progressStepLabel,
+  rawProgressPercent,
+} from "@/pages/ScanDetail/utils/scanProgressPercent";
 
-const SCANNER_LABELS: Record<string, string> = {
-  cloning: "Cloning",
-  semgrep: "Semgrep",
-  custom: "Custom rules",
-  sensitive: "Sensitive data",
-  sonarqube: "SonarQube",
-  persisting: "Saving",
-};
-
-const BATCH_SCANNERS = new Set(["semgrep", "sonarqube"]);
-const BATCH_SCANNER_ESTIMATE_SEC = 300;
-
-function parseElapsedSeconds(label?: string): number | null {
-  if (!label) return null;
-  const match = label.match(/\((\d+)m\s*(\d+)s\)$/);
-  if (match) return Number(match[1]) * 60 + Number(match[2]);
-  const secOnly = label.match(/\((\d+)s\)$/);
-  if (secOnly) return Number(secOnly[1]);
-  return null;
+interface Props {
+  progress: ScanProgress;
+  /** When false, animate to 100% before the panel unmounts. */
+  active?: boolean;
 }
 
-function isBatchScannerPhase(progress: ScanProgress): boolean {
-  return progress.scanner != null && BATCH_SCANNERS.has(progress.scanner);
-}
+export default function ScanProgressPanel({ progress, active = true }: Props) {
+  const scanningStartedAt = useRef<number | null>(null);
+  const maxPctRef = useRef(0);
+  const [displayPct, setDisplayPct] = useState(0);
+  const [detail, setDetail] = useState<string | null>(null);
 
-function progressPercent(progress: ScanProgress): number {
-  if (progress.phase === "cloning") return 5;
-  if (progress.phase === "persisting") {
-    return progress.filesInRepo > 0
-      ? 60 + Math.round((progress.filesScanned / progress.filesInRepo) * 35)
-      : 85;
-  }
-  if (progress.phase === "done") return 100;
-  if (isBatchScannerPhase(progress)) {
-    const elapsed = parseElapsedSeconds(progress.currentFile);
-    if (elapsed != null) {
-      return Math.min(58, 12 + Math.round((elapsed / BATCH_SCANNER_ESTIMATE_SEC) * 46));
+  useEffect(() => {
+    if (progress.phase === "scanning" && scanningStartedAt.current == null) {
+      scanningStartedAt.current = Date.now();
     }
-    return 15;
-  }
-  if (progress.filesInRepo > 0) {
-    return 10 + Math.round((progress.filesScanned / progress.filesInRepo) * 50);
-  }
-  return 30;
-}
+    if (progress.phase === "cloning") {
+      scanningStartedAt.current = null;
+      maxPctRef.current = 0;
+    }
+  }, [progress.phase]);
 
-function stepLabel(progress: ScanProgress): string {
-  if (progress.scanner) return SCANNER_LABELS[progress.scanner] ?? progress.scanner;
-  if (progress.phase === "cloning") return "Cloning";
-  if (progress.phase === "persisting") return "Saving";
-  return "Scanning";
-}
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      const elapsed =
+        progress.phase === "scanning" && scanningStartedAt.current != null
+          ? Date.now() - scanningStartedAt.current
+          : 0;
 
-function detailLine(progress: ScanProgress): string | null {
-  if (progress.currentRule && progress.rulesTotal != null && progress.rulesTotal > 0) {
-    const rule = progress.currentRule;
-    const checked = progress.rulesChecked ?? 0;
-    return `${rule} (${checked}/${progress.rulesTotal})`;
-  }
-  const current = progress.currentFile ?? null;
-  if (!current) return null;
-  return displayFindingPath(current);
-}
+      const target = active
+        ? rawProgressPercent(progress, elapsed)
+        : 100;
 
-export default function ScanProgressPanel({ progress }: { progress: ScanProgress }) {
-  const pct = progressPercent(progress);
-  const batchScanner = isBatchScannerPhase(progress);
-  const detail = detailLine(progress);
+      const next = active
+        ? Math.max(maxPctRef.current, clampProgressPercent(target))
+        : finalizeProgressPercent(Math.max(maxPctRef.current, target));
+
+      maxPctRef.current = next;
+      setDisplayPct(next);
+
+      const rawDetail = progressDetailLine(progress);
+      setDetail(rawDetail ? displayFindingPath(rawDetail) : null);
+
+      if (active && progress.phase !== "done") {
+        frame = window.requestAnimationFrame(tick);
+      }
+    };
+
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [progress, active]);
+
+  const step = progressStepLabel(progress);
+  const fileHint =
+    progress.filesInRepo > 0
+      ? `${Math.min(progress.filesScanned, progress.filesInRepo)}/${progress.filesInRepo} files`
+      : null;
 
   return (
     <div className="space-y-1.5" aria-live="polite">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-text-muted">{stepLabel(progress)}</span>
-        <span className="text-xs font-semibold text-primary tabular-nums">{pct}%</span>
+        <span className="text-xs font-medium text-text-muted">{step}</span>
+        <span className="text-xs font-semibold text-primary tabular-nums">{displayPct}%</span>
       </div>
 
-      <div className="h-0.5 w-full overflow-hidden rounded-full bg-muted">
+      <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className={`h-full rounded-full bg-primary ease-out ${batchScanner ? "animate-pulse" : ""} transition-all duration-300`}
-          style={{ width: `${pct}%` }}
+          className="h-full rounded-full bg-primary transition-[width] duration-500 ease-linear"
+          style={{ width: `${displayPct}%` }}
         />
       </div>
 
-      {detail && (
-        <p key={detail} className="truncate font-mono text-xs/tight  text-text-muted">
-          {detail}
-        </p>
+      {(detail || fileHint) && (
+        <div className="space-y-0.5">
+          {detail && (
+            <p key={detail} className="truncate font-mono text-xs/tight text-text-muted">
+              {detail}
+            </p>
+          )}
+          {fileHint && (
+            <p className="text-xs text-text-muted tabular-nums">{fileHint}</p>
+          )}
+        </div>
       )}
     </div>
   );

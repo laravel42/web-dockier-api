@@ -26,7 +26,6 @@ export default function NotificationContent({ notification, compact = false }: P
     <div className="flex flex-wrap items-center gap-1.5">
       <BranchCommitLabel
         branch={metadata.branch}
-        commit={metadata.commit}
         size={compact ? "compact" : "default"}
       />
       {metadata.kind === "scan" && (

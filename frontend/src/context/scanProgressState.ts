@@ -18,7 +18,7 @@ const PHASE_ORDER: Record<string, number> = {
   done: 3,
 };
 
-export const POLL_INTERVAL_MS = 4_000;
+export const POLL_INTERVAL_MS = 2_000;
 
 function emptySummaryFromProgress(progress: ScanProgress): ScanSummary {
   return {
