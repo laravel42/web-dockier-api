@@ -71,7 +71,7 @@ export default function TopNavbar() {
 
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-card/30 backdrop-blur supports-backdrop-filter:bg-card/60">
-      <div className="flex h-14 items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
         <AppBrand size="sm" className="shrink-0" />
 
         <nav
@@ -138,7 +138,7 @@ export default function TopNavbar() {
                 </button>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={signOut}>
+              <DropdownMenuItem onSelect={signOut} className="justify-center text-danger-500 focus:text-danger-500">
                 <LogOutIcon />
                 <span>Sign out</span>
               </DropdownMenuItem>

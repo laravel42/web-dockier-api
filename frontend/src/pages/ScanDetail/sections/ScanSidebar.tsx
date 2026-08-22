@@ -90,11 +90,11 @@ export default function ScanSidebar({
                         {" · "}
                         {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5 py-px px-0.5">
+                      <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5">
                         {isLive && (
                           <span className="text-xs font-medium text-primary">live</span>
                         )}
-                        <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} size="sidebar" />
+                        <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} />
                       </div>
                     </div>
                     {hasBadges && (
