@@ -2,7 +2,6 @@ import TechCell from "@/components/TechCell";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { getRepoSlug } from "@/utils/parseOwnerRepo";
 import {
-  statusDotColors as statusColors,
   tableCellCls,
   tableCellMutedCls,
   typeCardDateCls,
@@ -11,6 +10,7 @@ import { formatCardDateTime } from "@/utils/formatCardDate";
 import DataTable, { tableRowCls } from "@/components/ui/DataTable";
 import type { Deployment, Project, TechBadgeInfo } from "@/types";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
+import { projectInfraDotClass } from "@/utils/projectInfraDot";
 
 interface Props {
   grouped: Array<[string, Deployment[]]>;
@@ -36,7 +36,6 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
             <td>
               <BranchCommitLabel
                 branch={latest.branch}
-                commit={latest.commitHash || proj?.lastCommitHash || undefined}
                 onClick={() => onSelect(latest.id)}
               />
             </td>
@@ -51,7 +50,7 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
             </td>
             <td>
               <div className="flex items-center gap-1.5">
-                <span className={`size-2 rounded-full shrink-0 ${statusColors[latest.status] || "bg-text-muted"}`} />
+                <span className={`size-2 rounded-full shrink-0 ${projectInfraDotClass(proj?.infraState, latest.status)}`} />
                 <span className={typeCardDateCls}>
                   {formatCardDateTime(getSortTimestamp(latest, "updated"))}
                 </span>

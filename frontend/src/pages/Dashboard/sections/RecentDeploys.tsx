@@ -1,9 +1,10 @@
 import type { Deployment as Deploy, Provider, Project } from "@/types";
-import { cardCls, getStatusDotClass, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "@/utils/styles";
+import { cardCls, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "@/utils/styles";
 import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import ProviderBadge from "@/components/ProviderBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { projectInfraDotClass } from "@/utils/projectInfraDot";
 
 interface Props {
   deploys: Deploy[];
@@ -34,7 +35,7 @@ export default function RecentDeploys({ deploys, providers, projectMap, fallback
             const prov = providers.find((p) => p.id === d.providerId);
             const pk = prov?.provider || "";
             const projectName = projectMap[d.projectId]?.name || d.repo;
-            const statusDot = getStatusDotClass(d.status);
+            const statusDot = projectInfraDotClass(projectMap[d.projectId]?.infraState, d.status);
             return (
               <li key={d.id}>
                 <div

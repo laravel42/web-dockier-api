@@ -5,7 +5,7 @@ import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "@/utils/styles
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
-import { isScanSecurityClean, scanHasSecurityErrors, scanSecurityFindingCount } from "@/utils/scanSummary";
+import { scanFindingSeverityDotClass, scanSecurityFindingCount } from "@/utils/scanSummary";
 
 interface Props {
   sortedProjectIds: string[];
@@ -18,11 +18,7 @@ interface Props {
 }
 
 function getScanStatusDot(latest: Scan, summary: Scan["summary"] | undefined): string {
-  if (latest.status === "completed") {
-    if (summary && isScanSecurityClean(summary)) return "bg-success-500";
-    if (summary && scanHasSecurityErrors(summary)) return "bg-danger-500";
-    return "bg-warning-500";
-  }
+  if (latest.status === "completed") return scanFindingSeverityDotClass(summary);
   if (latest.status === "failed") return "bg-danger-500";
   if (latest.status === "running") return "bg-primary-500";
   return "bg-secondary-400";
@@ -89,7 +85,6 @@ export default function ScanProjectTable({
               {project?.branch ? (
                 <BranchCommitLabel
                   branch={project.branch}
-                  commit={latest.commitSha || undefined}
                   onClick={() => onSelectScan(latest.id)}
                 />
               ) : (

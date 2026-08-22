@@ -13,3 +13,13 @@ export function isScanSecurityClean(summary: ScanSummaryCounts): boolean {
 export function scanHasSecurityErrors(summary: ScanSummaryCounts): boolean {
   return summary.errors > 0;
 }
+
+/**
+ * History-dot color from findings: red if any errors, yellow if warnings only,
+ * green when there are no errors or warnings (infos-only and empty both count).
+ */
+export function scanFindingSeverityDotClass(summary?: Pick<ScanSummaryCounts, "errors" | "warnings"> | null): string {
+  if (summary && summary.errors > 0) return "bg-danger-500";
+  if (summary && summary.warnings > 0) return "bg-warning-500";
+  return "bg-success-500";
+}

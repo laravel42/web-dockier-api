@@ -6,6 +6,7 @@ import { formatCardDateTime } from "@/utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import { clickableProps } from "@/utils/a11y";
+import { projectInfraDotClass } from "@/utils/projectInfraDot";
 
 interface Props {
   repo: string;
@@ -19,14 +20,7 @@ interface Props {
 export default function DeployCard({ repo, deploys, project, badges, badgeLoading, onClick }: Props) {
   const sorted = [...deploys].sort((a, b) => compareByTime(a, b, "updated"));
   const latest = sorted[0];
-  const statusDot =
-    latest.status === "success"
-      ? "bg-success-500"
-      : latest.status === "failed"
-        ? "bg-danger-500"
-        : latest.status === "building" || latest.status === "deploying"
-          ? "bg-primary-500"
-          : "bg-secondary-400";
+  const statusDot = projectInfraDotClass(project?.infraState, latest.status);
 
   return (
     <div {...clickableProps(onClick)} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
@@ -57,7 +51,6 @@ export default function DeployCard({ repo, deploys, project, badges, badgeLoadin
         </div>
         <BranchCommitLabel
           branch={latest.branch}
-          commit={latest.commitHash || project?.lastCommitHash || undefined}
           onClick={onClick}
         />
       </div>

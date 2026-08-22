@@ -1,5 +1,5 @@
 import SeverityBadge from "@/components/SeverityBadge";
-import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
+import { cardCls } from "@/utils/styles";
 import Button from "@/components/ui/Button";
 import SparklesIcon from "@/components/icons/outlined/SparklesIcon";
 import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
@@ -9,7 +9,12 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import type { Finding, PMIntegration, SecurityFindingCounts } from "@/types";
 import Spinner from "@/components/Spinner";
-import { ChevronRightIcon, CircleCheckIcon, CirclePlusIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  CircleCheckIcon,
+  CirclePlusIcon,
+} from "lucide-react";
+import type { KeyboardEvent } from "react";
 
 interface Props {
   findings: Finding[];
@@ -22,7 +27,6 @@ interface Props {
   scanCompleted: boolean;
   severityFilter: string;
   providerFilter: string;
-  onProviderFilterChange: (provider: string) => void;
   fileContents: Record<string, string>;
   pmIntegrations: PMIntegration[];
   hasConnectionId: boolean;
@@ -31,14 +35,93 @@ interface Props {
   onCreateMR: (f: Finding) => void;
 }
 
-type ProviderKey = "semgrep" | "sonar" | "custom";
+type ProviderKey = "semgrep" | "bearer" | "custom" | "codeql";
 
-const PROVIDER_DEFS: Array<{ key: string; label: string; countKey: ProviderKey | null }> = [
-  { key: "", label: "All Providers", countKey: null },
-  { key: "semgrep", label: "Semgrep", countKey: "semgrep" },
-  { key: "sonar", label: "SonarQube", countKey: "sonar" },
-  { key: "custom", label: "Custom Rules", countKey: "custom" },
+const PROVIDER_DEFS: Array<{
+  key: string;
+  label: string;
+  countKey: ProviderKey | null;
+}> = [
+  { key: "", label: "All", countKey: null },
+  { key: "custom", label: "Custom rules", countKey: "custom" },
+  { key: "codeql", label: "CodeQL", countKey: "codeql" },
+  { key: "bearer", label: "Bearer", countKey: "bearer" },
 ];
+
+export function ProviderFilters({
+  findingCounts,
+  providerFilter,
+  onProviderFilterChange,
+}: {
+  findingCounts: SecurityFindingCounts | null;
+  providerFilter: string;
+  onProviderFilterChange: (provider: string) => void;
+}) {
+  const moveSelection = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = PROVIDER_DEFS.length - 1;
+    let next = index;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = index === last ? 0 : index + 1;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = index === 0 ? last : index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = last;
+    else return;
+    event.preventDefault();
+    onProviderFilterChange(PROVIDER_DEFS[next].key);
+    const radios = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    radios?.[next]?.focus();
+  };
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Filter findings by engine"
+      className="inline-flex flex-wrap items-center rounded-md border border-border/50 bg-card/30 p-0.5"
+    >
+      {PROVIDER_DEFS.map((p, index) => {
+        const count =
+          findingCounts == null
+            ? null
+            : p.key === ""
+              ? findingCounts.total
+              : p.countKey
+                ? providerCount(findingCounts, p.countKey)
+                : null;
+        const selected = providerFilter === p.key;
+        return (
+          <button
+            key={p.key || "all"}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onProviderFilterChange(p.key)}
+            onKeyDown={(event) => moveSelection(event, index)}
+            className={`inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-md px-2.5 text-ui font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
+              selected ? "bg-primary-500/10 text-text" : "text-text-muted hover:text-text"
+            }`}
+          >
+            {p.label}
+            {count != null && (
+              <span className="ml-1 tabular-nums text-text-muted">({count})</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const SEVERITY_RANK: Record<string, number> = { error: 3, warning: 2, info: 1 };
+
+function severityCount(findings: Finding[], severity: string): number {
+  return findings.filter((f) => f.severity === severity).length;
+}
+
+function sortFindingsBySeverityDesc(findings: Finding[]): Finding[] {
+  return [...findings].sort(
+    (a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0),
+  );
+}
 
 function emptyFilterMessage(severityFilter: string, providerFilter: string): string {
   const parts: string[] = [];
@@ -52,21 +135,15 @@ function emptyFilterMessage(severityFilter: string, providerFilter: string): str
 }
 
 export default function FindingsList({
-  findings, findingsTotal, findingCounts, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
+  findings, findingCounts, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
   scanCompleted,
-  severityFilter, providerFilter, onProviderFilterChange,
+  severityFilter, providerFilter,
   fileContents, pmIntegrations, hasConnectionId, mrCreating,
   onCreateIssue, onCreateMR,
 }: Props) {
   const sentinelRef = useInfiniteScroll(onLoadMore, {
     enabled: hasMoreFindings && !findingsLoading,
     isLoading: findingsLoadingMore,
-  });
-
-  const providers = PROVIDER_DEFS.filter((p) => {
-    if (p.key === "") return true;
-    if (!findingCounts || !p.countKey) return false;
-    return findingCounts[p.countKey] > 0;
   });
 
   const hasSecurityFindings = (findingCounts?.total ?? 0) > 0;
@@ -90,36 +167,14 @@ export default function FindingsList({
   }
 
   const grouped = Object.entries(
-    findings.reduce<Record<string, Finding[]>>((acc, f) => {
+    sortFindingsBySeverityDesc(findings).reduce<Record<string, Finding[]>>((acc, f) => {
       (acc[f.filePath] ||= []).push(f);
       return acc;
     }, {}),
-  ).sort(([, a], [, b]) => b.length - a.length);
+  );
 
   return (
     <>
-      {providers.length > 1 && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs text-text-muted mr-1">Source:</span>
-          {providers.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => onProviderFilterChange(p.key)}
-              className={`px-2.5 py-1 rounded-sm border text-xs font-medium transition-colors ${
-                providerFilter === p.key
-                  ? segmentActiveCls
-                  : `${segmentIdleCls} bg-secondary-50 hover:bg-secondary-100 hover:text-text`
-              }`}
-            >
-              {p.label}
-              {p.key === "" && findingCounts ? ` (${findingCounts.total})` : ""}
-              {p.countKey && findingCounts ? ` (${providerCount(findingCounts, p.countKey)})` : ""}
-            </button>
-          ))}
-        </div>
-      )}
-
       {findings.length === 0 ? (
         <div className={`${cardCls} p-8 text-center`}>
           <p className="text-sm text-text-muted">{emptyFilterMessage(severityFilter, providerFilter)}</p>
@@ -129,24 +184,25 @@ export default function FindingsList({
         </div>
       ) : (
         <>
-          <p className="text-xs text-text-muted mb-3 tabular-nums">
-            Showing {findings.length} of {findingsTotal} finding{findingsTotal !== 1 ? "s" : ""}
-          </p>
           <div className="space-y-2">
-            {grouped.map(([filePath, fileFindings]) => (
+            {grouped.map(([filePath, fileFindings]) => {
+              const errorCount = severityCount(fileFindings, "error");
+              const warningCount = severityCount(fileFindings, "warning");
+              const infoCount = severityCount(fileFindings, "info");
+              return (
               <details key={filePath} className={`${cardCls} group`}>
                 <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
                   <ChevronRightIcon className="size-3.5  text-text-muted shrink-0 transition-transform group-open:rotate-90" />
                   <span className="text-xs font-mono text-text truncate">{displayFindingPath(filePath)}</span>
                   <div className="flex items-center gap-1 ml-auto shrink-0">
-                    {fileFindings.filter(f => f.severity === "error").length > 0 && (
-                      <SeverityBadge severity="error" count={fileFindings.filter(f => f.severity === "error").length} />
+                    {errorCount > 0 && (
+                      <SeverityBadge severity="error" count={errorCount} />
                     )}
-                    {fileFindings.filter(f => f.severity === "warning").length > 0 && (
-                      <SeverityBadge severity="warning" count={fileFindings.filter(f => f.severity === "warning").length} />
+                    {warningCount > 0 && (
+                      <SeverityBadge severity="warning" count={warningCount} />
                     )}
-                    {fileFindings.filter(f => f.severity === "info").length > 0 && (
-                      <SeverityBadge severity="info" count={fileFindings.filter(f => f.severity === "info").length} />
+                    {infoCount > 0 && (
+                      <SeverityBadge severity="info" count={infoCount} />
                     )}
                   </div>
                 </summary>
@@ -165,7 +221,8 @@ export default function FindingsList({
                   ))}
                 </div>
               </details>
-            ))}
+              );
+            })}
           </div>
 
           <div ref={sentinelRef} className="h-4" aria-hidden />
@@ -173,9 +230,6 @@ export default function FindingsList({
             <div className="flex justify-center py-4">
               <Spinner />
             </div>
-          )}
-          {!hasMoreFindings && findings.length > 0 && (
-            <p className="text-center text-xs text-text-muted py-4">All findings loaded</p>
           )}
         </>
       )}
@@ -275,7 +329,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
   );
   if (rows.length === 0) return null;
 
-  const gutterWidth = String(rows[rows.length - 1]!.lineNumber).length;
+  const gutterWidth = String(Math.max(...rows.map((r) => r.lineNumber))).length;
   const lineLabel =
     rows.length === 1
       ? `L${rows[0]!.lineNumber}`
@@ -289,15 +343,24 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
       </div>
       <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
         {rows.map((row) => (
-          <div key={row.lineNumber} className="flex items-start bg-danger-surface">
+          <div
+            key={row.lineNumber}
+            className={`flex items-start ${row.highlighted ? "bg-danger-surface" : "bg-secondary-900/40"}`}
+          >
             <span
-              className="shrink-0 select-none border-r border-danger-line bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums text-danger-ink"
+              className={`shrink-0 select-none border-r py-px pr-3 text-right text-sm/5 tabular-nums ${
+                row.highlighted
+                  ? "border-danger-line bg-danger-500/10 text-danger-ink"
+                  : "border-border/30 bg-muted/30 text-text-muted"
+              }`}
               style={{ width: `${gutterWidth + 3}ch` }}
             >
               {row.lineNumber}
             </span>
             <code
-              className="min-w-0 flex-1 px-3 py-px whitespace-pre-wrap break-all leading-5 text-text language-markup"
+              className={`min-w-0 flex-1 px-3 py-px whitespace-pre-wrap break-all leading-5 language-markup ${
+                row.highlighted ? "text-text" : "text-text-muted"
+              }`}
               dangerouslySetInnerHTML={{ __html: row.html }}
             />
           </div>

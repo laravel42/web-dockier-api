@@ -4,7 +4,7 @@ import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
-import { isScanSecurityClean, scanHasSecurityErrors } from "@/utils/scanSummary";
+import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 
 interface Props {
   scans: Scan[];
@@ -36,11 +36,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
             const isClean = summary ? isScanSecurityClean(summary) : false;
             const statusDot =
               s.status === "completed"
-                ? isClean
-                  ? "bg-success-500"
-                  : summary && scanHasSecurityErrors(summary)
-                    ? "bg-danger-500"
-                    : "bg-warning-500"
+                ? scanFindingSeverityDotClass(summary)
                 : s.status === "failed"
                   ? "bg-danger-500"
                   : "bg-primary-500";

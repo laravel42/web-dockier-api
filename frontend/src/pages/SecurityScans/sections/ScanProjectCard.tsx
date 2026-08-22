@@ -3,7 +3,7 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
-import { isScanSecurityClean, scanHasSecurityErrors } from "@/utils/scanSummary";
+import { scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { ShieldCheckIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
@@ -22,15 +22,10 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
   const latest = sorted[0];
   const latestCompleted = sorted.find((s) => s.status === "completed");
   const summary = latestCompleted?.summary;
-  const isClean = summary ? isScanSecurityClean(summary) : false;
 
   const statusDot =
     latest.status === "completed"
-      ? isClean
-        ? "bg-success-500"
-        : summary && scanHasSecurityErrors(summary)
-          ? "bg-danger-500"
-          : "bg-warning-500"
+      ? scanFindingSeverityDotClass(summary)
       : latest.status === "failed"
         ? "bg-danger-500"
         : latest.status === "running"
@@ -67,7 +62,6 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
         {project?.branch && (
           <BranchCommitLabel
             branch={project.branch}
-            commit={latest.commitSha || undefined}
             onClick={() => onSelect(latest.id)}
           />
         )}

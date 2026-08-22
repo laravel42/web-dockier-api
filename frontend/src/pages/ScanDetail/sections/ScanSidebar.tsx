@@ -13,6 +13,7 @@ import Button from "@/components/ui/Button";
 import Spinner from "@/components/Spinner";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { ShieldCheckIcon } from "lucide-react";
+import { scanFindingSeverityDotClass } from "@/utils/scanSummary";
 
 interface Props {
   scanId: string | undefined;
@@ -22,12 +23,13 @@ interface Props {
   hasConnectionId: boolean;
   onRunScan: () => void;
   onSelectScan: (id: string) => void;
+  runScanBusy?: boolean;
 }
 
 export default function ScanSidebar({
   scanId, allScans, allScansLoading,
   scanError,
-  hasConnectionId, onRunScan, onSelectScan,
+  hasConnectionId, onRunScan, onSelectScan, runScanBusy = false,
 }: Props) {
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canRunScan = isOwner || has("scan:run");
@@ -38,8 +40,10 @@ export default function ScanSidebar({
         <div className={`${cardCls} overflow-hidden`}>
           <div className="p-2 border-b border-border/40">
             <Button
+              type="button"
               onClick={onRunScan}
-              disabled={!hasConnectionId || permissionsLoading || !canRunScan}
+              loading={runScanBusy}
+              disabled={!hasConnectionId || permissionsLoading || !canRunScan || runScanBusy}
               iconLeft={<ShieldCheckIcon className="size-3.5" />}
               className="w-full"
             >
@@ -69,6 +73,11 @@ export default function ScanSidebar({
                 const isActive = s.id === scanId;
                 const isLive = s.status === "running" || s.status === "pending";
                 const hasBadges = s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0);
+                const dotClass = isLive
+                  ? getStatusDotClass(s.status)
+                  : s.status === "failed"
+                    ? getStatusDotClass("failed")
+                    : scanFindingSeverityDotClass(s.summary);
                 return (
                   <div
                     key={s.id}
@@ -84,7 +93,7 @@ export default function ScanSidebar({
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`size-2 rounded-full shrink-0 ${getStatusDotClass(s.status)}`} />
+                      <span className={`size-2 rounded-full shrink-0 ${dotClass}`} />
                       <span className={`${sidebarHistoryLabelCls(isActive)} truncate min-w-0`}>
                         {new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                         {" · "}
@@ -94,7 +103,7 @@ export default function ScanSidebar({
                         {isLive && (
                           <span className="text-xs font-medium text-primary">live</span>
                         )}
-                        <BranchCommitLabel branch={s.branch} commit={s.commitSha || undefined} />
+                        <BranchCommitLabel branch={s.branch} />
                       </div>
                     </div>
                     {hasBadges && (

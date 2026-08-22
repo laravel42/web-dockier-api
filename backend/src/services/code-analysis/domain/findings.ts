@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import { findingProvider, isSensitiveDataFinding, type FindingProvider } from "./finding-filters.js";
+import { pageSlicesForSeverityOrder } from "./finding-order.js";
 import { rowToFinding } from "./mappers.js";
 import { CodeAnalysisError } from "./scans.js";
 
@@ -19,8 +20,9 @@ export interface SecurityFindingCounts {
   warnings: number;
   infos: number;
   semgrep: number;
-  sonar: number;
+  bearer: number;
   custom: number;
+  codeql: number;
   byProvider: Record<FindingProvider, ProviderSeverityCounts>;
 }
 
@@ -35,12 +37,14 @@ function emptyCounts(): SecurityFindingCounts {
     warnings: 0,
     infos: 0,
     semgrep: 0,
-    sonar: 0,
+    bearer: 0,
     custom: 0,
+    codeql: 0,
     byProvider: {
       semgrep: emptyProviderCounts(),
-      sonar: emptyProviderCounts(),
+      bearer: emptyProviderCounts(),
       custom: emptyProviderCounts(),
+      codeql: emptyProviderCounts(),
     },
   };
 }
@@ -62,12 +66,17 @@ function applyFindingRow(
   bumpCount(counts.byProvider[provider], row.severity);
 }
 
+/** Actionable security findings: not LLM-suppressed, not sensitive-data. */
+function restrictToActionableFindings<T extends { eq: (column: "suppressed_by_llm", value: boolean) => T; not: (column: "rule_id", op: string, value: string) => T }>(
+  query: T,
+): T {
+  return query.eq("suppressed_by_llm", false).not("rule_id", "like", "sensitive-data.%");
+}
+
 export async function getSecurityFindingCounts(scanId: string): Promise<SecurityFindingCounts> {
-  const { data, error } = await supabaseAdmin
-    .from("findings")
-    .select("severity,rule_id")
-    .eq("scan_id", scanId)
-    .not("rule_id", "like", "sensitive-data.%");
+  const { data, error } = await restrictToActionableFindings(
+    supabaseAdmin.from("findings").select("severity,rule_id").eq("scan_id", scanId),
+  );
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
 
   const counts = emptyCounts();
@@ -77,20 +86,27 @@ export async function getSecurityFindingCounts(scanId: string): Promise<Security
   return counts;
 }
 
+export async function countDistinctFindingFiles(scanId: string): Promise<number> {
+  const { data, error } = await restrictToActionableFindings(
+    supabaseAdmin.from("findings").select("file_path").eq("scan_id", scanId),
+  );
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count finding files" });
+
+  return new Set((data ?? []).map((row) => row.file_path).filter(Boolean)).size;
+}
+
 export type ScanSeveritySummary = Pick<SecurityFindingCounts, "total" | "errors" | "warnings" | "infos">;
 
-/** Batch severity totals for list views (excludes sensitive-data findings). */
+/** Batch severity totals for list views (excludes suppressed and sensitive-data findings). */
 export async function getSecurityFindingCountsForScans(
   scanIds: string[],
 ): Promise<Map<string, ScanSeveritySummary>> {
   const result = new Map<string, ScanSeveritySummary>();
   if (scanIds.length === 0) return result;
 
-  const { data, error } = await supabaseAdmin
-    .from("findings")
-    .select("scan_id,severity,rule_id")
-    .in("scan_id", scanIds)
-    .not("rule_id", "like", "sensitive-data.%");
+  const { data, error } = await restrictToActionableFindings(
+    supabaseAdmin.from("findings").select("scan_id,severity,rule_id").in("scan_id", scanIds),
+  );
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
 
   const byScan = new Map<string, SecurityFindingCounts>();
@@ -117,6 +133,9 @@ export async function getSecurityFindingCountsForScans(
 
 export const FINDINGS_PAGE_SIZE_DEFAULT = 40;
 export const FINDINGS_PAGE_SIZE_MAX = 100;
+
+const FINDING_LIST_COLUMNS =
+  "id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,created_at";
 
 export interface ListFindingsParams {
   scanId: string;
@@ -211,31 +230,86 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
   if (!scan) throw new CodeAnalysisError("Scan not found", "not_found");
   assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
 
-  let query = supabaseAdmin
-    .from("findings")
-    .select("id,scan_id,rule_id,severity,message,file_path,start_line,end_line,snippet,created_at", { count: "exact" })
-    .eq("scan_id", scanId)
-    .order("severity", { ascending: true })
-    .order("file_path", { ascending: true })
-    .order("start_line", { ascending: true });
+  const applyListFilters = <T extends {
+    eq: (column: string, value: string | boolean) => T;
+    not: (column: string, op: string, value: string) => T;
+    or: (filters: string) => T;
+    like: (column: string, value: string) => T;
+  }>(query: T, severityFilter?: string): T => {
+    let next = query.eq("scan_id", scanId).eq("suppressed_by_llm", false);
+    if (severityFilter) next = next.eq("severity", severityFilter);
+    if (excludeSensitiveData) next = next.not("rule_id", "like", "sensitive-data.%");
+    if (provider === "bearer") next = next.or("rule_id.like.bearer.%,rule_id.like.sonar.%");
+    else if (provider === "custom") next = next.like("rule_id", "custom.%");
+    else if (provider === "codeql") next = next.like("rule_id", "codeql.%");
+    else if (provider === "semgrep") {
+      next = next
+        .not("rule_id", "like", "sonar.%")
+        .not("rule_id", "like", "bearer.%")
+        .not("rule_id", "like", "custom.%")
+        .not("rule_id", "like", "codeql.%")
+        .not("rule_id", "like", "sensitive-data.%");
+    }
+    return next;
+  };
 
-  if (severity) query = query.eq("severity", severity);
-  if (excludeSensitiveData) query = query.not("rule_id", "like", "sensitive-data.%");
-  if (provider === "sonar") query = query.like("rule_id", "sonar.%");
-  else if (provider === "custom") query = query.like("rule_id", "custom.%");
-  else if (provider === "semgrep") {
-    query = query
-      .not("rule_id", "like", "sonar.%")
-      .not("rule_id", "like", "custom.%")
-      .not("rule_id", "like", "sensitive-data.%");
+  const listQuery = (severityFilter?: string) =>
+    applyListFilters(
+      supabaseAdmin
+        .from("findings")
+        .select(FINDING_LIST_COLUMNS)
+        .order("file_path", { ascending: true })
+        .order("start_line", { ascending: true }),
+      severityFilter,
+    );
+
+  const countQuery = (severityFilter?: string) =>
+    applyListFilters(
+      supabaseAdmin.from("findings").select("id", { count: "exact", head: true }),
+      severityFilter,
+    );
+
+  const fetchPage = async (severityFilter: string | undefined, pageOffset: number, pageLimit: number) => {
+    const { data, error } = await listQuery(severityFilter).range(pageOffset, pageOffset + pageLimit - 1);
+    return unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list findings" });
+  };
+
+  const countExact = async (severityFilter?: string): Promise<number> => {
+    const { count, error } = await countQuery(severityFilter);
+    throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
+    return count ?? 0;
+  };
+
+  if (severity) {
+    const [total, rows, counts] = await Promise.all([
+      countExact(severity),
+      fetchPage(severity, offset, limit),
+      getSecurityFindingCounts(scanId),
+    ]);
+    return {
+      findings: rows.map(rowToFinding),
+      total,
+      hasMore: offset + rows.length < total,
+      counts,
+    };
   }
 
-  const [{ data, error, count }, counts] = await Promise.all([
-    query.range(offset, offset + limit - 1),
+  const [errorCount, warningCount, infoCount, counts] = await Promise.all([
+    countExact("error"),
+    countExact("warning"),
+    countExact("info"),
     getSecurityFindingCounts(scanId),
   ]);
-  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list findings" });
-  const total = count ?? rows.length;
+  const total = errorCount + warningCount + infoCount;
+  const slices = pageSlicesForSeverityOrder(offset, limit, {
+    error: errorCount,
+    warning: warningCount,
+    info: infoCount,
+  });
+  const pages = await Promise.all(
+    slices.map((slice) => fetchPage(slice.severity, slice.offset, slice.limit)),
+  );
+  const rows = pages.flat();
 
   return {
     findings: rows.map(rowToFinding),

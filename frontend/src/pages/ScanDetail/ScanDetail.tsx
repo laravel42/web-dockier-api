@@ -1,10 +1,11 @@
 import Button from "@/components/ui/Button";
+import { useEffect, useState } from "react";
 import { useScanDetail } from "./useScanDetail";
 import { useIssueModal } from "./useIssueModal";
 import { useFixModal } from "./useFixModal";
 import ScanHeader from "./sections/ScanHeader";
 import SummaryCards from "./sections/SummaryCards";
-import FindingsList from "./sections/FindingsList";
+import FindingsList, { ProviderFilters } from "./sections/FindingsList";
 import ScanSidebar from "./sections/ScanSidebar";
 import ScanProgressPanel from "./sections/ScanProgressPanel";
 import EngineOutcomePanel from "./sections/EngineOutcomePanel";
@@ -13,11 +14,35 @@ import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
+import type { ScanProgress } from "@/types";
 
 export default function ScanDetail() {
   const core = useScanDetail();
   const issue = useIssueModal(core.project);
   const fix = useFixModal(core.project);
+  const [progressHold, setProgressHold] = useState(false);
+  const [heldProgress, setHeldProgress] = useState<ScanProgress | null>(null);
+
+  useEffect(() => {
+    setHeldProgress(null);
+    setProgressHold(false);
+  }, [core.scanId]);
+
+  useEffect(() => {
+    if (core.scanProgress) setHeldProgress(core.scanProgress);
+  }, [core.scanProgress]);
+
+  useEffect(() => {
+    if (core.scanRunning) {
+      setProgressHold(true);
+      return;
+    }
+    if (!progressHold) return;
+    const timer = window.setTimeout(() => setProgressHold(false), 800);
+    return () => window.clearTimeout(timer);
+  }, [core.scanRunning, progressHold]);
+
+  const progressToShow = core.scanProgress ?? (progressHold ? heldProgress : null);
 
   if (core.loading) {
     return <PageLoading />;
@@ -47,6 +72,7 @@ export default function ScanDetail() {
         scanError={core.scanError}
         onRunScan={core.handleRunScan}
         onSelectScan={(id) => core.navigate(`/security/${id}`)}
+        runScanBusy={core.runScanBusy}
       />
     );
   }
@@ -64,11 +90,22 @@ export default function ScanDetail() {
           liveStatus={core.liveStatus}
           onBack={() => core.navigate("/security")}
           onNavigateProject={() => core.project && core.navigate(`/projects/${core.project.id}`)}
+          actions={(
+            <ProviderFilters
+              findingCounts={core.findingCounts}
+              providerFilter={core.providerFilter}
+              onProviderFilterChange={core.setProviderFilter}
+            />
+          )}
         />
 
-        {core.scanRunning && core.scanProgress && (
+        {progressToShow && (core.scanRunning || progressHold) && (
           <div className="mb-4 rounded-card border border-primary/20 bg-primary/5 px-4 py-3">
-            <ScanProgressPanel progress={core.scanProgress} />
+            <ScanProgressPanel
+              key={core.scanId}
+              progress={progressToShow}
+              active={core.scanRunning}
+            />
           </div>
         )}
 
@@ -85,7 +122,10 @@ export default function ScanDetail() {
           />
         )}
 
-        <EngineOutcomePanel scanId={core.scanId} />
+        <EngineOutcomePanel
+          scanId={core.scanId}
+          scanStatus={core.scan?.status ?? core.liveStatus}
+        />
 
         <FindingsList
           findings={core.findings}
@@ -98,7 +138,6 @@ export default function ScanDetail() {
           scanCompleted={core.scan.status === "completed"}
           severityFilter={core.severityFilter}
           providerFilter={core.providerFilter}
-          onProviderFilterChange={core.setProviderFilter}
           fileContents={core.fileContents}
           pmIntegrations={issue.pmIntegrations}
           hasConnectionId={!!core.project?.connectionId}
@@ -173,6 +212,7 @@ export default function ScanDetail() {
         hasConnectionId={!!core.project?.connectionId}
         onRunScan={core.handleRunScan}
         onSelectScan={(id) => core.navigate(`/security/${id}`)}
+        runScanBusy={core.runScanBusy}
       />
     </div>
   );
