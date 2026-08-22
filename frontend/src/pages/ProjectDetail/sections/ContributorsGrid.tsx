@@ -1,17 +1,18 @@
 import type { RepoStats } from "@/types";
-import { cardCls, typePanelTitle } from "@/utils/styles";
 
 interface Props {
   stats: RepoStats | null;
   nameByLogin?: Record<string, string>;
 }
 
+const MAX_VISIBLE = 5;
+
 function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
   if (avatarUrl) {
-    return <img src={avatarUrl} alt="" className="size-10 rounded-full shrink-0 ring-2 ring-border" />;
+    return <img src={avatarUrl} alt="" className="size-6 shrink-0 rounded-full" />;
   }
   return (
-    <div className="size-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm shrink-0 ring-2 ring-border">
+    <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary-100 text-ui-sm font-semibold text-text-muted">
       {name.charAt(0).toUpperCase()}
     </div>
   );
@@ -20,67 +21,66 @@ function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
 export default function ContributorsGrid({ stats, nameByLogin }: Props) {
   if (!stats?.topContributors?.length) return null;
 
-  const contributors = stats.topContributors;
+  const contributors = stats.topContributors.slice(0, MAX_VISIBLE);
+  const overflow = stats.topContributors.length - contributors.length;
   const maxCommits = Math.max(...contributors.map((c) => c.commits), 1);
 
   return (
-    <section className={`${cardCls} mb-6 p-4 sm:p-5`} aria-labelledby="project-contributors-heading">
-      <h2 id="project-contributors-heading" className={`${typePanelTitle} mb-3`}>Contributors</h2>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+    <div aria-labelledby="project-contributors-heading">
+      <p id="project-contributors-heading" className="text-ui font-semibold text-text-muted">
+        Contributors
+      </p>
+      <ul className="mt-2 space-y-3">
         {contributors.map((c, i) => {
-            const rank = i + 1;
-            const pct = Math.round((c.commits / maxCommits) * 100);
-            const realName = nameByLogin?.[c.name.toLowerCase()];
-            const displayName = realName && realName !== c.name ? `${realName} (${c.name})` : c.name;
-            const nameEl = c.profileUrl ? (
-              <a
-                href={c.profileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-sm font-semibold text-primary-500 hover:text-primary-700 transition-colors truncate"
-                title={displayName}
-              >
-                {displayName}
-              </a>
-            ) : (
-              <span className="block text-sm font-semibold text-text truncate" title={displayName}>
-                {displayName}
-              </span>
-            );
+          const pct = Math.round((c.commits / maxCommits) * 100);
+          const realName = nameByLogin?.[c.name.toLowerCase()];
+          const displayName = realName && realName !== c.name ? `${realName} (${c.name})` : c.name;
+          const nameEl = c.profileUrl ? (
+            <a
+              href={c.profileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate text-ui font-medium text-text hover:text-primary-500"
+              title={displayName}
+            >
+              {displayName}
+            </a>
+          ) : (
+            <span className="truncate text-ui font-medium text-text" title={displayName}>
+              {displayName}
+            </span>
+          );
 
-            return (
-              <div
-                key={c.name}
-                className="flex items-center gap-3 min-w-0 rounded-lg border border-border/50 bg-secondary-50/30 px-3 py-2.5 hover:border-primary/30 hover:bg-secondary-50/60 transition-colors"
-              >
-                <span className="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-1.5 rounded-sm text-xs font-bold tabular-nums ring-1 bg-secondary-100/50 text-text-muted ring-border">
-                  #{rank}
+          return (
+            <li key={c.name} className="min-w-0">
+              <div className="flex items-start gap-2 min-w-0">
+                <span className="mt-1 w-5 shrink-0 text-ui-sm tabular-nums text-text-muted">
+                  {i + 1}
                 </span>
                 <Avatar name={c.name} avatarUrl={c.avatarUrl} />
                 <div className="min-w-0 flex-1">
-                  {nameEl}
-                  <div className="mt-1.5 h-1.5 w-[85%] overflow-hidden rounded-full bg-secondary-100/60">
-                    <div
-                      className="h-full rounded-full bg-primary-500"
-                      style={{ width: `${pct}%` }}
-                    />
+                  <div className="flex min-w-0 items-center gap-2">
+                    {nameEl}
+                    <span className="ml-auto shrink-0 text-ui-sm tabular-nums text-text-muted">
+                      {c.commits.toLocaleString()}
+                      <span className="sr-only">
+                        {" "}
+                        commit{c.commits !== 1 ? "s" : ""}
+                      </span>
+                    </span>
                   </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-xs text-text-muted tabular-nums">
-                    {c.commits.toLocaleString()} commit{c.commits !== 1 ? "s" : ""}
+                  <div className="mt-1 h-0.5 overflow-hidden bg-border/50">
+                    <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
                   </div>
-                  {(c.additions > 0 || c.deletions > 0) && (
-                    <div className="mt-0.5 flex items-center justify-end gap-2 text-xs tabular-nums">
-                      <span className="text-success-ink">{c.additions.toLocaleString()} ++<span className="sr-only"> additions</span></span>
-                      <span className="text-danger-ink">{c.deletions.toLocaleString()} --<span className="sr-only"> deletions</span></span>
-                    </div>
-                  )}
                 </div>
               </div>
-            );
-          })}
-      </div>
-    </section>
+            </li>
+          );
+        })}
+      </ul>
+      {overflow > 0 && (
+        <p className="mt-3 text-ui-sm tabular-nums text-text-muted">+{overflow} more</p>
+      )}
+    </div>
   );
 }

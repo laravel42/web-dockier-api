@@ -2,14 +2,12 @@ import { useProjectDetail } from "./useProjectDetail";
 import DeployWizard from "@/components/DeployWizard";
 import Button from "@/components/ui/Button";
 import ProjectHeader from "./sections/ProjectHeader";
-import RepoInfoCard from "./sections/RepoInfoCard";
 import ProjectDetailsCard from "./sections/ProjectDetailsCard";
-import ContributorsGrid from "./sections/ContributorsGrid";
 import OpenIssues from "./sections/OpenIssues";
 import PullRequests from "./sections/PullRequests";
 import RecentCommits from "./sections/RecentCommits";
 import RecentDeploys from "./sections/RecentDeploys";
-import ProjectPostureLine from "./sections/ProjectPostureLine";
+import { DeployInfraStatus } from "./sections/ProjectPostureLine";
 import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
 import PullLogModal from "./modals/PullLogModal";
@@ -44,7 +42,7 @@ export default function ProjectDetail() {
     recentDeploys,
     recentScans,
     deploysError, scansError, fetchScans, hasLiveDeploy,
-    deploysLoaded, scansLoaded,
+    deploysLoaded,
   } = useProjectDetail();
 
   const nameByLogin: Record<string, string> = {};
@@ -166,15 +164,23 @@ export default function ProjectDetail() {
 
   return (
     <div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => navigate("/projects")}
-        iconLeft={<ChevronLeftIcon className="size-4" />}
-        className="mb-6"
-      >
-        Back to Projects
-      </Button>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/projects")}
+          iconLeft={<ChevronLeftIcon className="size-4" />}
+        >
+          Back to Projects
+        </Button>
+        <DeployInfraStatus
+          project={project}
+          deploys={recentDeploys}
+          allProviders={allProviders}
+          error={deploysError}
+          loaded={deploysLoaded}
+        />
+      </div>
 
       <ProjectHeader
         project={project}
@@ -186,31 +192,18 @@ export default function ProjectDetail() {
         nameSaving={nameSaving}
         nameError={nameError}
         liveDeploy={hasLiveDeploy}
-        posture={
-          <ProjectPostureLine
-            project={project}
-            recentDeploys={recentDeploys}
-            recentScans={recentScans}
-            deploysError={deploysError}
-            scansError={scansError}
-            deploysLoaded={deploysLoaded}
-            scansLoaded={scansLoaded}
-          />
-        }
       />
 
-      <div className="mb-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-        <RepoInfoCard project={project} stats={stats} badges={badges} allBadges={allBadges} />
-        <ProjectDetailsCard
-          project={project}
-          deployUrl={lastSuccessfulDeployUrl}
-          stats={stats}
-          statsLoading={statsLoading}
-          statsError={statsError}
-        />
-      </div>
-
-      <ContributorsGrid stats={stats} nameByLogin={nameByLogin} />
+      <ProjectDetailsCard
+        project={project}
+        deployUrl={lastSuccessfulDeployUrl}
+        stats={stats}
+        statsLoading={statsLoading}
+        statsError={statsError}
+        badges={badges}
+        allBadges={allBadges}
+        nameByLogin={nameByLogin}
+      />
 
       <ProjectDescription
         analysis={analysis}
@@ -257,6 +250,7 @@ export default function ProjectDetail() {
             scans={recentScans}
             navigate={navigate}
             projectId={project.id}
+            fallbackCommitHash={stats?.lastCommitHash}
             error={scansError}
             onRetry={fetchScans}
           />

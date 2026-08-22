@@ -7,6 +7,8 @@ interface Props {
   statsLoading: boolean;
   statsError: string;
   embedded?: boolean;
+  /** Half-width companion: stay on a 3×2 lattice instead of expanding to six columns. */
+  compact?: boolean;
 }
 
 /**
@@ -18,12 +20,18 @@ interface Props {
  * no-data cells hold back to 70% so a wall of zeros never competes with the
  * numbers that actually moved.
  */
-export default function ProjectStatsStrip({ stats, statsLoading, statsError, embedded = false }: Props) {
+export default function ProjectStatsStrip({ stats, statsLoading, statsError, embedded = false, compact = false }: Props) {
   const outerCls = embedded ? "" : "mb-6";
 
   if (statsLoading) {
     return (
-      <div className={`${outerCls} flex h-12 items-center justify-center rounded-lg border border-border/60 bg-card/40`}>
+      <div
+        className={
+          embedded
+            ? `${outerCls} flex h-12 items-center justify-center`
+            : `${outerCls} flex h-12 items-center justify-center rounded-lg border border-border/60 bg-card/40`
+        }
+      >
         <Spinner />
       </div>
     );
@@ -31,7 +39,13 @@ export default function ProjectStatsStrip({ stats, statsLoading, statsError, emb
 
   if (statsError) {
     return (
-      <div className={`${outerCls} rounded-lg border border-border/60 bg-danger-500/10 px-3 py-2.5 text-sm text-danger-500`}>
+      <div
+        className={
+          embedded
+            ? `${outerCls} py-2 text-sm text-danger-500`
+            : `${outerCls} rounded-lg border border-border/60 bg-danger-500/10 px-3 py-2.5 text-sm text-danger-500`
+        }
+      >
         {statsError}
       </div>
     );
@@ -45,11 +59,28 @@ export default function ProjectStatsStrip({ stats, statsLoading, statsError, emb
     <div className={outerCls}>
       {/* gap-px over a border-toned background paints the dividers, so the lattice
           survives wrapping at every column count without per-cell border rules. */}
-      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/60 bg-border/60 lg:grid-cols-6">
+      <div
+        className={
+          compact
+            ? "grid grid-cols-3"
+            : embedded
+              ? "grid grid-cols-3 gap-px bg-border/40 lg:grid-cols-6"
+              : "grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border/60 bg-border/60 lg:grid-cols-6"
+        }
+      >
         {kpis.map((kpi) => {
           const isQuiet = typeof kpi.value === "number" ? kpi.value === 0 : true;
           return (
-            <div key={kpi.label} className="flex flex-col items-center gap-0.5 bg-card px-3 py-2.5 text-center">
+            <div
+              key={kpi.label}
+              className={
+                compact
+                  ? "flex flex-col items-center gap-0.5 border-r border-b border-border/25 px-3 py-2.5 text-center [&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:border-b-0"
+                  : embedded
+                    ? "flex flex-col items-center gap-0.5 px-3 py-2.5 text-center"
+                    : "flex flex-col items-center gap-0.5 bg-card px-3 py-2.5 text-center"
+              }
+            >
               <div className="flex items-center justify-center gap-1.5">
                 <span className="shrink-0">{kpi.icon}</span>
                 <span

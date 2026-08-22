@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import ProjectPostureLine from "../pages/ProjectDetail/sections/ProjectPostureLine";
+import {
+  DeployInfraStatus,
+  DeployStatusLink,
+  InfraStatusLink,
+} from "../pages/ProjectDetail/sections/ProjectPostureLine";
 import {
   deployClause,
   findingsClause,
@@ -101,41 +105,20 @@ describe("infra clause", () => {
 describe("rendered line", () => {
   const at = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
-  it("renders all three clauses as links to their tabs", () => {
-    at(
-      <ProjectPostureLine
-        project={project()}
-        recentDeploys={[deploy()]}
-        recentScans={[scan(3)]}
-        deploysLoaded
-        scansLoaded
-      />,
-    );
+  it("renders deploy and infra as links to their tabs", () => {
+    at(<DeployInfraStatus project={project()} deploys={[deploy()]} loaded />);
     expect(screen.getByRole("link", { name: /^Deployed/ })).toHaveAttribute("href", "/?tab=deployments");
-    expect(screen.getByRole("link", { name: "3 critical findings" })).toHaveAttribute("href", "/?tab=security");
     expect(screen.getByRole("link", { name: "Running on ECS Fargate" })).toHaveAttribute("href", "/?tab=settings");
   });
 
-  it("shows the failure, not a reassurance, when both fetches failed", () => {
-    at(
-      <ProjectPostureLine
-        project={project()}
-        recentDeploys={[]}
-        recentScans={[]}
-        deploysError="offline"
-        scansError="offline"
-        deploysLoaded
-        scansLoaded
-      />,
-    );
+  it("shows the failure, not a reassurance, when the deploy fetch failed", () => {
+    at(<DeployStatusLink deploys={[]} error="offline" loaded />);
     expect(screen.getByText("Deploy status unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Scan status unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("No critical findings")).not.toBeInTheDocument();
     expect(screen.queryByText("Never deployed")).not.toBeInTheDocument();
   });
 
   it("still shows infra state while the two fetches are in flight", () => {
-    at(<ProjectPostureLine project={project()} recentDeploys={[]} recentScans={[]} />);
+    at(<InfraStatusLink project={project()} deploys={[]} />);
     expect(screen.getAllByRole("link")).toHaveLength(1);
     expect(screen.getByRole("link", { name: /Running on/ })).toBeInTheDocument();
   });
