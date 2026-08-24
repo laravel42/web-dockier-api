@@ -1,3 +1,5 @@
+import { createDomainErrorClass } from "../../../../shared/supabase/errors.js";
+
 export type GitProvider = string;
 
 export type RepoRef = { owner: string; repo: string; branch: string };
@@ -18,6 +20,47 @@ export type ListedRepo = {
 
 const MAX_REPO_PAGES = 10;
 const REPOS_PER_PAGE = 100;
+
+/**
+ * Error raised when an upstream git provider API returns a non-OK response.
+ * Extends DomainError so the global handler maps it to the right HTTP status
+ * (e.g. a provider 403 → 403 Forbidden) instead of a generic 500 — and the
+ * provider's own message (e.g. "requires ... [Project: Read]") reaches the user.
+ */
+export const ProviderApiError = createDomainErrorClass<
+  "unauthorized" | "forbidden" | "not_found" | "too_many_requests" | "service_unavailable" | "bad_request"
+>("ProviderApiError");
+
+function statusToDomainCode(status: number) {
+  if (status === 401) return "unauthorized" as const;
+  if (status === 403) return "forbidden" as const;
+  if (status === 404) return "not_found" as const;
+  if (status === 429) return "too_many_requests" as const;
+  if (status >= 500) return "service_unavailable" as const;
+  return "bad_request" as const;
+}
+
+/** Pull a human-readable detail out of a provider error body (GitHub/GitLab/Bitbucket shapes). */
+function extractProviderDetail(body: string): string {
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>;
+    const nested = obj.error && typeof obj.error === "object" ? (obj.error as Record<string, unknown>) : null;
+    const detail =
+      (typeof obj.error_description === "string" && obj.error_description) ||
+      (typeof obj.message === "string" && obj.message) ||
+      (nested && typeof nested.message === "string" && nested.message) ||
+      (typeof obj.error === "string" && obj.error) ||
+      "";
+    return detail || body;
+  } catch {
+    return body;
+  }
+}
+
+function providerApiError(provider: string, status: number, body: string) {
+  const detail = extractProviderDetail(body).slice(0, 500);
+  return new ProviderApiError(`${provider} API error ${status}: ${detail}`, statusToDomainCode(status));
+}
 
 function baseUrl(provider: GitProvider, endpoint?: string | null): string {
   if (provider === "github") return endpoint || "https://api.github.com";
@@ -60,7 +103,7 @@ async function listGitHubRepos(origin: string, headers: Record<string, string>):
 
   for (let page = 0; page < MAX_REPO_PAGES && nextUrl; page += 1) {
     const response = await fetch(nextUrl, { headers });
-    if (!response.ok) throw new Error(`GitHub API error ${response.status}`);
+    if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     const data = (await response.json()) as Array<{
       archived?: boolean;
       name: string;
@@ -88,7 +131,44 @@ async function listGitHubRepos(origin: string, headers: Record<string, string>):
   return dedupeRepos(repos);
 }
 
-async function listGitLabRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+/** Read a response body for error reporting without throwing. Truncated to keep logs sane. */
+async function readErrorBody(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).trim();
+    return text ? text.slice(0, 500) : response.statusText;
+  } catch {
+    return response.statusText;
+  }
+}
+
+type GitLabProject = {
+  name: string;
+  path_with_namespace: string;
+  web_url?: string;
+  default_branch?: string;
+  visibility?: string;
+};
+
+function mapGitLabProject(origin: string, project: GitLabProject): ListedRepo {
+  return {
+    name: project.name,
+    fullName: project.path_with_namespace,
+    url: project.web_url || `${origin}/${project.path_with_namespace}`,
+    defaultBranch: project.default_branch ?? "main",
+    // Absent visibility (associations endpoint omits it) → treat as private (safer default).
+    private: project.visibility ? project.visibility !== "public" : true,
+  };
+}
+
+type ListAttempt =
+  | { ok: true; repos: ListedRepo[] }
+  | { ok: false; status: number; body: string };
+
+/**
+ * Classic discovery via the projects list. Works for classic PATs and
+ * fine-grained tokens that were granted the projects-list permission.
+ */
+async function listGitLabViaMembership(origin: string, headers: Record<string, string>): Promise<ListAttempt> {
   const repos: ListedRepo[] = [];
 
   for (let page = 1; page <= MAX_REPO_PAGES; page += 1) {
@@ -96,31 +176,75 @@ async function listGitLabRepos(origin: string, headers: Record<string, string>):
       `${origin}/api/v4/projects?membership=true&simple=true&per_page=${REPOS_PER_PAGE}` +
       `&page=${page}&order_by=updated_at&archived=false`;
     const response = await fetch(url, { headers });
-    if (!response.ok) throw new Error(`GitLab API error ${response.status}`);
-    const data = (await response.json()) as Array<{
-      name: string;
-      path_with_namespace: string;
-      web_url: string;
-      default_branch?: string;
-      visibility?: string;
-    }>;
+    if (!response.ok) {
+      return { ok: false, status: response.status, body: await readErrorBody(response) };
+    }
+    const data = (await response.json()) as GitLabProject[];
     if (data.length === 0) break;
 
-    for (const repo of data) {
-      repos.push({
-        name: repo.name,
-        fullName: repo.path_with_namespace,
-        url: repo.web_url,
-        defaultBranch: repo.default_branch ?? "main",
-        private: repo.visibility === "private",
-      });
-    }
+    for (const project of data) repos.push(mapGitLabProject(origin, project));
 
-    const nextPage = response.headers.get("X-Next-Page");
-    if (!nextPage) break;
+    if (!response.headers.get("X-Next-Page")) break;
   }
 
-  return dedupeRepos(repos);
+  return { ok: true, repos };
+}
+
+/**
+ * Token-scoped discovery via the token's associations. This is the correct
+ * discovery path for fine-grained PATs, which cannot always call the
+ * projects-list endpoint but can enumerate what the token is authorized for.
+ *
+ * See: GET /personal_access_tokens/self/associations (GitLab 17.6+).
+ */
+async function listGitLabViaAssociations(origin: string, headers: Record<string, string>): Promise<ListAttempt> {
+  const repos: ListedRepo[] = [];
+
+  for (let page = 1; page <= MAX_REPO_PAGES; page += 1) {
+    const url = `${origin}/api/v4/personal_access_tokens/self/associations?per_page=${REPOS_PER_PAGE}&page=${page}`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      return { ok: false, status: response.status, body: await readErrorBody(response) };
+    }
+    const data = (await response.json()) as { projects?: GitLabProject[] };
+    const projects = data.projects ?? [];
+    if (projects.length === 0) break;
+
+    for (const project of projects) repos.push(mapGitLabProject(origin, project));
+
+    if (!response.headers.get("X-Next-Page")) break;
+  }
+
+  return { ok: true, repos };
+}
+
+async function listGitLabRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+  const membership = await listGitLabViaMembership(origin, headers);
+  if (membership.ok) return dedupeRepos(membership.repos);
+
+  // Fine-grained tokens often lack permission for the projects-list endpoint
+  // (403) even though they can access specific projects. Fall back to the
+  // token's associations, which is the discovery path built for such tokens.
+  if (membership.status === 403) {
+    const associations = await listGitLabViaAssociations(origin, headers);
+    if (associations.ok) return dedupeRepos(associations.repos);
+
+    // Both listing endpoints are user-scoped operations. A fine-grained token
+    // scoped only to groups/projects can't call them. Give an actionable hint.
+    if (associations.status === 403) {
+      throw new ProviderApiError(
+        `GitLab denied repository listing: ${extractProviderDetail(membership.body)} ` +
+          `Listing repositories needs a user-level permission that a group/project-scoped ` +
+          `fine-grained token doesn't include. Add "Personal Access Token: Read" to the token ` +
+          `(used for repository discovery), or use a token that can call GET /projects.`,
+        "forbidden",
+      );
+    }
+  }
+
+  // Surface the provider's own message (e.g. the missing granular permission)
+  // as a proper HTTP status instead of an opaque 500.
+  throw providerApiError("GitLab", membership.status, membership.body);
 }
 
 async function listBitbucketRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
@@ -129,7 +253,7 @@ async function listBitbucketRepos(origin: string, headers: Record<string, string
 
   for (let page = 0; page < MAX_REPO_PAGES && nextUrl; page += 1) {
     const response = await fetch(nextUrl, { headers });
-    if (!response.ok) throw new Error(`Bitbucket API error ${response.status}`);
+    if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
     const data = (await response.json()) as {
       values?: Array<{
         name: string;

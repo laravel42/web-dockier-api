@@ -64,6 +64,13 @@ export interface AnalyzeOptions {
   skipExistingDockerfile?: boolean;
   /** User-selected platform from project creation (e.g. "laravel", "nextjs"). Overrides auto-detection of framework. */
   knownPlatform?: string;
+  /**
+   * Opt-in capture mode. When true, the result additionally carries the
+   * effective Dockerfile content and AI review details so callers (e.g. the
+   * pre-deploy preview) can return them without re-running generation.
+   * Does not change any other observable behavior.
+   */
+  capture?: boolean;
 }
 
 export interface AnalyzeResult {
@@ -77,6 +84,19 @@ export interface AnalyzeResult {
   aiReviewed?: boolean;
   /** Whether the AI review produced a validated revision that was used. */
   aiRevised?: boolean;
+  // ─── Capture-mode fields (populated only when opts.capture === true) ───
+  /** Rule-based Dockerfile, or the repo's own Dockerfile when it was used as-is. */
+  mechanicalDockerfile?: string;
+  /** Effective Dockerfile after optional review; equals mechanical when not revised. */
+  finalDockerfile?: string;
+  /** Structured AI review changes (empty when approved or not run). */
+  reviewChanges?: Array<{ what: string; why: string }>;
+  /** Reason the review was skipped or a revision rejected, when applicable. */
+  reviewSkipReason?: string;
+  /** Whether the Dockerfile was Dockier-generated or taken from the repo. */
+  source?: "generated" | "repo";
+  /** Whether the AI review actually ran (key + flag on, generated source). */
+  aiEnabled?: boolean;
 }
 
 // ─── Clone Repository ──────────────────────────────────────────────
@@ -223,6 +243,13 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
   let aiReviewed = false;
   let aiRevised = false;
 
+  // Capture-mode accumulators (only surfaced when opts.capture === true).
+  let capturedMechanical: string | undefined;
+  let capturedFinal: string | undefined;
+  let capturedChanges: Array<{ what: string; why: string }> | undefined;
+  let capturedSkipReason: string | undefined;
+  let capturedSource: "generated" | "repo" | undefined;
+
   const hasExistingDockerfile = existsSync(join(repoDir, "Dockerfile"));
 
   if (hasExistingDockerfile && skipExistingDockerfile) {
@@ -231,12 +258,22 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
       const df = await readFile(join(repoDir, "Dockerfile"), "utf-8");
       const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
       if (exposeMatch) detectedPort = parseInt(exposeMatch[1], 10);
+      if (opts.capture) {
+        capturedSource = "repo";
+        capturedMechanical = df;
+        capturedFinal = df;
+        capturedChanges = [];
+      }
     } catch { /* use default port */ }
     await logger.info(`Repo already has a Dockerfile, using it as-is (port: ${detectedPort})`);
   } else {
     // Generate Dockerfile
     let df = generateDockerfile(repoConfig, repoDir);
     if (df) {
+      const mechanical = df;
+      let reviewChanges: Array<{ what: string; why: string }> = [];
+      let reviewSkipReason: string | undefined;
+
       // Optional AI review — best-effort, never fatal. Falls back to the
       // mechanical Dockerfile on any skip/failure/rejected revision.
       if (env.OPENAI_API_KEY && env.AI_DOCKERFILE_REVIEW !== "off") {
@@ -251,6 +288,8 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
           fileTree: listTopLevelFiles(repoDir),
         });
         aiReviewed = true;
+        reviewChanges = review.changes;
+        reviewSkipReason = review.skipReason;
         const elapsed = ((Date.now() - started) / 1000).toFixed(1);
 
         if (review.revised) {
@@ -263,6 +302,14 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
         } else {
           await logger.info(`AI Dockerfile review passed — no changes needed [${elapsed}s]`);
         }
+      }
+
+      if (opts.capture) {
+        capturedSource = "generated";
+        capturedMechanical = mechanical;
+        capturedFinal = df;
+        capturedChanges = reviewChanges;
+        capturedSkipReason = reviewSkipReason;
       }
 
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
@@ -284,5 +331,17 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
 
   const detectedStack = toDetectedStack(repoConfig);
 
-  return { repoConfig, detectedStack, detectedPort, dockerfileGenerated, aiReviewed, aiRevised };
+  const result: AnalyzeResult = { repoConfig, detectedStack, detectedPort, dockerfileGenerated, aiReviewed, aiRevised };
+
+  if (opts.capture) {
+    result.source = capturedSource;
+    result.mechanicalDockerfile = capturedMechanical;
+    result.finalDockerfile = capturedFinal;
+    result.reviewChanges = capturedChanges ?? [];
+    result.reviewSkipReason = capturedSkipReason;
+    // AI actually ran only for the generated path with the review block entered.
+    result.aiEnabled = capturedSource === "generated" && aiReviewed;
+  }
+
+  return result;
 }

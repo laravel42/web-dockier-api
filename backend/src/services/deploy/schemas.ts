@@ -41,3 +41,30 @@ export const envVarSchema = z.object({
   value: z.string().max(10_000),
 });
 
+
+// ─── Dockerfile Preview (Phase 2) ──────────────────────────────────
+
+export const dockerfilePreviewRequestSchema = z.object({
+  gitConnectionId: z.union([z.uuid(), z.literal("")]),
+  repo: z.string().min(1).max(300),
+  branch: z.string().min(1).max(200),
+  projectId: z.string().max(100).optional(),
+  useRepoDockerfile: z.boolean().optional(),
+});
+
+export const dockerfileChangeSchema = z.object({
+  what: z.string(),
+  why: z.string(),
+});
+
+export const dockerfilePreviewResponseSchema = z.object({
+  aiEnabled: z.boolean(),
+  source: z.enum(["generated", "repo"]),
+  mechanicalDockerfile: z.string(),
+  finalDockerfile: z.string(),
+  revised: z.boolean(),
+  changes: z.array(dockerfileChangeSchema),
+  skipReason: z.string().optional(),
+  runtime: z.string(),
+  framework: z.string(),
+});

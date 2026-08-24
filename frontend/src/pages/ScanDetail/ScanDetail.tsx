@@ -85,7 +85,7 @@ export default function ScanDetail() {
           />
         )}
 
-        <EngineOutcomePanel scanId={core.scanId} />
+        <EngineOutcomePanel scanId={core.scanId ?? ""} />
 
         <FindingsList
           findings={core.findings}

@@ -399,7 +399,7 @@ export function CodeQLSettingsPanel() {
             slow — a large repository can take tens of minutes per language.
           </p>
         </div>
-        <ToggleSwitch checked={form.enabled} onChange={(v) => set("enabled", v)} label="Enable CodeQL" />
+        <ToggleSwitch checked={form.enabled} onChange={(v) => set("enabled", v)} ariaLabel="Enable CodeQL" />
       </div>
 
       <SettingsField label="Languages">
