@@ -120,6 +120,8 @@ Based on the detected stack, Dockier generates an optimized multi-stage Dockerfi
 - **Python** — Virtual environment isolation, gunicorn/uvicorn configuration, Django collectstatic
 - **Go** — Static binary compilation with CGO disabled, minimal scratch/distroless final image
 
+**Optional AI review.** When an OpenAI key is configured (and `AI_DOCKERFILE_REVIEW` is not `off`), the mechanically generated Dockerfile is passed to an AI reviewer before it is written. The reviewer only revises for concrete problems — an unpinned base image, dependencies installed after copying all source, running as root, wrong build/start commands, missing native packages, an incorrect `EXPOSE`, or secrets baked into a layer — and otherwise approves it unchanged. The review is strictly best-effort: any failure, timeout, invalid response, or rejected revision falls back to the mechanical Dockerfile, so it can never break a build. Only `.env.example` variable names and non-secret manifests are sent as context; `.env` is never read. Outcomes appear in the deploy logs.
+
 #### Stage 3: Auto-Retry with Intelligent Patching
 
 If a build fails, Dockier analyzes the error output and attempts to fix the Dockerfile automatically. Up to 3 attempts with patches including:

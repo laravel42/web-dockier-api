@@ -30,6 +30,8 @@ const envSchema = z
     CORS_ORIGIN: z.string().default("*"),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+    /** Toggle the AI Dockerfile review layer. Review runs only when an OpenAI key is also set. */
+    AI_DOCKERFILE_REVIEW: z.enum(["on", "off"]).default("on"),
     WEBHOOK_SECRET: z.string().optional(),
     INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
     DEPLOY_CALLBACK_URL: z.string().optional(),

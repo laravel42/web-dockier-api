@@ -14,6 +14,13 @@ import { execSync } from "node:child_process";
 import { buildCloneUrl } from "./git-url.js";
 import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack } from "./repo-analyzer/index.js";
 import type { RepoConfig, DetectedStack } from "./repo-analyzer/types.js";
+import { env } from "../shared/config.js";
+import {
+  aiReviewDockerfile,
+  readPrimaryManifest,
+  readEnvExample,
+  listTopLevelFiles,
+} from "./repo-analyzer/ai-review.js";
 import type { ContextualLogger } from "./logging.js";
 import { BuildError } from "./logging.js";
 
@@ -66,6 +73,10 @@ export interface AnalyzeResult {
   detectedPort: number;
   /** Whether a Dockerfile was generated (vs. already present) */
   dockerfileGenerated: boolean;
+  /** Whether the AI review layer ran for this analysis. */
+  aiReviewed?: boolean;
+  /** Whether the AI review produced a validated revision that was used. */
+  aiRevised?: boolean;
 }
 
 // ─── Clone Repository ──────────────────────────────────────────────
@@ -209,6 +220,8 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
   // Generate or detect Dockerfile
   let detectedPort = repoConfig.port || 3000;
   let dockerfileGenerated = false;
+  let aiReviewed = false;
+  let aiRevised = false;
 
   const hasExistingDockerfile = existsSync(join(repoDir, "Dockerfile"));
 
@@ -222,8 +235,36 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
     await logger.info(`Repo already has a Dockerfile, using it as-is (port: ${detectedPort})`);
   } else {
     // Generate Dockerfile
-    const df = generateDockerfile(repoConfig, repoDir);
+    let df = generateDockerfile(repoConfig, repoDir);
     if (df) {
+      // Optional AI review — best-effort, never fatal. Falls back to the
+      // mechanical Dockerfile on any skip/failure/rejected revision.
+      if (env.OPENAI_API_KEY && env.AI_DOCKERFILE_REVIEW !== "off") {
+        const started = Date.now();
+        const review = await aiReviewDockerfile({
+          apiKey: env.OPENAI_API_KEY,
+          model: env.OPENAI_MODEL,
+          dockerfile: df,
+          repoConfig,
+          manifest: readPrimaryManifest(repoDir, repoConfig),
+          envExample: readEnvExample(repoDir),
+          fileTree: listTopLevelFiles(repoDir),
+        });
+        aiReviewed = true;
+        const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+
+        if (review.revised) {
+          df = review.dockerfile;
+          aiRevised = true;
+          const summary = review.changes.map((c) => c.what).join("; ") || "improvements applied";
+          await logger.success(`AI improved Dockerfile in ${elapsed}s: ${summary}`);
+        } else if (review.skipReason) {
+          await logger.warn(`AI Dockerfile review skipped (${review.skipReason}) — using generated Dockerfile [${elapsed}s]`);
+        } else {
+          await logger.info(`AI Dockerfile review passed — no changes needed [${elapsed}s]`);
+        }
+      }
+
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
       dockerfileGenerated = true;
       const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
@@ -243,5 +284,5 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
 
   const detectedStack = toDetectedStack(repoConfig);
 
-  return { repoConfig, detectedStack, detectedPort, dockerfileGenerated };
+  return { repoConfig, detectedStack, detectedPort, dockerfileGenerated, aiReviewed, aiRevised };
 }
