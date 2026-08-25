@@ -45,8 +45,23 @@ export const gitApi = {
   updateConnection: (connectionId: string, data: { label: string; personalToken?: string }) =>
     request<{ success: true }>(`/git/connections/${connectionId}`, { method: "PUT", body: JSON.stringify({ connectionId, ...data }) }),
 
-  listRepos: (connectionId: string, refresh?: boolean) =>
-    request<{ repos: Repo[]; cached: boolean }>(`/git/connections/${connectionId}/repos${buildQuery({ refresh: refresh ? "true" : undefined })}`),
+  /**
+   * List or search repos for a connection.
+   *
+   * Without `search` the backend returns only the first page (fast) — use
+   * `search` to reach repos beyond it. `hasMore` signals that more exist.
+   */
+  listRepos: (
+    connectionId: string,
+    opts: { refresh?: boolean; search?: string; limit?: number } = {},
+  ) =>
+    request<{ repos: Repo[]; cached: boolean; hasMore: boolean }>(
+      `/git/connections/${connectionId}/repos${buildQuery({
+        refresh: opts.refresh ? "true" : undefined,
+        search: opts.search?.trim() || undefined,
+        limit: opts.limit,
+      })}`,
+    ),
 
   listBranches: (connectionId: string, owner: string, repo: string) =>
     request<{ branches: string[] }>(

@@ -20,6 +20,28 @@ export type ListedRepo = {
 
 const MAX_REPO_PAGES = 10;
 const REPOS_PER_PAGE = 100;
+/** Page budget when serving a search — keeps provider-side search responsive. */
+export const SEARCH_MAX_PAGES = 3;
+
+export interface ListReposOptions {
+  /** Maximum pages to walk. Defaults to MAX_REPO_PAGES. Use 1 for a fast first page. */
+  maxPages?: number;
+  /** Page size requested from the provider. Defaults to REPOS_PER_PAGE. */
+  perPage?: number;
+  /**
+   * Search term. Passed to the provider natively where supported
+   * (GitLab `search`, Bitbucket `q=name~`); filtered locally otherwise (GitHub,
+   * whose /user/repos endpoint has no search parameter).
+   */
+  search?: string;
+}
+
+/** Case-insensitive match against the repo name and its full path. */
+export function matchesRepoSearch(repo: ListedRepo, search?: string): boolean {
+  if (!search) return true;
+  const term = search.toLowerCase();
+  return repo.name.toLowerCase().includes(term) || repo.fullName.toLowerCase().includes(term);
+}
 
 /**
  * Error raised when an upstream git provider API returns a non-OK response.
@@ -96,12 +118,18 @@ function dedupeRepos(repos: ListedRepo[]): ListedRepo[] {
   return [...byFullName.values()];
 }
 
-async function listGitHubRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+async function listGitHubRepos(
+  origin: string,
+  headers: Record<string, string>,
+  opts: ListReposOptions = {},
+): Promise<ListedRepo[]> {
+  const perPage = opts.perPage ?? REPOS_PER_PAGE;
+  const maxPages = opts.maxPages ?? MAX_REPO_PAGES;
   const repos: ListedRepo[] = [];
   let nextUrl: string | null =
-    `${origin}/user/repos?per_page=${REPOS_PER_PAGE}&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member`;
+    `${origin}/user/repos?per_page=${perPage}&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member`;
 
-  for (let page = 0; page < MAX_REPO_PAGES && nextUrl; page += 1) {
+  for (let page = 0; page < maxPages && nextUrl; page += 1) {
     const response = await fetch(nextUrl, { headers });
     if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     const data = (await response.json()) as Array<{
@@ -115,16 +143,20 @@ async function listGitHubRepos(origin: string, headers: Record<string, string>):
 
     for (const repo of data) {
       if (repo.archived) continue;
-      repos.push({
+      const mapped: ListedRepo = {
         name: repo.name,
         fullName: repo.full_name,
         url: repo.html_url,
         defaultBranch: repo.default_branch ?? "main",
         private: Boolean(repo.private),
-      });
+      };
+      // GitHub's /user/repos has no search parameter, so filter locally.
+      if (matchesRepoSearch(mapped, opts.search)) repos.push(mapped);
     }
 
-    if (data.length < REPOS_PER_PAGE) break;
+    // Enough matches for the caller's page — stop early instead of walking on.
+    if (opts.search && repos.length >= perPage) break;
+    if (data.length < perPage) break;
     nextUrl = parseGitHubLinkNext(response.headers.get("Link"));
   }
 
@@ -168,13 +200,21 @@ type ListAttempt =
  * Classic discovery via the projects list. Works for classic PATs and
  * fine-grained tokens that were granted the projects-list permission.
  */
-async function listGitLabViaMembership(origin: string, headers: Record<string, string>): Promise<ListAttempt> {
+async function listGitLabViaMembership(
+  origin: string,
+  headers: Record<string, string>,
+  opts: ListReposOptions = {},
+): Promise<ListAttempt> {
+  const perPage = opts.perPage ?? REPOS_PER_PAGE;
+  const maxPages = opts.maxPages ?? MAX_REPO_PAGES;
   const repos: ListedRepo[] = [];
 
-  for (let page = 1; page <= MAX_REPO_PAGES; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const url =
-      `${origin}/api/v4/projects?membership=true&simple=true&per_page=${REPOS_PER_PAGE}` +
-      `&page=${page}&order_by=updated_at&archived=false`;
+      `${origin}/api/v4/projects?membership=true&simple=true&per_page=${perPage}` +
+      `&page=${page}&order_by=updated_at&archived=false` +
+      // GitLab supports server-side search on this endpoint.
+      (opts.search ? `&search=${encodeURIComponent(opts.search)}` : "");
     const response = await fetch(url, { headers });
     if (!response.ok) {
       return { ok: false, status: response.status, body: await readErrorBody(response) };
@@ -197,11 +237,17 @@ async function listGitLabViaMembership(origin: string, headers: Record<string, s
  *
  * See: GET /personal_access_tokens/self/associations (GitLab 17.6+).
  */
-async function listGitLabViaAssociations(origin: string, headers: Record<string, string>): Promise<ListAttempt> {
+async function listGitLabViaAssociations(
+  origin: string,
+  headers: Record<string, string>,
+  opts: ListReposOptions = {},
+): Promise<ListAttempt> {
+  const perPage = opts.perPage ?? REPOS_PER_PAGE;
+  const maxPages = opts.maxPages ?? MAX_REPO_PAGES;
   const repos: ListedRepo[] = [];
 
-  for (let page = 1; page <= MAX_REPO_PAGES; page += 1) {
-    const url = `${origin}/api/v4/personal_access_tokens/self/associations?per_page=${REPOS_PER_PAGE}&page=${page}`;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const url = `${origin}/api/v4/personal_access_tokens/self/associations?per_page=${perPage}&page=${page}`;
     const response = await fetch(url, { headers });
     if (!response.ok) {
       return { ok: false, status: response.status, body: await readErrorBody(response) };
@@ -210,33 +256,46 @@ async function listGitLabViaAssociations(origin: string, headers: Record<string,
     const projects = data.projects ?? [];
     if (projects.length === 0) break;
 
-    for (const project of projects) repos.push(mapGitLabProject(origin, project));
+    for (const project of projects) {
+      const mapped = mapGitLabProject(origin, project);
+      // This endpoint has no search parameter — filter locally.
+      if (matchesRepoSearch(mapped, opts.search)) repos.push(mapped);
+    }
 
+    if (opts.search && repos.length >= perPage) break;
     if (!response.headers.get("X-Next-Page")) break;
   }
 
   return { ok: true, repos };
 }
 
-async function listGitLabRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
-  const membership = await listGitLabViaMembership(origin, headers);
+async function listGitLabRepos(
+  origin: string,
+  headers: Record<string, string>,
+  opts: ListReposOptions = {},
+): Promise<ListedRepo[]> {
+  const membership = await listGitLabViaMembership(origin, headers, opts);
   if (membership.ok) return dedupeRepos(membership.repos);
 
   // Fine-grained tokens often lack permission for the projects-list endpoint
   // (403) even though they can access specific projects. Fall back to the
   // token's associations, which is the discovery path built for such tokens.
   if (membership.status === 403) {
-    const associations = await listGitLabViaAssociations(origin, headers);
+    const associations = await listGitLabViaAssociations(origin, headers, opts);
     if (associations.ok) return dedupeRepos(associations.repos);
 
-    // Both listing endpoints are user-scoped operations. A fine-grained token
-    // scoped only to groups/projects can't call them. Give an actionable hint.
+    // Both listing endpoints are USER-boundary operations. Fine-grained tokens
+    // separate permissions into "Group and project", "User", and "Global"
+    // boundaries — granting Project: Read under Group and project is NOT enough
+    // to list projects, which requires Project: Read under the User boundary.
     if (associations.status === 403) {
       throw new ProviderApiError(
         `GitLab denied repository listing: ${extractProviderDetail(membership.body)} ` +
-          `Listing repositories needs a user-level permission that a group/project-scoped ` +
-          `fine-grained token doesn't include. Add "Personal Access Token: Read" to the token ` +
-          `(used for repository discovery), or use a token that can call GET /projects.`,
+          `Repository listing is a user-scoped operation: in your token's permissions, enable ` +
+          `"Project: Read" under the User boundary — this is a separate grant from the ` +
+          `"Project: Read" in the Group and project section, which only allows reading ` +
+          `individual projects. (Alternatively, "Personal Access Token: Read" under the User ` +
+          `boundary also enables discovery.)`,
         "forbidden",
       );
     }
@@ -247,11 +306,20 @@ async function listGitLabRepos(origin: string, headers: Record<string, string>):
   throw providerApiError("GitLab", membership.status, membership.body);
 }
 
-async function listBitbucketRepos(origin: string, headers: Record<string, string>): Promise<ListedRepo[]> {
+async function listBitbucketRepos(
+  origin: string,
+  headers: Record<string, string>,
+  opts: ListReposOptions = {},
+): Promise<ListedRepo[]> {
+  const perPage = opts.perPage ?? REPOS_PER_PAGE;
+  const maxPages = opts.maxPages ?? MAX_REPO_PAGES;
   const repos: ListedRepo[] = [];
-  let nextUrl: string | null = `${origin}/2.0/repositories?role=member&pagelen=${REPOS_PER_PAGE}`;
+  let nextUrl: string | null =
+    `${origin}/2.0/repositories?role=member&pagelen=${perPage}` +
+    // Bitbucket supports server-side filtering via its query language.
+    (opts.search ? `&q=${encodeURIComponent(`name~"${opts.search}"`)}` : "");
 
-  for (let page = 0; page < MAX_REPO_PAGES && nextUrl; page += 1) {
+  for (let page = 0; page < maxPages && nextUrl; page += 1) {
     const response = await fetch(nextUrl, { headers });
     if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
     const data = (await response.json()) as {
@@ -281,18 +349,21 @@ async function listBitbucketRepos(origin: string, headers: Record<string, string
   return dedupeRepos(repos);
 }
 
-export async function listRepos(connection: ConnectionLike): Promise<ListedRepo[]> {
+export async function listRepos(
+  connection: ConnectionLike,
+  opts: ListReposOptions = {},
+): Promise<ListedRepo[]> {
   const headers = authHeaders(connection);
   const origin = baseUrl(connection.provider, connection.endpoint);
   if (connection.provider === "github") {
-    return listGitHubRepos(origin, headers);
+    return listGitHubRepos(origin, headers, opts);
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    return listGitLabRepos(origin, headers);
+    return listGitLabRepos(origin, headers, opts);
   }
 
-  return listBitbucketRepos(origin, headers);
+  return listBitbucketRepos(origin, headers, opts);
 }
 
 export async function listBranches(connection: ConnectionLike, ref: RepoRef): Promise<string[]> {

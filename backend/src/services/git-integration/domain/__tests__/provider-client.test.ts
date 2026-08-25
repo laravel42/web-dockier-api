@@ -110,8 +110,47 @@ describe("listRepos (GitLab)", () => {
     expect((err as InstanceType<typeof ProviderApiError>).code).toBe("forbidden");
     // The provider's own actionable detail is surfaced (not the raw JSON envelope).
     expect((err as Error).message).toContain("[Project: Read]");
-    // And an actionable hint about the missing user-level permission.
-    expect((err as Error).message).toContain("Personal Access Token: Read");
+    // And an actionable hint naming the required User-boundary grant.
+    expect((err as Error).message).toContain("User boundary");
+    expect((err as Error).message).toContain("Project: Read");
+  });
+
+  it("passes the search term to GitLab and honors perPage/maxPages", async () => {
+    fetchMock.mockResolvedValue(gitlabRes({
+      ok: true,
+      jsonData: [{ name: "Api", path_with_namespace: "grp/api", visibility: "public" }],
+    }));
+
+    const repos = await listRepos(gitlabConn, { search: "api", perPage: 20, maxPages: 1 });
+
+    expect(repos).toHaveLength(1);
+    expect(repos[0].private).toBe(false); // visibility "public"
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain("search=api");
+    expect(url).toContain("per_page=20");
+    // maxPages: 1 → exactly one request.
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("filters associations results locally by the search term", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("/projects?membership=true")) {
+        return Promise.resolve(gitlabRes({ ok: false, status: 403, text: "denied" }));
+      }
+      return Promise.resolve(gitlabRes({
+        ok: true,
+        jsonData: {
+          projects: [
+            { name: "Api", path_with_namespace: "grp/api" },
+            { name: "Web", path_with_namespace: "grp/web" },
+          ],
+        },
+      }));
+    });
+
+    const repos = await listRepos(gitlabConn, { search: "web", maxPages: 1 });
+
+    expect(repos.map((r) => r.fullName)).toEqual(["grp/web"]);
   });
 
   it("maps a non-403 membership error to the right domain code without the associations fallback", async () => {

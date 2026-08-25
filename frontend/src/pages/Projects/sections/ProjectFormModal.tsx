@@ -25,6 +25,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
     branches, selectedBranch, setSelectedBranch,
     loadingRepos, loadingBranches, loadingConnections,
     refreshRepos, refreshingRepos,
+    searchRepos, searchingRepos, hasMoreRepos,
     error, submitting,
     openCreate, closeForm, handleSubmit,
   } = useProjectForm({ onSuccess: () => { onClose(); onSuccess(); } });
@@ -101,7 +102,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
         {selectedConnectionId && (
           <div>
             <span id={`${fid}-repository`} className="block text-sm font-medium text-text-secondary mb-1.5">Repository</span>
-            <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={handleRepoChange} repos={repos} loading={loadingRepos} onRefresh={refreshRepos} refreshing={refreshingRepos} />
+            <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={handleRepoChange} repos={repos} loading={loadingRepos} onRefresh={refreshRepos} refreshing={refreshingRepos} onSearch={searchRepos} searching={searchingRepos} hasMore={hasMoreRepos} />
           </div>
         )}
 

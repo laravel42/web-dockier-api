@@ -19,7 +19,7 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "../domain/connections.js";
-import { listBranches, listRepos } from "../domain/providers/provider-client.js";
+import { listBranches, listRepos, matchesRepoSearch, SEARCH_MAX_PAGES } from "../domain/providers/provider-client.js";
 import { parseJsonField, writeRepoListCache } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
 
@@ -136,12 +136,17 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
   typed.get(
     "/git/connections/:connectionId/repos",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "git-repos" })],
+      // Searches are typed (debounced) so this is called more often than a plain list.
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 60, windowMs: 60_000, prefix: "git-repos" })],
       schema: {
         tags: ["git-integration"],
-        summary: "List repos for connection",
+        summary: "List or search repos for connection",
         params: connectionIdParamsSchema,
-        querystring: z.object({ refresh: z.coerce.boolean().optional() }),
+        querystring: z.object({
+          refresh: z.coerce.boolean().optional(),
+          search: z.string().max(200).optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+        }),
         response: {
           200: z.object({
             repos: z.array(
@@ -154,6 +159,8 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
               }),
             ),
             cached: z.boolean(),
+            /** True when more repos likely exist beyond this page — prompt the user to search. */
+            hasMore: z.boolean(),
           }),
         },
       },
@@ -163,29 +170,54 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
 
       const REPO_CACHE_TTL_MS = 10 * 60 * 1000;
+      const DEFAULT_REPO_LIMIT = 30;
 
-      if (!request.query.refresh) {
+      const search = request.query.search?.trim() ?? "";
+      const limit = request.query.limit ?? DEFAULT_REPO_LIMIT;
+
+      type CachedRepo = { name: string; fullName: string; url: string; defaultBranch: string; private: boolean };
+
+      const readFreshCache = async (): Promise<CachedRepo[] | null> => {
         const cached = await db
           .from("repo_cache")
           .select("repos, created_at")
           .eq("connection_id", request.params.connectionId)
           .maybeSingle();
-        if (cached.data?.repos) {
-          const cachedAt = cached.data.created_at ? new Date(cached.data.created_at).getTime() : 0;
-          const isFresh = cachedAt > 0 && Date.now() - cachedAt < REPO_CACHE_TTL_MS;
-          if (isFresh) {
-            return {
-              repos: parseJsonField<Array<{ name: string; fullName: string; url: string; defaultBranch: string; private: boolean }>>(cached.data.repos)!,
-              cached: true,
-            };
-          }
+        if (!cached.data?.repos) return null;
+        const cachedAt = cached.data.created_at ? new Date(cached.data.created_at).getTime() : 0;
+        const isFresh = cachedAt > 0 && Date.now() - cachedAt < REPO_CACHE_TTL_MS;
+        if (!isFresh) return null;
+        return parseJsonField<CachedRepo[]>(cached.data.repos) ?? null;
+      };
+
+      // ── Search path ──────────────────────────────────────────────
+      // Try the cache first (instant, no network). Only hit the provider when
+      // the cached page has no match. Search results are never cached, so they
+      // can't shrink the cached default list.
+      if (search) {
+        const cachedRepos = await readFreshCache();
+        const fromCache = (cachedRepos ?? []).filter((r) => matchesRepoSearch(r, search));
+        if (fromCache.length > 0) {
+          return { repos: fromCache.slice(0, limit), cached: true, hasMore: fromCache.length > limit };
+        }
+
+        const found = await listRepos(conn, { search, perPage: limit, maxPages: SEARCH_MAX_PAGES });
+        return { repos: found.slice(0, limit), cached: false, hasMore: found.length > limit };
+      }
+
+      // ── Default list path ────────────────────────────────────────
+      if (!request.query.refresh) {
+        const cachedRepos = await readFreshCache();
+        if (cachedRepos) {
+          return { repos: cachedRepos.slice(0, limit), cached: true, hasMore: cachedRepos.length > limit };
         }
       }
 
-      const repos = await listRepos(conn);
+      // Only the first page — fast. Everything beyond it is reachable via search.
+      const repos = await listRepos(conn, { perPage: limit, maxPages: 1 });
 
       await writeRepoListCache(request.params.connectionId, auth.tenantId, repos, log);
-      return { repos, cached: false };
+      return { repos, cached: false, hasMore: repos.length >= limit };
     },
   );
 
