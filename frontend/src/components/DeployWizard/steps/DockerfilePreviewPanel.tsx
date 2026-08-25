@@ -64,21 +64,9 @@ export default function DockerfilePreviewPanel({ preview, loading, error, useRep
     </p>
   );
 
-  // The endpoint returned the repo's own Dockerfile (edge case).
-  if (preview.source === "repo") {
-    return (
-      <div>
-        <div className="flex items-center gap-2 mb-1.5">
-          <DockerfileIcon className="size-4 text-primary-500" />
-          <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Repository Dockerfile</span>
-        </div>
-        <DockerfileBlock content={preview.finalDockerfile} />
-        {footnote}
-      </div>
-    );
-  }
-
-  // Dockier generated the Dockerfile.
+  // Only the generated path reaches here: a repo-sourced preview is short-circuited
+  // by the `useRepoDockerfile` card above (the backend reports source "repo" only
+  // when that flag is set), so there is no separate repo branch to render.
   const header = (() => {
     if (preview.revised) {
       return (
@@ -88,7 +76,9 @@ export default function DockerfilePreviewPanel({ preview, loading, error, useRep
         </div>
       );
     }
-    if (preview.aiEnabled) {
+    // A skipped review is NOT an approval — fall through to the neutral header
+    // so the skip note below is the only claim made about the review.
+    if (preview.aiEnabled && !preview.skipReason) {
       return (
         <div className="flex items-center gap-2">
           <CheckIcon className="size-4 text-success-ink" />
