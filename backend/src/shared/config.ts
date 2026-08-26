@@ -43,6 +43,14 @@ const envSchema = z
     RESEND_FROM_EMAIL: z.string().optional(),
     DATABASE_URL: z.string().min(1).optional(),
     ENV_ENCRYPTION_KEY: z.string().min(32).optional(),
+    /** Deploy provider: "native" for CloudFormation/Pulumi, "dokploy" for Dokploy-based pipeline. */
+    DEPLOY_PROVIDER: z.enum(["native", "dokploy"]).default("native"),
+    /** Dokploy instance base API URL (required when DEPLOY_PROVIDER=dokploy). */
+    DOKPLOY_API_URL: z.string().url().optional(),
+    /** Dokploy API token for authentication (required when DEPLOY_PROVIDER=dokploy). */
+    DOKPLOY_API_TOKEN: z.string().min(1).optional(),
+    /** Default SSH key ID registered in Dokploy for remote server access. */
+    DOKPLOY_SSH_KEY_ID: z.string().min(1).optional(),
     /** When true, the Fastify backend does not consume `security-scan` — SAST workers do. */
     DISABLE_TS_SCAN_WORKER: z
       .enum(["true", "false"])

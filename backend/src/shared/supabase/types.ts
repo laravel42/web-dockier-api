@@ -640,6 +640,57 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["project_wp_configs"]["Row"]>;
         Relationships: [];
       };
+
+      // ─── Dokploy Integration ─────────────────────────────────────────
+
+      dokploy_tenant_projects: {
+        Row: {
+          id: string;
+          organization_id: string;
+          dokploy_project_id: string;
+          dokploy_environment_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["dokploy_tenant_projects"]["Row"]> &
+          Pick<Database["public"]["Tables"]["dokploy_tenant_projects"]["Row"], "organization_id" | "dokploy_project_id" | "dokploy_environment_id">;
+        Update: Partial<Database["public"]["Tables"]["dokploy_tenant_projects"]["Row"]>;
+        Relationships: [];
+      };
+
+      dokploy_servers: {
+        Row: {
+          id: string;
+          project_id: string;
+          provider_id: string;
+          dokploy_server_id: string;
+          server_ip: string;
+          instance_id: string | null;
+          server_status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["dokploy_servers"]["Row"]> &
+          Pick<Database["public"]["Tables"]["dokploy_servers"]["Row"], "project_id" | "provider_id" | "dokploy_server_id" | "server_ip">;
+        Update: Partial<Database["public"]["Tables"]["dokploy_servers"]["Row"]>;
+        Relationships: [];
+      };
+
+      dokploy_applications: {
+        Row: {
+          id: string;
+          project_id: string;
+          dokploy_application_id: string;
+          dokploy_server_id: string | null;
+          build_type: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["dokploy_applications"]["Row"]> &
+          Pick<Database["public"]["Tables"]["dokploy_applications"]["Row"], "project_id" | "dokploy_application_id">;
+        Update: Partial<Database["public"]["Tables"]["dokploy_applications"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
