@@ -83,20 +83,20 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 
 ### Phase 3: Pipeline Orchestrator
 
-- [ ] 11. Pipeline Entry Point
-  - [ ] 11.1 Create `backend/src/services/deploy/domain/dokploy/pipeline.ts`
-  - [ ] 11.2 Function `executeDokployPipeline(event: PipelineInput): Promise<void>`
-  - [ ] 11.3 Coordinate stages: ensure-project → (sync-git || provision-server) → configure-app → deploy-with-retry
-  - [ ] 11.4 Retry loop: up to 3 attempts with Dokploy AI recovery between failures
-  - [ ] 11.5 Update deployment status and logs at each stage
-  - [ ] 11.6 Handle timeouts (15 min max)
-  - [ ] 11.7 Idempotency: safe to re-run from any stage
+- [x] 11. Pipeline Entry Point
+  - [x] 11.1 Create `backend/src/services/deploy/domain/dokploy/pipeline.ts`
+  - [x] 11.2 Function `executeDokployPipeline(event: PipelineInput): Promise<void>`
+  - [x] 11.3 Coordinate stages: ensure-project → (sync-git || provision-server) → configure-app → deploy-with-retry
+  - [x] 11.4 Retry loop: up to 3 attempts with Dokploy AI recovery between failures
+  - [x] 11.5 Update deployment status and logs at each stage
+  - [x] 11.6 Handle timeouts (15 min max)
+  - [x] 11.7 Idempotency: safe to re-run from any stage
 
-- [ ] 12. Router Integration
-  - [ ] 12.1 Modify worker to check `DEPLOY_PROVIDER` config
-  - [ ] 12.2 If `"dokploy"`, call `executeDokployPipeline` instead of `executePipeline`
-  - [ ] 12.3 Existing pipeline remains available via `DEPLOY_PROVIDER=native`
-  - [ ] 12.4 No changes to the `POST /deploy/deployments` route (same API contract)
+- [x] 12. Router Integration
+  - [x] 12.1 Modify worker to check `DEPLOY_PROVIDER` config
+  - [x] 12.2 If `"dokploy"`, call `executeDokployPipeline` instead of `executePipeline`
+  - [x] 12.3 Existing pipeline remains available via `DEPLOY_PROVIDER=native`
+  - [x] 12.4 No changes to the `POST /deploy/deployments` route (same API contract)
 
 ### Phase 4: Frontend Changes
 
