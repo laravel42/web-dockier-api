@@ -17,6 +17,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
   const {
     step, state, setState,
     tofuLoading, tofuError, deployError,
+    previewLoading, previewError,
     canNext, handleNext, handleBack,
     startDeploy, cancelDeploy, cancellingDeploy,
     generateScript,
@@ -87,6 +88,8 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             error={tofuError}
             isTemplate={project.sourceType === "template"}
             hasRepoDockerfile={analysis?.hasDocker ?? false}
+            previewLoading={previewLoading}
+            previewError={previewError}
             onToggleDocker={() => {
               const next = !state.useDocker;
               setState(prev => ({ ...prev, useDocker: next, tofuScript: "" }));

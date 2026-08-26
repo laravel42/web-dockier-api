@@ -55,12 +55,16 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const [tofuLoading, setTofuLoading] = useState(false);
   const [tofuError, setTofuError] = useState("");
   const [deployError, setDeployError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
 
   const { start: startStandardDeploy, cleanup: cleanupStandardDeploy } = useStandardDeploy();
 
   const prevOpenRef = useRef(false);
   const configLoadedRef = useRef(false);
   const analysisSyncedKeyRef = useRef<string | null>(null);
+  // Tracks the last input set previewed, so we fetch at most once per (repo, branch, useRepoDockerfile).
+  const previewKeyRef = useRef<string | null>(null);
   const cleanupStandardDeployRef = useRef(cleanupStandardDeploy);
   cleanupStandardDeployRef.current = cleanupStandardDeploy;
 
@@ -74,6 +78,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     if (justClosed) {
       configLoadedRef.current = false;
       analysisSyncedKeyRef.current = null;
+      previewKeyRef.current = null;
       cleanupStandardDeployRef.current();
       return;
     }
@@ -84,8 +89,11 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     setTofuLoading(false);
     setTofuError("");
     setDeployError("");
+    setPreviewLoading(false);
+    setPreviewError("");
     configLoadedRef.current = false;
     analysisSyncedKeyRef.current = null;
+    previewKeyRef.current = null;
 
     const defaultProvider = getDefaultProviderSelection(providers);
     setState({ ...INITIAL_WIZARD_STATE, ...(defaultProvider ?? {}) });
@@ -193,6 +201,49 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       setTofuLoading(false);
     }
   }, [state, project, analysis]);
+
+  // ─── Dockerfile Preview (Build step) ─────────────────────────────
+  // Informational only: fetches the Dockerfile Dockier will build plus any
+  // AI review changes. Never blocks navigation or deploy. Fetched at most
+  // once per (repo, branch, useRepoDockerfile) input set.
+
+  const generatePreview = useCallback(async () => {
+    // Only meaningful for Dockier-generated container builds.
+    if (!state.useDocker || state.useRepoDockerfile || state.deployStrategy === "static") return;
+    if (!project.connectionId) return;
+
+    const repo = getRepoString(project.repository);
+    const key = `${repo}|${project.branch || "main"}|${state.useRepoDockerfile}`;
+    if (previewKeyRef.current === key) return; // already fetched for this input set
+    previewKeyRef.current = key;
+
+    setPreviewLoading(true);
+    setPreviewError("");
+    try {
+      const preview = await deployApi.previewDockerfile({
+        gitConnectionId: project.connectionId,
+        repo,
+        branch: project.branch || "main",
+        projectId: project.id,
+        useRepoDockerfile: state.useRepoDockerfile || undefined,
+      });
+      setState((prev) => ({ ...prev, dockerfilePreview: preview }));
+    } catch (err: unknown) {
+      // Non-fatal: clear the key so a later retry can re-fetch.
+      previewKeyRef.current = null;
+      setPreviewError(getErrorMessage(err, "Could not preview the Dockerfile"));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [state.useDocker, state.useRepoDockerfile, state.deployStrategy, project]);
+
+  // Trigger the preview when the user is on the Build step with a
+  // Dockier-generated container build. The key guard prevents refetch loops.
+  useEffect(() => {
+    if (!open || step !== 4) return;
+    if (!state.useDocker || state.useRepoDockerfile || state.deployStrategy === "static") return;
+    void generatePreview();
+  }, [open, step, state.useDocker, state.useRepoDockerfile, state.deployStrategy, generatePreview]);
 
   // ─── Start Deployment ────────────────────────────────────────────
 
@@ -322,6 +373,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     tofuLoading,
     tofuError,
     deployError,
+    previewLoading,
+    previewError,
     canNext,
     handleNext,
     handleBack,
@@ -329,6 +382,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     cancelDeploy,
     cancellingDeploy,
     generateScript,
+    generatePreview,
     isDeploying,
     isFinished,
   };

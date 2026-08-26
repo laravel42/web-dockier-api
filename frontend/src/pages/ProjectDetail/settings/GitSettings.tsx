@@ -94,6 +94,9 @@ export function GitRepositoryModal({
   const [selectedConnectionId, setSelectedConnectionId] = useState(project.connectionId || "");
   const [repos, setRepos] = useState<Repo[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [searchingRepos, setSearchingRepos] = useState(false);
+  const [refreshingRepos, setRefreshingRepos] = useState(false);
+  const [hasMoreRepos, setHasMoreRepos] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState(project.repository || "");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -120,19 +123,32 @@ export function GitRepositoryModal({
       setLoadingRepos(true);
       setRepos([]);
       try {
-        const res = await gitApi.listRepos(selectedConnectionId, false);
+        const res = await gitApi.listRepos(selectedConnectionId);
         if (!cancelled) {
           setRepos(res.repos);
+          setHasMoreRepos(res.hasMore);
           if (project.repository && selectedConnectionId === project.connectionId) {
             let repoPath = project.repository;
             try {
               const url = new URL(repoPath);
               repoPath = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
             } catch { /* not a URL */ }
-            const match = res.repos.find(
+            const findMatch = (list: Repo[]) => list.find(
               (r) => r.fullName === repoPath || r.fullName === project.repository || r.url === project.repository,
             );
-            if (match) setSelectedRepo(match.fullName);
+            let match = findMatch(res.repos);
+            // Only the first page is loaded, so the project's repo may not be in
+            // it — look it up directly and merge it into the list.
+            if (!match && repoPath) {
+              const term = repoPath.split("/").pop() || repoPath;
+              const found = await gitApi.listRepos(selectedConnectionId, { search: term }).catch(() => null);
+              match = found ? findMatch(found.repos) : undefined;
+              if (match && !cancelled) {
+                const resolved = match;
+                setRepos((prev) => (prev.some((r) => r.fullName === resolved.fullName) ? prev : [resolved, ...prev]));
+              }
+            }
+            if (match && !cancelled) setSelectedRepo(match.fullName);
           }
         }
       } catch (err) {
@@ -143,6 +159,34 @@ export function GitRepositoryModal({
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- toast is stable
   }, [selectedConnectionId, project.connectionId, project.repository]);
+
+  /** Server-side repo search (debounced by RepoSelect). Empty term restores the default page. */
+  const searchRepos = useCallback(async (term: string) => {
+    if (!selectedConnectionId) return;
+    setSearchingRepos(true);
+    try {
+      const res = await gitApi.listRepos(selectedConnectionId, { search: term || undefined });
+      setRepos(res.repos);
+      setHasMoreRepos(res.hasMore);
+    } catch { /* non-fatal: keep the current list */ } finally {
+      setSearchingRepos(false);
+    }
+  }, [selectedConnectionId]);
+
+  /** Bypass the repo cache — picks up renames, deletions, and brand-new repos. */
+  const refreshRepos = useCallback(async () => {
+    if (!selectedConnectionId) return;
+    setRefreshingRepos(true);
+    try {
+      const res = await gitApi.listRepos(selectedConnectionId, { refresh: true });
+      setRepos(res.repos);
+      setHasMoreRepos(res.hasMore);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to refresh repositories"));
+    } finally {
+      setRefreshingRepos(false);
+    }
+  }, [selectedConnectionId, toast]);
 
   const handleSubmit = async () => {
     if (!selectedRepo) return;
@@ -177,7 +221,7 @@ export function GitRepositoryModal({
         {selectedConnectionId && (
           <div>
             <span id={`${fid}-repository`} className="mb-1.5 block text-sm font-medium text-text-muted">Repository</span>
-            <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={setSelectedRepo} repos={repos} loading={loadingRepos} />
+            <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={setSelectedRepo} repos={repos} loading={loadingRepos} onRefresh={refreshRepos} refreshing={refreshingRepos} onSearch={searchRepos} searching={searchingRepos} hasMore={hasMoreRepos} />
           </div>
         )}
 

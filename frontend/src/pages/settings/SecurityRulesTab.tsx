@@ -53,7 +53,7 @@ const extIconMap: Record<string, string> = {
 
 export default function SecurityRulesTab() {
   const [ruleSource, setRuleSource] = useState<
-    "custom" | "sonarqube" | "semgrep" | "sonarqube-settings" | "codeql-settings"
+    "custom" | "sonarqube" | "semgrep" | "sonarqube-settings" | "codeql-settings" | "semgrep-settings" | "custom-settings"
   >("semgrep");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(() => {
     const savedTools = localStorage.getItem("scan_tools");

@@ -14,6 +14,7 @@ import { registerProviderRoutes } from "./routes/providers.js";
 import { registerSshKeyRoutes } from "./routes/ssh-keys.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerTofuRoutes } from "./routes/tofu.js";
+import { registerDockerfilePreviewRoutes } from "./routes/dockerfile-preview.js";
 import { registerGitPushWebhookRoutes } from "./routes/git-push-webhook.js";
 
 export async function registerDeployRoutes(app: FastifyInstance) {
@@ -21,5 +22,6 @@ export async function registerDeployRoutes(app: FastifyInstance) {
   await registerSshKeyRoutes(app);
   await registerDeploymentRoutes(app);
   await registerTofuRoutes(app);
+  await registerDockerfilePreviewRoutes(app);
   await registerGitPushWebhookRoutes(app);
 }

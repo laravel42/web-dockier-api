@@ -2,6 +2,23 @@ import { request } from "./request";
 import { buildQuery } from "./query";
 import type { Deployment, Provider, PaginationMeta } from "../types";
 
+export interface DockerfilePreviewResult {
+  /** Whether the AI review actually ran (key + flag on, generated source). */
+  aiEnabled: boolean;
+  /** Whether the Dockerfile was Dockier-generated or taken from the repo. */
+  source: "generated" | "repo";
+  /** Rule-based Dockerfile (or the repo's own when source is "repo"). */
+  mechanicalDockerfile: string;
+  /** Effective Dockerfile after optional review; equals mechanical when not revised. */
+  finalDockerfile: string;
+  revised: boolean;
+  changes: Array<{ what: string; why: string }>;
+  /** Present when the review was skipped or a revision rejected. */
+  skipReason?: string;
+  runtime: string;
+  framework: string;
+}
+
 export const deployApi = {
   listProviders: () =>
     request<{
@@ -118,6 +135,18 @@ export const deployApi = {
       appName: string;
       estimatedResources: string[];
     }>("/deploy/tofu/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  previewDockerfile: (data: {
+    gitConnectionId: string;
+    repo: string;
+    branch: string;
+    projectId?: string;
+    useRepoDockerfile?: boolean;
+  }) =>
+    request<DockerfilePreviewResult>("/deploy/dockerfile/preview", {
       method: "POST",
       body: JSON.stringify(data),
     }),

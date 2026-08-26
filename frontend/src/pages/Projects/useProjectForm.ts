@@ -41,6 +41,8 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
   const [selectedBranch, setSelectedBranch] = useState("");
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [refreshingRepos, setRefreshingRepos] = useState(false);
+  const [searchingRepos, setSearchingRepos] = useState(false);
+  const [hasMoreRepos, setHasMoreRepos] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [error, setError] = useState("");
@@ -70,8 +72,9 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
       setLoadingRepos(true);
       setRepos([]); setSelectedRepo(""); setBranches([]); setSelectedBranch(""); setError("");
       try {
-        const res = await gitApi.listRepos(selectedConnectionId, true);
-        if (!cancelled) setRepos(res.repos);
+        // Use the cache when it's warm — only the first page is fetched.
+        const res = await gitApi.listRepos(selectedConnectionId);
+        if (!cancelled) { setRepos(res.repos); setHasMoreRepos(res.hasMore); }
       } catch (err: unknown) {
         if (!cancelled) setError((err as Error).message || "Failed to load repositories");
       } finally {
@@ -86,10 +89,24 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
     if (!selectedConnectionId) return;
     setRefreshingRepos(true);
     try {
-      const res = await gitApi.listRepos(selectedConnectionId, true);
+      const res = await gitApi.listRepos(selectedConnectionId, { refresh: true });
       setRepos(res.repos);
+      setHasMoreRepos(res.hasMore);
     } catch { /* ignore */ } finally {
       setRefreshingRepos(false);
+    }
+  };
+
+  /** Server-side repo search (debounced by RepoSelect). Empty term restores the default page. */
+  const searchRepos = async (term: string) => {
+    if (!selectedConnectionId) return;
+    setSearchingRepos(true);
+    try {
+      const res = await gitApi.listRepos(selectedConnectionId, { search: term || undefined });
+      setRepos(res.repos);
+      setHasMoreRepos(res.hasMore);
+    } catch { /* non-fatal: keep the current list */ } finally {
+      setSearchingRepos(false);
     }
   };
 
@@ -245,6 +262,7 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
     branches, selectedBranch, setSelectedBranch,
     loadingRepos, loadingBranches, loadingConnections,
     refreshRepos, refreshingRepos,
+    searchRepos, searchingRepos, hasMoreRepos,
     error, submitting,
     // Actions
     openCreate, closeForm, handleSubmit,

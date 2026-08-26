@@ -15,9 +15,22 @@ interface Props {
   loading?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /**
+   * Called (debounced) with the typed term so the parent can query the server.
+   * Only the first page of repos is loaded up front, so this is how repos
+   * beyond that page are found. Omit to keep purely local filtering.
+   */
+  onSearch?: (term: string) => void;
+  /** True while a server-side search is in flight. */
+  searching?: boolean;
+  /** True when more repos exist than were loaded — shows a hint to search. */
+  hasMore?: boolean;
 }
 
-export default function RepoSelect({ value, onChange, repos, loading, onRefresh, refreshing, labelledBy }: Props) {
+/** Debounce delay before hitting the server while the user types. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+export default function RepoSelect({ value, onChange, repos, loading, onRefresh, refreshing, labelledBy, onSearch, searching, hasMore }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -25,7 +38,29 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
   const { triggerRef, pos, updatePos, clearPos } = useDropdownPosition();
 
   const selected = repos.find((r) => r.fullName === value);
+  // Local filter gives instant feedback; the server search (below) then widens
+  // the set beyond the loaded page.
   const filtered = repos.filter((r) => r.fullName.toLowerCase().includes(search.toLowerCase()));
+
+  // Debounced server-side search. The callback is held in a ref so an unstable
+  // parent function doesn't restart the debounce timer on every render.
+  const onSearchRef = useRef(onSearch);
+  useEffect(() => {
+    onSearchRef.current = onSearch;
+  }, [onSearch]);
+  // Term already reflected in `repos` — starts as "" since the parent loads the
+  // default page, so simply opening the dropdown doesn't refetch.
+  const lastRequestedRef = useRef("");
+  useEffect(() => {
+    if (!onSearchRef.current || !open) return;
+    const term = search.trim();
+    if (lastRequestedRef.current === term) return;
+    const id = setTimeout(() => {
+      lastRequestedRef.current = term;
+      onSearchRef.current?.(term);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [search, open]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -58,7 +93,10 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
     );
   }
 
-  if (repos.length === 0) {
+  // Only collapse to a bare message when there's no way to search. With search
+  // enabled the control must stay mounted, otherwise a zero-result search would
+  // unmount the search input and strand the user.
+  if (repos.length === 0 && !onSearch && !searching) {
     return <p className="text-sm text-text-muted py-2">No repositories found for this connection.</p>;
   }
 
@@ -92,7 +130,12 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
       {onRefresh && (
         <button
           type="button"
-          onClick={onRefresh}
+          onClick={() => {
+            // Clear the filter so the refreshed list isn't hidden by a stale term.
+            setSearch("");
+            lastRequestedRef.current = "";
+            onRefresh();
+          }}
           disabled={refreshing}
           className="size-9 shrink-0 rounded-(--radius-input) border border-border bg-card flex items-center justify-center text-text-muted hover:text-primary-500 hover:border-primary-500/30 transition-colors disabled:opacity-50"
           title="Refresh repository list"
@@ -113,8 +156,17 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
           />
         </div>
         <div className="overflow-y-auto flex-1">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-text-muted text-center">No repositories found</div>
+          {searching && filtered.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-4 text-sm text-text-muted">
+              <Spinner className="size-4" />
+              Searching…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-3 py-4 text-center text-sm text-text-muted">
+              {search
+                ? `No repositories match "${search}". Try a different term.`
+                : "No repositories found for this connection."}
+            </div>
           ) : (
             filtered.map((r) => (
               <button
@@ -136,6 +188,11 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
             ))
           )}
         </div>
+        {onSearch && hasMore && !search && (
+          <div className="border-t border-border px-3 py-2 text-xs text-text-muted">
+            Showing your most recent repositories — type to search the rest.
+          </div>
+        )}
       </DropdownPortal>
     </div>
   );

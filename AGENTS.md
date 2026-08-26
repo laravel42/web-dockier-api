@@ -47,6 +47,18 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 - **Auth:** Supabase passwordless (OTP) → tenant-scoped JWT for API calls. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`. Optional TOTP 2FA.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 
+### Dockerfile generation + AI review
+
+The deploy pipeline generates a Dockerfile during the analyze stage via `analyzeAndGenerate()` in `backend/src/lib/build-pipeline.ts`.
+
+- **Mechanical generation is authoritative.** `analyzeRepoConfig()` detects the stack and `generateDockerfile()` (in `backend/src/lib/repo-analyzer/`) produces the Dockerfile from rule-based templates. This always runs.
+- **Optional AI review layer** (`backend/src/lib/repo-analyzer/ai-review.ts`): after mechanical generation, `aiReviewDockerfile()` may ask OpenAI to improve the Dockerfile. It is **strictly best-effort and non-fatal** — any failure, timeout, invalid response, or rejected revision falls back to the mechanical Dockerfile. It NEVER throws and can never break a deploy.
+- **Gating:** runs only when `OPENAI_API_KEY` is set AND `AI_DOCKERFILE_REVIEW !== "off"` AND the Dockerfile was mechanically generated (not when a user's own repo Dockerfile is used via `skipExistingDockerfile`).
+- **Validation:** a proposed revision is accepted only if it starts with `FROM`, contains `EXPOSE`, is ≥50% of the original length, contains no secret patterns, and differs from the original (identical revisions are treated as approvals). See `validateRevision()`.
+- **Prompt calibration:** the review prompt biases toward approval and revises only for concrete problems (unpinned base image, dependencies installed after copying all source, running as root, wrong build/start command, missing native packages, wrong `EXPOSE`, baked-in secrets). It must NOT make stylistic/cosmetic changes. The model is sensitive to prompt framing — **after changing the prompt or `OPENAI_MODEL`, re-run the live smoke test** (`pnpm --filter @dockier/backend-fastify smoke:ai-review`) to confirm it approves good Dockerfiles and only revises genuinely flawed ones.
+- **Secrets:** only `.env.example` (variable names) and non-secret manifests are sent as context; `.env` is never read.
+- **Visibility:** outcomes are logged via the deploy `ContextualLogger` (approved / revised-with-summary / skipped-with-reason) and surface in the deploy log stream. There is intentionally no frontend surface for this yet — a UI preview is tracked as Phase 2 in `.kiro/specs/ai-dockerfile-review/`.
+
 ## Database
 
 - The active runtime uses `supabase/migrations/` as the canonical schema source.
@@ -103,6 +115,7 @@ pnpm backend:dev              # Start backend
 pnpm backend:typecheck        # Type-check backend
 pnpm --filter @dockier/backend-fastify build
 pnpm test                     # Run root Vitest tests
+pnpm --filter @dockier/backend-fastify smoke:ai-review   # Live OpenAI smoke test for the Dockerfile AI review (needs OPENAI_API_KEY)
 
 # Frontend
 cd frontend && pnpm install   # Install frontend dependencies
