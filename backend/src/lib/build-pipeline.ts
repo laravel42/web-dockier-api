@@ -12,7 +12,7 @@ import { mkdtemp, readFile, writeFile, copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { buildCloneUrl } from "./git-url.js";
-import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack } from "./repo-analyzer/index.js";
+import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack, resolvePhpVersion } from "./repo-analyzer/index.js";
 import type { RepoConfig, DetectedStack } from "./repo-analyzer/types.js";
 import { env } from "../shared/config.js";
 import {
@@ -281,6 +281,15 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
       const mechanical = df;
       let reviewChanges: Array<{ what: string; why: string }> = [];
       let reviewSkipReason: string | undefined;
+
+      // Log effective PHP version when it differs from declared (composer.lock deps may require higher)
+      if (repoConfig.runtime === "php" && repoConfig.phpVersion) {
+        const appDir = repoConfig.subDir ? join(repoDir, repoConfig.subDir) : repoDir;
+        const effectivePhp = resolvePhpVersion(appDir, repoConfig.phpVersion);
+        if (effectivePhp !== repoConfig.phpVersion) {
+          await logger.info(`Effective PHP: ${effectivePhp} (upgraded from ${repoConfig.phpVersion} — required by composer.lock dependencies)`);
+        }
+      }
 
       // Optional AI review — best-effort, never fatal. Falls back to the
       // mechanical Dockerfile on any skip/failure/rejected revision.

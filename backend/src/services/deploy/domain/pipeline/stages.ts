@@ -106,6 +106,20 @@ export async function stageAnalyze(ctx: PipelineContext): Promise<void> {
   });
 
   ctx.repoConfig = repoConfig;
+
+  // Warn if a Laravel project is missing APP_KEY in environment variables.
+  // APP_KEY must persist across deployments — generating it at build time
+  // would produce a different key on every rebuild, breaking encryption.
+  if (repoConfig.framework === "laravel") {
+    const hasAppKey = ctx.envVars.some(v => v.name === "APP_KEY" && v.value.length > 0);
+    if (!hasAppKey) {
+      await ctx.logger.warn(
+        "APP_KEY not found in project environment variables. " +
+        "Laravel requires a persistent APP_KEY for encryption, sessions, and cookies. " +
+        "Add it in Project Settings → Environment to avoid runtime errors.",
+      );
+    }
+  }
 }
 
 // ─── Stage 5: Build Docker Image ────────────────────────────────────

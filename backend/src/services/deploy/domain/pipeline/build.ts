@@ -124,6 +124,7 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
   if (!skippedBuild) {
     await logger.section("Build Docker Image");
     const MAX_BUILD_ATTEMPTS = 3;
+    let successfulBuildOutput = "";
 
     for (let attempt = 1; attempt <= MAX_BUILD_ATTEMPTS; attempt++) {
       const buildArgs = ["build", "--platform", "linux/amd64", "-t", imageName];
@@ -132,6 +133,7 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
       const buildResult = await runCmd("docker", buildArgs, { cwd: repoDir });
       if (buildResult.code === 0) {
         await logger.success(`Docker image built: ${imageName}`);
+        successfulBuildOutput = buildResult.output;
         break;
       }
       if (attempt < MAX_BUILD_ATTEMPTS) {
@@ -145,10 +147,61 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
       }
       throw new BuildError(`docker build failed (exit code ${buildResult.code})`, "docker-build");
     }
+
+    // Surface build warnings (non-fatal issues detected in the build output)
+    const warnings = parseBuildWarnings(successfulBuildOutput);
+    for (const warning of warnings) {
+      await logger.warn(warning);
+    }
   }
 
   // Persist the image name
   await patchDeployment(deploymentId, { docker_image: actualImage });
 
   return { actualImage, skippedBuild };
+}
+
+// ─── Build Warning Detection ───────────────────────────────────────
+
+/**
+ * Scan Docker build output for non-fatal issues that should be surfaced
+ * as deployment warnings. Does not affect build success/failure.
+ */
+export function parseBuildWarnings(output: string): string[] {
+  const warnings: string[] = [];
+
+  // ── SQLSTATE / DB connection errors during build ──
+  // Laravel apps may attempt DB connections during `package:discover` or
+  // other artisan commands that run as Composer post-scripts. This is a
+  // known anti-pattern but common — surface it so the user is aware.
+  if (/SQLSTATE\[HY000\].*Connection refused/i.test(output)) {
+    warnings.push(
+      "Database connection attempted during image build (SQLSTATE Connection refused). " +
+      "A service provider or Composer script tried to reach the database at build time. " +
+      "This is non-fatal — the app will connect normally at runtime with real credentials.",
+    );
+  } else if (/SQLSTATE\[/i.test(output)) {
+    warnings.push(
+      "Database error detected during image build (SQLSTATE). " +
+      "A Composer script or artisan command attempted a database operation at build time. " +
+      "The app should work normally at runtime once database credentials are available.",
+    );
+  }
+
+  // ── npm audit vulnerabilities ──
+  // npm ci/install prints audit summary lines like "9 vulnerabilities (2 moderate, 6 high, 1 critical)"
+  const auditMatch = output.match(/(\d+)\s+vulnerabilit(?:y|ies)\s*\(([^)]+)\)/);
+  if (auditMatch) {
+    const total = auditMatch[1];
+    const breakdown = auditMatch[2];
+    const hasCritical = /critical/i.test(breakdown);
+    const hasHigh = /high/i.test(breakdown);
+    const severity = hasCritical ? "critical" : hasHigh ? "high" : "moderate";
+    warnings.push(
+      `npm reported ${total} dependency vulnerabilit${total === "1" ? "y" : "ies"} (${breakdown}). ` +
+      `Highest severity: ${severity}. Deployment was not blocked. Review with: npm audit`,
+    );
+  }
+
+  return warnings;
 }

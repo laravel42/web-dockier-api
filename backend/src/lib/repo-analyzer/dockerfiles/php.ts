@@ -150,7 +150,7 @@ function pnpmCorepackSetup(appDir: string | undefined): string {
  *    file's effective minimum.
  * 4. Cap at the highest officially released PHP Docker image version.
  */
-function resolvePhpVersion(appDir: string, fallback: string): string {
+export function resolvePhpVersion(appDir: string, fallback: string): string {
   let phpVer = fallback;
 
   try {
@@ -327,13 +327,9 @@ function generateLaravelDockerfile(
 
   lines.push("RUN composer dump-autoload --optimize \\");
   lines.push('    && if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || touch .env; fi \\');
-  lines.push("    && php artisan key:generate --force 2>/dev/null || true \\");
-  lines.push("    && php artisan config:clear 2>/dev/null || true \\");
-  lines.push("    && php artisan route:clear 2>/dev/null || true \\");
-  lines.push("    && php artisan view:clear 2>/dev/null || true \\");
   lines.push("    && mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \\");
   lines.push("    && chown -R www-data:www-data storage bootstrap/cache \\");
-  lines.push("    && chmod -R 777 storage bootstrap/cache");
+  lines.push("    && chmod -R 775 storage bootstrap/cache");
 
   lines.push("");
   lines.push("# Nginx config");

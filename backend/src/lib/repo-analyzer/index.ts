@@ -7,7 +7,7 @@ import { analyzePhpProject } from "./analyzers/php.js";
 import { analyzePythonProject } from "./analyzers/python.js";
 import { analyzeGoProject } from "./analyzers/go.js";
 import { generateNodeDockerfile } from "./dockerfiles/node.js";
-import { generatePhpDockerfile } from "./dockerfiles/php.js";
+import { generatePhpDockerfile, resolvePhpVersion } from "./dockerfiles/php.js";
 import { generatePythonDockerfile } from "./dockerfiles/python.js";
 import { generateGoDockerfile } from "./dockerfiles/go.js";
 import { finalizeNodeVersion } from "./utils.js";
@@ -15,6 +15,7 @@ import { finalizeNodeVersion } from "./utils.js";
 // Re-export everything for public API
 export type { DetectedStack, RepoConfig, NativeDep, DockerFix } from "./types.js";
 export { configSummary } from "./utils.js";
+export { resolvePhpVersion } from "./dockerfiles/php.js";
 export { patchDockerfile } from "./docker-fixer.js";
 export { buildWithRailpack, isRailpackAvailable, buildWithNixpacks, isNixpacksAvailable } from "./builders.js";
 export type { CliBuildResult, RailpackBuildResult, NixpacksBuildResult } from "./builders.js";
