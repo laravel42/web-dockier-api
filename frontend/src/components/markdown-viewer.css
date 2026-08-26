@@ -78,3 +78,19 @@
 .milkdown-viewer .milkdown .ProseMirror-focused {
   outline: none !important;
 }
+
+/* Images: render at natural size, capped at container width.
+   Badges (shields.io, etc.) stay small and inline; large images don't overflow.
+   Crepe's image-block CSS sets min-height: 100px and object-fit: cover, which
+   forces small badge images to stretch. Override for the read-only viewer. */
+.milkdown-viewer .milkdown .milkdown-image-block > .image-wrapper img {
+  min-height: unset !important;
+  object-fit: contain !important;
+  width: auto !important;
+}
+
+/* In the viewer, hide editing chrome (resize handle, caption operation) */
+.milkdown-viewer .milkdown .milkdown-image-block .image-resize-handle,
+.milkdown-viewer .milkdown .milkdown-image-block .operation {
+  display: none !important;
+}
