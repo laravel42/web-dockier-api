@@ -1,0 +1,4 @@
+version: "1"
+spec:
+  name: "Dokploy Deploy Integration"
+  description: "Replace CloudFormation/Pulumi deploy pipeline with Dokploy-based orchestration"
