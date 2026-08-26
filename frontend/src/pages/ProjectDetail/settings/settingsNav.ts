@@ -11,11 +11,11 @@ export type SettingsSection =
 
 export const SETTINGS_SECTION_TABS = [
   { key: "settingsGeneral", section: "general", label: "General" },
-  { key: "settingsDeployments", section: "deployments", label: "Deployments" },
+  { key: "settingsDeployments", section: "deployments", label: "Deploy" },
   { key: "settingsEnvironment", section: "environment", label: "Environment" },
   { key: "settingsWordpress", section: "wordpress", label: "WordPress" },
   { key: "settingsComposer", section: "composer", label: "Composer" },
-  { key: "settingsNpm", section: "npm", label: "npm" },
+  { key: "settingsNpm", section: "npm", label: "NPM" },
   { key: "settingsNotifications", section: "notifications", label: "Notifications" },
 ] as const satisfies ReadonlyArray<{
   key: string;

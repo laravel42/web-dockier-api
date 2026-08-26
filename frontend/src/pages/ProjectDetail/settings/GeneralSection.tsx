@@ -13,16 +13,20 @@ import { GitRepositoryModal } from "./GitSettings";
 import BranchPickerInline from "./GitSettings";
 import { SectionTitle, SettingsRow } from "./shared";
 import SettingsCard from "./SettingsCard";
+import PlatformBadge from "@/components/PlatformBadge";
+import type { RepoAnalysis } from "@/components/DeployWizard";
+import { resolveFrameworkVersion } from "../utils/frameworkVersion";
 import { useProjectDelete } from "../hooks/useProjectDelete";
 import { useInfraTeardown } from "../hooks/useInfraTeardown";
 
 interface Props {
   project: Project;
+  analysis?: RepoAnalysis | null;
   canManage: boolean;
   onProjectUpdate?: (project: Project) => void;
 }
 
-export default function GeneralSection({ project, canManage, onProjectUpdate }: Props) {
+export default function GeneralSection({ project, analysis, canManage, onProjectUpdate }: Props) {
   const fid = useId();
   const [name] = useState(project.name);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
@@ -54,6 +58,8 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
     { errorFallback: "Failed to save note" },
   );
 
+  const frameworkVersion = resolveFrameworkVersion(project, analysis);
+
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
@@ -65,9 +71,11 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
       <SettingsCard>
         {/* Framework */}
         <SettingsRow label="Framework" description="The framework used by the installed application.">
-          <span className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-text capitalize">
-            {project.platform || "Auto-detect"}
-          </span>
+          {project.platform ? (
+            <PlatformBadge slug={project.platform} version={frameworkVersion} />
+          ) : (
+            <span className="text-xs text-text-muted">Auto-detect</span>
+          )}
         </SettingsRow>
 
         {/* Tags */}

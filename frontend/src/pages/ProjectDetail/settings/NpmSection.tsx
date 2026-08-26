@@ -51,7 +51,7 @@ export default function NpmSection({ canManage }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
-        title="npm"
+        title="NPM"
         description="Manage auth tokens for private npm registries. Dockier loads .npmrc on demand and does not store credential data."
         linkText="Learn more"
         linkHref="#"

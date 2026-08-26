@@ -1167,6 +1167,7 @@ export default function ProjectDescription({
             <ProjectSettingsTab
               project={project}
               section={settingsSection}
+              analysis={analysis}
               onProjectUpdate={onProjectUpdate}
             />
           );

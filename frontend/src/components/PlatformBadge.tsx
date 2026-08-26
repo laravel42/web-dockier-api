@@ -23,16 +23,27 @@ const PLATFORM_ICONS: Record<string, string> = {
 
 interface Props {
   slug: string;
+  /** Detected package version (e.g. from package.json / composer.json). */
+  version?: string;
 }
 
-export default function PlatformBadge({ slug }: Props) {
+export default function PlatformBadge({ slug, version }: Props) {
   const label = PLATFORM_NAMES[slug] || slug;
   const icon = PLATFORM_ICONS[slug] || slug;
+  const versionLabel = version?.trim();
 
   return (
     <span className={`${chipCls} whitespace-nowrap`}>
       <DevIcon src={icon} className="size-4 " />
       {label}
+      {versionLabel ? (
+        <>
+          <span className="text-text-muted/50" aria-hidden>
+            ·
+          </span>
+          <span className="tabular-nums text-text-muted">{versionLabel}</span>
+        </>
+      ) : null}
     </span>
   );
 }

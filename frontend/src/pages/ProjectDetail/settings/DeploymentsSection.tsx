@@ -46,7 +46,7 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
-        title="Deployments"
+        title="Deploy"
         description="Manage build and deployment settings."
       />
 

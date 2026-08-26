@@ -1,4 +1,5 @@
 import type { Project } from "@/types";
+import type { RepoAnalysis } from "@/components/DeployWizard";
 import { usePermissions } from "@/context/PermissionsContext";
 import { TabSpinner } from "../settings/shared";
 import GeneralSection from "../settings/GeneralSection";
@@ -13,10 +14,11 @@ import type { SettingsSection } from "../settings/settingsNav";
 interface Props {
   project: Project;
   section: SettingsSection;
+  analysis?: RepoAnalysis | null;
   onProjectUpdate?: (project: Project) => void;
 }
 
-export default function ProjectSettingsTab({ project, section, onProjectUpdate }: Props) {
+export default function ProjectSettingsTab({ project, section, analysis, onProjectUpdate }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
 
@@ -25,7 +27,12 @@ export default function ProjectSettingsTab({ project, section, onProjectUpdate }
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-auto pr-1">
       {section === "general" && (
-        <GeneralSection project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
+        <GeneralSection
+          project={project}
+          analysis={analysis}
+          canManage={canManage}
+          onProjectUpdate={onProjectUpdate}
+        />
       )}
       {section === "deployments" && (
         <DeploymentsSection project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
