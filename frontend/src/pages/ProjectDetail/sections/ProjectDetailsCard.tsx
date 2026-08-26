@@ -66,7 +66,7 @@ const templateDescriptions: Record<string, string> = {
   wordpress: "Full WordPress setup with MySQL database, ready to deploy.",
 };
 
-const fieldLabelCls = "text-ui font-semibold text-text-muted";
+const fieldLabelCls = "text-sm font-semibold text-text-muted";
 
 const specCellCls =
   "flex h-full min-w-0 items-start gap-3 border-b border-border/40 py-2.5 last:border-b-0 md:odd:border-r md:odd:border-border/40 md:odd:pr-8 md:even:pl-8 md:[&:nth-child(n+5)]:border-b-0";

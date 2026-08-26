@@ -119,8 +119,10 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           {step > 0 && step < 6 && !isDeploying && (
             <Button
               variant="outline"
+              size="lg"
+              className="border-0 hover:!bg-background hover:!opacity-90"
               onClick={handleBack}
-              iconLeft={<ArrowLeftIcon className="size-3.5" />}
+              iconLeft={<ArrowLeftIcon className="size-4" />}
             >
               Back
             </Button>
@@ -132,34 +134,30 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               type="button"
               onClick={cancelDeploy}
               disabled={cancellingDeploy}
-              className="h-9 px-4 text-sm font-medium text-warning-ink border border-warning-line rounded-(--radius-btn) hover:bg-warning-surface transition-colors disabled:opacity-50"
+              className="h-10 px-4 text-sm font-medium text-warning-ink border border-warning-line rounded-(--radius-btn) hover:bg-warning-surface transition-colors disabled:opacity-50"
             >
               {cancellingDeploy ? "Cancelling…" : "Cancel Deploy"}
             </button>
           )}
           {step === 6 && isFinished && (
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" size="lg" onClick={onClose}>
               Close
             </Button>
           )}
           {step === 6 && state.deployStatus === "failed" && (
             <Button
               variant="primary"
+              size="lg"
               onClick={startDeploy}
-              iconLeft={<RotateCwIcon className="size-3.5" />}
+              iconLeft={<RotateCwIcon className="size-4" />}
             >
               Retry
             </Button>
           )}
           {step < 6 && !isDeploying && (
-            <>
-              {step === 0 && (
-                <Button variant="outline" onClick={() => { if (!isDeploying) onClose(); }}>
-                  Cancel
-                </Button>
-              )}
               <Button
                 variant="primary"
+                size="lg"
                 onClick={handleNext}
                 disabled={!canNext()}
                 loading={step === 5 && tofuLoading}
@@ -178,11 +176,10 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
                 ) : (
                   <>
                     Next
-                    <ArrowRightIcon className="size-3.5" />
+                    <ArrowRightIcon className="size-4" />
                   </>
                 )}
               </Button>
-            </>
           )}
         </div>
       </div>

@@ -73,7 +73,7 @@ export default function StepService({ state, templateId, analysis, onChange }: {
                   <span className={`text-sm font-semibold ${selected ? "text-foreground" : "text-text"}`}>{svc.name}</span>
                   <span className={`px-1.5 py-0.5 rounded text-xs font-semibold uppercase ${
                     svc.type === "managed"
-                      ? selected ? "bg-primary/15 text-primary" : "bg-primary-50 text-primary-600"
+                      ? selected ? "bg-primary/15 text-primary" : "bg-primary-50 text-primary-800"
                       : selected ? "bg-warning-500/15 text-warning-500" : "bg-warning-50 text-warning-500"
                   }`}>{svc.label}</span>
                 </div>
