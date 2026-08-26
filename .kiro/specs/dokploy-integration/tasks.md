@@ -31,55 +31,55 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 
 ### Phase 2: Pipeline Stages
 
-- [ ] 5. Ensure Project Stage
-  - [ ] 5.1 Create `backend/src/services/deploy/domain/dokploy/stages/ensure-project.ts`
-  - [ ] 5.2 Look up tenant → Dokploy project mapping
-  - [ ] 5.3 If missing, create project via `client.createProject()`
-  - [ ] 5.4 Store mapping in `dokploy_tenant_projects`
-  - [ ] 5.5 Log progress to deployment record
+- [x] 5. Ensure Project Stage
+  - [x] 5.1 Create `backend/src/services/deploy/domain/dokploy/stages/ensure-project.ts`
+  - [x] 5.2 Look up tenant → Dokploy project mapping
+  - [x] 5.3 If missing, create project via `client.createProject()`
+  - [x] 5.4 Store mapping in `dokploy_tenant_projects`
+  - [x] 5.5 Log progress to deployment record
 
-- [ ] 6. Sync Git Credentials Stage
-  - [ ] 6.1 Create `backend/src/services/deploy/domain/dokploy/stages/sync-git.ts`
-  - [ ] 6.2 Load git connection from Dockier DB (provider type, token/credentials)
-  - [ ] 6.3 For GitHub: prepare params for `application.saveGithubProvider`
-  - [ ] 6.4 For GitLab: prepare params for `application.saveGitlabProvider`
-  - [ ] 6.5 For others: use `application.saveGitProvider` with SSH key
-  - [ ] 6.6 This stage stores needed params; actual git config is applied in configure-app stage
+- [x] 6. Sync Git Credentials Stage
+  - [x] 6.1 Create `backend/src/services/deploy/domain/dokploy/stages/sync-git.ts`
+  - [x] 6.2 Load git connection from Dockier DB (provider type, token/credentials)
+  - [x] 6.3 For GitHub: prepare params for `application.saveGithubProvider`
+  - [x] 6.4 For GitLab: prepare params for `application.saveGitlabProvider`
+  - [x] 6.5 For others: use `application.saveGitProvider` with SSH key
+  - [x] 6.6 This stage stores needed params; actual git config is applied in configure-app stage
 
 - [ ] 7. Provision Server Stage
-  - [ ] 7.1 Create `backend/src/services/deploy/domain/dokploy/stages/provision-server.ts`
-  - [ ] 7.2 Check if project already has a provisioned server (`dokploy_servers`)
-  - [ ] 7.3 If existing + healthy, reuse it
-  - [ ] 7.4 If not: launch VPS using AWS EC2 SDK or GCP Compute API (reuse existing `provider-credentials.ts`)
-  - [ ] 7.5 Wait for SSH access (poll port 22)
-  - [ ] 7.6 Register as Dokploy remote server (`server.create`)
-  - [ ] 7.7 Run setup (`server.setup`) and validate (`server.validate`)
-  - [ ] 7.8 Store in `dokploy_servers`
+  - [x] 7.1 Create `backend/src/services/deploy/domain/dokploy/stages/provision-server.ts`
+  - [x] 7.2 Check if project already has a provisioned server (`dokploy_servers`)
+  - [x] 7.3 If existing + healthy, reuse it
+  - [ ] 7.4 If not: launch VPS using AWS EC2 SDK or GCP Compute API (deferred — currently throws with descriptive error)
+  - [ ] 7.5 Wait for SSH access (poll port 22) (deferred — part of VPS auto-provisioning)
+  - [x] 7.6 Register as Dokploy remote server (`server.create`) — via `registerServerInDokploy()`
+  - [x] 7.7 Run setup (`server.setup`) and validate (`server.validate`)
+  - [x] 7.8 Store in `dokploy_servers`
 
-- [ ] 8. Configure Application Stage
-  - [ ] 8.1 Create `backend/src/services/deploy/domain/dokploy/stages/configure-app.ts`
-  - [ ] 8.2 Check if project already has a Dokploy application (`dokploy_applications`)
-  - [ ] 8.3 If not: create via `application.create` (name, environmentId, serverId)
-  - [ ] 8.4 Configure git source (using params from sync-git stage)
-  - [ ] 8.5 Determine build type from repo analysis (Has Dockerfile → `dockerfile`, Static site → `static` + publishDirectory, Railpack-compatible → `railpack`, Default → `nixpacks`)
-  - [ ] 8.6 Set build type via `application.saveBuildType`
-  - [ ] 8.7 Set env vars via `application.saveEnvironment`
+- [x] 8. Configure Application Stage
+  - [x] 8.1 Create `backend/src/services/deploy/domain/dokploy/stages/configure-app.ts`
+  - [x] 8.2 Check if project already has a Dokploy application (`dokploy_applications`)
+  - [x] 8.3 If not: create via `application.create` (name, environmentId, serverId)
+  - [x] 8.4 Configure git source (using params from sync-git stage)
+  - [x] 8.5 Determine build type from repo analysis (Has Dockerfile → `dockerfile`, Static site → `static` + publishDirectory, Railpack-compatible → `railpack`, Default → `nixpacks`)
+  - [x] 8.6 Set build type via `application.saveBuildType`
+  - [x] 8.7 Set env vars via `application.saveEnvironment`
 
-- [ ] 9. Deploy & Poll Stage
-  - [ ] 9.1 Create `backend/src/services/deploy/domain/dokploy/stages/trigger-deploy.ts`
-  - [ ] 9.2 Trigger deploy via `application.deploy`
-  - [ ] 9.3 Poll application status until `done` or `error` (configurable interval, default 5s)
-  - [ ] 9.4 Extract appUrl from application once deployed
-  - [ ] 9.5 Return success/failure with logs
+- [x] 9. Deploy & Poll Stage
+  - [x] 9.1 Create `backend/src/services/deploy/domain/dokploy/stages/trigger-deploy.ts`
+  - [x] 9.2 Trigger deploy via `application.deploy`
+  - [x] 9.3 Poll application status until `done` or `error` (configurable interval, default 5s)
+  - [x] 9.4 Extract appUrl from application once deployed
+  - [x] 9.5 Return success/failure with logs
 
-- [ ] 10. AI Recovery Stage (Dokploy AI)
-  - [ ] 10.1 Create `backend/src/services/deploy/domain/dokploy/stages/ai-recovery.ts`
-  - [ ] 10.2 On deploy failure, invoke Dokploy's built-in AI fix feature via the Dokploy API (already configured on Dokploy account)
-  - [ ] 10.3 Do NOT call OpenAI directly — Dokploy AI is tightly integrated with its build system and handles deployment errors better
-  - [ ] 10.4 Dokploy AI analyzes logs and applies fixes internally (env vars, build config, dependencies)
-  - [ ] 10.5 After AI applies fix, return `{ fixed: true, description }` for logging
-  - [ ] 10.6 Return whether a fix was applied (for retry decision)
-  - [ ] 10.7 Non-fatal: if Dokploy AI is unavailable or cannot fix the issue, return `{ fixed: false }`
+- [x] 10. AI Recovery Stage (Dokploy AI)
+  - [x] 10.1 Create `backend/src/services/deploy/domain/dokploy/stages/ai-recovery.ts`
+  - [x] 10.2 On deploy failure, invoke Dokploy's built-in AI fix feature via the Dokploy API (already configured on Dokploy account)
+  - [x] 10.3 Do NOT call OpenAI directly — Dokploy AI is tightly integrated with its build system and handles deployment errors better
+  - [x] 10.4 Dokploy AI analyzes logs and applies fixes internally (env vars, build config, dependencies)
+  - [x] 10.5 After AI applies fix, return `{ fixed: true, description }` for logging
+  - [x] 10.6 Return whether a fix was applied (for retry decision)
+  - [x] 10.7 Non-fatal: if Dokploy AI is unavailable or cannot fix the issue, return `{ fixed: false }`
 
 ### Phase 3: Pipeline Orchestrator
 
