@@ -1,5 +1,8 @@
 import type { Provider } from "@/types";
+import type { DockerfilePreviewResult } from "@/services/deploy";
+
 export type { Provider };
+export type { DockerfilePreviewResult };
 
 export interface DetectedService {
   type: string;
@@ -125,6 +128,8 @@ export interface WizardState {
   /** When true, keep the repo's Dockerfile instead of Dockier generating one. */
   useRepoDockerfile: boolean;
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
+  /** Pre-deploy Dockerfile preview + AI review result (null until fetched). */
+  dockerfilePreview: DockerfilePreviewResult | null;
   // Step 7 (Deploy)
   deploymentId: string;
   deployStatus: "" | "pending" | "building" | "deploying" | "success" | "failed" | "destroyed" | "cancelled";

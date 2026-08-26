@@ -26,9 +26,10 @@ php bin/console doctrine:migrations:migrate --no-interaction
 php bin/console cache:clear --env=prod
 php bin/console cache:warmup --env=prod`;
 
-const WORDPRESS_DEPLOY = `# WordPress post-deploy commands
-wp core update-db --allow-root 2>/dev/null || true
-wp cache flush --allow-root 2>/dev/null || true`;
+// Kept for when the WordPress framework entry below is re-enabled.
+// const WORDPRESS_DEPLOY = `# WordPress post-deploy commands
+// wp core update-db --allow-root 2>/dev/null || true
+// wp cache flush --allow-root 2>/dev/null || true`;
 
 const PHP_DEPLOY = `# PHP post-deploy commands
 # Add your commands here`;

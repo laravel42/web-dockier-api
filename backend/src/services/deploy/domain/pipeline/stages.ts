@@ -98,6 +98,9 @@ export async function stageAnalyze(ctx: PipelineContext): Promise<void> {
     logger: ctx.logger,
     skipExistingDockerfile: ctx.event.useRepoDockerfile === true,
     knownPlatform: ctx.knownPlatform,
+    // Lets the review from the pre-deploy preview be reused, so the built
+    // Dockerfile matches the one the user approved in the wizard.
+    commitHash: ctx.commitHash,
   });
 
   ctx.repoConfig = repoConfig;

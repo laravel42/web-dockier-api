@@ -6,8 +6,9 @@ import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
 import RailpackIcon from "@/components/icons/outlined/RailpackIcon";
 import NixpacksIcon from "@/components/icons/outlined/NixpacksIcon";
 import CodeBuildIcon from "@/components/icons/outlined/CodeBuildIcon";
+import DockerfilePreviewPanel from "./DockerfilePreviewPanel";
 
-export default function StepCompose({ state, loading, error, hasRepoDockerfile, onToggleDocker, onBuildMethodChange, onDockerfileSourceChange, onRegenerateScript, isTemplate }: {
+export default function StepCompose({ state, loading, error, hasRepoDockerfile, onToggleDocker, onBuildMethodChange, onDockerfileSourceChange, onRegenerateScript, isTemplate, previewLoading, previewError }: {
   state: WizardState;
   loading: boolean;
   error: string;
@@ -17,6 +18,8 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
   onDockerfileSourceChange: (useRepoDockerfile: boolean) => void;
   onRegenerateScript?: () => void;
   isTemplate?: boolean;
+  previewLoading?: boolean;
+  previewError?: string;
 }) {
   return (
     <div className="space-y-4">
@@ -156,6 +159,16 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
             ))}
           </div>
         </div>
+      )}
+
+      {/* Dockerfile preview + AI review — only for Dockier-generated container builds */}
+      {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (
+        <DockerfilePreviewPanel
+          preview={state.dockerfilePreview}
+          loading={!!previewLoading}
+          error={previewError || ""}
+          useRepoDockerfile={state.useRepoDockerfile}
+        />
       )}
 
       {/* Deploy script preview */}

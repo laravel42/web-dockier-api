@@ -14,6 +14,14 @@ import { execSync } from "node:child_process";
 import { buildCloneUrl } from "./git-url.js";
 import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack } from "./repo-analyzer/index.js";
 import type { RepoConfig, DetectedStack } from "./repo-analyzer/types.js";
+import { env } from "../shared/config.js";
+import {
+  aiReviewDockerfile,
+  readPrimaryManifest,
+  readEnvExample,
+  listTopLevelFiles,
+} from "./repo-analyzer/ai-review.js";
+import { reviewCacheKey, getCachedReview, setCachedReview } from "./repo-analyzer/review-cache.js";
 import type { ContextualLogger } from "./logging.js";
 import { BuildError } from "./logging.js";
 
@@ -57,6 +65,20 @@ export interface AnalyzeOptions {
   skipExistingDockerfile?: boolean;
   /** User-selected platform from project creation (e.g. "laravel", "nextjs"). Overrides auto-detection of framework. */
   knownPlatform?: string;
+  /**
+   * Commit being analyzed (from `cloneRepo`). Enables reuse of an AI review
+   * already computed for the same commit + stack, so the pre-deploy preview
+   * and the deploy that follows it share one outcome instead of making two
+   * independent OpenAI calls. Omit to disable review caching.
+   */
+  commitHash?: string;
+  /**
+   * Opt-in capture mode. When true, the result additionally carries the
+   * effective Dockerfile content and AI review details so callers (e.g. the
+   * pre-deploy preview) can return them without re-running generation.
+   * Does not change any other observable behavior.
+   */
+  capture?: boolean;
 }
 
 export interface AnalyzeResult {
@@ -66,6 +88,23 @@ export interface AnalyzeResult {
   detectedPort: number;
   /** Whether a Dockerfile was generated (vs. already present) */
   dockerfileGenerated: boolean;
+  /** Whether the AI review layer ran for this analysis. */
+  aiReviewed?: boolean;
+  /** Whether the AI review produced a validated revision that was used. */
+  aiRevised?: boolean;
+  // ─── Capture-mode fields (populated only when opts.capture === true) ───
+  /** Rule-based Dockerfile, or the repo's own Dockerfile when it was used as-is. */
+  mechanicalDockerfile?: string;
+  /** Effective Dockerfile after optional review; equals mechanical when not revised. */
+  finalDockerfile?: string;
+  /** Structured AI review changes (empty when approved or not run). */
+  reviewChanges?: Array<{ what: string; why: string }>;
+  /** Reason the review was skipped or a revision rejected, when applicable. */
+  reviewSkipReason?: string;
+  /** Whether the Dockerfile was Dockier-generated or taken from the repo. */
+  source?: "generated" | "repo";
+  /** Whether the AI review actually ran (key + flag on, generated source). */
+  aiEnabled?: boolean;
 }
 
 // ─── Clone Repository ──────────────────────────────────────────────
@@ -165,7 +204,7 @@ function applyKnownPlatform(config: RepoConfig, platform: string): void {
  * - .dockerignore generation
  */
 export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeResult> {
-  const { repoDir, logger, skipExistingDockerfile, knownPlatform } = opts;
+  const { repoDir, logger, skipExistingDockerfile, knownPlatform, commitHash } = opts;
 
   await logger.section("Analyze Repository");
 
@@ -209,6 +248,15 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
   // Generate or detect Dockerfile
   let detectedPort = repoConfig.port || 3000;
   let dockerfileGenerated = false;
+  let aiReviewed = false;
+  let aiRevised = false;
+
+  // Capture-mode accumulators (only surfaced when opts.capture === true).
+  let capturedMechanical: string | undefined;
+  let capturedFinal: string | undefined;
+  let capturedChanges: Array<{ what: string; why: string }> | undefined;
+  let capturedSkipReason: string | undefined;
+  let capturedSource: "generated" | "repo" | undefined;
 
   const hasExistingDockerfile = existsSync(join(repoDir, "Dockerfile"));
 
@@ -218,12 +266,75 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
       const df = await readFile(join(repoDir, "Dockerfile"), "utf-8");
       const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
       if (exposeMatch) detectedPort = parseInt(exposeMatch[1], 10);
+      if (opts.capture) {
+        capturedSource = "repo";
+        capturedMechanical = df;
+        capturedFinal = df;
+        capturedChanges = [];
+      }
     } catch { /* use default port */ }
     await logger.info(`Repo already has a Dockerfile, using it as-is (port: ${detectedPort})`);
   } else {
     // Generate Dockerfile
-    const df = generateDockerfile(repoConfig, repoDir);
+    let df = generateDockerfile(repoConfig, repoDir);
     if (df) {
+      const mechanical = df;
+      let reviewChanges: Array<{ what: string; why: string }> = [];
+      let reviewSkipReason: string | undefined;
+
+      // Optional AI review — best-effort, never fatal. Falls back to the
+      // mechanical Dockerfile on any skip/failure/rejected revision.
+      if (env.OPENAI_API_KEY && env.AI_DOCKERFILE_REVIEW !== "off") {
+        const started = Date.now();
+
+        // Reuse the review computed for this exact commit + stack + Dockerfile
+        // if one exists (typically from the pre-deploy preview), so the user
+        // deploys the Dockerfile they were shown. A miss just runs the review.
+        const cacheKey = reviewCacheKey({
+          commitHash: commitHash ?? "",
+          model: env.OPENAI_MODEL,
+          dockerfile: df,
+          repoConfig,
+        });
+        const cached = cacheKey ? await getCachedReview(cacheKey) : undefined;
+
+        const review = cached ?? await aiReviewDockerfile({
+          apiKey: env.OPENAI_API_KEY,
+          model: env.OPENAI_MODEL,
+          dockerfile: df,
+          repoConfig,
+          manifest: readPrimaryManifest(repoDir, repoConfig),
+          envExample: readEnvExample(repoDir),
+          fileTree: listTopLevelFiles(repoDir),
+        });
+        if (cacheKey && !cached) await setCachedReview(cacheKey, review);
+
+        aiReviewed = true;
+        reviewChanges = review.changes;
+        reviewSkipReason = review.skipReason;
+        // Timing is meaningless on a hit — say so instead of reporting ~0s.
+        const timing = cached ? "cached" : `${((Date.now() - started) / 1000).toFixed(1)}s`;
+
+        if (review.revised) {
+          df = review.dockerfile;
+          aiRevised = true;
+          const summary = review.changes.map((c) => c.what).join("; ") || "improvements applied";
+          await logger.success(`AI improved Dockerfile [${timing}]: ${summary}`);
+        } else if (review.skipReason) {
+          await logger.warn(`AI Dockerfile review skipped (${review.skipReason}) — using generated Dockerfile [${timing}]`);
+        } else {
+          await logger.info(`AI Dockerfile review passed — no changes needed [${timing}]`);
+        }
+      }
+
+      if (opts.capture) {
+        capturedSource = "generated";
+        capturedMechanical = mechanical;
+        capturedFinal = df;
+        capturedChanges = reviewChanges;
+        capturedSkipReason = reviewSkipReason;
+      }
+
       await writeFile(join(repoDir, "Dockerfile"), df, "utf-8");
       dockerfileGenerated = true;
       const exposeMatch = df.match(/EXPOSE\s+(\d+)/);
@@ -243,5 +354,17 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
 
   const detectedStack = toDetectedStack(repoConfig);
 
-  return { repoConfig, detectedStack, detectedPort, dockerfileGenerated };
+  const result: AnalyzeResult = { repoConfig, detectedStack, detectedPort, dockerfileGenerated, aiReviewed, aiRevised };
+
+  if (opts.capture) {
+    result.source = capturedSource;
+    result.mechanicalDockerfile = capturedMechanical;
+    result.finalDockerfile = capturedFinal;
+    result.reviewChanges = capturedChanges ?? [];
+    result.reviewSkipReason = capturedSkipReason;
+    // AI actually ran only for the generated path with the review block entered.
+    result.aiEnabled = capturedSource === "generated" && aiReviewed;
+  }
+
+  return result;
 }

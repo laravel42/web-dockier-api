@@ -131,6 +131,7 @@ export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   useDocker: true,
   useRepoDockerfile: false,
   buildMethod: "dockerfile",
+  dockerfilePreview: null,
   deploymentId: "",
   deployStatus: "",
   deployLogs: [],
