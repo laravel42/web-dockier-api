@@ -1143,13 +1143,13 @@ export default function ProjectDescription({
               title="Activity"
               description="Recent commits, open issues, and pull requests from your repository."
             />
-            {activityPanel ?? renderMainTabPlaceholder("Activity")}
+            {activityPanel}
           </div>
         );
       case "security":
-        return securityPanel ?? renderMainTabPlaceholder("Security");
+        return securityPanel;
       case "deployments":
-        return deploysPanel ?? renderMainTabPlaceholder("Deployments");
+        return deploysPanel;
       case "processes":
         return <ProjectProcessesTab project={project} />;
       case "commands":
@@ -1172,14 +1172,10 @@ export default function ProjectDescription({
             />
           );
         }
-        return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTabSafe)?.label ?? "");
+        return null;
       }
     }
   };
-
-  const renderMainTabPlaceholder = (label: string) => (
-    <p className="text-sm text-text-muted pb-10 text-center">{label} — coming soon.</p>
-  );
 
   return (
     <div
