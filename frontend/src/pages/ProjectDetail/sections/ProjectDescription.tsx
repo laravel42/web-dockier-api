@@ -23,11 +23,20 @@ import ProjectNetworkTab from "./ProjectNetworkTab";
 import ProjectObserveTab from "./ProjectObserveTab";
 import ProjectDomainsTab from "./ProjectDomainsTab";
 import ProjectSettingsTab from "./ProjectSettingsTab";
+import {
+  isSettingsMainTabKey,
+  resolveLegacySettingsTab,
+  settingsSectionForTab,
+  SETTINGS_SECTION_TABS,
+  visibleSettingsSectionTabs,
+} from "../settings/settingsNav";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useIsMdUp } from "@/hooks/useMediaQuery";
 import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { TabPanelHeader, tabPanelContentCls } from "@/components/TabPanelHeader";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -82,7 +91,11 @@ const MAIN_TABS = [
   { key: "network", label: "Network", cluster: "runtime" },
   { key: "domains", label: "Domains", cluster: "runtime" },
   { key: "observe", label: "Observe", cluster: "runtime" },
-  { key: "settings", label: "Settings", cluster: "configure" },
+  ...SETTINGS_SECTION_TABS.map((tab) => ({
+    key: tab.key,
+    label: tab.label,
+    cluster: "configure" as const,
+  })),
 ] as const satisfies ReadonlyArray<{ key: string; label: string; cluster: ClusterKey }>;
 
 type MainTabKey = typeof MAIN_TABS[number]["key"];
@@ -113,9 +126,10 @@ function isMainTabVisible(
       return has("scan:view");
     case "deployments":
       return has("deploy:view");
-    case "settings":
-      return isOwner || has("project:manage");
     default:
+      if (isSettingsMainTabKey(key)) {
+        return isOwner || has("project:manage");
+      }
       return false;
   }
 }
@@ -877,9 +891,10 @@ export default function ProjectDescription({
   const isSidebar = useIsMdUp();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const activeMainTab: MainTabKey = MAIN_TABS.some((t) => t.key === tabParam)
-    ? (tabParam as MainTabKey)
-    : "overview";
+  const sectionParam = searchParams.get("section");
+  const legacySettingsTab = resolveLegacySettingsTab(tabParam, sectionParam);
+  const activeMainTab: MainTabKey = legacySettingsTab
+    ?? (MAIN_TABS.some((t) => t.key === tabParam) ? (tabParam as MainTabKey) : "overview");
 
   const setActiveMainTab = useCallback(
     (key: MainTabKey, replace = false) => {
@@ -887,6 +902,7 @@ export default function ProjectDescription({
         (prev) => {
           const next = new URLSearchParams(prev);
           next.set("tab", key);
+          next.delete("section");
           return next;
         },
         { replace },
@@ -894,6 +910,12 @@ export default function ProjectDescription({
     },
     [setSearchParams],
   );
+
+  // Flatten legacy ?tab=settings&section=… into ?tab=settingsGeneral, etc.
+  useEffect(() => {
+    if (!legacySettingsTab) return;
+    setActiveMainTab(legacySettingsTab, true);
+  }, [legacySettingsTab, setActiveMainTab]);
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canEditOverview = isOwner || has("project:manage");
 
@@ -901,15 +923,16 @@ export default function ProjectDescription({
   const navScrollRef = useRef<HTMLDivElement>(null);
   const overviewClipRef = useRef<HTMLDivElement>(null);
   const [overviewExpanded, setOverviewExpanded] = useState(false);
-  const [overviewClipPx, setOverviewClipPx] = useState<number | null>(null);
   const [overviewOverflows, setOverviewOverflows] = useState(true);
 
   const visibleMainTabs = useMemo(() => {
     if (permissionsLoading) return [];
-    return MAIN_TABS.filter((tab) =>
-      isMainTabVisible(tab.key, has, isOwner, isRuntimeTabVisible(tab.key, recentDeploys)),
-    );
-  }, [has, isOwner, permissionsLoading, recentDeploys]);
+    const settingsKeys = new Set(visibleSettingsSectionTabs(project).map((t) => t.key));
+    return MAIN_TABS.filter((tab) => {
+      if (isSettingsMainTabKey(tab.key) && !settingsKeys.has(tab.key)) return false;
+      return isMainTabVisible(tab.key, has, isOwner, isRuntimeTabVisible(tab.key, recentDeploys));
+    });
+  }, [has, isOwner, permissionsLoading, recentDeploys, project]);
 
   const visibleMainTabKeys = useMemo(() => visibleMainTabs.map((t) => t.key), [visibleMainTabs]);
   const handleMainTabKeyDown = useTabListKeyboard(visibleMainTabKeys, setActiveMainTab, "both");
@@ -938,40 +961,27 @@ export default function ProjectDescription({
     setOverviewExpanded(false);
   }, [project.id]);
 
-  // Clip the overview at the nav column's bottom so a long README cannot stretch
-  // the card thousands of pixels, while a collapsed one still fills it. On the
-  // horizontal (mobile) strip the nav sits above the panel, so the delta is
-  // useless — fall back to a preview height.
+  // Collapsed overview locks the card at 800px so a long README can't stretch
+  // the panel (which would make overflow never detect and hide Show all).
   useLayoutEffect(() => {
     if (activeMainTabSafe !== "overview") return;
 
     const panel = overviewClipRef.current;
     if (!panel) return;
 
-    const measure = () => {
-      const panelRect = panel.getBoundingClientRect();
-      // Measured on the nav's own scroll box, never the column around it: that
-      // column is self-stretch, so its height is the panel's and feeding it back
-      // in would ratchet. Floored by the row's min-h so a short nav (most tabs
-      // hidden by permissions) still can't leave dead space under the fold.
-      const navEl = navScrollRef.current;
-      const clipPx =
-        isSidebar && navEl
-          ? Math.max(Math.round(navEl.getBoundingClientRect().bottom - panelRect.top), 420)
-          : 360;
+    const COLLAPSED_FOLD_PX = 800;
 
+    const measure = () => {
       const editor = panel.querySelector<HTMLElement>(".overview-editor");
-      const styles = getComputedStyle(panel);
-      const padY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
       const natural = editor?.scrollHeight ?? panel.scrollHeight;
-      setOverviewClipPx(clipPx);
-      setOverviewOverflows(natural > clipPx - padY + 24);
+      // When expanded the panel grows with content — compare against the
+      // collapsed fold, not the stretched clientHeight.
+      const fold = overviewExpanded ? COLLAPSED_FOLD_PX : panel.clientHeight;
+      setOverviewOverflows(natural > fold + 24);
     };
 
     const ro = new ResizeObserver(measure);
     ro.observe(panel);
-    // The nav now sets the fold, so its height changing (tabs revealed once
-    // permissions land, alarm badges wrapping) has to re-measure too.
     if (navScrollRef.current) ro.observe(navScrollRef.current);
 
     const watchEditor = () => {
@@ -995,11 +1005,9 @@ export default function ProjectDescription({
     };
   }, [activeMainTabSafe, overviewExpanded, isSidebar, visibleMainTabs, project.id]);
 
-  const clipOverview =
-    activeMainTabSafe === "overview" && !overviewExpanded && overviewOverflows;
-  const overviewMaxHeight = clipOverview
-    ? (overviewClipPx ?? (isSidebar ? 520 : 360))
-    : undefined;
+  const overviewCollapsed =
+    activeMainTabSafe === "overview" && !overviewExpanded;
+  const clipOverview = overviewCollapsed && overviewOverflows;
 
   const [uploadedSensitiveData, setUploadedSensitiveData] = useState<SensitiveField[] | null>(() => {
     if (!cacheKey) return null;
@@ -1070,46 +1078,56 @@ export default function ProjectDescription({
   );
 
   const renderDependenciesSection = () => (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={tabPanelContentCls}>
+      <TabPanelHeader
+        title="Dependencies"
+        description="Third-party packages detected in your repository."
+      />
       {dependencies && dependencies.length > 0 ? (
         <DependenciesTab data={dependencies} />
       ) : analysisLoading ? (
         <TabSpinner label="Scanning dependencies…" />
       ) : (
-        <p className="text-sm text-text-muted pb-4 text-center">No dependencies detected.</p>
+        <EmptyState compact description="No dependencies detected." />
       )}
     </div>
   );
 
   const renderSensitiveDataSection = () => (
-    ((aiSensitiveResult?.tables.length ?? 0) > 0) || (uploadedSensitiveData && uploadedSensitiveData.length > 0) ? (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            {aiSensitiveResult && (
-              <span className="text-xs text-text-muted">
-                {aiSensitiveResult.summary.totalTables} tables · {aiSensitiveResult.summary.highRiskTables} high risk
-              </span>
-            )}
-            {!aiSensitiveResult && uploadedSensitiveData && (
-              <span className="text-xs text-text-muted">{uploadedSensitiveData.length} sensitive fields detected</span>
-            )}
+    <div className={tabPanelContentCls}>
+      <TabPanelHeader
+        title="Sensitive Data"
+        description="Upload a SQL dump to detect sensitive columns and potential PII exposure."
+      />
+      {((aiSensitiveResult?.tables.length ?? 0) > 0) || (uploadedSensitiveData && uploadedSensitiveData.length > 0) ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div className="flex shrink-0 items-center justify-between">
+            <div className="flex items-center gap-3">
+              {aiSensitiveResult && (
+                <span className="text-xs text-text-muted">
+                  {aiSensitiveResult.summary.totalTables} tables · {aiSensitiveResult.summary.highRiskTables} high risk
+                </span>
+              )}
+              {!aiSensitiveResult && uploadedSensitiveData && (
+                <span className="text-xs text-text-muted">{uploadedSensitiveData.length} sensitive fields detected</span>
+              )}
+            </div>
+            <button type="button" onClick={clearSensitiveData} className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
+              Upload another file
+            </button>
           </div>
-          <button type="button" onClick={clearSensitiveData} className="text-xs text-primary-500 hover:text-primary-400 transition-colors">
-            Upload another file
-          </button>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {aiSensitiveResult && aiSensitiveResult.tables.length > 0 ? (
+              <AiSensitiveDataTab data={aiSensitiveResult} />
+            ) : uploadedSensitiveData ? (
+              <SensitiveDataTab data={uploadedSensitiveData} />
+            ) : null}
+          </div>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {aiSensitiveResult && aiSensitiveResult.tables.length > 0 ? (
-            <AiSensitiveDataTab data={aiSensitiveResult} />
-          ) : uploadedSensitiveData ? (
-            <SensitiveDataTab data={uploadedSensitiveData} />
-          ) : null}
-        </div>
-      </div>
-    ) : (
-      <SqlDropzone onParsed={handleSensitiveParsed} onAiResult={handleAiResult} projectId={projectId} />
-    )
+      ) : (
+        <SqlDropzone onParsed={handleSensitiveParsed} onAiResult={handleAiResult} projectId={projectId} />
+      )}
+    </div>
   );
 
   const renderMainTabContent = () => {
@@ -1119,7 +1137,15 @@ export default function ProjectDescription({
       case "sensitiveData":
         return renderSensitiveDataSection();
       case "activity":
-        return activityPanel ?? renderMainTabPlaceholder("Activity");
+        return (
+          <div className={tabPanelContentCls}>
+            <TabPanelHeader
+              title="Activity"
+              description="Recent commits, open issues, and pull requests from your repository."
+            />
+            {activityPanel ?? renderMainTabPlaceholder("Activity")}
+          </div>
+        );
       case "security":
         return securityPanel ?? renderMainTabPlaceholder("Security");
       case "deployments":
@@ -1134,10 +1160,19 @@ export default function ProjectDescription({
         return <ProjectObserveTab project={project} />;
       case "domains":
         return <ProjectDomainsTab project={project} />;
-      case "settings":
-        return <ProjectSettingsTab project={project} onProjectUpdate={onProjectUpdate} />;
-      default:
+      default: {
+        const settingsSection = settingsSectionForTab(activeMainTabSafe);
+        if (settingsSection) {
+          return (
+            <ProjectSettingsTab
+              project={project}
+              section={settingsSection}
+              onProjectUpdate={onProjectUpdate}
+            />
+          );
+        }
         return renderMainTabPlaceholder(MAIN_TABS.find((t) => t.key === activeMainTabSafe)?.label ?? "");
+      }
     }
   };
 
@@ -1146,13 +1181,13 @@ export default function ProjectDescription({
   );
 
   return (
-    <div className={`${cardCls} mb-8`}>
+    <div
+      className={`${cardCls} mb-8 flex flex-col ${
+        overviewCollapsed ? "h-[800px] overflow-hidden" : "min-h-[800px]"
+      }`}
+    >
 
-      <div
-        className={`flex flex-col md:flex-row${
-          activeMainTabSafe === "overview" ? " min-h-[420px]" : ""
-        }`}
-      >
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         {/*
           Tab nav as a sidebar. Twelve peers never fit a horizontal strip — they
           overflowed behind a mask with no affordance, hiding Security and
@@ -1186,14 +1221,14 @@ export default function ProjectDescription({
                   group inside a tablist. `contents` collapses the wrapper on mobile so
                   the buttons stay in the scrolling row.
                 */
-                <div key={cluster.key} role="presentation" className="contents md:mb-2 md:block md:last:mb-0">
-                  <p
+                <div key={cluster.key} role="presentation" className="contents md:mb-5 md:block md:last:mb-0">
+                  <div
                     aria-hidden="true"
-                    className="hidden px-3 pt-0.5 pb-1 text-xs font-semibold tracking-wide text-text-muted/70 uppercase md:block"
+                    className="hidden rounded-md bg-secondary-50/70 px-3 pt-0.5 pb-0.5 text-base font-semibold tracking-wide text-text-muted/70 uppercase md:mt-2.5 md:block"
                   >
                     {cluster.label}
-                  </p>
-                  {tabs.map((tab) => {
+                  </div>
+                  {tabs.map((tab, tabIndex) => {
                     const alarm = tabAlarms[tab.key];
                     const selected = activeMainTabSafe === tab.key;
                     return (
@@ -1207,9 +1242,11 @@ export default function ProjectDescription({
                         tabIndex={selected ? 0 : -1}
                         onClick={() => setActiveMainTab(tab.key)}
                         onKeyDown={(e) => handleMainTabKeyDown(e, tab.key)}
-                        className={`flex min-w-0 shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
+                        className={`flex min-w-0 shrink-0 items-center gap-2 rounded-md px-3 py-1 text-sm font-medium whitespace-nowrap transition-colors md:w-full md:justify-between ${
+                          tabIndex === 0 ? "md:mt-1.5" : "md:mt-0.5"
+                        } ${
                           selected
-                            ? "bg-primary/10 text-text"
+                            ? "bg-transparent text-seed-400"
                             : "text-text-muted hover:bg-card/60 hover:text-text"
                         }`}
                       >
@@ -1235,8 +1272,9 @@ export default function ProjectDescription({
 
         <div
           ref={overviewClipRef}
-          className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-4 sm:p-5${clipOverview ? " overflow-hidden" : ""}`}
-          style={overviewMaxHeight != null ? { maxHeight: overviewMaxHeight } : undefined}
+          className={`relative flex h-full min-h-0 min-w-0 flex-1 flex-col px-4 sm:px-5 pb-4 sm:pb-5${
+            activeMainTabSafe === "overview" ? " pt-0" : " pt-4 sm:pt-5"
+          }${overviewCollapsed ? " overflow-hidden" : ""}`}
         >
           <div
             role="tabpanel"

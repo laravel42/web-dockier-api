@@ -19,12 +19,10 @@ export function findOverviewAnchorTarget(
     container.querySelector<HTMLElement>(`#${CSS.escape(slug)}`);
   if (byId) return byId;
 
-  const headings = container.querySelectorAll<HTMLElement>(
-    '.bn-block-content[data-content-type="heading"] .bn-inline-content',
-  );
+  const headings = container.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6");
   for (const heading of headings) {
     if (githubHeadingSlug(heading.textContent ?? "") === slug) {
-      return heading.closest<HTMLElement>(".bn-block-outer") ?? heading;
+      return heading;
     }
   }
 

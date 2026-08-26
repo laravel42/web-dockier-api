@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useUrlSection } from "@/hooks/useUrlSection";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { getErrorMessage } from "@/utils/errors";
 
 interface Props {
@@ -687,7 +688,11 @@ export default function ProjectObserveTab({ project }: Props) {
   if (permissionsLoading) return <TabSpinner label="Loading…" />;
 
   return (
-    <div className="flex min-h-0 flex-col gap-4">
+    <div className="flex min-h-0 flex-col gap-6">
+      <TabPanelHeader
+        title="Observe"
+        description="Monitor heartbeats, logs, and deployment activity for this project."
+      />
       {/* Section nav as a topbar */}
       <div className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide" role="tablist" aria-label="Observe sections">
         {SECTIONS.map((section) => (

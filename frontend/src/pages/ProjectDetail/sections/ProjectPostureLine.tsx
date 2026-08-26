@@ -74,7 +74,7 @@ export function InfraStatusLink({
   if (showProviderService && shipped) {
     return (
       <Link
-        to="?tab=settings"
+        to="?tab=settingsGeneral"
         aria-label={infra.text}
         className="inline-flex items-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500/40"
       >
@@ -133,14 +133,14 @@ export function DeployInfraStatus({
         <span className="w-px self-stretch bg-border/50" aria-hidden />
       )}
       {showInfraBadge && shipped ? (
-        <Link to="?tab=settings" aria-label={infra.text} className={`${segmentCls} text-text`}>
+        <Link to="?tab=settingsGeneral" aria-label={infra.text} className={`${segmentCls} text-text`}>
           {providerKey ? (
             <ProviderBadge provider={providerKey} showName={false} iconSize="size-3.5" />
           ) : null}
           <span className="whitespace-nowrap">{infraLabel || serviceLabel}</span>
         </Link>
       ) : (
-        <Link to="?tab=settings" className={`${segmentCls} ${TONE_CLASS[infra.tone]}`}>
+        <Link to="?tab=settingsGeneral" className={`${segmentCls} ${TONE_CLASS[infra.tone]}`}>
           {infra.text}
         </Link>
       )}

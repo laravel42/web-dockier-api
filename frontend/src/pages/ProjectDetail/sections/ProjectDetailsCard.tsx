@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from "react";
-import type { Project, RepoStats } from "@/types";
+import { useMemo, useState, type ReactNode } from "react";
+import type { CommitInfo, Project, RepoStats } from "@/types";
 import { cardCls } from "@/utils/styles";
-import { getRepoKey } from "@/utils/parseOwnerRepo";
+import { getRepoKey, parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { useProjectSiteUrl } from "@/hooks/useProjectSiteUrl";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { gitApi } from "@/services/api";
 import { timeAgo } from "@/utils/timeAgo";
 import SourceControlBadge from "@/components/SourceControlBadge";
 import ProjectTechBadges from "@/components/ProjectTechBadges";
@@ -21,12 +23,43 @@ import ProjectStatsStrip from "./ProjectStatsStrip";
 interface Props {
   project: Project;
   deployUrl?: string;
+  /** SHA of the latest successful deploy — the branch chip must not use a scan SHA. */
+  deployedCommitHash?: string;
   stats?: RepoStats | null;
   statsLoading?: boolean;
   statsError?: string;
   badges?: Array<{ name: string; category: string; confidence: number }>;
   allBadges?: Array<{ name: string; category: string; confidence: number }>;
   nameByLogin?: Record<string, string>;
+  recentCommits?: CommitInfo[];
+}
+
+/** Short and full SHAs from different sources should still match. */
+function sameCommit(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+/**
+ * How far `known` sits behind `head` in a newest-first commit list.
+ * Returns null when up to date.
+ */
+function commitsBehind(
+  head?: string,
+  known?: string,
+  commits: Array<{ hash: string }> = [],
+): { count: number; capped: boolean } | null {
+  if (!head || !known || sameCommit(head, known)) return null;
+  const idx = commits.findIndex((c) => sameCommit(c.hash, known));
+  if (idx > 0) return { count: idx, capped: false };
+  if (idx === 0) return null;
+  // Known commit is older than the window — report at least the window size.
+  if (commits.length > 0 && sameCommit(commits[0].hash, head)) {
+    return { count: commits.length, capped: true };
+  }
+  // Hashes differ but `known` is not in the list yet (still loading, or older
+  // than the window). Still behind the tip — at least one commit.
+  return { count: 1, capped: true };
 }
 
 const templateDescriptions: Record<string, string> = {
@@ -159,12 +192,14 @@ function RepoLanguageBreakdown({ stats }: { stats: RepoStats }) {
 export default function ProjectDetailsCard({
   project,
   deployUrl,
+  deployedCommitHash,
   stats = null,
   statsLoading = false,
   statsError = "",
   badges,
   allBadges,
   nameByLogin,
+  recentCommits = [],
 }: Props) {
   const isTemplate = project.sourceType === "template";
   const repoKey = project.repository ? getRepoKey(project.repository) : null;
@@ -178,6 +213,42 @@ export default function ProjectDetailsCard({
   const hasLanguageBreakdown = Boolean(
     stats?.languages && Object.values(stats.languages).some((pct) => pct >= 0.1),
   );
+
+  // SHA on the chip must match the Commit row: that's the deployed snapshot
+  // (stats.lastCommitHash). A newer success-deploy record or the activity tip
+  // can be HEAD (ad0aac2) while the running site is still the older SHA.
+  const knownCommit = stats?.lastCommitHash || deployedCommitHash || undefined;
+  const parsedRepo = useMemo(
+    () => (project.repository ? parseOwnerRepo(project.repository) : null),
+    [project.repository],
+  );
+
+  // Live remote tip. Always fetch when we have a known SHA — do not wait until
+  // stats (often cached at the deploy SHA) already disagrees. API max is 20.
+  const { data: tipCommits } = useAsyncData(
+    () =>
+      gitApi
+        .getRecentCommits(
+          project.connectionId,
+          parsedRepo!.owner,
+          parsedRepo!.repo,
+          project.branch || undefined,
+          20,
+        )
+        .then((res) => res.commits),
+    [project.id, project.connectionId, project.branch],
+    { enabled: Boolean(hasRepo && !isTemplate && knownCommit && parsedRepo) },
+  );
+
+  const headCommit = tipCommits?.[0]?.hash || recentCommits[0]?.hash || undefined;
+  const lastCommit = tipCommits?.[0] ?? recentCommits[0] ?? null;
+
+  const behind = useMemo(
+    () => commitsBehind(headCommit, knownCommit, tipCommits ?? recentCommits),
+    [headCommit, knownCommit, tipCommits, recentCommits],
+  );
+
+  const branchCommit = knownCommit;
 
   if (isTemplate) {
     return (
@@ -323,10 +394,48 @@ export default function ProjectDetailsCard({
 
         <SpecRow label="Branch">
           {hasRepo ? (
-            <BranchCommitLabel
-              branch={project.branch || "main"}
-              commit={stats?.lastCommitHash}
-            />
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <BranchCommitLabel
+                branch={project.branch || "main"}
+                commit={branchCommit}
+              />
+              {behind && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="cursor-help border-0 border-b border-dashed border-warning-ink bg-transparent p-0 text-xs text-warning-ink tabular-nums"
+                      >
+                        {behind.count}{behind.capped ? "+" : ""} commit
+                        {behind.count === 1 && !behind.capped ? "" : "s"} behind origin
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs space-y-0.5">
+                      <p className="font-medium">Last commit</p>
+                      <p className="font-mono tabular-nums">
+                        {(lastCommit?.hash || headCommit || "—").slice(0, 7)}
+                      </p>
+                      {(lastCommit?.message || stats?.lastCommitMessage) && (
+                        <p className="text-popover-foreground/80">
+                          {lastCommit?.message || stats?.lastCommitMessage}
+                        </p>
+                      )}
+                      {(lastCommit?.author || stats?.lastCommitAuthor || lastCommit?.date || stats?.lastCommitDate) && (
+                        <p className="text-popover-foreground/60">
+                          {[
+                            lastCommit?.author || stats?.lastCommitAuthor,
+                            (lastCommit?.date || stats?.lastCommitDate)
+                              ? timeAgo(lastCommit?.date || stats?.lastCommitDate || "")
+                              : null,
+                          ].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
           ) : (
             <span className="text-text-muted">—</span>
           )}

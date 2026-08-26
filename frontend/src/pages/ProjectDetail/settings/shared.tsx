@@ -2,42 +2,13 @@ import { useState } from "react";
 import Spinner from "@/components/Spinner";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
+export { TabPanelHeader as SectionTitle } from "@/components/TabPanelHeader";
+
 export function TabSpinner({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-10">
       <Spinner className="size-4" />
       <span className="text-sm text-text-muted">{label}</span>
-    </div>
-  );
-}
-
-export function SectionTitle({
-  title,
-  description,
-  linkText,
-  linkHref,
-}: {
-  title: string;
-  description?: string;
-  linkText?: string;
-  linkHref?: string;
-}) {
-  return (
-    <div className="mb-2">
-      <h3 className="text-sm font-semibold text-text">{title}</h3>
-      {description && (
-        <p className="mt-1 text-xs/relaxed text-text-muted">
-          {description}
-          {linkText && linkHref && (
-            <>
-              {" "}
-              <a href={linkHref} className="text-primary-500 hover:text-primary-400 transition-colors">
-                {linkText}
-              </a>
-            </>
-          )}
-        </p>
-      )}
     </div>
   );
 }

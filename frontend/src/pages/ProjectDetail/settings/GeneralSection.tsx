@@ -57,7 +57,7 @@ export default function GeneralSection({ project, canManage, onProjectUpdate }: 
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
-        title="Settings"
+        title="General"
         description="Configure your project's basic settings."
       />
 

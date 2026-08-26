@@ -11,6 +11,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import Modal from "@/components/Modal";
 import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { destructiveReason } from "../destructiveCommand";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 
 const PAGE_SIZE = 10;
@@ -234,7 +235,11 @@ export default function ProjectCommandsTab({ project }: Props) {
   const rangeEnd = Math.min((page + 1) * PAGE_SIZE, total);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scrollbar-hide">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto scrollbar-hide">
+      <TabPanelHeader
+        title="Commands"
+        description="Run arbitrary commands on your deployed server from the project root directory."
+      />
       {/* Run new command section */}
       <div className="rounded-lg border border-border/50 bg-card/30 p-4">
         <h3 className="text-sm font-semibold text-text">Run new command</h3>

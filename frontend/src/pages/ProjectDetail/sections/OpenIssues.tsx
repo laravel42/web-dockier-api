@@ -3,6 +3,7 @@ import { cardCls } from "@/utils/styles";
 import { timeAgo } from "@/utils/timeAgo";
 import Spinner from "@/components/Spinner";
 import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
+import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
 
 interface Props {
   issues: RepoIssue[];
@@ -32,35 +33,28 @@ function Label({ name, color }: { name: string; color: string }) {
 export default function OpenIssues({ issues, issuesLoading, issuesError, onIssueClick }: Props) {
   if (issuesLoading) {
     return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-3">Open Issues</h2>
+      <section className="flex flex-col gap-3">
+        <TabPanelSectionTitle title="Open Issues" />
         <div className={`${cardCls} p-6 flex justify-center`}>
           <Spinner className="size-5 " />
         </div>
-      </div>
+      </section>
     );
   }
 
-  if (issuesError) {
-    return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-3">Open Issues</h2>
-        <div className={`${cardCls} p-4`}>
-          <p className="text-sm text-danger-500">{issuesError}</p>
-        </div>
-      </div>
-    );
+  if (!issuesError && issues.length === 0) {
+    return null;
   }
 
   return (
-    <div className="mb-8">
-      <h2 className="text-sm font-semibold text-text mb-3">
-        Open Issues
-        {issues.length > 0 && <span className="ml-1.5 text-text-muted">({issues.length})</span>}
-      </h2>
-      {issues.length === 0 ? (
+    <section className="flex flex-col gap-3">
+      <TabPanelSectionTitle
+        title="Open Issues"
+        suffix={issues.length > 0 ? <span className="ml-1.5 text-text-muted">({issues.length})</span> : undefined}
+      />
+      {issuesError ? (
         <div className={`${cardCls} p-4`}>
-          <p className="text-sm text-text-muted">No open issues.</p>
+          <p className="text-sm text-danger-500">{issuesError}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -96,6 +90,6 @@ export default function OpenIssues({ issues, issuesLoading, issuesError, onIssue
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

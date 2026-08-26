@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 
 interface Props {
   project: Project;
@@ -839,6 +840,10 @@ export default function ProjectNetworkTab({ project }: Props) {
 
   return (
     <div className="space-y-6 overflow-y-auto pr-1">
+      <TabPanelHeader
+        title="Network"
+        description="Manage security credentials and redirect rules applied by Nginx."
+      />
       {/* Sync status bar */}
       {hasRules && canManage && (
         <div className="flex items-center justify-between rounded-lg border border-border px-4 py-2.5">

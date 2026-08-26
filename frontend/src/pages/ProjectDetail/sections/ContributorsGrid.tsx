@@ -30,7 +30,7 @@ export default function ContributorsGrid({ stats, nameByLogin }: Props) {
       <p id="project-contributors-heading" className="text-ui font-semibold text-text-muted">
         Contributors
       </p>
-      <ul className="mt-2 space-y-3">
+      <ul className="mt-2 space-y-[17px]">
         {contributors.map((c, i) => {
           const pct = Math.round((c.commits / maxCommits) * 100);
           const realName = nameByLogin?.[c.name.toLowerCase()];

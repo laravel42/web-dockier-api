@@ -1,5 +1,6 @@
 import { useState } from "react";
 import CredentialSection, { type Credential, type CredentialFieldConfig } from "./CredentialSection";
+import { SectionTitle } from "./shared";
 
 interface NpmCredential extends Credential {
   registry: string;
@@ -48,25 +49,32 @@ export default function NpmSection({ canManage }: Props) {
   };
 
   return (
-    <CredentialSection<NpmCredential>
-      title="npm package authentication"
-      description="Dockier allows you to manage the auth tokens in your project's .npmrc configuration file. The file is loaded on-demand from the server and no credential data is stored by Dockier."
-      linkText="Learn more"
-      linkHref="#"
-      canManage={canManage}
-      modalTitle="New npm credential"
-      fields={FIELDS}
-      credentials={credentials}
-      onAdd={handleAdd}
-      onRemove={handleRemove}
-      renderCredential={(cred) => (
-        <>
-          <p className="text-sm font-medium text-text">{cred.registry}</p>
-          <p className="text-xs text-text-muted mt-0.5">
-            {cred.scopes ? `Scopes: ${cred.scopes}` : "All packages"}
-          </p>
-        </>
-      )}
-    />
+    <div className="flex flex-col gap-6">
+      <SectionTitle
+        title="npm"
+        description="Manage auth tokens for private npm registries. Dockier loads .npmrc on demand and does not store credential data."
+        linkText="Learn more"
+        linkHref="#"
+      />
+      <CredentialSection<NpmCredential>
+        hideHeader
+        title="npm"
+        description=""
+        canManage={canManage}
+        modalTitle="New npm credential"
+        fields={FIELDS}
+        credentials={credentials}
+        onAdd={handleAdd}
+        onRemove={handleRemove}
+        renderCredential={(cred) => (
+          <>
+            <p className="text-sm font-medium text-text">{cred.registry}</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {cred.scopes ? `Scopes: ${cred.scopes}` : "All packages"}
+            </p>
+          </>
+        )}
+      />
+    </div>
   );
 }

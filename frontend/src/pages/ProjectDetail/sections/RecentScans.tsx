@@ -5,6 +5,7 @@ import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import EmptyState from "@/components/ui/EmptyState";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 
 interface Props {
   scans: Scan[];
@@ -60,8 +61,11 @@ export default function RecentScans({
 
   if (error) {
     return (
-      <div>
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <TabPanelHeader
+          title="Security"
+          description="Review scan history and findings for this project."
+        />
         <EmptyState
           compact
           title="Couldn't load scans"
@@ -74,8 +78,11 @@ export default function RecentScans({
 
   if (!scans.length) {
     return (
-      <div>
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <TabPanelHeader
+          title="Security"
+          description="Review scan history and findings for this project."
+        />
         <EmptyState
           compact
           description="No security scans have been run for this project yet."
@@ -95,8 +102,11 @@ export default function RecentScans({
   return (
     /* No min-h-0 anywhere in this chain: the card should fill spare panel height
        but never be squeezed below its own rows. */
-    <div className="flex min-w-0 flex-1 flex-col">
-      <h2 className="text-sm font-semibold text-text mb-4">Recent Security Scans</h2>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <TabPanelHeader
+        title="Security"
+        description="Review scan history and findings for this project."
+      />
       {/* Vertical-only card padding so hover bands and day rules reach the card edges. */}
       <div className={`${cardCls} flex-1 py-2`}>
       <ul className="min-w-0">

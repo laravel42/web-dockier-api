@@ -108,7 +108,7 @@ describe("rendered line", () => {
   it("renders deploy and infra as links to their tabs", () => {
     at(<DeployInfraStatus project={project()} deploys={[deploy()]} loaded />);
     expect(screen.getByRole("link", { name: /^Deployed/ })).toHaveAttribute("href", "/?tab=deployments");
-    expect(screen.getByRole("link", { name: "Running on ECS Fargate" })).toHaveAttribute("href", "/?tab=settings");
+    expect(screen.getByRole("link", { name: "Running on ECS Fargate" })).toHaveAttribute("href", "/?tab=settingsGeneral");
   });
 
   it("shows the failure, not a reassurance, when the deploy fetch failed", () => {

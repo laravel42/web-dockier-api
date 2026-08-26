@@ -121,10 +121,12 @@ export default function ScanDetail() {
             progress={core.scanProgress}
           />
         )}
+
         <EngineOutcomePanel
-          scanId={core.scanId}
+          scanId={core.scanId ?? ""}
           scanStatus={core.scan?.status ?? core.liveStatus}
         />
+
         <FindingsList
           findings={core.findings}
           findingsTotal={core.findingsTotal}

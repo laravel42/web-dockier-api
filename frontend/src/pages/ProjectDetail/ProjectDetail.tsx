@@ -136,6 +136,8 @@ export default function ProjectDetail() {
     .filter((d) => d.status === "success")
     .map((d) => resolveDeployUrl(d))
     .find(Boolean);
+  const deployedCommitHash =
+    recentDeploys.find((d) => d.status === "success" && d.commitHash)?.commitHash || undefined;
   const siteUrl = useProjectSiteUrl(
     project?.id,
     lastSuccessfulDeployUrl,
@@ -197,12 +199,14 @@ export default function ProjectDetail() {
       <ProjectDetailsCard
         project={project}
         deployUrl={lastSuccessfulDeployUrl}
+        deployedCommitHash={deployedCommitHash}
         stats={stats}
         statsLoading={statsLoading}
         statsError={statsError}
         badges={badges}
         allBadges={allBadges}
         nameByLogin={nameByLogin}
+        recentCommits={recentCommits}
       />
 
       <ProjectDescription
@@ -214,10 +218,10 @@ export default function ProjectDetail() {
         project={project}
         onProjectUpdate={setProject}
         activityPanel={
-          <div>
+          <div className="flex flex-col gap-6">
             <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
             {hasRepo && (
-              <div className="grid grid-cols-1 gap-4">
+              <>
                 <OpenIssues
                   issues={openIssues}
                   issuesLoading={issuesLoading}
@@ -230,7 +234,7 @@ export default function ProjectDetail() {
                   pullRequestsError={pullRequestsError}
                   onPRClick={setSelectedPR}
                 />
-              </div>
+              </>
             )}
           </div>
         }

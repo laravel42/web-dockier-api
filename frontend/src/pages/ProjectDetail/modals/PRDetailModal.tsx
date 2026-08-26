@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
+import MarkdownViewer from "@/components/MarkdownViewer";
+import { MarkdownBodyFrame, type MarkdownBodyView } from "@/components/MarkdownBodyFrame";
 import { timeAgo } from "@/utils/timeAgo";
 import type { RepoPullRequest } from "@/types";
 import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
@@ -22,11 +24,13 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
   const [reviewing, setReviewing] = useState(false);
   const [reviewResult, setReviewResult] = useState<GeneratedReview | null>(null);
   const [error, setError] = useState("");
+  const [bodyView, setBodyView] = useState<MarkdownBodyView>("preview");
 
   // Reset state when a different PR is selected
   useEffect(() => {
     setReviewResult(null);
     setError("");
+    setBodyView("preview");
   }, [pr?.number]);
 
   const handleReview = async () => {
@@ -72,11 +76,20 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
 
           {/* PR body / description */}
           {pr.body && (
-            <div className="rounded-lg border border-border/50 bg-secondary-50/30 p-3 max-h-40 overflow-y-auto">
-              <pre className="text-sm/relaxed text-text whitespace-pre-wrap wrap-break-word font-sans ">
-                {pr.body}
-              </pre>
-            </div>
+            <MarkdownBodyFrame
+              view={bodyView}
+              onViewChange={setBodyView}
+              className="max-h-80"
+              preview={<MarkdownViewer markdown={pr.body} />}
+              raw={
+                <textarea
+                  readOnly
+                  value={pr.body}
+                  aria-label="Pull request body (raw markdown)"
+                  className="block w-full min-h-[12rem] resize-none border-0 bg-transparent p-0 font-mono text-xs/relaxed text-text outline-none"
+                />
+              }
+            />
           )}
 
           {/* Meta info */}
@@ -136,18 +149,15 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
               choose which to post — comments appear publicly on this pull request, under
               your account, only after you confirm.
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2">
             <Button
               variant="primary"
+              className="h-8 border border-primary-foreground/20"
               onClick={handleReview}
               disabled={reviewing || !!reviewResult}
               loading={reviewing}
             >
               {reviewResult ? "Comments generated" : "Draft review with AI"}
-            </Button>
-            <div className="flex-1" />
-            <Button variant="outline" onClick={handleClose}>
-              Close
             </Button>
             </div>
           </div>

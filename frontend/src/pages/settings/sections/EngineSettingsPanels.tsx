@@ -511,19 +511,8 @@ export function CodeQLSettingsPanel() {
         ? form.languages.filter((l) => l !== id)
         : [...form.languages, id],
     );
+
   const allLanguageIds = LANGUAGES.map((l) => l.id);
-  return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-text">CodeQL</h3>
-          <p className="mt-1 max-w-prose text-sm text-text-muted">
-            Builds one database per detected language and runs a query suite over it. Thorough and
-            slow — a large repository can take tens of minutes per language.
-          </p>
-        </div>
-        <ToggleSwitch checked={form.enabled} onChange={(v) => set("enabled", v)} ariaLabel="Enable CodeQL" />
-      </div>
 
   return (
     <EnginePanelShell

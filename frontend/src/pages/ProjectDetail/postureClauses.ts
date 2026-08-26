@@ -75,11 +75,11 @@ export function infraClause(project: Project, deploys: readonly Deployment[]): C
   const strategy = strategyLabels[shipped?.deployStrategy ?? ""] ?? "infrastructure";
   switch (project.infraState) {
     case "live":
-      return { tab: "settings", text: `Running on ${strategy}`, tone: "good" };
+      return { tab: "settingsGeneral", text: `Running on ${strategy}`, tone: "good" };
     case "torn_down":
-      return { tab: "settings", text: "Infrastructure torn down", tone: "warning" };
+      return { tab: "settingsGeneral", text: "Infrastructure torn down", tone: "warning" };
     default:
-      return { tab: "settings", text: "No infrastructure", tone: "neutral" };
+      return { tab: "settingsGeneral", text: "No infrastructure", tone: "neutral" };
   }
 }
 

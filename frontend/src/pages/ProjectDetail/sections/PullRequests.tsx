@@ -3,6 +3,7 @@ import { cardCls } from "@/utils/styles";
 import { timeAgo } from "@/utils/timeAgo";
 import Spinner from "@/components/Spinner";
 import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
+import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
 
 interface Props {
   pullRequests: RepoPullRequest[];
@@ -14,32 +15,32 @@ interface Props {
 export default function PullRequests({ pullRequests, pullRequestsLoading, pullRequestsError, onPRClick }: Props) {
   if (pullRequestsLoading) {
     return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-3">Pull Requests</h2>
+      <section className="flex flex-col gap-3">
+        <TabPanelSectionTitle title="Pull Requests" />
         <div className={`${cardCls} p-6 flex justify-center`}>
           <Spinner className="size-5 " />
         </div>
-      </div>
+      </section>
     );
   }
 
   if (pullRequestsError) {
     return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-3">Pull Requests</h2>
+      <section className="flex flex-col gap-3">
+        <TabPanelSectionTitle title="Pull Requests" />
         <div className={`${cardCls} p-4`}>
           <p className="text-sm text-danger-500">{pullRequestsError}</p>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="mb-8">
-      <h2 className="text-sm font-semibold text-text mb-3">
-        Pull Requests
-        {pullRequests.length > 0 && <span className="ml-1.5 text-text-muted">({pullRequests.length})</span>}
-      </h2>
+    <section className="flex flex-col gap-3">
+      <TabPanelSectionTitle
+        title="Pull Requests"
+        suffix={pullRequests.length > 0 ? <span className="ml-1.5 text-text-muted">({pullRequests.length})</span> : undefined}
+      />
       {pullRequests.length === 0 ? (
         <div className={`${cardCls} p-4`}>
           <p className="text-sm text-text-muted">No open pull requests.</p>
@@ -70,6 +71,6 @@ export default function PullRequests({ pullRequests, pullRequestsLoading, pullRe
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -47,24 +47,25 @@ describe("Runtime cluster gating", () => {
   });
 
   it("never gates a non-Runtime tab", () => {
-    for (const key of ["overview", "security", "dependencies", "settings"]) {
+    for (const key of ["overview", "security", "dependencies", "settingsGeneral"]) {
       expect(isRuntimeTabVisible(key, []), key).toBe(true);
     }
   });
 });
 
 describe("alarm counts", () => {
-  it("counts errors and warnings, never infos", () => {
-    // 40 infos are not 40 things to do; totalFindings would claim 43.
-    expect(securityAlarm([scan(1, 2, 40, 43)])).toMatchObject({ count: 3, tone: "danger" });
+  it("counts errors only, never warnings/infos/totalFindings", () => {
+    // 40 infos + 2 warnings are not things the Security badge counts;
+    // totalFindings would claim 43.
+    expect(securityAlarm([scan(1, 2, 40, 43)])).toMatchObject({ count: 1, tone: "danger" });
   });
 
   it("shows no badge for an infos-only scan", () => {
     expect(securityAlarm([scan(0, 0, 12)])).toBeNull();
   });
 
-  it("drops to warning tone when nothing is an error", () => {
-    expect(securityAlarm([scan(0, 5, 0)])).toMatchObject({ count: 5, tone: "warning" });
+  it("shows no badge when there are only warnings", () => {
+    expect(securityAlarm([scan(0, 5, 0)])).toBeNull();
   });
 
   it("shows no badge on a clean scan, rather than a zero", () => {
@@ -77,8 +78,8 @@ describe("alarm counts", () => {
   });
 
   it("names what the number counts, for screen readers", () => {
-    expect(securityAlarm([scan(1, 0, 0)])?.label).toBe("1 finding needing attention");
-    expect(securityAlarm([scan(2, 0, 0)])?.label).toBe("2 findings needing attention");
+    expect(securityAlarm([scan(1, 0, 0)])?.label).toBe("1 error needing attention");
+    expect(securityAlarm([scan(2, 0, 0)])?.label).toBe("2 errors needing attention");
   });
 
   it("counts dependencies at risk, not the dependency total", () => {
@@ -109,7 +110,7 @@ describe("grouped tablist keyboard", () => {
     { key: "overview", cluster: "understand" },
     { key: "activity", cluster: "understand" },
     { key: "security", cluster: "risk" },
-    { key: "settings", cluster: "configure" },
+    { key: "settingsGeneral", cluster: "configure" },
   ] as const;
   const CLUSTERS = ["understand", "risk", "configure"] as const;
   const KEYS = TABS.map((t) => t.key);
@@ -163,7 +164,7 @@ describe("grouped tablist keyboard", () => {
     expect(screen.getByRole("tab", { selected: true })).toHaveAccessibleName("security");
 
     await user.keyboard("{End}"); // jumps to the last tab in the last group
-    expect(screen.getByRole("tab", { selected: true })).toHaveAccessibleName("settings");
+    expect(screen.getByRole("tab", { selected: true })).toHaveAccessibleName("settingsGeneral");
   });
 
   it("exposes exactly one tab stop across all groups", () => {
@@ -181,7 +182,7 @@ describe("grouped tablist keyboard", () => {
       "overview",
       "activity",
       "security",
-      "settings",
+      "settingsGeneral",
     ]);
   });
 });

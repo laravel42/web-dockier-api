@@ -3,6 +3,7 @@ import { cardCls } from "@/utils/styles";
 import { timeAgo } from "@/utils/timeAgo";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
+import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
 
 interface Props {
   commits: CommitInfo[];
@@ -41,40 +42,40 @@ function buildRows(commits: CommitInfo[]): TimelineRow[] {
 export default function RecentCommits({ commits, commitsLoading, commitsError }: Props) {
   if (commitsLoading) {
     return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
+      <section className="flex flex-col gap-3">
+        <TabPanelSectionTitle title="Recent Commits" />
         <div className={`${cardCls} p-6 flex justify-center`}>
           <Spinner className="size-5 " />
         </div>
-      </div>
+      </section>
     );
   }
 
   if (commitsError) {
     return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
+      <section className="flex flex-col gap-3">
+        <TabPanelSectionTitle title="Recent Commits" />
         <div className={`${cardCls} p-4`}>
           <p className="text-sm text-danger-500">{commitsError}</p>
         </div>
-      </div>
+      </section>
     );
   }
 
   if (!commits.length) {
     return (
-      <div className="mb-8">
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
+      <section className="flex flex-col gap-3">
+        <TabPanelSectionTitle title="Recent Commits" />
         <EmptyState compact description="No commits on this branch yet." />
-      </div>
+      </section>
     );
   }
 
   const rows = buildRows(commits);
 
   return (
-    <div className="mb-8">
-      <h2 className="text-sm font-semibold text-text mb-4">Recent Commits</h2>
+    <section className="flex flex-col gap-3">
+      <TabPanelSectionTitle title="Recent Commits" />
       <div className={`${cardCls} p-4`}>
         <ol className="relative">
           {rows.map((row, i) => {
@@ -148,6 +149,6 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
           })}
         </ol>
       </div>
-    </div>
+    </section>
   );
 }

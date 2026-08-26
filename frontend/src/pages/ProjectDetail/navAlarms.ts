@@ -34,20 +34,19 @@ export function isRuntimeTabVisible(key: string, deploys: readonly Deployment[] 
 }
 
 /**
- * Errors + warnings from the latest scan — never `totalFindings`. Forty infos are
- * not forty things to do, and a badge that counts them trains the eye to ignore it.
- * Returns null when there is nothing to act on, so a clean scan shows no badge
- * rather than a zero.
+ * Error findings from the latest scan — never `totalFindings` or infos.
+ * Warnings alone do not badge the Security tab. Returns null when there are
+ * no errors, so a clean (or warnings-only) scan shows no badge rather than a zero.
  */
 export function securityAlarm(scans: readonly Scan[] | undefined): Alarm | null {
   const summary = scans?.[0]?.summary;
   if (!summary) return null;
-  const count = summary.errors + summary.warnings;
+  const count = summary.errors;
   if (count <= 0) return null;
   return {
     count,
-    tone: summary.errors > 0 ? "danger" : "warning",
-    label: `${count} finding${count === 1 ? "" : "s"} needing attention`,
+    tone: "danger",
+    label: `${count} error${count === 1 ? "" : "s"} needing attention`,
   };
 }
 

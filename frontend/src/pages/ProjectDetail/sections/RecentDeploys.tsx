@@ -6,6 +6,7 @@ import { getProviderStyle } from "@/data/providers";
 import ProviderBadge from "@/components/ProviderBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 
 interface Props {
   deploys: DeployInfo[];
@@ -74,8 +75,11 @@ export default function RecentDeploys({
   // because the network dropped tells the user something false about their project.
   if (error) {
     return (
-      <div>
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <TabPanelHeader
+          title="Deployments"
+          description="Deploy history and status for this project."
+        />
         <EmptyState
           compact
           title="Couldn't load deploys"
@@ -88,8 +92,11 @@ export default function RecentDeploys({
 
   if (!deploys.length) {
     return (
-      <div>
-        <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <TabPanelHeader
+          title="Deployments"
+          description="Deploy history and status for this project."
+        />
         <EmptyState
           compact
           description="This project hasn't been deployed yet. Deploying ships the current branch."
@@ -105,8 +112,11 @@ export default function RecentDeploys({
   return (
     /* No min-h-0 anywhere in this chain: the card should fill spare panel height
        but never be squeezed below its own rows. */
-    <div className="flex min-w-0 flex-1 flex-col">
-      <h2 className="text-sm font-semibold text-text mb-4">Recent Deploys</h2>
+    <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <TabPanelHeader
+        title="Deployments"
+        description="Deploy history and status for this project."
+      />
       {/* Vertical-only card padding so hover bands and day rules reach the card edges. */}
       <div className={`${cardCls} flex-1 py-2`}>
       <ul className="min-w-0">

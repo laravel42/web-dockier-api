@@ -1,0 +1,80 @@
+/* Milkdown Crepe overrides — imported last from index.css so they win the
+   cascade over Crepe's theme (which sets ProseMirror padding: 60px 120px).
+   That 60px top pad is what made spacing appear to come and go as styles and
+   the editor finished loading. */
+
+.milkdown-viewer {
+  width: 100%;
+  min-width: 0;
+}
+
+.milkdown-viewer .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--color-text);
+  --crepe-color-surface: var(--color-card);
+  --crepe-color-surface-low: var(--color-secondary-50);
+  --crepe-color-on-surface: var(--color-text);
+  --crepe-color-on-surface-variant: var(--color-text-muted);
+  --crepe-color-outline: var(--color-border);
+  --crepe-color-primary: var(--color-primary);
+  --crepe-color-secondary: var(--color-secondary-100);
+  --crepe-color-on-secondary: var(--color-text);
+  --crepe-color-inverse: var(--color-text);
+  --crepe-color-on-inverse: var(--color-background);
+  --crepe-color-inline-code: var(--color-primary);
+  --crepe-color-error: var(--color-danger-500);
+  --crepe-color-hover: var(--color-card);
+  --crepe-color-selected: var(--color-secondary-50);
+  --crepe-color-inline-area: var(--color-secondary-50);
+
+  --crepe-base-font-size: 0.875rem;
+  --crepe-font-title: var(--font-family);
+  --crepe-font-default: var(--font-family);
+  --crepe-font-code: var(--font-family);
+
+  --crepe-shadow-1: none;
+  --crepe-shadow-2: none;
+
+  width: 100% !important;
+  max-width: 100% !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.milkdown-viewer [data-milkdown-root],
+.milkdown-viewer .milkdown,
+.milkdown-viewer .milkdown .ProseMirror {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+}
+
+/*
+  Crepe headings carry 16–32px margin-top. A leading empty <p> (common when the
+  source starts with a blank line or the parser inserts a trailing-break node)
+  steals :first-child, so the visible h2 still got its full top margin — that
+  gap appeared only after create() resolved.
+*/
+.milkdown-viewer .milkdown .ProseMirror > p:first-child:empty,
+.milkdown-viewer .milkdown .ProseMirror > p:first-child:has(> br.ProseMirror-trailingBreak:only-child) {
+  display: none !important;
+}
+
+.milkdown-viewer .milkdown .ProseMirror > :first-child,
+.milkdown-viewer .milkdown .ProseMirror > p:first-child:empty + *,
+.milkdown-viewer .milkdown .ProseMirror > p:first-child:has(> br.ProseMirror-trailingBreak:only-child) + *,
+.milkdown-viewer .milkdown .ProseMirror > h1:first-of-type,
+.milkdown-viewer .milkdown .ProseMirror > h2:first-of-type,
+.milkdown-viewer .milkdown .ProseMirror > h3:first-of-type,
+.milkdown-viewer .milkdown .ProseMirror > p:first-of-type {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.milkdown-viewer .milkdown .ProseMirror-focused {
+  outline: none !important;
+}

@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
 import { useUrlSection } from "@/hooks/useUrlSection";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 
 interface Props {
@@ -925,7 +926,11 @@ export default function ProjectProcessesTab({ project }: Props) {
     }`;
 
   return (
-    <div className="flex min-h-0 flex-col gap-4 pr-1">
+    <div className="flex min-h-0 flex-col gap-6 pr-1">
+      <TabPanelHeader
+        title="Processes"
+        description="Manage background workers and scheduled jobs on your deployed server."
+      />
       {/* Sub-tab nav as a topbar */}
       <div
         className="-mx-1 flex shrink-0 items-stretch gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1 pb-2 scrollbar-hide"

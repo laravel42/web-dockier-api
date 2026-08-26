@@ -55,6 +55,8 @@ export interface CredentialSectionProps<T extends Credential> {
   onRemove: (id: string) => void;
   /** Render the display content for a credential row. */
   renderCredential: (credential: T) => React.ReactNode;
+  /** When true, omit the page header (caller provides TabPanelHeader). */
+  hideHeader?: boolean;
 }
 
 // ─── Component ───
@@ -71,6 +73,7 @@ export default function CredentialSection<T extends Credential>({
   onAdd,
   onRemove,
   renderCredential,
+  hideHeader = false,
 }: CredentialSectionProps<T>) {
   const fid = useId();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -113,12 +116,14 @@ export default function CredentialSection<T extends Credential>({
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionTitle
-        title={title}
-        description={description}
-        linkText={linkText}
-        linkHref={linkHref}
-      />
+      {!hideHeader && (
+        <SectionTitle
+          title={title}
+          description={description}
+          linkText={linkText}
+          linkHref={linkHref}
+        />
+      )}
 
       <SettingsCard padded>
         {credentials.length === 0 ? (

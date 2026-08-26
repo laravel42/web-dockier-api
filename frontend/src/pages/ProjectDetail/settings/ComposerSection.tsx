@@ -1,5 +1,6 @@
 import { useState } from "react";
 import CredentialSection, { type Credential, type CredentialFieldConfig } from "./CredentialSection";
+import { SectionTitle } from "./shared";
 
 interface ComposerCredential extends Credential {
   repository: string;
@@ -31,23 +32,30 @@ export default function ComposerSection({ canManage }: Props) {
   };
 
   return (
-    <CredentialSection<ComposerCredential>
-      title="Composer package authentication"
-      description="Dockier allows you to manage the http-basic portion of your site's auth.json Composer configuration file. The file is loaded on-demand from the server and no credential data is stored by Dockier."
-      linkText="Learn more"
-      linkHref="#"
-      canManage={canManage}
-      modalTitle="New Composer credential"
-      fields={FIELDS}
-      credentials={credentials}
-      onAdd={handleAdd}
-      onRemove={handleRemove}
-      renderCredential={(cred) => (
-        <>
-          <p className="text-sm font-medium text-text">{cred.repository}</p>
-          <p className="text-xs text-text-muted mt-0.5">{cred.username}</p>
-        </>
-      )}
-    />
+    <div className="flex flex-col gap-6">
+      <SectionTitle
+        title="Composer"
+        description="Manage http-basic credentials for private Composer repositories. Dockier loads auth.json on demand and does not store credential data."
+        linkText="Learn more"
+        linkHref="#"
+      />
+      <CredentialSection<ComposerCredential>
+        hideHeader
+        title="Composer"
+        description=""
+        canManage={canManage}
+        modalTitle="New Composer credential"
+        fields={FIELDS}
+        credentials={credentials}
+        onAdd={handleAdd}
+        onRemove={handleRemove}
+        renderCredential={(cred) => (
+          <>
+            <p className="text-sm font-medium text-text">{cred.repository}</p>
+            <p className="text-xs text-text-muted mt-0.5">{cred.username}</p>
+          </>
+        )}
+      />
+    </div>
   );
 }

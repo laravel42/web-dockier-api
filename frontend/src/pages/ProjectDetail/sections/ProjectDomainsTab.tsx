@@ -13,6 +13,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
+import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 
 interface Props {
@@ -766,21 +767,13 @@ export default function ProjectDomainsTab({ project }: Props) {
   return (
     <div className="space-y-6 overflow-y-auto pr-1">
       {/* Header with actions */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-text">Domains</h2>
-          <p className="text-xs text-text-muted mt-0.5">
-            Manage your site's domains and SSL certificates.{" "}
-            <a
-              href="https://docs.dockier.dev/domains"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary-500 hover:text-primary-400 transition-colors"
-            >
-              Learn more
-            </a>
-          </p>
-        </div>
+      <div className="flex items-start justify-between gap-4">
+        <TabPanelHeader
+          title="Domains"
+          description="Manage your site's domains and SSL certificates."
+          linkText="Learn more"
+          linkHref="https://docs.dockier.dev/domains"
+        />
         {canManage && (
           <div className="flex items-center gap-2">
             <Button
