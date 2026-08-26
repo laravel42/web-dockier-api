@@ -1,11 +1,10 @@
-import { CloudIcon, CogIcon, SearchIcon, ClipboardListIcon, FileTextIcon, RocketIcon } from "lucide-react";
+import { CloudIcon, SearchIcon, ClipboardListIcon, FileTextIcon, RocketIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 export type StepDef = { label: string; icon: ComponentType<SVGProps<SVGSVGElement>> };
 
 export const STEPS: StepDef[] = [
   { label: "Provider", icon: CloudIcon },
-  { label: "Service", icon: CogIcon },
   { label: "Analysis", icon: SearchIcon },
   { label: "Plan", icon: ClipboardListIcon },
   { label: "Build", icon: FileTextIcon },
@@ -16,21 +15,17 @@ export const STEPS: StepDef[] = [
  * Provider metadata for the deploy wizard.
  * To add a new provider, add its entry here with name, icon, color, and available services.
  */
-export const PROVIDER_META: Record<string, { name: string; icon: string; color: string; services: Array<{ type: "vps" | "managed" | "static"; label: string; name: string; description: string }> }> = {
+export const PROVIDER_META: Record<string, { name: string; icon: string; color: string; services: Array<{ type: "vps"; label: string; name: string; description: string }> }> = {
   aws: {
     name: "AWS", icon: "amazonaws", color: "bg-orange-500",
     services: [
-      { type: "managed", label: "Managed", name: "ECS Fargate", description: "Serverless containers — no servers to manage, auto-scaling included" },
       { type: "vps", label: "VPS", name: "EC2 Instance", description: "Full control over a virtual machine with Docker" },
-      { type: "static", label: "Free", name: "S3 + CloudFront", description: "Static website hosting with global CDN" },
     ],
   },
   gcp: {
     name: "Google Cloud", icon: "googlecloud", color: "bg-blue-500",
     services: [
-      { type: "managed", label: "Managed", name: "Cloud Run", description: "Serverless containers — auto-scaling, pay per request" },
       { type: "vps", label: "VPS", name: "Compute Engine", description: "Full control over a virtual machine with Docker" },
-      { type: "static", label: "Free", name: "Cloud Storage + CDN", description: "Static website hosting with global CDN" },
     ],
   },
 };

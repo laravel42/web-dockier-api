@@ -5,7 +5,6 @@ import Modal from "../Modal";
 import Button from "../ui/Button";
 import Stepper from "./steps/Stepper";
 import StepProvider from "./steps/StepProvider";
-import StepService from "./steps/StepService";
 import StepAnalysis from "./steps/StepAnalysis";
 import StepEnvironment from "./steps/StepEnvironment";
 import StepCompose from "./steps/StepCompose";
@@ -30,7 +29,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     <Modal
       open={open}
       onClose={() => { if (!isDeploying) onClose(); }}
-      title={step === 5 ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
+      title={step === 4 ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
       size="xl"
     >
       <Stepper current={step} steps={STEPS} />
@@ -49,14 +48,6 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           />
         )}
         {step === 1 && (
-          <StepService
-            state={state}
-            templateId={project.sourceType === "template" ? project.template : undefined}
-            analysis={analysis}
-            onChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}
-          />
-        )}
-        {step === 2 && (
           <StepAnalysis
             state={state}
             analysis={analysis}
@@ -73,7 +64,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             }}
           />
         )}
-        {step === 3 && (
+        {step === 2 && (
           <StepEnvironment
             state={state}
             templateId={project.sourceType === "template" ? project.template : undefined}
@@ -81,7 +72,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
           />
         )}
-        {step === 4 && (
+        {step === 3 && (
           <StepCompose
             state={state}
             loading={tofuLoading}
@@ -105,18 +96,18 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             }}
           />
         )}
-        {step === 5 && <StepDeploy state={state} />}
+        {step === 4 && <StepDeploy state={state} />}
       </div>
 
       {/* Errors */}
-      {deployError && step === 5 && (
+      {deployError && step === 4 && (
         <div className="mt-3 rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{deployError}</div>
       )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
         <div>
-          {step > 0 && step < 6 && !isDeploying && (
+          {step > 0 && step < 5 && !isDeploying && (
             <Button
               variant="outline"
               size="lg"
@@ -139,12 +130,12 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               {cancellingDeploy ? "Cancelling…" : "Cancel Deploy"}
             </button>
           )}
-          {step === 6 && isFinished && (
+          {step === 5 && isFinished && (
             <Button variant="outline" size="lg" onClick={onClose}>
               Close
             </Button>
           )}
-          {step === 6 && state.deployStatus === "failed" && (
+          {step === 5 && state.deployStatus === "failed" && (
             <Button
               variant="primary"
               size="lg"
@@ -154,15 +145,15 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               Retry
             </Button>
           )}
-          {step < 6 && !isDeploying && (
+          {step < 5 && !isDeploying && (
               <Button
                 variant="primary"
                 size="lg"
                 onClick={handleNext}
                 disabled={!canNext()}
-                loading={step === 5 && tofuLoading}
+                loading={step === 4 && tofuLoading}
               >
-                {step === 5 ? (
+                {step === 4 ? (
                   tofuLoading ? (
                     "Preparing deploy script…"
                   ) : !state.tofuScript ? (

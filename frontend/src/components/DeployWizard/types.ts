@@ -108,18 +108,18 @@ export interface WizardState {
   // Step 1
   selectedProvider: string;
   selectedProviderId: string;
-  // Step 2
-  deployStrategy: "vps" | "managed" | "static";
-  // Step 3 (Env Vars)
+  // Deploy strategy (always VPS — EC2 for AWS, Compute Engine for GCP)
+  deployStrategy: "vps";
+  // Env Vars
   envVars: Array<{ name: string; value: string }>;
-  // Step 4 (Analysis)
+  // Analysis
   servicesModes: Record<string, "vps" | "managed">;
   envDetectionHints: Record<string, string>;
   manualServiceOverrides: string[];
-  // Step 5 (Plan)
+  // Plan
   environment: "staging" | "production";
   selectedPlan: number;
-  // Step 6 (Config)
+  // Config
   tofuScript: string;
   tofuResources: string[];
   tofuAppName: string;
@@ -130,7 +130,7 @@ export interface WizardState {
   buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   /** Pre-deploy Dockerfile preview + AI review result (null until fetched). */
   dockerfilePreview: DockerfilePreviewResult | null;
-  // Step 7 (Deploy)
+  // Deploy
   deploymentId: string;
   deployStatus: "" | "pending" | "building" | "deploying" | "success" | "failed" | "destroyed" | "cancelled";
   deployLogs: string[];

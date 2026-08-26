@@ -23,8 +23,8 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
 }) {
   return (
     <div className="space-y-4">
-      {/* Docker toggle — hidden for template projects and static deploys (no container needed) */}
-      {!isTemplate && state.deployStrategy !== "static" && (
+      {/* Docker toggle — hidden for template projects */}
+      {!isTemplate && (
       <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface">
         <div className="flex items-center gap-2">
           <DockerIcon className="size-5  text-primary-500" />
@@ -42,7 +42,7 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
       )}
 
       {/* Dockerfile source — only when repo includes one and container build is enabled */}
-      {!isTemplate && hasRepoDockerfile && state.deployStrategy !== "static" && state.useDocker && (
+      {!isTemplate && hasRepoDockerfile && state.useDocker && (
         <div>
           <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Dockerfile Source</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -84,8 +84,8 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
         </div>
       )}
 
-      {/* Build method selector for non-static deploys */}
-      {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (() => {
+      {/* Build method selector */}
+      {!isTemplate && state.useDocker && (() => {
         const isAws = state.selectedProvider === "aws";
         const methods: Array<{ id: "dockerfile" | "railpack" | "nixpacks" | "codebuild"; label: string; desc: string; icon: React.ReactNode; awsOnly?: boolean }> = [
           { id: "dockerfile", label: "Auto-generate", desc: "Dockier writes and auto-fixes the Dockerfile on build failure", icon: <DockerfileIcon className="size-4  text-primary-500" /> },
@@ -121,34 +121,6 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
         );
       })()}
 
-      {/* Optional CodeBuild for AWS static deploys — build remotely instead of locally */}
-      {!isTemplate && state.deployStrategy === "static" && state.selectedProvider === "aws" && (
-        <div>
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Build Method <span className="text-text-muted font-normal normal-case">(optional)</span></p>
-          <p className="text-xs text-text-secondary mb-2">
-            By default the static site is built locally. You can optionally use AWS CodeBuild to build remotely instead.
-          </p>
-          <button
-            type="button"
-            onClick={() => onBuildMethodChange(state.buildMethod === "codebuild" ? "dockerfile" : "codebuild")}
-            className={`w-full p-3 rounded-lg border text-left transition-all ${
-              state.buildMethod === "codebuild"
-                ? "border-primary-500 bg-primary-50 ring-1 ring-primary-500/30"
-                : "border-border bg-surface hover:border-primary-500/30"
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <CodeBuildIcon className="size-4  text-caution-ink" />
-              <span className="text-sm font-medium text-text">CodeBuild</span>
-              {state.buildMethod === "codebuild" && (
-                <span className="ml-auto text-xs text-primary-500 font-medium">Active</span>
-              )}
-            </div>
-            <p className="text-xs text-text-muted">AWS CodeBuild builds your site remotely — no local build needed</p>
-          </button>
-        </div>
-      )}
-
       {/* Resources */}
       {state.tofuResources.length > 0 && (
         <div>
@@ -162,7 +134,7 @@ export default function StepCompose({ state, loading, error, hasRepoDockerfile, 
       )}
 
       {/* Dockerfile preview + AI review — only for Dockier-generated container builds */}
-      {!isTemplate && state.deployStrategy !== "static" && state.useDocker && (
+      {!isTemplate && state.useDocker && (
         <DockerfilePreviewPanel
           preview={state.dockerfilePreview}
           loading={!!previewLoading}

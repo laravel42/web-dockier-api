@@ -165,7 +165,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     setTofuError("");
     try {
       const repo = getRepoString(project.repository);
-      const plans = getPlans(s.selectedProvider, s.environment, s.servicesModes, s.deployStrategy, project.sourceType === "template" ? project.template : undefined);
+      const plans = getPlans(s.selectedProvider, s.environment, s.servicesModes, project.sourceType === "template" ? project.template : undefined);
       const selectedPlan = plans[s.selectedPlan] || plans[1] || plans[0];
 
       const res = await deployApi.generateTofu({
@@ -209,7 +209,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
   const generatePreview = useCallback(async () => {
     // Only meaningful for Dockier-generated container builds.
-    if (!state.useDocker || state.useRepoDockerfile || state.deployStrategy === "static") return;
+    if (!state.useDocker || state.useRepoDockerfile) return;
     if (!project.connectionId) return;
 
     const repo = getRepoString(project.repository);
@@ -235,15 +235,15 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     } finally {
       setPreviewLoading(false);
     }
-  }, [state.useDocker, state.useRepoDockerfile, state.deployStrategy, project]);
+  }, [state.useDocker, state.useRepoDockerfile, project]);
 
   // Trigger the preview when the user is on the Build step with a
   // Dockier-generated container build. The key guard prevents refetch loops.
   useEffect(() => {
-    if (!open || step !== 4) return;
-    if (!state.useDocker || state.useRepoDockerfile || state.deployStrategy === "static") return;
+    if (!open || step !== 3) return;
+    if (!state.useDocker || state.useRepoDockerfile) return;
     void generatePreview();
-  }, [open, step, state.useDocker, state.useRepoDockerfile, state.deployStrategy, generatePreview]);
+  }, [open, step, state.useDocker, state.useRepoDockerfile, generatePreview]);
 
   // ─── Start Deployment ────────────────────────────────────────────
 
@@ -290,32 +290,31 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const canNext = (): boolean => {
     switch (step) {
       case 0: return !!state.selectedProvider && !!state.selectedProviderId;
-      case 1: return !!state.deployStrategy;
-      case 2: return !analysisLoading;
-      case 3: return state.selectedPlan >= 0;
-      case 4: return !tofuLoading;
+      case 1: return !analysisLoading;
+      case 2: return state.selectedPlan >= 0;
+      case 3: return !tofuLoading;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (step === 4) {
+    if (step === 3) {
       if (tofuLoading) return;
       if (!state.tofuScript) {
         await generateScript();
         return;
       }
-      setStep(5);
+      setStep(4);
       startDeploy();
       return;
     }
-    if (step === 3) {
-      setStep(4);
+    if (step === 2) {
+      setStep(3);
       if (!state.tofuScript) void generateScript();
       return;
     }
-    if (step === 1) {
-      // After service selection, detect service modes from analysis
+    if (step === 0) {
+      // After provider selection, detect service modes from analysis
       const serviceTypes = analysis?.detectedServices?.map(s => s.type) || [];
       if (serviceTypes.length > 0) {
         const detection = detectServiceModes(state.envVars, serviceTypes);
@@ -331,14 +330,14 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
           return { ...prev, servicesModes: newModes, envDetectionHints: newHints };
         });
       }
-      setStep(2);
+      setStep(1);
       return;
     }
-    setStep(prev => Math.min(prev + 1, 5));
+    setStep(prev => Math.min(prev + 1, 4));
   };
 
   const handleBack = () => {
-    if (step === 5) return;
+    if (step === 4) return;
     setStep(prev => Math.max(prev - 1, 0));
   };
 

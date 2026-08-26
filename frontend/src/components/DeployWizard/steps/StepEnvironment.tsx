@@ -9,7 +9,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
   onChange: (env: "staging" | "production", plan: number) => void;
   onRegionChange: (region: string) => void;
 }) {
-  const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, state.deployStrategy, templateId);
+  const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, templateId);
   const regions = PROVIDER_REGIONS[state.selectedProvider] || [];
 
   return (
@@ -23,7 +23,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
               key={env}
               type="button"
               onClick={() => {
-                const newPlans = getPlans(state.selectedProvider, env, state.servicesModes, state.deployStrategy, templateId);
+                const newPlans = getPlans(state.selectedProvider, env, state.servicesModes, templateId);
                 // Default to Standard plan (index 0 if Starter is filtered, index 1 otherwise)
                 const standardIdx = newPlans.findIndex(p => p.tier === "balanced");
                 onChange(env, standardIdx >= 0 ? standardIdx : 0);
