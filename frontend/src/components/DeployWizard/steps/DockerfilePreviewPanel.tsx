@@ -58,9 +58,11 @@ export default function DockerfilePreviewPanel({ preview, loading, error, useRep
 
   if (!preview) return null;
 
+  // The deploy reuses this exact review rather than re-running it, so the
+  // preview is binding for the previewed commit. A new commit is re-analyzed.
   const footnote = (
     <p className="mt-2 text-[11px] text-text-muted">
-      Preview of the current branch — the deploy regenerates the Dockerfile against the commit it builds.
+      This is the Dockerfile your deploy will build. If new commits land on the branch first, Dockier re-analyzes them.
     </p>
   );
 
