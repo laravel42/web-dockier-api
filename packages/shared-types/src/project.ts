@@ -37,6 +37,10 @@ export interface ProjectSettings {
   webDirectory?: string;
   /** Custom deploy/build script override. */
   deployScript?: string;
+  /** Whether to ping a URL after deployment to verify availability. */
+  healthCheckEnabled?: boolean;
+  /** URL to ping after deployment completes. */
+  healthCheckUrl?: string;
   /** Extensible — additional settings added by integrations or plugins. */
   [key: string]: unknown;
 }

@@ -88,6 +88,8 @@ export async function stageLoadProjectContext(ctx: PipelineContext): Promise<voi
   ctx.envVars = result.envVars;
   ctx.deployScript = result.deployScript;
   ctx.knownPlatform = result.knownPlatform;
+  ctx.healthCheckEnabled = result.healthCheckEnabled;
+  ctx.healthCheckUrl = result.healthCheckUrl;
 }
 
 // ─── Stage 4: Analyze & Generate Dockerfile ─────────────────────────
@@ -243,7 +245,55 @@ export async function stageFinalize(ctx: PipelineContext): Promise<void> {
   });
 }
 
-// ─── Stage 10: Restore Processes ────────────────────────────────────
+// ─── Stage 10: Health Check ─────────────────────────────────────────
+
+const HEALTH_CHECK_TIMEOUT_MS = 10_000;
+const HEALTH_CHECK_RETRIES = 3;
+const HEALTH_CHECK_RETRY_DELAY_MS = 2_000;
+
+export async function stageHealthCheck(ctx: PipelineContext): Promise<void> {
+  if (!ctx.healthCheckEnabled || !ctx.healthCheckUrl) return;
+
+  await ctx.logger.info(`Running health check: ${ctx.healthCheckUrl}`);
+
+  for (let attempt = 1; attempt <= HEALTH_CHECK_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+
+      const response = await fetch(ctx.healthCheckUrl, {
+        method: "GET",
+        signal: controller.signal,
+        redirect: "follow",
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        await ctx.logger.success(`Health check passed (status ${response.status})`);
+        return;
+      }
+
+      await ctx.logger.warn(
+        `Health check attempt ${attempt}/${HEALTH_CHECK_RETRIES} failed (status ${response.status})`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.logger.warn(
+        `Health check attempt ${attempt}/${HEALTH_CHECK_RETRIES} failed: ${msg}`,
+      );
+    }
+
+    if (attempt < HEALTH_CHECK_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, HEALTH_CHECK_RETRY_DELAY_MS));
+    }
+  }
+
+  await ctx.logger.warn(
+    `Health check failed after ${HEALTH_CHECK_RETRIES} attempts — deployment proceeded but the URL may be unreachable`,
+  );
+}
+
+// ─── Stage 11: Restore Processes ────────────────────────────────────
 
 export async function stageRestoreProcesses(ctx: PipelineContext): Promise<void> {
   if (!ctx.event.projectId) return;

@@ -9,6 +9,7 @@ import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
 import SettingsCard from "./SettingsCard";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
+import { Input } from "@/components/ui/input";
 
 interface Props {
   project: Project;
@@ -42,6 +43,30 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
 
   const apiBase = import.meta.env.VITE_API_BASE || window.location.origin;
   const deployHookUrl = `${apiBase}/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;
+
+  // Health checks
+  const [healthCheckEnabled, toggleHealthCheck] = useOptimisticToggle(
+    (project.settings?.healthCheckEnabled as boolean) ?? false,
+    async (enabled) => {
+      const updated = await projectsApi.update(project.id, { settings: { healthCheckEnabled: enabled } });
+      onProjectUpdate?.(updated);
+    },
+    { errorFallback: "Failed to update health check setting" },
+  );
+
+  const [healthCheckUrl, setHealthCheckUrl] = useState(
+    (project.settings?.healthCheckUrl as string) ?? "",
+  );
+  const originalHealthCheckUrl = (project.settings?.healthCheckUrl as string) ?? "";
+  const hasHealthCheckUrlChanges = healthCheckUrl !== originalHealthCheckUrl;
+
+  const { saving: savingHealthCheck, saved: savedHealthCheck, save: handleSaveHealthCheckUrl } = useSaveAction(
+    async () => {
+      const updated = await projectsApi.update(project.id, { settings: { healthCheckUrl } });
+      onProjectUpdate?.(updated);
+    },
+    { errorFallback: "Failed to save health check URL" },
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -86,18 +111,9 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
         />
 
         <div className="mt-3 flex items-center justify-between">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={false}
-              disabled
-              className="size-3.5 rounded border-border accent-primary-500"
-            />
-            <span className="text-xs text-text-muted">
-              Make <code className="rounded border border-border/50 bg-background px-1 py-0.5 text-xs font-mono">.env</code> variables available to deployment script
-            </span>
-            <span className="text-xs font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
-          </label>
+          <p className="text-xs text-text-muted">
+            <code className="rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs font-mono">.env</code> variables are automatically available in your deployment script.
+          </p>
           {canManage && hasScriptChanges && (
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={() => setDeployScript(originalScript)}>
@@ -128,13 +144,35 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
         <SettingsRow
           label="Health checks"
           description="After deploying, Dockier will ping a URL in your application to ensure it is still available."
-          border={false}
+          border={healthCheckEnabled}
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-text-muted/70 bg-secondary-50 border border-border/50 rounded px-1.5 py-0.5">Coming soon</span>
-            <ToggleSwitch checked={false} onChange={() => {}} disabled />
-          </div>
+          <ToggleSwitch checked={healthCheckEnabled} onChange={toggleHealthCheck} disabled={!canManage} />
         </SettingsRow>
+        {healthCheckEnabled && (
+          <div className="border-t border-border px-4 py-3">
+            <p className="text-xs font-medium text-text-muted mb-1.5">Health check URL</p>
+            <p className="text-xs text-text-muted mb-2">
+              The URL that will be pinged after a deployment is finished.
+            </p>
+            <Input
+              value={healthCheckUrl}
+              onChange={(e) => setHealthCheckUrl(e.target.value)}
+              placeholder="https://your-app.example.com"
+              disabled={!canManage}
+            />
+            {canManage && hasHealthCheckUrlChanges && (
+              <div className="mt-3 flex items-center justify-end gap-3">
+                <Button variant="ghost" size="sm" onClick={() => setHealthCheckUrl(originalHealthCheckUrl)}>
+                  Reset
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => void handleSaveHealthCheckUrl()} loading={savingHealthCheck}>
+                  Save
+                </Button>
+                {savedHealthCheck && <span className="text-xs text-success-500 font-medium">Saved</span>}
+              </div>
+            )}
+          </div>
+        )}
       </SettingsCard>
 
       {/* Keys */}

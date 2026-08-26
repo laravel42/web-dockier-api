@@ -35,6 +35,7 @@ import {
   stagePostDeploy,
   stageNetworkRules,
   stageFinalize,
+  stageHealthCheck,
   stageRestoreProcesses,
   stageTemplateInit,
   stageTemplatePull,
@@ -111,6 +112,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await stagePostDeploy(ctx);
     await stageNetworkRules(ctx);
     await stageFinalize(ctx);
+    await stageHealthCheck(ctx);
     await stageRestoreProcesses(ctx);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);

@@ -12,6 +12,8 @@ import { logger } from "../logger.js";
 export interface ProjectDeployConfig {
   platform: string;
   deployScript: string;
+  healthCheckEnabled: boolean;
+  healthCheckUrl: string;
 }
 
 /**
@@ -43,12 +45,19 @@ export async function getProjectDeployConfig(projectId: string): Promise<Project
   if (!data) return null;
 
   let deployScript = "";
+  let healthCheckEnabled = false;
+  let healthCheckUrl = "";
   if (data.settings && typeof data.settings === "object" && !Array.isArray(data.settings)) {
-    deployScript = (data.settings as Record<string, unknown>).deployScript as string ?? "";
+    const settings = data.settings as Record<string, unknown>;
+    deployScript = settings.deployScript as string ?? "";
+    healthCheckEnabled = settings.healthCheckEnabled === true;
+    healthCheckUrl = settings.healthCheckUrl as string ?? "";
   }
 
   return {
     platform: (data.platform as string) || "",
     deployScript,
+    healthCheckEnabled,
+    healthCheckUrl,
   };
 }

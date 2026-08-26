@@ -13,6 +13,8 @@ export const projectSettingsSchema = z.object({
   webDirectory: z.string().max(500).optional(),
   deployScript: z.string().max(50_000).optional(),
   pushToDeploy: z.boolean().optional(),
+  healthCheckEnabled: z.boolean().optional(),
+  healthCheckUrl: z.string().url().max(500).optional(),
 }).passthrough();
 
 export const infraStateSchema = z.enum(["none", "live", "torn_down"]);

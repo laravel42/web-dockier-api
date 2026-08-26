@@ -47,6 +47,8 @@ export class PipelineContext {
   envVars: Array<{ name: string; value: string }> = [];
   deployScript = "";
   knownPlatform = "";
+  healthCheckEnabled = false;
+  healthCheckUrl = "";
 
   // ─── Stage 4: Analyze ─────────────────────────────────────────
   repoConfig!: RepoConfig;

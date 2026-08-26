@@ -61,6 +61,8 @@ export interface ProjectContext {
   envVars: Array<{ name: string; value: string }>;
   deployScript: string;
   knownPlatform: string;
+  healthCheckEnabled: boolean;
+  healthCheckUrl: string;
 }
 
 export interface ProviderResult {
@@ -78,10 +80,12 @@ export async function loadProjectContext(
   let envVars: Array<{ name: string; value: string }> = [];
   let deployScript = "";
   let knownPlatform = "";
+  let healthCheckEnabled = false;
+  let healthCheckUrl = "";
 
   if (!event.projectId || !event.tenantId) {
     await logger.info("No projectId/tenantId — skipping env/script fetch");
-    return { envVars, deployScript, knownPlatform };
+    return { envVars, deployScript, knownPlatform, healthCheckEnabled, healthCheckUrl };
   }
 
   // Load env vars
@@ -104,6 +108,8 @@ export async function loadProjectContext(
     if (projectConfig) {
       deployScript = projectConfig.deployScript;
       knownPlatform = projectConfig.platform;
+      healthCheckEnabled = projectConfig.healthCheckEnabled;
+      healthCheckUrl = projectConfig.healthCheckUrl;
     }
     if (deployScript) {
       await logger.info("Deploy script loaded from project settings");
@@ -112,7 +118,7 @@ export async function loadProjectContext(
     obsLogger.warn({ err: settingsErr, projectId: event.projectId }, "[deploy] Failed to load project settings");
   }
 
-  return { envVars, deployScript, knownPlatform };
+  return { envVars, deployScript, knownPlatform, healthCheckEnabled, healthCheckUrl };
 }
 
 // ─── Stage 6: Build Adapter Context ───────────────────────────────
