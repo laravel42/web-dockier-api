@@ -79,6 +79,9 @@ export async function previewDockerfile(input: PreviewDockerfileInput): Promise<
       logger,
       knownPlatform,
       skipExistingDockerfile: !!useRepoDockerfile,
+      // Seeds the review cache so the deploy that follows reuses this exact
+      // outcome instead of making a second, independent OpenAI call.
+      commitHash: clone.commitHash,
       capture: true,
     });
 

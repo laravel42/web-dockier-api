@@ -21,6 +21,7 @@ import {
   readEnvExample,
   listTopLevelFiles,
 } from "./repo-analyzer/ai-review.js";
+import { reviewCacheKey, getCachedReview, setCachedReview } from "./repo-analyzer/review-cache.js";
 import type { ContextualLogger } from "./logging.js";
 import { BuildError } from "./logging.js";
 
@@ -64,6 +65,13 @@ export interface AnalyzeOptions {
   skipExistingDockerfile?: boolean;
   /** User-selected platform from project creation (e.g. "laravel", "nextjs"). Overrides auto-detection of framework. */
   knownPlatform?: string;
+  /**
+   * Commit being analyzed (from `cloneRepo`). Enables reuse of an AI review
+   * already computed for the same commit + stack, so the pre-deploy preview
+   * and the deploy that follows it share one outcome instead of making two
+   * independent OpenAI calls. Omit to disable review caching.
+   */
+  commitHash?: string;
   /**
    * Opt-in capture mode. When true, the result additionally carries the
    * effective Dockerfile content and AI review details so callers (e.g. the
@@ -196,7 +204,7 @@ function applyKnownPlatform(config: RepoConfig, platform: string): void {
  * - .dockerignore generation
  */
 export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeResult> {
-  const { repoDir, logger, skipExistingDockerfile, knownPlatform } = opts;
+  const { repoDir, logger, skipExistingDockerfile, knownPlatform, commitHash } = opts;
 
   await logger.section("Analyze Repository");
 
@@ -278,7 +286,19 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
       // mechanical Dockerfile on any skip/failure/rejected revision.
       if (env.OPENAI_API_KEY && env.AI_DOCKERFILE_REVIEW !== "off") {
         const started = Date.now();
-        const review = await aiReviewDockerfile({
+
+        // Reuse the review computed for this exact commit + stack + Dockerfile
+        // if one exists (typically from the pre-deploy preview), so the user
+        // deploys the Dockerfile they were shown. A miss just runs the review.
+        const cacheKey = reviewCacheKey({
+          commitHash: commitHash ?? "",
+          model: env.OPENAI_MODEL,
+          dockerfile: df,
+          repoConfig,
+        });
+        const cached = cacheKey ? await getCachedReview(cacheKey) : undefined;
+
+        const review = cached ?? await aiReviewDockerfile({
           apiKey: env.OPENAI_API_KEY,
           model: env.OPENAI_MODEL,
           dockerfile: df,
@@ -287,20 +307,23 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
           envExample: readEnvExample(repoDir),
           fileTree: listTopLevelFiles(repoDir),
         });
+        if (cacheKey && !cached) await setCachedReview(cacheKey, review);
+
         aiReviewed = true;
         reviewChanges = review.changes;
         reviewSkipReason = review.skipReason;
-        const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+        // Timing is meaningless on a hit — say so instead of reporting ~0s.
+        const timing = cached ? "cached" : `${((Date.now() - started) / 1000).toFixed(1)}s`;
 
         if (review.revised) {
           df = review.dockerfile;
           aiRevised = true;
           const summary = review.changes.map((c) => c.what).join("; ") || "improvements applied";
-          await logger.success(`AI improved Dockerfile in ${elapsed}s: ${summary}`);
+          await logger.success(`AI improved Dockerfile [${timing}]: ${summary}`);
         } else if (review.skipReason) {
-          await logger.warn(`AI Dockerfile review skipped (${review.skipReason}) — using generated Dockerfile [${elapsed}s]`);
+          await logger.warn(`AI Dockerfile review skipped (${review.skipReason}) — using generated Dockerfile [${timing}]`);
         } else {
-          await logger.info(`AI Dockerfile review passed — no changes needed [${elapsed}s]`);
+          await logger.info(`AI Dockerfile review passed — no changes needed [${timing}]`);
         }
       }
 
