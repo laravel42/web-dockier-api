@@ -155,7 +155,10 @@ function buildPrompt(input: DockerfileReviewInput): string {
   const envSection = envExample && envExample.trim().length > 0 ? envExample.trim() : "none";
   const treeSection = fileTree.length > 0 ? fileTree.join("\n") : "none";
 
-  return `You are a Docker and DevOps expert reviewing an auto-generated Dockerfile.
+  return `You are a Docker and DevOps expert acting as a conservative validator for an
+auto-generated Dockerfile. Your job is NOT to optimize, modernize, refactor, or rewrite it.
+Decide whether it contains a concrete correctness, security, build, or runtime problem that
+the evidence below actually supports. If it does not, approve it unchanged.
 
 **Generated Dockerfile:**
 \`\`\`
@@ -181,12 +184,17 @@ Revise ONLY to fix a genuine problem. Otherwise set "approved": true.
 
 Revise when you see one of these concrete problems:
 - Unpinned or floating base image (e.g. "FROM node:latest" or no tag) — pin to a specific version.
+  A tag such as "node:22", "node:22-bookworm", or "php:8.3-fpm" is ALREADY pinned enough — leave it.
 - Dependencies installed AFTER copying all source (e.g. "COPY . ." before "npm install"),
   which breaks layer caching — copy the manifest/lockfile and install first.
-- Container runs as root for a long-running server and the base image supports a non-root user.
+- Container runs as root for a long-running server AND the base image already provides a suitable
+  non-root user AND switching needs no speculative file-ownership or permission changes. If correct
+  ownership cannot be determined from the evidence, leave it running as root.
 - Wrong or missing build/start command relative to the manifest scripts.
-- Missing system package required by a known native dependency.
-- Missing or incorrect EXPOSE port.
+- Missing system package required by a native dependency that is evident in the manifest or file
+  tree above. Do NOT guess native dependencies.
+- Missing or incorrect EXPOSE port, when the correct port is determinable from the framework,
+  manifest scripts, or project context above. Do NOT guess a port.
 - A secret, token, or credential baked into a layer.
 
 Do NOT revise for style, taste, or marginal preferences. In particular, do NOT:
@@ -194,9 +202,13 @@ Do NOT revise for style, taste, or marginal preferences. In particular, do NOT:
 - Re-pin or "modernize" a base image that is ALREADY pinned to a specific version.
 - Reorder or reformat lines that are already correct.
 - Add USER, multi-stage builds, or extra hardening to a Dockerfile that ALREADY has them.
+- Add or change USER when the correct file ownership would have to be guessed.
+- Invent files, scripts, ports, users, packages, or environment values that the evidence
+  above does not support.
 
-If the Dockerfile has none of the concrete problems above, APPROVE it. A no-op or
-cosmetic revision is worse than no revision.
+Before revising, confirm all three: (1) a specific problem exists, (2) the evidence above
+supports it, (3) the change is necessary to fix that problem. If any is false, APPROVE.
+A no-op, speculative, or cosmetic revision is worse than no revision.
 
 Return ONLY valid JSON:
 {
@@ -209,6 +221,7 @@ CRITICAL:
 - When approving, set "approved": true and leave "revisedDockerfile" empty and "changes" empty.
 - When revising, revisedDockerfile MUST be a complete, valid Dockerfile starting with FROM and containing EXPOSE.
 - Every entry in "changes" MUST describe a fix for a genuine problem, not a preference.
+- Every modification in revisedDockerfile MUST have a matching entry in "changes" — no unlisted edits.
 - Do NOT introduce secrets, tokens, or credentials.
 - Preserve the detected runtime and framework intent.
 - Prefer the smallest change that fixes the problem.`;
