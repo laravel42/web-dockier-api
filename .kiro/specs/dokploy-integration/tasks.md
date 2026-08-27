@@ -127,19 +127,19 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 
 ### Phase 5: Cleanup & Testing
 
-- [ ] 16. Backend Integration Tests
-  - [ ] 16.1 Test Dokploy client with mocked HTTP responses
-  - [ ] 16.2 Test pipeline orchestration with mocked client
-  - [ ] 16.3 Test Dokploy AI recovery with mocked API responses
-  - [ ] 16.4 Test mapping layer race condition handling
-  - [ ] 16.5 Test idempotency (re-running pipeline doesn't duplicate resources)
+- [x] 16. Backend Integration Tests
+  - [x] 16.1 Test Dokploy client with mocked HTTP responses
+  - [x] 16.2 Test pipeline orchestration with mocked client
+  - [x] 16.3 Test Dokploy AI recovery with mocked API responses
+  - [x] 16.4 Test mapping layer race condition handling
+  - [x] 16.5 Test idempotency (re-running pipeline doesn't duplicate resources)
 
 - [ ] 17. Remove Legacy Code (Deferred)
   - [ ] 17.1 After `DEPLOY_PROVIDER=dokploy` is validated in production, remove: CloudFormation templates (`domain/cfn-templates/`), Pulumi templates (`domain/pulumi-templates/`), Legacy adapters (`domain/adapters/aws-ec2.ts`, `aws-ecs.ts`, `aws-s3.ts`, etc.), Build pipeline (`lib/build-pipeline.ts` image building), Tofu generation endpoint (`/deploy/tofu/generate`), Dockerfile preview endpoint, `StepCompose` component (already done in Task 4.1)
   - [ ] 17.2 Keep `DEPLOY_PROVIDER` flag until migration complete
 
 - [ ] 18. Documentation
-  - [ ] 18.1 Update `AGENTS.md` with new deploy flow description
+  - [x] 18.1 Update `AGENTS.md` with new deploy flow description
   - [ ] 18.2 Update `PRODUCT.md` if deploy feature description changes
   - [ ] 18.3 Add operational runbook: how to set up a Dokploy instance, configure API access
 

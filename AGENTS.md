@@ -47,9 +47,9 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 - **Auth:** Supabase passwordless (OTP) → tenant-scoped JWT for API calls. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`. Optional TOTP 2FA.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 
-### Dockerfile generation + AI review
+### Dockerfile generation + AI review (legacy pipeline)
 
-The deploy pipeline generates a Dockerfile during the analyze stage via `analyzeAndGenerate()` in `backend/src/lib/build-pipeline.ts`.
+The **legacy** (`DEPLOY_PROVIDER=native`) deploy pipeline generates a Dockerfile during the analyze stage via `analyzeAndGenerate()` in `backend/src/lib/build-pipeline.ts`.
 
 - **Mechanical generation is authoritative.** `analyzeRepoConfig()` detects the stack and `generateDockerfile()` (in `backend/src/lib/repo-analyzer/`) produces the Dockerfile from rule-based templates. This always runs.
 - **Optional AI review layer** (`backend/src/lib/repo-analyzer/ai-review.ts`): after mechanical generation, `aiReviewDockerfile()` may ask OpenAI to improve the Dockerfile. It is **strictly best-effort and non-fatal** — any failure, timeout, invalid response, or rejected revision falls back to the mechanical Dockerfile. It NEVER throws and can never break a deploy.
@@ -58,6 +58,34 @@ The deploy pipeline generates a Dockerfile during the analyze stage via `analyze
 - **Prompt calibration:** the review prompt biases toward approval and revises only for concrete problems (unpinned base image, dependencies installed after copying all source, running as root, wrong build/start command, missing native packages, wrong `EXPOSE`, baked-in secrets). It must NOT make stylistic/cosmetic changes. The model is sensitive to prompt framing — **after changing the prompt or `OPENAI_MODEL`, re-run the live smoke test** (`pnpm --filter @dockier/backend-fastify smoke:ai-review`) to confirm it approves good Dockerfiles and only revises genuinely flawed ones.
 - **Secrets:** only `.env.example` (variable names) and non-secret manifests are sent as context; `.env` is never read.
 - **Visibility:** outcomes are logged via the deploy `ContextualLogger` (approved / revised-with-summary / skipped-with-reason) and surface in the deploy log stream. There is intentionally no frontend surface for this yet — a UI preview is tracked as Phase 2 in `.kiro/specs/ai-dockerfile-review/`.
+
+### Dokploy deploy pipeline (active)
+
+The primary deploy path (`DEPLOY_PROVIDER=dokploy`) delegates build and deployment to a self-hosted Dokploy instance. See `backend/src/services/deploy/domain/dokploy/`.
+
+**Architecture:**
+1. `POST /deploy/deployments` creates a deployment record and enqueues a pg-boss job.
+2. The worker calls `executeDokployPipeline()` which coordinates five stages:
+   - **Ensure Project** — Maps the Dockier tenant to a Dokploy Project (idempotent via upsert).
+   - **Sync Git Credentials** — Prepares git provider config (GitHub/GitLab/custom SSH) for Dokploy.
+   - **Provision Server** — Ensures a remote server is registered and healthy in Dokploy.
+   - **Configure Application** — Creates/configures the Dokploy Application (build type, env vars, git source).
+   - **Deploy with Retry** — Triggers the deploy, polls until done/error. On failure, invokes Dokploy's built-in AI to diagnose and fix issues, then retries (up to 3 attempts).
+
+**Build type detection:** Automatically selects `dockerfile`, `static`, `railpack`, or `nixpacks` based on repo analysis — no user configuration needed.
+
+**AI recovery:** Uses Dokploy's built-in AI (NOT OpenAI directly). Non-fatal — failures never block the pipeline.
+
+**Feature flag:** `DEPLOY_PROVIDER` env var gates the pipeline. `"dokploy"` activates the new flow; `"native"` (default) keeps the legacy CloudFormation/Pulumi pipeline.
+
+**Frontend wizard:** 4 steps — Provider → Analysis → Plan → Deploy. The Build step was removed (Dokploy handles build internally). The Deploy step shows a real-time vertical timeline of pipeline stages parsed from `[stage:xxx]` log markers.
+
+**Key files:**
+- `backend/src/services/deploy/domain/dokploy/pipeline.ts` — Orchestrator entry point
+- `backend/src/services/deploy/domain/dokploy/client.ts` — Typed HTTP client (tRPC-over-HTTP, retries, error classification)
+- `backend/src/services/deploy/domain/dokploy/mappings.ts` — DB operations (concurrency-safe upserts)
+- `backend/src/services/deploy/domain/dokploy/stages/` — Individual pipeline stages
+- `supabase/migrations/0068_dokploy_integration.sql` — Schema for `dokploy_tenant_projects`, `dokploy_servers`, `dokploy_applications`
 
 ## Database
 
