@@ -66,6 +66,8 @@ export const deployApi = {
     deployStrategy?: string;
     buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
     useRepoDockerfile?: boolean;
+    instanceType?: string;
+    region?: string;
     skipPipeline?: boolean;
     templateId?: string;
     services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;

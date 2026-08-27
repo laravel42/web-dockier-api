@@ -100,30 +100,30 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 
 ### Phase 4: Frontend Changes
 
-- [ ] 13. Remove Build Step from Wizard
-  - [ ] 13.1 Remove `StepCompose` from `DeployWizard.tsx` step rendering
-  - [ ] 13.2 Remove step 3 (Build) from `STEPS` array in constants
-  - [ ] 13.3 Update step indices in `useDeployWizard.ts` (steps become 0-3 instead of 0-4)
-  - [ ] 13.4 Remove `StepCompose.tsx` file
-  - [ ] 13.5 Remove Dockerfile preview logic from `useDeployWizard.ts`
-  - [ ] 13.6 Remove `tofuScript`, `tofuResources`, `useDocker`, `useRepoDockerfile`, `buildMethod`, `dockerfilePreview` from `WizardState`
-  - [ ] 13.7 Remove `generateScript` and `generatePreview` callbacks
-  - [ ] 13.8 Remove tofu-related loading/error state
+- [x] 13. Remove Build Step from Wizard
+  - [x] 13.1 Remove `StepCompose` from `DeployWizard.tsx` step rendering
+  - [x] 13.2 Remove step 3 (Build) from `STEPS` array in constants
+  - [x] 13.3 Update step indices in `useDeployWizard.ts` (steps become 0-3 instead of 0-4)
+  - [x] 13.4 Remove `StepCompose.tsx` file
+  - [x] 13.5 Remove Dockerfile preview logic from `useDeployWizard.ts`
+  - [x] 13.6 Remove `tofuScript`, `tofuResources`, `useDocker`, `useRepoDockerfile`, `buildMethod`, `dockerfilePreview` from `WizardState`
+  - [x] 13.7 Remove `generateScript` and `generatePreview` callbacks
+  - [x] 13.8 Remove tofu-related loading/error state
 
-- [ ] 14. New Deploy Progress UI
-  - [ ] 14.1 Redesign `StepDeploy.tsx` to show orchestration timeline
-  - [ ] 14.2 Show stages: Project → Git Sync → Server → App Config → Deploy
-  - [ ] 14.3 Each stage shows: pending / in-progress (spinner) / success (check) / failed (x)
-  - [ ] 14.4 On failure + retry: show Dokploy AI fix description and retry count
-  - [ ] 14.5 Use existing deploy log polling (already polls `GET /deploy/deployments/:id`)
-  - [ ] 14.6 Parse structured stage info from deploy logs (add stage markers like `[stage:ensure-project]`)
+- [x] 14. New Deploy Progress UI
+  - [x] 14.1 Redesign `StepDeploy.tsx` to show orchestration timeline
+  - [x] 14.2 Show stages: Project → Git Sync → Server → App Config → Deploy
+  - [x] 14.3 Each stage shows: pending / in-progress (spinner) / success (check) / failed (x)
+  - [x] 14.4 On failure + retry: show Dokploy AI fix description and retry count
+  - [x] 14.5 Use existing deploy log polling (already polls `GET /deploy/deployments/:id`)
+  - [x] 14.6 Parse structured stage info from deploy logs (add stage markers like `[stage:ensure-project]`)
 
-- [ ] 15. Simplify WizardState & Plans
-  - [ ] 15.1 Remove `tofuScript`, `tofuResources`, `tofuAppName` from `WizardState` type
-  - [ ] 15.2 Remove `useDocker`, `useRepoDockerfile`, `buildMethod`, `dockerfilePreview` from `WizardState`
-  - [ ] 15.3 Remove `generateScript` flow from `useDeployWizard.ts`
-  - [ ] 15.4 Keep plan selection (instance size still matters for server provisioning)
-  - [ ] 15.5 The `createDeployment` call no longer sends `tofuScript` or `buildMethod`
+- [x] 15. Simplify WizardState & Plans
+  - [x] 15.1 Remove `tofuScript`, `tofuResources`, `tofuAppName` from `WizardState` type
+  - [x] 15.2 Remove `useDocker`, `useRepoDockerfile`, `buildMethod`, `dockerfilePreview` from `WizardState`
+  - [x] 15.3 Remove `generateScript` flow from `useDeployWizard.ts`
+  - [x] 15.4 Keep plan selection (instance size still matters for server provisioning)
+  - [x] 15.5 The `createDeployment` call no longer sends `tofuScript` or `buildMethod`
 
 ### Phase 5: Cleanup & Testing
 

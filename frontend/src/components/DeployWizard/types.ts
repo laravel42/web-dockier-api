@@ -1,8 +1,6 @@
 import type { Provider } from "@/types";
-import type { DockerfilePreviewResult } from "@/services/deploy";
 
 export type { Provider };
-export type { DockerfilePreviewResult };
 
 export interface DetectedService {
   type: string;
@@ -119,25 +117,13 @@ export interface WizardState {
   // Plan
   environment: "staging" | "production";
   selectedPlan: number;
-  // Config
-  tofuScript: string;
-  tofuResources: string[];
-  tofuAppName: string;
+  // Region
   tofuRegion: string;
-  useDocker: boolean;
-  /** When true, keep the repo's Dockerfile instead of Dockier generating one. */
-  useRepoDockerfile: boolean;
-  buildMethod: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
-  /** Pre-deploy Dockerfile preview + AI review result (null until fetched). */
-  dockerfilePreview: DockerfilePreviewResult | null;
   // Deploy
   deploymentId: string;
   deployStatus: "" | "pending" | "building" | "deploying" | "success" | "failed" | "destroyed" | "cancelled";
   deployLogs: string[];
   deployAppUrl: string;
-  codebuildBuildId: string;
-  codebuildImageUri: string;
-  codebuildLogsUrl: string;
 }
 
 export interface DeployWizardProps {

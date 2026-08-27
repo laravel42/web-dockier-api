@@ -1,7 +1,94 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { WizardState } from "../types";
-import { CheckIcon, ExternalLinkIcon } from "lucide-react";
+import { CheckIcon, XIcon, ExternalLinkIcon } from "lucide-react";
 import Spinner from "@/components/Spinner";
+
+// ─── Stage Parsing ─────────────────────────────────────────────────
+
+type StageStatus = "pending" | "in-progress" | "success" | "failed";
+
+interface PipelineStage {
+  id: string;
+  label: string;
+  status: StageStatus;
+  logs: string[];
+}
+
+interface AIRetryInfo {
+  attempt: number;
+  maxAttempts: number;
+  fixDescription: string | null;
+}
+
+const STAGE_DEFS = [
+  { id: "ensure-project", label: "Create Project" },
+  { id: "sync-git", label: "Sync Git Credentials" },
+  { id: "provision-server", label: "Provision Server" },
+  { id: "configure-app", label: "Configure Application" },
+  { id: "deploy", label: "Deploy" },
+] as const;
+
+/**
+ * Parse deploy log lines into structured pipeline stages.
+ * Backend logs use markers like `[stage:ensure-project] ...`
+ */
+function parseStages(logs: string[]): { stages: PipelineStage[]; retries: AIRetryInfo[] } {
+  const stages: PipelineStage[] = STAGE_DEFS.map((def) => ({
+    id: def.id,
+    label: def.label,
+    status: "pending",
+    logs: [],
+  }));
+
+  const retries: AIRetryInfo[] = [];
+  const stageMap = new Map(stages.map((s) => [s.id, s]));
+
+  for (const line of logs) {
+    // Match [stage:xxx] markers
+    const stageMatch = line.match(/\[stage:([\w-]+)\]/);
+    if (stageMatch) {
+      const stageId = stageMatch[1];
+      const stage = stageMap.get(stageId);
+      if (stage) {
+        stage.logs.push(line);
+
+        // Determine status from markers
+        if (line.includes("✓")) {
+          stage.status = "success";
+        } else if (line.includes("✗")) {
+          stage.status = "failed";
+        } else if (stage.status === "pending") {
+          stage.status = "in-progress";
+        }
+      }
+
+      // Parse AI recovery info
+      if (stageId === "ai-recovery" && line.includes("Fix applied:")) {
+        const descMatch = line.match(/Fix applied:\s*(.+)/);
+        retries.push({
+          attempt: retries.length + 1,
+          maxAttempts: 3,
+          fixDescription: descMatch?.[1] || "Applied automatic fix",
+        });
+      }
+    }
+
+    // Parse deploy attempts
+    const attemptMatch = line.match(/Attempt (\d+)\/(\d+)/);
+    if (attemptMatch) {
+      const [, attempt, max] = attemptMatch;
+      // Update retry tracking
+      if (parseInt(attempt) > 1) {
+        const lastRetry = retries[retries.length - 1];
+        if (lastRetry) lastRetry.maxAttempts = parseInt(max);
+      }
+    }
+  }
+
+  return { stages, retries };
+}
+
+// ─── Component ─────────────────────────────────────────────────────
 
 export default function StepDeploy({ state }: { state: WizardState }) {
   const logsRef = useRef<HTMLDivElement>(null);
@@ -12,98 +99,113 @@ export default function StepDeploy({ state }: { state: WizardState }) {
     }
   }, [state.deployLogs]);
 
-  const statusColors: Record<string, string> = {
-    pending: "bg-warning-50 text-warning-500",
-    building: "bg-primary-50 text-primary-500",
-    deploying: "bg-primary-100 text-primary-700",
-    success: "bg-success-50 text-success-500",
-    failed: "bg-danger-50 text-danger-500",
-    cancelled: "bg-warning-surface text-warning-ink",
-  };
+  const { stages, retries } = useMemo(() => parseStages(state.deployLogs), [state.deployLogs]);
 
   const isRunning = ["pending", "building", "deploying"].includes(state.deployStatus);
+  const isFailed = state.deployStatus === "failed";
+  const isSuccess = state.deployStatus === "success";
 
   return (
-    <div className="space-y-4">
-      {/* Status */}
+    <div className="space-y-5">
+      {/* Overall status */}
       <div className="flex items-center gap-3">
         <span className="text-xs text-text-muted uppercase tracking-wide">Status:</span>
-        <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${statusColors[state.deployStatus] || "bg-secondary-100 text-text-muted"}`}>
+        <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${
+          isSuccess ? "bg-success-50 text-success-500" :
+          isFailed ? "bg-danger-50 text-danger-500" :
+          isRunning ? "bg-primary-50 text-primary-500" :
+          "bg-secondary-100 text-text-muted"
+        }`}>
           {state.deployStatus || "waiting"}
         </span>
-        {isRunning && <Spinner className="size-3.5 " />}
+        {isRunning && <Spinner className="size-3.5" />}
       </div>
 
-      {/* Timeline steps */}
-      <div className="flex items-center gap-2 text-xs">
-        {["Provisioning", "Building Image", "Pushing", "Starting"].map((step, i) => {
-          const phases = ["pending", "building", "deploying", "success"];
-          const currentIdx = phases.indexOf(state.deployStatus);
-          const isSuccess = state.deployStatus === "success";
-          const done = currentIdx > i || (isSuccess && currentIdx === i);
-          const active = currentIdx === i && !isSuccess;
-          return (
-            <div key={step} className="flex items-center gap-1.5 flex-1">
-              <div className={`size-5  rounded-full flex items-center justify-center shrink-0 ${
-                done ? "bg-primary-500/80 text-primary-foreground" : active ? "bg-primary-500 text-primary-foreground" : "bg-secondary-100 text-text-muted"
-              }`}>
-                {done ? (
-                  <CheckIcon className="size-3" />
-                ) : active ? (
-                  <div className="size-2  border border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <span className="text-xs">{i + 1}</span>
+      {/* Pipeline stage timeline */}
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="space-y-0">
+          {stages.map((stage, i) => (
+            <div key={stage.id} className="flex items-start gap-3">
+              {/* Vertical connector + status icon */}
+              <div className="flex flex-col items-center">
+                <StageIcon status={stage.status} />
+                {i < stages.length - 1 && (
+                  <div className={`w-px h-6 ${
+                    stage.status === "success" ? "bg-success-500/40" :
+                    stage.status === "failed" ? "bg-danger-500/40" :
+                    "bg-border"
+                  }`} />
                 )}
               </div>
-              <span className={`hidden sm:block ${active ? "text-text font-medium" : "text-text-muted"}`}>{step}</span>
-              {i < 3 && <div className={`flex-1 h-px ${done ? "bg-primary-500/80" : "bg-border"}`} />}
+
+              {/* Stage info */}
+              <div className="flex-1 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${
+                    stage.status === "success" ? "text-success-500" :
+                    stage.status === "failed" ? "text-danger-500" :
+                    stage.status === "in-progress" ? "text-text" :
+                    "text-text-muted"
+                  }`}>
+                    {stage.label}
+                  </span>
+                  {stage.status === "in-progress" && (
+                    <Spinner className="size-3" />
+                  )}
+                </div>
+                {/* Show last meaningful log for the stage */}
+                {stage.logs.length > 0 && stage.status !== "pending" && (
+                  <p className="text-xs text-text-muted mt-0.5 truncate max-w-md">
+                    {cleanLogLine(stage.logs[stage.logs.length - 1])}
+                  </p>
+                )}
+              </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Logs */}
-      {state.deployLogs.length > 0 && (
-        <div ref={logsRef} className="rounded-lg bg-terminal p-3 max-h-72 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed ">
-          {state.deployLogs.map((line, i) => (
-            <div key={i} className={
-              line.includes("✓") ? "text-green-400" :
-              line.includes("✗") ? "text-red-400" :
-              line.includes("──") ? "text-primary-500" :
-              line.includes("ℹ") ? "text-primary-500" :
-              line.includes("▶") ? "text-warning-ink" :
-              line.includes("⚠") ? "text-warning-ink" :
-              "text-text-secondary"
-            }>
-              {line}
+      {/* AI retry info */}
+      {retries.length > 0 && (
+        <div className="rounded-lg bg-warning-surface border border-warning-line p-3 space-y-2">
+          <p className="text-xs font-semibold text-warning-ink uppercase tracking-wide">AI Recovery</p>
+          {retries.map((retry, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs text-text-secondary">
+              <span className="shrink-0 text-warning-ink font-medium">Attempt {retry.attempt + 1}:</span>
+              <span>{retry.fixDescription || "Analyzing deployment failure..."}</span>
             </div>
           ))}
         </div>
       )}
 
+      {/* Detailed logs */}
+      {state.deployLogs.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer text-xs text-text-muted hover:text-text transition-colors select-none">
+            Show raw logs ({state.deployLogs.length} lines)
+          </summary>
+          <div ref={logsRef} className="mt-2 rounded-lg bg-terminal p-3 max-h-56 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed">
+            {state.deployLogs.map((line, i) => (
+              <div key={i} className={
+                line.includes("✓") ? "text-green-400" :
+                line.includes("✗") ? "text-red-400" :
+                line.includes("──") ? "text-primary-500" :
+                line.includes("ℹ") ? "text-primary-500" :
+                line.includes("▶") ? "text-warning-ink" :
+                line.includes("⚠") ? "text-warning-ink" :
+                "text-text-secondary"
+              }>
+                {line}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       {state.deployLogs.length === 0 && isRunning && (
         <div className="rounded-lg bg-terminal p-6 flex items-center justify-center gap-2">
-          <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-text-muted">Waiting for logs…</span>
-        </div>
-      )}
-
-      {/* CodeBuild logs link */}
-      {state.codebuildLogsUrl && (
-        <div className="rounded-lg bg-caution-surface border border-caution-line p-3">
-          <p className="text-xs text-caution-ink font-semibold uppercase tracking-wide mb-1">CodeBuild Logs</p>
-          <a href={state.codebuildLogsUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:text-primary-700 transition-colors break-all flex items-center gap-1.5">
-            <ExternalLinkIcon className="size-4 shrink-0" />
-            View in CloudWatch
-          </a>
-        </div>
-      )}
-
-      {/* CodeBuild image URI */}
-      {state.codebuildImageUri && (
-        <div className="rounded-lg bg-primary-500/10 border border-primary-500/20 p-3">
-          <p className="text-xs text-primary-600 font-semibold uppercase tracking-wide mb-1">Built Image</p>
-          <p className="text-sm text-text font-mono break-all">{state.codebuildImageUri}</p>
+          <Spinner className="size-4" />
+          <span className="text-sm text-text-muted">Waiting for pipeline to start…</span>
         </div>
       )}
 
@@ -118,15 +220,60 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         </div>
       )}
 
-      {/* VPS warm-up notice — shown when deploy succeeds on a VPS strategy */}
-      {state.deployAppUrl && state.deployStatus === "success" && state.deployStrategy === "vps" && (
+      {/* VPS warm-up notice */}
+      {state.deployAppUrl && isSuccess && state.deployStrategy === "vps" && (
         <div className="rounded-lg bg-warning-surface border border-warning-line p-3">
           <p className="text-sm text-warning-ink font-semibold uppercase tracking-wide mb-1">First-time startup notice</p>
-          <p className="text-xs/relaxed text-text-muted ">
+          <p className="text-xs/relaxed text-text-muted">
             If you see an nginx welcome page, don't worry — your application is still booting up. This is normal for VPS deployments and typically resolves within 1–3 minutes as the container starts and configures itself.
           </p>
         </div>
       )}
     </div>
   );
+}
+
+// ─── Sub-components ────────────────────────────────────────────────
+
+function StageIcon({ status }: { status: StageStatus }) {
+  switch (status) {
+    case "success":
+      return (
+        <div className="size-5 rounded-full bg-success-500/80 text-white flex items-center justify-center shrink-0">
+          <CheckIcon className="size-3" />
+        </div>
+      );
+    case "failed":
+      return (
+        <div className="size-5 rounded-full bg-danger-500/80 text-white flex items-center justify-center shrink-0">
+          <XIcon className="size-3" />
+        </div>
+      );
+    case "in-progress":
+      return (
+        <div className="size-5 rounded-full bg-primary-500 text-white flex items-center justify-center shrink-0">
+          <div className="size-2 border border-white border-t-transparent rounded-full animate-spin" />
+        </div>
+      );
+    default:
+      return (
+        <div className="size-5 rounded-full bg-secondary-100 flex items-center justify-center shrink-0">
+          <div className="size-2 rounded-full bg-text-muted/40" />
+        </div>
+      );
+  }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
+/**
+ * Strip the timestamp and stage marker prefix from a log line for display.
+ * Input:  "[2025-01-15T10:00:00Z] [stage:ensure-project] ✓ Project created: abc123"
+ * Output: "Project created: abc123"
+ */
+function cleanLogLine(line: string): string {
+  return line
+    .replace(/^\[[\d\-T:.Z]+\]\s*/, "") // remove timestamp
+    .replace(/\[stage:[\w-]+\]\s*/, "") // remove stage marker
+    .replace(/^[✓✗⚠▶ℹ]\s*/, ""); // remove status icon
 }

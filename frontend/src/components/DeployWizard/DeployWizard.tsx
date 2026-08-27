@@ -7,7 +7,6 @@ import Stepper from "./steps/Stepper";
 import StepProvider from "./steps/StepProvider";
 import StepAnalysis from "./steps/StepAnalysis";
 import StepEnvironment from "./steps/StepEnvironment";
-import StepCompose from "./steps/StepCompose";
 import StepDeploy from "./steps/StepDeploy";
 import RocketIcon from "../icons/outlined/RocketIcon";
 import { ArrowLeftIcon, ArrowRightIcon, RotateCwIcon } from "lucide-react";
@@ -15,11 +14,9 @@ import { ArrowLeftIcon, ArrowRightIcon, RotateCwIcon } from "lucide-react";
 export default function DeployWizard({ open, onClose, project, analysis, analysisLoading, analysisError, providers, onDeployComplete }: DeployWizardProps) {
   const {
     step, state, setState,
-    tofuLoading, tofuError, deployError,
-    previewLoading, previewError,
+    deployError,
     canNext, handleNext, handleBack,
     startDeploy, cancelDeploy, cancellingDeploy,
-    generateScript,
     isDeploying, isFinished,
   } = useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete });
 
@@ -29,7 +26,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     <Modal
       open={open}
       onClose={() => { if (!isDeploying) onClose(); }}
-      title={step === 4 ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
+      title={step === 3 ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
       size="xl"
     >
       <Stepper current={step} steps={STEPS} />
@@ -72,42 +69,18 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
           />
         )}
-        {step === 3 && (
-          <StepCompose
-            state={state}
-            loading={tofuLoading}
-            error={tofuError}
-            isTemplate={project.sourceType === "template"}
-            hasRepoDockerfile={analysis?.hasDocker ?? false}
-            previewLoading={previewLoading}
-            previewError={previewError}
-            onToggleDocker={() => {
-              const next = !state.useDocker;
-              setState(prev => ({ ...prev, useDocker: next, tofuScript: "" }));
-              generateScript({ useDocker: next });
-            }}
-            onBuildMethodChange={(method) => setState(prev => ({ ...prev, buildMethod: method }))}
-            onDockerfileSourceChange={(useRepoDockerfile) => {
-              setState(prev => ({ ...prev, useRepoDockerfile, tofuScript: "" }));
-            }}
-            onRegenerateScript={() => {
-              setState(prev => ({ ...prev, tofuScript: "" }));
-              void generateScript();
-            }}
-          />
-        )}
-        {step === 4 && <StepDeploy state={state} />}
+        {step === 3 && <StepDeploy state={state} />}
       </div>
 
       {/* Errors */}
-      {deployError && step === 4 && (
+      {deployError && step === 3 && (
         <div className="mt-3 rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{deployError}</div>
       )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
         <div>
-          {step > 0 && step < 5 && !isDeploying && (
+          {step > 0 && step < 4 && !isDeploying && (
             <Button
               variant="outline"
               size="lg"
@@ -130,12 +103,12 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               {cancellingDeploy ? "Cancelling…" : "Cancel Deploy"}
             </button>
           )}
-          {step === 5 && isFinished && (
+          {step === 3 && isFinished && (
             <Button variant="outline" size="lg" onClick={onClose}>
               Close
             </Button>
           )}
-          {step === 5 && state.deployStatus === "failed" && (
+          {step === 3 && state.deployStatus === "failed" && (
             <Button
               variant="primary"
               size="lg"
@@ -145,32 +118,27 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               Retry
             </Button>
           )}
-          {step < 5 && !isDeploying && (
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={handleNext}
-                disabled={!canNext()}
-                loading={step === 4 && tofuLoading}
-              >
-                {step === 4 ? (
-                  tofuLoading ? (
-                    "Preparing deploy script…"
-                  ) : !state.tofuScript ? (
-                    "Prepare deploy script"
-                  ) : (
-                    <>
-                      <RocketIcon />
-                      Deploy
-                    </>
-                  )
-                ) : (
-                  <>
-                    Next
-                    <ArrowRightIcon className="size-4" />
-                  </>
-                )}
-              </Button>
+          {step < 2 && !isDeploying && (
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleNext}
+              disabled={!canNext()}
+            >
+              Next
+              <ArrowRightIcon className="size-4" />
+            </Button>
+          )}
+          {step === 2 && !isDeploying && (
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={handleNext}
+              disabled={!canNext()}
+            >
+              <RocketIcon />
+              Deploy
+            </Button>
           )}
         </div>
       </div>

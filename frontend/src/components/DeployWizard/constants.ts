@@ -1,4 +1,4 @@
-import { CloudIcon, SearchIcon, ClipboardListIcon, FileTextIcon, RocketIcon } from "lucide-react";
+import { CloudIcon, SearchIcon, ClipboardListIcon, RocketIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 export type StepDef = { label: string; icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -7,7 +7,6 @@ export const STEPS: StepDef[] = [
   { label: "Provider", icon: CloudIcon },
   { label: "Analysis", icon: SearchIcon },
   { label: "Plan", icon: ClipboardListIcon },
-  { label: "Build", icon: FileTextIcon },
   { label: "Deploy", icon: RocketIcon },
 ];
 
@@ -119,19 +118,9 @@ export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   manualServiceOverrides: [],
   environment: "production",
   selectedPlan: 1,
-  tofuScript: "",
-  tofuResources: [],
-  tofuAppName: "",
   tofuRegion: "",
-  useDocker: true,
-  useRepoDockerfile: false,
-  buildMethod: "dockerfile",
-  dockerfilePreview: null,
   deploymentId: "",
   deployStatus: "",
   deployLogs: [],
   deployAppUrl: "",
-  codebuildBuildId: "",
-  codebuildImageUri: "",
-  codebuildLogsUrl: "",
 };

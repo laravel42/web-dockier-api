@@ -2,7 +2,8 @@
  * Standard Deploy Hook
  *
  * Manages the standard deployment path (create deployment record + poll status).
- * Used for non-CodeBuild deployments (Pulumi/GCP, template deploys, etc.).
+ * With the Dokploy pipeline, deployment parameters are simplified — the backend
+ * handles build type detection and image building internally.
  */
 
 import { useRef, useCallback } from "react";
@@ -14,6 +15,7 @@ interface StandardDeployParams {
   project: { id: string; name: string; repository: string; branch: string; connectionId: string; sourceType?: string; template?: string };
   analysis: RepoAnalysis | null;
   repo: string;
+  instanceType?: string;
   onStateUpdate: (updater: (prev: WizardState) => WizardState) => void;
   onError: (msg: string) => void;
   onComplete?: () => void;
@@ -36,6 +38,7 @@ export function useStandardDeploy() {
     project,
     analysis,
     repo,
+    instanceType,
     onStateUpdate,
     onError,
     onComplete,
@@ -48,12 +51,11 @@ export function useStandardDeploy() {
       projectId: project.id,
       repo,
       branch: project.branch || "main",
-      tofuScript: state.tofuScript || undefined,
       techStack: analysis?.techStack.map(t => t.name) || [],
       primaryLanguage: analysis?.primaryLanguage || "",
       deployStrategy: state.deployStrategy,
-      buildMethod: state.buildMethod,
-      useRepoDockerfile: state.useRepoDockerfile || undefined,
+      instanceType,
+      region: state.tofuRegion || undefined,
       templateId: project.sourceType === "template" ? project.template : undefined,
       services: analysis?.detectedServices?.length
         ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: state.servicesModes[svc.type] || "vps" as const }))

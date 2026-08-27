@@ -1,8 +1,9 @@
 /**
  * Deploy Wizard Orchestrator
  *
- * Slim hook that manages wizard state, step navigation, and script generation.
- * Delegates actual deployment execution to useStandardDeploy (backend pipeline).
+ * Slim hook that manages wizard state, step navigation, and deployment.
+ * With the Dokploy pipeline, the Build step is removed — the backend handles
+ * build type detection and Dockerfile generation internally.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -52,19 +53,13 @@ interface UseDeployWizardParams {
 export function useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete }: UseDeployWizardParams) {
   const [step, setStep] = useState(0);
   const [state, setState] = useState<WizardState>({ ...INITIAL_WIZARD_STATE });
-  const [tofuLoading, setTofuLoading] = useState(false);
-  const [tofuError, setTofuError] = useState("");
   const [deployError, setDeployError] = useState("");
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState("");
 
   const { start: startStandardDeploy, cleanup: cleanupStandardDeploy } = useStandardDeploy();
 
   const prevOpenRef = useRef(false);
   const configLoadedRef = useRef(false);
   const analysisSyncedKeyRef = useRef<string | null>(null);
-  // Tracks the last input set previewed, so we fetch at most once per (repo, branch, useRepoDockerfile).
-  const previewKeyRef = useRef<string | null>(null);
   const cleanupStandardDeployRef = useRef(cleanupStandardDeploy);
   cleanupStandardDeployRef.current = cleanupStandardDeploy;
 
@@ -78,7 +73,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     if (justClosed) {
       configLoadedRef.current = false;
       analysisSyncedKeyRef.current = null;
-      previewKeyRef.current = null;
       cleanupStandardDeployRef.current();
       return;
     }
@@ -86,14 +80,9 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     if (!justOpened) return;
 
     setStep(0);
-    setTofuLoading(false);
-    setTofuError("");
     setDeployError("");
-    setPreviewLoading(false);
-    setPreviewError("");
     configLoadedRef.current = false;
     analysisSyncedKeyRef.current = null;
-    previewKeyRef.current = null;
 
     const defaultProvider = getDefaultProviderSelection(providers);
     setState({ ...INITIAL_WIZARD_STATE, ...(defaultProvider ?? {}) });
@@ -151,99 +140,9 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         if (result?.hint) hints[svc.type] = result.hint;
       }
 
-
       return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars };
     });
   }, [open, analysis]);
-
-  // ─── Generate Script ─────────────────────────────────────────────
-
-  const generateScript = useCallback(async (overrideState?: Partial<WizardState>) => {
-    const s = { ...state, ...overrideState };
-    if (!s.selectedProviderId || !project) return;
-    setTofuLoading(true);
-    setTofuError("");
-    try {
-      const repo = getRepoString(project.repository);
-      const plans = getPlans(s.selectedProvider, s.environment, s.servicesModes, project.sourceType === "template" ? project.template : undefined);
-      const selectedPlan = plans[s.selectedPlan] || plans[1] || plans[0];
-
-      const res = await deployApi.generateTofu({
-        providerId: s.selectedProviderId,
-        repo,
-        branch: project.branch || "main",
-        techStack: analysis?.techStack.map(t => t.name) || [],
-        primaryLanguage: analysis?.primaryLanguage || "",
-        hasDocker: analysis?.hasDocker || false,
-        appName: s.tofuAppName || undefined,
-        region: s.tofuRegion || undefined,
-        deployStrategy: s.deployStrategy || undefined,
-        useDocker: s.useDocker || undefined,
-        instanceType: selectedPlan?.instance || undefined,
-        services: analysis?.detectedServices?.length
-          ? analysis.detectedServices.map(svc => ({ type: svc.type, name: svc.name, mode: s.servicesModes[svc.type] || "vps" }))
-          : undefined,
-        aiAnalysis: (analysis?.aiAnalysis as Record<string, unknown> | undefined) || undefined,
-        templateId: project.sourceType === "template" ? project.template : undefined,
-      });
-
-      setState(prev => ({
-        ...prev,
-        ...overrideState,
-        tofuScript: res.script,
-        tofuResources: res.estimatedResources,
-        tofuAppName: res.appName,
-        tofuRegion: res.region,
-      }));
-    } catch (err: unknown) {
-      setTofuError(getErrorMessage(err, "Failed to generate Pulumi program"));
-    } finally {
-      setTofuLoading(false);
-    }
-  }, [state, project, analysis]);
-
-  // ─── Dockerfile Preview (Build step) ─────────────────────────────
-  // Informational only: fetches the Dockerfile Dockier will build plus any
-  // AI review changes. Never blocks navigation or deploy. Fetched at most
-  // once per (repo, branch, useRepoDockerfile) input set.
-
-  const generatePreview = useCallback(async () => {
-    // Only meaningful for Dockier-generated container builds.
-    if (!state.useDocker || state.useRepoDockerfile) return;
-    if (!project.connectionId) return;
-
-    const repo = getRepoString(project.repository);
-    const key = `${repo}|${project.branch || "main"}|${state.useRepoDockerfile}`;
-    if (previewKeyRef.current === key) return; // already fetched for this input set
-    previewKeyRef.current = key;
-
-    setPreviewLoading(true);
-    setPreviewError("");
-    try {
-      const preview = await deployApi.previewDockerfile({
-        gitConnectionId: project.connectionId,
-        repo,
-        branch: project.branch || "main",
-        projectId: project.id,
-        useRepoDockerfile: state.useRepoDockerfile || undefined,
-      });
-      setState((prev) => ({ ...prev, dockerfilePreview: preview }));
-    } catch (err: unknown) {
-      // Non-fatal: clear the key so a later retry can re-fetch.
-      previewKeyRef.current = null;
-      setPreviewError(getErrorMessage(err, "Could not preview the Dockerfile"));
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [state.useDocker, state.useRepoDockerfile, project]);
-
-  // Trigger the preview when the user is on the Build step with a
-  // Dockier-generated container build. The key guard prevents refetch loops.
-  useEffect(() => {
-    if (!open || step !== 3) return;
-    if (!state.useDocker || state.useRepoDockerfile) return;
-    void generatePreview();
-  }, [open, step, state.useDocker, state.useRepoDockerfile, generatePreview]);
 
   // ─── Start Deployment ────────────────────────────────────────────
 
@@ -261,20 +160,19 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       deployStatus: "pending",
       deployLogs: [],
       deployAppUrl: "",
-      codebuildBuildId: "",
-      codebuildImageUri: "",
-      codebuildLogsUrl: "",
     }));
 
     try {
       const repo = getRepoString(project.repository);
+      const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, project.sourceType === "template" ? project.template : undefined);
+      const selectedPlan = plans[state.selectedPlan] || plans[1] || plans[0];
 
-      // All deploy paths go through the backend pipeline
       await startStandardDeploy({
         state,
         project,
         analysis,
         repo,
+        instanceType: selectedPlan?.instance,
         onStateUpdate: setState,
         onError: setDeployError,
         onComplete: () => onDeployCompleteRef.current?.(),
@@ -292,25 +190,15 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       case 0: return !!state.selectedProvider && !!state.selectedProviderId;
       case 1: return !analysisLoading;
       case 2: return state.selectedPlan >= 0;
-      case 3: return !tofuLoading;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (step === 3) {
-      if (tofuLoading) return;
-      if (!state.tofuScript) {
-        await generateScript();
-        return;
-      }
-      setStep(4);
-      startDeploy();
-      return;
-    }
     if (step === 2) {
+      // Plan → Deploy: start deploying immediately
       setStep(3);
-      if (!state.tofuScript) void generateScript();
+      startDeploy();
       return;
     }
     if (step === 0) {
@@ -333,11 +221,11 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       setStep(1);
       return;
     }
-    setStep(prev => Math.min(prev + 1, 4));
+    setStep(prev => Math.min(prev + 1, 3));
   };
 
   const handleBack = () => {
-    if (step === 4) return;
+    if (step === 3) return; // can't go back from deploy
     setStep(prev => Math.max(prev - 1, 0));
   };
 
@@ -369,19 +257,13 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     step,
     state,
     setState,
-    tofuLoading,
-    tofuError,
     deployError,
-    previewLoading,
-    previewError,
     canNext,
     handleNext,
     handleBack,
     startDeploy,
     cancelDeploy,
     cancellingDeploy,
-    generateScript,
-    generatePreview,
     isDeploying,
     isFinished,
   };
