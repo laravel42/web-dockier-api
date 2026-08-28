@@ -261,6 +261,24 @@ export async function updateProject(params: UpdateProjectParams) {
 }
 
 export async function deleteProject(projectId: string, tenantId: string) {
+  // Verify the project exists and belongs to the tenant before we do any
+  // (potentially slow) infrastructure teardown.
+  const { data: existing, error: findError } = await supabaseAdmin
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("organization_id", tenantId)
+    .maybeSingle();
+  throwOnError(findError, ProjectsError, { internalMsg: "Failed to delete project" });
+  if (!existing) {
+    throw new ProjectsError("Project not found", "not_found");
+  }
+
+  // Best-effort: release provisioned infrastructure (VPS + Dokploy resources)
+  // before removing the project row, so we don't orphan billable cloud VMs.
+  // Never block deletion on teardown failure — surface it in logs instead.
+  await teardownProjectInfraSafely(projectId, tenantId);
+
   const { data, error } = await supabaseAdmin
     .from("projects")
     .delete()
@@ -270,5 +288,28 @@ export async function deleteProject(projectId: string, tenantId: string) {
   throwOnError(error, ProjectsError, { internalMsg: "Failed to delete project" });
   if (!data || data.length === 0) {
     throw new ProjectsError("Project not found", "not_found");
+  }
+}
+
+/**
+ * Tear down a project's provisioned infrastructure without ever throwing.
+ *
+ * Uses a dynamic import to avoid a static dependency cycle between the projects
+ * and deploy services. Teardown failures are logged but do not block project
+ * deletion — a stuck/unreachable provider must not make projects undeletable.
+ */
+async function teardownProjectInfraSafely(projectId: string, tenantId: string): Promise<void> {
+  try {
+    const { teardownProjectInfrastructure } = await import(
+      "../../deploy/domain/lifecycle/project-teardown.js"
+    );
+    const result = await teardownProjectInfrastructure(projectId, tenantId);
+    if (result.status === "partial") {
+      const { logger } = await import("../../../shared/logger.js");
+      logger.warn({ projectId, result }, "[projects] Infrastructure teardown incomplete on project delete");
+    }
+  } catch (err) {
+    const { logger } = await import("../../../shared/logger.js");
+    logger.error({ err, projectId }, "[projects] Infrastructure teardown failed on project delete");
   }
 }

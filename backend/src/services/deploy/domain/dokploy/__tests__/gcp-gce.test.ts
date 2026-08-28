@@ -11,12 +11,14 @@ const ensureFirewallRule = vi.fn().mockResolvedValue(undefined);
 const createInstance = vi.fn().mockResolvedValue({ operationName: "op-1", alreadyExists: false });
 const waitForZoneOperation = vi.fn().mockResolvedValue(undefined);
 const getInstanceExternalIp = vi.fn().mockResolvedValue("34.1.2.3");
+const listAvailableZones = vi.fn().mockResolvedValue([]);
 
 const createGcpClientMock = vi.fn(async () => ({
   ensureFirewallRule,
   createInstance,
   waitForZoneOperation,
   getInstanceExternalIp,
+  listAvailableZones,
 }));
 
 // GcpApiError must be a real class the code can `instanceof`-check.
@@ -62,6 +64,7 @@ afterEach(() => {
   vi.clearAllMocks();
   createInstance.mockResolvedValue({ operationName: "op-1", alreadyExists: false });
   getInstanceExternalIp.mockResolvedValue("34.1.2.3");
+  listAvailableZones.mockResolvedValue([]);
 });
 
 // ─── Happy path ────────────────────────────────────────────────────
@@ -73,16 +76,26 @@ describe("provisionGceInstance — happy path", () => {
     expect(result).toEqual({ instanceId: "dockier-abc12345", publicIp: "34.1.2.3", zone: "us-central1-b" });
   });
 
-  it("derives the zone from region when no zone is given", async () => {
+  it("falls back to <region>-b when zone listing returns nothing", async () => {
+    listAvailableZones.mockResolvedValueOnce([]);
     await provisionGceInstance(baseParams());
 
     expect(createInstance).toHaveBeenCalledWith("us-central1-b", expect.any(Object));
   });
 
-  it("honors an explicit zone override", async () => {
+  it("honors an explicit zone override without listing zones", async () => {
     await provisionGceInstance(baseParams({ zone: "europe-west1-d" }));
 
     expect(createInstance).toHaveBeenCalledWith("europe-west1-d", expect.any(Object));
+    expect(listAvailableZones).not.toHaveBeenCalled();
+  });
+
+  it("picks the first available zone from the region when no zone is given", async () => {
+    listAvailableZones.mockResolvedValueOnce(["us-central1-c", "us-central1-f"]);
+    await provisionGceInstance(baseParams());
+
+    expect(listAvailableZones).toHaveBeenCalledWith("us-central1");
+    expect(createInstance).toHaveBeenCalledWith("us-central1-c", expect.any(Object));
   });
 
   it("passes machine type, Ubuntu image, 30GB disk, and the SSH key", async () => {

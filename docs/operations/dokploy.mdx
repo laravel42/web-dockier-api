@@ -1,0 +1,97 @@
+---
+title: Dokploy Deploy Provider
+description: Set up and operate the Dokploy-backed deploy pipeline.
+---
+
+Dockier's active deploy pipeline delegates build and deployment to a self-hosted **Dokploy** instance. For each project, a VPS is provisioned **on the deploying user's own AWS or GCP account**, registered in Dokploy as a remote server, and used as the deploy target. Dockier owns no shared compute.
+
+This runbook covers standing up Dokploy, wiring the required configuration, and the operational model. It does **not** require the legacy CloudFormation/Pulumi pipeline.
+
+## Architecture at a glance
+
+| Concern | Owner |
+|---------|-------|
+| Orchestration (projects, servers, apps, deploy, AI recovery) | Dokploy API |
+| Compute (the VPS that runs the app) | The user's connected AWS/GCP account |
+| Build strategy detection (dockerfile / static / railpack / nixpacks) | Dockier repo analyzer |
+| Container build, Traefik routing, TLS | Dokploy |
+| Per-tenant cloud credentials | Dockier `server_providers` table (by `providerId`) |
+
+Pipeline stages: **Ensure Project → (Sync Git ‖ Provision Server) → Configure Application → Deploy with Retry**.
+
+## Prerequisites
+
+- A running Dokploy instance reachable from the Dockier backend (Railway in production). A private LAN address will not work from a hosted backend — expose Dokploy via a public URL or tunnel.
+- A Dokploy API token.
+- An SSH key registered in Dokploy (Dokploy must hold the **private** half).
+- Users have connected an AWS or GCP provider under **Settings → Providers**.
+
+## 1. Stand up Dokploy
+
+Follow the [official Dokploy install guide](https://docs.dokploy.com). Once the UI is reachable, note its base URL. The API base is that URL plus `/api` (e.g. `https://dokploy.example.com/api`).
+
+## 2. Generate an API token
+
+In the Dokploy dashboard, open the API / Swagger settings and generate a token. This becomes `DOKPLOY_API_TOKEN`. It is sent as `Authorization: Bearer <token>`.
+
+## 3. Register an SSH key
+
+In Dokploy → **Settings → SSH Keys**, create a key (ED25519 recommended). Dokploy stores the private half and uses it to connect to remote servers.
+
+The Dokploy UI does not display the key's internal id. Retrieve it from the API:
+
+```bash
+curl -s -H "Authorization: Bearer $DOKPLOY_API_TOKEN" \
+  "$DOKPLOY_API_URL/sshKey.all?input=%7B%7D"
+```
+
+Copy the `sshKeyId` value — this is `DOKPLOY_SSH_KEY_ID`. The provision stage installs this key's **public** half on every VPS it launches so Dokploy can connect and run its setup.
+
+## 4. Configure Dockier
+
+Set these on the backend (Railway variables or the Cloudflare secrets bridge):
+
+```env
+DEPLOY_PROVIDER=dokploy
+DOKPLOY_API_URL=https://dokploy.example.com/api
+DOKPLOY_API_TOKEN=<token from step 2>
+DOKPLOY_SSH_KEY_ID=<sshKeyId from step 3>
+```
+
+Cloud credentials are **not** env vars — they are per-tenant rows in `server_providers`, resolved by the deployment's `providerId`. AWS stores an access key + secret; GCP stores the full service-account JSON in `api_key`.
+
+### Config validation
+
+The backend fails fast on misconfiguration:
+
+- **At boot:** the deploy worker logs a warning listing any missing `DOKPLOY_*` values.
+- **At deploy time:** `assertDokployConfigured()` throws a single aggregated error before the deployment leaves `pending`, so you never get an opaque failure mid-pipeline.
+
+`DOKPLOY_DEFAULT_SERVER_IP` is a **testing-only** override that registers a pre-provisioned IP instead of launching a VPS. Leave it unset in production.
+
+## 5. Verify
+
+Trigger a deploy from the wizard (Provider → Analysis → Plan → Deploy). Watch the stage timeline; logs carry `[stage:...]` markers. On success the deployment stores the app URL.
+
+## Provisioning details
+
+**AWS (EC2).** Imports the SSH key pair, finds-or-creates a security group opening 22/80/443, resolves a recent Ubuntu 22.04+ AMI, launches the plan's instance type with a 30 GB gp3 volume, and polls until the instance is running with a public IP.
+
+**GCP (Compute Engine).** Ensures a firewall rule for 22/80/443, creates an Ubuntu 22.04 LTS VM (plan machine type, 30 GB pd-balanced, ephemeral external IP, SSH key in metadata), and polls the zonal operation. The zone is resolved from the region's available zones, falling back to `<region>-b`.
+
+After the VM is reachable on port 22, it is registered in Dokploy (`server.create` → `server.setup` → `server.validate`) and the mapping is stored in `dokploy_servers`.
+
+## Teardown
+
+Deleting a project — or calling `POST /projects/:id/infrastructure/teardown` — removes the Dokploy application (`application.remove`) and remote server (`server.remove`) and terminates the cloud VM (EC2 `TerminateInstances` / GCE instance delete). Teardown is best-effort and idempotent: a single failure (e.g. an already-deleted resource) is logged and does not block project deletion. Outcomes aggregate to `torn_down`, `partial`, or `nothing_to_tear_down`.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---------|--------------|
+| Deploy fails immediately with a config error | A `DOKPLOY_*` value is missing — check the boot warning and the deploy error message. |
+| `server.setup` cannot connect over SSH | The VPS lacks the public key matching `DOKPLOY_SSH_KEY_ID`, or Dokploy does not hold that key's private half. |
+| "invalid or lack permission" during provisioning | The tenant's AWS/GCP credentials are wrong or missing IAM roles (EC2/Compute admin). |
+| "capacity or quota limit" | The user's cloud account hit a quota — try another instance type or region. |
+| GCE create fails on zone | Region has no `-b` zone and zone listing failed; check the account's zone availability. |
+| Orphaned VM after delete | Teardown returned `partial` — check logs and remove the instance manually. |

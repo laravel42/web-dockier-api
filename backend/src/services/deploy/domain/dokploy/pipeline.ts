@@ -98,6 +98,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       client,
       log,
       maxAttempts: 3,
+      pollIntervalMs: event.deployPollIntervalMs,
     });
 
     // ─── Success ─────────────────────────────────────────────────

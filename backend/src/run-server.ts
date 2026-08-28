@@ -34,7 +34,14 @@ interface WorkerEntry {
 }
 
 const workerRegistry: WorkerEntry[] = [
-  { services: ["deploy"], register: registerDeployWorker },
+  {
+    services: ["deploy"],
+    register: registerDeployWorker,
+    onStartup: async () => {
+      const { warnIfDokployMisconfigured } = await import("./services/deploy/domain/dokploy/config.js");
+      warnIfDokployMisconfigured((msg) => logger.warn(msg));
+    },
+  },
   { services: ["image-builder"], register: registerImageBuildWorker },
   {
     services: ["code-analysis"],

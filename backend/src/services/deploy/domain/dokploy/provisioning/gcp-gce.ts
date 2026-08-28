@@ -52,7 +52,6 @@ export interface GceProvisionResult {
  */
 export async function provisionGceInstance(params: GceProvisionParams): Promise<GceProvisionResult> {
   const log = params.log ?? (() => {});
-  const zone = params.zone || `${params.region}-b`;
   const machineType = params.machineType || DEFAULT_MACHINE_TYPE;
   const name = sanitizeInstanceName(params.instanceName);
 
@@ -62,6 +61,11 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
   } catch (err) {
     throw wrapGcpError(err, "authenticate with GCP");
   }
+
+  // Resolve the target zone. An explicit zone wins; otherwise query the region's
+  // available (UP) zones and pick the preferred one, falling back to <region>-b
+  // if the lookup returns nothing.
+  const zone = await resolveZone(client, params.region, params.zone, log);
 
   // ─── 1. Firewall rule (idempotent) ─────────────────────────────
   await log(`Ensuring firewall rule "${FIREWALL_NAME}" (ports ${OPEN_PORTS.join("/")})...`);
@@ -114,6 +118,32 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Pick a target zone for the given region.
+ *  - explicit `zone` param always wins
+ *  - else query the region's UP zones and take the preferred one
+ *  - else fall back to `<region>-b`
+ */
+async function resolveZone(
+  client: Awaited<ReturnType<typeof createGcpClient>>,
+  region: string,
+  explicitZone: string | undefined,
+  log: (line: string) => Promise<void> | void,
+): Promise<string> {
+  if (explicitZone) return explicitZone;
+
+  const fallback = `${region}-b`;
+  const zones = await client.listAvailableZones(region);
+  if (zones.length === 0) {
+    await log(`Could not list zones for ${region}; falling back to ${fallback}`);
+    return fallback;
+  }
+
+  const chosen = zones[0];
+  await log(`Selected zone ${chosen} (available: ${zones.join(", ")})`);
+  return chosen;
+}
 
 async function pollExternalIp(
   client: Awaited<ReturnType<typeof createGcpClient>>,

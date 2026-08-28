@@ -357,6 +357,38 @@ export class GcpClient {
   }
 
   /**
+   * List UP (available) zone names within a region, ordered by preference.
+   *
+   * Compute Engine zone names look like "us-central1-a". We prefer the -b/-c/-f
+   * suffixes (historically better capacity than -a) but return whatever is UP.
+   * Returns [] if the lookup fails so callers can fall back to a default.
+   */
+  async listAvailableZones(region: string): Promise<string[]> {
+    try {
+      const data = await this.requestJson<{
+        items?: Array<{ name: string; status: string; region: string }>;
+      }>(
+        `https://compute.googleapis.com/compute/v1/projects/${this.projectId}/zones`,
+        { noRetry: true },
+      );
+
+      const zones = (data.items ?? [])
+        .filter((z) => z.status === "UP" && z.name.startsWith(`${region}-`))
+        .map((z) => z.name);
+
+      const rank = (name: string): number => {
+        const suffix = name.slice(name.lastIndexOf("-") + 1);
+        const order = ["b", "c", "f", "d", "a"];
+        const idx = order.indexOf(suffix);
+        return idx === -1 ? order.length : idx;
+      };
+      return zones.sort((a, b) => rank(a) - rank(b));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Read a Compute Engine instance's external (NAT) IP address.
    * Returns null if the instance has no external IP yet.
    */

@@ -12,6 +12,7 @@
 import { createWorker, DEPLOY_QUEUE } from "../../../shared/database/queue.js";
 import { executePipeline, type PipelineInput } from "./pipeline/pipeline.js";
 import { executeDokployPipeline } from "./dokploy/pipeline.js";
+import { assertDokployConfigured } from "./dokploy/config.js";
 import { env } from "../../../shared/config.js";
 
 /**
@@ -24,21 +25,10 @@ import { env } from "../../../shared/config.js";
  */
 async function routePipeline(event: PipelineInput): Promise<void> {
   if (env.DEPLOY_PROVIDER === "dokploy") {
-    // Fail fast with a clear error if Dokploy env vars are missing.
-    // This prevents the job from entering "building" state only to crash
-    // with an obscure error when the client is instantiated.
-    if (!env.DOKPLOY_API_URL) {
-      throw new Error(
-        "DEPLOY_PROVIDER is set to \"dokploy\" but DOKPLOY_API_URL is not configured. " +
-        "Set DOKPLOY_API_URL in .env or your secrets store to the base URL of your Dokploy instance (e.g. https://dokploy.example.com/api).",
-      );
-    }
-    if (!env.DOKPLOY_API_TOKEN) {
-      throw new Error(
-        "DEPLOY_PROVIDER is set to \"dokploy\" but DOKPLOY_API_TOKEN is not configured. " +
-        "Set DOKPLOY_API_TOKEN in .env or your secrets store to a valid Dokploy API token.",
-      );
-    }
+    // Fail fast with a single clear error if the Dokploy provider is
+    // misconfigured, before the deployment flips to "building" and crashes
+    // with an opaque error deep inside a stage.
+    assertDokployConfigured();
     return executeDokployPipeline(event);
   }
   return executePipeline(event);

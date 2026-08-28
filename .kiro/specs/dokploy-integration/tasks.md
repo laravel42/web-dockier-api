@@ -168,8 +168,8 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 
 - [ ] 18. Documentation
   - [x] 18.1 Update `AGENTS.md` with new deploy flow description
-  - [ ] 18.2 Update `PRODUCT.md` if deploy feature description changes
-  - [ ] 18.3 Add operational runbook: how to set up a Dokploy instance, configure API access
+  - [x] 18.2 Updated `PRODUCT.md` deploy description: per-tenant VPS provisioning on the user's own AWS/GCP account + teardown on delete
+  - [x] 18.3 Added operational runbook `docs/operations/dokploy.mdx` (Dokploy setup, API token, SSH key id retrieval, config + validation, provisioning/teardown, troubleshooting); registered in `docs/docs.json`
 
 ## Task Dependency Graph
 

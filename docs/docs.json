@@ -41,6 +41,8 @@
             "group": "Operations",
             "pages": [
               "operations/cloudflare",
+              "operations/railway",
+              "operations/dokploy",
               "operations/migrations"
             ]
           }
