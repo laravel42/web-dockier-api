@@ -235,6 +235,141 @@ export class GcpClient {
 
   // ─── Compute Engine ───────────────────────────────────────────────
 
+  /**
+   * Create a Compute Engine VM instance.
+   *
+   * Returns the name of the zonal operation that must be polled to completion
+   * (see `waitForZoneOperation`). Treats a 409 (already exists) as success.
+   */
+  async createInstance(zone: string, params: {
+    name: string;
+    machineType: string;
+    sourceImage: string;
+    /** SSH key material as GCP metadata value, e.g. "root:ssh-ed25519 AAAA...". */
+    sshKeys: string;
+    /** Root disk size in GB. Default 30. */
+    diskSizeGb?: number;
+    /** Network tags (used to target firewall rules). */
+    tags?: string[];
+    /** Extra labels applied to the instance. */
+    labels?: Record<string, string>;
+  }): Promise<{ operationName: string; alreadyExists: boolean }> {
+    const diskSizeGb = params.diskSizeGb ?? 30;
+    const body = {
+      name: params.name,
+      machineType: `zones/${zone}/machineTypes/${params.machineType}`,
+      disks: [{
+        boot: true,
+        autoDelete: true,
+        initializeParams: {
+          sourceImage: params.sourceImage,
+          diskSizeGb: String(diskSizeGb),
+          diskType: `zones/${zone}/diskTypes/pd-balanced`,
+        },
+      }],
+      networkInterfaces: [{
+        network: "global/networks/default",
+        // An empty accessConfig block requests an ephemeral external IP (NAT).
+        accessConfigs: [{ type: "ONE_TO_ONE_NAT", name: "External NAT" }],
+      }],
+      metadata: {
+        items: [{ key: "ssh-keys", value: params.sshKeys }],
+      },
+      tags: params.tags ? { items: params.tags } : undefined,
+      labels: { "managed-by": "dockier", ...(params.labels ?? {}) },
+    };
+
+    try {
+      const op = await this.requestJson<{ name: string }>(
+        `https://compute.googleapis.com/compute/v1/projects/${this.projectId}/zones/${zone}/instances`,
+        { method: "POST", body },
+      );
+      return { operationName: op.name, alreadyExists: false };
+    } catch (err) {
+      if (err instanceof GcpApiError && err.isAlreadyExists) {
+        return { operationName: "", alreadyExists: true };
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Ensure a firewall rule exists opening the given TCP ports (idempotent).
+   * Applies to instances carrying `targetTag` (or all instances if omitted).
+   */
+  async ensureFirewallRule(params: {
+    name: string;
+    ports: string[];
+    targetTag?: string;
+  }): Promise<void> {
+    const body = {
+      name: params.name,
+      network: "global/networks/default",
+      direction: "INGRESS",
+      sourceRanges: ["0.0.0.0/0"],
+      allowed: [{ IPProtocol: "tcp", ports: params.ports }],
+      targetTags: params.targetTag ? [params.targetTag] : undefined,
+    };
+
+    try {
+      await this.requestJson(
+        `https://compute.googleapis.com/compute/v1/projects/${this.projectId}/global/firewalls`,
+        { method: "POST", body },
+      );
+    } catch (err) {
+      // A rule with this name already exists — good enough (idempotent).
+      if (err instanceof GcpApiError && err.isAlreadyExists) return;
+      throw err;
+    }
+  }
+
+  /**
+   * Poll a zonal operation until it reaches DONE (or a timeout elapses).
+   * Throws if the operation completes with an error.
+   */
+  async waitForZoneOperation(
+    zone: string,
+    operationName: string,
+    opts: { timeoutMs?: number; intervalMs?: number } = {},
+  ): Promise<void> {
+    const timeoutMs = opts.timeoutMs ?? 180_000;
+    const intervalMs = opts.intervalMs ?? 3_000;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const op = await this.requestJson<{
+        status?: string;
+        error?: { errors?: Array<{ message?: string }> };
+      }>(
+        `https://compute.googleapis.com/compute/v1/projects/${this.projectId}/zones/${zone}/operations/${operationName}`,
+        { noRetry: true },
+      );
+
+      if (op.status === "DONE") {
+        const opError = op.error?.errors?.[0]?.message;
+        if (opError) throw new GcpApiError(`GCP operation failed: ${opError}`, 500);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+
+    throw new GcpApiError(`GCP operation ${operationName} did not complete within ${Math.round(timeoutMs / 1000)}s`, 504);
+  }
+
+  /**
+   * Read a Compute Engine instance's external (NAT) IP address.
+   * Returns null if the instance has no external IP yet.
+   */
+  async getInstanceExternalIp(zone: string, instanceName: string): Promise<string | null> {
+    const data = await this.requestJson<{
+      networkInterfaces?: Array<{ accessConfigs?: Array<{ natIP?: string }> }>;
+    }>(
+      `https://compute.googleapis.com/compute/v1/projects/${this.projectId}/zones/${zone}/instances/${instanceName}`,
+      { noRetry: true },
+    );
+    return data.networkInterfaces?.[0]?.accessConfigs?.[0]?.natIP ?? null;
+  }
+
   /** Delete a Compute Engine instance by name (idempotent — ignores 404). */
   async deleteInstance(zone: string, instanceName: string): Promise<boolean> {
     try {

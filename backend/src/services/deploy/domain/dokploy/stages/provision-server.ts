@@ -20,6 +20,7 @@ import { getServer, upsertServer, updateServerStatus } from "../mappings.js";
 import { env } from "../../../../../shared/config.js";
 import { getProviderCredentialsSafe } from "../../../../../lib/provider-credentials.js";
 import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
+import { provisionGceInstance } from "../provisioning/gcp-gce.js";
 import { waitForSsh } from "../provisioning/wait-for-ssh.js";
 
 export interface ProvisionServerResult {
@@ -91,14 +92,11 @@ export async function stageProvisionServer(params: {
   }
 
   if (provider === "gcp") {
-    throw new Error(
-      "GCP VPS auto-provisioning is not implemented yet. " +
-      "Use an AWS provider, or set DOKPLOY_DEFAULT_SERVER_IP for testing.",
-    );
+    return provisionGcpServer({ projectId, providerId, instanceType, creds, client, log });
   }
 
   throw new Error(
-    `Unsupported cloud provider "${creds.provider}" for VPS provisioning. Supported: aws.`,
+    `Unsupported cloud provider "${creds.provider}" for VPS provisioning. Supported: aws, gcp.`,
   );
 }
 
@@ -149,6 +147,62 @@ async function provisionAwsServer(params: {
   }
 
   // Wait for SSH before handing the box to Dokploy's setup (which SSHes in).
+  await log(`[stage:provision-server] Waiting for SSH on ${serverIp}:22...`);
+  const reachable = await waitForSsh(serverIp, 22, {
+    onAttempt: (attempt) => { if (attempt % 6 === 0) void log(`[stage:provision-server] still waiting for SSH (attempt ${attempt})...`); },
+  });
+  if (!reachable) {
+    if (await getServer(projectId)) await updateServerStatus(projectId, "error");
+    throw new Error(`Provisioned instance ${instanceId} (${serverIp}) did not become SSH-reachable in time`);
+  }
+
+  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, client, log });
+}
+
+/**
+ * Provision a Compute Engine VM on the tenant's GCP account, wait for SSH, and
+ * register it in Dokploy. The GCP credential is a service-account JSON string
+ * (server_providers.api_key). Installs the Dokploy-managed key's public half so
+ * Dokploy can connect and run its own setup.
+ */
+async function provisionGcpServer(params: {
+  projectId: string;
+  providerId: string;
+  instanceType?: string;
+  creds: { apiKey: string; apiSecret: string; region: string };
+  client: DokployClient;
+  log: (line: string) => Promise<void>;
+}): Promise<ProvisionServerResult> {
+  const { projectId, providerId, instanceType, creds, client, log } = params;
+
+  const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
+  if (!sshKeyId) {
+    throw new Error("DOKPLOY_SSH_KEY_ID is required to auto-provision servers");
+  }
+
+  const region = creds.region || "us-central1";
+  await log(`[stage:provision-server] Provisioning GCE VM on tenant GCP account (region ${region})...`);
+
+  const sshPublicKey = await getDokployPublicKey(client, sshKeyId);
+
+  let instanceId: string;
+  let serverIp: string;
+  try {
+    const result = await provisionGceInstance({
+      serviceAccountKey: creds.apiKey,
+      region,
+      machineType: instanceType,
+      sshPublicKey,
+      instanceName: `dockier-${projectId.slice(0, 8)}`,
+      log: (line) => log(`[stage:provision-server] ${line}`),
+    });
+    instanceId = result.instanceId;
+    serverIp = result.publicIp;
+  } catch (err) {
+    if (await getServer(projectId)) await updateServerStatus(projectId, "error");
+    throw err;
+  }
+
   await log(`[stage:provision-server] Waiting for SSH on ${serverIp}:22...`);
   const reachable = await waitForSsh(serverIp, 22, {
     onAttempt: (attempt) => { if (attempt % 6 === 0) void log(`[stage:provision-server] still waiting for SSH (attempt ${attempt})...`); },

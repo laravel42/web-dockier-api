@@ -4,7 +4,7 @@
 
 Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom image building) with a Dokploy-backed orchestration pipeline. The integration uses Dokploy's API for project management, application configuration, deployment execution, and AI-powered failure recovery. Compute is a per-tenant VPS launched on the deploying user's **own AWS or GCP account** (credentials from `server_providers`), then registered in Dokploy as a remote server — Dockier owns no shared compute. The frontend deploy wizard is simplified by removing the build step and replacing it with a real-time pipeline progress view.
 
-**Current status:** Phases 1–6 and 8–10 are largely complete. Task 7b (plan threading) is done, and Task 7 is done **for AWS** — the provision-server stage launches an EC2 VPS on the tenant's account, waits for SSH, and registers it in Dokploy (with unit tests). Outstanding: Task 7.12 (GCP provisioning), Task 7.18 (instance teardown on delete), and a live end-to-end validation (blocked on network reachability to the Dokploy instance).
+**Current status:** Phases 1–6 and 8–10 are largely complete. Task 7b (plan threading) is done, and Task 7 is done **for both AWS and GCP** — the provision-server stage launches a VPS on the tenant's account (EC2 or Compute Engine), waits for SSH, and registers it in Dokploy (with unit tests). Outstanding: Task 7.18 (instance teardown on delete) and a live end-to-end validation (blocked on network reachability to the Dokploy instance).
 
 ## Tasks
 
@@ -48,7 +48,7 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 6.5 For others: use `application.saveGitProvider` with SSH key
   - [x] 6.6 This stage stores needed params; actual git config is applied in configure-app stage
 
-- [ ] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account (AWS done; GCP + teardown pending)
+- [ ] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account (AWS + GCP done; teardown pending)
   - [x] 7.1 Create `backend/src/services/deploy/domain/dokploy/stages/provision-server.ts`
   - [x] 7.2 Check if project already has a provisioned server (`dokploy_servers`)
   - [x] 7.3 If existing + healthy, reuse it
@@ -64,11 +64,13 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
     - Resolve recent Ubuntu 22.04+ AMI (`DescribeImagesCommand`, Canonical `099720109477`)
     - Launch instance (`RunInstancesCommand`): instanceType from plan, key pair, SG, public IP, 30GB gp3, tag `ManagedBy=dockier`
     - Poll `DescribeInstancesCommand` until `running` + public IP assigned → return `{ ip, instanceId }`
-  - [ ] 7.12 **GCP provisioning** — new `provisionGceInstance(creds, plan)` + `GcpClient.createInstance()`:
-    - Build client with `createGcpClient(apiKey)` (`domain/infra/gcp-client.ts`)
-    - Add `createInstance(zone, params)` to `GcpClient` — `instances.insert` with Ubuntu 22.04+ image, machineType from plan, external NAT config, deploy SSH key in `ssh-keys` metadata
-    - Find-or-create firewall rule for tcp 22/80/443
-    - Poll the zonal operation to completion; read `networkInterfaces[].accessConfigs[].natIP` → return `{ ip, instanceName }`
+  - [x] 7.12 **GCP provisioning** — new `provisionGceInstance()` (`provisioning/gcp-gce.js`) + `GcpClient` methods:
+    - Builds client with `createGcpClient(apiKey)` (`domain/infra/gcp-client.ts`)
+    - Added `createInstance(zone, params)` to `GcpClient` — `instances.insert` with Ubuntu 22.04 LTS image, machineType from plan, external NAT config, deploy SSH key in `ssh-keys` metadata (`root:<pubkey>`), 30GB pd-balanced disk, `dockier-dokploy` network tag; treats 409 as already-exists
+    - Added `ensureFirewallRule()` (idempotent, tcp 22/80/443 on the network tag) and `waitForZoneOperation()` + `getInstanceExternalIp()`
+    - Polls the zonal operation to completion, then reads `networkInterfaces[].accessConfigs[].natIP` → returns `{ instanceId, publicIp, zone }`
+    - GCE instance-name sanitization; error mapping for auth/quota; wired into `stageProvisionServer` (gcp branch) with SSH wait + Dokploy registration
+    - Unit tests: `__tests__/gcp-gce.test.ts` (15 tests)
   - [x] 7.13 SSH reachability poll — new `waitForSsh(ip, 22, timeout)` in `provisioning/wait-for-ssh.ts`; poll TCP connect until reachable or timeout (~3 min) before Dokploy registration
   - [x] 7.14 Wire it up: replaced the `throw` in `stageProvisionServer` with resolve-creds → branch aws (provision → `waitForSsh` → `registerServerInDokploy`) / gcp throws not-implemented / others unsupported
   - [x] 7.15 Error handling: invalid creds, quota/permission, SSH timeout mapped to clear messages + mark `dokploy_servers.server_status='error'` for re-provision on next deploy
