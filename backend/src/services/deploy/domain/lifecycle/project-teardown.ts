@@ -10,11 +10,13 @@
 
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logger } from "../../../../shared/logger.js";
+import { env } from "../../../../shared/config.js";
 import { deriveRepoName, stackNameFor, sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
 import { parseInfra } from "../../types.js";
 import { getAdapter } from "../adapters/index.js";
 import type { DestroyContext, DestroyResult } from "../adapters/types.js";
+import { teardownDokployProject } from "./dokploy-teardown.js";
 
 /**
  * A distinct live stack belonging to a project, with everything needed to
@@ -256,11 +258,40 @@ export interface TeardownDeps {
   destroy?: (stack: ResolvedStack) => Promise<DestroyResult>;
 }
 
+/**
+ * Teardown path for Dokploy-provisioned projects. Delegates to the Dokploy
+ * teardown module and maps its result into the shared `TeardownResult` shape,
+ * updating `infra_state` on full success.
+ */
+async function teardownViaDokploy(projectId: string, tenantId: string): Promise<TeardownResult> {
+  const result = await teardownDokployProject(projectId, tenantId);
+
+  const perStack: TeardownStackResult[] = result.steps.map((step) => ({
+    stackName: step.resource,
+    success: step.success,
+    message: step.message,
+    errors: step.success ? [] : [step.message],
+  }));
+
+  if (result.status === "torn_down") {
+    await setProjectInfraState(projectId, tenantId, "torn_down");
+  }
+
+  return { status: result.status, message: result.message, perStack };
+}
+
 export async function teardownProjectInfrastructure(
   projectId: string,
   tenantId: string,
   deps: TeardownDeps = {},
 ): Promise<TeardownResult> {
+  // Dokploy deployments don't create Pulumi/CFN stacks — their infrastructure
+  // is a VPS + Dokploy records tracked in the dokploy_* tables. Route teardown
+  // to the Dokploy-specific path when that provider is active.
+  if (env.DEPLOY_PROVIDER === "dokploy") {
+    return teardownViaDokploy(projectId, tenantId);
+  }
+
   const resolve = deps.resolve ?? resolveProjectStacks;
   const destroy = deps.destroy ?? destroyStack;
 

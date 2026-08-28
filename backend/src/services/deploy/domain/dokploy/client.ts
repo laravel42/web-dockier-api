@@ -79,6 +79,10 @@ export class DokployClient {
     return this.query<DokployServer>("server.one", { serverId });
   }
 
+  async deleteServer(serverId: string): Promise<void> {
+    await this.mutation<unknown>("server.remove", { serverId });
+  }
+
   // ─── Applications ──────────────────────────────────────────────
 
   async createApplication(params: CreateApplicationParams): Promise<DokployApplication> {
@@ -91,6 +95,10 @@ export class DokployClient {
 
   async updateApplication(params: { applicationId: string } & Record<string, unknown>): Promise<void> {
     await this.mutation<unknown>("application.update", params);
+  }
+
+  async deleteApplication(applicationId: string): Promise<void> {
+    await this.mutation<unknown>("application.remove", { applicationId });
   }
 
   async saveBuildType(params: SaveBuildTypeParams): Promise<void> {

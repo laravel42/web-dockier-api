@@ -308,3 +308,33 @@ function wrapAwsError(err: unknown, action: string): Error {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// ─── Teardown ────────────────────────────────────────────────────
+
+/**
+ * Terminate an EC2 instance. Idempotent: a missing instance is treated as
+ * already-terminated (success). Used by project teardown.
+ */
+export async function terminateEc2Instance(
+  credentials: Ec2Credentials,
+  instanceId: string,
+): Promise<void> {
+  const { EC2Client, TerminateInstancesCommand } = await getEc2();
+
+  const ec2 = new EC2Client({
+    region: credentials.region,
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+    },
+  });
+
+  try {
+    await ec2.send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
+  } catch (err) {
+    const name = (err as { name?: string })?.name ?? "";
+    // Already gone — nothing to do.
+    if (name === "InvalidInstanceID.NotFound") return;
+    throw wrapAwsError(err, "terminate EC2 instance");
+  }
+}

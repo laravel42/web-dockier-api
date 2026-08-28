@@ -4,7 +4,7 @@
 
 Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom image building) with a Dokploy-backed orchestration pipeline. The integration uses Dokploy's API for project management, application configuration, deployment execution, and AI-powered failure recovery. Compute is a per-tenant VPS launched on the deploying user's **own AWS or GCP account** (credentials from `server_providers`), then registered in Dokploy as a remote server — Dockier owns no shared compute. The frontend deploy wizard is simplified by removing the build step and replacing it with a real-time pipeline progress view.
 
-**Current status:** Phases 1–6 and 8–10 are largely complete. Task 7b (plan threading) is done, and Task 7 is done **for both AWS and GCP** — the provision-server stage launches a VPS on the tenant's account (EC2 or Compute Engine), waits for SSH, and registers it in Dokploy (with unit tests). Outstanding: Task 7.18 (instance teardown on delete) and a live end-to-end validation (blocked on network reachability to the Dokploy instance).
+**Current status:** Phases 1–6 and 8–11 are complete. Task 7b (plan threading) is done, and Task 7 is fully done for **both AWS and GCP** — the provision-server stage launches a VPS on the tenant's account (EC2 or Compute Engine), waits for SSH, and registers it in Dokploy; teardown removes the Dokploy app/server and terminates the cloud VM on project delete (all with unit tests). The main outstanding item is a live end-to-end validation, currently blocked on network reachability to the Dokploy instance.
 
 ## Tasks
 
@@ -48,7 +48,7 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 6.5 For others: use `application.saveGitProvider` with SSH key
   - [x] 6.6 This stage stores needed params; actual git config is applied in configure-app stage
 
-- [ ] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account (AWS + GCP done; teardown pending)
+- [x] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account (AWS + GCP provisioning + teardown done)
   - [x] 7.1 Create `backend/src/services/deploy/domain/dokploy/stages/provision-server.ts`
   - [x] 7.2 Check if project already has a provisioned server (`dokploy_servers`)
   - [x] 7.3 If existing + healthy, reuse it
@@ -76,7 +76,7 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 7.15 Error handling: invalid creds, quota/permission, SSH timeout mapped to clear messages + mark `dokploy_servers.server_status='error'` for re-provision on next deploy
   - [x] 7.16 Injects the Dokploy-managed key's public half (from `client.listSSHKeys()` matched to `DOKPLOY_SSH_KEY_ID`) into the VM so Dokploy can connect — **assumes Dokploy holds the private half; verify before a live run**
   - [x] 7.17 Unit tests for the AWS path (`__tests__/aws-ec2.test.ts`, `__tests__/wait-for-ssh.test.ts`) — 20 tests: happy path, AMI selection, SG/key-pair idempotency, IP polling, error mapping
-  - [ ] 7.18 Teardown: terminate the EC2 instance when a project/server is deleted (not yet implemented — orphaned-VM risk)
+  - [x] 7.18 Teardown (`lifecycle/dokploy-teardown.ts`): on project infra teardown, remove the Dokploy application (`application.remove`) + server (`server.remove`), terminate the tenant's cloud VM (EC2 `TerminateInstances` / GCE `deleteInstance`), and delete the `dokploy_*` mapping rows. Best-effort/idempotent — per-resource results aggregate to torn_down/partial/nothing_to_tear_down. Dispatched from `teardownProjectInfrastructure` when `DEPLOY_PROVIDER=dokploy`. Unit tests: `__tests__/dokploy-teardown.test.ts` (8 tests)
 
 - [x] 7b. Plan Threading (prerequisite for 7.11/7.12 instance sizing)
   - [x] 7b.1 Added `instanceType` + `region` to the `POST /deploy/deployments` request schema (frontend already sent them; backend was dropping them)

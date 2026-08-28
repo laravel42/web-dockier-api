@@ -171,6 +171,18 @@ export async function updateServerStatus(projectId: string, status: string): Pro
   if (error) throw new Error(`Failed to update dokploy_servers status: ${error.message}`);
 }
 
+/**
+ * Delete the server mapping row for a project (used during teardown).
+ */
+export async function deleteServerMapping(projectId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("dokploy_servers")
+    .delete()
+    .eq("project_id", projectId);
+
+  if (error) throw new Error(`Failed to delete dokploy_servers row: ${error.message}`);
+}
+
 // ─── Application Mappings ──────────────────────────────────────────
 
 /**
@@ -229,6 +241,18 @@ export async function upsertApplication(params: {
     dokployServerId: data.dokploy_server_id,
     buildType: data.build_type,
   };
+}
+
+/**
+ * Delete the application mapping row for a project (used during teardown).
+ */
+export async function deleteApplicationMapping(projectId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("dokploy_applications")
+    .delete()
+    .eq("project_id", projectId);
+
+  if (error) throw new Error(`Failed to delete dokploy_applications row: ${error.message}`);
 }
 
 // ─── Composite Get-or-Create Helpers ───────────────────────────────
