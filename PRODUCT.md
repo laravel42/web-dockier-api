@@ -43,7 +43,7 @@ The differentiating mechanism is the **unbroken path from repository to shipped 
 
 Two parts of that are hard for a neighboring product to truthfully copy:
 
-1. **Deployment with no build authoring at all.** A repo analyzer detects runtime, framework, and package manager, then generates an optimized multi-stage Dockerfile tailored to the detected stack. When a build fails, Dockier patches the Dockerfile and retries automatically, up to three attempts. The user never sees, writes, or maintains a Dockerfile — and because generation is provider-agnostic, adding a cloud provider requires no change to project configuration.
+1. **Deployment with no build authoring at all.** A repo analyzer detects runtime, framework, and package manager, then selects the optimal build strategy (Nixpacks, Railpack, or Dockerfile) tailored to the detected stack. When a build fails, Dokploy's built-in AI diagnoses the issue and applies fixes automatically, retrying up to three attempts. The user never sees, writes, or maintains a Dockerfile — and because detection is provider-agnostic, adding a cloud provider requires no change to project configuration.
 2. **Findings that terminate in a shipped change, not a report.** A finding carries through AI fix generation, diff preview, and a real merge request on the connected Git host — or an issue in the team's own PM tool with severity-mapped priority.
 
 Scanners that only report, and deploy tools that only build, each solve one half. The position is the join.
@@ -56,7 +56,7 @@ Scanners that only report, and deploy tools that only build, each solve one half
 - **Scanning is manual and on-demand.** There is no cron, no webhook trigger, and no scan-on-deploy gate. The user decides when a scan runs, which makes the scan-launch and scan-result surfaces high-traffic rather than incidental.
 - **Results are consumed asynchronously.** Scan and deploy outcomes arrive over email, Slack, webhook, and in-app notification, so users frequently enter a surface from a notification rather than from navigation.
 - **Deploys are long-running and stateful.** Status moves pending → building → deploying → success / failed / destroyed. Users watch, leave, and return, so progress and terminal states must be legible on re-entry.
-- **Work spans providers the user already pays for:** AWS (ECS via CodeBuild → ECR → CloudFormation) and GCP (Cloud Run, Compute Engine, Cloud Storage + CDN via Pulumi + Artifact Registry), plus their existing PM tool among Jira, Linear, Asana, GitHub/GitLab Issues, ClickUp, Monday.com, Notion, Todoist, and Basecamp.
+- **Work spans providers the user already pays for:** AWS and GCP VPS instances via Dokploy-managed remote servers, plus their existing PM tool among Jira, Linear, Asana, GitHub/GitLab Issues, ClickUp, Monday.com, Notion, Todoist, and Basecamp.
 
 ---
 
@@ -86,7 +86,7 @@ Scanners that only report, and deploy tools that only build, each solve one half
 
 **AI-assisted remediation.** Fix suggestions from findings, diff preview, and merge requests (GitHub PR / GitLab MR / Bitbucket PR) with reviewer assignment. Issues created in connected PM tools with AI-generated titles, severity-mapped priority, and effort estimates.
 
-**Deployment automation.** Repo analyzer detects runtime, framework, and package manager and generates multi-stage Dockerfiles (Node, PHP, Python, Go, with framework-specific handling for Next.js, Nuxt, Laravel, Django, SvelteKit, Angular, Astro and more). When configured, an optional OpenAI-backed review refines the generated Dockerfile for correctness, security, and build efficiency — strictly best-effort, falling back to the mechanical Dockerfile if unavailable so it never blocks a deploy. Failed builds auto-patch and retry up to 3 times. Deploy wizard covers provider selection, env vars, post-deploy commands, and strategy. One-click teardown uses Pulumi state for GCP and CloudFormation stack deletion for AWS.
+**Deployment automation.** Repo analyzer detects runtime, framework, and package manager to automatically select the optimal build strategy (Nixpacks for zero-config, Railpack for Railway-compatible stacks, Dockerfile when one exists in the repo, or static for SPAs). Deploys are orchestrated via a self-hosted Dokploy instance that handles container building, Traefik routing, and TLS termination on remote servers. When a deploy fails, Dokploy's built-in AI diagnoses the failure logs and applies fixes automatically, retrying up to 3 times. Deploy wizard covers provider selection, plan (instance size), region, and environment. The pipeline shows real-time stage progress: Project → Git Sync → Server → App Config → Deploy. Legacy CloudFormation/Pulumi pipeline remains available via `DEPLOY_PROVIDER=native` feature flag.
 
 **Notifications.** Email, Slack, webhook, and in-app channels (in-app seeded by default). In-app dropdown carries rich metadata (branch, commit, deploy/scan context) with mark-as-read; full page at `/notifications`. Async delivery via pg-boss when `DATABASE_URL` is configured.
 

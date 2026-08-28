@@ -44,6 +44,12 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 
 - **Database access:** Use Supabase via `backend/src/shared/supabase/client.ts` with typed payloads and explicit row-to-response mapping.
 - **Secrets:** Local fallback in gitignored root `.env`. Production: Cloudflare Secrets Store (`pnpm secrets:push`, `LOAD_SECRETS_FROM=cloudflare`). Backend hosted on Railway — see `docs/operations/railway.mdx`.
+  - Core: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `JWT_SECRET`, `DATABASE_URL`, `MIGRATE_URL`
+  - Git integrations: `GITHUB_APP_*`, `GITLAB_APP_*`
+  - AI: `OPENAI_API_KEY`, `OPENAI_MODEL`, `AI_DOCKERFILE_REVIEW`
+  - Deploy (Dokploy): `DOKPLOY_API_URL`, `DOKPLOY_API_TOKEN`, `DOKPLOY_SSH_KEY_ID`, `DEPLOY_PROVIDER` (`"dokploy"` | `"native"`)
+  - Deploy (legacy/AWS): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+  - Secrets bridge: `LOAD_SECRETS_FROM` (`"cloudflare"` to pull from Cloudflare Secrets Store at boot)
 - **Auth:** Supabase passwordless (OTP) → tenant-scoped JWT for API calls. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`. Optional TOTP 2FA.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 

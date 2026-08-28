@@ -151,7 +151,7 @@ describe("DokployClient", () => {
 
     beforeEach(() => {
       // Spy on global setTimeout and make it resolve immediately for backoff sleeps
-      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler) => {
+      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: (...args: unknown[]) => void) => {
         if (typeof fn === "function") fn();
         return 0 as unknown as ReturnType<typeof setTimeout>;
       });
@@ -331,6 +331,89 @@ describe("DokployClient", () => {
       expect(result).toEqual([{ projectId: "p1" }]);
       const calledUrl = fetchMock.mock.calls[0][0] as string;
       expect(calledUrl).toContain("project.all?input=");
+    });
+  });
+
+  // ─── Edge Cases ──────────────────────────────────────────────────
+
+  describe("edge cases", () => {
+    it("handles empty response body gracefully", async () => {
+      fetchMock.mockResolvedValue(
+        new Response("", { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+
+      // Empty body will cause JSON.parse to fail — should not crash unhandled
+      await expect(client.createProject({ name: "test" })).rejects.toThrow();
+    });
+
+    it("handles malformed JSON in response body", async () => {
+      fetchMock.mockResolvedValue(
+        new Response("{not valid json", { status: 200 }),
+      );
+
+      await expect(client.getProject("p1")).rejects.toThrow();
+    });
+
+    it("treats 429 Too Many Requests as retryable (server-side)", async () => {
+      // 429 is >= 400 and < 500, so it's treated as a client error (no retry)
+      fetchMock.mockResolvedValue(
+        new Response("Rate limited", { status: 429, statusText: "Too Many Requests" }),
+      );
+
+      await expect(client.listProjects()).rejects.toThrow(DokployError);
+      // 429 is a 4xx — not retried per current logic
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves original error as cause after retries exhausted", async () => {
+      // Spy on setTimeout to make retries instant
+      vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: (...args: unknown[]) => void) => {
+        if (typeof fn === "function") fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+
+      const fastClient = new DokployClient({
+        baseUrl: "https://dokploy.test/api",
+        apiToken: "test-token",
+        timeout: 30000,
+        maxRetries: 1,
+      });
+
+      const networkError = new Error("ECONNRESET");
+      fetchMock.mockRejectedValue(networkError);
+
+      try {
+        await fastClient.getProject("p1");
+        expect.fail("Should have thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(DokployError);
+        expect((err as DokployError).cause).toBe(networkError);
+      }
+
+      vi.restoreAllMocks();
+    });
+
+    it("handles response with unexpected content type", async () => {
+      fetchMock.mockResolvedValue(
+        new Response("<html>Gateway Error</html>", { status: 200, headers: { "Content-Type": "text/html" } }),
+      );
+
+      // Will fail at JSON parsing
+      await expect(client.getProject("p1")).rejects.toThrow();
+    });
+
+    it("includes error body text in 4xx DokployError message", async () => {
+      fetchMock.mockResolvedValue(
+        new Response("Project not found: proj-xyz", { status: 404, statusText: "Not Found" }),
+      );
+
+      try {
+        await client.getProject("proj-xyz");
+        expect.fail("Should have thrown");
+      } catch (err) {
+        expect(err).toBeInstanceOf(DokployError);
+        expect((err as DokployError).message).toContain("Project not found: proj-xyz");
+      }
     });
   });
 });

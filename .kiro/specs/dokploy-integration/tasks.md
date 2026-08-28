@@ -16,7 +16,7 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 - [ ] 2. Environment & Configuration
   - [x] 2.1 Add `DOKPLOY_API_URL`, `DOKPLOY_API_TOKEN`, `DOKPLOY_SSH_KEY_ID`, `DEPLOY_PROVIDER` to `.env.example`
   - [x] 2.2 Add config values to `backend/src/shared/config.ts`
-  - [ ] 2.3 Update `AGENTS.md` secrets documentation
+  - [x] 2.3 Update `AGENTS.md` secrets documentation
 
 - [ ] 3. Dokploy API Client
   - [x] 3.1 Create `backend/src/services/deploy/domain/dokploy/types.ts` — all Dokploy request/response types

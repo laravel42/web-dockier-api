@@ -2,8 +2,15 @@
  * Stage: Provision Server
  *
  * Ensures a Dokploy Remote Server exists for the project.
- * If a healthy server already exists, reuses it.
- * If not, provisions a new VPS and registers it in Dokploy.
+ * If a healthy server already exists in the DB, reuses it.
+ * If not, attempts to register a pre-provisioned VPS (from DOKPLOY_DEFAULT_SERVER_IP)
+ * or fails with a clear actionable error.
+ *
+ * Full VPS auto-provisioning (EC2/GCE API → launch → wait for SSH) is deferred
+ * to a follow-up task. For the initial integration, servers must be pre-provisioned
+ * externally and either:
+ *   a) Registered via `registerServerInDokploy()` from an admin endpoint, or
+ *   b) Set via `DOKPLOY_DEFAULT_SERVER_IP` env var for single-server setups.
  *
  * This stage runs in parallel with sync-git.
  */
@@ -45,27 +52,41 @@ export async function stageProvisionServer(params: {
     await log("[stage:provision-server] Existing server is in error state, re-provisioning...");
   }
 
-  // ─── Provision new VPS ─────────────────────────────────────────
-  // TODO: Phase 2.3 full implementation — call AWS EC2 or GCP Compute API
-  // to launch a new instance. For now, this throws a descriptive error
-  // indicating the VPS must be pre-provisioned externally.
-  //
-  // The full implementation will:
-  // 1. Load provider credentials (AWS/GCP keys)
-  // 2. Launch a t3.small (AWS) or n2d-standard-2 (GCP)
-  // 3. Wait for instance to be running
-  // 4. Wait for SSH on port 22
-  // 5. Register in Dokploy + run setup
-
   await log("[stage:provision-server] Provisioning new server...");
 
-  // For the initial integration, expect the server IP to come from
-  // a pre-provisioned VPS. The full VPS provisioning (EC2/GCE API calls)
-  // will be added as a follow-up task.
+  // ─── Pre-provisioned server path ───────────────────────────────
+  // For the initial integration, we support a DOKPLOY_DEFAULT_SERVER_IP
+  // env var for single-server setups. This registers the server in Dokploy
+  // and stores the mapping. The server must already have SSH access configured
+  // with the key matching DOKPLOY_SSH_KEY_ID.
+  const defaultServerIp = process.env.DOKPLOY_DEFAULT_SERVER_IP;
+  if (defaultServerIp) {
+    await log(`[stage:provision-server] Using pre-provisioned server: ${defaultServerIp}`);
+    return registerServerInDokploy({
+      projectId,
+      providerId,
+      serverIp: defaultServerIp,
+      client,
+      log,
+    });
+  }
+
+  // ─── No server available — fail with actionable guidance ───────
+  await log("[stage:provision-server] ✗ No server available for deployment");
   throw new Error(
-    "VPS auto-provisioning not yet implemented. " +
-    "Pre-provision a VPS and register it manually in Dokploy, " +
-    "then store the mapping in dokploy_servers.",
+    "No server available for this project. To fix this:\n" +
+    "\n" +
+    "Option A (recommended for testing): Set DOKPLOY_DEFAULT_SERVER_IP in your .env\n" +
+    "  to the IP address of a pre-provisioned VPS with SSH access.\n" +
+    "  The server needs: Ubuntu 22.04+, SSH on port 22, root access,\n" +
+    "  and the SSH key matching DOKPLOY_SSH_KEY_ID registered in Dokploy.\n" +
+    "\n" +
+    "Option B: Manually register a server mapping in the dokploy_servers table\n" +
+    "  with server_status='ready' and a valid dokploy_server_id from your\n" +
+    "  Dokploy instance.\n" +
+    "\n" +
+    "Option C (future): VPS auto-provisioning via AWS EC2 or GCP Compute Engine\n" +
+    "  will be implemented in a follow-up task.",
   );
 }
 

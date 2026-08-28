@@ -89,6 +89,8 @@ describe("executeDokployPipeline", () => {
     repo: "owner/my-app",
     branch: "main",
     providerId: "provider-1",
+    tofuScript: "",
+    deployStrategy: "vps",
     hasDocker: false,
     primaryLanguage: "javascript",
     techStack: ["node"],

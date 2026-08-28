@@ -84,7 +84,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             <Button
               variant="outline"
               size="lg"
-              className="border-0 hover:!bg-background hover:!opacity-90"
+              className="border-0 hover:bg-background! hover:opacity-90!"
               onClick={handleBack}
               iconLeft={<ArrowLeftIcon className="size-4" />}
             >

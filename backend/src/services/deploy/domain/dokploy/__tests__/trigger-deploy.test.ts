@@ -20,7 +20,7 @@ describe("stageTriggerDeploy", () => {
 
   beforeEach(() => {
     // Make setTimeout resolve immediately so sleep() doesn't actually wait
-    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler) => {
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: (...args: unknown[]) => void) => {
       if (typeof fn === "function") fn();
       return 0 as unknown as ReturnType<typeof setTimeout>;
     });
@@ -94,9 +94,9 @@ describe("stageTriggerDeploy", () => {
     // Restore real setTimeout for this test — we need Date.now() to advance
     vi.restoreAllMocks();
 
-    // Re-stub fetch-unrelated setTimeout to be instant but track elapsed time
+    // Re-stub setTimeout to be instant but track elapsed time
     let elapsed = 0;
-    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler, ms?: number) => {
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: (...args: unknown[]) => void, ms?: number) => {
       elapsed += ms ?? 0;
       if (typeof fn === "function") fn();
       return 0 as unknown as ReturnType<typeof setTimeout>;
@@ -147,7 +147,7 @@ describe("stageDeployWithRetry", () => {
 
   beforeEach(() => {
     // Make setTimeout resolve immediately
-    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler) => {
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: (...args: unknown[]) => void) => {
       if (typeof fn === "function") fn();
       return 0 as unknown as ReturnType<typeof setTimeout>;
     });
