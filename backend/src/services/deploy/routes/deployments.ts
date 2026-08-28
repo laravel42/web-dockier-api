@@ -47,6 +47,10 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
           skipPipeline: z.boolean().optional(),
           templateId: z.string().max(100).optional(),
           services: z.array(serviceEntrySchema).max(20).optional(),
+          // Selected plan's instance size + region — used by the Dokploy pipeline
+          // to provision a VPS on the tenant's cloud account (see REQ-4).
+          instanceType: z.string().max(50).optional(),
+          region: z.string().max(50).optional(),
         }),
         response: { 200: deploymentSchema },
       },
@@ -70,6 +74,8 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         skipPipeline: request.body.skipPipeline,
         templateId: request.body.templateId,
         services: request.body.services,
+        instanceType: request.body.instanceType,
+        region: request.body.region,
         correlationId: request.id,
       });
     },

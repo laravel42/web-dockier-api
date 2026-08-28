@@ -53,6 +53,10 @@ export interface PipelineInput {
   registryUrl?: string;
   services?: Array<{ type: string; name: string; mode: string }>;
   useRepoDockerfile?: boolean;
+  /** Selected plan's instance size (e.g. "t3.small" / "n2d-standard-2"). Used for VPS provisioning. */
+  instanceType?: string;
+  /** Target region for provisioning. Falls back to the provider's configured region. */
+  region?: string;
   /** Request ID from the originating HTTP request — used for log correlation. */
   correlationId?: string;
 }

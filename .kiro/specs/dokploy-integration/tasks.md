@@ -4,7 +4,7 @@
 
 Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom image building) with a Dokploy-backed orchestration pipeline. The integration uses Dokploy's API for project management, application configuration, deployment execution, and AI-powered failure recovery. Compute is a per-tenant VPS launched on the deploying user's **own AWS or GCP account** (credentials from `server_providers`), then registered in Dokploy as a remote server — Dockier owns no shared compute. The frontend deploy wizard is simplified by removing the build step and replacing it with a real-time pipeline progress view.
 
-**Current status:** Phases 1–6 and 8–10 are largely complete. The main outstanding work is Task 7 (real per-tenant VPS provisioning — currently the stage throws unless `DOKPLOY_DEFAULT_SERVER_IP` is set) and its prerequisite Task 7b (threading the selected plan through to the provisioner).
+**Current status:** Phases 1–6 and 8–10 are largely complete. Task 7b (plan threading) is done, and Task 7 is done **for AWS** — the provision-server stage launches an EC2 VPS on the tenant's account, waits for SSH, and registers it in Dokploy (with unit tests). Outstanding: Task 7.12 (GCP provisioning), Task 7.18 (instance teardown on delete), and a live end-to-end validation (blocked on network reachability to the Dokploy instance).
 
 ## Tasks
 
@@ -48,7 +48,7 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 6.5 For others: use `application.saveGitProvider` with SSH key
   - [x] 6.6 This stage stores needed params; actual git config is applied in configure-app stage
 
-- [ ] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account
+- [ ] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account (AWS done; GCP + teardown pending)
   - [x] 7.1 Create `backend/src/services/deploy/domain/dokploy/stages/provision-server.ts`
   - [x] 7.2 Check if project already has a provisioned server (`dokploy_servers`)
   - [x] 7.3 If existing + healthy, reuse it
@@ -69,16 +69,18 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
     - Add `createInstance(zone, params)` to `GcpClient` — `instances.insert` with Ubuntu 22.04+ image, machineType from plan, external NAT config, deploy SSH key in `ssh-keys` metadata
     - Find-or-create firewall rule for tcp 22/80/443
     - Poll the zonal operation to completion; read `networkInterfaces[].accessConfigs[].natIP` → return `{ ip, instanceName }`
-  - [ ] 7.13 SSH reachability poll — new `waitForSsh(ip, 22, timeout)`; poll TCP connect until reachable or timeout (~3 min) before Dokploy registration
-  - [ ] 7.14 Wire it up: replace the current `throw` in `stageProvisionServer` with resolve-creds → branch aws/gcp → provision → `waitForSsh` → `registerServerInDokploy({ serverIp, instanceId, providerId })`
-  - [ ] 7.15 Error handling: invalid creds, quota/permission, SSH timeout, setup/validate failure → clear messages + mark `dokploy_servers.server_status='error'` for re-provision on next deploy
-  - [ ] 7.16 Ensure the deploy SSH public key injected into the VM matches the private key Dokploy holds for `DOKPLOY_SSH_KEY_ID` (or the tenant `ssh_keys` row, per design)
+  - [x] 7.13 SSH reachability poll — new `waitForSsh(ip, 22, timeout)` in `provisioning/wait-for-ssh.ts`; poll TCP connect until reachable or timeout (~3 min) before Dokploy registration
+  - [x] 7.14 Wire it up: replaced the `throw` in `stageProvisionServer` with resolve-creds → branch aws (provision → `waitForSsh` → `registerServerInDokploy`) / gcp throws not-implemented / others unsupported
+  - [x] 7.15 Error handling: invalid creds, quota/permission, SSH timeout mapped to clear messages + mark `dokploy_servers.server_status='error'` for re-provision on next deploy
+  - [x] 7.16 Injects the Dokploy-managed key's public half (from `client.listSSHKeys()` matched to `DOKPLOY_SSH_KEY_ID`) into the VM so Dokploy can connect — **assumes Dokploy holds the private half; verify before a live run**
+  - [x] 7.17 Unit tests for the AWS path (`__tests__/aws-ec2.test.ts`, `__tests__/wait-for-ssh.test.ts`) — 20 tests: happy path, AMI selection, SG/key-pair idempotency, IP polling, error mapping
+  - [ ] 7.18 Teardown: terminate the EC2 instance when a project/server is deleted (not yet implemented — orphaned-VM risk)
 
-- [ ] 7b. Plan Threading (prerequisite for 7.11/7.12 instance sizing)
-  - [ ] 7b.1 Add `plan`/`instanceSize` (+ region if not from provider) to the `POST /deploy/deployments` request schema
-  - [ ] 7b.2 Thread through `CreateDeploymentParams` → `createDeploymentRecord` (persist) → `enqueueDeployment`
-  - [ ] 7b.3 Add the field to `PipelineInput` (`domain/pipeline/shared.ts`)
-  - [ ] 7b.4 Pass it into `stageProvisionServer` and map to EC2 `instanceType` / GCE `machineType` (reuse instance types from `plans.ts`)
+- [x] 7b. Plan Threading (prerequisite for 7.11/7.12 instance sizing)
+  - [x] 7b.1 Added `instanceType` + `region` to the `POST /deploy/deployments` request schema (frontend already sent them; backend was dropping them)
+  - [x] 7b.2 Threaded through `CreateDeploymentParams` → `enqueueDeployment` (region falls back to the provider's region). Not persisted to `deployments` (pipeline runs from the enqueue payload; redeploy reuses the existing server)
+  - [x] 7b.3 Added `instanceType` + `region` to `PipelineInput` (`domain/pipeline/shared.ts`)
+  - [x] 7b.4 Passed into `stageProvisionServer` and mapped to the EC2 `instanceType` (instance sizes come from `plans.ts` via the wizard)
 
 - [x] 8. Configure Application Stage
   - [x] 8.1 Create `backend/src/services/deploy/domain/dokploy/stages/configure-app.ts`

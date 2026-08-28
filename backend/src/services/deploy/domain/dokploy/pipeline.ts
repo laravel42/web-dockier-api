@@ -65,7 +65,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // ─── Stage 2 & 3: Parallel — Sync Git + Provision Server ─────
     const [gitResult, serverResult] = await Promise.all([
       stageSyncGit({ gitConnectionId, repo, branch, log }),
-      stageProvisionServer({ projectId: projectId || deploymentId, providerId: event.providerId, client, log }),
+      stageProvisionServer({ projectId: projectId || deploymentId, providerId: event.providerId, instanceType: event.instanceType, client, log }),
     ]);
     checkTimeout();
 

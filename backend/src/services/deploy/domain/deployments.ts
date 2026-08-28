@@ -225,6 +225,10 @@ export interface CreateDeploymentParams {
   skipPipeline?: boolean;
   templateId?: string;
   services?: ServiceEntry[];
+  /** Selected plan's instance size (e.g. "t3.small"). Used for VPS provisioning. */
+  instanceType?: string;
+  /** Target region override. Falls back to the provider's configured region. */
+  region?: string;
   /** Request ID for end-to-end log correlation. */
   correlationId?: string;
 }
@@ -255,6 +259,8 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
     skipPipeline,
     templateId,
     services,
+    instanceType,
+    region,
     correlationId,
   } = params;
 
@@ -306,6 +312,8 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
       registryUrl,
       services: services as Array<{ type: string; name: string; mode: string }> | undefined,
       useRepoDockerfile,
+      instanceType,
+      region: region || providerRow.region || undefined,
       correlationId,
     });
   }

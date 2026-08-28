@@ -18,6 +18,9 @@
 import type { DokployClient } from "../client.js";
 import { getServer, upsertServer, updateServerStatus } from "../mappings.js";
 import { env } from "../../../../../shared/config.js";
+import { getProviderCredentialsSafe } from "../../../../../lib/provider-credentials.js";
+import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
+import { waitForSsh } from "../provisioning/wait-for-ssh.js";
 
 export interface ProvisionServerResult {
   dokployServerId: string;
@@ -30,10 +33,12 @@ export interface ProvisionServerResult {
 export async function stageProvisionServer(params: {
   projectId: string;
   providerId: string;
+  /** Selected plan's instance size (e.g. "t3.small"). Optional — defaults per provider. */
+  instanceType?: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, client, log } = params;
+  const { projectId, providerId, instanceType, client, log } = params;
 
   await log("[stage:provision-server] Checking for existing server...");
 
@@ -71,23 +76,105 @@ export async function stageProvisionServer(params: {
     });
   }
 
-  // ─── No server available — fail with actionable guidance ───────
-  await log("[stage:provision-server] ✗ No server available for deployment");
+  // ─── Auto-provision a VPS on the tenant's own cloud account ────
+  const creds = await getProviderCredentialsSafe(providerId);
+  if (!creds) {
+    throw new Error(
+      "Could not resolve cloud credentials for this deployment's provider. " +
+      "Verify the provider is configured under Settings → Providers.",
+    );
+  }
+
+  const provider = creds.provider.toLowerCase();
+  if (provider === "aws") {
+    return provisionAwsServer({ projectId, providerId, instanceType, creds, client, log });
+  }
+
+  if (provider === "gcp") {
+    throw new Error(
+      "GCP VPS auto-provisioning is not implemented yet. " +
+      "Use an AWS provider, or set DOKPLOY_DEFAULT_SERVER_IP for testing.",
+    );
+  }
+
   throw new Error(
-    "No server available for this project. To fix this:\n" +
-    "\n" +
-    "Option A (recommended for testing): Set DOKPLOY_DEFAULT_SERVER_IP in your .env\n" +
-    "  to the IP address of a pre-provisioned VPS with SSH access.\n" +
-    "  The server needs: Ubuntu 22.04+, SSH on port 22, root access,\n" +
-    "  and the SSH key matching DOKPLOY_SSH_KEY_ID registered in Dokploy.\n" +
-    "\n" +
-    "Option B: Manually register a server mapping in the dokploy_servers table\n" +
-    "  with server_status='ready' and a valid dokploy_server_id from your\n" +
-    "  Dokploy instance.\n" +
-    "\n" +
-    "Option C (future): VPS auto-provisioning via AWS EC2 or GCP Compute Engine\n" +
-    "  will be implemented in a follow-up task.",
+    `Unsupported cloud provider "${creds.provider}" for VPS provisioning. Supported: aws.`,
   );
+}
+
+/**
+ * Provision an EC2 VPS on the tenant's AWS account, wait for SSH, and register
+ * it in Dokploy. The SSH public key installed on the instance is the public
+ * half of the Dokploy-managed key referenced by DOKPLOY_SSH_KEY_ID, so Dokploy
+ * can connect and run its own setup.
+ */
+async function provisionAwsServer(params: {
+  projectId: string;
+  providerId: string;
+  instanceType?: string;
+  creds: { apiKey: string; apiSecret: string; region: string };
+  client: DokployClient;
+  log: (line: string) => Promise<void>;
+}): Promise<ProvisionServerResult> {
+  const { projectId, providerId, instanceType, creds, client, log } = params;
+
+  const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
+  if (!sshKeyId) {
+    throw new Error("DOKPLOY_SSH_KEY_ID is required to auto-provision servers");
+  }
+
+  const region = creds.region || "us-east-1";
+  await log(`[stage:provision-server] Provisioning EC2 VPS on tenant AWS account (region ${region})...`);
+
+  // The Dokploy key's public half must be installed on the VM so Dokploy can SSH in.
+  const sshPublicKey = await getDokployPublicKey(client, sshKeyId);
+
+  let instanceId: string;
+  let serverIp: string;
+  try {
+    const result = await provisionEc2Instance({
+      credentials: { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret, region },
+      instanceType,
+      sshPublicKey,
+      keyPairName: `dockier-${projectId.slice(0, 8)}`,
+      instanceName: `dockier-${projectId.slice(0, 8)}`,
+      log: (line) => log(`[stage:provision-server] ${line}`),
+    });
+    instanceId = result.instanceId;
+    serverIp = result.publicIp;
+  } catch (err) {
+    // Mark any prior server row as error so a later deploy re-provisions cleanly.
+    if (await getServer(projectId)) await updateServerStatus(projectId, "error");
+    throw err;
+  }
+
+  // Wait for SSH before handing the box to Dokploy's setup (which SSHes in).
+  await log(`[stage:provision-server] Waiting for SSH on ${serverIp}:22...`);
+  const reachable = await waitForSsh(serverIp, 22, {
+    onAttempt: (attempt) => { if (attempt % 6 === 0) void log(`[stage:provision-server] still waiting for SSH (attempt ${attempt})...`); },
+  });
+  if (!reachable) {
+    if (await getServer(projectId)) await updateServerStatus(projectId, "error");
+    throw new Error(`Provisioned instance ${instanceId} (${serverIp}) did not become SSH-reachable in time`);
+  }
+
+  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, client, log });
+}
+
+/**
+ * Fetch the public key material for the Dokploy-managed SSH key referenced by
+ * DOKPLOY_SSH_KEY_ID, so it can be installed on provisioned VMs.
+ */
+async function getDokployPublicKey(client: DokployClient, sshKeyId: string): Promise<string> {
+  const keys = await client.listSSHKeys();
+  const match = keys.find((k) => k.sshKeyId === sshKeyId);
+  if (!match?.publicKey) {
+    throw new Error(
+      `SSH key "${sshKeyId}" not found in Dokploy (or has no public key). ` +
+      "Check DOKPLOY_SSH_KEY_ID matches a key under Dokploy → Settings → SSH Keys.",
+    );
+  }
+  return match.publicKey.trim();
 }
 
 /**
