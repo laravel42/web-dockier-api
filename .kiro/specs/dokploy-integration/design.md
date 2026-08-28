@@ -221,15 +221,103 @@ This detection uses existing `RepoAnalysis` data (already computed in the Analys
 
 ## Server Provisioning Strategy
 
-The Dokploy pipeline still needs a VPS to deploy to. The server provisioning reuses existing provider credentials but simplifies the flow:
+The Dokploy pipeline needs a VPS to deploy to, and in the production model that VPS is launched **on the deploying tenant's own cloud account** (AWS or GCP). Dockier owns no shared compute. The provision-server stage resolves the tenant's credentials, launches a VM on their account, waits for SSH, then hands the IP to Dokploy.
 
-1. Use AWS SDK / GCP API to launch a minimal VPS (same instance types from plans.ts)
-2. Wait for SSH availability
-3. Register in Dokploy as a Remote Server
-4. Run `server.setup` to install Docker + Traefik + build tools
-5. Validate with `server.validate`
+### End-to-end flow
 
-This replaces the entire CloudFormation/Pulumi infrastructure-as-code approach with a simpler "just give me a VM" pattern. Dokploy handles everything else (Docker, networking, routing, TLS).
+```
+stageProvisionServer(projectId, providerId, plan, client, log)
+  │
+  ├─ 1. getServer(projectId) — reuse if server_status === "ready"
+  │
+  ├─ 2. DOKPLOY_DEFAULT_SERVER_IP set?  (testing-only)
+  │        └─ yes → registerServerInDokploy({ serverIp: default })  ── done
+  │
+  ├─ 3. getProviderCredentialsSafe(providerId)  → { provider, region, apiKey, apiSecret }
+  │
+  ├─ 4. branch on provider:
+  │        ├─ "aws" → provisionEc2Instance(creds, plan)  → { ip, instanceId }
+  │        └─ "gcp" → provisionGceInstance(creds, plan)  → { ip, instanceId }
+  │
+  ├─ 5. waitForSsh(ip, port 22, timeout)
+  │
+  └─ 6. registerServerInDokploy({ serverIp: ip, instanceId, providerId, ... })
+             └─ server.create → server.setup → server.validate → upsertServer(status="ready")
+```
+
+Steps 5–6 (SSH wait + Dokploy registration) already exist as `registerServerInDokploy()` in `provision-server.ts`. Steps 3–4 (credential resolve + VM launch) are the new work; today the stage throws when no `DOKPLOY_DEFAULT_SERVER_IP` and no existing server exist.
+
+### Credential resolution (per tenant, not backend-global)
+
+Credentials come from the `server_providers` table, resolved by the deployment's `providerId` via `getProviderCredentialsSafe(providerId)` in `backend/src/lib/provider-credentials.ts`. The shape differs by provider:
+
+| Provider | `api_key` | `api_secret` | Notes |
+|---|---|---|---|
+| `aws` | Access Key ID | Secret Access Key | `region` from the row (default `us-east-1`) |
+| `gcp` | Full service-account **JSON** (string) | unused | `project_id` + token minted via `getGcpAccessToken()` / `getGcpProjectId()` |
+
+The pipeline must **not** use backend-global AWS/GCP env credentials for provisioning.
+
+### AWS EC2 provisioning (`provisionEc2Instance`)
+
+Reuses `getEc2()` from `backend/src/lib/aws-sdk.ts` (the `@aws-sdk/client-ec2` dep is already present), constructed with the tenant's resolved credentials + region. Steps:
+
+1. `ImportKeyPairCommand` — import the deploy public key (idempotent by key name; reuse if exists).
+2. Security group — find-or-create one opening ingress 22/80/443 and egress all (`CreateSecurityGroupCommand` + `AuthorizeSecurityGroupIngressCommand`).
+3. Resolve a recent Ubuntu 22.04+ AMI (`DescribeImagesCommand`, Canonical owner `099720109477`) for the region.
+4. `RunInstancesCommand` — launch one instance: instanceType from the plan, the key pair, the SG, `AssociatePublicIpAddress`, 30GB gp3 root volume, tagged `ManagedBy=dockier`.
+5. Poll `DescribeInstancesCommand` until `running` + a public IP is assigned; return `{ ip, instanceId }`.
+
+The equivalent resource set exists today only as a Pulumi template string (`pulumi-templates/aws.ts` `buildAwsEc2`) — it is the reference for what this SDK routine must reproduce, but it is not callable as-is.
+
+### GCP Compute Engine provisioning (`provisionGceInstance`)
+
+Reuses `createGcpClient(apiKey)` / `GcpClient` from `backend/src/services/deploy/domain/infra/gcp-client.ts` (auth, token exchange, retries, and delete/find/exists helpers already exist). New methods to add to `GcpClient`:
+
+1. `createInstance(zone, params)` — `POST compute/v1/projects/{project}/zones/{zone}/instances` with an Ubuntu 22.04+ source image, machineType from the plan, an external NAT access config, and the deploy SSH key in metadata (`ssh-keys: root:<pubkey>`).
+2. Firewall rule — `POST .../global/firewalls` opening tcp 22/80/443 (find-or-create by name).
+3. Poll the returned zonal operation to completion, then read the instance's `networkInterfaces[].accessConfigs[].natIP` for the public IP; return `{ ip, instanceName }`.
+
+Teardown helpers (`deleteInstance`, `deleteFirewall`, `findInstance`) already exist for cleanup.
+
+### SSH reachability poll (`waitForSsh`)
+
+New helper — no equivalent exists today. Poll TCP connect to `ip:22` on an interval (e.g. 5s) until connectable or a timeout (e.g. 3 min). Register in Dokploy only after SSH is reachable so `server.setup` doesn't fail immediately.
+
+### Plan threading (new)
+
+The user-selected plan (instance size + region) is **not** currently on `PipelineInput`. It must be threaded:
+
+```
+request body (plan/instanceSize)
+  → CreateDeploymentParams
+  → createDeploymentRecord (persist)
+  → enqueueDeployment → PipelineInput.plan
+  → stageProvisionServer(plan) → EC2 instanceType / GCE machineType
+```
+
+Region for AWS comes from the `server_providers` row; for GCP, zone/region is derived from the provider row or a sensible default.
+
+### SSH key for provisioned VMs
+
+Two keys are in play: the tenant's public key stored in the `ssh_keys` table (injected into the VM's `authorized_keys`) and Dokploy's key referenced by `DOKPLOY_SSH_KEY_ID` (used by Dokploy to connect after registration). The private half matching `DOKPLOY_SSH_KEY_ID` must be the one Dokploy holds; the corresponding public key must be present on the launched VM. For a first cut, inject the Dokploy-managed public key into the VM metadata/authorized_keys at launch so `server.setup` can connect.
+
+### Reuse vs. build inventory
+
+**Reusable as-is:**
+- `getProviderCredentialsSafe(providerId)` — credential resolution (`lib/provider-credentials.ts`).
+- `getEc2()`, `getSts()` (`lib/aws-sdk.ts`); `GcpClient`, `createGcpClient`, `getGcpAccessToken`, `getGcpProjectId` + GCE delete/find/exists (`domain/infra/gcp-client.ts`).
+- `registerServerInDokploy()` and `upsertServer` / `getServer` / `updateServerStatus` (`dokploy/stages/provision-server.ts`, `dokploy/mappings.ts`). `dokploy_servers` already has `instance_id`, `provider_id`, `server_ip`, `server_status`.
+- Tenant SSH key lookup from the `ssh_keys` table (pattern in `adapters/gcp-compute.ts`).
+
+**Must be built:**
+- `provisionEc2Instance()` — SDK-based EC2 launcher (SG + key pair + AMI lookup + RunInstances + poll). No callable launcher exists (only the Pulumi template equivalent).
+- `provisionGceInstance()` + `GcpClient.createInstance()` + firewall insert + operation polling. Only delete/find helpers exist today.
+- `waitForSsh()` port-22 reachability poller.
+- Plan threading through `PipelineInput`.
+- Wiring in `stageProvisionServer`: replace the current `throw` with resolve-creds → branch aws/gcp → provision → `waitForSsh` → `registerServerInDokploy`.
+
+Dokploy still handles everything above the VM (Docker install via `server.setup`, networking, Traefik routing, TLS), so this remains a "just give me a VM on the user's account" pattern — far simpler than the legacy CloudFormation/Pulumi IaC approach.
 
 ## Database Schema
 
@@ -320,6 +408,11 @@ The `createAndEnqueueDeployment` function checks this flag and routes to either 
 # Dokploy Integration
 DOKPLOY_API_URL=https://dokploy.example.com/api
 DOKPLOY_API_TOKEN=your-api-token
-DOKPLOY_SSH_KEY_ID=ssh-key-id-in-dokploy
+DOKPLOY_SSH_KEY_ID=ssh-key-id-in-dokploy   # used when registering provisioned VPS as Dokploy remote servers
 DEPLOY_PROVIDER=dokploy
+# Testing-only: register this pre-provisioned IP instead of launching a VPS on the
+# tenant's cloud account. Leave UNSET in production (per-tenant provisioning is the model).
+# DOKPLOY_DEFAULT_SERVER_IP=
 ```
+
+Cloud provisioning credentials are **not** env vars — they are per-tenant records in `server_providers`, resolved by the deployment's `providerId`.

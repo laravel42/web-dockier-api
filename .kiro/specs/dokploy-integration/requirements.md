@@ -61,16 +61,21 @@ We're replacing it with **Dokploy** — a self-hosted PaaS that handles the enti
 ### Requirement 4: Remote Server Management
 
 **ID**: REQ-4  
-**Description**: Create and manage Dokploy Remote Servers — one per Dockier project (application deployment target).
+**Description**: Create and manage Dokploy Remote Servers — one per Dockier project (application deployment target). Each server is a VPS provisioned dynamically **on the deploying tenant's own connected cloud account** (AWS or GCP), then registered in Dokploy as a remote deploy target.
+
+**Deployment model note**: Dockier does not own the compute. For every project, a VPS is launched in the user's own AWS account (EC2) or GCP account (Compute Engine) using the per-tenant credentials stored in `server_providers` (resolved by `providerId`). Dokploy then treats that VPS as a remote server. There is no shared/central deploy server in the production model.
 
 **Acceptance Criteria**:
-- Before deploying, provision a VPS (EC2 or Compute Engine) using existing cloud provider credentials
-- Register the VPS as a Dokploy Remote Server (IP, SSH port 22, SSH key)
-- Run Dokploy's server setup (`server.setup`) to install Docker and build tools
-- Validate server readiness (`server.validate`) before proceeding with deploy
-- Store `(project_id, dokploy_server_id, server_ip)` in the mapping table
-- Reuse existing server for redeployments of the same project
-- Handle server provisioning failures gracefully with clear error messages
+- Resolve the tenant's cloud credentials for the deployment's `providerId` via `getProviderCredentialsSafe()` (`server_providers` row). AWS stores access key + secret; GCP stores the full service-account JSON in `api_key`.
+- Branch on `provider` (`"aws"` | `"gcp"`) and provision a VPS on that account:
+  - **AWS**: launch an EC2 instance (Ubuntu 22.04+), create/reuse a security group opening ports 22/80/443, import the deploy SSH key, in the region from the `server_providers` row.
+  - **GCP**: create a Compute Engine instance (Ubuntu 22.04+) plus a firewall rule for ports 22/80/443, in the configured zone/region.
+- Instance size is driven by the user-selected plan (see REQ-8/plan step); the selected plan must be threaded from the deploy request through to the provisioning stage (it is not currently on `PipelineInput`).
+- Poll the new instance for SSH reachability on port 22 before registering it in Dokploy.
+- Register the VPS as a Dokploy Remote Server (IP, SSH port 22, `DOKPLOY_SSH_KEY_ID`) via `server.create`, run `server.setup` (installs Docker + build tools), and validate with `server.validate`.
+- Store `(project_id, provider_id, dokploy_server_id, server_ip, instance_id)` in the `dokploy_servers` mapping table; reuse an existing healthy server for redeployments of the same project.
+- Handle provisioning failures gracefully with clear, actionable error messages (invalid credentials, quota/permission errors, SSH timeout, setup/validation failure) and mark the server row `error` so a later deploy can re-provision.
+- **Fallback for local testing only**: if `DOKPLOY_DEFAULT_SERVER_IP` is set, skip cloud provisioning and register that pre-provisioned IP directly. This is a developer convenience, not part of the production per-tenant model, and must not be relied on in production.
 
 ### Requirement 5: Application Creation & Configuration
 
@@ -134,6 +139,7 @@ We're replacing it with **Dokploy** — a self-hosted PaaS that handles the enti
 - Real-time log streaming during deploy
 - On failure + retry, show which fix was attempted and current retry count
 - No more Dockerfile preview, build method selector, or tofu script in the wizard
+- The Plan step is retained — the selected plan (instance size + region) is sent with the deploy request and used for VPS provisioning (REQ-4). The plan value must be threaded through `createDeployment` → `PipelineInput` → the provision-server stage.
 - The backend accepts the same `createDeployment` call but internally routes to the Dokploy pipeline
 
 ### Requirement 9: Database Schema
@@ -157,7 +163,11 @@ We're replacing it with **Dokploy** — a self-hosted PaaS that handles the enti
 **Acceptance Criteria**:
 - `DOKPLOY_API_URL` — base URL of the Dokploy instance (required for deploy)
 - `DOKPLOY_API_TOKEN` — API token for authenticating with Dokploy (required for deploy)
-- `DOKPLOY_SSH_KEY_ID` — default SSH key ID registered in Dokploy for server access
+- `DOKPLOY_SSH_KEY_ID` — SSH key ID registered in Dokploy, used when registering provisioned VPS as remote servers (required for the auto-provisioning path)
+- `DOKPLOY_DEFAULT_SERVER_IP` — **testing-only** override. When set, the provision-server stage registers this pre-provisioned IP instead of launching a VPS on the tenant's cloud account. Leave unset in production; the production model provisions per-tenant VPS dynamically (REQ-4).
 - Feature flag: `DEPLOY_PROVIDER=dokploy` (vs legacy `DEPLOY_PROVIDER=native` for gradual rollout)
+- Cloud provisioning does **not** use backend-global AWS/GCP env credentials — it uses per-tenant credentials from the `server_providers` table, resolved by the deployment's `providerId`.
 - Add to `.env.example` with placeholder values
 - Document in `AGENTS.md` under secrets section
+
+**Note on credentials**: `DOKPLOY_SSH_KEY_ID`'s value is not surfaced in the Dokploy UI. Retrieve it from the `sshKey.all` API (or the browser network inspector) after creating a key in Dokploy → Settings → SSH Keys.

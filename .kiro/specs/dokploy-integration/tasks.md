@@ -2,7 +2,9 @@
 
 ## Overview
 
-Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom image building) with a Dokploy-backed orchestration pipeline. The integration uses Dokploy's API for project management, server provisioning, application configuration, deployment execution, and AI-powered failure recovery. The frontend deploy wizard is simplified by removing the build step and replacing it with a real-time pipeline progress view.
+Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom image building) with a Dokploy-backed orchestration pipeline. The integration uses Dokploy's API for project management, application configuration, deployment execution, and AI-powered failure recovery. Compute is a per-tenant VPS launched on the deploying user's **own AWS or GCP account** (credentials from `server_providers`), then registered in Dokploy as a remote server — Dockier owns no shared compute. The frontend deploy wizard is simplified by removing the build step and replacing it with a real-time pipeline progress view.
+
+**Current status:** Phases 1–6 and 8–10 are largely complete. The main outstanding work is Task 7 (real per-tenant VPS provisioning — currently the stage throws unless `DOKPLOY_DEFAULT_SERVER_IP` is set) and its prerequisite Task 7b (threading the selected plan through to the provisioner).
 
 ## Tasks
 
@@ -46,15 +48,37 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 6.5 For others: use `application.saveGitProvider` with SSH key
   - [x] 6.6 This stage stores needed params; actual git config is applied in configure-app stage
 
-- [ ] 7. Provision Server Stage
+- [ ] 7. Provision Server Stage — per-tenant VPS on the user's own AWS/GCP account
   - [x] 7.1 Create `backend/src/services/deploy/domain/dokploy/stages/provision-server.ts`
   - [x] 7.2 Check if project already has a provisioned server (`dokploy_servers`)
   - [x] 7.3 If existing + healthy, reuse it
-  - [ ] 7.4 If not: launch VPS using AWS EC2 SDK or GCP Compute API (deferred — currently throws with descriptive error)
-  - [ ] 7.5 Wait for SSH access (poll port 22) (deferred — part of VPS auto-provisioning)
   - [x] 7.6 Register as Dokploy remote server (`server.create`) — via `registerServerInDokploy()`
   - [x] 7.7 Run setup (`server.setup`) and validate (`server.validate`)
   - [x] 7.8 Store in `dokploy_servers`
+  - [x] 7.9 Testing-only fallback: register `DOKPLOY_DEFAULT_SERVER_IP` when set
+  - [ ] 7.10 Resolve per-tenant cloud credentials from `providerId` via `getProviderCredentialsSafe()` (`lib/provider-credentials.ts`); branch on `provider` (`"aws"` | `"gcp"`)
+  - [ ] 7.11 **AWS provisioning** — new `provisionEc2Instance(creds, plan)`:
+    - Build EC2 client from tenant creds + region using `getEc2()` (`lib/aws-sdk.ts`)
+    - Import deploy SSH key (`ImportKeyPairCommand`, idempotent by name)
+    - Find-or-create security group opening ingress 22/80/443 + egress all
+    - Resolve recent Ubuntu 22.04+ AMI (`DescribeImagesCommand`, Canonical `099720109477`)
+    - Launch instance (`RunInstancesCommand`): instanceType from plan, key pair, SG, public IP, 30GB gp3, tag `ManagedBy=dockier`
+    - Poll `DescribeInstancesCommand` until `running` + public IP assigned → return `{ ip, instanceId }`
+  - [ ] 7.12 **GCP provisioning** — new `provisionGceInstance(creds, plan)` + `GcpClient.createInstance()`:
+    - Build client with `createGcpClient(apiKey)` (`domain/infra/gcp-client.ts`)
+    - Add `createInstance(zone, params)` to `GcpClient` — `instances.insert` with Ubuntu 22.04+ image, machineType from plan, external NAT config, deploy SSH key in `ssh-keys` metadata
+    - Find-or-create firewall rule for tcp 22/80/443
+    - Poll the zonal operation to completion; read `networkInterfaces[].accessConfigs[].natIP` → return `{ ip, instanceName }`
+  - [ ] 7.13 SSH reachability poll — new `waitForSsh(ip, 22, timeout)`; poll TCP connect until reachable or timeout (~3 min) before Dokploy registration
+  - [ ] 7.14 Wire it up: replace the current `throw` in `stageProvisionServer` with resolve-creds → branch aws/gcp → provision → `waitForSsh` → `registerServerInDokploy({ serverIp, instanceId, providerId })`
+  - [ ] 7.15 Error handling: invalid creds, quota/permission, SSH timeout, setup/validate failure → clear messages + mark `dokploy_servers.server_status='error'` for re-provision on next deploy
+  - [ ] 7.16 Ensure the deploy SSH public key injected into the VM matches the private key Dokploy holds for `DOKPLOY_SSH_KEY_ID` (or the tenant `ssh_keys` row, per design)
+
+- [ ] 7b. Plan Threading (prerequisite for 7.11/7.12 instance sizing)
+  - [ ] 7b.1 Add `plan`/`instanceSize` (+ region if not from provider) to the `POST /deploy/deployments` request schema
+  - [ ] 7b.2 Thread through `CreateDeploymentParams` → `createDeploymentRecord` (persist) → `enqueueDeployment`
+  - [ ] 7b.3 Add the field to `PipelineInput` (`domain/pipeline/shared.ts`)
+  - [ ] 7b.4 Pass it into `stageProvisionServer` and map to EC2 `instanceType` / GCE `machineType` (reuse instance types from `plans.ts`)
 
 - [x] 8. Configure Application Stage
   - [x] 8.1 Create `backend/src/services/deploy/domain/dokploy/stages/configure-app.ts`
@@ -160,8 +184,8 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
     },
     {
       "wave": 3,
-      "tasks": [5, 6, 7],
-      "description": "Pipeline stages — ensure project, sync git, provision server (depend on waves 1–2)"
+      "tasks": [5, 6, "7b", 7],
+      "description": "Pipeline stages — ensure project, sync git, plan threading (7b), provision server incl. per-tenant AWS/GCP VPS provisioning (7 depends on 7b for instance sizing). Depend on waves 1–2."
     },
     {
       "wave": 4,
@@ -209,6 +233,8 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
 
 ## Notes
 
+- **Server provisioning model:** VPS instances are provisioned **on the deploying tenant's own AWS/GCP account** using per-tenant credentials from `server_providers` (resolved by `providerId`), then registered in Dokploy. Dockier owns no shared compute. `DOKPLOY_DEFAULT_SERVER_IP` is a **testing-only** override that skips cloud provisioning; it is not part of the production model.
+- **Reuse vs. build for Task 7:** Reusable — `getProviderCredentialsSafe()`, `getEc2()`, `GcpClient`/`createGcpClient` (+ GCE delete/find/exists), and `registerServerInDokploy()` (`server.create`/`setup`/`validate` + `upsertServer`). Must be built — the EC2 `RunInstances` launcher, `GcpClient.createInstance()` (only delete/find/exists exist today), the `waitForSsh` port-22 poller, and plan threading onto `PipelineInput`.
 - **Feature flag:** The `DEPLOY_PROVIDER` env var gates the new pipeline. Set to `"dokploy"` to activate, `"native"` (default) to keep the existing CloudFormation/Pulumi flow.
 - **Idempotency:** Every stage is designed to be re-runnable. Mapping layer uses `INSERT ON CONFLICT` and advisory locks to prevent duplicate resource creation under concurrent requests.
 - **AI recovery is non-fatal:** Dokploy AI fix failures never block the pipeline — they simply skip retry enhancement and let the deploy fail normally after max attempts.
