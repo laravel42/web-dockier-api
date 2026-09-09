@@ -13,6 +13,7 @@ import {
 } from "../infra/aws-helpers.js";
 import { stackNameFor, sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { type AwsCredentials } from "../../../../lib/aws.js";
+import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 
 /**
  * Abstract base class for AWS CloudFormation-based adapters.
@@ -87,10 +88,7 @@ export abstract class AwsCloudFormationAdapter implements DeployAdapter {
    */
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
-    const credentials: AwsCredentials = {
-      accessKeyId: ctx.providerCredentials.apiKey,
-      secretAccessKey: ctx.providerCredentials.apiSecret,
-    };
+    const credentials: AwsCredentials = toAwsCredentials(ctx.providerCredentials);
     const stackName = stackNameFor(ctx.repoName);
 
     await ctx.appendLog(`── Destroy ${this.getDestroyLogHeader()} ──────`);

@@ -18,7 +18,7 @@
 import type { DokployClient } from "../client.js";
 import { getServer, upsertServer, updateServerStatus } from "../mappings.js";
 import { env } from "../../../../../shared/config.js";
-import { getProviderCredentialsSafe } from "../../../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials } from "../../../../../lib/provider-credentials.js";
 import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
 import { provisionGceInstance } from "../provisioning/gcp-gce.js";
 import { waitForSsh } from "../provisioning/wait-for-ssh.js";
@@ -134,7 +134,7 @@ async function provisionAwsServer(params: {
   let serverIp: string;
   try {
     const result = await provisionEc2Instance({
-      credentials: { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret, region },
+      credentials: toAwsCredentials(creds, region),
       instanceType,
       sshPublicKey,
       keyPairName: `dockier-${projectId.slice(0, 8)}`,

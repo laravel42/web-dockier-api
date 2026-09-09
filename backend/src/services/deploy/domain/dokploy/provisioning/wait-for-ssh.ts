@@ -7,6 +7,7 @@
  */
 
 import { Socket } from "node:net";
+import { pollUntil } from "../../infra/poll-until.js";
 
 export interface WaitForSshOptions {
   /** Total time to keep polling before giving up. Default 3 minutes. */
@@ -58,25 +59,16 @@ export async function waitForSsh(
   const connectTimeoutMs = options.connectTimeoutMs ?? 5_000;
 
   const start = Date.now();
-  let attempt = 0;
+  const { success } = await pollUntil<true>({
+    intervalMs,
+    timeoutMs,
+    check: async (attempt) => {
+      // Report the attempt before connecting, preserving the (attempt, elapsedMs)
+      // callback contract (pollUntil's own onAttempt only fires after a failure).
+      options.onAttempt?.(attempt, Date.now() - start);
+      return (await tryConnect(host, port, connectTimeoutMs)) ? true : null;
+    },
+  });
 
-  while (Date.now() - start < timeoutMs) {
-    attempt += 1;
-    options.onAttempt?.(attempt, Date.now() - start);
-
-    if (await tryConnect(host, port, connectTimeoutMs)) {
-      return true;
-    }
-
-    // Don't oversleep past the deadline.
-    const remaining = timeoutMs - (Date.now() - start);
-    if (remaining <= 0) break;
-    await sleep(Math.min(intervalMs, remaining));
-  }
-
-  return false;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return success;
 }

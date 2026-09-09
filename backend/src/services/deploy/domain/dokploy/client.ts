@@ -29,6 +29,7 @@ import type {
   DokploySSHKey,
 } from "./types.js";
 import { DokployError } from "./types.js";
+import { sleep } from "../../../../shared/utils/time.js";
 
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -253,10 +254,4 @@ export function createDokployClient(): DokployClient {
   if (!apiToken) throw new Error("DOKPLOY_API_TOKEN is required when DEPLOY_PROVIDER=dokploy");
 
   return new DokployClient({ baseUrl, apiToken });
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

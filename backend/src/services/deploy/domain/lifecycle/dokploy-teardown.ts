@@ -18,7 +18,7 @@
  */
 
 import { logger } from "../../../../shared/logger.js";
-import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { createDokployClient } from "../dokploy/client.js";
 import {
   getServer,
@@ -131,7 +131,7 @@ async function terminateCloudInstance(providerId: string, instanceId: string): P
 
   if (provider === "aws") {
     return runStep(resource, () => terminateEc2Instance(
-      { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret, region: creds.region || "us-east-1" },
+      toAwsCredentials(creds, creds.region || "us-east-1"),
       instanceId,
     ));
   }

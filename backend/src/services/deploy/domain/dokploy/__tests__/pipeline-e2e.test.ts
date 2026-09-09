@@ -36,6 +36,8 @@ vi.mock("../../deployments.js", () => ({
 }));
 vi.mock("../../../../../shared/utils/time.js", () => ({
   logTimestamp: () => "2025-01-01T00:00:00Z",
+  // sleep is used by the real trigger-deploy poll loop; make it instant here.
+  sleep: () => Promise.resolve(),
 }));
 
 const dbUpdateEq = vi.fn().mockResolvedValue({ data: null, error: null });

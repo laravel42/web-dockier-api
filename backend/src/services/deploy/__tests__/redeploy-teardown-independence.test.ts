@@ -36,6 +36,10 @@ vi.mock("../domain/deployments.js", () => ({
 const mockGetCreds = vi.fn();
 vi.mock("../../../lib/provider-credentials.js", () => ({
   getProviderCredentialsSafe: (...args: unknown[]) => mockGetCreds(...args),
+  toAwsCredentials: (creds: { apiKey: string; apiSecret: string }, region?: string) => {
+    const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+    return region === undefined ? base : { ...base, region };
+  },
 }));
 
 const { redeployLatest, rollbackToDeployment } = await import("../domain/redeploy.js");

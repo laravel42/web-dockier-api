@@ -31,6 +31,7 @@ vi.mock("../../../../../shared/supabase/client.js", () => ({
 
 vi.mock("../../../../../shared/utils/time.js", () => ({
   logTimestamp: () => "2025-01-01T00:00:00Z",
+  sleep: () => Promise.resolve(),
 }));
 
 // Stage mocks

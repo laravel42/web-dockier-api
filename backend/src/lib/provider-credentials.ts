@@ -26,6 +26,25 @@ export interface ResolvedCredentials {
 }
 
 /**
+ * Map a provider credential pair (`apiKey`/`apiSecret`) to the AWS SDK's
+ * credential shape (`accessKeyId`/`secretAccessKey`).
+ *
+ * Consolidates the inline `{ accessKeyId: creds.apiKey, secretAccessKey:
+ * creds.apiSecret }` re-mapping repeated across the deploy/commands/network
+ * services. Pass a `region` to get the region-carrying shape used when
+ * constructing SDK clients directly.
+ */
+export function toAwsCredentials(creds: { apiKey: string; apiSecret: string }): { accessKeyId: string; secretAccessKey: string };
+export function toAwsCredentials(creds: { apiKey: string; apiSecret: string }, region: string): ResolvedCredentials;
+export function toAwsCredentials(
+  creds: { apiKey: string; apiSecret: string },
+  region?: string,
+): { accessKeyId: string; secretAccessKey: string } | ResolvedCredentials {
+  const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+  return region === undefined ? base : { ...base, region };
+}
+
+/**
  * Fetch provider credentials from the server_providers table.
  *
  * Throws if the provider is not found or the query fails.

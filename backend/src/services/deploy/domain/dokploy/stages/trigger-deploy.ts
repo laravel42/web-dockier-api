@@ -7,6 +7,7 @@
 
 import type { DokployClient } from "../client.js";
 import { invokeDokployAI } from "./ai-recovery.js";
+import { sleep } from "../../../../../shared/utils/time.js";
 
 export interface DeployResult {
   status: "done" | "error";
@@ -105,8 +106,4 @@ function extractAppUrl(app: { appName: string }): string {
   // For now, return the app name — the full URL resolution
   // will come from querying the Dokploy domains API.
   return app.appName ? `https://${app.appName}.dokploy.local` : "";
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

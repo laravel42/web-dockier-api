@@ -11,6 +11,7 @@
  */
 
 import { createGcpClient, GcpApiError } from "../../infra/gcp-client.js";
+import { pollUntil } from "../../infra/poll-until.js";
 
 const DEFAULT_MACHINE_TYPE = "e2-small";
 const FIREWALL_NAME = "dockier-dokploy-allow";
@@ -189,20 +190,24 @@ async function pollExternalIp(
 ): Promise<string> {
   const timeoutMs = opts.timeoutMs ?? 180_000;
   const intervalMs = opts.intervalMs ?? 3_000;
-  const start = Date.now();
 
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const ip = await client.getInstanceExternalIp(zone, name);
-      if (ip) return ip;
-    } catch (err) {
-      // Transient read failure — keep polling until the deadline.
-      if (err instanceof GcpApiError && !err.isRetryable && !err.isNotFound) {
-        throw wrapGcpError(err, "read GCE instance IP");
+  const { value } = await pollUntil<string>({
+    intervalMs,
+    timeoutMs,
+    check: async () => {
+      try {
+        return await client.getInstanceExternalIp(zone, name);
+      } catch (err) {
+        // Fail fast on definitive errors; swallow transient read failures.
+        if (err instanceof GcpApiError && !err.isRetryable && !err.isNotFound) {
+          throw wrapGcpError(err, "read GCE instance IP");
+        }
+        return null;
       }
-    }
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
+    },
+  });
+
+  if (value) return value;
   throw new Error(`GCE instance "${name}" did not report an external IP within ${Math.round(timeoutMs / 1000)}s`);
 }
 

@@ -44,6 +44,11 @@ vi.mock("../provisioning/gcp-gce.js", () => ({
 const getProviderCredentialsSafe = vi.fn();
 vi.mock("../../../../../lib/provider-credentials.js", () => ({
   getProviderCredentialsSafe: (...a: unknown[]) => getProviderCredentialsSafe(...a),
+  // Pure mapper — mirror the real implementation so the AWS teardown branch works.
+  toAwsCredentials: (creds: { apiKey: string; apiSecret: string }, region?: string) => {
+    const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+    return region === undefined ? base : { ...base, region };
+  },
 }));
 
 vi.mock("../../../../../shared/logger.js", () => ({

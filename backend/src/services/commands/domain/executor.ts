@@ -11,6 +11,8 @@
 
 import { spawn } from "node:child_process";
 import { getEcs, getSsm } from "../../../lib/aws-sdk.js";
+import { toAwsCredentials } from "../../../lib/provider-credentials.js";
+import { sleep } from "../../../shared/utils/time.js";
 
 const COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -110,7 +112,7 @@ async function executeViaEcsRunTask(
     } = await getEcs();
     const ecs = new ECSClient({
       region: region!,
-      credentials: { accessKeyId: credentials!.apiKey, secretAccessKey: credentials!.apiSecret },
+      credentials: toAwsCredentials(credentials!),
     });
 
     // Resolve network config from the existing ECS service
@@ -339,7 +341,7 @@ async function executeViaSSM(
   const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await getSsm();
   const ssm = new SSMClient({
     region: region!,
-    credentials: { accessKeyId: credentials!.apiKey, secretAccessKey: credentials!.apiSecret },
+    credentials: toAwsCredentials(credentials!),
   });
 
   const escaped = command.replace(/'/g, "'\\''");
@@ -414,10 +416,6 @@ async function executeLocal(
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Run a local command with a 2-minute timeout.

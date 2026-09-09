@@ -29,6 +29,8 @@
  * ```
  */
 
+import { sleep } from "./time.js";
+
 export interface RetryOptions {
   /** Maximum number of attempts (including the initial call). Default: 3 */
   attempts?: number;
@@ -88,10 +90,6 @@ export async function withRetry<T>(
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([

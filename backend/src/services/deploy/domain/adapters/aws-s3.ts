@@ -19,6 +19,7 @@ import {
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, ensureS3Bucket, type AwsCredentials } from "../../../../lib/aws.js";
+import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
 
 /**
@@ -302,7 +303,7 @@ export class AwsS3Adapter implements DeployAdapter {
 
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
-    const credentials: AwsCredentials = { accessKeyId: ctx.providerCredentials.apiKey, secretAccessKey: ctx.providerCredentials.apiSecret };
+    const credentials: AwsCredentials = toAwsCredentials(ctx.providerCredentials);
     const stackName = stackNameFor(ctx.appName);
 
     await ctx.appendLog("── Destroy AWS S3 Resources ───────");

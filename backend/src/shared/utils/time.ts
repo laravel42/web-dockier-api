@@ -23,3 +23,14 @@ export function logTimestamp(): string {
 export function nowIso(): string {
   return new Date().toISOString();
 }
+
+/**
+ * Resolve after `ms` milliseconds.
+ *
+ * The canonical delay helper for polling loops, retry backoff, and rate-limited
+ * calls. Consolidates what were previously six identical private `sleep`
+ * definitions scattered across the deploy and commands services.
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -20,7 +20,7 @@
 import { logger } from "../../../shared/logger.js";
 import { getCfn, getEc2, getSsm } from "../../../lib/aws-sdk.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
-import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials } from "../../../lib/provider-credentials.js";
 import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import {
@@ -216,7 +216,7 @@ async function executeOnHost(target: ExecutionTarget, script: string): Promise<H
   const { SSMClient, SendCommandCommand, GetCommandInvocationCommand } = await getSsm();
   const ssm = new SSMClient({
     region: target.region,
-    credentials: { accessKeyId: target.credentials.apiKey, secretAccessKey: target.credentials.apiSecret },
+    credentials: toAwsCredentials(target.credentials),
   });
 
   try {

@@ -18,6 +18,7 @@
 
 import { getAwsAccountId } from "../../../../lib/aws.js";
 import { getS3, getSsm } from "../../../../lib/aws-sdk.js";
+import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import type { ContextualLogger } from "../../../../lib/logging.js";
 import { formatEnvFileContent } from "../../../../shared/env/format-env-file.js";
 import { pollUntil } from "../infra/poll-until.js";
@@ -105,15 +106,12 @@ async function uploadEnvToS3(
   const envContent = formatEnvFileContent(envVars);
 
   const { S3Client, PutObjectCommand } = await getS3();
-  const accountId = await getAwsAccountId(region, {
-    accessKeyId: credentials.apiKey,
-    secretAccessKey: credentials.apiSecret,
-  });
+  const accountId = await getAwsAccountId(region, toAwsCredentials(credentials));
   const envBucket = `image-builder-templates-${accountId}`;
   const envKey = `env-files/${containerName}-postdeploy.env`;
   const s3 = new S3Client({
     region,
-    credentials: { accessKeyId: credentials.apiKey, secretAccessKey: credentials.apiSecret },
+    credentials: toAwsCredentials(credentials),
   });
   await s3.send(new PutObjectCommand({ Bucket: envBucket, Key: envKey, Body: envContent, ContentType: "text/plain" }));
 
@@ -160,7 +158,7 @@ async function executeSsmScript(params: SsmExecutionParams): Promise<void> {
   const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await getSsm();
   const ssm = new SSMClient({
     region,
-    credentials: { accessKeyId: credentials.apiKey, secretAccessKey: credentials.apiSecret },
+    credentials: toAwsCredentials(credentials),
   });
 
   // 1. Wait for SSM agent to come online

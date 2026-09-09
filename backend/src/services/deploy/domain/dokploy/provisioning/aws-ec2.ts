@@ -14,6 +14,7 @@
  */
 
 import { getEc2 } from "../../../../../lib/aws-sdk.js";
+import { pollUntil } from "../../infra/poll-until.js";
 
 const DEFAULT_INSTANCE_TYPE = "t3.small";
 const SG_NAME = "dockier-dokploy-sg";
@@ -254,32 +255,35 @@ async function waitForPublicIp(
 ): Promise<string> {
   const timeoutMs = opts.timeoutMs ?? 180_000;
   const intervalMs = opts.intervalMs ?? 5_000;
-  const start = Date.now();
 
-  while (Date.now() - start < timeoutMs) {
-    let state: string | undefined;
-    let ip: string | undefined;
-    try {
-      const desc = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
-      const instance = desc.Reservations?.[0]?.Instances?.[0];
-      state = instance?.State?.Name;
-      ip = instance?.PublicIpAddress;
-    } catch (err) {
-      // A transient describe failure shouldn't abort the whole poll.
-      await log(`Waiting for instance... (${err instanceof Error ? err.message : String(err)})`);
-      await sleep(intervalMs);
-      continue;
-    }
+  const { value } = await pollUntil<string>({
+    intervalMs,
+    timeoutMs,
+    check: async () => {
+      let state: string | undefined;
+      let ip: string | undefined;
+      try {
+        const desc = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
+        const instance = desc.Reservations?.[0]?.Instances?.[0];
+        state = instance?.State?.Name;
+        ip = instance?.PublicIpAddress;
+      } catch (err) {
+        // A transient describe failure shouldn't abort the whole poll.
+        await log(`Waiting for instance... (${err instanceof Error ? err.message : String(err)})`);
+        return null;
+      }
 
-    if (state === "running" && ip) return ip;
-    // A terminal state means the launch failed — fail fast rather than polling
-    // until the overall timeout.
-    if (state === "terminated" || state === "shutting-down") {
-      throw new Error(`Instance ${instanceId} entered state "${state}" before becoming reachable`);
-    }
-    await sleep(intervalMs);
-  }
+      if (state === "running" && ip) return ip;
+      // A terminal state means the launch failed — fail fast (the throw
+      // propagates out of pollUntil) rather than polling until the timeout.
+      if (state === "terminated" || state === "shutting-down") {
+        throw new Error(`Instance ${instanceId} entered state "${state}" before becoming reachable`);
+      }
+      return null;
+    },
+  });
 
+  if (value) return value;
   throw new Error(`Instance ${instanceId} did not report a public IP within ${Math.round(timeoutMs / 1000)}s`);
 }
 
@@ -306,10 +310,6 @@ function wrapAwsError(err: unknown, action: string): Error {
     return new Error(`Failed to ${action}: the AWS account hit a capacity or quota limit (${name}). Try a different instance type or region, or request a limit increase.`);
   }
   return new Error(`Failed to ${action}: ${message}`);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ─── Teardown ────────────────────────────────────────────────────
