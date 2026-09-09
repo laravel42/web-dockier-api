@@ -9,6 +9,7 @@ import { enqueueBuild } from "./worker.js";
 import { escapePostgrestFilter } from "../../../shared/http/security.js";
 import { rowToBuild } from "./mappers.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { lookupCodeBuildId, refreshBuildStatus } from "./aws-runtime.js";
 import { checkDeployStatus, deriveAppName, deriveStackName, type DeployStatusResult } from "./cfn-deploy.js";
 import type { DeployParams } from "./deploy-params.js";
@@ -91,7 +92,7 @@ export async function createBuild(params: CreateBuildParams) {
       correlationId: params.correlationId,
     });
   } catch (enqueueError: unknown) {
-    const message = enqueueError instanceof Error ? enqueueError.message : String(enqueueError);
+    const message = getErrMsg(enqueueError);
     await supabaseAdmin.from("builds").update({
       status: "failed",
       status_reason: `Failed to enqueue build job: ${message}`,
@@ -346,7 +347,7 @@ export async function getDeployStatus(
       logger,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     logger.debug(`deploy-status error: ${message}`);
     if (build.status === "succeeded") return { status: "success", appUrl: "", stackName };
     return { status: "deploying", appUrl: "", stackName };

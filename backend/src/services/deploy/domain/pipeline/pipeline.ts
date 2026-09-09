@@ -15,6 +15,7 @@
 
 import { rm } from "node:fs/promises";
 import { logger as obsLogger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { createDeployLogger } from "../../../../lib/logging.js";
 import { createStreamingRunCmd } from "../run-cmd.js";
 import { getTemplateConfig } from "../planning/project-templates.js";
@@ -115,7 +116,7 @@ export async function executePipeline(event: PipelineInput): Promise<void> {
     await stageHealthCheck(ctx);
     await stageRestoreProcesses(ctx);
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrMsg(e);
     const { category, phase } = classifyPipelineError(e);
     // Best-effort logging and status update. If Supabase is unreachable
     // (the cause of this failure), these calls may also fail silently.

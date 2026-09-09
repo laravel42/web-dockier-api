@@ -18,6 +18,7 @@ import { createWorker, COMMAND_EXEC_QUEUE } from "../../../shared/database/queue
 import { getCfn, getEc2 } from "../../../lib/aws-sdk.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
@@ -312,7 +313,7 @@ async function resolveEc2InstanceId(
       }
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.info(`[command-exec] CFN lookup failed: ${msg}`);
   }
 
@@ -333,7 +334,7 @@ async function resolveEc2InstanceId(
         return instance.InstanceId;
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       logger.info(`[command-exec] EC2 IP lookup failed: ${msg}`);
     }
   }
@@ -410,7 +411,7 @@ async function processCommandJob(input: CommandJobInput): Promise<void> {
 
     logger.info(`[command-exec] Command ${commandId} completed with status: ${status}`);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[command-exec] Command ${commandId} failed: ${msg}`);
     await updateCommandStatus(commandId, "failed", `Execution error: ${msg}`);
   }

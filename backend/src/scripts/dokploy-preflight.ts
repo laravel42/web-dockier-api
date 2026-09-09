@@ -21,16 +21,13 @@
 import { initConfig, env } from "../shared/config.js";
 import { collectDokployConfigIssues } from "../services/deploy/domain/dokploy/config.js";
 import { DokployClient } from "../services/deploy/domain/dokploy/client.js";
+import { getErrMsg } from "../shared/utils/error-message.js";
 
 type CheckStatus = "pass" | "fail" | "skip";
 
 function line(status: CheckStatus, label: string, detail?: string): void {
   const icon = status === "pass" ? "✓" : status === "fail" ? "✗" : "–";
   console.log(`  ${icon} ${label}${detail ? ` — ${detail}` : ""}`);
-}
-
-function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 async function main(): Promise<number> {
@@ -71,7 +68,7 @@ async function main(): Promise<number> {
     line("pass", "Reachable + authenticated", `project.all returned ${Array.isArray(projects) ? projects.length : "?"} project(s)`);
   } catch (err) {
     failed = true;
-    const msg = errMsg(err);
+    const msg = getErrMsg(err);
     line("fail", "project.all", msg);
     if (/401|403|token/i.test(msg)) {
       console.log("    → Looks like an auth problem. Check DOKPLOY_API_TOKEN.");
@@ -98,7 +95,7 @@ async function main(): Promise<number> {
     }
   } catch (err) {
     failed = true;
-    line("fail", "sshKey.all", errMsg(err));
+    line("fail", "sshKey.all", getErrMsg(err));
   }
 
   console.log("");

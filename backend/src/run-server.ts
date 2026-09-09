@@ -1,6 +1,7 @@
 import { buildApp, type ServiceName } from "./app.js";
 import { env } from "./shared/config.js";
 import { logger } from "./shared/logger.js";
+import { getErrMsg } from "./shared/utils/error-message.js";
 import { startQueue, stopQueue } from "./shared/database/queue.js";
 import { destroyPermissionCache } from "./shared/permissions/authorization.js";
 import { destroyRateLimitStore } from "./shared/http/rate-limit.js";
@@ -91,7 +92,7 @@ const startupHooks: StartupHook[] = [
       try {
         await seedCustomRules();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = getErrMsg(err);
         logger.warn(`[scan] Custom rule seed skipped: ${message}`);
       }
 
@@ -101,7 +102,7 @@ const startupHooks: StartupHook[] = [
           logger.info(`[scan] Reconciled ${staleScans} stale scan(s) on startup`);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = getErrMsg(err);
         logger.warn(`[scan] Stale scan reconciliation skipped: ${message}`);
       }
     },
@@ -153,7 +154,7 @@ export async function runServer(): Promise<void> {
         try {
           await hook.run();
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+          const message = getErrMsg(err);
           logger.error(`[startup] Post-listen hook failed: ${message}`);
         }
       }

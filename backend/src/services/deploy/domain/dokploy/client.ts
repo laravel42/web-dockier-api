@@ -30,6 +30,7 @@ import type {
 } from "./types.js";
 import { DokployError } from "./types.js";
 import { sleep } from "../../../../shared/utils/time.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -230,7 +231,7 @@ export class DokployClient {
     }
 
     // All retries exhausted
-    const message = lastError instanceof Error ? lastError.message : String(lastError);
+    const message = getErrMsg(lastError);
     throw new DokployError(
       `Dokploy API request failed after ${this.maxRetries + 1} attempts: ${message}`,
       0,

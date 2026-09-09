@@ -10,6 +10,7 @@
 
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { env } from "../../../../shared/config.js";
 import { deriveRepoName, stackNameFor, sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
@@ -161,7 +162,7 @@ export async function destroyStack(resolved: ResolvedStack): Promise<DestroyResu
   try {
     adapter = getAdapter(resolved.provider, resolved.deployStrategy);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     return { success: false, message, errors: [message] };
   }
 
@@ -188,7 +189,7 @@ export async function destroyStack(resolved: ResolvedStack): Promise<DestroyResu
   try {
     return await adapter.destroy(ctx);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     logger.error({ err, stackName: resolved.stackName }, "[teardown] Adapter destroy threw");
     return { success: false, message: `Destroy failed: ${message}`, errors: [message] };
   }

@@ -7,6 +7,7 @@ import { extname, join, relative } from "node:path";
 import { cloneRepo } from "../../../lib/build-pipeline.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
 import { logger as obsLogger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../../shared/service-clients/git-connections.js";
@@ -87,7 +88,7 @@ function startScanHeartbeat(
       ...base,
       currentFile: withElapsed(base.currentFile ?? "Working", startedAt),
     }).catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = getErrMsg(err);
       obsLogger.error("[scan] Heartbeat progress persist failed: " + message);
     });
   }, HEARTBEAT_INTERVAL_MS);
@@ -434,7 +435,7 @@ async function persistFindings(
 export async function failScanIfStillRunning(scanId: string, err: unknown): Promise<void> {
   const { data } = await supabaseAdmin.from("scans").select("status").eq("id", scanId).single();
   if (data?.status !== "running") return;
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrMsg(err);
   await markScanFailed(scanId, message);
 }
 
@@ -676,7 +677,7 @@ export async function executeScan(
         findings.push(...enabledSonarFindings);
         await logger.success(`SonarQube found ${enabledSonarFindings.length} issue(s)`);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = getErrMsg(err);
         await logger.warn(`SonarQube scan skipped or failed: ${message}`);
       } finally {
         stopSonarHeartbeat();
@@ -734,7 +735,7 @@ export async function executeScan(
       `Scan ${scanId} completed: ${findings.length} finding(s), ${filesInRepo} file(s) in repo`,
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     await logger.error(`Scan ${scanId} failed: ${message}`);
     await markScanFailed(scanId, message);
     throw err;

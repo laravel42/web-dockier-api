@@ -17,6 +17,7 @@ import { appendLog, updateStatus } from "../pipeline/helpers.js";
 import { getDeploymentCurrentStatus } from "../deployments.js";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 import { stageEnsureProject } from "./stages/ensure-project.js";
 import { stageSyncGit } from "./stages/sync-git.js";
@@ -113,7 +114,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         .eq("id", deploymentId);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     await log(`✗ Pipeline failed: ${message}`);
     try {
       await updateStatus(deploymentId, "failed");

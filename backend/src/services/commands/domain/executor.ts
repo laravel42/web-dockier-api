@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import { getEcs, getSsm } from "../../../lib/aws-sdk.js";
 import { toAwsCredentials } from "../../../lib/provider-credentials.js";
 import { sleep } from "../../../shared/utils/time.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 
 const COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -167,7 +168,7 @@ async function executeViaEcsRunTask(
 
     return { exitCode, output, timedOut: false };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { exitCode: 1, output: `ECS execution failed: ${msg}`, timedOut: false };
   }
 }
@@ -302,7 +303,7 @@ async function executeViaCloudRunJob(
 
     return { exitCode: 124, output: "Cloud Run Job timed out (2 minute limit exceeded)", timedOut: true };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { exitCode: 1, output: `Cloud Run execution failed: ${msg}`, timedOut: false };
   }
 }
@@ -400,7 +401,7 @@ async function executeViaSSM(
 
     return { exitCode: 124, output: "Command timed out waiting for response", timedOut: true };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { exitCode: 1, output: `SSM execution failed: ${msg}`, timedOut: false };
   }
 }

@@ -8,6 +8,7 @@
 import type { ContextualLogger } from "../../../../lib/logging.js";
 import { getSsm } from "../../../../lib/aws-sdk.js";
 import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { revealWpConfig } from "../../../projects/domain/wp-config.js";
 import { pollUntil } from "../infra/poll-until.js";
 import type { RunCmdFn } from "../run-cmd.js";
@@ -159,7 +160,7 @@ async function injectViaSsm(
     }));
     commandId = sendResult.Command?.CommandId;
   } catch (sendErr) {
-    const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+    const msg = getErrMsg(sendErr);
     await logger.warn(`Failed to send SSM command for wp-config injection: ${msg}`);
     return;
   }

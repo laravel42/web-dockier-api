@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { env } from "../../../shared/config.js";
 import { bundleAndUploadSource } from "./source-bundler.js";
 import { getAwsAccountId } from "../../../lib/aws.js";
@@ -129,7 +130,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     }).eq("id", buildId);
 
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrMsg(e);
     logger.error({ err: message }, `[image-build-worker] Failed to trigger CodeBuild for ${buildId}`);
     await db.from("builds").update({
       status: "failed",

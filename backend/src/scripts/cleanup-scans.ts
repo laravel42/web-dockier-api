@@ -2,6 +2,7 @@ import pg from "pg";
 import { initConfig } from "../shared/config.js";
 import { getPostgresConnectionConfig } from "../shared/database/postgres.js";
 import { SECURITY_SCAN_QUEUE } from "../shared/database/queue.js";
+import { getErrMsg } from "../shared/utils/error-message.js";
 
 const dryRun = process.argv.includes("--dry-run");
 
@@ -72,7 +73,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrMsg(err);
   console.error(`Cleanup failed: ${message}`);
   process.exit(1);
 });

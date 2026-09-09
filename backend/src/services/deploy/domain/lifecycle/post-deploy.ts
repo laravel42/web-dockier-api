@@ -19,6 +19,7 @@
 import { getAwsAccountId } from "../../../../lib/aws.js";
 import { getS3, getSsm } from "../../../../lib/aws-sdk.js";
 import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import type { ContextualLogger } from "../../../../lib/logging.js";
 import { formatEnvFileContent } from "../../../../shared/env/format-env-file.js";
 import { pollUntil } from "../infra/poll-until.js";
@@ -259,7 +260,7 @@ async function executeSsmScript(params: SsmExecutionParams): Promise<void> {
       await logger.warn("Deploy script still running after timeout");
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     await logger.warn(`SSM execution failed: ${msg}`);
   }
 }

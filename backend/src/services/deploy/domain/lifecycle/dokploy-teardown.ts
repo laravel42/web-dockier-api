@@ -19,6 +19,7 @@
 
 import { logger } from "../../../../shared/logger.js";
 import { getProviderCredentialsSafe, toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { createDokployClient } from "../dokploy/client.js";
 import {
   getServer,
@@ -155,7 +156,7 @@ async function runStep(resource: string, fn: () => Promise<void>): Promise<Dokpl
     await fn();
     return { resource, success: true, message: "removed" };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     logger.warn({ err, resource }, "[dokploy-teardown] Step failed");
     return { resource, success: false, message };
   }

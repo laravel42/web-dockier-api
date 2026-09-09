@@ -12,6 +12,7 @@ import { PgBoss } from "pg-boss";
 import type { Job } from "pg-boss";
 import { getPostgresConnectionConfig } from "./postgres.js";
 import { logger } from "../logger.js";
+import { getErrMsg } from "../utils/error-message.js";
 import { env } from "../config.js";
 
 let boss: PgBoss | null = null;
@@ -80,7 +81,7 @@ export async function startQueue(): Promise<boolean> {
     logger.info("[queue] pg-boss started");
     return true;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrMsg(err);
     logger.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
     queueInitFailed = true;
     queueStarted = false;

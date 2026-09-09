@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 
@@ -76,7 +77,7 @@ export async function restoreProcessesAfterDeploy(params: {
       await executeCommand(target, cmd);
       logger.info(`[processes] Restored process: ${proc.name || proc.command}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       logger.error(`[processes] Failed to restore process ${proc.id}: ${msg}`);
       // Mark as errored so user knows it didn't start
       await db.from("background_processes")
@@ -110,7 +111,7 @@ export async function restoreProcessesAfterDeploy(params: {
       await executeCommand(target, installCmd);
       logger.info(`[processes] Restored ${jobs.length} scheduled job(s)`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       logger.error(`[processes] Failed to restore scheduled jobs: ${msg}`);
     }
   }

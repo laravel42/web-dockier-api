@@ -18,6 +18,7 @@
  */
 
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getCfn, getEc2, getSsm } from "../../../lib/aws-sdk.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe, toAwsCredentials } from "../../../lib/provider-credentials.js";
@@ -168,7 +169,7 @@ async function resolveEc2InstanceId(
       }
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.info(`[network] CFN lookup failed for stack ${stackName}: ${msg}`);
   }
 
@@ -189,7 +190,7 @@ async function resolveEc2InstanceId(
         return instance.InstanceId;
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       logger.info(`[network] EC2 IP lookup failed: ${msg}`);
     }
   }
@@ -260,7 +261,7 @@ async function executeOnHost(target: ExecutionTarget, script: string): Promise<H
 
     return { exitCode: 1, output: "SSM command timed out waiting for response" };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { exitCode: 1, output: `SSM execution error: ${msg}` };
   }
 }
@@ -411,7 +412,7 @@ export async function applyNetworkRules(params: {
       generatedConfig: config.serverConfig,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[network] Error applying rules for project ${projectId}: ${msg}`);
     return { success: false, message: `Error applying network rules: ${msg}` };
   }

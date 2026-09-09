@@ -31,6 +31,7 @@ import { markProjectInfraLive } from "../lifecycle/project-teardown.js";
 import { clearRepoFaviconFromAnalysisCache } from "../../../git-integration/domain/cache.js";
 import { logger } from "../../../../shared/logger.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { waitForAppReady } from "./health.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -104,7 +105,7 @@ export async function loadProjectContext(
       await logger.info("No environment file configured for this project");
     }
   } catch (envErr) {
-    const msg = envErr instanceof Error ? envErr.message : String(envErr);
+    const msg = getErrMsg(envErr);
     await logger.warn(`Could not load project environment file: ${msg}`);
   }
 
@@ -206,7 +207,7 @@ export async function applyNetworkRulesIfNeeded(
       await logger.warn(`Could not apply network rules: ${networkResult.message}`);
     }
   } catch (networkErr) {
-    const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
+    const msg = getErrMsg(networkErr);
     await logger.warn(`Could not apply network rules: ${msg}`);
   }
 }

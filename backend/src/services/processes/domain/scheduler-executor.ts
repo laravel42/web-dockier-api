@@ -7,6 +7,7 @@
  */
 
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import { ProcessesError } from "./processes.js";
 import type { ScheduledJobRow } from "../schemas.js";
@@ -139,7 +140,7 @@ export async function installJob(params: {
 
     return { success: false, message: result.output || "Failed to install cron job." };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[scheduler] Failed to install job ${jobId}: ${msg}`);
     return { success: false, message: `Execution error: ${msg}` };
   }
@@ -187,7 +188,7 @@ export async function pauseJob(params: {
 
     return { success: false, message: result.output || "Failed to pause cron job." };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[scheduler] Failed to pause job ${jobId}: ${msg}`);
     return { success: false, message: `Execution error: ${msg}` };
   }

@@ -7,6 +7,7 @@ import type { RunCmdFn } from "../run-cmd.js";
 import type { ProvisionResult } from "../adapters/types.js";
 import { getAwsAccountId, type AwsCredentials } from "../../../../lib/aws.js";
 import { sanitizeEcrRepoName } from "../../../../lib/naming.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -111,7 +112,7 @@ export async function pushToEcr(opts: {
       await appendLog("✓ ECR repository created");
     } catch (createErr: unknown) {
       if (!(createErr instanceof Error) || !createErr.name?.includes("AlreadyExists")) {
-        const msg = createErr instanceof Error ? createErr.message : String(createErr);
+        const msg = getErrMsg(createErr);
         throw new Error(`Failed to create ECR repository: ${msg}`);
       }
       await appendLog("✓ ECR repository already exists");
@@ -302,7 +303,7 @@ export async function cleanupStuckStack(
   } catch (err: unknown) {
     // Stack doesn't exist yet — that's fine (ValidationError with "does not exist")
     // But log unexpected errors so they're not silently swallowed
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     if (!msg.includes("does not exist")) {
       await appendLog(`⚠ Stack check error (non-fatal): ${msg.slice(0, 200)}`);
     }
@@ -362,7 +363,7 @@ export async function createOrUpdateStack(opts: {
         await appendLog("✓ CloudFormation stack update initiated");
         return { isUpdate: true };
       } catch (updateErr: unknown) {
-        const updateMsg = updateErr instanceof Error ? updateErr.message : String(updateErr);
+        const updateMsg = getErrMsg(updateErr);
         if (updateMsg.includes("No updates are to be performed")) {
           await appendLog("ℹ No infrastructure changes needed");
           const result = await extractStackOutputs(cfn, stackName, appendLog);
@@ -371,7 +372,7 @@ export async function createOrUpdateStack(opts: {
         throw new Error(`CloudFormation update failed: ${updateMsg}`);
       }
     }
-    const createMsg = createErr instanceof Error ? createErr.message : String(createErr);
+    const createMsg = getErrMsg(createErr);
     throw new Error(`CloudFormation create failed: ${createMsg}`);
   }
 }
@@ -417,7 +418,7 @@ export async function destroyCfnStack(
     await cfn.send(new DeleteStackCommand({ StackName: stackName }));
     await appendLog(`✓ Stack deletion initiated: ${stackName}`);
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = getErrMsg(e);
     // DeleteStackCommand throws if the stack doesn't exist — that's fine
     if (!msg.includes("does not exist")) {
       errors.push(`CloudFormation: ${msg}`);

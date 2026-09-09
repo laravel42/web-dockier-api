@@ -12,6 +12,7 @@
 import type { ConnectionLike, RepoRef } from "../providers/provider-client.js";
 import { fetchRepoFile, getRepoFileTree } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -163,7 +164,7 @@ async function fetchBlobByShaWithError(
     logger.warn(`[AI-FixIssue] ${errMsg}`);
     return { content: null, error: errMsg };
   } catch (err) {
-    const errMsg = `Exception: ${(err as Error).message}`;
+    const errMsg = `Exception: ${getErrMsg(err)}`;
     logger.error(`[AI-FixIssue] Blob fetch: ${errMsg}`);
     return { content: null, error: errMsg };
   }
@@ -732,7 +733,7 @@ export async function planIssueFix(
           logger.info(`[AI-FixIssue] fetchRepoFile returned null for "${resolvedPath}" (provider: "${connection.provider}", endpoint: "${connection.endpoint || "default"}")`);
         }
       } catch (err) {
-        lastFetchError = err instanceof Error ? err.message : String(err);
+        lastFetchError = getErrMsg(err);
       }
 
       // Fallback: fetch via Git Blobs API

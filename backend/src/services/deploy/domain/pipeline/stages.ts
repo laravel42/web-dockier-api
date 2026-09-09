@@ -14,6 +14,7 @@ import { cloneRepo, analyzeAndGenerate } from "../../../../lib/build-pipeline.js
 import { containerNameFor } from "../../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
 import { getGitConnectionCredentials } from "../../../../shared/service-clients/git-connections.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { getAdapter } from "../adapters/index.js";
 import { extractRegionFromScript } from "../infra/gcp-helpers.js";
 import { executePostDeployScript } from "../lifecycle/post-deploy.js";
@@ -291,7 +292,7 @@ export async function stageHealthCheck(ctx: PipelineContext): Promise<void> {
         `Health check attempt ${attempt}/${HEALTH_CHECK_RETRIES} failed (status ${response.status})`,
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrMsg(err);
       await ctx.logger.warn(
         `Health check attempt ${attempt}/${HEALTH_CHECK_RETRIES} failed: ${msg}`,
       );
@@ -318,7 +319,7 @@ export async function stageRestoreProcesses(ctx: PipelineContext): Promise<void>
       projectId: ctx.event.projectId,
     });
   } catch (restoreErr) {
-    const msg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+    const msg = getErrMsg(restoreErr);
     await ctx.logger.warn(`Could not restore processes/jobs: ${msg}`);
   }
 }
@@ -428,7 +429,7 @@ export async function stageTemplatePostDeploy(ctx: PipelineContext): Promise<voi
       ctx.runCmd,
     );
   } catch (wpErr) {
-    const msg = wpErr instanceof Error ? wpErr.message : String(wpErr);
+    const msg = getErrMsg(wpErr);
     await ctx.logger.warn(`Could not inject wp-config.php: ${msg}`);
   }
 

@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import { ProcessesError } from "./processes.js";
 import type { BackgroundProcessRow } from "../schemas.js";
@@ -124,7 +125,7 @@ export async function startProcess(params: {
     logger.warn(`[processes] Start failed for ${processId}: ${result.output.trim().slice(0, 500)}`);
     return { success: false, message: result.output || "Failed to start process." };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[processes] Failed to start process ${processId}: ${msg}`);
     return { success: false, message: `Execution error: ${msg}` };
   }
@@ -171,7 +172,7 @@ export async function stopProcess(params: {
 
     return { success: false, message: result.output || "Failed to stop process." };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[processes] Failed to stop process ${processId}: ${msg}`);
     return { success: false, message: `Execution error: ${msg}` };
   }
@@ -218,7 +219,7 @@ export async function getProcessLogs(params: {
     const result = await executeCommand(target, cmd);
     return { logs: result.output || "No logs available yet." };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { logs: `Failed to retrieve logs: ${msg}` };
   }
 }

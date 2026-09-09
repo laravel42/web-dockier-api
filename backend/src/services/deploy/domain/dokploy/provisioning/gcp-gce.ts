@@ -12,6 +12,7 @@
 
 import { createGcpClient, GcpApiError } from "../../infra/gcp-client.js";
 import { pollUntil } from "../../infra/poll-until.js";
+import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 
 const DEFAULT_MACHINE_TYPE = "e2-small";
 const FIREWALL_NAME = "dockier-dokploy-allow";
@@ -249,7 +250,7 @@ function wrapGcpError(err: unknown, action: string): Error {
     }
     return new Error(`Failed to ${action}: ${err.message}`);
   }
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrMsg(err);
   // createGcpClient throws plain Errors for bad/missing credentials.
   if (/service account|access token|project ID/i.test(message)) {
     return new Error(`Failed to ${action}: the GCP service-account credentials for this provider are invalid (${message}).`);

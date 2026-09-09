@@ -1,4 +1,5 @@
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 
 export const LogsError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("LogsError");
@@ -105,7 +106,7 @@ export async function getLog(params: {
       lastModified: new Date().toISOString(),
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return {
       type: logType,
       content: `Failed to read ${LOG_TYPE_LABELS[logType]}: ${msg}`,

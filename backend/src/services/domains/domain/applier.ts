@@ -17,6 +17,7 @@
  */
 
 import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getCfn, getEc2, getSsm } from "../../../lib/aws-sdk.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe, toAwsCredentials } from "../../../lib/provider-credentials.js";
@@ -227,7 +228,7 @@ async function executeOnHost(target: ExecutionTarget, script: string): Promise<H
 
     return { exitCode: 1, output: "SSM command timed out" };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { exitCode: 1, output: `SSM execution error: ${msg}` };
   }
 }
@@ -588,7 +589,7 @@ export async function applyDomainConfig(params: {
 
     return { success: true, message: "Domain configuration applied.", generatedConfig: nginxConfig };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     logger.error(`[domains] Error applying domain config for project ${projectId}: ${msg}`);
     return { success: false, message: `Error: ${msg}` };
   }
@@ -672,7 +673,7 @@ export async function issueCertificate(params: {
       message: `SSL certificate issued for ${domainName}. Nginx reloaded with SSL.`,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     await updateCertificateStatus(certificateId, "failed");
     logger.error(`[domains] Error issuing certificate for ${domainName}: ${msg}`);
     return { success: false, message: `Certificate issuance error: ${msg}` };
@@ -732,7 +733,7 @@ export async function verifyDomainDns(params: {
       };
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = getErrMsg(err);
     return { verified: false, message: `DNS verification error: ${msg}` };
   }
 }

@@ -15,6 +15,7 @@
 
 import { getEc2 } from "../../../../../lib/aws-sdk.js";
 import { pollUntil } from "../../infra/poll-until.js";
+import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 
 const DEFAULT_INSTANCE_TYPE = "t3.small";
 const SG_NAME = "dockier-dokploy-sg";
@@ -269,7 +270,7 @@ async function waitForPublicIp(
         ip = instance?.PublicIpAddress;
       } catch (err) {
         // A transient describe failure shouldn't abort the whole poll.
-        await log(`Waiting for instance... (${err instanceof Error ? err.message : String(err)})`);
+        await log(`Waiting for instance... (${getErrMsg(err)})`);
         return null;
       }
 
@@ -298,7 +299,7 @@ function isDuplicateError(err: unknown): boolean {
 /** Turn opaque AWS SDK errors into actionable, user-facing messages. */
 function wrapAwsError(err: unknown, action: string): Error {
   const name = (err as { name?: string })?.name ?? "";
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrMsg(err);
 
   if (name === "AuthFailure" || name === "UnauthorizedOperation" || name === "AccessDenied") {
     return new Error(`Failed to ${action}: the AWS credentials for this provider are invalid or lack permission (${name}). Check the provider's access key, secret, and IAM policy.`);

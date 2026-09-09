@@ -16,6 +16,7 @@ import { getS3, getSns, getCodeBuild } from "../../../../lib/aws-sdk.js";
 import { sanitizeEcrRepoName } from "../../../../lib/naming.js";
 import { env } from "../../../../shared/config.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -275,7 +276,7 @@ async function pollCodeBuild(opts: {
           }
         }
       } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = getErrMsg(e);
         if (message.startsWith("CodeBuild failed")) throw e;
         /* transient error, retry */
       }
