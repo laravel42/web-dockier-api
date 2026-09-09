@@ -9,7 +9,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../../shared/auth/auth.js";
-import { authSessionSchema, membershipSchema } from "../schemas.js";
+import { authSessionSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../../shared/schemas/responses.js";
 import {

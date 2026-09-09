@@ -42,9 +42,9 @@ export interface QueryErrorOptions {
 
 import type { ErrorMetadata } from "./errors.js";
  
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type DomainErrorConstructor<E extends Error = Error> = new (
   message: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   code: any,
   cause?: unknown,
   metadata?: ErrorMetadata,

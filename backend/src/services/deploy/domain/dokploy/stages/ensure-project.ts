@@ -7,8 +7,6 @@
 
 import type { DokployClient } from "../client.js";
 import { getTenantProject, createTenantProject } from "../mappings.js";
-import type { TenantProjectMapping } from "../mappings.js";
-
 export interface EnsureProjectResult {
   dokployProjectId: string;
   dokployEnvironmentId: string;

@@ -7,7 +7,7 @@ import { analyzePhpProject } from "./analyzers/php.js";
 import { analyzePythonProject } from "./analyzers/python.js";
 import { analyzeGoProject } from "./analyzers/go.js";
 import { generateNodeDockerfile } from "./dockerfiles/node.js";
-import { generatePhpDockerfile, resolvePhpVersion } from "./dockerfiles/php.js";
+import { generatePhpDockerfile } from "./dockerfiles/php.js";
 import { generatePythonDockerfile } from "./dockerfiles/python.js";
 import { generateGoDockerfile } from "./dockerfiles/go.js";
 import { finalizeNodeVersion } from "./utils.js";

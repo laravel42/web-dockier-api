@@ -19,7 +19,6 @@ import type { DetectedService } from "../domain/services.js";
 import { env } from "../../../shared/config.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { getGitProvider } from "../domain/providers/git-provider.js";
 import {
   parseJsonField,
   writeRepoCache,

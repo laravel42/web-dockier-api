@@ -14,7 +14,6 @@ import { unwrapQuery, assertOwnership } from "../../../shared/supabase/query.js"
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { DeployError } from "./providers.js";
 import { createAndEnqueueDeployment } from "./deployments.js";
-import { rowToDeployment } from "./mappers.js";
 
 type BuildMethod = "dockerfile" | "railpack" | "nixpacks" | "codebuild";
 

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList, assertOwnership, normalizePagination, paginatedQuery } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, assertOwnership, normalizePagination, paginatedQuery } from "../../../shared/supabase/query.js";
 import type { DeploymentRow, DeploymentStatus, ServiceEntry } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";

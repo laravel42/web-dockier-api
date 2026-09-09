@@ -253,7 +253,7 @@ function generateDomainNginxConfig(params: {
   certificates: SslCertificateResponse[];
   containerPort?: number;
 }): string {
-  const { appName, domains, certificates, containerPort = 8080 } = params;
+  const { domains, certificates, containerPort = 8080 } = params;
 
   // Validate all domain names before interpolating into nginx config
   for (const d of domains) {

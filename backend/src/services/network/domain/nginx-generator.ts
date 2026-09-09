@@ -53,7 +53,7 @@ function generateRedirectDirectives(rules: RedirectRuleResponse[]): string[] {
   for (const rule of rules) {
     const flag = rule.type === "permanent" ? "permanent" : "redirect";
     // Escape regex special characters to ensure exact path matching
-    const from = rule.fromPath.replace(/[^a-zA-Z0-9/_\-]/g, "\\$&");
+    const from = rule.fromPath.replace(/[^a-zA-Z0-9/_-]/g, "\\$&");
     lines.push(`    rewrite ^${from}$ ${rule.toPath} ${flag};`);
   }
   lines.push("");

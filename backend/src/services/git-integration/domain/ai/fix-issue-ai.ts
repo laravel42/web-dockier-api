@@ -116,16 +116,6 @@ async function getFileTreeWithShas(
  * Fetch file content directly by blob SHA using the Git Blobs API.
  * This works when the token has git data access but not contents access.
  */
-async function fetchBlobBySha(
-  connection: ConnectionLike,
-  owner: string,
-  repo: string,
-  sha: string,
-): Promise<string | null> {
-  const result = await fetchBlobByShaWithError(connection, owner, repo, sha);
-  return result.content;
-}
-
 async function fetchBlobByShaWithError(
   connection: ConnectionLike,
   owner: string,

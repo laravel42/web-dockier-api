@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, paginatedQuery } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { enqueueCommand } from "./worker.js";
 import { safeRecordActivity } from "../../../shared/service-clients/activity.js";

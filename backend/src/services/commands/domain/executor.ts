@@ -108,7 +108,7 @@ async function executeViaEcsRunTask(
 
   try {
     const {
-      ECSClient, RunTaskCommand, DescribeTasksCommand, DescribeServicesCommand,
+      ECSClient, RunTaskCommand, DescribeTasksCommand,
       waitUntilTasksStopped,
     } = await getEcs();
     const ecs = new ECSClient({

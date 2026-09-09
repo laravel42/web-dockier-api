@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // Fully adapted to Supabase (no ts-nocheck).
 import { join } from "node:path";
 import { extractRegionFromScript } from "../infra/gcp-helpers.js";
