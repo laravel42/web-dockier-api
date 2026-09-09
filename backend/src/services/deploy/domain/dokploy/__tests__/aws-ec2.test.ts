@@ -176,6 +176,19 @@ describe("provisionEc2Instance — happy path", () => {
     expect(input.KeyName).toBe("dockier-abc12345");
     expect(Buffer.from(input.PublicKeyMaterial).toString()).toBe("ssh-ed25519 AAAA... dockier");
   });
+
+  it("applies cost-attribution tags alongside Name and ManagedBy", async () => {
+    routeSend({});
+
+    await provisionEc2Instance(baseParams({ tags: { "dockier-project": "proj-1", "dockier-tenant": "tenant-9" } }));
+
+    const tags = inputFor("RunInstances").TagSpecifications[0].Tags as Array<{ Key: string; Value: string }>;
+    const byKey = Object.fromEntries(tags.map((t) => [t.Key, t.Value]));
+    expect(byKey["Name"]).toBe("dockier-abc12345");
+    expect(byKey["ManagedBy"]).toBe("dockier");
+    expect(byKey["dockier-project"]).toBe("proj-1");
+    expect(byKey["dockier-tenant"]).toBe("tenant-9");
+  });
 });
 
 // ─── AMI resolution ────────────────────────────────────────────────

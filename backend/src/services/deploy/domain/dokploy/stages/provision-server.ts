@@ -34,12 +34,14 @@ export interface ProvisionServerResult {
 export async function stageProvisionServer(params: {
   projectId: string;
   providerId: string;
+  /** Tenant/organization id — used for cost-attribution tags on the VM. */
+  tenantId?: string;
   /** Selected plan's instance size (e.g. "t3.small"). Optional — defaults per provider. */
   instanceType?: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, instanceType, client, log } = params;
+  const { projectId, providerId, tenantId, instanceType, client, log } = params;
 
   await log("[stage:provision-server] Checking for existing server...");
 
@@ -88,11 +90,11 @@ export async function stageProvisionServer(params: {
 
   const provider = creds.provider.toLowerCase();
   if (provider === "aws") {
-    return provisionAwsServer({ projectId, providerId, instanceType, creds, client, log });
+    return provisionAwsServer({ projectId, providerId, tenantId, instanceType, creds, client, log });
   }
 
   if (provider === "gcp") {
-    return provisionGcpServer({ projectId, providerId, instanceType, creds, client, log });
+    return provisionGcpServer({ projectId, providerId, tenantId, instanceType, creds, client, log });
   }
 
   throw new Error(
@@ -109,12 +111,13 @@ export async function stageProvisionServer(params: {
 async function provisionAwsServer(params: {
   projectId: string;
   providerId: string;
+  tenantId?: string;
   instanceType?: string;
   creds: { apiKey: string; apiSecret: string; region: string };
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, instanceType, creds, client, log } = params;
+  const { projectId, providerId, tenantId, instanceType, creds, client, log } = params;
 
   const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
   if (!sshKeyId) {
@@ -136,6 +139,7 @@ async function provisionAwsServer(params: {
       sshPublicKey,
       keyPairName: `dockier-${projectId.slice(0, 8)}`,
       instanceName: `dockier-${projectId.slice(0, 8)}`,
+      tags: attributionTags(projectId, tenantId),
       log: (line) => log(`[stage:provision-server] ${line}`),
     });
     instanceId = result.instanceId;
@@ -168,12 +172,13 @@ async function provisionAwsServer(params: {
 async function provisionGcpServer(params: {
   projectId: string;
   providerId: string;
+  tenantId?: string;
   instanceType?: string;
   creds: { apiKey: string; apiSecret: string; region: string };
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, instanceType, creds, client, log } = params;
+  const { projectId, providerId, tenantId, instanceType, creds, client, log } = params;
 
   const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
   if (!sshKeyId) {
@@ -194,6 +199,7 @@ async function provisionGcpServer(params: {
       machineType: instanceType,
       sshPublicKey,
       instanceName: `dockier-${projectId.slice(0, 8)}`,
+      labels: attributionTags(projectId, tenantId),
       log: (line) => log(`[stage:provision-server] ${line}`),
     });
     instanceId = result.instanceId;
@@ -213,6 +219,20 @@ async function provisionGcpServer(params: {
   }
 
   return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, client, log });
+}
+
+/**
+ * Build cost-attribution tags/labels applied to provisioned VMs so orphaned
+ * instances on a tenant's cloud account are traceable back to Dockier.
+ * Keys are lowercase to satisfy GCP label rules (AWS tag keys are case-flexible).
+ */
+function attributionTags(projectId: string, tenantId?: string): Record<string, string> {
+  const tags: Record<string, string> = {
+    "dockier-managed": "true",
+    "dockier-project": projectId,
+  };
+  if (tenantId) tags["dockier-tenant"] = tenantId;
+  return tags;
 }
 
 /**

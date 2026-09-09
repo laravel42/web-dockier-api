@@ -36,14 +36,9 @@ vi.mock("../provisioning/aws-ec2.js", () => ({
   terminateEc2Instance: (...a: unknown[]) => terminateEc2Instance(...a),
 }));
 
-const gcpFindInstance = vi.fn().mockResolvedValue({ zone: "us-central1-b", name: "vm-1" });
-const gcpDeleteInstance = vi.fn().mockResolvedValue(true);
-const createGcpClient = vi.fn(async () => ({
-  findInstance: (...a: unknown[]) => gcpFindInstance(...a),
-  deleteInstance: (...a: unknown[]) => gcpDeleteInstance(...a),
-}));
-vi.mock("../../infra/gcp-client.js", () => ({
-  createGcpClient: (...a: unknown[]) => createGcpClient(...(a as [])),
+const terminateGceInstance = vi.fn().mockResolvedValue(undefined);
+vi.mock("../provisioning/gcp-gce.js", () => ({
+  terminateGceInstance: (...a: unknown[]) => terminateGceInstance(...a),
 }));
 
 const getProviderCredentialsSafe = vi.fn();
@@ -86,6 +81,7 @@ afterEach(() => {
   deleteApplication.mockResolvedValue(undefined);
   deleteServer.mockResolvedValue(undefined);
   terminateEc2Instance.mockResolvedValue(undefined);
+  terminateGceInstance.mockResolvedValue(undefined);
   getProviderCredentialsSafe.mockResolvedValue(AWS_CREDS);
 });
 
@@ -138,28 +134,27 @@ describe("teardownDokployProject — AWS happy path", () => {
 // ─── GCP dispatch ──────────────────────────────────────────────────
 
 describe("teardownDokployProject — GCP", () => {
-  it("finds the instance zone and deletes the GCE VM", async () => {
+  it("delegates GCE VM deletion to terminateGceInstance", async () => {
     getServer.mockResolvedValue({ ...SERVER, instanceId: "vm-1" });
     getApplication.mockResolvedValue(null);
     getProviderCredentialsSafe.mockResolvedValue({ provider: "gcp", region: "us-central1", apiKey: "{}", apiSecret: "" });
 
     const result = await teardownDokployProject("proj-1", "tenant-1");
 
-    expect(gcpFindInstance).toHaveBeenCalledWith("vm-1");
-    expect(gcpDeleteInstance).toHaveBeenCalledWith("us-central1-b", "vm-1");
+    expect(terminateGceInstance).toHaveBeenCalledWith("{}", "vm-1");
     expect(result.status).toBe("torn_down");
   });
 
-  it("treats an already-gone GCE instance as success", async () => {
+  it("reports partial when GCE termination fails", async () => {
     getServer.mockResolvedValue({ ...SERVER, instanceId: "vm-gone" });
     getApplication.mockResolvedValue(null);
     getProviderCredentialsSafe.mockResolvedValue({ provider: "gcp", region: "us-central1", apiKey: "{}", apiSecret: "" });
-    gcpFindInstance.mockResolvedValueOnce(null);
+    terminateGceInstance.mockRejectedValueOnce(new Error("gcp down"));
 
     const result = await teardownDokployProject("proj-1", "tenant-1");
 
-    expect(gcpDeleteInstance).not.toHaveBeenCalled();
-    expect(result.status).toBe("torn_down");
+    expect(result.status).toBe("partial");
+    expect(result.message).toMatch(/cloud instance vm-gone/);
   });
 });
 

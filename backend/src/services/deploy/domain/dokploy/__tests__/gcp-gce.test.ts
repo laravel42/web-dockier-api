@@ -12,6 +12,8 @@ const createInstance = vi.fn().mockResolvedValue({ operationName: "op-1", alread
 const waitForZoneOperation = vi.fn().mockResolvedValue(undefined);
 const getInstanceExternalIp = vi.fn().mockResolvedValue("34.1.2.3");
 const listAvailableZones = vi.fn().mockResolvedValue([]);
+const findInstance = vi.fn().mockResolvedValue({ zone: "us-central1-b", name: "vm-1" });
+const deleteInstance = vi.fn().mockResolvedValue(true);
 
 const createGcpClientMock = vi.fn(async () => ({
   ensureFirewallRule,
@@ -19,6 +21,8 @@ const createGcpClientMock = vi.fn(async () => ({
   waitForZoneOperation,
   getInstanceExternalIp,
   listAvailableZones,
+  findInstance,
+  deleteInstance,
 }));
 
 // GcpApiError must be a real class the code can `instanceof`-check.
@@ -41,7 +45,7 @@ vi.mock("../../infra/gcp-client.js", () => ({
   GcpApiError,
 }));
 
-const { provisionGceInstance } = await import("../provisioning/gcp-gce.js");
+const { provisionGceInstance, terminateGceInstance } = await import("../provisioning/gcp-gce.js");
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -65,6 +69,8 @@ afterEach(() => {
   createInstance.mockResolvedValue({ operationName: "op-1", alreadyExists: false });
   getInstanceExternalIp.mockResolvedValue("34.1.2.3");
   listAvailableZones.mockResolvedValue([]);
+  findInstance.mockResolvedValue({ zone: "us-central1-b", name: "vm-1" });
+  deleteInstance.mockResolvedValue(true);
 });
 
 // ─── Happy path ────────────────────────────────────────────────────
@@ -112,6 +118,15 @@ describe("provisionGceInstance — happy path", () => {
     await provisionGceInstance(baseParams({ machineType: undefined }));
 
     expect(createInstance.mock.calls[0][1].machineType).toBe("e2-small");
+  });
+
+  it("passes sanitized cost-attribution labels", async () => {
+    await provisionGceInstance(baseParams({ labels: { "dockier-project": "Proj_1", "dockier-tenant": "Tenant-9" } }));
+
+    const labels = createInstance.mock.calls[0][1].labels as Record<string, string>;
+    // GCP label values are lowercased and non-conforming chars replaced.
+    expect(labels["dockier-project"]).toBe("proj_1");
+    expect(labels["dockier-tenant"]).toBe("tenant-9");
   });
 
   it("opens a firewall rule for 22/80/443 before creating the instance", async () => {
@@ -203,6 +218,40 @@ describe("provisionGceInstance — error mapping", () => {
     createGcpClientMock.mockRejectedValueOnce(new Error("Could not determine GCP project ID from service account key"));
 
     await expect(provisionGceInstance(baseParams()))
+      .rejects.toThrow(/authenticate with GCP|invalid/i);
+  });
+});
+
+// ─── Teardown ──────────────────────────────────────────────────────
+
+describe("terminateGceInstance", () => {
+  it("deletes directly when a zone is known (no cross-zone lookup)", async () => {
+    await terminateGceInstance(SA_KEY, "vm-1", "us-central1-c");
+
+    expect(findInstance).not.toHaveBeenCalled();
+    expect(deleteInstance).toHaveBeenCalledWith("us-central1-c", "vm-1");
+  });
+
+  it("locates the instance across zones when no zone is given", async () => {
+    findInstance.mockResolvedValueOnce({ zone: "europe-west1-b", name: "vm-1" });
+
+    await terminateGceInstance(SA_KEY, "vm-1");
+
+    expect(findInstance).toHaveBeenCalledWith("vm-1");
+    expect(deleteInstance).toHaveBeenCalledWith("europe-west1-b", "vm-1");
+  });
+
+  it("treats an already-gone instance as success (no delete)", async () => {
+    findInstance.mockResolvedValueOnce(null);
+
+    await expect(terminateGceInstance(SA_KEY, "vm-gone")).resolves.toBeUndefined();
+    expect(deleteInstance).not.toHaveBeenCalled();
+  });
+
+  it("wraps auth failures from client construction", async () => {
+    createGcpClientMock.mockRejectedValueOnce(new Error("Failed to get GCP access token from service account key"));
+
+    await expect(terminateGceInstance(SA_KEY, "vm-1", "us-central1-b"))
       .rejects.toThrow(/authenticate with GCP|invalid/i);
   });
 });

@@ -32,6 +32,8 @@ export interface GceProvisionParams {
   sshPublicKey: string;
   /** Instance name (GCE naming rules: lowercase, digits, hyphens). */
   instanceName: string;
+  /** Extra labels for cost attribution / traceability (e.g. dockier-project, dockier-tenant). Sanitized to GCP label rules. */
+  labels?: Record<string, string>;
   /** Optional progress log. */
   log?: (line: string) => Promise<void> | void;
   /** Operation poll timeout (ms). Default 180000. */
@@ -86,6 +88,7 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
       sshKeys: `root:${params.sshPublicKey}`,
       diskSizeGb: 30,
       tags: [NETWORK_TAG],
+      labels: sanitizeLabels(params.labels),
     });
   } catch (err) {
     throw wrapGcpError(err, "create GCE instance");
@@ -115,6 +118,39 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
 
   await log(`Instance "${name}" is running at ${publicIp}`);
   return { instanceId: name, publicIp, zone };
+}
+
+// ─── Teardown ────────────────────────────────────────────────────
+
+/**
+ * Delete a Compute Engine instance. Idempotent: a missing instance is treated
+ * as already-gone (success). Prefers the known `zone` and only falls back to a
+ * cross-zone lookup when it isn't provided. Mirrors `terminateEc2Instance`.
+ */
+export async function terminateGceInstance(
+  serviceAccountKey: string,
+  instanceName: string,
+  zone?: string,
+): Promise<void> {
+  let client: Awaited<ReturnType<typeof createGcpClient>>;
+  try {
+    client = await createGcpClient(serviceAccountKey);
+  } catch (err) {
+    throw wrapGcpError(err, "authenticate with GCP");
+  }
+
+  try {
+    if (zone) {
+      await client.deleteInstance(zone, instanceName);
+      return;
+    }
+    // No zone recorded — locate the instance across zones first.
+    const found = await client.findInstance(instanceName);
+    if (!found) return; // already gone
+    await client.deleteInstance(found.zone, found.name);
+  } catch (err) {
+    throw wrapGcpError(err, "terminate GCE instance");
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -168,6 +204,23 @@ async function pollExternalIp(
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error(`GCE instance "${name}" did not report an external IP within ${Math.round(timeoutMs / 1000)}s`);
+}
+
+/**
+ * Sanitize a label map to GCP's constraints: keys and values must be lowercase
+ * letters, digits, `_` or `-`, at most 63 chars; keys must start with a letter.
+ * Invalid entries are dropped rather than failing the whole provision.
+ */
+function sanitizeLabels(labels?: Record<string, string>): Record<string, string> | undefined {
+  if (!labels) return undefined;
+  const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 63);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(labels)) {
+    let key = clean(k);
+    if (!/^[a-z]/.test(key)) key = `d-${key}`.slice(0, 63);
+    if (key) out[key] = clean(v);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

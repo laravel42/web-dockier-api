@@ -40,6 +40,8 @@ export interface ProvisionEc2Params {
   keyPairName: string;
   /** Tag value applied to the instance Name tag. */
   instanceName: string;
+  /** Extra tags for cost attribution / traceability (e.g. dockier:project, dockier:tenant). */
+  tags?: Record<string, string>;
   /** Optional progress log. */
   log?: (line: string) => Promise<void> | void;
   /** Poll interval (ms) while waiting for a public IP. Default 5000. */
@@ -129,6 +131,7 @@ export async function provisionEc2Instance(params: ProvisionEc2Params): Promise<
         Tags: [
           { Key: "Name", Value: instanceName },
           { Key: "ManagedBy", Value: "dockier" },
+          ...Object.entries(params.tags ?? {}).map(([Key, Value]) => ({ Key, Value })),
         ],
       }],
     }));

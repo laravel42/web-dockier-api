@@ -27,7 +27,7 @@ import {
   deleteApplicationMapping,
 } from "../dokploy/mappings.js";
 import { terminateEc2Instance } from "../dokploy/provisioning/aws-ec2.js";
-import { createGcpClient } from "../infra/gcp-client.js";
+import { terminateGceInstance } from "../dokploy/provisioning/gcp-gce.js";
 
 export interface DokployTeardownStep {
   resource: string;
@@ -137,13 +137,9 @@ async function terminateCloudInstance(providerId: string, instanceId: string): P
   }
 
   if (provider === "gcp") {
-    return runStep(resource, async () => {
-      const client = await createGcpClient(creds.apiKey);
-      // instanceId is the GCE instance name; find its zone, then delete.
-      const found = await client.findInstance(instanceId);
-      if (!found) return; // already gone
-      await client.deleteInstance(found.zone, found.name);
-    });
+    // instanceId is the GCE instance name. No zone is recorded in the mapping,
+    // so terminateGceInstance locates it across zones before deleting.
+    return runStep(resource, () => terminateGceInstance(creds.apiKey, instanceId));
   }
 
   return { resource, success: false, message: `Unsupported provider "${creds.provider}" for VM termination.` };
