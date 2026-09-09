@@ -4,12 +4,17 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
-import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
+import { ALL_PERMISSIONS, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
 
 function resolveIsDeletable(systemKey: string | null, isDeletable: boolean): boolean {
   return systemKey !== SYSTEM_ROLE_KEYS.ADMIN && isDeletable;
+}
+
+/** Type guard: is a raw string a known permission key? */
+function isPermissionKey(value: string): value is PermissionKey {
+  return (ALL_PERMISSIONS as readonly string[]).includes(value);
 }
 
 export const RolesError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal">("RolesError");
@@ -117,13 +122,13 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
   }
 
   // Validate permission keys
-  const invalidPerms = permissions.filter((p) => !ALL_PERMISSIONS.includes(p as any));
+  const invalidPerms = permissions.filter((p) => !isPermissionKey(p));
   if (invalidPerms.length > 0) {
     throw new RolesError(`Invalid permissions: ${invalidPerms.join(", ")}`, "bad_request");
   }
 
   // Escalation check: cannot assign permissions you don't have
-  const hasAllPerms = resolvedAuth.isOwner || permissions.every((p) => resolvedAuth.permissions.includes(p as any));
+  const hasAllPerms = resolvedAuth.isOwner || permissions.every((p) => resolvedAuth.permissions.includes(p as PermissionKey));
   if (!hasAllPerms) {
     throw new RolesError("Cannot assign permissions you do not possess", "forbidden");
   }
@@ -232,12 +237,12 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
   // Update permissions if provided
   let finalPermissions: string[];
   if (params.permissions !== undefined) {
-    const invalidPerms = params.permissions.filter((p) => !ALL_PERMISSIONS.includes(p as any));
+    const invalidPerms = params.permissions.filter((p) => !isPermissionKey(p));
     if (invalidPerms.length > 0) {
       throw new RolesError(`Invalid permissions: ${invalidPerms.join(", ")}`, "bad_request");
     }
     // Escalation check: cannot assign permissions you don't have
-    const hasAllPerms = resolvedAuth.isOwner || params.permissions.every((p) => resolvedAuth.permissions.includes(p as any));
+    const hasAllPerms = resolvedAuth.isOwner || params.permissions.every((p) => resolvedAuth.permissions.includes(p as PermissionKey));
     if (!hasAllPerms) {
       throw new RolesError("Cannot assign permissions you do not possess", "forbidden");
     }
