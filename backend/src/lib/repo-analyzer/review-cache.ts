@@ -25,6 +25,7 @@
 import { createHash } from "node:crypto";
 import { MemoryAsyncCache } from "../../shared/cache/memory-async-cache.js";
 import { logger } from "../../shared/logger.js";
+import { getErrMsg } from "../../shared/utils/error-message.js";
 import type { DockerfileReviewResult } from "./ai-review.js";
 import type { RepoConfig } from "./types.js";
 
@@ -112,7 +113,7 @@ export async function getCachedReview(key: string): Promise<CachedReview | undef
   try {
     return await store.get(key);
   } catch (e: unknown) {
-    logger.warn(`[AI-Dockerfile] Review cache read failed: ${(e as Error).message}`);
+    logger.warn(`[AI-Dockerfile] Review cache read failed: ${getErrMsg(e)}`);
     return undefined;
   }
 }
@@ -131,7 +132,7 @@ export async function setCachedReview(key: string, review: CachedReview): Promis
   try {
     await store.set(key, review, REVIEW_CACHE_TTL_MS);
   } catch (e: unknown) {
-    logger.warn(`[AI-Dockerfile] Review cache write failed: ${(e as Error).message}`);
+    logger.warn(`[AI-Dockerfile] Review cache write failed: ${getErrMsg(e)}`);
   }
 }
 

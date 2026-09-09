@@ -9,6 +9,7 @@
 
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -304,7 +305,7 @@ Rules:
         severity: validSeverities.has(c.severity) ? c.severity : "suggestion",
       }));
   } catch (e) {
-    logger.error(`[AI-ReviewPR] Failed to parse review: ${(e as Error).message}`);
+    logger.error(`[AI-ReviewPR] Failed to parse review: ${getErrMsg(e)}`);
     throw new Error("AI failed to produce a valid review");
   }
 

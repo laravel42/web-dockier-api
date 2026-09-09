@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 import { getCodeBuild, getCloudWatchLogs } from "../../../lib/aws-sdk.js";
 import { env } from "../../../shared/config.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 
 function imageBuilderProjectName(): string {
   return env.IMAGE_BUILDER_CODEBUILD_PROJECT;
@@ -86,6 +87,6 @@ export async function fetchBuildLogs(app: FastifyInstance, row: any, nextToken?:
     };
   } catch (error) {
     app.log.warn({ error }, "Failed to fetch CloudWatch logs");
-    return { logs: [`Unable to fetch logs: ${(error as Error).message}`], nextToken: undefined as string | undefined };
+    return { logs: [`Unable to fetch logs: ${getErrMsg(error)}`], nextToken: undefined as string | undefined };
   }
 }

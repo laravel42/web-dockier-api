@@ -9,6 +9,7 @@
 import type { TechStackItem } from "../tech-stack.js";
 import type { DetectedService } from "../services.js";
 import { logger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 // ─── Types ───
 
@@ -89,7 +90,7 @@ async function callOpenAI(apiKey: string, prompt: string, maxTokens = 4096): Pro
   try {
     return JSON.parse(text);
   } catch (e: unknown) {
-    logger.error(`[AI] JSON parse failed: ${(e as Error).message}`);
+    logger.error(`[AI] JSON parse failed: ${getErrMsg(e)}`);
     return null;
   }
 }

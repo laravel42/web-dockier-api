@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../../shared/logger.js";
+import { getErrMsg } from "../../shared/utils/error-message.js";
 import type { RepoConfig } from "./types.js";
 
 // ─── Constants ─────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ async function callOpenAI(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e: unknown) {
-    logger.warn(`[AI-Dockerfile] Request failed: ${(e as Error).message}`);
+    logger.warn(`[AI-Dockerfile] Request failed: ${getErrMsg(e)}`);
     return null;
   }
 
@@ -136,7 +137,7 @@ async function callOpenAI(
   try {
     return JSON.parse(text) as RawReviewResponse;
   } catch (e: unknown) {
-    logger.warn(`[AI-Dockerfile] JSON parse failed: ${(e as Error).message}`);
+    logger.warn(`[AI-Dockerfile] JSON parse failed: ${getErrMsg(e)}`);
     return null;
   }
 }

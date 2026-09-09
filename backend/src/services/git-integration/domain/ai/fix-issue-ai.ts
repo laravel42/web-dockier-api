@@ -295,7 +295,7 @@ Return ONLY valid JSON:
       reasoning: parsed.reasoning || "",
     };
   } catch (e) {
-    logger.error(`[AI-FixIssue] Failed to parse file identification: ${(e as Error).message}`);
+    logger.error(`[AI-FixIssue] Failed to parse file identification: ${getErrMsg(e)}`);
     throw new Error("AI failed to identify relevant files");
   }
 }
@@ -454,12 +454,13 @@ CRITICAL RULES:
       prDescription: parsed.prDescription || "",
     };
   } catch (e) {
-    if ((e as Error).message.includes("could not be applied") ||
-        (e as Error).message.includes("no actual changes") ||
-        (e as Error).message === "AI returned no edits") {
+    const message = getErrMsg(e);
+    if (message.includes("could not be applied") ||
+        message.includes("no actual changes") ||
+        message === "AI returned no edits") {
       throw e;
     }
-    logger.error(`[AI-FixIssue] Failed to parse fix plan: ${(e as Error).message}`);
+    logger.error(`[AI-FixIssue] Failed to parse fix plan: ${message}`);
     throw new Error("AI failed to generate a valid fix plan");
   }
 }

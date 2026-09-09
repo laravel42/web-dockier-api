@@ -3,6 +3,7 @@
  */
 
 import { logger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 export interface GenerateCodeFixInput {
   filePath: string;
@@ -62,7 +63,7 @@ async function callOpenAI(
   try {
     return JSON.parse(text) as CodeFixResponse;
   } catch (e: unknown) {
-    logger.error(`[AI-Fix] JSON parse failed: ${(e as Error).message}`);
+    logger.error(`[AI-Fix] JSON parse failed: ${getErrMsg(e)}`);
     return null;
   }
 }
