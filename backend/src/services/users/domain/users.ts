@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, normalizePagination } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, normalizePagination, paginatedRows } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/http/security.js";
@@ -121,7 +121,6 @@ export async function listUsers(params: ListUsersParams) {
     .from("users")
     .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at", { count: "exact" })
     .eq("organization_id", tenantId)
-    .range(offset, offset + limit - 1)
     .order("created_at", { ascending: false });
 
   if (search) {
@@ -129,11 +128,12 @@ export async function listUsers(params: ListUsersParams) {
     query = query.or(`name.ilike.%${escaped}%,email.ilike.%${escaped}%`);
   }
 
-  const { data, count, error } = await query;
-  throwOnError(error, UsersError, { internalMsg: "Failed to list users" });
+  const { rows: data, count } = await paginatedRows(query, { limit, offset }, UsersError, {
+    internalMsg: "Failed to list users",
+  });
 
   // Fetch membership + role info
-  const userIds = (data ?? []).map((u) => u.id);
+  const userIds = data.map((u) => u.id);
   if (userIds.length === 0) return { users: [], total: 0 };
 
   const { data: memberships, error: membershipsError } = await supabaseAdmin
@@ -151,7 +151,7 @@ export async function listUsers(params: ListUsersParams) {
   }
 
   return {
-    users: (data ?? []).map((row) => {
+    users: data.map((row) => {
       const membership = membershipByUser.get(row.id);
       return {
         ...rowToUser(row),

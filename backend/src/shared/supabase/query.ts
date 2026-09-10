@@ -276,14 +276,48 @@ export async function paginatedQuery<TRow, TResult, E extends Error>(
   ErrorClass: DomainErrorConstructor<E>,
   options: PaginatedQueryOptions<TRow, TResult>,
 ): Promise<PaginatedResult<TResult>> {
-  const { limit, offset } = pagination;
   const { internalMsg = "Database query failed", map } = options;
 
-  const { data, error, count } = await query.range(offset, offset + limit - 1);
-  const rows = unwrapList(data, error, ErrorClass, { internalMsg });
+  const { rows, count } = await paginatedRows(query, pagination, ErrorClass, { internalMsg });
 
   return {
     data: rows.map(map),
     total: count ?? rows.length,
   };
+}
+
+/**
+ * Fetch one page of raw rows plus the total count.
+ *
+ * This is the lower-level primitive behind {@link paginatedQuery}. Use it when
+ * the response can't be produced by a single per-row `map` — e.g. when rows need
+ * a follow-up batch query (memberships, latest commits) before they can be shaped.
+ * For the simple case where each row maps independently, prefer `paginatedQuery`.
+ *
+ * Applies `.range(offset, offset + limit - 1)` to a query that already carries
+ * `{ count: "exact" }`, then `unwrapList()`s the result. The caller owns the
+ * `total` fallback so it can preserve existing semantics (e.g. `count ?? 0`).
+ *
+ * @example
+ * ```ts
+ * const { rows, count } = await paginatedRows(query, { limit, offset }, UsersError, {
+ *   internalMsg: "Failed to list users",
+ * });
+ * // ...enrich rows, then map...
+ * return { users: rows.map(enrich), total: count ?? 0 };
+ * ```
+ */
+export async function paginatedRows<TRow, E extends Error>(
+  query: { range: (from: number, to: number) => PromiseLike<{ data: TRow[] | null; error: PostgrestError | null; count: number | null }> },
+  pagination: { limit: number; offset: number },
+  ErrorClass: DomainErrorConstructor<E>,
+  options: { internalMsg?: string } = {},
+): Promise<{ rows: TRow[]; count: number | null }> {
+  const { limit, offset } = pagination;
+  const { internalMsg = "Database query failed" } = options;
+
+  const { data, error, count } = await query.range(offset, offset + limit - 1);
+  const rows = unwrapList(data, error, ErrorClass, { internalMsg });
+
+  return { rows, count };
 }

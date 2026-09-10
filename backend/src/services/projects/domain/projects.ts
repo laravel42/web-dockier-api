@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList, normalizePagination } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, normalizePagination, paginatedRows } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
@@ -179,10 +179,9 @@ export async function listProjects(tenantId: string, params?: { limit?: number; 
     query = query.ilike("name", `%${escapePostgrestLike(params.search)}%`);
   }
 
-  query = query.range(offset, offset + limit - 1);
-
-  const { data, error, count } = await query;
-  const rows = unwrapList(data, error, ProjectsError, { internalMsg: "Failed to list projects" });
+  const { rows, count } = await paginatedRows(query, { limit, offset }, ProjectsError, {
+    internalMsg: "Failed to list projects",
+  });
   const projectIds = rows.map((row) => row.id);
   const commits = await latestCommitByProject(tenantId, projectIds);
   return {
