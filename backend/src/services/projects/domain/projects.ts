@@ -12,6 +12,32 @@ import { saveWpConfig, generateWpConfig } from "./wp-config.js";
 export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal" | "service_unavailable">("ProjectsError");
 export type ProjectsError = InstanceType<typeof ProjectsError>;
 
+/** A commit candidate sourced from a deployment or scan row. */
+interface CommitCandidate {
+  commit: string;
+  /** Epoch millis of the source row's `updated_at`; 0 when missing/unparseable. */
+  ts: number;
+}
+
+/** Parse a nullable ISO timestamp into epoch millis, defaulting to 0. */
+function commitTs(when: string | null | undefined): number {
+  return when ? Date.parse(when) || 0 : 0;
+}
+
+/**
+ * Pick the newer of two commit candidates, ignoring blank commits.
+ *
+ * Ties are broken toward the deploy candidate (the first argument), matching
+ * the historical behavior of both the single- and batch-project lookups.
+ * Returns "" when neither candidate has a commit.
+ */
+function pickNewerCommit(deploy: CommitCandidate, scan: CommitCandidate): string {
+  if (!deploy.commit && !scan.commit) return "";
+  if (!scan.commit) return deploy.commit;
+  if (!deploy.commit) return scan.commit;
+  return scan.ts > deploy.ts ? scan.commit : deploy.commit;
+}
+
 /**
  * Resolves the most recent known commit per project for a tenant, derived from
  * the latest deployment (`commit_hash`) or security scan (`commit_sha`). Used to
@@ -48,18 +74,31 @@ async function latestCommitByProject(tenantId: string, projectIds?: string[]): P
 
   const [deployRes, scanRes] = await Promise.all([deployQuery, scanQuery]);
 
-  const best: Record<string, { commit: string; ts: number }> = {};
-  const consider = (pid: string | null, commit: string | null, when: string | null) => {
+  // Reduce each table to its newest commit per project (rows arrive ordered by
+  // updated_at desc, so the first non-blank hit per project is the newest).
+  const bestDeploy = new Map<string, CommitCandidate>();
+  const bestScan = new Map<string, CommitCandidate>();
+  const collect = (
+    into: Map<string, CommitCandidate>,
+    pid: string | null,
+    commit: string | null,
+    when: string | null,
+  ) => {
     if (!pid || !commit) return;
-    const ts = when ? Date.parse(when) || 0 : 0;
-    const existing = best[pid];
-    if (!existing || ts > existing.ts) best[pid] = { commit, ts };
+    const ts = commitTs(when);
+    const existing = into.get(pid);
+    if (!existing || ts > existing.ts) into.set(pid, { commit, ts });
   };
-  for (const row of deployRes.data ?? []) consider(row.project_id, row.commit_hash, row.updated_at);
-  for (const row of scanRes.data ?? []) consider(row.project_id, row.commit_sha, row.updated_at);
+  for (const row of deployRes.data ?? []) collect(bestDeploy, row.project_id, row.commit_hash, row.updated_at);
+  for (const row of scanRes.data ?? []) collect(bestScan, row.project_id, row.commit_sha, row.updated_at);
 
   const out: Record<string, string> = {};
-  for (const [pid, value] of Object.entries(best)) out[pid] = value.commit;
+  for (const pid of new Set([...bestDeploy.keys(), ...bestScan.keys()])) {
+    out[pid] = pickNewerCommit(
+      bestDeploy.get(pid) ?? { commit: "", ts: 0 },
+      bestScan.get(pid) ?? { commit: "", ts: 0 },
+    );
+  }
   return out;
 }
 
@@ -140,13 +179,10 @@ async function latestCommitForProject(tenantId: string, projectId: string): Prom
       .maybeSingle(),
   ]);
 
-  const deployCommit = deployRes.data?.commit_hash ?? "";
-  const deployTs = deployRes.data?.updated_at ? Date.parse(deployRes.data.updated_at) || 0 : 0;
-  const scanCommit = scanRes.data?.commit_sha ?? "";
-  const scanTs = scanRes.data?.updated_at ? Date.parse(scanRes.data.updated_at) || 0 : 0;
-
-  if (!deployCommit && !scanCommit) return "";
-  return scanTs > deployTs ? scanCommit : deployCommit;
+  return pickNewerCommit(
+    { commit: deployRes.data?.commit_hash ?? "", ts: commitTs(deployRes.data?.updated_at) },
+    { commit: scanRes.data?.commit_sha ?? "", ts: commitTs(scanRes.data?.updated_at) },
+  );
 }
 
 export async function getProject(projectId: string, tenantId: string) {
