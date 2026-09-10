@@ -8,6 +8,19 @@
  */
 
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
+import { createDomainErrorClass } from "../../../../shared/supabase/errors.js";
+import { throwOnError, unwrapQuery } from "../../../../shared/supabase/query.js";
+
+/**
+ * Domain error for the Dokploy DB mapping layer.
+ *
+ * Distinct from the HTTP-transport `DokployError` in `types.ts` (which carries
+ * a status code + endpoint). This one plugs into the shared DomainError system
+ * so mapping failures get structured logging and correct HTTP mapping like the
+ * rest of the app.
+ */
+export const DokployMappingError = createDomainErrorClass<"not_found" | "internal">("DokployMappingError");
+export type DokployMappingError = InstanceType<typeof DokployMappingError>;
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -48,7 +61,7 @@ export async function getTenantProject(organizationId: string): Promise<TenantPr
     .eq("organization_id", organizationId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to query dokploy_tenant_projects: ${error.message}`);
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to query dokploy_tenant_projects" });
   if (!data) return null;
 
   return {
@@ -81,13 +94,15 @@ export async function createTenantProject(params: {
     .select("*")
     .single();
 
-  if (error) throw new Error(`Failed to upsert dokploy_tenant_projects: ${error.message}`);
+  const row = unwrapQuery(data, error, DokployMappingError, {
+    internalMsg: "Failed to upsert dokploy_tenant_projects",
+  });
 
   return {
-    id: data.id,
-    organizationId: data.organization_id,
-    dokployProjectId: data.dokploy_project_id,
-    dokployEnvironmentId: data.dokploy_environment_id,
+    id: row.id,
+    organizationId: row.organization_id,
+    dokployProjectId: row.dokploy_project_id,
+    dokployEnvironmentId: row.dokploy_environment_id,
   };
 }
 
@@ -103,7 +118,7 @@ export async function getServer(projectId: string): Promise<ServerMapping | null
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to query dokploy_servers: ${error.message}`);
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to query dokploy_servers" });
   if (!data) return null;
 
   return {
@@ -146,16 +161,18 @@ export async function upsertServer(params: {
     .select("*")
     .single();
 
-  if (error) throw new Error(`Failed to upsert dokploy_servers: ${error.message}`);
+  const row = unwrapQuery(data, error, DokployMappingError, {
+    internalMsg: "Failed to upsert dokploy_servers",
+  });
 
   return {
-    id: data.id,
-    projectId: data.project_id,
-    providerId: data.provider_id,
-    dokployServerId: data.dokploy_server_id,
-    serverIp: data.server_ip,
-    instanceId: data.instance_id,
-    serverStatus: data.server_status,
+    id: row.id,
+    projectId: row.project_id,
+    providerId: row.provider_id,
+    dokployServerId: row.dokploy_server_id,
+    serverIp: row.server_ip,
+    instanceId: row.instance_id,
+    serverStatus: row.server_status,
   };
 }
 
@@ -168,7 +185,7 @@ export async function updateServerStatus(projectId: string, status: string): Pro
     .update({ server_status: status, updated_at: new Date().toISOString() })
     .eq("project_id", projectId);
 
-  if (error) throw new Error(`Failed to update dokploy_servers status: ${error.message}`);
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to update dokploy_servers status" });
 }
 
 /**
@@ -180,7 +197,7 @@ export async function deleteServerMapping(projectId: string): Promise<void> {
     .delete()
     .eq("project_id", projectId);
 
-  if (error) throw new Error(`Failed to delete dokploy_servers row: ${error.message}`);
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_servers row" });
 }
 
 // ─── Application Mappings ──────────────────────────────────────────
@@ -195,7 +212,7 @@ export async function getApplication(projectId: string): Promise<ApplicationMapp
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to query dokploy_applications: ${error.message}`);
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to query dokploy_applications" });
   if (!data) return null;
 
   return {
@@ -232,14 +249,16 @@ export async function upsertApplication(params: {
     .select("*")
     .single();
 
-  if (error) throw new Error(`Failed to upsert dokploy_applications: ${error.message}`);
+  const row = unwrapQuery(data, error, DokployMappingError, {
+    internalMsg: "Failed to upsert dokploy_applications",
+  });
 
   return {
-    id: data.id,
-    projectId: data.project_id,
-    dokployApplicationId: data.dokploy_application_id,
-    dokployServerId: data.dokploy_server_id,
-    buildType: data.build_type,
+    id: row.id,
+    projectId: row.project_id,
+    dokployApplicationId: row.dokploy_application_id,
+    dokployServerId: row.dokploy_server_id,
+    buildType: row.build_type,
   };
 }
 
@@ -252,7 +271,7 @@ export async function deleteApplicationMapping(projectId: string): Promise<void>
     .delete()
     .eq("project_id", projectId);
 
-  if (error) throw new Error(`Failed to delete dokploy_applications row: ${error.message}`);
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_applications row" });
 }
 
 // ─── Composite Get-or-Create Helpers ───────────────────────────────
