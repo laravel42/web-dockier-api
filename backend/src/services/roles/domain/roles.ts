@@ -7,10 +7,7 @@ import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/
 import { ALL_PERMISSIONS, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
-
-function resolveIsDeletable(systemKey: string | null, isDeletable: boolean): boolean {
-  return systemKey !== SYSTEM_ROLE_KEYS.ADMIN && isDeletable;
-}
+import { rowToRole } from "./mappers.js";
 
 /** Type guard: is a raw string a known permission key? */
 function isPermissionKey(value: string): value is PermissionKey {
@@ -58,16 +55,7 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
   }
 
   return {
-    roles: roleRows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      description: r.description,
-      systemKey: r.system_key ?? null,
-      isSystem: r.is_system,
-      isEditable: r.is_editable,
-      isDeletable: resolveIsDeletable(r.system_key ?? null, r.is_deletable),
-      permissions: permsByRole.get(r.id) ?? [],
-    })),
+    roles: roleRows.map((r) => rowToRole(r, permsByRole.get(r.id) ?? [])),
   };
 }
 
@@ -90,16 +78,7 @@ export async function getRole(roleId: string, tenantId: string): Promise<RoleRes
     .eq("role_id", found.id);
   const permRows = unwrapList(perms, permsError, RolesError, { internalMsg: "Failed to fetch role permissions" });
 
-  return {
-    id: found.id,
-    name: found.name,
-    description: found.description,
-    systemKey: found.system_key ?? null,
-    isSystem: found.is_system,
-    isEditable: found.is_editable,
-    isDeletable: resolveIsDeletable(found.system_key ?? null, found.is_deletable),
-    permissions: permRows.map((p) => p.permission_id),
-  };
+  return rowToRole(found, permRows.map((p) => p.permission_id));
 }
 
 export interface CreateRoleParams {
@@ -163,16 +142,18 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
     }
   }
 
-  return {
-    id,
-    name: trimmedName,
-    description: description?.trim() ?? "",
-    systemKey: null,
-    isSystem: false,
-    isEditable: true,
-    isDeletable: true,
+  return rowToRole(
+    {
+      id,
+      name: trimmedName,
+      description: description?.trim() ?? "",
+      system_key: null,
+      is_system: false,
+      is_editable: true,
+      is_deletable: true,
+    },
     permissions,
-  };
+  );
 }
 
 export interface UpdateRoleParams {
@@ -262,16 +243,18 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     finalPermissions = permRows.map((p) => p.permission_id);
   }
 
-  return {
-    id: role.id,
-    name: updates.name ?? role.name,
-    description: updates.description ?? role.description,
-    systemKey: role.system_key ?? null,
-    isSystem: role.is_system,
-    isEditable: role.is_editable,
-    isDeletable: resolveIsDeletable(role.system_key ?? null, role.is_deletable),
-    permissions: finalPermissions,
-  };
+  return rowToRole(
+    {
+      id: role.id,
+      name: updates.name ?? role.name,
+      description: updates.description ?? role.description,
+      system_key: role.system_key,
+      is_system: role.is_system,
+      is_editable: role.is_editable,
+      is_deletable: role.is_deletable,
+    },
+    finalPermissions,
+  );
 }
 
 export async function deleteRole(roleId: string, tenantId: string, resolvedAuth: ResolvedAuth) {
