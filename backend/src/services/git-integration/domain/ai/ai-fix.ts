@@ -2,8 +2,7 @@
  * AI-powered security finding remediation using OpenAI.
  */
 
-import { logger } from "../../../../shared/logger.js";
-import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { callOpenAIJson } from "./openai-client.js";
 
 export interface GenerateCodeFixInput {
   filePath: string;
@@ -32,40 +31,14 @@ async function callOpenAI(
   prompt: string,
   maxTokens = 8192,
 ): Promise<CodeFixResponse | null> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0,
-      max_completion_tokens: maxTokens,
-      response_format: { type: "json_object" },
-    }),
+  return callOpenAIJson<CodeFixResponse>({
+    apiKey,
+    model,
+    messages: [{ role: "user", content: prompt }],
+    maxTokens,
+    logTag: "[AI-Fix]",
+    truncation: "null",
   });
-
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    logger.error(`[AI-Fix] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
-    return null;
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
-  };
-  const text = data.choices?.[0]?.message?.content?.trim() || "";
-
-  if (data.choices?.[0]?.finish_reason === "length") {
-    logger.error(`[AI-Fix] Response truncated (${text.length} chars)`);
-    return null;
-  }
-
-  try {
-    return JSON.parse(text) as CodeFixResponse;
-  } catch (e: unknown) {
-    logger.error(`[AI-Fix] JSON parse failed: ${getErrMsg(e)}`);
-    return null;
-  }
 }
 
 function buildPrompt(input: GenerateCodeFixInput): string {

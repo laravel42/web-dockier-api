@@ -9,7 +9,7 @@
 import type { TechStackItem } from "../tech-stack.js";
 import type { DetectedService } from "../services.js";
 import { logger } from "../../../../shared/logger.js";
-import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { callOpenAIJson } from "./openai-client.js";
 
 // ─── Types ───
 
@@ -60,39 +60,15 @@ export const CONFIG_FILES_TO_FETCH = [
 
 // ─── Shared OpenAI caller ───
 
-async function callOpenAI(apiKey: string, prompt: string, maxTokens = 4096): Promise<Record<string, unknown> | null> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0,
-      max_completion_tokens: maxTokens,
-      response_format: { type: "json_object" },
-    }),
+async function callOpenAI(apiKey: string, model: string, prompt: string, maxTokens = 4096): Promise<Record<string, unknown> | null> {
+  return callOpenAIJson<Record<string, unknown>>({
+    apiKey,
+    model,
+    messages: [{ role: "user", content: prompt }],
+    maxTokens,
+    logTag: "[AI]",
+    truncation: "null",
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    logger.error(`[AI] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
-    return null;
-  }
-
-  const data = await res.json() as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
-  const text = data.choices?.[0]?.message?.content?.trim() || "";
-
-  if (data.choices?.[0]?.finish_reason === "length") {
-    logger.error(`[AI] Response truncated (${text.length} chars)`);
-    return null;
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch (e: unknown) {
-    logger.error(`[AI] JSON parse failed: ${getErrMsg(e)}`);
-    return null;
-  }
 }
 
 // ─── Context builder ───
@@ -128,14 +104,14 @@ const SECTION_DEFS: SectionDef[] = [
 
 // ─── Per-section AI call ───
 
-async function fetchSection(apiKey: string, def: SectionDef, context: string, fileTree: string[]): Promise<{ key: string; content: string } | null> {
+async function fetchSection(apiKey: string, model: string, def: SectionDef, context: string, fileTree: string[]): Promise<{ key: string; content: string } | null> {
   const relevantTree = def.relevantFiles
     ? fileTree.filter(f => def.relevantFiles!.some(p => p.test(f))).slice(0, 80)
     : fileTree.slice(0, 100);
 
   const prompt = `${def.role}\n\n${context}\n\n**Relevant files:** ${relevantTree.join(", ") || "none matched"}\n\n${def.instruction}\n\nReturn ONLY valid JSON: {"content": "your markdown here"}`;
 
-  const result = await callOpenAI(apiKey, prompt, def.maxTokens);
+  const result = await callOpenAI(apiKey, model, prompt, def.maxTokens);
   if (result && typeof result.content === "string" && (result.content as string).length > 10) {
     return { key: def.key, content: result.content as string };
   }
@@ -144,16 +120,17 @@ async function fetchSection(apiKey: string, def: SectionDef, context: string, fi
 
 // ─── Core analysis ───
 
-async function fetchCoreAnalysis(apiKey: string, context: string): Promise<Partial<AIRepoAnalysis> | null> {
+async function fetchCoreAnalysis(apiKey: string, model: string, context: string): Promise<Partial<AIRepoAnalysis> | null> {
   const prompt = `You are a DevOps architect. Analyze this repository and return deployment configuration.\n\n${context}\n\nReturn ONLY valid JSON with: runtime, runtimeVersion, framework, frameworkVersion, phpExtensions, nodeVersion, buildCommand, startCommand, port, needsScheduler, needsQueueWorker, needsWebsockets, envVars, nginxConfig, summary, description, deployOptions (3-6 for AWS and GCP).`;
 
-  return callOpenAI(apiKey, prompt, 4096) as Promise<Partial<AIRepoAnalysis> | null>;
+  return callOpenAI(apiKey, model, prompt, 4096) as Promise<Partial<AIRepoAnalysis> | null>;
 }
 
 // ─── Main entry point ───
 
 export async function analyzeWithAI(
   apiKey: string,
+  model: string,
   files: string[],
   configContents: Record<string, string>,
   techStack: TechStackItem[],
@@ -171,8 +148,8 @@ export async function analyzeWithAI(
   const startTime = Date.now();
 
   const [coreResult, ...sectionResults] = await Promise.allSettled([
-    fetchCoreAnalysis(apiKey, context),
-    ...SECTION_DEFS.map(def => fetchSection(apiKey, def, context, files)),
+    fetchCoreAnalysis(apiKey, model, context),
+    ...SECTION_DEFS.map(def => fetchSection(apiKey, model, def, context, files)),
   ]);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

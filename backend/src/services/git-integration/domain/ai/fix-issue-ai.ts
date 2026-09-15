@@ -13,6 +13,7 @@ import type { ConnectionLike, RepoRef } from "../providers/provider-client.js";
 import { fetchRepoFile, getRepoFileTree } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { callOpenAIChat } from "./openai-client.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -166,33 +167,15 @@ async function callOpenAI(
   messages: Array<{ role: string; content: string }>,
   maxTokens = 8192,
 ): Promise<string | null> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.1,
-      max_completion_tokens: maxTokens,
-      response_format: { type: "json_object" },
-    }),
+  return callOpenAIChat({
+    apiKey,
+    model,
+    messages,
+    temperature: 0.1,
+    maxTokens,
+    logTag: "[AI-FixIssue]",
+    truncation: "warn",
   });
-
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    logger.error(`[AI-FixIssue] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
-    return null;
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
-  };
-
-  if (data.choices?.[0]?.finish_reason === "length") {
-    logger.warn("[AI-FixIssue] Response truncated");
-  }
-
-  return data.choices?.[0]?.message?.content?.trim() || null;
 }
 
 // ─── Step 1: Identify relevant files ─────────────────────────────────────────

@@ -10,6 +10,7 @@
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { callOpenAIChat } from "./openai-client.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -51,28 +52,15 @@ async function callOpenAI(
   messages: Array<{ role: string; content: string }>,
   maxTokens = 8192,
 ): Promise<string | null> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.1,
-      max_completion_tokens: maxTokens,
-      response_format: { type: "json_object" },
-    }),
+  return callOpenAIChat({
+    apiKey,
+    model,
+    messages,
+    temperature: 0.1,
+    maxTokens,
+    logTag: "[AI-ReviewPR]",
+    truncation: "ignore",
   });
-
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    logger.error(`[AI-ReviewPR] OpenAI ${res.status}: ${err.error?.message || res.statusText}`);
-    return null;
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content?.trim() || null;
 }
 
 // ─── Fetch PR diff ───────────────────────────────────────────────────────────

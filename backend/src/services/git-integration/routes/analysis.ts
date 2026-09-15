@@ -371,6 +371,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
           }
           const aiResult = await analyzeWithAI(
             env.OPENAI_API_KEY,
+            env.OPENAI_MODEL,
             files,
             configContents,
             (parsed.techStack as TechStackItem[]) ?? [],
@@ -405,6 +406,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         }
         const aiResult = await analyzeWithAI(
           env.OPENAI_API_KEY,
+          env.OPENAI_MODEL,
           files,
           configContents,
           result.techStack,
