@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
 import type { DomainRow, SslCertificateRow } from "../schemas.js";
 import {
   rowToDomain,
@@ -147,15 +147,16 @@ export async function deleteDomain(params: {
 
   const row = unwrapQuery(domain, fetchError, DomainsError, { notFoundMsg: "Domain not found" });
 
-  const { error, count } = await supabaseAdmin
-    .from("domains")
-    .delete({ count: "exact" })
-    .eq("id", domainId)
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnError(error, DomainsError, { internalMsg: "Failed to delete domain" });
-  if (count === 0) throw new DomainsError("Domain not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("domains")
+      .delete({ count: "exact" })
+      .eq("id", domainId)
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId),
+    DomainsError,
+    { notFoundMsg: "Domain not found", internalMsg: "Failed to delete domain" },
+  );
 
   // If the deleted domain was primary, promote the oldest remaining domain
   if (row.is_primary) {
@@ -238,13 +239,14 @@ export async function deleteCertificate(params: {
 }): Promise<void> {
   const { tenantId, projectId, certificateId } = params;
 
-  const { error, count } = await supabaseAdmin
-    .from("ssl_certificates")
-    .delete({ count: "exact" })
-    .eq("id", certificateId)
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnError(error, DomainsError, { internalMsg: "Failed to delete certificate" });
-  if (count === 0) throw new DomainsError("Certificate not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("ssl_certificates")
+      .delete({ count: "exact" })
+      .eq("id", certificateId)
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId),
+    DomainsError,
+    { notFoundMsg: "Certificate not found", internalMsg: "Failed to delete certificate" },
+  );
 }

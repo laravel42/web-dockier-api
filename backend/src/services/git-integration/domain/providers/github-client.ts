@@ -10,6 +10,7 @@
  */
 
 import type { ConnectionLike } from "./provider-client.js";
+import { authHeaders, baseUrl } from "./provider-client.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
 
 export class GitHubApiError extends DomainError {
@@ -24,14 +25,11 @@ export class GitHubApiError extends DomainError {
 }
 
 function getBaseUrl(connection: ConnectionLike): string {
-  return connection.endpoint || "https://api.github.com";
+  return baseUrl(connection.provider, connection.endpoint);
 }
 
 function getHeaders(connection: ConnectionLike): Record<string, string> {
-  return {
-    Authorization: `Bearer ${connection.personal_token}`,
-    Accept: "application/vnd.github.v3+json",
-  };
+  return authHeaders(connection);
 }
 
 function assertOk(response: Response, context: string): void {

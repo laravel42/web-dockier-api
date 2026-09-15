@@ -10,7 +10,7 @@
  */
 
 import type { ConnectionLike, RepoRef } from "../providers/provider-client.js";
-import { fetchRepoFile, getRepoFileTree } from "../providers/provider-client.js";
+import { fetchRepoFile, getRepoFileTree, baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { callOpenAIChat } from "./openai-client.js";
@@ -84,7 +84,7 @@ async function getFileTreeWithShas(
   branch: string,
 ): Promise<{ fileTree: string[]; blobShaMap: Map<string, string> }> {
   if (connection.provider === "github") {
-    const origin = connection.endpoint || "https://api.github.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = {
       Authorization: `Bearer ${connection.personal_token}`,
       Accept: "application/vnd.github.v3+json",
@@ -127,7 +127,7 @@ async function fetchBlobByShaWithError(
   const provider = connection.provider?.toLowerCase() || "";
   if (!provider.includes("github")) return { content: null, error: `provider "${connection.provider}" not github` };
 
-  const origin = connection.endpoint || "https://api.github.com";
+  const origin = providerBaseUrl(connection.provider, connection.endpoint);
   const headers = {
     Authorization: `Bearer ${connection.personal_token}`,
     Accept: "application/vnd.github.v3+json",
@@ -461,7 +461,7 @@ async function commitMultipleFiles(
 ): Promise<void> {
   // For GitHub: use the Git Data API to create a single commit with all file changes
   if (connection.provider === "github") {
-    const origin = connection.endpoint || "https://api.github.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = {
       Authorization: `Bearer ${connection.personal_token}`,
       Accept: "application/vnd.github+json",
@@ -530,7 +530,7 @@ async function commitMultipleFiles(
 
   // For GitLab: use the commits API to commit multiple files at once
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    const origin = connection.endpoint || "https://gitlab.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = { "PRIVATE-TOKEN": connection.personal_token, "Content-Type": "application/json" };
     const project = encodeURIComponent(`${owner}/${repo}`);
 
@@ -581,7 +581,7 @@ async function createPullRequest(
   body: string,
 ): Promise<{ prUrl: string; prNumber: number }> {
   if (connection.provider === "github") {
-    const origin = connection.endpoint || "https://api.github.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = {
       Authorization: `Bearer ${connection.personal_token}`,
       Accept: "application/vnd.github+json",
@@ -610,7 +610,7 @@ async function createPullRequest(
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    const origin = connection.endpoint || "https://gitlab.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = { "PRIVATE-TOKEN": connection.personal_token, "Content-Type": "application/json" };
     const project = encodeURIComponent(`${owner}/${repo}`);
 

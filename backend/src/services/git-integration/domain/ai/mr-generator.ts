@@ -1,4 +1,4 @@
-import { fetchRepoFile } from "../providers/provider-client.js";
+import { fetchRepoFile, baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { generateCodeFix } from "./ai-fix.js";
 import { commitFixToBranch } from "./fix-branch.js";
@@ -42,9 +42,7 @@ export function parseRepoKey(repoKey: string): { owner: string; repo: string } {
 }
 
 function baseUrl(connection: ConnectionLike): string {
-  if (connection.provider === "github") return connection.endpoint || "https://api.github.com";
-  if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") return connection.endpoint || "https://gitlab.com";
-  return connection.endpoint || "https://api.bitbucket.org";
+  return providerBaseUrl(connection.provider, connection.endpoint);
 }
 
 function webRepoUrl(connection: ConnectionLike, owner: string, repo: string): string {

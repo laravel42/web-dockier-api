@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 
 export const TagsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("TagsError");
@@ -130,14 +130,15 @@ export async function deleteTag(params: {
 }): Promise<void> {
   const { tenantId, tagId } = params;
 
-  const { error, count } = await supabaseAdmin
-    .from("project_tags")
-    .delete({ count: "exact" })
-    .eq("id", tagId)
-    .eq("organization_id", tenantId);
-
-  throwOnError(error, TagsError, { internalMsg: "Failed to delete tag" });
-  if (count === 0) throw new TagsError("Tag not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("project_tags")
+      .delete({ count: "exact" })
+      .eq("id", tagId)
+      .eq("organization_id", tenantId),
+    TagsError,
+    { notFoundMsg: "Tag not found", internalMsg: "Failed to delete tag" },
+  );
 }
 
 // ─── Tag Assignments ───

@@ -84,13 +84,23 @@ function providerApiError(provider: string, status: number, body: string) {
   return new ProviderApiError(`${provider} API error ${status}: ${detail}`, statusToDomainCode(status));
 }
 
-function baseUrl(provider: GitProvider, endpoint?: string | null): string {
+/**
+ * Resolve the API base URL for a provider, honoring a custom `endpoint`
+ * (self-hosted GitLab, GitHub Enterprise) and falling back to the public host.
+ * Canonical source — reused by the provider-specific client modules.
+ */
+export function baseUrl(provider: GitProvider, endpoint?: string | null): string {
   if (provider === "github") return endpoint || "https://api.github.com";
   if (provider === "gitlab" || provider === "gitlab_self_hosted") return endpoint || "https://gitlab.com";
   return endpoint || "https://api.bitbucket.org";
 }
 
-function authHeaders(connection: ConnectionLike): Record<string, string> {
+/**
+ * Build the auth headers for a provider's REST API. Canonical source — reused
+ * by the provider-specific client modules. Note: read paths that need a
+ * different `Accept` (e.g. raw file content) spread this and override it.
+ */
+export function authHeaders(connection: ConnectionLike): Record<string, string> {
   if (connection.provider === "github") {
     return { Authorization: `Bearer ${connection.personal_token}`, Accept: "application/vnd.github.v3+json" };
   }

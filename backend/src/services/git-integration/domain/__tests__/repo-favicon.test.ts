@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  findRepoFaviconPath,
   findRepoFaviconPaths,
   bufferToFaviconDataUrl,
   isValidFaviconDataUrl,
@@ -49,7 +48,7 @@ function createIcoBuffer(width: number, height: number, count = 1): Buffer {
   return buffer;
 }
 
-describe("findRepoFaviconPath", () => {
+describe("findRepoFaviconPaths (top match)", () => {
   const files = [
     "README.md",
     "package.json",
@@ -59,20 +58,25 @@ describe("findRepoFaviconPath", () => {
     "assets/apple-touch-icon.png",
   ];
 
+  const topPath = (
+    input: string[],
+    options?: { rootDirectory?: string; webDirectory?: string },
+  ): string | null => findRepoFaviconPaths(input, options)[0] ?? null;
+
   it("prefers webDirectory favicon paths", () => {
-    expect(findRepoFaviconPath(files, { webDirectory: "public" })).toBe("public/favicon.ico");
+    expect(topPath(files, { webDirectory: "public" })).toBe("public/favicon.ico");
   });
 
   it("finds favicon by filename anywhere in the tree", () => {
-    expect(findRepoFaviconPath(["src/app/favicon.svg"])).toBe("src/app/favicon.svg");
+    expect(topPath(["src/app/favicon.svg"])).toBe("src/app/favicon.svg");
   });
 
   it("falls back to apple-touch-icon when no favicon file exists", () => {
-    expect(findRepoFaviconPath(["assets/apple-touch-icon.png", "README.md"])).toBe("assets/apple-touch-icon.png");
+    expect(topPath(["assets/apple-touch-icon.png", "README.md"])).toBe("assets/apple-touch-icon.png");
   });
 
   it("returns null when no icon files are present", () => {
-    expect(findRepoFaviconPath(["README.md", "package.json"])).toBeNull();
+    expect(topPath(["README.md", "package.json"])).toBeNull();
   });
 });
 

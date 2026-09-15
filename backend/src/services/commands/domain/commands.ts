@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, paginatedQuery } from "../../../shared/supabase/query.js";
+import { unwrapQuery, paginatedQuery, deleteOrThrow } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { enqueueCommand } from "./worker.js";
 import { safeRecordActivity } from "../../../shared/service-clients/activity.js";
@@ -119,16 +119,14 @@ export async function deleteCommand(params: {
 }): Promise<void> {
   const { tenantId, projectId, commandId } = params;
 
-  const { error, count } = await supabaseAdmin
-    .from("commands")
-    .delete({ count: "exact" })
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId)
-    .eq("id", commandId);
-
-  throwOnError(error, CommandsError, { internalMsg: "Failed to delete command" });
-
-  if (count === 0) {
-    throw new CommandsError("Command not found", "not_found");
-  }
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("commands")
+      .delete({ count: "exact" })
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId)
+      .eq("id", commandId),
+    CommandsError,
+    { notFoundMsg: "Command not found", internalMsg: "Failed to delete command" },
+  );
 }

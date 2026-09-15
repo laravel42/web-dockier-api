@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
 import type {
   SecurityRuleRow,
   SecurityRuleCredentialRow,
@@ -115,15 +115,16 @@ export async function deleteSecurityRule(params: {
 }): Promise<void> {
   const { tenantId, projectId, ruleId } = params;
 
-  const { error, count } = await supabaseAdmin
-    .from("security_rules")
-    .delete({ count: "exact" })
-    .eq("id", ruleId)
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnError(error, NetworkError, { internalMsg: "Failed to delete security rule" });
-  if (count === 0) throw new NetworkError("Security rule not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("security_rules")
+      .delete({ count: "exact" })
+      .eq("id", ruleId)
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId),
+    NetworkError,
+    { notFoundMsg: "Security rule not found", internalMsg: "Failed to delete security rule" },
+  );
 }
 
 export async function addSecurityRuleCredential(params: {
@@ -182,14 +183,15 @@ export async function deleteSecurityRuleCredential(params: {
 
   unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
 
-  const { error, count } = await supabaseAdmin
-    .from("security_rule_credentials")
-    .delete({ count: "exact" })
-    .eq("id", credentialId)
-    .eq("security_rule_id", ruleId);
-
-  throwOnError(error, NetworkError, { internalMsg: "Failed to delete credential" });
-  if (count === 0) throw new NetworkError("Credential not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("security_rule_credentials")
+      .delete({ count: "exact" })
+      .eq("id", credentialId)
+      .eq("security_rule_id", ruleId),
+    NetworkError,
+    { notFoundMsg: "Credential not found", internalMsg: "Failed to delete credential" },
+  );
 }
 
 // ─── Redirect Rules ───
@@ -245,13 +247,14 @@ export async function deleteRedirectRule(params: {
 }): Promise<void> {
   const { tenantId, projectId, ruleId } = params;
 
-  const { error, count } = await supabaseAdmin
-    .from("redirect_rules")
-    .delete({ count: "exact" })
-    .eq("id", ruleId)
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnError(error, NetworkError, { internalMsg: "Failed to delete redirect rule" });
-  if (count === 0) throw new NetworkError("Redirect rule not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("redirect_rules")
+      .delete({ count: "exact" })
+      .eq("id", ruleId)
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId),
+    NetworkError,
+    { notFoundMsg: "Redirect rule not found", internalMsg: "Failed to delete redirect rule" },
+  );
 }

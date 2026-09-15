@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
 import type { HeartbeatRow } from "../schemas.js";
 import { rowToHeartbeat, type HeartbeatResponse } from "./mappers.js";
 
@@ -63,18 +63,16 @@ export async function deleteHeartbeat(params: {
 }): Promise<void> {
   const { tenantId, projectId, heartbeatId } = params;
 
-  const { error, count } = await supabaseAdmin
-    .from("heartbeats")
-    .delete({ count: "exact" })
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId)
-    .eq("id", heartbeatId);
-
-  throwOnError(error, HeartbeatsError, { internalMsg: "Failed to delete heartbeat" });
-
-  if (count === 0) {
-    throw new HeartbeatsError("Heartbeat not found", "not_found");
-  }
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("heartbeats")
+      .delete({ count: "exact" })
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId)
+      .eq("id", heartbeatId),
+    HeartbeatsError,
+    { notFoundMsg: "Heartbeat not found", internalMsg: "Failed to delete heartbeat" },
+  );
 }
 
 /**

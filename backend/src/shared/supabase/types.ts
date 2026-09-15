@@ -12,6 +12,12 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
  */
 export type TableRow<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
 
+/** Utility type to extract the Insert payload type for a given table name. */
+export type TableInsert<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Insert"];
+
+/** Utility type to extract the Update payload type for a given table name. */
+export type TableUpdate<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Update"];
+
 export type Database = {
   public: {
     Tables: {
@@ -689,6 +695,64 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["dokploy_applications"]["Row"]> &
           Pick<Database["public"]["Tables"]["dokploy_applications"]["Row"], "project_id" | "dokploy_application_id">;
         Update: Partial<Database["public"]["Tables"]["dokploy_applications"]["Row"]>;
+        Relationships: [];
+      };
+
+      // ─── Processes (background processes + scheduled jobs) ────────────
+
+      background_processes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          name: string;
+          type: string;
+          command: string;
+          status: string;
+          runtime: string;
+          runtime_version: string | null;
+          connection: string | null;
+          num_processes: number;
+          queue: string | null;
+          backoff: number;
+          sleep: number;
+          rest: number;
+          timeout: number;
+          tries: number;
+          memory: number;
+          env: string | null;
+          force: boolean;
+          working_directory: string | null;
+          graceful_shutdown: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["background_processes"]["Row"]> &
+          Pick<Database["public"]["Tables"]["background_processes"]["Row"], "organization_id" | "project_id" | "type" | "command">;
+        Update: Partial<Database["public"]["Tables"]["background_processes"]["Row"]>;
+        Relationships: [];
+      };
+
+      scheduled_jobs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          project_id: string;
+          name: string;
+          command: string;
+          user: string;
+          frequency: string;
+          custom_cron: string | null;
+          monitor_heartbeat: boolean;
+          heartbeat_url: string | null;
+          status: string;
+          last_run_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["scheduled_jobs"]["Row"]> &
+          Pick<Database["public"]["Tables"]["scheduled_jobs"]["Row"], "organization_id" | "project_id" | "name" | "command">;
+        Update: Partial<Database["public"]["Tables"]["scheduled_jobs"]["Row"]>;
         Relationships: [];
       };
     };

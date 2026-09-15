@@ -13,8 +13,7 @@ import { resolveExecutionTarget, executeCommand } from "../../../shared/service-
 import { ProcessesError } from "./processes.js";
 import type { BackgroundProcessRow } from "../schemas.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 
 // ─── Security ──────────────────────────────────────────────────────
 
@@ -53,13 +52,16 @@ async function fetchProcessOrThrow(
 
   if (!data) throw new ProcessesError("Process not found", "not_found");
 
+  // A dynamic column string means PostgREST types the row loosely; narrow it here.
+  const row = data as unknown as BackgroundProcessRow;
+
   // Defense-in-depth: verify organization_id even if PostgREST filter is correct.
   // This guards against future query refactors that might accidentally drop the filter.
-  if (columns === "*" && (data as BackgroundProcessRow).organization_id !== tenantId) {
+  if (columns === "*" && row.organization_id !== tenantId) {
     throw new ProcessesError("Access denied", "forbidden");
   }
 
-  return data as BackgroundProcessRow;
+  return row;
 }
 
 /** Marker must be alphanumeric + underscore only. */

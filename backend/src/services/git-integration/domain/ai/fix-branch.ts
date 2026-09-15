@@ -1,11 +1,8 @@
 import type { ConnectionLike } from "../providers/provider-client.js";
+import { baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 
 function baseUrl(connection: ConnectionLike): string {
-  if (connection.provider === "github") return connection.endpoint || "https://api.github.com";
-  if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    return connection.endpoint || "https://gitlab.com";
-  }
-  return connection.endpoint || "https://api.bitbucket.org";
+  return providerBaseUrl(connection.provider, connection.endpoint);
 }
 
 function githubHeaders(connection: ConnectionLike): Record<string, string> {

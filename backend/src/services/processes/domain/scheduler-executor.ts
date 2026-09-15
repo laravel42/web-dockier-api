@@ -13,8 +13,7 @@ import { ProcessesError } from "./processes.js";
 import type { ScheduledJobRow } from "../schemas.js";
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 
 /** Map frequency values to cron expressions. */
 const FREQUENCY_TO_CRON: Record<string, string> = {

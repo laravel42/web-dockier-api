@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TableRow } from "../../shared/supabase/types.js";
 
 // ─── Background Processes ───
 
@@ -100,46 +101,6 @@ export const updateJobBodySchema = createJobBodySchema.partial();
 
 // ─── Row Types ───
 
-export type BackgroundProcessRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  name: string;
-  type: string;
-  command: string;
-  status: string;
-  runtime: string;
-  runtime_version: string | null;
-  connection: string | null;
-  num_processes: number;
-  queue: string | null;
-  backoff: number;
-  sleep: number;
-  rest: number;
-  timeout: number;
-  tries: number;
-  memory: number;
-  env: string | null;
-  force: boolean;
-  working_directory: string | null;
-  graceful_shutdown: number;
-  created_at: string;
-  updated_at: string;
-};
+export type BackgroundProcessRow = TableRow<"background_processes">;
 
-export type ScheduledJobRow = {
-  id: string;
-  organization_id: string;
-  project_id: string;
-  name: string;
-  command: string;
-  user: string;
-  frequency: string;
-  custom_cron: string | null;
-  monitor_heartbeat: boolean;
-  heartbeat_url: string | null;
-  status: string;
-  last_run_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type ScheduledJobRow = TableRow<"scheduled_jobs">;

@@ -5,6 +5,7 @@
  */
 
 import type { ConnectionLike } from "./provider-client.js";
+import { authHeaders, baseUrl } from "./provider-client.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
 
 export class GitLabApiError extends DomainError {
@@ -19,11 +20,11 @@ export class GitLabApiError extends DomainError {
 }
 
 function getBaseUrl(connection: ConnectionLike): string {
-  return connection.endpoint || "https://gitlab.com";
+  return baseUrl(connection.provider, connection.endpoint);
 }
 
 function getHeaders(connection: ConnectionLike): Record<string, string> {
-  return { "PRIVATE-TOKEN": connection.personal_token };
+  return authHeaders(connection);
 }
 
 export function encodeProjectPath(owner: string, repo: string): string {

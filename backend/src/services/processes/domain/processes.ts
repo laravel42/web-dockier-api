@@ -1,15 +1,14 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError } from "../../../shared/supabase/query.js";
+import { throwOnError, deleteOrThrow } from "../../../shared/supabase/query.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
+import type { TableUpdate } from "../../../shared/supabase/types.js";
 import { rowToProcess, rowToJob, type BackgroundProcessResponse, type ScheduledJobResponse } from "./mappers.js";
 
 export const ProcessesError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("ProcessesError");
 export type ProcessesError = InstanceType<typeof ProcessesError>;
 
-// Use raw Supabase client with 'any' for tables not yet in generated types
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 
 // ─── Background Processes ───
 
@@ -129,25 +128,31 @@ export async function updateProcess(params: {
 }): Promise<BackgroundProcessResponse> {
   const { tenantId, projectId, processId, updates } = params;
 
-  const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (updates.name !== undefined) dbUpdates.name = updates.name;
-  if (updates.type !== undefined) dbUpdates.type = updates.type;
-  if (updates.command !== undefined) dbUpdates.command = updates.command;
-  if (updates.runtime !== undefined) dbUpdates.runtime = updates.runtime;
-  if (updates.runtimeVersion !== undefined) dbUpdates.runtime_version = updates.runtimeVersion;
-  if (updates.connection !== undefined) dbUpdates.connection = updates.connection;
-  if (updates.numProcesses !== undefined) dbUpdates.num_processes = updates.numProcesses;
-  if (updates.queue !== undefined) dbUpdates.queue = updates.queue;
-  if (updates.backoff !== undefined) dbUpdates.backoff = updates.backoff;
-  if (updates.sleep !== undefined) dbUpdates.sleep = updates.sleep;
-  if (updates.rest !== undefined) dbUpdates.rest = updates.rest;
-  if (updates.timeout !== undefined) dbUpdates.timeout = updates.timeout;
-  if (updates.tries !== undefined) dbUpdates.tries = updates.tries;
-  if (updates.memory !== undefined) dbUpdates.memory = updates.memory;
-  if (updates.env !== undefined) dbUpdates.env = updates.env;
-  if (updates.force !== undefined) dbUpdates.force = updates.force;
-  if (updates.workingDirectory !== undefined) dbUpdates.working_directory = updates.workingDirectory;
-  if (updates.gracefulShutdown !== undefined) dbUpdates.graceful_shutdown = updates.gracefulShutdown;
+  const u = updates as Partial<{
+    name: string; type: string; command: string; runtime: string; runtimeVersion: string | null;
+    connection: string | null; numProcesses: number; queue: string | null; backoff: number;
+    sleep: number; rest: number; timeout: number; tries: number; memory: number; env: string | null;
+    force: boolean; workingDirectory: string | null; gracefulShutdown: number;
+  }>;
+  const dbUpdates: TableUpdate<"background_processes"> = { updated_at: new Date().toISOString() };
+  if (u.name !== undefined) dbUpdates.name = u.name;
+  if (u.type !== undefined) dbUpdates.type = u.type;
+  if (u.command !== undefined) dbUpdates.command = u.command;
+  if (u.runtime !== undefined) dbUpdates.runtime = u.runtime;
+  if (u.runtimeVersion !== undefined) dbUpdates.runtime_version = u.runtimeVersion;
+  if (u.connection !== undefined) dbUpdates.connection = u.connection;
+  if (u.numProcesses !== undefined) dbUpdates.num_processes = u.numProcesses;
+  if (u.queue !== undefined) dbUpdates.queue = u.queue;
+  if (u.backoff !== undefined) dbUpdates.backoff = u.backoff;
+  if (u.sleep !== undefined) dbUpdates.sleep = u.sleep;
+  if (u.rest !== undefined) dbUpdates.rest = u.rest;
+  if (u.timeout !== undefined) dbUpdates.timeout = u.timeout;
+  if (u.tries !== undefined) dbUpdates.tries = u.tries;
+  if (u.memory !== undefined) dbUpdates.memory = u.memory;
+  if (u.env !== undefined) dbUpdates.env = u.env;
+  if (u.force !== undefined) dbUpdates.force = u.force;
+  if (u.workingDirectory !== undefined) dbUpdates.working_directory = u.workingDirectory;
+  if (u.gracefulShutdown !== undefined) dbUpdates.graceful_shutdown = u.gracefulShutdown;
 
   const { data, error } = await db
     .from("background_processes")
@@ -194,15 +199,16 @@ export async function deleteProcess(params: {
 }): Promise<void> {
   const { tenantId, projectId, processId } = params;
 
-  const { error, count } = await db
-    .from("background_processes")
-    .delete({ count: "exact" })
-    .eq("id", processId)
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnError(error, ProcessesError, { internalMsg: "Failed to delete process" });
-  if (count === 0) throw new ProcessesError("Process not found", "not_found");
+  await deleteOrThrow(
+    db
+      .from("background_processes")
+      .delete({ count: "exact" })
+      .eq("id", processId)
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId),
+    ProcessesError,
+    { notFoundMsg: "Process not found", internalMsg: "Failed to delete process" },
+  );
 }
 
 // ─── Scheduled Jobs ───
@@ -267,13 +273,17 @@ export async function updateJob(params: {
 }): Promise<ScheduledJobResponse> {
   const { tenantId, projectId, jobId, updates } = params;
 
-  const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (updates.name !== undefined) dbUpdates.name = updates.name;
-  if (updates.command !== undefined) dbUpdates.command = updates.command;
-  if (updates.user !== undefined) dbUpdates.user = updates.user;
-  if (updates.frequency !== undefined) dbUpdates.frequency = updates.frequency;
-  if (updates.customCron !== undefined) dbUpdates.custom_cron = updates.customCron;
-  if (updates.monitorHeartbeat !== undefined) dbUpdates.monitor_heartbeat = updates.monitorHeartbeat;
+  const u = updates as Partial<{
+    name: string; command: string; user: string; frequency: string;
+    customCron: string | null; monitorHeartbeat: boolean;
+  }>;
+  const dbUpdates: TableUpdate<"scheduled_jobs"> = { updated_at: new Date().toISOString() };
+  if (u.name !== undefined) dbUpdates.name = u.name;
+  if (u.command !== undefined) dbUpdates.command = u.command;
+  if (u.user !== undefined) dbUpdates.user = u.user;
+  if (u.frequency !== undefined) dbUpdates.frequency = u.frequency;
+  if (u.customCron !== undefined) dbUpdates.custom_cron = u.customCron;
+  if (u.monitorHeartbeat !== undefined) dbUpdates.monitor_heartbeat = u.monitorHeartbeat;
 
   const { data, error } = await db
     .from("scheduled_jobs")
@@ -320,13 +330,14 @@ export async function deleteJob(params: {
 }): Promise<void> {
   const { tenantId, projectId, jobId } = params;
 
-  const { error, count } = await db
-    .from("scheduled_jobs")
-    .delete({ count: "exact" })
-    .eq("id", jobId)
-    .eq("organization_id", tenantId)
-    .eq("project_id", projectId);
-
-  throwOnError(error, ProcessesError, { internalMsg: "Failed to delete job" });
-  if (count === 0) throw new ProcessesError("Job not found", "not_found");
+  await deleteOrThrow(
+    db
+      .from("scheduled_jobs")
+      .delete({ count: "exact" })
+      .eq("id", jobId)
+      .eq("organization_id", tenantId)
+      .eq("project_id", projectId),
+    ProcessesError,
+    { notFoundMsg: "Job not found", internalMsg: "Failed to delete job" },
+  );
 }

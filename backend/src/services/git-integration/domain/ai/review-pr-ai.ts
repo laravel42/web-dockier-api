@@ -8,6 +8,7 @@
  */
 
 import type { ConnectionLike } from "../providers/provider-client.js";
+import { baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { callOpenAIChat } from "./openai-client.js";
@@ -72,7 +73,7 @@ async function fetchPRFiles(
   prNumber: number,
 ): Promise<PRFile[]> {
   if (connection.provider === "github" || connection.provider?.toLowerCase()?.includes("github")) {
-    const origin = connection.endpoint || "https://api.github.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = {
       Authorization: `Bearer ${connection.personal_token}`,
       Accept: "application/vnd.github.v3+json",
@@ -103,7 +104,7 @@ async function fetchPRFiles(
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    const origin = connection.endpoint || "https://gitlab.com";
+    const origin = providerBaseUrl(connection.provider, connection.endpoint);
     const headers = { "PRIVATE-TOKEN": connection.personal_token };
     const project = encodeURIComponent(`${owner}/${repo}`);
 
@@ -145,7 +146,7 @@ async function postGitHubReview(
   comments: ReviewComment[],
   approved: boolean,
 ): Promise<string> {
-  const origin = connection.endpoint || "https://api.github.com";
+  const origin = providerBaseUrl(connection.provider, connection.endpoint);
   const headers = {
     Authorization: `Bearer ${connection.personal_token}`,
     Accept: "application/vnd.github.v3+json",

@@ -169,6 +169,52 @@ export function throwOnMutationError<E extends Error>(
   throwOnError(error, ErrorClass, opts);
 }
 
+/**
+ * Options for the deleteOrThrow helper.
+ */
+export interface DeleteOrThrowOptions {
+  /** Message thrown when the delete affected zero rows. Defaults to "Resource not found". */
+  notFoundMsg?: string;
+  /** Message thrown when the delete itself errored. Defaults to "Database query failed". */
+  internalMsg?: string;
+}
+
+/**
+ * Execute a scoped delete and enforce that exactly one (or more) rows were
+ * removed. Consolidates the repeated pattern of running a `.delete({ count:
+ * "exact" })` chain, checking the error, then throwing `not_found` when the
+ * affected count is zero.
+ *
+ * The caller builds the full delete chain (including `{ count: "exact" }` and
+ * all `.eq()` scoping filters); this helper awaits it and applies the checks.
+ *
+ * @example
+ * ```ts
+ * await deleteOrThrow(
+ *   supabaseAdmin
+ *     .from("commands")
+ *     .delete({ count: "exact" })
+ *     .eq("organization_id", tenantId)
+ *     .eq("project_id", projectId)
+ *     .eq("id", commandId),
+ *   CommandsError,
+ *   { notFoundMsg: "Command not found", internalMsg: "Failed to delete command" },
+ * );
+ * ```
+ */
+export async function deleteOrThrow<E extends Error>(
+  query: PromiseLike<{ error: PostgrestError | null; count: number | null }>,
+  ErrorClass: DomainErrorConstructor<E>,
+  opts: DeleteOrThrowOptions = {},
+): Promise<void> {
+  const { notFoundMsg = "Resource not found", internalMsg = "Database query failed" } = opts;
+  const { error, count } = await query;
+  throwOnError(error, ErrorClass, { internalMsg });
+  if (count === 0) {
+    throw new ErrorClass(notFoundMsg, "not_found");
+  }
+}
+
 // ─── Tenant Ownership Validation ───────────────────────────────────
 
 /**

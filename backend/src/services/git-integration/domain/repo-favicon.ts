@@ -389,14 +389,6 @@ export function findRepoFaviconPaths(
   return candidates;
 }
 
-/** @deprecated Prefer findRepoFaviconPaths — returns highest-priority static path match. */
-export function findRepoFaviconPath(
-  files: string[],
-  options?: { rootDirectory?: string; webDirectory?: string },
-): string | null {
-  return findRepoFaviconPaths(files, options)[0] ?? null;
-}
-
 function extractIconHrefsFromHtml(html: string, baseFile: string): string[] {
   const hrefs: string[] = [];
   const linkPattern = /<link\b[^>]*>/gi;
@@ -558,24 +550,6 @@ export async function resolveRepoFaviconCandidates(
   }
 
   return candidates;
-}
-
-export async function resolveRepoFaviconPaths(
-  connection: ConnectionLike,
-  ref: RepoRef,
-  options?: { rootDirectory?: string; webDirectory?: string },
-): Promise<string[]> {
-  const candidates = await resolveRepoFaviconCandidates(connection, ref, options);
-  return candidates.map((candidate) => candidate.path);
-}
-
-export async function resolveRepoFaviconPath(
-  connection: ConnectionLike,
-  ref: RepoRef,
-  options?: { rootDirectory?: string; webDirectory?: string },
-): Promise<string | null> {
-  const paths = await resolveRepoFaviconPaths(connection, ref, options);
-  return paths[0] ?? null;
 }
 
 export async function resolveRepoFaviconDataUrl(

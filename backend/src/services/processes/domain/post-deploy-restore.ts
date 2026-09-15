@@ -12,8 +12,7 @@ import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabaseAdmin as any;
+const db = supabaseAdmin;
 
 const FREQUENCY_TO_CRON: Record<string, string> = {
   every_minute: "* * * * *",
