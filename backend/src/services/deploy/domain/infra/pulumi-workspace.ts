@@ -1,6 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RunCmdFn } from "../run-cmd.js";
+import { runCmd, type RunCmdFn } from "../run-cmd.js";
+import { getGcpProjectId } from "./gcp-client.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import type { DestroyContext } from "../adapters/types.js";
+
+/** The marker separating the Pulumi program from its serialized state in tofu_script. */
+const STATE_MARKER = "/* STATE */\n";
 
 export interface PulumiWorkspaceResult {
   pulumiDir: string;
@@ -178,4 +184,66 @@ export async function savePulumiState(opts: {
       await opts.updateTofuScript(deploymentId, scriptWithState.replace(/\0/g, ""));
     }
   } catch {}
+}
+
+/**
+ * Restore a previous deployment's Pulumi state into a throwaway workspace and
+ * run `pulumi destroy` against it (GCP).
+ *
+ * This is the "we have saved state" teardown path shared by every GCP adapter's
+ * `destroy()`. The caller has already located the STATE marker (via
+ * `tofuScript.indexOf(...)`), so it passes the resulting `stateMarker` index
+ * (guaranteed `!== -1`). Any API-based, no-state fallback teardown stays in the
+ * adapter — this helper only handles the Pulumi-state case.
+ *
+ * Returns a list of error strings (empty on success); it never throws. The
+ * caller merges these into its own error accumulator.
+ */
+export async function destroyPulumiStack(ctx: DestroyContext, stateMarker: number): Promise<string[]> {
+  const errors: string[] = [];
+  const savedState = ctx.tofuScript.slice(stateMarker + STATE_MARKER.length);
+  const pulumiScript = ctx.tofuScript.slice(0, stateMarker).trim();
+
+  const { mkdtemp, writeFile: writeFs, rm } = await import("node:fs/promises");
+  const { join: joinPath } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+
+  const workDir = await mkdtemp(joinPath(tmpdir(), `destroy-${ctx.deploymentId.slice(0, 8)}-`));
+  try {
+    const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
+      workDir,
+      appName: ctx.repoName,
+      provider: "gcp",
+      region: ctx.region,
+      providerRow: { api_key: ctx.providerCredentials.apiKey, api_secret: ctx.providerCredentials.apiSecret },
+      indexTs: pulumiScript,
+    });
+
+    await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
+    const stackName = `destroy-${ctx.deploymentId.slice(0, 8)}`;
+    await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+
+    const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
+    if (gcpProjectId) {
+      await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
+    }
+
+    const stateFile = joinPath(pulumiDir, "state.json");
+    await writeFs(stateFile, savedState, "utf-8");
+    const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--force", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
+    if (importResult.code !== 0) {
+      errors.push(`State import failed: ${importResult.output.split("\n").slice(-3).join(" ")}`);
+    } else {
+      const destroyResult = await runCmd("pulumi", ["destroy", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
+      if (destroyResult.code !== 0) {
+        errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter((l) => l.includes("error")).slice(-3).join(" ")}`);
+      }
+    }
+  } catch (e: unknown) {
+    errors.push(getErrMsg(e) || "Unknown error during Pulumi destroy");
+  } finally {
+    try { await rm(workDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+  }
+
+  return errors;
 }

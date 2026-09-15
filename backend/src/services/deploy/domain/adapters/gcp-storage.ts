@@ -11,6 +11,7 @@ import {
   setupPulumiWorkspace,
   restorePulumiState,
   savePulumiState,
+  destroyPulumiStack,
 } from "../infra/pulumi-workspace.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getMimeType, SKIP_DIRS } from "../planning/static-site-builder.js";
 import type {
@@ -21,7 +22,6 @@ import type {
   DestroyContext,
   DestroyResult,
 } from "./types.js";
-import { runCmd } from "../run-cmd.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
@@ -450,43 +450,7 @@ export class GcpStorageAdapter implements DeployAdapter {
     await ctx.appendLog("── Destroy GCP Storage + CDN ──────");
 
     if (stateMarker !== -1) {
-      const savedState = ctx.tofuScript.slice(stateMarker + "/* STATE */\n".length);
-      const pulumiScript = ctx.tofuScript.slice(0, stateMarker).trim();
-
-      const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
-      const { join: joinPath } = await import("node:path");
-      const { tmpdir } = await import("node:os");
-
-      const workDir = await mkdtemp(joinPath(tmpdir(), `destroy-${ctx.deploymentId.slice(0, 8)}-`));
-      try {
-        const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
-          workDir, appName: ctx.repoName, provider: "gcp",
-          region: ctx.region, providerRow: { api_key: ctx.providerCredentials.apiKey, api_secret: ctx.providerCredentials.apiSecret },
-          indexTs: pulumiScript,
-        });
-
-        await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
-        const stackName = `destroy-${ctx.deploymentId.slice(0, 8)}`;
-        await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-
-        if (gcpProjectId) await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-
-        const stateFile = joinPath(pulumiDir, "state.json");
-        await writeFile(stateFile, savedState, "utf-8");
-        const importResult = await runCmd("pulumi", ["stack", "import", "--non-interactive", "--force", "--file", stateFile], { cwd: pulumiDir, env: providerEnv });
-        if (importResult.code !== 0) {
-          errors.push(`State import failed: ${importResult.output.split("\n").slice(-3).join(" ")}`);
-        } else {
-          const destroyResult = await runCmd("pulumi", ["destroy", "--yes", "--non-interactive", "--skip-preview"], { cwd: pulumiDir, env: providerEnv });
-          if (destroyResult.code !== 0) {
-            errors.push(`Pulumi destroy failed: ${destroyResult.output.split("\n").filter(l => l.includes("error")).slice(-3).join(" ")}`);
-          }
-        }
-      } catch (e: unknown) {
-        errors.push(getErrMsg(e) || "Unknown error during Pulumi destroy");
-      } finally {
-        try { await rm(workDir, { recursive: true, force: true }); } catch {}
-      }
+      errors.push(...await destroyPulumiStack(ctx, stateMarker));
     } else if (accessToken && gcpProjectId) {
       // No-state fallback: delete GCS bucket + CDN resources via API
       const authHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
