@@ -8,10 +8,11 @@ import {
   pushToGcpArtifactRegistry,
 } from "../infra/gcp-helpers.js";
 import {
-  setupPulumiWorkspace,
   restorePulumiState,
   savePulumiState,
   destroyPulumiStack,
+  setupAndInitPulumiStack,
+  readPulumiOutput,
 } from "../infra/pulumi-workspace.js";
 import { replacePulumiPlaceholders } from "../infra/pulumi-placeholders.js";
 import type {
@@ -116,61 +117,17 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
     }
 
-    await appendLog("── Pulumi Setup ───────────────────");
-
-    const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
+    // Set up Pulumi workspace, install deps, init stack, set resourceSuffix
+    const { pulumiDir, providerEnv, stackName } = await setupAndInitPulumiStack({
       workDir,
-      appName: repoName,
-      provider: "gcp",
+      repoName,
+      shortId,
       region,
-      providerRow: {
-        api_key: providerCredentials.apiKey,
-        api_secret: providerCredentials.apiSecret,
-      },
+      providerCredentials,
       indexTs: event.tofuScript,
+      runCmd,
+      appendLog,
     });
-
-    // Install npm dependencies
-    await appendLog("ℹ Installing Pulumi dependencies...");
-    const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], {
-      cwd: pulumiDir,
-      env: providerEnv,
-    });
-    if (installResult.code !== 0) {
-      const errLines = installResult.output
-        .split("\n")
-        .filter((l) => l.trim())
-        .slice(-10);
-      for (const line of errLines) {
-        await appendLog(`✗ npm: ${line}`);
-      }
-      throw new Error(`npm install failed (exit code ${installResult.code})`);
-    }
-    await appendLog("✓ Dependencies installed");
-
-    // Init Pulumi stack
-    const stackName = `${repoName}-${shortId}`;
-    const initResult = await runCmd(
-      "pulumi",
-      ["stack", "init", stackName, "--non-interactive"],
-      { cwd: pulumiDir, env: providerEnv },
-    );
-    if (initResult.code !== 0) {
-      await appendLog(
-        `⚠ Stack init: ${initResult.output
-          .split("\n")
-          .filter((l) => l.trim())
-          .slice(-3)
-          .join(" | ")}`,
-      );
-    }
-
-    // Set resource suffix for GCP resource names to avoid 409 collisions
-    await runCmd(
-      "pulumi",
-      ["config", "set", "resourceSuffix", shortId, "--non-interactive"],
-      { cwd: pulumiDir, env: providerEnv },
-    );
 
     // Set GCP project config
     const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
@@ -326,17 +283,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
 
     let appUrl = "";
     try {
-      const urlResult = await runCmd(
-        "pulumi",
-        ["stack", "output", "appUrl", "--non-interactive"],
-        { cwd: pulumiDir, env: providerEnv },
-      );
-      appUrl =
-        urlResult.output
-          .trim()
-          .split("\n")
-          .pop()
-          ?.trim() || "";
+      appUrl = await readPulumiOutput({ pulumiDir, providerEnv, name: "appUrl", runCmd });
       if (appUrl && !appUrl.startsWith("http")) {
         appUrl = `https://${appUrl}`;
       }

@@ -110,6 +110,96 @@ export async function initPulumiStack(opts: {
 }
 
 /**
+ * Shared provisioning preamble for the GCP adapters:
+ * set up the workspace, install npm deps, init the stack, and set the
+ * `resourceSuffix` config used to avoid cross-stack name collisions.
+ *
+ * Streams the same progress lines the adapters used to emit inline. Throws on
+ * npm-install failure (after logging the tail of npm's output); a non-fatal
+ * stack-init failure is logged as a warning (init routinely "fails" when the
+ * stack already exists). Returns the workspace handles + the derived stack name.
+ */
+export async function setupAndInitPulumiStack(opts: {
+  workDir: string;
+  repoName: string;
+  shortId: string;
+  region: string;
+  providerCredentials: { apiKey: string; apiSecret: string };
+  indexTs: string;
+  runCmd: RunCmdFn;
+  appendLog: (line: string) => Promise<void>;
+}): Promise<{ pulumiDir: string; providerEnv: Record<string, string>; stackName: string }> {
+  const { workDir, repoName, shortId, region, providerCredentials, indexTs, runCmd, appendLog } = opts;
+
+  await appendLog("── Pulumi Setup ───────────────────");
+
+  const { pulumiDir, providerEnv } = await setupPulumiWorkspace({
+    workDir,
+    appName: repoName,
+    provider: "gcp",
+    region,
+    providerRow: { api_key: providerCredentials.apiKey, api_secret: providerCredentials.apiSecret },
+    indexTs,
+  });
+
+  // Install npm dependencies
+  await appendLog("ℹ Installing Pulumi dependencies...");
+  const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], {
+    cwd: pulumiDir,
+    env: providerEnv,
+  });
+  if (installResult.code !== 0) {
+    const errLines = installResult.output.split("\n").filter((l) => l.trim()).slice(-10);
+    for (const line of errLines) {
+      await appendLog(`✗ npm: ${line}`);
+    }
+    throw new Error(`npm install failed (exit code ${installResult.code})`);
+  }
+  await appendLog("✓ Dependencies installed");
+
+  // Init Pulumi stack
+  const stackName = `${repoName}-${shortId}`;
+  const initResult = await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], {
+    cwd: pulumiDir,
+    env: providerEnv,
+  });
+  if (initResult.code !== 0) {
+    await appendLog(
+      `⚠ Stack init: ${initResult.output.split("\n").filter((l) => l.trim()).slice(-3).join(" | ")}`,
+    );
+  }
+
+  // Set unique suffix for GCP resource names to avoid 409 collisions across stacks
+  await runCmd("pulumi", ["config", "set", "resourceSuffix", shortId, "--non-interactive"], {
+    cwd: pulumiDir,
+    env: providerEnv,
+  });
+
+  return { pulumiDir, providerEnv, stackName };
+}
+
+/**
+ * Read a single Pulumi stack output value.
+ *
+ * Runs `pulumi stack output <name>` and returns the last non-empty line
+ * (trimmed) — Pulumi prints the value on the final line. Returns "" when the
+ * output is unset or the command produced nothing.
+ */
+export async function readPulumiOutput(opts: {
+  pulumiDir: string;
+  providerEnv: Record<string, string>;
+  name: string;
+  runCmd: RunCmdFn;
+}): Promise<string> {
+  const { pulumiDir, providerEnv, name, runCmd } = opts;
+  const result = await runCmd("pulumi", ["stack", "output", name, "--non-interactive"], {
+    cwd: pulumiDir,
+    env: providerEnv,
+  });
+  return result.output.trim().split("\n").pop()?.trim() || "";
+}
+
+/**
  * Restore Pulumi state from a previous deployment's tofu_script.
  * Rewrites stack URNs to match the current stack name.
  */
