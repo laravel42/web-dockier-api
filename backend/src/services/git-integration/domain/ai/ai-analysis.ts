@@ -10,6 +10,8 @@ import type { TechStackItem } from "../tech-stack.js";
 import type { DetectedService } from "../services.js";
 import { logger } from "../../../../shared/logger.js";
 import { callOpenAIJson } from "./openai-client.js";
+import { env } from "../../../../shared/config.js";
+import { fetchRepoFile, getRepoFileTree, type ConnectionLike, type RepoRef } from "../providers/provider-client.js";
 
 // ─── Types ───
 
@@ -178,4 +180,39 @@ export async function analyzeWithAI(
       deployment: sections.deployment || "",
     },
   } as AIRepoAnalysis;
+}
+
+/**
+ * Fetch the repo's file tree + config file contents and run {@link analyzeWithAI}.
+ *
+ * Wraps the "gather context then call the model" flow the repo-analyze route
+ * used to inline (twice). The caller supplies the already-computed tech stack
+ * and detected services. Returns null when the OpenAI key is unset or the
+ * analysis fails, so callers can treat AI enrichment as best-effort.
+ */
+export async function runAiAnalysisForRepo(
+  connection: ConnectionLike,
+  ref: RepoRef,
+  techStack: TechStackItem[],
+  detectedServices: DetectedService[],
+): Promise<AIRepoAnalysis | null> {
+  if (!env.OPENAI_API_KEY) return null;
+
+  const files = await getRepoFileTree(connection, ref);
+  const configContents: Record<string, string> = {};
+  for (const candidate of CONFIG_FILES_TO_FETCH) {
+    const path = files.find((f) => f.toLowerCase().endsWith(candidate.toLowerCase()));
+    if (!path) continue;
+    const content = await fetchRepoFile(connection, ref, path);
+    if (content) configContents[path] = content;
+  }
+
+  return analyzeWithAI(
+    env.OPENAI_API_KEY,
+    env.OPENAI_MODEL,
+    files,
+    configContents,
+    techStack,
+    detectedServices,
+  );
 }

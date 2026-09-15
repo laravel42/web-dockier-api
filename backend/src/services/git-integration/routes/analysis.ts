@@ -13,7 +13,7 @@ import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-cli
 import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
 import { getFindingById } from "../../../shared/service-clients/findings.js";
-import { analyzeWithAI, CONFIG_FILES_TO_FETCH as AI_CONFIG_FILES } from "../domain/ai/ai-analysis.js";
+import { runAiAnalysisForRepo } from "../domain/ai/ai-analysis.js";
 import type { TechStackItem } from "../domain/tech-stack.js";
 import type { DetectedService } from "../domain/services.js";
 import { env } from "../../../shared/config.js";
@@ -361,19 +361,9 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         // If AI analysis was requested but cache doesn't have it, run AI and update cache
         if (request.query.aiType && env.OPENAI_API_KEY && !parsed.aiAnalysis) {
           const ref = { owner: request.query.owner, repo: request.query.repo, branch };
-          const files = await getRepoFileTree(conn, ref);
-          const configContents: Record<string, string> = {};
-          for (const candidate of AI_CONFIG_FILES) {
-            const path = files.find((f) => f.toLowerCase().endsWith(candidate.toLowerCase()));
-            if (!path) continue;
-            const content = await fetchRepoFile(conn, ref, path);
-            if (content) configContents[path] = content;
-          }
-          const aiResult = await analyzeWithAI(
-            env.OPENAI_API_KEY,
-            env.OPENAI_MODEL,
-            files,
-            configContents,
+          const aiResult = await runAiAnalysisForRepo(
+            conn,
+            ref,
             (parsed.techStack as TechStackItem[]) ?? [],
             (parsed.detectedServices as DetectedService[]) ?? [],
           );
@@ -396,19 +386,9 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       let aiAnalysis: Record<string, unknown> | undefined;
       if (request.query.aiType && env.OPENAI_API_KEY) {
         const ref = { owner: request.query.owner, repo: request.query.repo, branch };
-        const files = await getRepoFileTree(conn, ref);
-        const configContents: Record<string, string> = {};
-        for (const candidate of AI_CONFIG_FILES) {
-          const path = files.find((f) => f.toLowerCase().endsWith(candidate.toLowerCase()));
-          if (!path) continue;
-          const content = await fetchRepoFile(conn, ref, path);
-          if (content) configContents[path] = content;
-        }
-        const aiResult = await analyzeWithAI(
-          env.OPENAI_API_KEY,
-          env.OPENAI_MODEL,
-          files,
-          configContents,
+        const aiResult = await runAiAnalysisForRepo(
+          conn,
+          ref,
           result.techStack,
           result.detectedServices,
         );
