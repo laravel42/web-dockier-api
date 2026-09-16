@@ -15,6 +15,7 @@ import { parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
 import { planIssueFix, applyIssueFix, type FixIssuePlan } from "../domain/ai/fix-issue-ai.js";
 import { generatePRReview, postPRReview } from "../domain/ai/review-pr-ai.js";
+import { fixIssuePlanSchema } from "../schemas.js";
 import { env } from "../../../shared/config.js";
 
 export async function registerRepositoryRoutes(app: FastifyInstance) {
@@ -437,15 +438,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
           issueBody: z.string().default(""),
         }),
         response: {
-          200: z.object({
-  summary: z.string(),
-  prDescription: z.string(),
-  branchName: z.string(),
-  baseBranch: z.string(),
-  issueNumber: z.number().int(),
-  issueTitle: z.string(),
-  files: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
-}),
+          200: fixIssuePlanSchema,
         },
       },
     },
@@ -486,15 +479,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         body: z.object({
           owner: z.string(),
           repo: z.string(),
-          plan: z.object({
-  summary: z.string(),
-  prDescription: z.string(),
-  branchName: z.string(),
-  baseBranch: z.string(),
-  issueNumber: z.number().int(),
-  issueTitle: z.string(),
-  files: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
-}),
+          plan: fixIssuePlanSchema,
         }),
         response: {
           200: z.object({
