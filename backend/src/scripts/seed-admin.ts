@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { initConfig, env } from "../shared/config.js";
+import { nowIso } from "../shared/utils/time.js";
 import { resolveSupabaseSecretKey } from "../shared/supabase/keys.js";
 import { seedDefaultRoles } from "../services/roles/seed.js";
 
@@ -130,7 +131,7 @@ async function main() {
   const { error: profileError } = await supabase
     .from("profiles")
     .upsert(
-      { id: userId, email, display_name: displayName, updated_at: new Date().toISOString() },
+      { id: userId, email, display_name: displayName, updated_at: nowIso() },
       { onConflict: "id" },
     );
   if (profileError) throw profileError;
@@ -139,7 +140,7 @@ async function main() {
   const { error: userError } = await supabase
     .from("users")
     .upsert(
-      { id: userId, email, name: displayName, organization_id: org.id, created_at: new Date().toISOString() },
+      { id: userId, email, name: displayName, organization_id: org.id, created_at: nowIso() },
       { onConflict: "id" },
     );
   if (userError) throw userError;

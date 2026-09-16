@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Database } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { composeDeployingReason } from "./orchestrator.js";
 import { ImageBuilderError } from "./builds.js";
 
@@ -40,7 +41,7 @@ export async function processImageBuilderWebhook(payload: WebhookPayload): Promi
   if (!data) return { success: false };
 
   const updates: Database["public"]["Tables"]["builds"]["Update"] = {
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
 
   if (payload.codebuildId) {

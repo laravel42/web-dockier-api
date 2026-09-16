@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { rowToCustomRule } from "./mappers.js";
 import { seedCustomRules } from "./seed-custom-rules.js";
 import { CodeAnalysisError } from "./scans.js";
@@ -85,7 +86,7 @@ export async function createCustomRule(params: CreateCustomRuleParams) {
     type: ruleType,
     yaml_content: params.yamlContent ?? "",
     enabled: true,
-    created_at: new Date().toISOString(),
+    created_at: nowIso(),
   };
   const { error } = await supabaseAdmin.from("custom_rules").insert(payload);
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to create custom rule" });

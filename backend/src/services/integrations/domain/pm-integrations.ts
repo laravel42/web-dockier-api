@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { rowToSummary } from "./mappers.js";
 
 export const PM_PROVIDERS = ["linear", "jira"] as const;
@@ -89,7 +90,7 @@ export async function createPMIntegration(params: CreatePMIntegrationParams) {
   if (existing) throw new IntegrationsError(`A ${provider} integration already exists`, "conflict");
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,

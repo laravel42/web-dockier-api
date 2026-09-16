@@ -20,6 +20,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { ParsedBuildMetadata as BuildMetadata } from "./deploy-params.js";
 import { parseBuildMetadata, parseDeployParamsFromMetadata } from "./deploy-params.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { getDefaultVpcAndSubnets, readCfnTemplate } from "../../deploy/domain/infra/aws-helpers.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ export async function checkDeployStatus(params: CheckStackStatusParams): Promise
     const { error } = await supabaseAdmin.from("builds").update({
       status: "failed",
       status_reason: `CloudFormation: ${stackStatus}`,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     }).eq("id", buildId);
     if (error) {
       logger.debug(`Failed to update build status to failed in DB: ${error.message}`);
@@ -415,7 +416,7 @@ async function cacheDeployResult(
   const { error } = await supabaseAdmin.from("builds").update({
     status: "succeeded",
     build_metadata: JSON.stringify({ ...existingMetadata, ...result }),
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   }).eq("id", buildId);
   if (error) {
     logger.debug(`Failed to cache deploy result in DB: ${error.message}`);

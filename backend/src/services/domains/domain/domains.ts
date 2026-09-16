@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import type { DomainRow, SslCertificateRow } from "../schemas.js";
 import {
   rowToDomain,
@@ -102,12 +103,12 @@ export async function updateDomain(params: {
   if (isPrimary) {
     await supabaseAdmin
       .from("domains")
-      .update({ is_primary: false, updated_at: new Date().toISOString() })
+      .update({ is_primary: false, updated_at: nowIso() })
       .eq("organization_id", tenantId)
       .eq("project_id", projectId);
   }
 
-  const updates: Partial<DomainRow> = { updated_at: new Date().toISOString() };
+  const updates: Partial<DomainRow> = { updated_at: nowIso() };
   if (isPrimary !== undefined) updates.is_primary = isPrimary;
   if (redirectWww !== undefined) updates.redirect_www = redirectWww;
   if (wildcard !== undefined) updates.wildcard = wildcard;
@@ -172,7 +173,7 @@ export async function deleteDomain(params: {
     if (nextDomain) {
       await supabaseAdmin
         .from("domains")
-        .update({ is_primary: true, updated_at: new Date().toISOString() })
+        .update({ is_primary: true, updated_at: nowIso() })
         .eq("id", nextDomain.id);
     }
   }

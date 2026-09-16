@@ -9,6 +9,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { env } from "../../../shared/config.js";
 import { bundleAndUploadSource } from "./source-bundler.js";
 import { getAwsAccountId } from "../../../lib/aws.js";
@@ -48,7 +49,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
       await db.from("builds").update({
         status: "failed",
         status_reason: "AWS credentials not configured on provider",
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso(),
       }).eq("id", buildId);
       return;
     }
@@ -126,7 +127,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     await db.from("builds").update({
       status: "submitted",
       status_reason: `Build submitted to CodeBuild (${detectedRuntime} runtime, port ${detectedPort})`,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     }).eq("id", buildId);
 
   } catch (e: unknown) {
@@ -135,7 +136,7 @@ export async function executeBuild(input: BuildJobInput): Promise<void> {
     await db.from("builds").update({
       status: "failed",
       status_reason: `Failed to queue build: ${message}`,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     }).eq("id", buildId);
     // Rethrow so pg-boss marks the job as failed and retries it
     throw e;

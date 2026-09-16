@@ -17,6 +17,7 @@ import { runAiAnalysisForRepo } from "../domain/ai/ai-analysis.js";
 import type { TechStackItem } from "../domain/tech-stack.js";
 import type { DetectedService } from "../domain/services.js";
 import { env } from "../../../shared/config.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import {
@@ -308,7 +309,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         ...(cachedResult ?? {}),
         repoFavicon: {
           dataUrl: favicon,
-          resolvedAt: new Date().toISOString(),
+          resolvedAt: nowIso(),
           deployId: latestDeployId,
           version: REPO_FAVICON_RESOLVER_VERSION,
         } satisfies RepoFaviconCacheEntry,

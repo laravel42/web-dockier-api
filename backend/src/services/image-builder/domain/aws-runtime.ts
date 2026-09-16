@@ -5,6 +5,7 @@ import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 import { getCodeBuild, getCloudWatchLogs } from "../../../lib/aws-sdk.js";
 import { env } from "../../../shared/config.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 function imageBuilderProjectName(): string {
   return env.IMAGE_BUILDER_CODEBUILD_PROJECT;
@@ -53,7 +54,7 @@ export async function refreshBuildStatus(row: any) {
       status_reason: statusReason,
       started_at: build.startTime?.toISOString() ?? row.started_at ?? null,
       finished_at: build.endTime?.toISOString() ?? row.finished_at ?? null,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", row.id);
   return { ...row, status, status_reason: statusReason };

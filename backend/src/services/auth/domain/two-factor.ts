@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { buildOtpAuthUrl, generateTotpSecret, verifyTotpToken } from "../../../shared/auth/totp.js";
 
 export const TwoFactorError = createDomainErrorClass<"bad_request" | "not_found" | "internal">("TwoFactorError");
@@ -28,7 +29,7 @@ export async function setupTwoFactor(userId: string, email: string) {
     .from("users")
     .update({
       two_factor_secret: secret,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", userId);
 
@@ -61,7 +62,7 @@ export async function enableTwoFactor(userId: string, token: string) {
     .from("users")
     .update({
       two_factor_enabled: true,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", userId);
 

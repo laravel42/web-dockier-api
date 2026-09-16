@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { CodeAnalysisError } from "./scans.js";
 
 /** Stable UUID per rule_id — satisfies API schema (z.uuid()). */
@@ -300,7 +301,7 @@ async function removeObsoleteSystemRules(): Promise<void> {
 export async function seedCustomRules(): Promise<void> {
   await removeObsoleteSystemRules();
 
-  const now = new Date().toISOString();
+  const now = nowIso();
   const rows = DEFAULT_SYSTEM_CUSTOM_RULES.map((rule) => ({
     id: systemRuleUuid(rule.ruleId),
     organization_id: "",

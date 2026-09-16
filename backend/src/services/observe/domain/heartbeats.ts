@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import type { HeartbeatRow } from "../schemas.js";
 import { rowToHeartbeat, type HeartbeatResponse } from "./mappers.js";
 
@@ -92,8 +93,8 @@ export async function pingHeartbeat(heartbeatId: string): Promise<void> {
     .from("heartbeats")
     .update({
       status: "healthy",
-      last_pinged_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      last_pinged_at: nowIso(),
+      updated_at: nowIso(),
     })
     .eq("id", heartbeatId);
 

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, deleteOrThrow } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 import type { TableUpdate } from "../../../shared/supabase/types.js";
 import { rowToProcess, rowToJob, type BackgroundProcessResponse, type ScheduledJobResponse } from "./mappers.js";
@@ -134,7 +135,7 @@ export async function updateProcess(params: {
     sleep: number; rest: number; timeout: number; tries: number; memory: number; env: string | null;
     force: boolean; workingDirectory: string | null; gracefulShutdown: number;
   }>;
-  const dbUpdates: TableUpdate<"background_processes"> = { updated_at: new Date().toISOString() };
+  const dbUpdates: TableUpdate<"background_processes"> = { updated_at: nowIso() };
   if (u.name !== undefined) dbUpdates.name = u.name;
   if (u.type !== undefined) dbUpdates.type = u.type;
   if (u.command !== undefined) dbUpdates.command = u.command;
@@ -179,7 +180,7 @@ export async function updateProcessStatus(params: {
 
   const { data, error } = await db
     .from("background_processes")
-    .update({ status, updated_at: new Date().toISOString() })
+    .update({ status, updated_at: nowIso() })
     .eq("id", processId)
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
@@ -277,7 +278,7 @@ export async function updateJob(params: {
     name: string; command: string; user: string; frequency: string;
     customCron: string | null; monitorHeartbeat: boolean;
   }>;
-  const dbUpdates: TableUpdate<"scheduled_jobs"> = { updated_at: new Date().toISOString() };
+  const dbUpdates: TableUpdate<"scheduled_jobs"> = { updated_at: nowIso() };
   if (u.name !== undefined) dbUpdates.name = u.name;
   if (u.command !== undefined) dbUpdates.command = u.command;
   if (u.user !== undefined) dbUpdates.user = u.user;
@@ -310,7 +311,7 @@ export async function updateJobStatus(params: {
 
   const { data, error } = await db
     .from("scheduled_jobs")
-    .update({ status, updated_at: new Date().toISOString() })
+    .update({ status, updated_at: nowIso() })
     .eq("id", jobId)
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)

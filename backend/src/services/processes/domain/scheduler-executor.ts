@@ -8,6 +8,7 @@
 
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import { ProcessesError } from "./processes.js";
 import type { ScheduledJobRow } from "../schemas.js";
@@ -130,7 +131,7 @@ export async function installJob(params: {
     if (result.exitCode === 0 && result.output.includes("INSTALLED")) {
       await db
         .from("scheduled_jobs")
-        .update({ status: "installed", updated_at: new Date().toISOString() })
+        .update({ status: "installed", updated_at: nowIso() })
         .eq("id", jobId);
 
       logger.info(`[scheduler] Installed job ${jobId}: ${cronLine}`);
@@ -178,7 +179,7 @@ export async function pauseJob(params: {
     if (result.exitCode === 0 && result.output.includes("PAUSED")) {
       await db
         .from("scheduled_jobs")
-        .update({ status: "paused", updated_at: new Date().toISOString() })
+        .update({ status: "paused", updated_at: nowIso() })
         .eq("id", jobId);
 
       logger.info(`[scheduler] Paused job ${jobId}`);

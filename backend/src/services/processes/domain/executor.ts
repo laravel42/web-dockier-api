@@ -9,6 +9,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import { ProcessesError } from "./processes.js";
 import type { BackgroundProcessRow } from "../schemas.js";
@@ -117,7 +118,7 @@ export async function startProcess(params: {
       // Update status to running
       await db
         .from("background_processes")
-        .update({ status: "running", updated_at: new Date().toISOString() })
+        .update({ status: "running", updated_at: nowIso() })
         .eq("id", processId);
 
       logger.info(`[processes] Started process ${processId}: ${processCmd}`);
@@ -165,7 +166,7 @@ export async function stopProcess(params: {
     if (result.output.includes("STOPPED")) {
       await db
         .from("background_processes")
-        .update({ status: "stopped", updated_at: new Date().toISOString() })
+        .update({ status: "stopped", updated_at: nowIso() })
         .eq("id", processId);
 
       logger.info(`[processes] Stopped process ${processId}`);

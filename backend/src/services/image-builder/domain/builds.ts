@@ -9,6 +9,7 @@ import { escapePostgrestFilter } from "../../../shared/http/security.js";
 import { rowToBuild } from "./mappers.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { lookupCodeBuildId, refreshBuildStatus } from "./aws-runtime.js";
 import { checkDeployStatus, deriveAppName, deriveStackName, type DeployStatusResult } from "./cfn-deploy.js";
 import type { DeployParams } from "./deploy-params.js";
@@ -37,7 +38,7 @@ export interface CreateBuildParams {
 export async function createBuild(params: CreateBuildParams) {
   const { tenantId } = params;
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const normalized = normalizeBuildInput(params);
   const payload = {
     id,
@@ -95,7 +96,7 @@ export async function createBuild(params: CreateBuildParams) {
     await supabaseAdmin.from("builds").update({
       status: "failed",
       status_reason: `Failed to enqueue build job: ${message}`,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     }).eq("id", id);
     throw new ImageBuilderError(`Failed to start build pipeline: ${message}`, "internal");
   }
@@ -163,7 +164,7 @@ export async function cancelBuild(buildId: string, tenantId: string) {
     .update({
       status: "stopped",
       status_reason: "Cancelled by user",
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", buildId)
     .select("*")
@@ -222,7 +223,7 @@ async function ensureCodeBuildId<T extends { id: string; provider_id: string; co
 
   await supabaseAdmin.from("builds").update({
     codebuild_id: codebuildId,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   }).eq("id", row.id);
 
   return { ...row, codebuild_id: codebuildId };

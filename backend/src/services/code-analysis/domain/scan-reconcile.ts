@@ -3,6 +3,7 @@ import type { Json } from "../../../shared/supabase/types.js";
 import { defaultSummary, parseSummary } from "./mappers.js";
 import { broadcastScanStatus } from "./scan-progress.js";
 import { logger } from "../../../shared/logger.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 /** Running scans must heartbeat within this window (see scan-worker). */
 const RUNNING_HEARTBEAT_STALE_MS = 90 * 1000;
@@ -44,7 +45,7 @@ async function failStaleScan(scanId: string, message: string): Promise<void> {
     .update({
       status: "failed",
       summary: summary as unknown as Json,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", scanId)
     .in("status", ["running", "pending"]);

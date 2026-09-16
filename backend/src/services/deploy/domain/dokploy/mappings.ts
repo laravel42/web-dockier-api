@@ -10,6 +10,7 @@
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery } from "../../../../shared/supabase/query.js";
+import { nowIso } from "../../../../shared/utils/time.js";
 
 /**
  * Domain error for the Dokploy DB mapping layer.
@@ -154,7 +155,7 @@ export async function upsertServer(params: {
         server_ip: params.serverIp,
         instance_id: params.instanceId ?? null,
         server_status: params.serverStatus ?? "provisioning",
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso(),
       },
       { onConflict: "project_id" },
     )
@@ -182,7 +183,7 @@ export async function upsertServer(params: {
 export async function updateServerStatus(projectId: string, status: string): Promise<void> {
   const { error } = await supabaseAdmin
     .from("dokploy_servers")
-    .update({ server_status: status, updated_at: new Date().toISOString() })
+    .update({ server_status: status, updated_at: nowIso() })
     .eq("project_id", projectId);
 
   throwOnError(error, DokployMappingError, { internalMsg: "Failed to update dokploy_servers status" });
@@ -242,7 +243,7 @@ export async function upsertApplication(params: {
         dokploy_application_id: params.dokployApplicationId,
         dokploy_server_id: params.dokployServerId ?? null,
         build_type: params.buildType ?? "nixpacks",
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso(),
       },
       { onConflict: "project_id" },
     )

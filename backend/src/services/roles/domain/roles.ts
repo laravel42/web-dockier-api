@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { ALL_PERMISSIONS, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
@@ -293,7 +294,7 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
   // Soft delete
   const { error } = await supabaseAdmin
     .from("roles")
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: nowIso() })
     .eq("id", roleId)
     .eq("organization_id", tenantId);
   throwOnError(error, RolesError, { internalMsg: "Failed to delete role" });

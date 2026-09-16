@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
@@ -96,7 +97,7 @@ export async function performDemoLogin(): Promise<DemoLoginResult> {
   const demoName = "Demo User";
   const demoTenantName = "Demo Workspace";
   const demoTenantSlug = "demo-workspace";
-  const now = new Date().toISOString();
+  const now = nowIso();
   const demoUserId = await resolveDemoAuthUser(demoEmail);
 
   const { error: userError } = await supabaseAdmin.from("users").upsert(
@@ -207,7 +208,7 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
       email,
       name: displayName as string,
       organization_id: null,
-      created_at: new Date().toISOString(),
+      created_at: nowIso(),
     });
     if (insertError) throw new RegistrationError("Failed to create user record", "internal", insertError);
   }
@@ -219,7 +220,7 @@ export async function performPasswordLogin(params: PasswordLoginParams): Promise
   // Sync user's active org
   const { error: syncError } = await supabaseAdmin
     .from("users")
-    .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
+    .update({ organization_id: selected.tenantId, updated_at: nowIso() })
     .eq("id", userId);
   if (syncError) throw new RegistrationError("Failed to sync active organization", "internal", syncError);
 
@@ -263,7 +264,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
 
   // Upsert user record
   const { error: userError } = await supabaseAdmin.from("users").upsert(
-    { id: userId, email, name: displayName, organization_id: null, created_at: new Date().toISOString() },
+    { id: userId, email, name: displayName, organization_id: null, created_at: nowIso() },
     { onConflict: "id" },
   );
   if (userError) throw new RegistrationError("Failed to upsert user record", "internal", userError);
@@ -321,7 +322,7 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
   // Sync user's active org
   const { error: syncError } = await supabaseAdmin
     .from("users")
-    .update({ organization_id: selected.tenantId, updated_at: new Date().toISOString() })
+    .update({ organization_id: selected.tenantId, updated_at: nowIso() })
     .eq("id", userId);
   if (syncError) throw new RegistrationError("Failed to sync active organization", "internal", syncError);
 

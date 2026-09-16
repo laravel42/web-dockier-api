@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Json } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { defaultSummary, rowToScan } from "./mappers.js";
 import { enqueueScan } from "./worker.js";
 import type { RunScanOptions } from "./scan-worker.js";
@@ -26,7 +27,7 @@ export interface CreateScanParams {
 export async function createScan(params: CreateScanParams) {
   const { tenantId, projectId, connectionId, repo, branch } = params;
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,
@@ -211,7 +212,7 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
     .update({
       status: "running",
       summary: runningSummary as unknown as Json,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", scanId)
     .select()

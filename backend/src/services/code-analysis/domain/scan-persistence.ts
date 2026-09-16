@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { filterSecurityFindings } from "./findings.js";
 import { defaultSummary, parseSummary } from "./mappers.js";
 import { toRepoRelativePath, type ScanFindingInput } from "./scan-analysis.js";
@@ -52,7 +53,7 @@ export async function persistFindings(
 
   if (findings.length === 0) return;
 
-  const now = new Date().toISOString();
+  const now = nowIso();
   for (let i = 0; i < findings.length; i += INSERT_BATCH_SIZE) {
     const batch = findings.slice(i, i + INSERT_BATCH_SIZE).map((finding) => ({
       id: randomUUID(),
@@ -99,7 +100,7 @@ export async function markScanFailed(scanId: string, message: string): Promise<v
     .update({
       status: "failed",
       summary: summary as unknown as Json,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso(),
     })
     .eq("id", scanId);
   if (error) obsLogger.error({ err: error.message }, `[scan] Failed to mark scan ${scanId} as failed`);

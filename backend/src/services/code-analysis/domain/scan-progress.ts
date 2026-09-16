@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { parseSummary } from "./mappers.js";
 import { broadcastScanEvent, type ScanProgressPayload } from "./scan-events.js";
 
@@ -48,7 +49,7 @@ export async function updateScanProgress(scanId: string, progress: ScanProgressP
   const summary = { ...parseSummary(data.summary), progress };
   const { error } = await supabaseAdmin
     .from("scans")
-    .update({ summary: summary as unknown as Json, updated_at: new Date().toISOString() })
+    .update({ summary: summary as unknown as Json, updated_at: nowIso() })
     .eq("id", scanId);
 
   if (!error) lastDbWrite.set(scanId, now);
@@ -69,7 +70,7 @@ export async function persistScanProgress(scanId: string, progress: ScanProgress
   const summary = { ...parseSummary(data.summary), progress };
   await supabaseAdmin
     .from("scans")
-    .update({ summary: summary as unknown as Json, updated_at: new Date().toISOString() })
+    .update({ summary: summary as unknown as Json, updated_at: nowIso() })
     .eq("id", scanId);
 
   lastDbWrite.set(scanId, Date.now());

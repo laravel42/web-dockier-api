@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { cloneRepo } from "../../../lib/build-pipeline.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../../shared/service-clients/git-connections.js";
@@ -283,7 +284,7 @@ export async function executeScan(
         status: "completed",
         summary: { ...summary, progress: undefined } as unknown as Json,
         commit_sha: cloneResult.commitHash,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso(),
       })
       .eq("id", scanId);
     if (updateError) throw new Error(`Failed to update scan status: ${updateError.message}`);

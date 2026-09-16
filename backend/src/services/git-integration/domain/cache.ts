@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Database, Json } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 /** Minimal logger interface compatible with both pino and Fastify's logger. */
 export interface CacheLogger {
@@ -97,7 +98,7 @@ export async function writeRepoCache(
         repo: params.repoKey,
         branch: params.branch,
         result: params.result,
-        created_at: new Date().toISOString(),
+        created_at: nowIso(),
         organization_id: params.tenantId,
         project_id: params.projectId ?? "",
       },
@@ -130,7 +131,7 @@ export async function writeAnalysisCache(
         branch: params.branch,
         commit_sha: "",
         result: params.result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
-        created_at: new Date().toISOString(),
+        created_at: nowIso(),
         organization_id: params.tenantId,
         project_id: params.projectId ?? "",
       },
@@ -218,7 +219,7 @@ export async function writeRepoListCache(
         connection_id: connectionId,
         organization_id: tenantId,
         repos,
-        created_at: new Date().toISOString(),
+        created_at: nowIso(),
       },
       { onConflict: "connection_id" },
     ),
@@ -240,7 +241,7 @@ export async function writeSensitiveCache(
         id: projectId,
         project_id: projectId,
         result,
-        created_at: new Date().toISOString(),
+        created_at: nowIso(),
       },
       { onConflict: "project_id" },
     ),

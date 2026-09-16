@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 export const GitIntegrationError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "precondition_failed">("GitIntegrationError");
 export type GitIntegrationError = InstanceType<typeof GitIntegrationError>;
@@ -66,7 +67,7 @@ export async function createConnection(params: CreateConnectionParams) {
   if (existing) throw new GitIntegrationError(`A ${provider} connection with label "${label}" already exists`, "conflict");
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,

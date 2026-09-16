@@ -9,6 +9,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 
@@ -80,7 +81,7 @@ export async function restoreProcessesAfterDeploy(params: {
       logger.error(`[processes] Failed to restore process ${proc.id}: ${msg}`);
       // Mark as errored so user knows it didn't start
       await db.from("background_processes")
-        .update({ status: "errored", updated_at: new Date().toISOString() })
+        .update({ status: "errored", updated_at: nowIso() })
         .eq("id", proc.id);
     }
   }

@@ -17,6 +17,7 @@
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { listDomains, listCertificates } from "./domains.js";
 import type { SslCertificateRow } from "../schemas.js";
 import { assertSafeDomainName, resolveDomainTarget, executeOnHost } from "./applier-target.js";
@@ -42,10 +43,10 @@ async function updateCertificateStatus(
 ): Promise<void> {
   const updates: Partial<SslCertificateRow> = {
     status,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso(),
   };
   if (status === "active") {
-    updates.issued_at = new Date().toISOString();
+    updates.issued_at = nowIso();
     // Let's Encrypt certs are valid for 90 days
     if (expiresAt) {
       updates.expires_at = expiresAt;

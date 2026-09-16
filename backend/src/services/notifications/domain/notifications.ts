@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
+import { nowIso } from "../../../shared/utils/time.js";
 import { sendEmailNotification } from "./email-dispatch.js";
 import { notificationMetadataSchema, type NotificationMetadata } from "../schemas.js";
 
@@ -55,7 +56,7 @@ async function insertInAppNotification(params: {
     title,
     message,
     read: false,
-    created_at: new Date().toISOString(),
+    created_at: nowIso(),
   };
 
   const supportsMetadata = await notificationsMetadataColumnExists();
@@ -89,7 +90,7 @@ export async function ensureDefaultInAppChannel(tenantId: string) {
   if (data) return;
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const { error: insertError } = await supabaseAdmin.from("notification_channels").insert({
     id,
     organization_id: tenantId,
@@ -118,7 +119,7 @@ export async function createChannel(params: CreateChannelParams) {
   }
 
   const id = randomUUID();
-  const now = new Date().toISOString();
+  const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,
