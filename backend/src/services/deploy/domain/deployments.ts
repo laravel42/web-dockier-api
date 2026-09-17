@@ -7,6 +7,8 @@ import { createDeploymentRecord } from "./processor.js";
 import { enqueueDeployment } from "./worker.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
+import { env } from "../../../shared/config.js";
+import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 
 export interface ListDeploymentsFilters {
   providerId?: string;
@@ -267,6 +269,29 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
   // Validate provider ownership
   const full = await getProviderForTenant(providerId, tenantId);
   const providerRow = { provider: full.provider, region: full.region ?? null };
+
+  // Fail fast on missing cloud credentials.
+  //
+  // The Dokploy pipeline auto-provisions a VPS on the tenant's own cloud
+  // account (AWS/GCP) unless a pre-provisioned server IP is configured.
+  // That path needs usable provider credentials. Without this guard the
+  // deployment would be created, flip to "building", and only fail deep in
+  // the provision-server stage with an opaque error — after the user has
+  // already committed to the deploy. Check up front and reject with a clear,
+  // actionable message instead.
+  const dokployAutoProvision =
+    env.DEPLOY_PROVIDER === "dokploy" && !process.env.DOKPLOY_DEFAULT_SERVER_IP;
+  if (dokployAutoProvision && !skipPipeline) {
+    const creds = await getProviderCredentialsSafe(providerId);
+    if (!creds || !creds.apiKey || !creds.apiSecret) {
+      throw new DeployError(
+        "This deployment provisions a server on your cloud account, but the selected " +
+        "provider has no usable credentials. Configure the provider's access key and " +
+        "secret under Settings → Providers before deploying.",
+        "precondition_failed",
+      );
+    }
+  }
 
   // Create the DB record
   const payload = await createDeploymentRecord(

@@ -18,12 +18,36 @@ export interface DokployProject {
   name: string;
   description: string | null;
   createdAt: string;
-  environments: DokployEnvironment[];
+  /**
+   * Nested environments. `project.one` / `project.all` return these populated.
+   * `project.create` may NOT embed them on some Dokploy versions — it can
+   * instead return the default environment as a sibling field (see
+   * `environment` / `environmentId` below), so treat this as possibly empty.
+   */
+  environments?: DokployEnvironment[];
+  /**
+   * Some Dokploy versions return the default ("production") environment
+   * alongside the created project rather than nested under `environments`.
+   * Either of these may carry it — resolveDefaultEnvironmentId() checks both.
+   */
+  environment?: DokployEnvironment | null;
+  environmentId?: string | null;
 }
 
 export interface DokployEnvironment {
   environmentId: string;
   name: string;
+}
+
+/**
+ * Wrapped response shape returned by `project.create` on current Dokploy
+ * versions: the project and its default ("production") environment come back
+ * as sibling objects rather than a flat project with nested `environments[]`.
+ * The client normalizes this into a flat `DokployProject`.
+ */
+export interface DokployCreateProjectResponse {
+  project: DokployProject;
+  environment: DokployEnvironment;
 }
 
 // ─── Servers ───────────────────────────────────────────────────────

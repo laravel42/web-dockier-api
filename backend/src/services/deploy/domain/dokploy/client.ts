@@ -13,6 +13,7 @@ import type {
   DokployClientConfig,
   CreateProjectParams,
   DokployProject,
+  DokployCreateProjectResponse,
   CreateServerParams,
   DokployServer,
   ServerValidation,
@@ -36,6 +37,38 @@ const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
 const RETRY_BASE_DELAY = 1000;
 
+/**
+ * Normalize the `project.create` response into a flat DokployProject.
+ *
+ * Handles both the wrapped `{ project, environment }` shape (current Dokploy)
+ * and a hypothetical flat shape (older/other versions), folding the default
+ * environment into `environments[]` so downstream code has a single contract.
+ */
+function isWrappedCreateResponse(
+  raw: DokployProject | DokployCreateProjectResponse,
+): raw is DokployCreateProjectResponse {
+  return (
+    typeof (raw as DokployCreateProjectResponse).project === "object" &&
+    (raw as DokployCreateProjectResponse).project !== null &&
+    typeof (raw as DokployProject).projectId !== "string"
+  );
+}
+
+function normalizeCreatedProject(
+  raw: DokployProject | DokployCreateProjectResponse,
+): DokployProject {
+  if (isWrappedCreateResponse(raw)) {
+    const { project, environment } = raw;
+    return {
+      ...project,
+      environments: environment
+        ? [environment, ...(project.environments ?? [])]
+        : project.environments ?? [],
+    };
+  }
+  return raw;
+}
+
 export class DokployClient {
   private readonly baseUrl: string;
   private readonly apiToken: string;
@@ -52,7 +85,14 @@ export class DokployClient {
   // ─── Projects ──────────────────────────────────────────────────
 
   async createProject(params: CreateProjectParams): Promise<DokployProject> {
-    return this.mutation<DokployProject>("project.create", params);
+    // Dokploy's project.create returns a WRAPPED shape on current versions:
+    //   { project: { projectId, ... }, environment: { environmentId, name, isDefault, ... } }
+    // rather than a flat DokployProject. Normalize both shapes here so callers
+    // always receive a flat project with its default environment folded into
+    // `environments[]`. Reading the wrapper directly (project.projectId) yields
+    // undefined and blows up the DB mapping with a NOT NULL violation.
+    const raw = await this.mutation<DokployProject | DokployCreateProjectResponse>("project.create", params);
+    return normalizeCreatedProject(raw);
   }
 
   async getProject(projectId: string): Promise<DokployProject> {
@@ -188,7 +228,10 @@ export class DokployClient {
         const response = await fetch(url, {
           method,
           headers: {
-            "Authorization": `Bearer ${this.apiToken}`,
+            // Dokploy authenticates via the `x-api-key` header, not
+            // `Authorization: Bearer`. See https://docs.dokploy.com/docs/api
+            // and https://github.com/Dokploy/dokploy/issues/4024.
+            "x-api-key": this.apiToken,
             "Content-Type": "application/json",
           },
           body: body !== undefined ? JSON.stringify(body) : undefined,

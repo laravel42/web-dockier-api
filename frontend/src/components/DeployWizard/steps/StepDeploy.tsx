@@ -31,8 +31,18 @@ const STAGE_DEFS = [
 /**
  * Parse deploy log lines into structured pipeline stages.
  * Backend logs use markers like `[stage:ensure-project] ...`
+ *
+ * `deployFailed` reconciles the timeline against the deployment's terminal
+ * status. A pipeline can fail between stage markers — or in the top-level
+ * catch handler, whose "✗ Pipeline failed: ..." line carries no `[stage:xxx]`
+ * marker — which would otherwise leave the active stage stuck showing a
+ * spinner forever. When the deploy has failed, the stage that was still
+ * in-progress is marked failed instead.
  */
-function parseStages(logs: string[]): { stages: PipelineStage[]; retries: AIRetryInfo[] } {
+function parseStages(
+  logs: string[],
+  deployFailed: boolean,
+): { stages: PipelineStage[]; retries: AIRetryInfo[] } {
   const stages: PipelineStage[] = STAGE_DEFS.map((def) => ({
     id: def.id,
     label: def.label,
@@ -85,6 +95,15 @@ function parseStages(logs: string[]): { stages: PipelineStage[]; retries: AIRetr
     }
   }
 
+  // Reconcile against the deployment's terminal status. If the deploy failed
+  // but no stage carried a "✗" marker (e.g. it died in the untagged top-level
+  // catch handler), the last stage that started is where it broke — mark it
+  // failed so the timeline stops spinning and shows an X.
+  if (deployFailed && !stages.some((s) => s.status === "failed")) {
+    const lastActive = [...stages].reverse().find((s) => s.status === "in-progress");
+    if (lastActive) lastActive.status = "failed";
+  }
+
   return { stages, retries };
 }
 
@@ -99,11 +118,22 @@ export default function StepDeploy({ state }: { state: WizardState }) {
     }
   }, [state.deployLogs]);
 
-  const { stages, retries } = useMemo(() => parseStages(state.deployLogs), [state.deployLogs]);
-
   const isRunning = ["pending", "building", "deploying"].includes(state.deployStatus);
   const isFailed = state.deployStatus === "failed";
   const isSuccess = state.deployStatus === "success";
+
+  const { stages, retries } = useMemo(
+    () => parseStages(state.deployLogs, isFailed),
+    [state.deployLogs, isFailed],
+  );
+
+  // Surface the failure reason from the top-level "✗ Pipeline failed: ..." log
+  // line so the user sees why it broke without expanding the raw logs.
+  const failureReason = useMemo(() => {
+    if (!isFailed) return null;
+    const failLine = [...state.deployLogs].reverse().find((l) => l.includes("✗"));
+    return failLine ? cleanLogLine(failLine).replace(/^Pipeline failed:\s*/i, "") : null;
+  }, [isFailed, state.deployLogs]);
 
   return (
     <div className="space-y-5">
@@ -120,6 +150,21 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         </span>
         {isRunning && <Spinner className="size-3.5" />}
       </div>
+
+      {/* Failure reason banner */}
+      {isFailed && (
+        <div className="rounded-lg bg-danger-50 border border-danger-500/20 p-3 flex items-start gap-2.5">
+          <div className="size-5 rounded-full bg-danger-500/80 text-white flex items-center justify-center shrink-0 mt-0.5">
+            <XIcon className="size-3" />
+          </div>
+          <div>
+            <p className="text-xs text-danger-500 font-semibold uppercase tracking-wide mb-0.5">Deployment failed</p>
+            <p className="text-sm text-text-secondary wrap-break-word">
+              {failureReason || "The deployment pipeline failed. Check the logs below for details."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pipeline stage timeline */}
       <div className="rounded-lg border border-border bg-surface p-4">

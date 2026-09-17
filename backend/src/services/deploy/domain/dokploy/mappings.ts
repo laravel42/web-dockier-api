@@ -293,7 +293,12 @@ export async function getOrCreateTenantProject(
   const existing = await getTenantProject(organizationId);
   if (existing) return existing;
 
-  // Create project in Dokploy
+  // Create project in Dokploy.
+  // NOTE: the create response does not embed the default environment on all
+  // Dokploy versions. The live pipeline uses stageEnsureProject(), which
+  // resolves it robustly (falling back to project.one). If this helper is ever
+  // wired into the pipeline, adopt that same resolution instead of the
+  // optimistic `environments[0]` read below.
   const project = await client.createProject({ name: organizationName });
   const environmentId = project.environments?.[0]?.environmentId ?? "";
 

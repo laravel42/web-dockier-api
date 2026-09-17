@@ -47,7 +47,33 @@ describe("DokployClient", () => {
       expect(result).toEqual({ projectId: "proj-1", name: "Test" });
     });
 
-    it("sends correct Authorization header", async () => {
+    it("normalizes the wrapped { project, environment } create response into a flat project", async () => {
+      // Current Dokploy returns project.create as a wrapper with the default
+      // environment as a sibling — not a flat project with nested environments.
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            result: {
+              data: {
+                project: { projectId: "proj-9", name: "Wrapped", description: null, createdAt: "2026-01-01T00:00:00Z" },
+                environment: { environmentId: "env-9", name: "production", isDefault: true },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const result = await client.createProject({ name: "Wrapped" });
+
+      // Flattened: projectId lifted to the top level (was the NOT NULL bug),
+      // and the default environment folded into environments[].
+      expect(result.projectId).toBe("proj-9");
+      expect(result.environments?.[0]?.environmentId).toBe("env-9");
+      expect(result.environments?.[0]?.name).toBe("production");
+    });
+
+    it("sends the API token via the x-api-key header", async () => {
       fetchMock.mockResolvedValue(
         new Response(JSON.stringify({ result: { data: {} } }), { status: 200 }),
       );
@@ -58,7 +84,7 @@ describe("DokployClient", () => {
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: "Bearer test-token",
+            "x-api-key": "test-token",
             "Content-Type": "application/json",
           }),
         }),
