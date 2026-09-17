@@ -138,12 +138,6 @@ export default function SourceControlTab() {
               ]}
             />
 
-            {/* Overview */}
-            <div>
-              <h3 className="text-sm font-semibold text-text mb-1">Overview</h3>
-              <p className="text-sm/relaxed text-text-secondary ">{getSourceControl(editingConn.provider).description}</p>
-            </div>
-
             {/* Configuration */}
             <div className="border-t border-border pt-4 space-y-4">
               <h3 className="text-sm font-semibold text-text">Configuration</h3>
