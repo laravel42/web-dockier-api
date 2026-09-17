@@ -84,6 +84,10 @@ vi.mock("../../../../projects/domain/env.js", () => ({
 // ─── Dokploy HTTP client (fake) ────────────────────────────────────
 
 const clientMethods = {
+  // No existing projects by default → ensure-project reconciliation finds
+  // nothing to adopt and proceeds to create a new one.
+  listProjects: vi.fn(async () => [] as Array<{ projectId: string; name: string; createdAt?: string }>),
+  getProject: vi.fn(async () => ({ projectId: "dpj-1", environments: [{ environmentId: "env-1", name: "production" }] })),
   createProject: vi.fn(async () => ({ projectId: "dpj-1", environments: [{ environmentId: "env-1" }] })),
   createApplication: vi.fn(async () => ({ applicationId: "app-1", appName: "my-app" })),
   saveGithubProvider: vi.fn(async () => undefined),
@@ -149,8 +153,9 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
   it("runs all real stages to success and stores the app URL", async () => {
     await executeDokployPipeline(input());
 
-    // Ensure-project created a Dokploy project + mapping.
-    expect(clientMethods.createProject).toHaveBeenCalledWith({ name: "Acme Inc" });
+    // Ensure-project created a Dokploy project + mapping. The name embeds the
+    // org id so it's unique per tenant.
+    expect(clientMethods.createProject).toHaveBeenCalledWith({ name: "Acme Inc [tenant-1]" });
     expect(createTenantProject).toHaveBeenCalled();
 
     // Configure-app created the application and configured github source.
@@ -224,6 +229,28 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(clientMethods.createProject).not.toHaveBeenCalled();
     expect(clientMethods.createApplication).toHaveBeenCalledWith(
       expect.objectContaining({ environmentId: "env-existing" }),
+    );
+  });
+
+  it("adopts an existing Dokploy project by name instead of creating a duplicate", async () => {
+    // No local mapping (tenantProject stays null), but a project with the org's
+    // name already exists in Dokploy — an orphan from a prior run that failed
+    // before persisting the mapping. The stage must adopt it, not duplicate it.
+    clientMethods.listProjects.mockResolvedValueOnce([
+      { projectId: "dpj-orphan", name: "Acme Inc [tenant-1]", createdAt: "2026-01-01T00:00:00Z" },
+    ]);
+    clientMethods.getProject.mockResolvedValueOnce({
+      projectId: "dpj-orphan",
+      environments: [{ environmentId: "env-orphan", name: "production" }],
+    });
+
+    await executeDokployPipeline(input());
+
+    // Did NOT create a duplicate project...
+    expect(clientMethods.createProject).not.toHaveBeenCalled();
+    // ...adopted the orphan and persisted the mapping to it.
+    expect(createTenantProject).toHaveBeenCalledWith(
+      expect.objectContaining({ dokployProjectId: "dpj-orphan" }),
     );
   });
 });

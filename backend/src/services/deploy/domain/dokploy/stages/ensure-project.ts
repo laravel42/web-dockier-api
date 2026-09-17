@@ -17,6 +17,21 @@ export interface EnsureProjectResult {
 const DEFAULT_ENVIRONMENT_NAME = "production";
 
 /**
+ * Build the Dokploy project name for an organization.
+ *
+ * The org id is embedded so the name is globally unique per tenant. Adoption
+ * (findExistingProjectByName) matches on this exact string, so two Dockier
+ * organizations that happen to share a display name (e.g. two "Demo Workspace"
+ * tenants) can never collide onto the same Dokploy project.
+ *
+ * Format: "<display name> [<org id>]" — display name kept first for
+ * human readability in the Dokploy UI.
+ */
+export function dokployProjectName(organizationName: string, organizationId: string): string {
+  return `${organizationName} [${organizationId}]`;
+}
+
+/**
  * Resolve the default environment id for a freshly created Dokploy project.
  *
  * `project.create` does not return the environment in a single consistent
@@ -72,7 +87,7 @@ export async function stageEnsureProject(params: {
 
   await log("[stage:ensure-project] Checking for existing Dokploy project...");
 
-  // Check if we already have a mapping
+  // 1. Local mapping is the fast path — one organization → one Dokploy project.
   const existing = await getTenantProject(organizationId);
   if (existing) {
     await log(`[stage:ensure-project] ✓ Reusing existing project: ${existing.dokployProjectId}`);
@@ -82,22 +97,68 @@ export async function stageEnsureProject(params: {
     };
   }
 
-  // Create new project in Dokploy
-  await log(`[stage:ensure-project] Creating new Dokploy project for "${organizationName}"...`);
-  const project = await client.createProject({ name: organizationName });
+  // The Dokploy project name embeds the org id, so it is unique per tenant and
+  // adoption can never match another organization's project.
+  const projectName = dokployProjectName(organizationName, organizationId);
+
+  // 2. No local mapping — reconcile with Dokploy before creating.
+  //
+  // A prior run may have created a project in Dokploy but failed before
+  // persisting the mapping (e.g. the create succeeded, then the DB write or
+  // environment resolution threw). Without this reconciliation, every retry
+  // would create ANOTHER project with the same name — which is exactly how
+  // the duplicate "Demo Workspace" projects accumulated. Adopt the existing
+  // Dokploy project instead of blindly creating a new one.
+  const adopted = await findExistingProjectByName(projectName, client);
+  const project = adopted ?? (await createNewProject(projectName, client, log));
+
+  if (adopted) {
+    await log(`[stage:ensure-project] ✓ Adopted existing Dokploy project by name: ${project.projectId}`);
+  }
 
   const environmentId = await resolveDefaultEnvironmentId(project, client);
 
-  // Store mapping
+  // Persist the mapping. The upsert is keyed on organization_id, so even if two
+  // deploys race here they converge on a single row (one org → one project).
   await createTenantProject({
     organizationId,
     dokployProjectId: project.projectId,
     dokployEnvironmentId: environmentId,
   });
 
-  await log(`[stage:ensure-project] ✓ Project created: ${project.projectId}`);
+  await log(`[stage:ensure-project] ✓ Project ready: ${project.projectId}`);
   return {
     dokployProjectId: project.projectId,
     dokployEnvironmentId: environmentId,
   };
+}
+
+/**
+ * Find an existing Dokploy project whose name matches the organization.
+ * Returns null if none exists. Used to adopt orphaned projects (created by a
+ * prior run that failed before persisting the mapping) instead of duplicating.
+ */
+async function findExistingProjectByName(
+  name: string,
+  client: DokployClient,
+): Promise<DokployProject | null> {
+  const projects = await client.listProjects();
+  const matches = projects.filter((p) => p.name === name);
+  if (matches.length === 0) return null;
+
+  // If prior bugs already produced duplicates, prefer the OLDEST project so
+  // repeated runs deterministically converge on the same one rather than
+  // ping-ponging between duplicates.
+  matches.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+  return matches[0];
+}
+
+/** Create a brand-new Dokploy project for the organization. */
+async function createNewProject(
+  name: string,
+  client: DokployClient,
+  log: (line: string) => Promise<void>,
+): Promise<DokployProject> {
+  await log(`[stage:ensure-project] Creating new Dokploy project for "${name}"...`);
+  return client.createProject({ name });
 }
