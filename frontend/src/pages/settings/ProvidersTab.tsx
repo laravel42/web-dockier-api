@@ -66,7 +66,13 @@ export default function ProvidersTab() {
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProvider) return;
-    await deployApi.updateProvider(editingProvider.id, { label: editForm.label });
+    // Only send credential fields when the user actually entered a new value —
+    // blank inputs mean "keep the existing key/secret". This lets users rotate
+    // a fully-rotated access key (new id + secret), not just the secret.
+    const payload: { label?: string; apiKey?: string; apiSecret?: string } = { label: editForm.label };
+    if (editForm.apiKey.trim()) payload.apiKey = editForm.apiKey.trim();
+    if (editForm.apiSecret.trim()) payload.apiSecret = editForm.apiSecret.trim();
+    await deployApi.updateProvider(editingProvider.id, payload);
     setEditingProvider(null); fetch_();
   };
 
@@ -167,6 +173,23 @@ export default function ProvidersTab() {
                 <div>
                   <label htmlFor="edit-provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
                   <Input id="edit-provider-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} required />
+                </div>
+                <div>
+                  <label htmlFor="edit-provider-key" className="block text-sm font-medium text-text-secondary mb-1.5">API Key</label>
+                  <Input id="edit-provider-key" type="text" value={editForm.apiKey} onChange={(e) => setEditForm({ ...editForm, apiKey: e.target.value })} placeholder="Leave blank to keep current" autoComplete="off" />
+                </div>
+                <div>
+                  <label htmlFor="edit-provider-secret" className="block text-sm font-medium text-text-secondary mb-1.5">API Secret</label>
+                  <div className="relative">
+                    <Input id="edit-provider-secret" type={showSecret ? "text" : "password"} value={editForm.apiSecret} onChange={(e) => setEditForm({ ...editForm, apiSecret: e.target.value })}
+                      placeholder="Leave blank to keep current" autoComplete="off" className="pr-10" />
+                    <button type="button" onClick={() => setShowSecret(!showSecret)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
+                      aria-label={showSecret ? "Hide API secret" : "Show API secret"}>
+                      {showSecret ? <EyeOffIcon className="size-4.5" /> : <EyeIcon className="size-4.5" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-muted mt-1.5">To rotate credentials, enter the new access key and secret. Leaving these blank keeps the existing ones.</p>
                 </div>
               </div>
 

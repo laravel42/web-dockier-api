@@ -70,9 +70,13 @@ export async function registerProviderRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_MANAGE),
       schema: {
         tags: ["deploy"],
-        summary: "Update provider label or secret",
+        summary: "Update provider label or credentials (key/secret)",
         params: z.object({ providerId: z.uuid() }),
-        body: z.object({ label: z.string().max(100).optional(), apiSecret: z.string().max(500).optional() }),
+        body: z.object({
+          label: z.string().max(100).optional(),
+          apiKey: z.string().min(1).max(500).optional(),
+          apiSecret: z.string().min(1).max(500).optional(),
+        }),
         response: { 200: providerSchema },
       },
     },
@@ -82,6 +86,7 @@ export async function registerProviderRoutes(app: FastifyInstance) {
         providerId: request.params.providerId,
         tenantId: auth.tenantId,
         label: request.body.label,
+        apiKey: request.body.apiKey,
         apiSecret: request.body.apiSecret,
       });
     },

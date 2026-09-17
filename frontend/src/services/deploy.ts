@@ -40,7 +40,7 @@ export const deployApi = {
   deleteProvider: (providerId: string) =>
     request<{ success: true }>(`/deploy/providers/${providerId}`, { method: "DELETE" }),
 
-  updateProvider: (providerId: string, data: { label?: string; apiSecret?: string }) =>
+  updateProvider: (providerId: string, data: { label?: string; apiKey?: string; apiSecret?: string }) =>
     request<{ success: true }>(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listDeployments: (params?: {

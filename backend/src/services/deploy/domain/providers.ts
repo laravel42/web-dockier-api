@@ -70,15 +70,21 @@ export interface UpdateProviderParams {
   providerId: string;
   tenantId: string;
   label?: string;
+  apiKey?: string;
   apiSecret?: string;
 }
 
 export async function updateProvider(params: UpdateProviderParams) {
-  const { providerId, tenantId, label, apiSecret } = params;
+  const { providerId, tenantId, label, apiKey, apiSecret } = params;
   const existing = await getProviderForTenant(providerId, tenantId);
 
   const updates: Partial<ProviderRow> = {};
   if (label !== undefined) updates.label = label;
+  // Allow rotating the access key id, not just the secret. When credentials
+  // are fully rotated in the cloud provider (new access key + secret), the
+  // secret-only update path left the stale key id in place, so every deploy
+  // kept failing with AuthFailure. Supporting apiKey here makes rotation work.
+  if (apiKey !== undefined) updates.api_key = apiKey.trim();
   if (apiSecret !== undefined) updates.api_secret = apiSecret.trim();
 
   if (Object.keys(updates).length === 0) return rowToProvider(existing);
