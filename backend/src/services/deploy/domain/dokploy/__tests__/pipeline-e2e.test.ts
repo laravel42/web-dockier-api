@@ -64,10 +64,12 @@ const upsertApplication = vi.fn(async (p: Record<string, unknown>) => {
   application = { id: "am-1", projectId: p.projectId, dokployApplicationId: p.dokployApplicationId, dokployServerId: p.dokployServerId ?? null, buildType: p.buildType ?? "nixpacks" };
   return application;
 });
+const deleteTenantProject = vi.fn(async () => { tenantProject = null; });
 
 vi.mock("../mappings.js", () => ({
   getTenantProject: vi.fn(async () => tenantProject),
   createTenantProject: (...a: unknown[]) => createTenantProject(...(a as [Record<string, unknown>])),
+  deleteTenantProject: (...a: unknown[]) => deleteTenantProject(...(a as [])),
   getApplication: vi.fn(async () => application),
   upsertApplication: (...a: unknown[]) => upsertApplication(...(a as [Record<string, unknown>])),
 }));
@@ -252,5 +254,21 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(createTenantProject).toHaveBeenCalledWith(
       expect.objectContaining({ dokployProjectId: "dpj-orphan" }),
     );
+  });
+
+  it("clears a stale mapping when the mapped Dokploy project was deleted, then recreates", async () => {
+    // Local mapping points at a project that no longer exists in Dokploy
+    // (deleted in the UI). getProject rejects → the stale mapping is cleared
+    // and a fresh project is created rather than trusting the dangling id.
+    tenantProject = { id: "tp-x", organizationId: "tenant-1", dokployProjectId: "dpj-deleted", dokployEnvironmentId: "env-deleted" };
+    deleteTenantProject.mockClear();
+    clientMethods.getProject.mockRejectedValueOnce(new Error("404 project not found"));
+
+    await executeDokployPipeline(input());
+
+    // Stale mapping cleared...
+    expect(deleteTenantProject).toHaveBeenCalled();
+    // ...and a new project created (nothing to adopt: listProjects is empty by default).
+    expect(clientMethods.createProject).toHaveBeenCalled();
   });
 });

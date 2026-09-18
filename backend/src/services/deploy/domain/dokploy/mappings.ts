@@ -107,6 +107,22 @@ export async function createTenantProject(params: {
   };
 }
 
+/**
+ * Delete the tenant→project mapping row for an organization.
+ *
+ * Used to clear a stale mapping when the referenced Dokploy project no longer
+ * exists (e.g. it was deleted in the Dokploy UI), so the pipeline can recreate
+ * or re-adopt cleanly instead of trusting a dangling reference.
+ */
+export async function deleteTenantProject(organizationId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("dokploy_tenant_projects")
+    .delete()
+    .eq("organization_id", organizationId);
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_tenant_projects row" });
+}
+
 // ─── Server Mappings ───────────────────────────────────────────────
 
 /**

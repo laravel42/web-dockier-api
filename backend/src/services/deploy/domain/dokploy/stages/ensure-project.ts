@@ -7,7 +7,7 @@
 
 import type { DokployClient } from "../client.js";
 import type { DokployProject } from "../types.js";
-import { getTenantProject, createTenantProject } from "../mappings.js";
+import { getTenantProject, createTenantProject, deleteTenantProject } from "../mappings.js";
 export interface EnsureProjectResult {
   dokployProjectId: string;
   dokployEnvironmentId: string;
@@ -88,13 +88,24 @@ export async function stageEnsureProject(params: {
   await log("[stage:ensure-project] Checking for existing Dokploy project...");
 
   // 1. Local mapping is the fast path — one organization → one Dokploy project.
+  //    But verify the mapped project still exists in Dokploy before trusting
+  //    it: a project deleted in the Dokploy UI leaves a dangling mapping row,
+  //    and blindly "reusing" it points the whole pipeline at a project that is
+  //    no longer there. If it's gone, drop the stale mapping and fall through
+  //    to reconcile/create.
   const existing = await getTenantProject(organizationId);
   if (existing) {
-    await log(`[stage:ensure-project] ✓ Reusing existing project: ${existing.dokployProjectId}`);
-    return {
-      dokployProjectId: existing.dokployProjectId,
-      dokployEnvironmentId: existing.dokployEnvironmentId,
-    };
+    if (await projectExists(existing.dokployProjectId, client)) {
+      await log(`[stage:ensure-project] ✓ Reusing existing project: ${existing.dokployProjectId}`);
+      return {
+        dokployProjectId: existing.dokployProjectId,
+        dokployEnvironmentId: existing.dokployEnvironmentId,
+      };
+    }
+    await log(
+      `[stage:ensure-project] Mapped project ${existing.dokployProjectId} no longer exists in Dokploy — clearing stale mapping and recreating.`,
+    );
+    await deleteTenantProject(organizationId);
   }
 
   // The Dokploy project name embeds the org id, so it is unique per tenant and
@@ -131,6 +142,21 @@ export async function stageEnsureProject(params: {
     dokployProjectId: project.projectId,
     dokployEnvironmentId: environmentId,
   };
+}
+
+/**
+ * Check whether a Dokploy project still exists, by id.
+ * Returns false if `project.one` reports it missing (or any lookup error),
+ * so a deleted/unreachable project is treated as "recreate" rather than fatal.
+ */
+async function projectExists(projectId: string, client: DokployClient): Promise<boolean> {
+  try {
+    const project = await client.getProject(projectId);
+    return Boolean(project?.projectId);
+  } catch {
+    // project.one throws (typically 404) when the project was deleted.
+    return false;
+  }
 }
 
 /**
