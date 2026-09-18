@@ -8,7 +8,7 @@ import { enqueueDeployment } from "./worker.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { env } from "../../../shared/config.js";
-import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, hasUsableCredential } from "../../../lib/provider-credentials.js";
 
 export interface ListDeploymentsFilters {
   providerId?: string;
@@ -283,11 +283,11 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
     env.DEPLOY_PROVIDER === "dokploy" && !process.env.DOKPLOY_DEFAULT_SERVER_IP;
   if (dokployAutoProvision && !skipPipeline) {
     const creds = await getProviderCredentialsSafe(providerId);
-    if (!creds || !creds.apiKey || !creds.apiSecret) {
+    if (!creds || !hasUsableCredential(creds.credential)) {
       throw new DeployError(
         "This deployment provisions a server on your cloud account, but the selected " +
-        "provider has no usable credentials. Configure the provider's access key and " +
-        "secret under Settings → Providers before deploying.",
+        "provider has no usable credentials. Configure the provider's credentials " +
+        "under Settings → Providers before deploying.",
         "precondition_failed",
       );
     }

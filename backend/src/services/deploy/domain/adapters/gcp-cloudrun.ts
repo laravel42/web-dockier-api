@@ -2,6 +2,7 @@
 import { join } from "node:path";
 import { extractRegionFromScript } from "../infra/gcp-helpers.js";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
+import { toGcpServiceAccountKey } from "../../../../lib/provider-credentials.js";
 import {
   getGcpAccessToken,
   getGcpProjectId,
@@ -105,7 +106,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       shortId,
       region,
       workDir,
-      providerCredentials,
+      credential,
       event,
       runCmd,
       appendLog,
@@ -117,20 +118,22 @@ export class GcpCloudRunAdapter implements DeployAdapter {
       throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
     }
 
+    const serviceAccountKey = toGcpServiceAccountKey(credential);
+
     // Set up Pulumi workspace, install deps, init stack, set resourceSuffix
     const { pulumiDir, providerEnv, stackName } = await setupAndInitPulumiStack({
       workDir,
       repoName,
       shortId,
       region,
-      providerCredentials,
+      credential,
       indexTs: event.tofuScript,
       runCmd,
       appendLog,
     });
 
     // Set GCP project config
-    const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
+    const gcpProjectId = getGcpProjectId(serviceAccountKey);
     if (gcpProjectId) {
       await runCmd(
         "pulumi",
@@ -187,7 +190,7 @@ export class GcpCloudRunAdapter implements DeployAdapter {
     // and inject import directives so Pulumi adopts existing resources instead of failing with 409
     if (!prevDeploy?.tofu_script) {
       try {
-        const accessToken = await getGcpAccessToken(providerCredentials.apiKey);
+        const accessToken = await getGcpAccessToken(serviceAccountKey);
 
         if (accessToken && gcpProjectId) {
           const arRegion = extractRegionFromScript(event.tofuScript) || region;
@@ -325,8 +328,9 @@ export class GcpCloudRunAdapter implements DeployAdapter {
 
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
-    const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
-    const accessToken = await getGcpAccessToken(ctx.providerCredentials.apiKey);
+    const serviceAccountKey = toGcpServiceAccountKey(ctx.credential);
+    const gcpProjectId = getGcpProjectId(serviceAccountKey);
+    const accessToken = await getGcpAccessToken(serviceAccountKey);
     const arRepo = ctx.repoName.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
     const arRegion = extractRegionFromScript(ctx.tofuScript) || ctx.region || "us-central1";
 

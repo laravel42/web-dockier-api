@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
+import { toGcpServiceAccountKey } from "../../../../lib/provider-credentials.js";
 import {
   GcpClient,
   getGcpAccessToken,
@@ -98,7 +99,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       shortId,
       region,
       workDir,
-      providerCredentials,
+      credential,
       event,
       runCmd,
       appendLog,
@@ -110,13 +111,15 @@ export class GcpComputeAdapter implements DeployAdapter {
       throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
     }
 
+    const serviceAccountKey = toGcpServiceAccountKey(credential);
+
     // Set up Pulumi workspace, install deps, init stack, set resourceSuffix
     const { pulumiDir, providerEnv, stackName } = await setupAndInitPulumiStack({
       workDir,
       repoName,
       shortId,
       region,
-      providerCredentials,
+      credential,
       indexTs: event.tofuScript,
       runCmd,
       appendLog,
@@ -156,7 +159,7 @@ export class GcpComputeAdapter implements DeployAdapter {
     );
 
     // Set GCP project config
-    const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
+    const gcpProjectId = getGcpProjectId(serviceAccountKey);
     if (gcpProjectId) {
       await runCmd(
         "pulumi",
@@ -272,7 +275,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       await appendLog("⚠ Resource conflict — cleaning up orphaned resources...");
 
       // Delete orphaned GCP resources that exist outside Pulumi state
-      const cleanupToken = ctx.state.gcpAccessToken || await getGcpAccessToken(providerCredentials.apiKey);
+      const cleanupToken = ctx.state.gcpAccessToken || await getGcpAccessToken(serviceAccountKey);
       if (gcpProjectId && cleanupToken) {
         await deleteOrphanedComputeResources({
           projectId: gcpProjectId,
@@ -355,7 +358,7 @@ export class GcpComputeAdapter implements DeployAdapter {
       // Query GCP for actual available zones in this region (not all regions have the same zones)
       let availableZones: string[] = [];
       try {
-        const zoneToken = ctx.state.gcpAccessToken || await getGcpAccessToken(providerCredentials.apiKey);
+        const zoneToken = ctx.state.gcpAccessToken || await getGcpAccessToken(serviceAccountKey);
         const zoneClient = new GcpClient(zoneToken, gcpProjectId);
         const zonesData = await zoneClient.requestJson<{
           items?: Array<{ name: string; status: string }>;

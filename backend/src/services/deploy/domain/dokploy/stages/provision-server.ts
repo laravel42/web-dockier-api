@@ -18,7 +18,7 @@
 import type { DokployClient } from "../client.js";
 import { getServer, upsertServer, updateServerStatus } from "../mappings.js";
 import { env } from "../../../../../shared/config.js";
-import { getProviderCredentialsSafe, toAwsCredentials } from "../../../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey, type ProviderCredential } from "../../../../../lib/provider-credentials.js";
 import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
 import { provisionGceInstance } from "../provisioning/gcp-gce.js";
 import { waitForSsh } from "../provisioning/wait-for-ssh.js";
@@ -88,13 +88,13 @@ export async function stageProvisionServer(params: {
     );
   }
 
-  const provider = creds.provider.toLowerCase();
-  if (provider === "aws") {
-    return provisionAwsServer({ projectId, providerId, tenantId, instanceType, creds, client, log });
+  const { credential, region } = creds;
+  if (credential.kind === "aws") {
+    return provisionAwsServer({ projectId, providerId, tenantId, instanceType, credential, region, client, log });
   }
 
-  if (provider === "gcp") {
-    return provisionGcpServer({ projectId, providerId, tenantId, instanceType, creds, client, log });
+  if (credential.kind === "gcp") {
+    return provisionGcpServer({ projectId, providerId, tenantId, instanceType, credential, region, client, log });
   }
 
   throw new Error(
@@ -113,18 +113,19 @@ async function provisionAwsServer(params: {
   providerId: string;
   tenantId?: string;
   instanceType?: string;
-  creds: { apiKey: string; apiSecret: string; region: string };
+  credential: ProviderCredential;
+  region: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, tenantId, instanceType, creds, client, log } = params;
+  const { projectId, providerId, tenantId, instanceType, credential, client, log } = params;
 
   const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
   if (!sshKeyId) {
     throw new Error("DOKPLOY_SSH_KEY_ID is required to auto-provision servers");
   }
 
-  const region = creds.region || "us-east-1";
+  const region = params.region || "us-east-1";
   await log(`[stage:provision-server] Provisioning EC2 VPS on tenant AWS account (region ${region})...`);
 
   // The Dokploy key's public half must be installed on the VM so Dokploy can SSH in.
@@ -134,7 +135,7 @@ async function provisionAwsServer(params: {
   let serverIp: string;
   try {
     const result = await provisionEc2Instance({
-      credentials: toAwsCredentials(creds, region),
+      credentials: toAwsCredentials(credential, region),
       instanceType,
       sshPublicKey,
       keyPairName: `dockier-${projectId.slice(0, 8)}`,
@@ -166,26 +167,27 @@ async function provisionAwsServer(params: {
 /**
  * Provision a Compute Engine VM on the tenant's GCP account, wait for SSH, and
  * register it in Dokploy. The GCP credential is a service-account JSON string
- * (server_providers.api_key). Installs the Dokploy-managed key's public half so
- * Dokploy can connect and run its own setup.
+ * (server_providers.credentials.serviceAccountKey). Installs the Dokploy-managed
+ * key's public half so Dokploy can connect and run its own setup.
  */
 async function provisionGcpServer(params: {
   projectId: string;
   providerId: string;
   tenantId?: string;
   instanceType?: string;
-  creds: { apiKey: string; apiSecret: string; region: string };
+  credential: ProviderCredential;
+  region: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, tenantId, instanceType, creds, client, log } = params;
+  const { projectId, providerId, tenantId, instanceType, credential, client, log } = params;
 
   const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
   if (!sshKeyId) {
     throw new Error("DOKPLOY_SSH_KEY_ID is required to auto-provision servers");
   }
 
-  const region = creds.region || "us-central1";
+  const region = params.region || "us-central1";
   await log(`[stage:provision-server] Provisioning GCE VM on tenant GCP account (region ${region})...`);
 
   const sshPublicKey = await getDokployPublicKey(client, sshKeyId);
@@ -194,7 +196,7 @@ async function provisionGcpServer(params: {
   let serverIp: string;
   try {
     const result = await provisionGceInstance({
-      serviceAccountKey: creds.apiKey,
+      serviceAccountKey: toGcpServiceAccountKey(credential),
       region,
       machineType: instanceType,
       sshPublicKey,

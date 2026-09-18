@@ -4,6 +4,7 @@ import { runCmd, type RunCmdFn } from "../run-cmd.js";
 import { getGcpProjectId } from "./gcp-client.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import type { DestroyContext } from "../adapters/types.js";
+import { toGcpServiceAccountKey, type ProviderCredential } from "../../../../lib/provider-credentials.js";
 
 /** The marker separating the Pulumi program from its serialized state in tofu_script. */
 const STATE_MARKER = "/* STATE */\n";
@@ -52,10 +53,10 @@ export async function setupPulumiWorkspace(opts: {
   appName: string;
   provider: string;
   region: string;
-  providerRow: { api_key: string; api_secret: string };
+  credential: ProviderCredential;
   indexTs: string;
 }): Promise<PulumiWorkspaceResult> {
-  const { workDir, appName, provider, providerRow, indexTs } = opts;
+  const { workDir, appName, provider, credential, indexTs } = opts;
 
   const pulumiDir = join(workDir, "pulumi");
   await mkdir(pulumiDir, { recursive: true });
@@ -65,16 +66,17 @@ export async function setupPulumiWorkspace(opts: {
   await writeFile(join(pulumiDir, "package.json"), generateDefaultPackageJson(appName, provider), "utf-8");
   await writeFile(join(pulumiDir, "tsconfig.json"), generateDefaultTsConfig(), "utf-8");
 
-  // Provider env vars
+  // Provider env vars, derived from the typed credential.
   const providerEnv: Record<string, string> = {};
-  if (provider === "aws") {
-    providerEnv.AWS_ACCESS_KEY_ID = providerRow.api_key || "";
-    providerEnv.AWS_SECRET_ACCESS_KEY = providerRow.api_secret || "";
+  if (credential.kind === "aws") {
+    providerEnv.AWS_ACCESS_KEY_ID = credential.accessKeyId || "";
+    providerEnv.AWS_SECRET_ACCESS_KEY = credential.secretAccessKey || "";
     providerEnv.AWS_DEFAULT_REGION = opts.region;
-  } else if (provider === "gcp") {
+  } else if (credential.kind === "gcp") {
+    const serviceAccountKey = toGcpServiceAccountKey(credential);
     const credPath = join(pulumiDir, "gcp-credentials.json");
-    await writeFile(credPath, providerRow.api_key || "{}", "utf-8");
-    providerEnv.GOOGLE_CREDENTIALS = providerRow.api_key || "";
+    await writeFile(credPath, serviceAccountKey || "{}", "utf-8");
+    providerEnv.GOOGLE_CREDENTIALS = serviceAccountKey || "";
     providerEnv.GOOGLE_APPLICATION_CREDENTIALS = credPath;
   }
 
@@ -124,12 +126,12 @@ export async function setupAndInitPulumiStack(opts: {
   repoName: string;
   shortId: string;
   region: string;
-  providerCredentials: { apiKey: string; apiSecret: string };
+  credential: ProviderCredential;
   indexTs: string;
   runCmd: RunCmdFn;
   appendLog: (line: string) => Promise<void>;
 }): Promise<{ pulumiDir: string; providerEnv: Record<string, string>; stackName: string }> {
-  const { workDir, repoName, shortId, region, providerCredentials, indexTs, runCmd, appendLog } = opts;
+  const { workDir, repoName, shortId, region, credential, indexTs, runCmd, appendLog } = opts;
 
   await appendLog("── Pulumi Setup ───────────────────");
 
@@ -138,7 +140,7 @@ export async function setupAndInitPulumiStack(opts: {
     appName: repoName,
     provider: "gcp",
     region,
-    providerRow: { api_key: providerCredentials.apiKey, api_secret: providerCredentials.apiSecret },
+    credential,
     indexTs,
   });
 
@@ -305,7 +307,7 @@ export async function destroyPulumiStack(ctx: DestroyContext, stateMarker: numbe
       appName: ctx.repoName,
       provider: "gcp",
       region: ctx.region,
-      providerRow: { api_key: ctx.providerCredentials.apiKey, api_secret: ctx.providerCredentials.apiSecret },
+      credential: ctx.credential,
       indexTs: pulumiScript,
     });
 
@@ -313,7 +315,7 @@ export async function destroyPulumiStack(ctx: DestroyContext, stateMarker: numbe
     const stackName = `destroy-${ctx.deploymentId.slice(0, 8)}`;
     await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
 
-    const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
+    const gcpProjectId = getGcpProjectId(toGcpServiceAccountKey(ctx.credential));
     if (gcpProjectId) {
       await runCmd("pulumi", ["config", "set", "gcp:project", gcpProjectId, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
     }

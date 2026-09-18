@@ -35,10 +35,11 @@ vi.mock("../../../shared/supabase/client.js", () => ({
 const mockGetCreds = vi.fn();
 vi.mock("../../../lib/provider-credentials.js", () => ({
   getProviderCredentialsSafe: (...args: unknown[]) => mockGetCreds(...args),
-  toAwsCredentials: (creds: { apiKey: string; apiSecret: string }, region?: string) => {
-    const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+  toAwsCredentials: (credential: { accessKeyId: string; secretAccessKey: string }, region?: string) => {
+    const base = { accessKeyId: credential.accessKeyId, secretAccessKey: credential.secretAccessKey };
     return region === undefined ? base : { ...base, region };
   },
+  toGcpServiceAccountKey: (credential: { serviceAccountKey: string }) => credential.serviceAccountKey,
 }));
 
 const mockDestroy = vi.fn();
@@ -66,7 +67,7 @@ function stack(overrides: Partial<ResolvedStack> = {}): ResolvedStack {
 beforeEach(() => {
   vi.clearAllMocks();
   fromCalls.length = 0;
-  mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", apiKey: "k", apiSecret: "s" });
+  mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", credential: { kind: "aws", accessKeyId: "k", secretAccessKey: "s" } });
   mockGetAdapter.mockReturnValue({ id: "aws-ecs", destroy: mockDestroy });
 });
 

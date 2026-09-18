@@ -13,6 +13,7 @@ import {
 } from "../infra/aws-helpers.js";
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, ensureS3Bucket } from "../../../../lib/aws.js";
+import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
@@ -49,11 +50,9 @@ export class AwsEcsAdapter extends AwsCloudFormationAdapter {
     ctx: AdapterContext,
     imageUri: string,
   ): Promise<ProvisionResult> {
-    const { deploymentId, repoName, region, providerCredentials, appendLog } = ctx;
+    const { deploymentId, repoName, region, credential, appendLog } = ctx;
 
-    const accessKeyId = providerCredentials.apiKey;
-    const secretAccessKey = providerCredentials.apiSecret;
-    const credentials = ctx.state.awsCredentials || { accessKeyId, secretAccessKey };
+    const credentials = ctx.state.awsCredentials || toAwsCredentials(credential);
     const accountId = ctx.state.awsAccountId || (await getAwsAccountId(region, credentials));
 
     await appendLog("── CloudFormation Deploy ──────────");

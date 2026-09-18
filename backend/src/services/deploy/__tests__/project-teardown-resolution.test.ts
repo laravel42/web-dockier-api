@@ -28,10 +28,11 @@ vi.mock("../../../shared/supabase/client.js", () => ({
 const mockGetCreds = vi.fn();
 vi.mock("../../../lib/provider-credentials.js", () => ({
   getProviderCredentialsSafe: (...args: unknown[]) => mockGetCreds(...args),
-  toAwsCredentials: (creds: { apiKey: string; apiSecret: string }, region?: string) => {
-    const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+  toAwsCredentials: (credential: { accessKeyId: string; secretAccessKey: string }, region?: string) => {
+    const base = { accessKeyId: credential.accessKeyId, secretAccessKey: credential.secretAccessKey };
     return region === undefined ? base : { ...base, region };
   },
+  toGcpServiceAccountKey: (credential: { serviceAccountKey: string }) => credential.serviceAccountKey,
 }));
 
 const { resolveProjectStacks } = await import("../domain/lifecycle/project-teardown.js");
@@ -140,7 +141,7 @@ describe("resolveProjectStacks — dedup (Property 2)", () => {
 
 describe("resolveProjectStacks — legacy fallback", () => {
   it("derives stack name from repo when infra metadata is absent", async () => {
-    mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", apiKey: "k", apiSecret: "s" });
+    mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", credential: { kind: "aws", accessKeyId: "k", secretAccessKey: "s" } });
     mockOrder.mockResolvedValueOnce({ data: [legacyRow({ id: "d1", repo: "acme/legacy-app" })], error: null });
 
     const stacks = await resolveProjectStacks(PROJECT, TENANT);
@@ -150,7 +151,7 @@ describe("resolveProjectStacks — legacy fallback", () => {
   });
 
   it("dedupes legacy rows against metadata rows targeting the same stack", async () => {
-    mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", apiKey: "k", apiSecret: "s" });
+    mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", credential: { kind: "aws", accessKeyId: "k", secretAccessKey: "s" } });
     const rows = [
       infraRow({ id: "d1", provider: "aws", stackName: "image-builder-app-my-app", repo: "acme/my-app" }),
       legacyRow({ id: "d2", repo: "acme/my-app" }), // derives image-builder-app-my-app → same key

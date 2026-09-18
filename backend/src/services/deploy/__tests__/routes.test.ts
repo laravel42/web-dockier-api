@@ -139,7 +139,7 @@ describe("POST /deploy/providers", () => {
     const res = await app.inject({
       method: "POST",
       url: "/deploy/providers",
-      payload: { provider: "aws", label: "My AWS", apiKey: "key", apiSecret: "secret" },
+      payload: { provider: "aws", label: "My AWS", accessKeyId: "key", secretAccessKey: "secret" },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -151,7 +151,7 @@ describe("POST /deploy/providers", () => {
       method: "POST",
       url: "/deploy/providers",
       headers: { authorization: authHeader() },
-      payload: { provider: "aws", label: "My AWS", apiKey: "key", apiSecret: "secret" },
+      payload: { provider: "aws", label: "My AWS", accessKeyId: "key", secretAccessKey: "secret" },
     });
 
     expect(res.statusCode).toBe(403);
@@ -172,7 +172,7 @@ describe("POST /deploy/providers", () => {
       method: "POST",
       url: "/deploy/providers",
       headers: { authorization: authHeader() },
-      payload: { provider: "aws", label: "My AWS", apiKey: "AKIATEST", apiSecret: "secretvalue" },
+      payload: { provider: "aws", label: "My AWS", accessKeyId: "AKIATEST", secretAccessKey: "secretvalue" },
     });
 
     expect(res.statusCode).toBe(200);
@@ -181,8 +181,7 @@ describe("POST /deploy/providers", () => {
       tenantId: TEST_TENANT_ID,
       provider: "aws",
       label: "My AWS",
-      apiKey: "AKIATEST",
-      apiSecret: "secretvalue",
+      credentials: { accessKeyId: "AKIATEST", secretAccessKey: "secretvalue" },
       region: undefined,
     });
   });
@@ -194,7 +193,7 @@ describe("POST /deploy/providers", () => {
       method: "POST",
       url: "/deploy/providers",
       headers: { authorization: authHeader() },
-      payload: { provider: "", label: "My AWS", apiKey: "key", apiSecret: "secret" },
+      payload: { provider: "", label: "My AWS", accessKeyId: "key", secretAccessKey: "secret" },
     });
 
     expect(res.statusCode).toBe(400);

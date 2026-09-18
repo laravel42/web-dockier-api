@@ -21,6 +21,7 @@ import { toDetectedStack } from "../../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 import type { AdapterContext, ProvisionResult, DeployAdapter } from "../adapters/types.js";
 import type { RunCmdFn } from "../run-cmd.js";
+import type { ProviderCredential } from "../../../../lib/provider-credentials.js";
 import { ADAPTER_TO_SERVICE, type CloudProvider, type InfraMetadata, serializeInfra } from "../../types.js";
 import { revealEnv } from "../../../projects/domain/env.js";
 import { getProjectDeployConfig } from "../../../../shared/service-clients/projects.js";
@@ -75,7 +76,7 @@ export interface ProjectContext {
 export interface ProviderResult {
   provider: CloudProvider;
   region: string;
-  credentials: { api_key: string; api_secret: string };
+  credential: ProviderCredential;
 }
 
 // ─── Stage 3: Load Project Context ────────────────────────────────
@@ -138,7 +139,7 @@ export function buildAdapterContext(ctx: {
   repoDir: string;
   workDir: string;
   commitHash: string;
-  providerCredentials: { api_key: string; api_secret: string };
+  credential: ProviderCredential;
   event: PipelineInput;
   deployStrategy: string;
   repoConfig: RepoConfig;
@@ -155,7 +156,7 @@ export function buildAdapterContext(ctx: {
     repoDir: ctx.repoDir,
     workDir: ctx.workDir,
     commitHash: ctx.commitHash,
-    providerCredentials: { apiKey: ctx.providerCredentials.api_key, apiSecret: ctx.providerCredentials.api_secret },
+    credential: ctx.credential,
     event: {
       deploymentId: ctx.event.deploymentId,
       tenantId: ctx.event.tenantId,

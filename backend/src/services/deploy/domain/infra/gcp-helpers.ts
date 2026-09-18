@@ -6,6 +6,7 @@
  */
 
 import type { AdapterContext, PushImageResult } from "../adapters/types.js";
+import { toGcpServiceAccountKey } from "../../../../lib/provider-credentials.js";
 import {
   GcpClient,
   GcpApiError,
@@ -143,10 +144,10 @@ export async function pushToGcpArtifactRegistry(
   localImage: string,
   config: GcpPushConfig,
 ): Promise<PushImageResult> {
-  const { shortId, region, workDir, providerCredentials, event, runCmd, appendLog } = ctx;
+  const { shortId, region, workDir, credential, event, runCmd, appendLog } = ctx;
   const repoName = ctx.repoName;
 
-  const client = await createGcpClient(providerCredentials.apiKey);
+  const client = await createGcpClient(toGcpServiceAccountKey(credential));
 
   await appendLog("── Push Image to Artifact Registry ─");
 

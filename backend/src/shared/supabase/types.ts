@@ -360,14 +360,13 @@ export type Database = {
           organization_id: string;
           provider: string;
           label: string;
-          api_key: string;
-          api_secret: string;
+          /** Per-provider credential blob. See StoredProviderCredentials in lib/provider-credentials.ts. */
+          credentials: Record<string, unknown>;
           region: string;
-          app_runner_connection_arn: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["server_providers"]["Row"]> &
-          Pick<Database["public"]["Tables"]["server_providers"]["Row"], "id" | "organization_id" | "provider" | "label" | "api_key" | "api_secret">;
+          Pick<Database["public"]["Tables"]["server_providers"]["Row"], "id" | "organization_id" | "provider" | "label" | "credentials">;
         Update: Partial<Database["public"]["Tables"]["server_providers"]["Row"]>;
         Relationships: [];
       };

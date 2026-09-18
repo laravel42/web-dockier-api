@@ -15,6 +15,7 @@ import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 import { buildViaCodeBuild } from "../infra/codebuild-builder.js";
 import type { RunCmdFn } from "../run-cmd.js";
 import type { ContextualLogger } from "../../../../lib/logging.js";
+import { toAwsCredentials, type ProviderCredential } from "../../../../lib/provider-credentials.js";
 import { appendLog } from "./helpers.js";
 import { findCachedImage, patchDeployment } from "../deployments.js";
 
@@ -35,7 +36,7 @@ export interface BuildImageParams {
   branch: string;
   deployStrategy: string;
   buildMethod?: string;
-  providerRow: { api_key: string; api_secret: string };
+  credential: ProviderCredential;
   projectEnvVars: Array<{ name: string; value: string }>;
   techStack?: string[];
   runCmd: RunCmdFn;
@@ -73,7 +74,7 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
     branch,
     deployStrategy,
     buildMethod,
-    providerRow,
+    credential,
     projectEnvVars,
     techStack,
     runCmd,
@@ -103,7 +104,8 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
       repoName,
       shortId,
       region,
-      providerRow: { api_key: providerRow.api_key, api_secret: providerRow.api_secret },
+      // CodeBuild is AWS-only; toAwsCredentials throws if this deploy is not AWS.
+      awsCredentials: toAwsCredentials(credential),
       repoDir,
       workDir,
       commitHash,

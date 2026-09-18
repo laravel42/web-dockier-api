@@ -22,7 +22,7 @@ import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { executeCommand, type ExecutionTarget } from "./executor.js";
 import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
-import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials, type ProviderCredential } from "../../../lib/provider-credentials.js";
 import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
 import type { InfraMetadata } from "../../deploy/types.js";
 
@@ -47,8 +47,7 @@ interface DeploymentInfo {
 
 interface ProviderInfo {
   provider: string;
-  api_key: string;
-  api_secret: string;
+  credential: ProviderCredential;
   region: string;
 }
 
@@ -78,8 +77,7 @@ export async function resolveExecutionTarget(
   }
   const provider: ProviderInfo = {
     provider: creds.provider,
-    api_key: creds.apiKey,
-    api_secret: creds.apiSecret,
+    credential: creds.credential,
     region: creds.region,
   };
 
@@ -126,7 +124,7 @@ function resolveFromInfra(
   provider: ProviderInfo,
   deployment: DeploymentInfo,
 ): { target: ExecutionTarget | null; errorMessage?: string } {
-  const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
+  const credentials = provider.credential;
   const { region, containerName } = infra;
 
   switch (infra.service) {
@@ -200,7 +198,7 @@ async function resolveVpsTarget(
         target: {
           instanceId,
           containerName,
-          credentials: { apiKey: provider.api_key, apiSecret: provider.api_secret },
+          credentials: provider.credential,
           region,
         },
       };
@@ -259,7 +257,7 @@ async function resolveManagedTarget(
     return {
       target: {
         containerName,
-        credentials: { apiKey: provider.api_key, apiSecret: provider.api_secret },
+        credentials: provider.credential,
         region: provider.region,
         ecsCluster: containerName,
         ecsTaskFamily: containerName,
@@ -273,7 +271,7 @@ async function resolveManagedTarget(
     return {
       target: {
         containerName,
-        credentials: { apiKey: provider.api_key, apiSecret: provider.api_secret },
+        credentials: provider.credential,
         region: provider.region,
         cloudRunService: containerName,
         gcpProjectId: undefined, // Will be derived from credentials
@@ -291,7 +289,7 @@ async function resolveEc2InstanceId(
   deployment: DeploymentInfo,
   provider: ProviderInfo,
 ): Promise<string | undefined> {
-  const credentials = { accessKeyId: provider.api_key, secretAccessKey: provider.api_secret };
+  const credentials = toAwsCredentials(provider.credential);
 
   // Strategy 1: Look up the CloudFormation stack by name
   try {

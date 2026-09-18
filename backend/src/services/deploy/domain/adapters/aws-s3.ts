@@ -102,16 +102,13 @@ export class AwsS3Adapter implements DeployAdapter {
     ctx: AdapterContext,
     _imageUri: string,
   ): Promise<ProvisionResult> {
-    const { deploymentId, repoName, repoDir, region, providerCredentials, appendLog } =
+    const { deploymentId, repoName, repoDir, region, credential, appendLog } =
       ctx;
 
-    const accessKeyId = providerCredentials.apiKey;
-    const secretAccessKey = providerCredentials.apiSecret;
-    if (!accessKeyId || !secretAccessKey) {
+    const credentials: AwsCredentials = toAwsCredentials(credential);
+    if (!credentials.accessKeyId || !credentials.secretAccessKey) {
       throw new Error("AWS credentials not configured on provider.");
     }
-
-    const credentials: AwsCredentials = { accessKeyId, secretAccessKey };
 
     // 1. Get AWS account ID via STS
     await appendLog("── AWS S3 Static Site Deploy ──────");
@@ -303,7 +300,7 @@ export class AwsS3Adapter implements DeployAdapter {
 
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
-    const credentials: AwsCredentials = toAwsCredentials(ctx.providerCredentials);
+    const credentials: AwsCredentials = toAwsCredentials(ctx.credential);
     const stackName = stackNameFor(ctx.appName);
 
     await ctx.appendLog("── Destroy AWS S3 Resources ───────");

@@ -249,12 +249,12 @@ Steps 5–6 (SSH wait + Dokploy registration) already exist as `registerServerIn
 
 ### Credential resolution (per tenant, not backend-global)
 
-Credentials come from the `server_providers` table, resolved by the deployment's `providerId` via `getProviderCredentialsSafe(providerId)` in `backend/src/lib/provider-credentials.ts`. The shape differs by provider:
+Credentials come from the `server_providers` table, resolved by the deployment's `providerId` via `getProviderCredentialsSafe(providerId)` in `backend/src/lib/provider-credentials.ts`. Each row stores a per-provider `credentials` JSONB blob discriminated on `kind`; the accessor returns a `ResolvedProvider { provider, region, credential }` where `credential` is a discriminated union. The shape differs by provider:
 
-| Provider | `api_key` | `api_secret` | Notes |
+| Provider | `credentials` JSONB shape | Accessor | Notes |
 |---|---|---|---|
-| `aws` | Access Key ID | Secret Access Key | `region` from the row (default `us-east-1`) |
-| `gcp` | Full service-account **JSON** (string) | unused | `project_id` + token minted via `getGcpAccessToken()` / `getGcpProjectId()` |
+| `aws` | `{ kind: "aws", accessKeyId, secretAccessKey }` | `toAwsCredentials(credential[, region])` | `region` from the row (default `us-east-1`) |
+| `gcp` | `{ kind: "gcp", serviceAccountKey }` (full service-account **JSON** string) | `toGcpServiceAccountKey(credential)` | `project_id` + token minted via `getGcpAccessToken()` / `getGcpProjectId()` |
 
 The pipeline must **not** use backend-global AWS/GCP env credentials for provisioning.
 

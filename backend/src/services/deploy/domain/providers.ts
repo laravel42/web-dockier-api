@@ -5,21 +5,32 @@ import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../..
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 import { nowIso } from "../../../shared/utils/time.js";
+import { buildProviderCredential, parseProviderCredential, type ProviderCredential } from "../../../lib/provider-credentials.js";
 
 export const DeployError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "precondition_failed" | "internal">("DeployError");
 export type DeployError = InstanceType<typeof DeployError>;
+
+/** Raw per-provider credential fields accepted from the API. */
+export interface ProviderCredentialInput {
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  serviceAccountKey?: string;
+}
 
 export interface CreateProviderParams {
   tenantId: string;
   provider: string;
   label: string;
-  apiKey: string;
-  apiSecret: string;
+  credentials: ProviderCredentialInput;
   region?: string;
 }
 
 export async function createProvider(params: CreateProviderParams) {
-  const { tenantId, provider, label, apiKey, apiSecret, region } = params;
+  const { tenantId, provider, label, credentials, region } = params;
+
+  // Throws DeployError-compatible on unknown provider; normalizes into the
+  // typed credential shape stored as JSONB.
+  const credential = buildProviderCredential(provider, credentials);
 
   const id = randomUUID();
   const now = nowIso();
@@ -28,10 +39,8 @@ export async function createProvider(params: CreateProviderParams) {
     organization_id: tenantId,
     provider,
     label,
-    api_key: apiKey,
-    api_secret: apiSecret,
+    credentials: credential as unknown as Record<string, unknown>,
     region: region ?? "",
-    app_runner_connection_arn: "",
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("server_providers").insert(payload);
@@ -55,7 +64,7 @@ export async function listProviders(tenantId: string) {
 export async function getProviderForTenant(providerId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("server_providers")
-    .select("id,provider,label,region,created_at,organization_id")
+    .select("id,provider,label,region,credentials,created_at,organization_id")
     .eq("id", providerId)
     .single();
   const provider = unwrapQuery(data, error, DeployError, {
@@ -70,22 +79,24 @@ export interface UpdateProviderParams {
   providerId: string;
   tenantId: string;
   label?: string;
-  apiKey?: string;
-  apiSecret?: string;
+  credentials?: ProviderCredentialInput;
 }
 
 export async function updateProvider(params: UpdateProviderParams) {
-  const { providerId, tenantId, label, apiKey, apiSecret } = params;
+  const { providerId, tenantId, label, credentials } = params;
   const existing = await getProviderForTenant(providerId, tenantId);
 
   const updates: Partial<ProviderRow> = {};
   if (label !== undefined) updates.label = label;
-  // Allow rotating the access key id, not just the secret. When credentials
-  // are fully rotated in the cloud provider (new access key + secret), the
-  // secret-only update path left the stale key id in place, so every deploy
-  // kept failing with AuthFailure. Supporting apiKey here makes rotation work.
-  if (apiKey !== undefined) updates.api_key = apiKey.trim();
-  if (apiSecret !== undefined) updates.api_secret = apiSecret.trim();
+
+  // Merge credential rotation over the existing stored credential. Only fields
+  // the caller actually supplied are overwritten, so a partial update (e.g.
+  // rotating just the AWS secret, or replacing a GCP service-account key)
+  // preserves the other fields rather than blanking them. This keeps full AWS
+  // key rotation (new id + secret) working while allowing single-field edits.
+  if (credentials !== undefined) {
+    updates.credentials = mergeCredential(existing.provider, existing.credentials, credentials) as unknown as Record<string, unknown>;
+  }
 
   if (Object.keys(updates).length === 0) return rowToProvider(existing);
 
@@ -110,4 +121,30 @@ export async function deleteProvider(providerId: string, tenantId: string) {
 
   const { error } = await supabaseAdmin.from("server_providers").delete().eq("id", providerId);
   throwOnError(error, DeployError, { internalMsg: "Failed to delete provider" });
+}
+
+/**
+ * Overlay caller-supplied credential fields onto the existing stored credential.
+ * Only non-empty supplied fields overwrite; everything else is preserved. This
+ * powers partial credential rotation from the update endpoint.
+ */
+function mergeCredential(
+  provider: string,
+  existingRaw: unknown,
+  input: ProviderCredentialInput,
+): ProviderCredential {
+  const existing = parseProviderCredential(provider, existingRaw);
+
+  if (existing.kind === "aws") {
+    return {
+      kind: "aws",
+      accessKeyId: input.accessKeyId?.trim() || existing.accessKeyId,
+      secretAccessKey: input.secretAccessKey?.trim() || existing.secretAccessKey,
+    };
+  }
+
+  return {
+    kind: "gcp",
+    serviceAccountKey: input.serviceAccountKey?.trim() || existing.serviceAccountKey,
+  };
 }

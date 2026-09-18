@@ -35,10 +35,9 @@ export abstract class AwsCloudFormationAdapter implements DeployAdapter {
    * of whether the downstream infrastructure is ECS, EC2, or something else.
    */
   async pushImage(ctx: AdapterContext, localImage: string): Promise<PushImageResult> {
-    const { repoName, shortId, region, providerCredentials, runCmd, appendLog } = ctx;
+    const { repoName, shortId, region, credential, runCmd, appendLog } = ctx;
 
-    const accessKeyId = providerCredentials.apiKey;
-    const secretAccessKey = providerCredentials.apiSecret;
+    const { accessKeyId, secretAccessKey } = toAwsCredentials(credential);
     if (!accessKeyId || !secretAccessKey) {
       throw new Error("AWS credentials not configured on provider.");
     }
@@ -88,7 +87,7 @@ export abstract class AwsCloudFormationAdapter implements DeployAdapter {
    */
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
-    const credentials: AwsCredentials = toAwsCredentials(ctx.providerCredentials);
+    const credentials: AwsCredentials = toAwsCredentials(ctx.credential);
     const stackName = stackNameFor(ctx.repoName);
 
     await ctx.appendLog(`── Destroy ${this.getDestroyLogHeader()} ──────`);

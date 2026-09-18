@@ -11,7 +11,7 @@
 
 import { spawn } from "node:child_process";
 import { getEcs, getSsm } from "../../../lib/aws-sdk.js";
-import { toAwsCredentials } from "../../../lib/provider-credentials.js";
+import { toAwsCredentials, toGcpServiceAccountKey, type ProviderCredential } from "../../../lib/provider-credentials.js";
 import { sleep } from "../../../shared/utils/time.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 
@@ -29,8 +29,8 @@ export interface ExecutionTarget {
   deployKeyPath?: string;
   /** Container name on the server (for docker exec) */
   containerName: string;
-  /** AWS/GCP credentials */
-  credentials?: { apiKey: string; apiSecret: string };
+  /** AWS/GCP credentials (discriminated on kind) */
+  credentials?: ProviderCredential;
   /** Cloud region */
   region?: string;
   /** ECS cluster name — triggers ECS RunTask path */
@@ -221,8 +221,9 @@ async function executeViaCloudRunJob(
     // Use GCP REST API for Cloud Run Jobs
     const { getGcpAccessToken, getGcpProjectId } = await import("../../deploy/domain/infra/gcp-client.js");
 
-    const accessToken = await getGcpAccessToken(credentials!.apiKey);
-    const projectId = target.gcpProjectId || getGcpProjectId(credentials!.apiKey);
+    const serviceAccountKey = toGcpServiceAccountKey(credentials!);
+    const accessToken = await getGcpAccessToken(serviceAccountKey);
+    const projectId = target.gcpProjectId || getGcpProjectId(serviceAccountKey);
     const imageUri = target.dockerImage || `${region}-docker.pkg.dev/${projectId}/${cloudRunService}/${cloudRunService}:latest`;
 
     const jobName = `${cloudRunService}-cmd`;

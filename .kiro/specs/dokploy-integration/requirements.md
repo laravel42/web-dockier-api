@@ -66,7 +66,7 @@ We're replacing it with **Dokploy** — a self-hosted PaaS that handles the enti
 **Deployment model note**: Dockier does not own the compute. For every project, a VPS is launched in the user's own AWS account (EC2) or GCP account (Compute Engine) using the per-tenant credentials stored in `server_providers` (resolved by `providerId`). Dokploy then treats that VPS as a remote server. There is no shared/central deploy server in the production model.
 
 **Acceptance Criteria**:
-- Resolve the tenant's cloud credentials for the deployment's `providerId` via `getProviderCredentialsSafe()` (`server_providers` row). AWS stores access key + secret; GCP stores the full service-account JSON in `api_key`.
+- Resolve the tenant's cloud credentials for the deployment's `providerId` via `getProviderCredentialsSafe()` (`server_providers` row). Credentials are a per-provider `credentials` JSONB blob discriminated on `kind`: AWS stores `{ kind: "aws", accessKeyId, secretAccessKey }`; GCP stores `{ kind: "gcp", serviceAccountKey }` (the full service-account JSON string).
 - Branch on `provider` (`"aws"` | `"gcp"`) and provision a VPS on that account:
   - **AWS**: launch an EC2 instance (Ubuntu 22.04+), create/reuse a security group opening ports 22/80/443, import the deploy SSH key, in the region from the `server_providers` row.
   - **GCP**: create a Compute Engine instance (Ubuntu 22.04+) plus a firewall rule for ports 22/80/443, in the configured zone/region.

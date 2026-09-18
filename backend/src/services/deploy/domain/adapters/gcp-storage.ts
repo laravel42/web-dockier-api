@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 
 const db = supabaseAdmin;
+import { toGcpServiceAccountKey } from "../../../../lib/provider-credentials.js";
 import {
   getGcpAccessToken,
   getGcpProjectId,
@@ -79,7 +80,7 @@ export class GcpStorageAdapter implements DeployAdapter {
       shortId,
       region,
       workDir,
-      providerCredentials,
+      credential,
       event,
       runCmd,
       appendLog,
@@ -89,15 +90,17 @@ export class GcpStorageAdapter implements DeployAdapter {
       throw new Error("No Pulumi program provided. Generate infrastructure code first, then deploy.");
     }
 
+    const serviceAccountKey = toGcpServiceAccountKey(credential);
+
     // Get GCP credentials
-    const gcpProjectId = getGcpProjectId(providerCredentials.apiKey);
+    const gcpProjectId = getGcpProjectId(serviceAccountKey);
     if (!gcpProjectId) {
       throw new Error("Could not determine GCP project ID from service account key");
     }
 
     // Enable Compute Engine API (required for CDN / load balancer resources)
     await appendLog("── GCP Static Site Setup ──────────");
-    const gcpAccessToken = await getGcpAccessToken(providerCredentials.apiKey);
+    const gcpAccessToken = await getGcpAccessToken(serviceAccountKey);
     if (gcpAccessToken) {
       await enableGcpApis(gcpProjectId, gcpAccessToken, ["compute.googleapis.com"]);
       await appendLog("✓ Compute Engine API enabled");
@@ -110,7 +113,7 @@ export class GcpStorageAdapter implements DeployAdapter {
       repoName,
       shortId,
       region,
-      providerCredentials,
+      credential,
       indexTs: event.tofuScript,
       runCmd,
       appendLog,
@@ -264,7 +267,7 @@ export class GcpStorageAdapter implements DeployAdapter {
     const {
       deploymentId,
       repoDir,
-      providerCredentials,
+      credential,
       event,
       runCmd,
       appendLog,
@@ -283,7 +286,7 @@ export class GcpStorageAdapter implements DeployAdapter {
       } else {
         // Get access token for GCS upload
         const uploadToken = await getGcpAccessToken(
-          providerCredentials.apiKey,
+          toGcpServiceAccountKey(credential),
           "https://www.googleapis.com/auth/devstorage.read_write",
         );
 
@@ -368,8 +371,9 @@ export class GcpStorageAdapter implements DeployAdapter {
 
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
-    const gcpProjectId = getGcpProjectId(ctx.providerCredentials.apiKey);
-    const accessToken = await getGcpAccessToken(ctx.providerCredentials.apiKey);
+    const gcpServiceAccountKey = toGcpServiceAccountKey(ctx.credential);
+    const gcpProjectId = getGcpProjectId(gcpServiceAccountKey);
+    const accessToken = await getGcpAccessToken(gcpServiceAccountKey);
     const stateMarker = ctx.tofuScript.indexOf("/* STATE */\n");
 
     await ctx.appendLog("── Destroy GCP Storage + CDN ──────");

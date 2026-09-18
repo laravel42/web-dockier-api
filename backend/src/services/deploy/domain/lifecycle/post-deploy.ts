@@ -18,7 +18,7 @@
 
 import { getAwsAccountId } from "../../../../lib/aws.js";
 import { getS3, getSsm } from "../../../../lib/aws-sdk.js";
-import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { toAwsCredentials, type ProviderCredential } from "../../../../lib/provider-credentials.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import type { ContextualLogger } from "../../../../lib/logging.js";
 import { formatEnvFileContent } from "../../../../shared/env/format-env-file.js";
@@ -34,7 +34,7 @@ export interface PostDeployContext {
   techStack: string[];
   services: Array<{ type: string; name: string; mode: string }>;
   envVars: Array<{ name: string; value: string }>;
-  credentials: { apiKey: string; apiSecret: string };
+  credential: ProviderCredential;
   /** EC2 instance ID — triggers SSM path when present (AWS only) */
   instanceId?: string;
   /** Server IP — triggers SSH path when present */
@@ -101,18 +101,18 @@ async function uploadEnvToS3(
   ctx: PostDeployContext,
   containerName: string,
 ): Promise<string> {
-  const { envVars, region, credentials } = ctx;
+  const { envVars, region, credential } = ctx;
   if (envVars.length === 0) return "";
 
   const envContent = formatEnvFileContent(envVars);
 
   const { S3Client, PutObjectCommand } = await getS3();
-  const accountId = await getAwsAccountId(region, toAwsCredentials(credentials));
+  const accountId = await getAwsAccountId(region, toAwsCredentials(credential));
   const envBucket = `image-builder-templates-${accountId}`;
   const envKey = `env-files/${containerName}-postdeploy.env`;
   const s3 = new S3Client({
     region,
-    credentials: toAwsCredentials(credentials),
+    credentials: toAwsCredentials(credential),
   });
   await s3.send(new PutObjectCommand({ Bucket: envBucket, Key: envKey, Body: envContent, ContentType: "text/plain" }));
 
@@ -152,14 +152,14 @@ interface SsmExecutionParams {
  */
 async function executeSsmScript(params: SsmExecutionParams): Promise<void> {
   const { ctx, dockerExecCmd, logger } = params;
-  const { containerName, instanceId, region, credentials, techStack, services, envVars } = ctx;
+  const { containerName, instanceId, region, credential, techStack, services, envVars } = ctx;
 
   if (!instanceId) return;
 
   const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await getSsm();
   const ssm = new SSMClient({
     region,
-    credentials: toAwsCredentials(credentials),
+    credentials: toAwsCredentials(credential),
   });
 
   // 1. Wait for SSM agent to come online

@@ -2,6 +2,16 @@ import { request } from "./request";
 import { buildQuery } from "./query";
 import type { Deployment, Provider, PaginationMeta } from "../types";
 
+// Credential fields differ per provider, so the create/update payloads are a
+// discriminated union on `provider`, mirroring the backend contract.
+export type AddProviderPayload =
+  | { provider: "aws"; label: string; accessKeyId: string; secretAccessKey: string; region?: string }
+  | { provider: "gcp"; label: string; serviceAccountKey: string; region?: string };
+
+export type UpdateProviderPayload =
+  | { provider: "aws"; label?: string; accessKeyId?: string; secretAccessKey?: string }
+  | { provider: "gcp"; label?: string; serviceAccountKey?: string };
+
 export interface DockerfilePreviewResult {
   /** Whether the AI review actually ran (key + flag on, generated source). */
   aiEnabled: boolean;
@@ -25,13 +35,7 @@ export const deployApi = {
       providers: Array<Provider & { createdAt: string }>;
     }>("/deploy/providers"),
 
-  addProvider: (data: {
-    provider: string;
-    label: string;
-    apiKey: string;
-    apiSecret: string;
-    region?: string;
-  }) =>
+  addProvider: (data: AddProviderPayload) =>
     request<{ id: string; provider: string; label: string }>("/deploy/providers", {
       method: "POST",
       body: JSON.stringify(data),
@@ -40,7 +44,7 @@ export const deployApi = {
   deleteProvider: (providerId: string) =>
     request<{ success: true }>(`/deploy/providers/${providerId}`, { method: "DELETE" }),
 
-  updateProvider: (providerId: string, data: { label?: string; apiKey?: string; apiSecret?: string }) =>
+  updateProvider: (providerId: string, data: UpdateProviderPayload) =>
     request<{ success: true }>(`/deploy/providers/${providerId}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listDeployments: (params?: {

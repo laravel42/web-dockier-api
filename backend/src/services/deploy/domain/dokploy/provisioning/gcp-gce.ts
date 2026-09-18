@@ -7,7 +7,7 @@
  * bootstrapping — because Dokploy's `server.setup` installs software.
  *
  * The tenant's credential is a service-account JSON string (stored in
- * server_providers.api_key); GcpClient handles the JWT → token exchange.
+ * server_providers.credentials.serviceAccountKey); GcpClient handles the JWT → token exchange.
  */
 
 import { createGcpClient, GcpApiError } from "../../infra/gcp-client.js";
@@ -22,7 +22,7 @@ const UBUNTU_SOURCE_IMAGE = "projects/ubuntu-os-cloud/global/images/family/ubunt
 const OPEN_PORTS = ["22", "80", "443"];
 
 export interface GceProvisionParams {
-  /** Service-account JSON key string (server_providers.api_key for GCP). */
+  /** Service-account JSON key string (server_providers.credentials.serviceAccountKey for GCP). */
   serviceAccountKey: string;
   /** Region (e.g. "us-central1"). A zone is derived unless `zone` is given. */
   region: string;

@@ -99,7 +99,7 @@ function lastCommand(): string {
   return (call?.[1] as string) ?? "";
 }
 
-const OK_TARGET = { target: { instanceId: "i-1", containerName: "app", credentials: { apiKey: "k", apiSecret: "s" }, region: "us-east-1" } };
+const OK_TARGET = { target: { instanceId: "i-1", containerName: "app", credentials: { kind: "aws", accessKeyId: "k", secretAccessKey: "s" }, region: "us-east-1" } };
 
 beforeEach(() => {
   jobRow = makeJob();

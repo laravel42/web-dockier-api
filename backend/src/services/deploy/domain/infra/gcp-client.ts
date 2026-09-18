@@ -516,10 +516,10 @@ export class GcpClient {
  * Centralizes the JWT → OAuth2 token exchange.
  */
 export async function getGcpAccessToken(
-  apiKey: string,
+  serviceAccountKey: string,
   scope = "https://www.googleapis.com/auth/cloud-platform",
 ): Promise<string> {
-  const saKey = JSON.parse(apiKey || "{}");
+  const saKey = JSON.parse(serviceAccountKey || "{}");
   if (!saKey.client_email || !saKey.private_key) return "";
 
   const now = Math.floor(Date.now() / 1000);
@@ -577,9 +577,9 @@ export async function getGcpAccessToken(
 }
 
 /** Extract the GCP project ID from a service account JSON key. */
-export function getGcpProjectId(apiKey: string): string {
+export function getGcpProjectId(serviceAccountKey: string): string {
   try {
-    return JSON.parse(apiKey || "{}").project_id || "";
+    return JSON.parse(serviceAccountKey || "{}").project_id || "";
   } catch {
     return "";
   }
@@ -590,15 +590,15 @@ export function getGcpProjectId(apiKey: string): string {
  * Handles token exchange and project ID extraction in one call.
  */
 export async function createGcpClient(
-  apiKey: string,
+  serviceAccountKey: string,
   config?: GcpClientConfig,
 ): Promise<GcpClient> {
-  const projectId = getGcpProjectId(apiKey);
+  const projectId = getGcpProjectId(serviceAccountKey);
   if (!projectId) {
     throw new Error("Could not determine GCP project ID from service account key");
   }
 
-  const accessToken = await getGcpAccessToken(apiKey);
+  const accessToken = await getGcpAccessToken(serviceAccountKey);
   if (!accessToken) {
     throw new Error("Failed to get GCP access token from service account key");
   }

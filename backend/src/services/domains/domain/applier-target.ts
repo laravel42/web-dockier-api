@@ -10,7 +10,7 @@
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getCfn, getEc2, getSsm } from "../../../lib/aws-sdk.js";
 import { deriveRepoName, stackNameFor } from "../../../lib/naming.js";
-import { getProviderCredentialsSafe, toAwsCredentials } from "../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials, type ProviderCredential } from "../../../lib/provider-credentials.js";
 import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
 import type { ExecutionTarget } from "../../../shared/service-clients/command-execution.js";
 
@@ -57,15 +57,14 @@ export async function resolveDomainTarget(
   }
   const provider = {
     provider: creds.provider,
-    api_key: creds.apiKey,
-    api_secret: creds.apiSecret,
+    credential: creds.credential,
     region: creds.region,
   };
 
   const appName = deriveRepoName(deployment.repo);
 
   const infra = deployment.infra;
-  const credentials = { apiKey: provider.api_key, apiSecret: provider.api_secret };
+  const credentials = provider.credential;
   const region = infra?.region || provider.region || "us-east-1";
   const containerName = infra?.containerName || appName;
 
@@ -109,11 +108,11 @@ interface DeploymentMeta {
 
 async function resolveEc2InstanceId(
   deployment: DeploymentMeta,
-  provider: { provider: string; api_key: string; api_secret: string; region: string },
+  provider: { provider: string; credential: ProviderCredential; region: string },
   region: string,
   infra: Record<string, string>,
 ): Promise<string | undefined> {
-  const credentials = { accessKeyId: provider.api_key, secretAccessKey: provider.api_secret };
+  const credentials = toAwsCredentials(provider.credential);
   const repoName = deriveRepoName(deployment.repo);
   const stackName = infra.stackName || stackNameFor(repoName);
 

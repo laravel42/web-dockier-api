@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { deployApi } from "@/services/api";
+import type { AddProviderPayload, UpdateProviderPayload } from "@/services/deploy";
 import Modal from "@/components/Modal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -8,6 +9,7 @@ import { getProviderStyle } from "@/data/providers";
 import { SearchableCombobox } from "@/components/ui/combobox";
 import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import Button from "@/components/ui/Button";
 import { usePermissions } from "@/context/PermissionsContext";
 import PageLoading from "@/components/ui/PageLoading";
@@ -18,6 +20,23 @@ import { clickableProps } from "@/utils/a11y";
 import MetadataBar from "./components/MetadataBar";
 import SettingsHeroHeader from "./components/SettingsHeroHeader";
 
+/** Provider types the app supports. Only AWS and GCP for now. */
+type ProviderKind = "aws" | "gcp";
+
+/**
+ * Form state holds every possible credential field; only the fields relevant to
+ * the selected provider are rendered and submitted. AWS uses an access key id +
+ * secret access key; GCP uses a single service-account JSON key.
+ */
+interface CredentialForm {
+  label: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  serviceAccountKey: string;
+}
+
+const EMPTY_FORM: CredentialForm = { label: "", accessKeyId: "", secretAccessKey: "", serviceAccountKey: "" };
+
 export default function ProvidersTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
@@ -27,54 +46,63 @@ export default function ProvidersTab() {
   );
   const providerList = providers ?? [];
   const [showForm, setShowForm] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<{ id: string; provider: string; label: string; apiKey?: string; apiSecret?: string; enabled?: boolean; createdAt?: string } | null>(null);
-  const [editForm, setEditForm] = useState({ label: "", apiKey: "", apiSecret: "" });
+  const [editingProvider, setEditingProvider] = useState<{ id: string; provider: string; label: string; createdAt?: string } | null>(null);
+  const [editForm, setEditForm] = useState<CredentialForm>(EMPTY_FORM);
   const [editEnabled, setEditEnabled] = useState(true);
-  const [form, setForm] = useState({ provider: "aws", label: "", apiKey: "", apiSecret: "" });
+  const [addProviderKind, setAddProviderKind] = useState<ProviderKind>("aws");
+  const [form, setForm] = useState<CredentialForm>(EMPTY_FORM);
   const [showSecret, setShowSecret] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const fetch_ = reload;
 
-  const apiKeyOnlyProviders: string[] = [];
-  const needsSecret = !apiKeyOnlyProviders.includes(form.provider);
-
-  const credLabel1 = "API Key";
-  const credLabel2 = "API Secret";
+  const resetAddForm = () => {
+    setForm(EMPTY_FORM);
+    setAddProviderKind("aws");
+    setShowSecret(false);
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    await deployApi.addProvider({
-      provider: form.provider, label: form.label, apiKey: form.apiKey,
-      apiSecret: needsSecret ? form.apiSecret : "",
-    });
-    setShowForm(false); setForm({ provider: "aws", label: "", apiKey: "", apiSecret: "" }); fetch_();
+    const payload: AddProviderPayload =
+      addProviderKind === "aws"
+        ? { provider: "aws", label: form.label, accessKeyId: form.accessKeyId.trim(), secretAccessKey: form.secretAccessKey.trim() }
+        : { provider: "gcp", label: form.label, serviceAccountKey: form.serviceAccountKey.trim() };
+    await deployApi.addProvider(payload);
+    setShowForm(false);
+    resetAddForm();
+    fetch_();
   };
 
   const openEdit = (p: (typeof providerList)[number]) => {
-    setEditingProvider({
-      id: p.id,
-      provider: p.provider,
-      label: p.label,
-      enabled: true,
-      createdAt: p.createdAt,
-    });
-    setEditForm({ label: p.label, apiKey: "", apiSecret: "" });
+    setEditingProvider({ id: p.id, provider: p.provider, label: p.label, createdAt: p.createdAt });
+    setEditForm({ ...EMPTY_FORM, label: p.label });
     setEditEnabled(true);
+    setShowSecret(false);
   };
 
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProvider) return;
-    // Only send credential fields when the user actually entered a new value —
-    // blank inputs mean "keep the existing key/secret". This lets users rotate
-    // a fully-rotated access key (new id + secret), not just the secret.
-    const payload: { label?: string; apiKey?: string; apiSecret?: string } = { label: editForm.label };
-    if (editForm.apiKey.trim()) payload.apiKey = editForm.apiKey.trim();
-    if (editForm.apiSecret.trim()) payload.apiSecret = editForm.apiSecret.trim();
+    const kind = normalizeProviderKind(editingProvider.provider);
+    // Only send credential fields the user actually entered — blank inputs mean
+    // "keep the existing value". The backend merges partial updates, so a user
+    // can rotate a single field (e.g. just the AWS secret) or the whole key.
+    let payload: UpdateProviderPayload;
+    if (kind === "aws") {
+      payload = { provider: "aws", label: editForm.label };
+      if (editForm.accessKeyId.trim()) payload.accessKeyId = editForm.accessKeyId.trim();
+      if (editForm.secretAccessKey.trim()) payload.secretAccessKey = editForm.secretAccessKey.trim();
+    } else {
+      payload = { provider: "gcp", label: editForm.label };
+      if (editForm.serviceAccountKey.trim()) payload.serviceAccountKey = editForm.serviceAccountKey.trim();
+    }
     await deployApi.updateProvider(editingProvider.id, payload);
-    setEditingProvider(null); fetch_();
+    setEditingProvider(null);
+    fetch_();
   };
+
+  const editKind = editingProvider ? normalizeProviderKind(editingProvider.provider) : "aws";
 
   return (
     <div>
@@ -90,14 +118,14 @@ export default function ProvidersTab() {
         )}
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Provider">
+      <Modal open={showForm} onClose={() => { setShowForm(false); resetAddForm(); }} title="Add Provider">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="provider-type" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
             <SearchableCombobox
               id="provider-type"
-              value={form.provider}
-              onValueChange={(provider) => setForm({ ...form, provider })}
+              value={addProviderKind}
+              onValueChange={(provider) => setAddProviderKind(provider as ProviderKind)}
               options={[
                 { value: "aws", label: "AWS" },
                 { value: "gcp", label: "Google Cloud" },
@@ -109,27 +137,37 @@ export default function ProvidersTab() {
             <label htmlFor="provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
             <Input id="provider-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
           </div>
-          <div>
-            <label htmlFor="provider-key" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel1}</label>
-            <Input id="provider-key" type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} required />
-          </div>
 
-          {(needsSecret) && <div>
-            <label htmlFor="provider-secret" className="block text-sm font-medium text-text-secondary mb-1.5">{credLabel2}</label>
-            <div className="relative">
-              <Input id="provider-secret" type={showSecret ? "text" : "password"} value={form.apiSecret} onChange={(e) => setForm({ ...form, apiSecret: e.target.value })}
-                className="pr-10" required />
-              <button type="button" onClick={() => setShowSecret(!showSecret)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
-                aria-label={showSecret ? "Hide API secret" : "Show API secret"}>
-                {showSecret ? (
-                  <EyeOffIcon className="size-4.5" />
-                ) : (
-                  <EyeIcon className="size-4.5" />
-                )}
-              </button>
+          {addProviderKind === "aws" ? (
+            <>
+              <div>
+                <label htmlFor="provider-access-key-id" className="block text-sm font-medium text-text-secondary mb-1.5">Access Key ID</label>
+                <Input id="provider-access-key-id" type="text" autoComplete="off" placeholder="AKIA…"
+                  value={form.accessKeyId} onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })} required />
+              </div>
+              <div>
+                <label htmlFor="provider-secret-access-key" className="block text-sm font-medium text-text-secondary mb-1.5">Secret Access Key</label>
+                <div className="relative">
+                  <Input id="provider-secret-access-key" type={showSecret ? "text" : "password"} autoComplete="off" className="pr-10"
+                    value={form.secretAccessKey} onChange={(e) => setForm({ ...form, secretAccessKey: e.target.value })} required />
+                  <button type="button" onClick={() => setShowSecret(!showSecret)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
+                    aria-label={showSecret ? "Hide secret access key" : "Show secret access key"}>
+                    {showSecret ? <EyeOffIcon className="size-4.5" /> : <EyeIcon className="size-4.5" />}
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label htmlFor="provider-sa-key" className="block text-sm font-medium text-text-secondary mb-1.5">Service Account Key (JSON)</label>
+              <Textarea id="provider-sa-key" rows={6} autoComplete="off" className="font-mono text-xs"
+                placeholder={'{\n  "type": "service_account",\n  "project_id": "…",\n  "private_key": "…"\n}'}
+                value={form.serviceAccountKey} onChange={(e) => setForm({ ...form, serviceAccountKey: e.target.value })} required />
+              <p className="text-xs text-text-muted mt-1.5">Paste the full service-account JSON key from the Google Cloud console.</p>
             </div>
-          </div>}
+          )}
+
           <div className="flex justify-end">
             <Button type="submit">Add Provider</Button>
           </div>
@@ -168,23 +206,36 @@ export default function ProvidersTab() {
                   <label htmlFor="edit-provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
                   <Input id="edit-provider-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} required />
                 </div>
-                <div>
-                  <label htmlFor="edit-provider-key" className="block text-sm font-medium text-text-secondary mb-1.5">API Key</label>
-                  <Input id="edit-provider-key" type="text" value={editForm.apiKey} onChange={(e) => setEditForm({ ...editForm, apiKey: e.target.value })} placeholder="Leave blank to keep current" autoComplete="off" />
-                </div>
-                <div>
-                  <label htmlFor="edit-provider-secret" className="block text-sm font-medium text-text-secondary mb-1.5">API Secret</label>
-                  <div className="relative">
-                    <Input id="edit-provider-secret" type={showSecret ? "text" : "password"} value={editForm.apiSecret} onChange={(e) => setEditForm({ ...editForm, apiSecret: e.target.value })}
-                      placeholder="Leave blank to keep current" autoComplete="off" className="pr-10" />
-                    <button type="button" onClick={() => setShowSecret(!showSecret)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
-                      aria-label={showSecret ? "Hide API secret" : "Show API secret"}>
-                      {showSecret ? <EyeOffIcon className="size-4.5" /> : <EyeIcon className="size-4.5" />}
-                    </button>
+
+                {editKind === "aws" ? (
+                  <>
+                    <div>
+                      <label htmlFor="edit-provider-access-key-id" className="block text-sm font-medium text-text-secondary mb-1.5">Access Key ID</label>
+                      <Input id="edit-provider-access-key-id" type="text" autoComplete="off" placeholder="Leave blank to keep current"
+                        value={editForm.accessKeyId} onChange={(e) => setEditForm({ ...editForm, accessKeyId: e.target.value })} />
+                    </div>
+                    <div>
+                      <label htmlFor="edit-provider-secret-access-key" className="block text-sm font-medium text-text-secondary mb-1.5">Secret Access Key</label>
+                      <div className="relative">
+                        <Input id="edit-provider-secret-access-key" type={showSecret ? "text" : "password"} autoComplete="off" className="pr-10" placeholder="Leave blank to keep current"
+                          value={editForm.secretAccessKey} onChange={(e) => setEditForm({ ...editForm, secretAccessKey: e.target.value })} />
+                        <button type="button" onClick={() => setShowSecret(!showSecret)}
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted hover:text-text-secondary transition-colors"
+                          aria-label={showSecret ? "Hide secret access key" : "Show secret access key"}>
+                          {showSecret ? <EyeOffIcon className="size-4.5" /> : <EyeIcon className="size-4.5" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-text-muted mt-1.5">To rotate credentials, enter the new access key id and secret. Leaving these blank keeps the existing ones.</p>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label htmlFor="edit-provider-sa-key" className="block text-sm font-medium text-text-secondary mb-1.5">Service Account Key (JSON)</label>
+                    <Textarea id="edit-provider-sa-key" rows={6} autoComplete="off" className="font-mono text-xs" placeholder="Leave blank to keep current"
+                      value={editForm.serviceAccountKey} onChange={(e) => setEditForm({ ...editForm, serviceAccountKey: e.target.value })} />
+                    <p className="text-xs text-text-muted mt-1.5">To rotate credentials, paste a new service-account JSON key. Leaving this blank keeps the existing one.</p>
                   </div>
-                  <p className="text-xs text-text-muted mt-1.5">To rotate credentials, enter the new access key and secret. Leaving these blank keeps the existing ones.</p>
-                </div>
+                )}
               </div>
 
               {/* Footer */}
@@ -231,4 +282,9 @@ export default function ProvidersTab() {
       )}
     </div>
   );
+}
+
+/** Map a stored provider string to the supported credential kind. */
+function normalizeProviderKind(provider: string): ProviderKind {
+  return provider.toLowerCase() === "aws" ? "aws" : "gcp";
 }

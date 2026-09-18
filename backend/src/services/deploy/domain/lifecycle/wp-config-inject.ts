@@ -7,7 +7,7 @@
 
 import type { ContextualLogger } from "../../../../lib/logging.js";
 import { getSsm } from "../../../../lib/aws-sdk.js";
-import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { toAwsCredentials, type ProviderCredential } from "../../../../lib/provider-credentials.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { revealWpConfig } from "../../../projects/domain/wp-config.js";
 import { pollUntil } from "../infra/poll-until.js";
@@ -19,7 +19,7 @@ interface WpConfigInjectContext {
   containerName: string;
   region: string;
   provider: string;
-  credentials: { apiKey: string; apiSecret: string };
+  credential: ProviderCredential;
   instanceId?: string;
   serverIp?: string;
   deployKeyPath?: string;
@@ -106,13 +106,13 @@ async function injectViaSsm(
   injectCmd: string,
   logger: ContextualLogger,
 ): Promise<void> {
-  const { containerName, instanceId, region, credentials } = ctx;
+  const { containerName, instanceId, region, credential } = ctx;
   if (!instanceId) return;
 
   const { SSMClient, SendCommandCommand, GetCommandInvocationCommand, DescribeInstanceInformationCommand } = await getSsm();
   const ssm = new SSMClient({
     region,
-    credentials: toAwsCredentials(credentials),
+    credentials: toAwsCredentials(credential),
   });
 
   // Wait for SSM agent (instance may still be booting)

@@ -20,6 +20,7 @@ import type { TemplateConfig } from "../planning/project-templates.js";
 import { deriveRepoName } from "../../../../lib/naming.js";
 import type { PipelineInput } from "./shared.js";
 import type { CloudProvider } from "../../types.js";
+import type { ProviderCredential } from "../../../../lib/provider-credentials.js";
 
 export class PipelineContext {
   // ─── Immutable inputs (set at construction) ───────────────────
@@ -36,7 +37,7 @@ export class PipelineContext {
   // ─── Stage 1: Provider Credentials ────────────────────────────
   provider!: CloudProvider;
   region!: string;
-  credentials!: { api_key: string; api_secret: string };
+  credential!: ProviderCredential;
 
   // ─── Stage 2: Clone ───────────────────────────────────────────
   repoDir = "";

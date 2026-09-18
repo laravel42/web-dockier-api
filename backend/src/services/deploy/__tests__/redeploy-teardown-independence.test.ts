@@ -36,10 +36,11 @@ vi.mock("../domain/deployments.js", () => ({
 const mockGetCreds = vi.fn();
 vi.mock("../../../lib/provider-credentials.js", () => ({
   getProviderCredentialsSafe: (...args: unknown[]) => mockGetCreds(...args),
-  toAwsCredentials: (creds: { apiKey: string; apiSecret: string }, region?: string) => {
-    const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+  toAwsCredentials: (credential: { accessKeyId: string; secretAccessKey: string }, region?: string) => {
+    const base = { accessKeyId: credential.accessKeyId, secretAccessKey: credential.secretAccessKey };
     return region === undefined ? base : { ...base, region };
   },
+  toGcpServiceAccountKey: (credential: { serviceAccountKey: string }) => credential.serviceAccountKey,
 }));
 
 const { redeployLatest, rollbackToDeployment } = await import("../domain/redeploy.js");
@@ -128,7 +129,7 @@ describe("build method preservation", () => {
 
   it("falls back to codebuild for a legacy AWS deployment without a stored build_method", async () => {
     sourceRow = makeSource("success", "abc123", null);
-    mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", apiKey: "k", apiSecret: "s" });
+    mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", credential: { kind: "aws", accessKeyId: "k", secretAccessKey: "s" } });
 
     await redeployLatest("dep-1", TENANT);
 
@@ -139,7 +140,7 @@ describe("build method preservation", () => {
 
   it("leaves build method unset for a legacy non-AWS deployment (pipeline default)", async () => {
     sourceRow = makeSource("success", "abc123", null);
-    mockGetCreds.mockResolvedValue({ provider: "gcp", region: "us-central1", apiKey: "k", apiSecret: "s" });
+    mockGetCreds.mockResolvedValue({ provider: "gcp", region: "us-central1", credential: { kind: "gcp", serviceAccountKey: "{}" } });
 
     await redeployLatest("dep-1", TENANT);
 

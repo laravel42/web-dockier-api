@@ -18,7 +18,7 @@
  */
 
 import { logger } from "../../../../shared/logger.js";
-import { getProviderCredentialsSafe, toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey } from "../../../../lib/provider-credentials.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { createDokployClient } from "../dokploy/client.js";
 import {
@@ -128,19 +128,17 @@ async function terminateCloudInstance(providerId: string, instanceId: string): P
     return { resource, success: false, message: `No provider credentials for ${providerId}; VM may still be running.` };
   }
 
-  const provider = creds.provider.toLowerCase();
-
-  if (provider === "aws") {
+  if (creds.credential.kind === "aws") {
     return runStep(resource, () => terminateEc2Instance(
-      toAwsCredentials(creds, creds.region || "us-east-1"),
+      toAwsCredentials(creds.credential, creds.region || "us-east-1"),
       instanceId,
     ));
   }
 
-  if (provider === "gcp") {
+  if (creds.credential.kind === "gcp") {
     // instanceId is the GCE instance name. No zone is recorded in the mapping,
     // so terminateGceInstance locates it across zones before deleting.
-    return runStep(resource, () => terminateGceInstance(creds.apiKey, instanceId));
+    return runStep(resource, () => terminateGceInstance(toGcpServiceAccountKey(creds.credential), instanceId));
   }
 
   return { resource, success: false, message: `Unsupported provider "${creds.provider}" for VM termination.` };

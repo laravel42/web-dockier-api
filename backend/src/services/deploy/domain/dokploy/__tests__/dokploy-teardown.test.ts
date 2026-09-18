@@ -44,11 +44,12 @@ vi.mock("../provisioning/gcp-gce.js", () => ({
 const getProviderCredentialsSafe = vi.fn();
 vi.mock("../../../../../lib/provider-credentials.js", () => ({
   getProviderCredentialsSafe: (...a: unknown[]) => getProviderCredentialsSafe(...a),
-  // Pure mapper — mirror the real implementation so the AWS teardown branch works.
-  toAwsCredentials: (creds: { apiKey: string; apiSecret: string }, region?: string) => {
-    const base = { accessKeyId: creds.apiKey, secretAccessKey: creds.apiSecret };
+  // Pure mappers — mirror the real implementations so the teardown branches work.
+  toAwsCredentials: (credential: { accessKeyId: string; secretAccessKey: string }, region?: string) => {
+    const base = { accessKeyId: credential.accessKeyId, secretAccessKey: credential.secretAccessKey };
     return region === undefined ? base : { ...base, region };
   },
+  toGcpServiceAccountKey: (credential: { serviceAccountKey: string }) => credential.serviceAccountKey,
 }));
 
 vi.mock("../../../../../shared/logger.js", () => ({
@@ -77,7 +78,7 @@ const APPLICATION = {
   buildType: "nixpacks",
 };
 
-const AWS_CREDS = { provider: "aws", region: "eu-west-1", apiKey: "AKIA", apiSecret: "secret" };
+const AWS_CREDS = { provider: "aws", region: "eu-west-1", credential: { kind: "aws", accessKeyId: "AKIA", secretAccessKey: "secret" } };
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -142,7 +143,7 @@ describe("teardownDokployProject — GCP", () => {
   it("delegates GCE VM deletion to terminateGceInstance", async () => {
     getServer.mockResolvedValue({ ...SERVER, instanceId: "vm-1" });
     getApplication.mockResolvedValue(null);
-    getProviderCredentialsSafe.mockResolvedValue({ provider: "gcp", region: "us-central1", apiKey: "{}", apiSecret: "" });
+    getProviderCredentialsSafe.mockResolvedValue({ provider: "gcp", region: "us-central1", credential: { kind: "gcp", serviceAccountKey: "{}" } });
 
     const result = await teardownDokployProject("proj-1", "tenant-1");
 
@@ -153,7 +154,7 @@ describe("teardownDokployProject — GCP", () => {
   it("reports partial when GCE termination fails", async () => {
     getServer.mockResolvedValue({ ...SERVER, instanceId: "vm-gone" });
     getApplication.mockResolvedValue(null);
-    getProviderCredentialsSafe.mockResolvedValue({ provider: "gcp", region: "us-central1", apiKey: "{}", apiSecret: "" });
+    getProviderCredentialsSafe.mockResolvedValue({ provider: "gcp", region: "us-central1", credential: { kind: "gcp", serviceAccountKey: "{}" } });
     terminateGceInstance.mockRejectedValueOnce(new Error("gcp down"));
 
     const result = await teardownDokployProject("proj-1", "tenant-1");

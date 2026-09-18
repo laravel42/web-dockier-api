@@ -1,5 +1,6 @@
 import type { DetectedStack } from "../../../../lib/repo-analyzer/types.js";
 import type { RunCmdFn } from "../run-cmd.js";
+import type { ProviderCredential } from "../../../../lib/provider-credentials.js";
 
 /**
  * Deploy event payload — the data needed to trigger a deployment.
@@ -62,7 +63,7 @@ export interface AdapterContext {
   repoDir: string;
   workDir: string;
   commitHash: string;
-  providerCredentials: { apiKey: string; apiSecret: string };
+  credential: ProviderCredential;
   event: DeployEvent;
   detectedStack: DetectedStack;
   runCmd: RunCmdFn;
@@ -99,7 +100,7 @@ export interface DestroyContext {
   repoName: string;
   appName: string;
   region: string;
-  providerCredentials: { apiKey: string; apiSecret: string };
+  credential: ProviderCredential;
   /** The full tofu_script column value (Pulumi program + optional state after STATE marker) */
   tofuScript: string;
   deployStrategy: string;

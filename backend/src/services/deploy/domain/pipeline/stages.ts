@@ -55,7 +55,7 @@ export async function stageProviderCredentials(ctx: PipelineContext): Promise<vo
     if (scriptRegion) ctx.region = scriptRegion;
   }
 
-  ctx.credentials = { api_key: creds.apiKey, api_secret: creds.apiSecret };
+  ctx.credential = creds.credential;
 }
 
 // ─── Stage 2: Clone Repository ──────────────────────────────────────
@@ -145,7 +145,7 @@ export async function stageBuild(ctx: PipelineContext): Promise<void> {
     branch: ctx.event.branch,
     deployStrategy: ctx.event.deployStrategy,
     buildMethod: ctx.event.buildMethod,
-    providerRow: ctx.credentials,
+    credential: ctx.credential,
     projectEnvVars: ctx.envVars,
     techStack: ctx.event.techStack,
     runCmd: ctx.runCmd,
@@ -172,7 +172,7 @@ export async function stageProvision(ctx: PipelineContext): Promise<void> {
     repoDir: ctx.repoDir,
     workDir: ctx.workDir,
     commitHash: ctx.commitHash,
-    providerCredentials: ctx.credentials,
+    credential: ctx.credential,
     event: ctx.event,
     deployStrategy: ctx.deployStrategy,
     repoConfig: ctx.repoConfig,
@@ -219,10 +219,7 @@ export async function stagePostDeploy(ctx: PipelineContext): Promise<void> {
       techStack: ctx.event.techStack || [],
       services: ctx.event.services || [],
       envVars: ctx.envVars,
-      credentials: {
-        apiKey: ctx.adapterCtx.providerCredentials.apiKey,
-        apiSecret: ctx.adapterCtx.providerCredentials.apiSecret,
-      },
+      credential: ctx.credential,
       instanceId: ctx.provision.outputs.InstanceId || "",
       serverIp: ctx.provision.serverIp || "",
       deployKeyPath: ctx.adapterCtx.state.deployKeyPath || "",
@@ -416,10 +413,7 @@ export async function stageTemplatePostDeploy(ctx: PipelineContext): Promise<voi
         containerName: containerNameFor(ctx.repoName, ctx.provider),
         region: ctx.region,
         provider: ctx.provider,
-        credentials: {
-          apiKey: ctx.credentials.api_key,
-          apiSecret: ctx.credentials.api_secret,
-        },
+        credential: ctx.credential,
         instanceId: ctx.provision.outputs.InstanceId || "",
         serverIp: ctx.provision.serverIp || "",
         deployKeyPath: ctx.adapterCtx.state.deployKeyPath || "",

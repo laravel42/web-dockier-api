@@ -177,7 +177,7 @@ export async function destroyStack(resolved: ResolvedStack): Promise<DestroyResu
     repoName,
     appName: sanitizeEcrRepoName(repoName),
     region: resolved.region || "us-east-1",
-    providerCredentials: { apiKey: creds.apiKey, apiSecret: creds.apiSecret },
+    credential: creds.credential,
     tofuScript: resolved.tofuScript,
     deployStrategy: resolved.deployStrategy,
     // Route teardown logs to the app logger — do not mutate historical records.

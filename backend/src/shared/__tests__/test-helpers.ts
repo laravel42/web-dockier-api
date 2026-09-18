@@ -228,10 +228,12 @@ export function makeProviderRow(overrides: Record<string, unknown> = {}) {
     organization_id: TEST_TENANT_ID,
     provider: "aws",
     label: "Test AWS",
-    api_key: "AKIAXXXXXXXXXXXXXXXX",
-    api_secret: "wJalrXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    credentials: {
+      kind: "aws",
+      accessKeyId: "AKIAXXXXXXXXXXXXXXXX",
+      secretAccessKey: "wJalrXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    },
     region: "us-east-1",
-    app_runner_connection_arn: "",
     created_at: "2025-01-01T00:00:00.000Z",
     ...overrides,
   };

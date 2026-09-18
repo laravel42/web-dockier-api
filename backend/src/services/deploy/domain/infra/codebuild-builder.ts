@@ -32,7 +32,7 @@ export interface CodeBuildOptions {
   repoName: string;
   shortId: string;
   region: string;
-  providerRow: { api_key: string; api_secret: string };
+  awsCredentials: { accessKeyId: string; secretAccessKey: string };
   repoDir: string;
   workDir: string;
   commitHash: string;
@@ -67,8 +67,7 @@ const CODEBUILD_MAX_ATTEMPTS = 60; // 15 minutes
  */
 export async function buildViaCodeBuild(opts: CodeBuildOptions): Promise<CodeBuildResult> {
   const { deploymentId, repoName, repoDir, workDir, commitHash, region, appendLog: logFn } = opts;
-  const accessKeyId = opts.providerRow.api_key || "";
-  const secretAccessKey = opts.providerRow.api_secret || "";
+  const { accessKeyId, secretAccessKey } = opts.awsCredentials;
 
   if (!accessKeyId || !secretAccessKey) {
     throw new Error("AWS credentials not configured on provider.");
