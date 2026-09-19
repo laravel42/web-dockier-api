@@ -54,6 +54,25 @@ function isWrappedCreateResponse(
   );
 }
 
+/**
+ * Serialize a query input object into a URL query string with each top-level
+ * field as its own param (?serverId=abc&foo=bar). Dokploy query endpoints read
+ * params directly, not from a tRPC `?input=<json>` envelope.
+ *
+ * - undefined/null fields are omitted.
+ * - object/array values are JSON-stringified (rare for these endpoints).
+ * - an empty/absent input produces an empty string (no query string).
+ */
+function buildQueryString(input: unknown): string {
+  if (input === undefined || input === null || typeof input !== "object") return "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (value === undefined || value === null) continue;
+    params.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
+  }
+  return params.toString();
+}
+
 function normalizeCreatedProject(
   raw: DokployProject | DokployCreateProjectResponse,
 ): DokployProject {
@@ -106,7 +125,39 @@ export class DokployClient {
   // ─── Servers ───────────────────────────────────────────────────
 
   async createServer(params: CreateServerParams): Promise<DokployServer> {
-    return this.mutation<DokployServer>("server.create", params);
+    // Idempotency: if a server with the same name + ipAddress already exists,
+    // reuse it instead of registering a duplicate. Without this, every retry
+    // of a failed provision run created another Dokploy server (and left the
+    // matching EC2 instance behind).
+    const existing = (await this.listServers()).find(
+      (s) => s.name === params.name && s.ipAddress === params.ipAddress,
+    );
+    if (existing?.serverId) return existing;
+
+    // Dokploy's server.create returns an EMPTY 2xx body — it does not echo the
+    // created server (unlike a typical REST create). Relying on the response
+    // yields an undefined serverId, which then fails server.setup/validate with
+    // a 400. So after creating, resolve the real server from server.all by its
+    // unique name + ipAddress and return that.
+    const created = await this.mutation<DokployServer | undefined>("server.create", params);
+    if (created?.serverId) return created;
+
+    const match = (await this.listServers()).find(
+      (s) => s.name === params.name && s.ipAddress === params.ipAddress,
+    );
+    if (!match?.serverId) {
+      throw new DokployError(
+        `server.create succeeded but the created server could not be resolved from server.all ` +
+        `(name="${params.name}", ip="${params.ipAddress}").`,
+        0,
+        "server.create",
+      );
+    }
+    return match;
+  }
+
+  async listServers(): Promise<DokployServer[]> {
+    return this.query<DokployServer[]>("server.all", {});
   }
 
   async setupServer(serverId: string): Promise<void> {
@@ -202,8 +253,13 @@ export class DokployClient {
   }
 
   private async query<T>(endpoint: string, input: unknown): Promise<T> {
-    const encodedInput = encodeURIComponent(JSON.stringify(input));
-    const url = `${this.baseUrl}/${endpoint}?input=${encodedInput}`;
+    // Dokploy's query endpoints read their parameters as DIRECT query-string
+    // params (e.g. ?serverId=abc), NOT wrapped in a tRPC `?input=<json>`
+    // envelope. Sending `?input={"serverId":...}` makes the handler see
+    // serverId as undefined and reject with a 400. Serialize each top-level
+    // field of `input` as its own query param instead.
+    const qs = buildQueryString(input);
+    const url = qs ? `${this.baseUrl}/${endpoint}?${qs}` : `${this.baseUrl}/${endpoint}`;
     return this.requestRaw<T>("GET", url, undefined, endpoint);
   }
 
@@ -241,7 +297,31 @@ export class DokployClient {
         clearTimeout(timeoutId);
 
         if (response.ok) {
-          const json = await response.json() as { result?: { data?: T } } | T;
+          // Read as text first: several Dokploy mutations (server.setup,
+          // saveBuildType, saveEnvironment, deploy, ...) return a 2xx with an
+          // EMPTY body. Calling response.json() on an empty body throws
+          // "Unexpected end of JSON input" — which, inside this retry loop,
+          // turned a server-side SUCCESS into a 4-attempt failure. Treat an
+          // empty/whitespace body as a successful void result.
+          const text = await response.text();
+          if (text.trim() === "") {
+            return undefined as T;
+          }
+
+          let json: { result?: { data?: T } } | T;
+          try {
+            json = JSON.parse(text) as { result?: { data?: T } } | T;
+          } catch {
+            // A malformed body on a 2xx won't fix itself on retry. Use a 4xx
+            // status code so the catch below classifies it as non-retryable
+            // and throws immediately instead of looping.
+            throw new DokployError(
+              `Dokploy API returned a non-JSON body (HTTP ${response.status}): ${text.slice(0, 200)}`,
+              422,
+              endpoint || url,
+            );
+          }
+
           // tRPC wraps results in { result: { data: ... } }
           if (json && typeof json === "object" && "result" in json && json.result && typeof json.result === "object" && "data" in json.result) {
             return json.result.data as T;

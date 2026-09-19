@@ -22,6 +22,9 @@ import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey, t
 import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
 import { provisionGceInstance } from "../provisioning/gcp-gce.js";
 import { waitForSsh } from "../provisioning/wait-for-ssh.js";
+import { sleep } from "../../../../../shared/utils/time.js";
+import { getErrMsg } from "../../../../../shared/utils/error-message.js";
+import type { ServerValidation } from "../types.js";
 
 export interface ProvisionServerResult {
   dokployServerId: string;
@@ -254,6 +257,46 @@ async function getDokployPublicKey(client: DokployClient, sshKeyId: string): Pro
 }
 
 /**
+ * Run Dokploy `server.setup` + `server.validate`, retrying while the box is
+ * not yet SSH-ready as root.
+ *
+ * A freshly launched Ubuntu VPS enables root SSH via cloud-init on first boot,
+ * which finishes a little AFTER port 22 starts accepting connections. If
+ * Dokploy connects in that window it hits the "Please login as the user
+ * ubuntu" banner, and server.validate returns "Failed to parse output: ...
+ * Please log ...". That is transient — retry setup + validate with a delay
+ * until cloud-init has enabled root login (or we exhaust attempts).
+ */
+async function setupAndValidateWithRetry(
+  client: DokployClient,
+  serverId: string,
+  log: (line: string) => Promise<void>,
+  opts: { attempts?: number; delayMs?: number } = {},
+): Promise<ServerValidation> {
+  const attempts = opts.attempts ?? 6;
+  const delayMs = opts.delayMs ?? 15_000;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await client.setupServer(serverId);
+      return await client.validateServer(serverId);
+    } catch (err) {
+      lastErr = err;
+      const msg = getErrMsg(err);
+      // Only retry the transient "server not SSH-ready yet" signal; anything
+      // else (bad serverId, auth, etc.) should fail fast.
+      const transient = /please log|failed to parse output|ECONNREFUSED|timed out|connection/i.test(msg);
+      if (!transient || attempt === attempts) throw err;
+      await log(`[stage:provision-server] Server not SSH-ready yet (attempt ${attempt}/${attempts}); waiting for cloud-init to enable root login...`);
+      await sleep(delayMs);
+    }
+  }
+  // Unreachable, but satisfies the type checker.
+  throw lastErr instanceof Error ? lastErr : new Error("Server setup failed");
+}
+
+/**
  * Register an already-provisioned VPS in Dokploy and run setup.
  * Used when VPS is provisioned externally or via EC2/GCE API.
  */
@@ -285,11 +328,23 @@ export async function registerServerInDokploy(params: {
     serverType: "deploy",
   });
 
-  await log("[stage:provision-server] Running Dokploy server setup (Docker, Traefik, buildpacks)...");
-  await client.setupServer(server.serverId);
+  // Guard: createServer must resolve a real serverId. Dokploy's server.create
+  // returns an empty body, so the id is resolved via server.all — if that
+  // resolution ever comes back without an id, fail here with a clear message
+  // rather than passing `undefined` into server.setup/validate (which surfaces
+  // as an opaque "expected string, received undefined" 400).
+  if (!server?.serverId) {
+    await updateServerStatus(projectId, "error");
+    throw new Error(
+      `Dokploy server registration for ${serverIp} returned no serverId ` +
+      `(create response was empty and the server could not be resolved from server.all).`,
+    );
+  }
+
+  await log(`[stage:provision-server] Registered as Dokploy server ${server.serverId}. Running setup (Docker, Traefik, buildpacks)...`);
 
   await log("[stage:provision-server] Validating server readiness...");
-  const validation = await client.validateServer(server.serverId);
+  const validation = await setupAndValidateWithRetry(client, server.serverId, log);
 
   if (!validation.docker.installed) {
     await updateServerStatus(projectId, "error");

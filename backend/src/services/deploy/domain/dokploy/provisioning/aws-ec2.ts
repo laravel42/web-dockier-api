@@ -19,7 +19,10 @@ import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 
 const DEFAULT_INSTANCE_TYPE = "t3.small";
 const SG_NAME = "dockier-dokploy-sg";
-const SG_DESCRIPTION = "Dockier/Dokploy — SSH + HTTP/HTTPS ingress";
+// AWS EC2 requires GroupDescription to be ASCII only — no em dashes or other
+// non-ASCII characters (it rejects them with "Character sets beyond ASCII are
+// not supported"). Keep this to plain ASCII.
+const SG_DESCRIPTION = "Dockier/Dokploy - SSH + HTTP/HTTPS ingress";
 // Canonical's AWS account ID — owner of official Ubuntu AMIs.
 const CANONICAL_OWNER_ID = "099720109477";
 const UBUNTU_AMI_NAME_PATTERN = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*";
@@ -55,6 +58,35 @@ export interface ProvisionEc2Params {
 export interface ProvisionEc2Result {
   instanceId: string;
   publicIp: string;
+}
+
+/**
+ * cloud-init user-data that enables root SSH with the provisioning key.
+ *
+ * Ubuntu cloud images disable direct root SSH — connecting as root returns a
+ * banner ("Please login as the user \"ubuntu\" ..."). Dokploy registers the
+ * server as `root` and runs its setup over SSH as root (Docker, Swarm,
+ * Traefik all need root), so root login must actually work. Without this, the
+ * SSH banner is returned in place of command output and Dokploy's
+ * `server.validate` fails with "Failed to parse output: ... Please log ...".
+ *
+ * This installs the same public key into root's authorized_keys (stripping any
+ * forced-command prefix Ubuntu injects) and enables PermitRootLogin.
+ */
+function rootSshUserData(sshPublicKey: string): string {
+  const script = [
+    "#!/bin/bash",
+    "set -e",
+    "mkdir -p /root/.ssh",
+    "chmod 700 /root/.ssh",
+    // Write the raw key (no forced-command wrapper) so root login is unrestricted.
+    `echo ${JSON.stringify(sshPublicKey.trim())} > /root/.ssh/authorized_keys`,
+    "chmod 600 /root/.ssh/authorized_keys",
+    // Ensure sshd allows root login with keys.
+    "sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config",
+    "systemctl restart ssh || systemctl restart sshd || true",
+  ].join("\n");
+  return Buffer.from(script).toString("base64");
 }
 
 /**
@@ -124,6 +156,9 @@ export async function provisionEc2Instance(params: ProvisionEc2Params): Promise<
       MaxCount: 1,
       KeyName: keyPairName,
       SecurityGroupIds: [securityGroupId],
+      // Enable root SSH on first boot so Dokploy (which connects as root) can
+      // run its server setup — Ubuntu blocks root SSH by default.
+      UserData: rootSshUserData(sshPublicKey),
       BlockDeviceMappings: [{
         DeviceName: "/dev/sda1",
         Ebs: { VolumeSize: 30, VolumeType: "gp3", DeleteOnTermination: true },

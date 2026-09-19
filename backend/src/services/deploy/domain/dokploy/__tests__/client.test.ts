@@ -107,7 +107,7 @@ describe("DokployClient", () => {
       );
     });
 
-    it("sends queries as GET with URL-encoded input param", async () => {
+    it("sends queries as GET with parameters as direct query-string params", async () => {
       fetchMock.mockResolvedValue(
         new Response(JSON.stringify({ result: { data: { projectId: "p1" } } }), { status: 200 }),
       );
@@ -115,8 +115,10 @@ describe("DokployClient", () => {
       await client.getProject("p1");
 
       const calledUrl = fetchMock.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("project.one?input=");
-      expect(calledUrl).toContain(encodeURIComponent(JSON.stringify({ projectId: "p1" })));
+      // Dokploy reads query params directly (?projectId=p1), NOT via a tRPC
+      // ?input=<json> envelope.
+      expect(calledUrl).toContain("project.one?projectId=p1");
+      expect(calledUrl).not.toContain("input=");
 
       const opts = fetchMock.mock.calls[0][1] as RequestInit;
       expect(opts.method).toBe("GET");
@@ -331,8 +333,17 @@ describe("DokployClient", () => {
       );
     });
 
-    it("createServer sends correct mutation", async () => {
-      await client.createServer({
+    it("createServer creates then resolves the server id from server.all (empty create body)", async () => {
+      const createdServer = { serverId: "srv-9", name: "prod-1", ipAddress: "10.0.0.1" };
+      fetchMock
+        // 1. server.all — no existing match yet (idempotency check)
+        .mockResolvedValueOnce(new Response(JSON.stringify({ result: { data: [] } }), { status: 200 }))
+        // 2. server.create — Dokploy returns an EMPTY 2xx body
+        .mockResolvedValueOnce(new Response("", { status: 200 }))
+        // 3. server.all — now the created server is present, resolve its id
+        .mockResolvedValueOnce(new Response(JSON.stringify({ result: { data: [createdServer] } }), { status: 200 }));
+
+      const result = await client.createServer({
         name: "prod-1",
         ipAddress: "10.0.0.1",
         port: 22,
@@ -341,10 +352,33 @@ describe("DokployClient", () => {
         serverType: "deploy",
       });
 
+      // Resolved the real serverId despite the empty create response.
+      expect(result.serverId).toBe("srv-9");
       expect(fetchMock).toHaveBeenCalledWith(
         "https://dokploy.test/api/server.create",
         expect.objectContaining({ method: "POST" }),
       );
+    });
+
+    it("createServer reuses an existing server with the same name + ip (idempotent)", async () => {
+      const existing = { serverId: "srv-existing", name: "prod-1", ipAddress: "10.0.0.1" };
+      // server.all returns a match → no server.create call.
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: { data: [existing] } }), { status: 200 }),
+      );
+
+      const result = await client.createServer({
+        name: "prod-1",
+        ipAddress: "10.0.0.1",
+        port: 22,
+        username: "root",
+        sshKeyId: "key-1",
+        serverType: "deploy",
+      });
+
+      expect(result.serverId).toBe("srv-existing");
+      const createCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("server.create"));
+      expect(createCalls).toHaveLength(0);
     });
 
     it("listProjects sends correct query", async () => {
@@ -356,28 +390,38 @@ describe("DokployClient", () => {
 
       expect(result).toEqual([{ projectId: "p1" }]);
       const calledUrl = fetchMock.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("project.all?input=");
+      // Empty input → no query string at all (not a ?input= envelope).
+      expect(calledUrl).toContain("project.all");
+      expect(calledUrl).not.toContain("input=");
     });
   });
 
   // ─── Edge Cases ──────────────────────────────────────────────────
 
   describe("edge cases", () => {
-    it("handles empty response body gracefully", async () => {
+    it("treats an empty 2xx body as a successful void result", async () => {
+      // Several Dokploy mutations (server.setup, saveBuildType, deploy, ...)
+      // return 2xx with an empty body. That must be a success, not a parse
+      // error that gets retried into a failure.
       fetchMock.mockResolvedValue(
         new Response("", { status: 200, headers: { "Content-Type": "application/json" } }),
       );
 
-      // Empty body will cause JSON.parse to fail — should not crash unhandled
-      await expect(client.createProject({ name: "test" })).rejects.toThrow();
+      const result = await client.saveBuildType({ applicationId: "a1", buildType: "dockerfile" });
+
+      expect(result).toBeUndefined();
+      // Exactly one call — no pointless retries on a successful empty response.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it("handles malformed JSON in response body", async () => {
+    it("throws a clear, non-retryable error on a malformed JSON body", async () => {
       fetchMock.mockResolvedValue(
         new Response("{not valid json", { status: 200 }),
       );
 
-      await expect(client.getProject("p1")).rejects.toThrow();
+      await expect(client.getProject("p1")).rejects.toThrow(/non-JSON body/);
+      // Malformed body on a 2xx won't fix itself — must not retry.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it("treats 429 Too Many Requests as retryable (server-side)", async () => {
