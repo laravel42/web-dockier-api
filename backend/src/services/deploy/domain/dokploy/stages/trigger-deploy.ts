@@ -26,21 +26,30 @@ export async function stageTriggerDeploy(params: {
   pollIntervalMs?: number;
   timeoutMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, pollIntervalMs = 5000, timeoutMs = 600_000 } = params;
+  const { applicationId, client, log, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
+
+  // Capture the set of existing deployment ids BEFORE triggering, so we can
+  // identify the NEW deployment this trigger creates and follow only its
+  // status. Polling the application's overall `applicationStatus` is unreliable
+  // here: it can still hold a stale "error" from a previous attempt while the
+  // new build is running, which made us report a false failure mid-build.
+  const priorIds = new Set((await client.listDeployments(applicationId)).map((d) => d.deploymentId));
 
   await log("[stage:deploy] Triggering deployment...");
   await client.deploy({ applicationId, title: "Dockier deploy" });
 
-  // Poll until done or error
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
     await sleep(pollIntervalMs);
 
-    const app = await client.getApplication(applicationId);
-    const status = app.applicationStatus;
+    // Find the deployment created by this trigger (newest id not seen before),
+    // falling back to the most recent record if we can't distinguish one yet.
+    const deployments = await client.listDeployments(applicationId);
+    const current = deployments.find((d) => !priorIds.has(d.deploymentId)) ?? deployments[0];
+    const status = current?.status;
 
     if (status === "done") {
-      // Extract app URL (Dokploy generates it from the app name + domain)
+      const app = await client.getApplication(applicationId);
       const appUrl = extractAppUrl(app);
       await log(`[stage:deploy] ✓ Deployment successful! URL: ${appUrl || "(pending domain)"}`);
       return { status: "done", appUrl };
@@ -52,11 +61,13 @@ export async function stageTriggerDeploy(params: {
       return { status: "error", appUrl: "", failureReason };
     }
 
-    // Still running — continue polling
+    // status is "running" (or the record hasn't appeared yet) — keep polling.
   }
 
   // Timeout
-  throw new Error(`Deployment timed out after ${Math.round(timeoutMs / 1000)}s`);
+  throw new Error(
+    `Deployment timed out after ${Math.round(timeoutMs / 1000)}s while the build was still running.`,
+  );
 }
 
 /**

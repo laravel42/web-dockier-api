@@ -131,7 +131,7 @@ describe("executeDokployPipeline", () => {
     expect(mockDeployWithRetry).toHaveBeenCalledWith(
       expect.objectContaining({
         applicationId: "app-1",
-        maxAttempts: 3,
+        maxAttempts: 2,
       }),
     );
   });
@@ -156,13 +156,13 @@ describe("executeDokployPipeline", () => {
   });
 
   it("logs the failure message when a stage throws", async () => {
-    mockDeployWithRetry.mockRejectedValueOnce(new Error("Deployment failed after 3 attempts"));
+    mockDeployWithRetry.mockRejectedValueOnce(new Error("Deployment failed after 2 attempts"));
 
     await executeDokployPipeline(basePipelineInput);
 
     const logLines = mockAppendLog.mock.calls.map((c) => c[1] as string);
     const failLine = logLines.find((l) => l.includes("Pipeline failed"));
-    expect(failLine).toContain("Deployment failed after 3 attempts");
+    expect(failLine).toContain("Deployment failed after 2 attempts");
   });
 
   it("skips execution if deployment is already building (idempotency guard)", async () => {

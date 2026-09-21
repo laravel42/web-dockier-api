@@ -99,6 +99,9 @@ const clientMethods = {
   saveEnvironment: vi.fn(async () => undefined),
   deploy: vi.fn(async () => undefined),
   getApplication: vi.fn(async () => ({ applicationStatus: "done", appName: "my-app" })),
+  // Deploy status is tracked via the latest deployment record; default to a
+  // successful one.
+  listDeployments: vi.fn(async () => [{ deploymentId: "d1", status: "done", createdAt: "x" }]),
   triggerAIFix: vi.fn(async () => ({ applied: true, summary: "bumped node version" })),
 };
 vi.mock("../client.js", () => ({
@@ -143,6 +146,7 @@ beforeEach(() => {
   application = null;
   mockGetDeploymentCurrentStatus.mockResolvedValue("pending");
   clientMethods.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app" });
+  clientMethods.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
 });
 
 afterEach(() => {
@@ -190,14 +194,16 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(dbUpdateEq).toHaveBeenCalled();
   });
 
-  it("recovers via Dokploy AI: first deploy errors, retry succeeds", async () => {
-    clientMethods.getApplication
-      .mockResolvedValueOnce({ applicationStatus: "error", appName: "my-app" })   // attempt 1 poll
-      .mockResolvedValueOnce({ applicationStatus: "done", appName: "my-app" });   // attempt 2 poll
+  it("recovers via automated diagnosis: first deploy errors, retry succeeds", async () => {
+    clientMethods.listDeployments
+      .mockResolvedValueOnce([]) // attempt 1 pre-trigger snapshot
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }])   // attempt 1 poll → error
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }])   // attempt 2 snapshot
+      .mockResolvedValue([{ deploymentId: "d2", status: "done", createdAt: "y" }]);       // attempt 2 poll → done
 
     await executeDokployPipeline(input());
 
-    // Deploy attempted twice, AI invoked once between attempts.
+    // Deploy attempted twice, automated recovery invoked once between attempts.
     expect(clientMethods.deploy).toHaveBeenCalledTimes(2);
     expect(clientMethods.triggerAIFix).toHaveBeenCalledTimes(1);
     expect(statusCalls).toContain("success");
@@ -206,19 +212,20 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(aiLog).toContain("bumped node version");
   });
 
-  it("fails after 3 attempts when deploy never succeeds", async () => {
-    clientMethods.getApplication.mockResolvedValue({ applicationStatus: "error", appName: "my-app" });
+  it("fails after the configured attempts when deploy never succeeds", async () => {
+    clientMethods.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "error", createdAt: "x" }]);
 
     await executeDokployPipeline(input());
 
-    expect(clientMethods.deploy).toHaveBeenCalledTimes(3);
-    // AI recovery attempted between the failed attempts (not after the last).
-    expect(clientMethods.triggerAIFix).toHaveBeenCalledTimes(2);
+    // maxAttempts is 2 for the Dokploy pipeline.
+    expect(clientMethods.deploy).toHaveBeenCalledTimes(2);
+    // Automated recovery attempted only between attempts (not after the last).
+    expect(clientMethods.triggerAIFix).toHaveBeenCalledTimes(1);
     expect(statusCalls).toContain("failed");
     expect(statusCalls).not.toContain("success");
 
     const failLog = logLines.find((l) => l.includes("Pipeline failed"));
-    expect(failLog).toContain("failed after 3 attempts");
+    expect(failLog).toContain("failed after 2 attempts");
   });
 
   it("chooses dockerfile build type when the repo has a Dockerfile", async () => {

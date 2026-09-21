@@ -17,7 +17,11 @@ import { getEc2 } from "../../../../../lib/aws-sdk.js";
 import { pollUntil } from "../../infra/poll-until.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 
-const DEFAULT_INSTANCE_TYPE = "t3.small";
+// t3.medium (4 GB) is the floor for source builds. t3.small (2 GB) reliably
+// OOM-kills memory-hungry builds (e.g. Vite/webpack), which surface as
+// "exit code 137 / cannot allocate memory". Swap is also added at boot (see
+// user-data) as a safety net for spiky builds.
+const DEFAULT_INSTANCE_TYPE = "t3.medium";
 const SG_NAME = "dockier-dokploy-sg";
 // AWS EC2 requires GroupDescription to be ASCII only — no em dashes or other
 // non-ASCII characters (it rejects them with "Character sets beyond ASCII are
@@ -60,8 +64,12 @@ export interface ProvisionEc2Result {
   publicIp: string;
 }
 
+/** Swap file size added at boot to absorb memory-spiky builds. */
+const SWAP_SIZE = "4G";
+
 /**
- * cloud-init user-data that enables root SSH with the provisioning key.
+ * cloud-init user-data that (1) enables root SSH with the provisioning key and
+ * (2) adds a swap file.
  *
  * Ubuntu cloud images disable direct root SSH — connecting as root returns a
  * banner ("Please login as the user \"ubuntu\" ..."). Dokploy registers the
@@ -70,8 +78,10 @@ export interface ProvisionEc2Result {
  * SSH banner is returned in place of command output and Dokploy's
  * `server.validate` fails with "Failed to parse output: ... Please log ...".
  *
- * This installs the same public key into root's authorized_keys (stripping any
- * forced-command prefix Ubuntu injects) and enables PermitRootLogin.
+ * The swap file is a safety net for source builds: Vite/webpack/etc. are
+ * memory-spiky and OOM-kill on small instances (exit code 137, "cannot
+ * allocate memory"). Swap lets a spike spill to disk instead of killing the
+ * build. It complements the larger default instance type, not replaces it.
  */
 function rootSshUserData(sshPublicKey: string): string {
   const script = [
@@ -85,6 +95,8 @@ function rootSshUserData(sshPublicKey: string): string {
     // Ensure sshd allows root login with keys.
     "sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config",
     "systemctl restart ssh || systemctl restart sshd || true",
+    // Add a swap file (idempotent) so memory-spiky builds don't get OOM-killed.
+    `if [ ! -f /swapfile ]; then fallocate -l ${SWAP_SIZE} /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=4096; chmod 600 /swapfile; mkswap /swapfile; swapon /swapfile; echo '/swapfile none swap sw 0 0' >> /etc/fstab; fi`,
   ].join("\n");
   return Buffer.from(script).toString("base64");
 }

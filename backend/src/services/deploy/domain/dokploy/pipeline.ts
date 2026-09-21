@@ -26,7 +26,11 @@ import { stageConfigureApp } from "./stages/configure-app.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
 import { revealEnv } from "../../../projects/domain/env.js";
 
-const PIPELINE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+// Real builds (dependency install + framework build + image build) commonly
+// run 8-12 minutes, on top of first-time server provisioning (~3-5 min). Keep
+// a generous ceiling so a legitimately slow build isn't cut off; the deploy
+// stage has its own per-attempt timeout for the build itself.
+const PIPELINE_TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes
 
 /**
  * Execute the full Dokploy deployment pipeline.
@@ -94,11 +98,14 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     checkTimeout();
 
     // ─── Stage 5: Deploy with Retry ──────────────────────────────
+    // A full build takes many minutes, so cap retries at 2: one retry covers a
+    // transient failure (e.g. a flaky dependency download), while avoiding
+    // burning 30+ minutes re-running a deterministic build failure three times.
     const deployResult = await stageDeployWithRetry({
       applicationId: dokployApplicationId,
       client,
       log,
-      maxAttempts: 3,
+      maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
     });
 

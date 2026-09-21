@@ -161,18 +161,15 @@ function determineBuildType(analysis: RepoAnalysisInfo): DokployBuildType {
   // Priority 2: Static site
   if (analysis.isStaticSite) return "static";
 
-  // Priority 3: Railpack-compatible languages.
+  // Priority 3: Everything else → Railpack.
   //
-  // Railpack is the newer successor to Nixpacks and tracks current runtime
-  // versions, so it avoids Nixpacks' stale-nixpkgs failures (e.g. Nixpacks
-  // erroring with "undefined variable 'nodejs_24'" when a repo asks for a Node
-  // version newer than its pinned package set). PHP is included because
-  // Railpack supports it and modern PHP/Laravel apps (which pull in a Node
-  // frontend build) frequently trip that Nixpacks limitation.
-  const railpackLanguages = ["javascript", "typescript", "php", "ruby", "go", "rust", "python", "elixir"];
-  const lang = analysis.primaryLanguage?.toLowerCase() ?? "";
-  if (railpackLanguages.some((l) => lang.includes(l))) return "railpack";
-
-  // Default: Nixpacks (zero-config, widest compatibility)
-  return "nixpacks";
+  // Railpack is the newer successor to Nixpacks and is our standard builder for
+  // source-based deploys. It tracks current runtime versions (so it avoids
+  // Nixpacks failures like "undefined variable 'nodejs_24'"), detects start
+  // commands more reliably (Nixpacks fails with "No start command could be
+  // found" on apps it can't infer), and supports Node, PHP, Python, Go, and
+  // more. We default to it rather than gating on a language allow-list, since
+  // that allow-list let unrecognized-language repos silently fall through to
+  // Nixpacks and fail.
+  return "railpack";
 }

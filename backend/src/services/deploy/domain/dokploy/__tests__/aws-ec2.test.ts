@@ -164,7 +164,7 @@ describe("provisionEc2Instance — happy path", () => {
 
     await provisionEc2Instance(baseParams({ instanceType: undefined }));
 
-    expect(inputFor("RunInstances").InstanceType).toBe("t3.small");
+    expect(inputFor("RunInstances").InstanceType).toBe("t3.medium");
   });
 
   it("imports the SSH key with the provided public key material", async () => {

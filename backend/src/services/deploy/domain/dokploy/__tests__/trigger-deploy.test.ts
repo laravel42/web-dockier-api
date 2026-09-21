@@ -40,11 +40,13 @@ describe("stageTriggerDeploy", () => {
     vi.clearAllMocks();
   });
 
-  it("returns success when application status becomes 'done'", async () => {
-    mockClient.getApplication.mockResolvedValue({
-      applicationStatus: "done",
-      appName: "my-app",
-    });
+  it("returns success when the deployment status becomes 'done'", async () => {
+    // First call (pre-trigger snapshot) has no deployments; after trigger a new
+    // one appears as "done".
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app" });
 
     const result = await stageTriggerDeploy({
       applicationId: "app-1",
@@ -58,11 +60,10 @@ describe("stageTriggerDeploy", () => {
     expect(mockClient.deploy).toHaveBeenCalledWith({ applicationId: "app-1", title: "Dockier deploy" });
   });
 
-  it("returns error when application status becomes 'error'", async () => {
-    mockClient.getApplication.mockResolvedValue({
-      applicationStatus: "error",
-      appName: "my-app",
-    });
+  it("returns error when the deployment status becomes 'error'", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "error", createdAt: "x", title: "bad commit" }]);
 
     const result = await stageTriggerDeploy({
       applicationId: "app-1",
@@ -75,11 +76,13 @@ describe("stageTriggerDeploy", () => {
     expect(result.appUrl).toBe("");
   });
 
-  it("polls repeatedly until status resolves", async () => {
-    mockClient.getApplication
-      .mockResolvedValueOnce({ applicationStatus: "running", appName: "my-app" })
-      .mockResolvedValueOnce({ applicationStatus: "running", appName: "my-app" })
-      .mockResolvedValueOnce({ applicationStatus: "done", appName: "my-app" });
+  it("polls repeatedly until the deployment status resolves", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([]) // pre-trigger snapshot
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "running", createdAt: "x" }])
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "running", createdAt: "x" }])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app" });
 
     const result = await stageTriggerDeploy({
       applicationId: "app-1",
@@ -89,7 +92,8 @@ describe("stageTriggerDeploy", () => {
     });
 
     expect(result.status).toBe("done");
-    expect(mockClient.getApplication).toHaveBeenCalledTimes(3);
+    // 1 pre-trigger snapshot + 3 polls
+    expect(mockClient.listDeployments).toHaveBeenCalledTimes(4);
   });
 
   it("throws on timeout", async () => {
@@ -112,7 +116,8 @@ describe("stageTriggerDeploy", () => {
       return now;
     });
 
-    mockClient.getApplication.mockResolvedValue({ applicationStatus: "running", appName: "my-app" });
+    // Deployment stays "running" forever → the poll loop hits the timeout.
+    mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "running", createdAt: "x" }]);
 
     await expect(
       stageTriggerDeploy({
@@ -126,6 +131,9 @@ describe("stageTriggerDeploy", () => {
   });
 
   it("logs triggering message", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
     mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "test" });
 
     await stageTriggerDeploy({
@@ -135,11 +143,10 @@ describe("stageTriggerDeploy", () => {
       pollIntervalMs: 100,
     });
 
-    expect(logLines[0]).toContain("[stage:deploy] Triggering deployment");
+    expect(logLines.some((l) => l.includes("[stage:deploy] Triggering deployment"))).toBe(true);
   });
 
   it("on failure, surfaces a user-facing reason pointing at the repository", async () => {
-    mockClient.getApplication.mockResolvedValue({ applicationStatus: "error", appName: "my-app" });
     mockClient.listDeployments.mockResolvedValue([
       { deploymentId: "d1", status: "error", title: "Fix login bug\n\nmore detail", errorMessage: null, createdAt: "x" },
     ]);
@@ -165,6 +172,7 @@ describe("stageDeployWithRetry", () => {
   let mockClient: {
     deploy: ReturnType<typeof vi.fn>;
     getApplication: ReturnType<typeof vi.fn>;
+    listDeployments: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   let mockLog: (line: string) => Promise<void>;
@@ -178,7 +186,8 @@ describe("stageDeployWithRetry", () => {
 
     mockClient = {
       deploy: vi.fn().mockResolvedValue(undefined),
-      getApplication: vi.fn(),
+      getApplication: vi.fn().mockResolvedValue({ applicationStatus: "done", appName: "my-app" }),
+      listDeployments: vi.fn().mockResolvedValue([]),
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };
@@ -191,7 +200,7 @@ describe("stageDeployWithRetry", () => {
   });
 
   it("returns on first attempt if deploy succeeds", async () => {
-    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app" });
+    mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
 
     const result = await stageDeployWithRetry({
       applicationId: "app-1",
@@ -207,9 +216,13 @@ describe("stageDeployWithRetry", () => {
   });
 
   it("invokes AI recovery on failure and retries", async () => {
-    mockClient.getApplication
-      .mockResolvedValueOnce({ applicationStatus: "error", appName: "my-app" }) // attempt 1 fails
-      .mockResolvedValueOnce({ applicationStatus: "done", appName: "my-app" }); // attempt 2 succeeds
+    // Attempt 1 → error, attempt 2 → done. Each attempt snapshots (pre-trigger)
+    // then polls; return error for the first resolved poll, done thereafter.
+    mockClient.listDeployments
+      .mockResolvedValueOnce([]) // attempt 1 pre-trigger snapshot
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 1 poll → error
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 2 pre-trigger snapshot
+      .mockResolvedValue([{ deploymentId: "d2", status: "done", createdAt: "y" }]); // attempt 2 poll → done
 
     mockInvokeDokployAI.mockResolvedValue({ fixed: true, description: "Fixed missing env" });
 
@@ -228,7 +241,7 @@ describe("stageDeployWithRetry", () => {
   });
 
   it("throws after max attempts exhausted", async () => {
-    mockClient.getApplication.mockResolvedValue({ applicationStatus: "error", appName: "my-app" });
+    mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "error", createdAt: "x" }]);
     mockInvokeDokployAI.mockResolvedValue({ fixed: false, description: "No fix" });
 
     await expect(
@@ -247,7 +260,7 @@ describe("stageDeployWithRetry", () => {
   });
 
   it("does not invoke AI after the last attempt", async () => {
-    mockClient.getApplication.mockResolvedValue({ applicationStatus: "error", appName: "my-app" });
+    mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "error", createdAt: "x" }]);
 
     await expect(
       stageDeployWithRetry({
@@ -263,9 +276,11 @@ describe("stageDeployWithRetry", () => {
   });
 
   it("logs attempt count for each try", async () => {
-    mockClient.getApplication
-      .mockResolvedValueOnce({ applicationStatus: "error", appName: "my-app" })
-      .mockResolvedValueOnce({ applicationStatus: "done", appName: "my-app" });
+    mockClient.listDeployments
+      .mockResolvedValueOnce([]) // attempt 1 snapshot
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 1 → error
+      .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 2 snapshot
+      .mockResolvedValue([{ deploymentId: "d2", status: "done", createdAt: "y" }]); // attempt 2 → done
 
     mockInvokeDokployAI.mockResolvedValue({ fixed: false, description: "" });
 
