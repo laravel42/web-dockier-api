@@ -249,23 +249,29 @@ async function getDokployPublicKey(client: DokployClient, sshKeyId: string): Pro
   const match = keys.find((k) => k.sshKeyId === sshKeyId);
   if (!match?.publicKey) {
     throw new Error(
-      `SSH key "${sshKeyId}" not found in Dokploy (or has no public key). ` +
-      "Check DOKPLOY_SSH_KEY_ID matches a key under Dokploy → Settings → SSH Keys.",
+      `The configured deployment SSH key "${sshKeyId}" could not be found (or has no public key). ` +
+      "Contact your Dockier administrator to verify the deployment SSH key configuration.",
     );
   }
   return match.publicKey.trim();
 }
 
 /**
- * Run Dokploy `server.setup` + `server.validate`, retrying while the box is
- * not yet SSH-ready as root.
+ * Run Dokploy `server.setup` + `server.validate`, retrying until the server is
+ * fully provisioned (Docker installed) or attempts are exhausted.
  *
- * A freshly launched Ubuntu VPS enables root SSH via cloud-init on first boot,
- * which finishes a little AFTER port 22 starts accepting connections. If
- * Dokploy connects in that window it hits the "Please login as the user
- * ubuntu" banner, and server.validate returns "Failed to parse output: ...
- * Please log ...". That is transient — retry setup + validate with a delay
- * until cloud-init has enabled root login (or we exhaust attempts).
+ * Two transient conditions are tolerated on a freshly launched VPS:
+ *
+ *  1. Not SSH-ready as root yet — Ubuntu enables root SSH via cloud-init on
+ *     first boot, finishing slightly AFTER port 22 opens. In that window
+ *     Dokploy hits the "Please login as the user ubuntu" banner and validate
+ *     returns "Failed to parse output: ... Please log ...".
+ *
+ *  2. Setup still running — `server.setup` installs Docker/Swarm/Traefik over
+ *     SSH, which takes a couple of minutes. validate returns a well-formed
+ *     response with `docker.enabled: false` until it completes.
+ *
+ * Both are retried with a delay. We only return once Docker reports enabled.
  */
 async function setupAndValidateWithRetry(
   client: DokployClient,
@@ -273,26 +279,38 @@ async function setupAndValidateWithRetry(
   log: (line: string) => Promise<void>,
   opts: { attempts?: number; delayMs?: number } = {},
 ): Promise<ServerValidation> {
-  const attempts = opts.attempts ?? 6;
-  const delayMs = opts.delayMs ?? 15_000;
+  const attempts = opts.attempts ?? 10;
+  const delayMs = opts.delayMs ?? 20_000;
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       await client.setupServer(serverId);
-      return await client.validateServer(serverId);
+      const validation = await client.validateServer(serverId);
+
+      if (validation.docker?.enabled) {
+        return validation;
+      }
+
+      // Setup accepted but Docker not up yet — keep waiting.
+      lastErr = new Error("Docker not installed yet");
+      if (attempt < attempts) {
+        await log(`[stage:provision-server] Docker not ready yet (attempt ${attempt}/${attempts}); waiting for server setup to finish...`);
+        await sleep(delayMs);
+        continue;
+      }
+      throw new Error("Server setup failed: Docker was not installed within the expected time");
     } catch (err) {
       lastErr = err;
       const msg = getErrMsg(err);
-      // Only retry the transient "server not SSH-ready yet" signal; anything
-      // else (bad serverId, auth, etc.) should fail fast.
-      const transient = /please log|failed to parse output|ECONNREFUSED|timed out|connection/i.test(msg);
+      // Retry the transient "not SSH-ready" / connection signals; fail fast on
+      // anything structural (bad serverId, auth, etc.).
+      const transient = /please log|failed to parse output|docker not installed yet|ECONNREFUSED|timed out|connection/i.test(msg);
       if (!transient || attempt === attempts) throw err;
-      await log(`[stage:provision-server] Server not SSH-ready yet (attempt ${attempt}/${attempts}); waiting for cloud-init to enable root login...`);
+      await log(`[stage:provision-server] Server not ready yet (attempt ${attempt}/${attempts}); retrying...`);
       await sleep(delayMs);
     }
   }
-  // Unreachable, but satisfies the type checker.
   throw lastErr instanceof Error ? lastErr : new Error("Server setup failed");
 }
 
@@ -315,7 +333,7 @@ export async function registerServerInDokploy(params: {
     throw new Error("DOKPLOY_SSH_KEY_ID is required to register remote servers");
   }
 
-  await log(`[stage:provision-server] Registering server ${serverIp} in Dokploy...`);
+  await log(`[stage:provision-server] Registering server ${serverIp}...`);
 
   // Register in Dokploy
   const server = await client.createServer({
@@ -341,19 +359,16 @@ export async function registerServerInDokploy(params: {
     );
   }
 
-  await log(`[stage:provision-server] Registered as Dokploy server ${server.serverId}. Running setup (Docker, Traefik, buildpacks)...`);
+  await log(`[stage:provision-server] Server registered (${server.serverId}). Running setup (Docker, Traefik, buildpacks)...`);
 
   await log("[stage:provision-server] Validating server readiness...");
+  // Retries until Docker is enabled (or attempts exhausted), so on return
+  // docker.enabled is guaranteed true.
   const validation = await setupAndValidateWithRetry(client, server.serverId, log);
 
-  if (!validation.docker.installed) {
+  if (!validation.isDokployNetworkInstalled) {
     await updateServerStatus(projectId, "error");
-    throw new Error("Server setup failed: Docker not installed after setup");
-  }
-
-  if (!validation.isDokployNetworkReady) {
-    await updateServerStatus(projectId, "error");
-    throw new Error("Server setup failed: Dokploy network not ready");
+    throw new Error("Server setup failed: Dokploy network not installed after setup");
   }
 
   // Store mapping

@@ -14,6 +14,7 @@ describe("stageTriggerDeploy", () => {
   let mockClient: {
     deploy: ReturnType<typeof vi.fn>;
     getApplication: ReturnType<typeof vi.fn>;
+    listDeployments: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   let mockLog: (line: string) => Promise<void>;
@@ -28,6 +29,7 @@ describe("stageTriggerDeploy", () => {
     mockClient = {
       deploy: vi.fn().mockResolvedValue(undefined),
       getApplication: vi.fn(),
+      listDeployments: vi.fn().mockResolvedValue([]),
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };
@@ -135,6 +137,28 @@ describe("stageTriggerDeploy", () => {
 
     expect(logLines[0]).toContain("[stage:deploy] Triggering deployment");
   });
+
+  it("on failure, surfaces a user-facing reason pointing at the repository", async () => {
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "error", appName: "my-app" });
+    mockClient.listDeployments.mockResolvedValue([
+      { deploymentId: "d1", status: "error", title: "Fix login bug\n\nmore detail", errorMessage: null, createdAt: "x" },
+    ]);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+    });
+
+    expect(result.status).toBe("error");
+    // Reason names the failing commit and points to the repo as the likely cause.
+    expect(result.failureReason).toContain("Fix login bug");
+    expect(result.failureReason).toMatch(/repository/i);
+    // The deploy log tells the user the build failed and where the cause lies.
+    expect(logLines.some((l) => /server build failed|building your application/i.test(l))).toBe(true);
+    expect(logLines.some((l) => /repository/i.test(l))).toBe(true);
+  });
 });
 
 describe("stageDeployWithRetry", () => {
@@ -200,7 +224,7 @@ describe("stageDeployWithRetry", () => {
     expect(result.status).toBe("done");
     expect(mockClient.deploy).toHaveBeenCalledTimes(2);
     expect(mockInvokeDokployAI).toHaveBeenCalledTimes(1);
-    expect(logLines.some((l) => l.includes("Dokploy AI applied fix"))).toBe(true);
+    expect(logLines.some((l) => l.includes("Applied automatic fix"))).toBe(true);
   });
 
   it("throws after max attempts exhausted", async () => {

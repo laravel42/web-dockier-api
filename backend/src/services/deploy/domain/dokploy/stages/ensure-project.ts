@@ -85,7 +85,7 @@ export async function stageEnsureProject(params: {
 }): Promise<EnsureProjectResult> {
   const { organizationId, organizationName, client, log } = params;
 
-  await log("[stage:ensure-project] Checking for existing Dokploy project...");
+  await log("[stage:ensure-project] Checking for existing project...");
 
   // 1. Local mapping is the fast path — one organization → one Dokploy project.
   //    But verify the mapped project still exists in Dokploy before trusting
@@ -103,7 +103,7 @@ export async function stageEnsureProject(params: {
       };
     }
     await log(
-      `[stage:ensure-project] Mapped project ${existing.dokployProjectId} no longer exists in Dokploy — clearing stale mapping and recreating.`,
+      `[stage:ensure-project] Mapped project ${existing.dokployProjectId} no longer exists — clearing stale mapping and recreating.`,
     );
     await deleteTenantProject(organizationId);
   }
@@ -124,7 +124,7 @@ export async function stageEnsureProject(params: {
   const project = adopted ?? (await createNewProject(projectName, client, log));
 
   if (adopted) {
-    await log(`[stage:ensure-project] ✓ Adopted existing Dokploy project by name: ${project.projectId}`);
+    await log(`[stage:ensure-project] ✓ Adopted existing project by name: ${project.projectId}`);
   }
 
   const environmentId = await resolveDefaultEnvironmentId(project, client);
@@ -185,6 +185,6 @@ async function createNewProject(
   client: DokployClient,
   log: (line: string) => Promise<void>,
 ): Promise<DokployProject> {
-  await log(`[stage:ensure-project] Creating new Dokploy project for "${name}"...`);
+  await log(`[stage:ensure-project] Creating new project for "${name}"...`);
   return client.createProject({ name });
 }

@@ -11,7 +11,6 @@
  */
 
 import type { DokployClient } from "../client.js";
-import { DokployError } from "../types.js";
 
 export interface AIRecoveryResult {
   fixed: boolean;
@@ -30,7 +29,7 @@ export async function invokeDokployAI(params: {
   const { applicationId, client, log } = params;
 
   try {
-    await log("[stage:ai-recovery] Triggering Dokploy AI diagnosis...");
+    await log("[stage:ai-recovery] Running automated deployment diagnosis...");
 
     const result = await client.triggerAIFix(applicationId);
 
@@ -40,17 +39,14 @@ export async function invokeDokployAI(params: {
       return { fixed: true, description };
     }
 
-    await log("[stage:ai-recovery] Dokploy AI analyzed the issue but no fix was applied");
+    await log("[stage:ai-recovery] Diagnosis completed but no automatic fix was applied");
     return { fixed: false, description: result.summary || "No actionable fix found" };
   } catch (err) {
-    // Non-fatal — AI recovery is best-effort
-    const message = err instanceof DokployError
-      ? `API error (${err.statusCode}): ${err.message}`
-      : err instanceof Error
-        ? err.message
-        : String(err);
-
-    await log(`[stage:ai-recovery] ⚠ Dokploy AI unavailable: ${message}`);
-    return { fixed: false, description: `AI unavailable: ${message}` };
+    // Non-fatal — automated recovery is best-effort. Keep the underlying
+    // detail out of the user-facing log (it can reference internal infra);
+    // just note that automated recovery wasn't available.
+    void err;
+    await log("[stage:ai-recovery] Automated diagnosis unavailable — continuing.");
+    return { fixed: false, description: "Automated diagnosis unavailable" };
   }
 }

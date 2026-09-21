@@ -72,14 +72,26 @@ export interface DokployServer {
   createdAt: string;
 }
 
+/**
+ * Shape of Dokploy's `server.validate` response.
+ *
+ * Field names match the live API exactly (verified against a real Dokploy
+ * instance): each tool reports `enabled` (not `installed`), and the readiness
+ * flags are `is*Installed` (not `is*Ready`/`is*Enabled`). Getting these wrong
+ * makes every field read as `undefined`, which previously caused a spurious
+ * "Docker not installed" failure even on a fully-provisioned server.
+ */
 export interface ServerValidation {
-  docker: { installed: boolean; version: string };
-  nixpacks: { installed: boolean; version: string };
-  railpack: { installed: boolean; version: string };
-  buildpacks: { installed: boolean; version: string };
-  isDokployNetworkReady: boolean;
-  isSwarmEnabled: boolean;
-  isMainDirectoryReady: boolean;
+  docker: { enabled: boolean; version: string };
+  rclone?: { enabled: boolean; version: string };
+  nixpacks: { enabled: boolean; version: string };
+  railpack: { enabled: boolean; version: string };
+  buildpacks: { enabled: boolean; version: string };
+  isDokployNetworkInstalled: boolean;
+  isSwarmInstalled: boolean;
+  isMainDirectoryInstalled: boolean;
+  privilegeMode?: string;
+  dockerGroupMember?: boolean;
 }
 
 // ─── Applications ──────────────────────────────────────────────────
@@ -109,6 +121,26 @@ export interface DokployApplication {
   createdAt: string;
 }
 
+/**
+ * A single Dokploy deployment record (from `deployment.all`). The full build
+ * log lives in a host file at `logPath` and is streamed over websocket, so it
+ * is not fetchable over REST — but the record's status, timestamps, commit
+ * title, and (when set) `errorMessage` are enough to surface a meaningful
+ * failure reason to the user.
+ */
+export interface DokployDeployment {
+  deploymentId: string;
+  title: string | null;
+  description: string | null;
+  status: "running" | "done" | "error" | string;
+  logPath: string | null;
+  errorMessage: string | null;
+  applicationId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export type DokployBuildType =
   | "dockerfile"
   | "nixpacks"
@@ -120,12 +152,16 @@ export type DokployBuildType =
 export interface SaveBuildTypeParams {
   applicationId: string;
   buildType: DokployBuildType;
+  // Dokploy's saveBuildType schema requires ALL of these fields regardless of
+  // the selected buildType (they're non-optional server-side). Unused ones
+  // must be sent as empty strings, not omitted — omitting triggers a 400.
   dockerfile?: string;
   dockerContextPath?: string;
   dockerBuildStage?: string;
+  herokuVersion?: string;
+  railpackVersion?: string;
   publishDirectory?: string;
   isStaticSpa?: boolean;
-  railpackVersion?: string;
 }
 
 export interface SaveEnvironmentParams {
@@ -179,13 +215,6 @@ export interface DeployParams {
   applicationId: string;
   title?: string;
   description?: string;
-}
-
-export interface DokployDeployment {
-  deploymentId: string;
-  status: string;
-  createdAt: string;
-  logPath?: string;
 }
 
 // ─── AI Fix ────────────────────────────────────────────────────────

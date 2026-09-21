@@ -12,6 +12,8 @@ import { sleep } from "../../../../../shared/utils/time.js";
 export interface DeployResult {
   status: "done" | "error";
   appUrl: string;
+  /** User-facing reason when status is "error" (best-effort). */
+  failureReason?: string;
 }
 
 /**
@@ -46,7 +48,8 @@ export async function stageTriggerDeploy(params: {
 
     if (status === "error") {
       await log("[stage:deploy] ✗ Deployment failed");
-      return { status: "error", appUrl: "" };
+      const failureReason = await reportBuildFailure(applicationId, client, log);
+      return { status: "error", appUrl: "", failureReason };
     }
 
     // Still running — continue polling
@@ -68,6 +71,8 @@ export async function stageDeployWithRetry(params: {
 }): Promise<DeployResult> {
   const { applicationId, client, log, maxAttempts = 3, pollIntervalMs } = params;
 
+  let lastFailureReason: string | undefined;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await log(`[stage:deploy] Attempt ${attempt}/${maxAttempts}...`);
 
@@ -82,20 +87,79 @@ export async function stageDeployWithRetry(params: {
       return result;
     }
 
-    // Failed — try Dokploy AI recovery if we have retries left
+    lastFailureReason = result.failureReason;
+
+    // Failed — try automated recovery diagnosis if we have retries left.
     if (attempt < maxAttempts) {
-      await log("[stage:deploy] Invoking Dokploy AI for error diagnosis...");
+      await log("[stage:deploy] Running automated error diagnosis...");
       const aiResult = await invokeDokployAI({ applicationId, client, log });
 
       if (aiResult.fixed) {
-        await log(`[stage:deploy] Dokploy AI applied fix: ${aiResult.description}`);
+        await log(`[stage:deploy] Applied automatic fix: ${aiResult.description}`);
       } else {
-        await log("[stage:deploy] Dokploy AI could not determine a fix. Retrying...");
+        await log("[stage:deploy] No automatic fix available. Retrying...");
       }
     }
   }
 
-  throw new Error(`Deployment failed after ${maxAttempts} attempts`);
+  const suffix = lastFailureReason ? ` ${lastFailureReason}` : "";
+  throw new Error(
+    `Deployment failed after ${maxAttempts} attempts. The application build did not succeed.${suffix}`,
+  );
+}
+
+// ─── Failure Reporting ───────────────────────────────────────────
+
+/**
+ * On a failed deploy, surface a user-facing reason in the deploy log.
+ *
+ * Dokploy streams the full build log over a websocket (not fetchable over
+ * REST), so we can't echo the raw build output here. Instead we read the
+ * latest deployment record and present what we do have — the failing commit
+ * and timing — plus clear guidance that a failure at this stage almost always
+ * originates in the application's own source (build/install scripts, missing
+ * dependencies, code that needs a database at build time, etc.), not in the
+ * Dockier platform. Users don't have Dokploy access, so this message is their
+ * only window into why the build failed.
+ *
+ * Returns a short reason string (also appended to the thrown error), or a
+ * generic message if the deployment record can't be read. Never throws.
+ */
+async function reportBuildFailure(
+  applicationId: string,
+  client: DokployClient,
+  log: (line: string) => Promise<void>,
+): Promise<string> {
+  let commit = "";
+  try {
+    const deployments = await client.listDeployments(applicationId);
+    const latest = deployments.find((d) => d.status === "error") ?? deployments[0];
+    if (latest?.title) {
+      // Dokploy stores the commit subject as the deployment title.
+      commit = latest.title.split("\n")[0].trim();
+    }
+    if (latest?.errorMessage) {
+      await log(`[stage:deploy] Build error: ${latest.errorMessage}`);
+    }
+  } catch {
+    // Best-effort — fall through to the generic guidance below.
+  }
+
+  await log("[stage:deploy] The server build failed while building your application.");
+  if (commit) {
+    await log(`[stage:deploy] Failing commit: ${commit}`);
+  }
+  await log(
+    "[stage:deploy] This stage compiles and installs YOUR application, so the cause is " +
+    "almost always in the repository — a failing build/install step, a missing dependency, " +
+    "or code that requires a database or external service at build time. Review the app's " +
+    "build and start commands and its most recent commit. If you need the full server build " +
+    "log, contact your Dockier administrator.",
+  );
+
+  return commit
+    ? `The build failed on commit "${commit}". The cause is most likely in the repository (build/install step, missing dependency, or code requiring a service at build time). Contact your Dockier administrator for the full server build log.`
+    : `The application build failed. The cause is most likely in the repository (build/install step, missing dependency, or code requiring a service at build time). Contact your Dockier administrator for the full server build log.`;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────

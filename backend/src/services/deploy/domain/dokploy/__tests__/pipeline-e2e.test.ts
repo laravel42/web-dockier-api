@@ -160,11 +160,17 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(clientMethods.createProject).toHaveBeenCalledWith({ name: "Acme Inc [tenant-1]" });
     expect(createTenantProject).toHaveBeenCalled();
 
-    // Configure-app created the application and configured github source.
+    // Configure-app created the application and configured the git source.
+    // GitHub (like GitLab) is routed through Dokploy's custom-git provider with
+    // a clone URL, since Dockier uses a token rather than a Dokploy-registered
+    // GitHub App.
     expect(clientMethods.createApplication).toHaveBeenCalledWith(
       expect.objectContaining({ environmentId: "env-1", serverId: "srv-1" }),
     );
-    expect(clientMethods.saveGithubProvider).toHaveBeenCalled();
+    expect(clientMethods.saveGitProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ customGitUrl: expect.stringContaining("github.com") }),
+    );
+    expect(clientMethods.saveGithubProvider).not.toHaveBeenCalled();
 
     // TypeScript with no Dockerfile → railpack build type.
     expect(clientMethods.saveBuildType).toHaveBeenCalledWith(
@@ -196,7 +202,7 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(clientMethods.triggerAIFix).toHaveBeenCalledTimes(1);
     expect(statusCalls).toContain("success");
 
-    const aiLog = logLines.find((l) => l.includes("Dokploy AI applied fix"));
+    const aiLog = logLines.find((l) => l.includes("Applied automatic fix"));
     expect(aiLog).toContain("bumped node version");
   });
 

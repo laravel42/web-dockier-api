@@ -19,6 +19,7 @@ import type {
   ServerValidation,
   CreateApplicationParams,
   DokployApplication,
+  DokployDeployment,
   SaveBuildTypeParams,
   SaveEnvironmentParams,
   SaveGithubProviderParams,
@@ -184,6 +185,20 @@ export class DokployClient {
 
   async getApplication(applicationId: string): Promise<DokployApplication> {
     return this.query<DokployApplication>("application.one", { applicationId });
+  }
+
+  /**
+   * List an application's deployment records (most recent first), used to
+   * surface a build-failure reason. Best-effort — returns [] on any error so
+   * failure reporting never throws over the underlying deploy error.
+   */
+  async listDeployments(applicationId: string): Promise<DokployDeployment[]> {
+    try {
+      const rows = await this.query<DokployDeployment[]>("deployment.all", { applicationId });
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
   }
 
   async updateApplication(params: { applicationId: string } & Record<string, unknown>): Promise<void> {

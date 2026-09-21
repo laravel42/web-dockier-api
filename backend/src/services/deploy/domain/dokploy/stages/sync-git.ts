@@ -9,6 +9,7 @@
  */
 
 import { getGitConnectionCredentials } from "../../../../../shared/service-clients/git-connections.js";
+import { buildCloneUrl } from "../../../../../lib/git-url.js";
 import type {
   SaveGithubProviderParams,
   SaveGitlabProviderParams,
@@ -50,44 +51,75 @@ export async function stageSyncGit(params: {
   let gitConfig: GitProviderConfig;
 
   if (provider === "github") {
-    gitConfig = {
-      type: "github",
-      params: {
-        owner,
-        repository,
-        branch,
-        githubId: "", // Will be resolved from Dokploy's registered GitHub App
-        enableSubmodules: false,
-        triggerType: "push",
-      },
-    };
-  } else if (provider === "gitlab") {
-    gitConfig = {
-      type: "gitlab",
-      params: {
-        gitlabOwner: owner,
-        gitlabRepository: repository,
-        gitlabBranch: branch,
-        gitlabBuildPath: "/",
-        gitlabId: "", // Will be resolved from Dokploy's registered GitLab integration
-        gitlabProjectId: 0, // Needs to be resolved from GitLab API or Dokploy
-        gitlabPathNamespace: `${owner}/${repository}`,
-        enableSubmodules: false,
-      },
-    };
-  } else {
-    // For Bitbucket, Gitea, or generic git — use custom SSH-based provider
-    const gitUrl = creds.endpoint
-      ? `${creds.endpoint}/${owner}/${repository}.git`
-      : `https://github.com/${owner}/${repository}.git`;
+    // Dokploy's native GitHub provider (saveGithubProvider) is built around a
+    // GitHub App registered INSIDE Dokploy, keyed by `githubId`. Dockier
+    // doesn't have that — it holds a personal access token — and sending an
+    // empty githubId fails (same class of problem GitLab had). Use the
+    // custom-git provider with a token-authenticated HTTPS clone URL instead,
+    // consistent with how GitLab is handled below.
+    const cloneUrl = buildCloneUrl({
+      provider: "github",
+      token: creds.token,
+      repo: `${owner}/${repository}`,
+      endpoint: creds.endpoint || undefined,
+    });
 
     gitConfig = {
       type: "custom",
       params: {
-        customGitUrl: gitUrl,
+        customGitUrl: cloneUrl,
         customGitBranch: branch,
         customGitBuildPath: "/",
         enableSubmodules: false,
+        watchPaths: [],
+      },
+    };
+  } else if (provider === "gitlab" || provider === "gitlab_self_hosted") {
+    // Dokploy's native GitLab provider (saveGitlabProvider) is built around a
+    // GitLab OAuth integration registered INSIDE Dokploy, keyed by `gitlabId`
+    // and a numeric `gitlabProjectId`. Dockier doesn't have those — it holds a
+    // personal access token — and sending empty/zero placeholders makes
+    // Dokploy 500. Instead, use the custom-git provider with a token-
+    // authenticated HTTPS clone URL. This also handles nested GitLab groups
+    // (e.g. "group/subgroup/repo") natively, since the full path lives in the
+    // clone URL rather than being split into owner/repository.
+    const cloneUrl = buildCloneUrl({
+      provider,
+      token: creds.token,
+      repo: `${owner}/${repository}`,
+      endpoint: creds.endpoint || undefined,
+    });
+
+    gitConfig = {
+      type: "custom",
+      params: {
+        customGitUrl: cloneUrl,
+        customGitBranch: branch,
+        customGitBuildPath: "/",
+        enableSubmodules: false,
+        // Dokploy's saveGitProvider requires watchPaths (non-optional). Empty
+        // means "no path-scoped auto-deploy filter" — send [] rather than
+        // omitting it, which triggers a 400.
+        watchPaths: [],
+      },
+    };
+  } else {
+    // For Bitbucket or generic git — use the custom provider. Prefer a
+    // token-authenticated clone URL when the provider is one buildCloneUrl
+    // supports; otherwise fall back to a plain URL from the endpoint.
+    const cloneUrl = tryBuildAuthedUrl(provider, creds.token, `${owner}/${repository}`, creds.endpoint)
+      ?? (creds.endpoint
+        ? `${creds.endpoint}/${owner}/${repository}.git`
+        : `https://github.com/${owner}/${repository}.git`);
+
+    gitConfig = {
+      type: "custom",
+      params: {
+        customGitUrl: cloneUrl,
+        customGitBranch: branch,
+        customGitBuildPath: "/",
+        enableSubmodules: false,
+        watchPaths: [],
       },
     };
   }
@@ -97,6 +129,20 @@ export async function stageSyncGit(params: {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Build a token-authenticated clone URL when the provider + token are usable,
+ * returning null (rather than throwing) for providers buildCloneUrl doesn't
+ * support or when no token is available. Lets the caller fall back cleanly.
+ */
+function tryBuildAuthedUrl(provider: string, token: string, repo: string, endpoint?: string): string | null {
+  if (!token) return null;
+  try {
+    return buildCloneUrl({ provider, token, repo, endpoint: endpoint || undefined });
+  } catch {
+    return null;
+  }
+}
 
 function parseOwnerRepo(repo: string): [string, string] {
   // "owner/repo" or "https://github.com/owner/repo"

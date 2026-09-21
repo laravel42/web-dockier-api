@@ -51,7 +51,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
 
   try {
     await updateStatus(deploymentId, "building");
-    await log("▶ Starting Dokploy deployment pipeline...");
+    await log("▶ Starting deployment pipeline...");
 
     // ─── Stage 1: Ensure Dokploy Project ─────────────────────────
     const orgName = await getOrganizationName(tenantId);

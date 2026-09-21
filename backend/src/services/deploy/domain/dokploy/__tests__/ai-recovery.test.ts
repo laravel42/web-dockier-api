@@ -51,10 +51,10 @@ describe("invokeDokployAI", () => {
 
     expect(result.fixed).toBe(false);
     expect(result.description).toBe("Issue requires manual intervention");
-    expect(logLines.some((l) => l.includes("no fix was applied"))).toBe(true);
+    expect(logLines.some((l) => l.includes("no automatic fix was applied"))).toBe(true);
   });
 
-  it("returns { fixed: false } when Dokploy AI is unavailable (network error)", async () => {
+  it("returns { fixed: false } when automated recovery is unavailable (network error)", async () => {
     mockClient.triggerAIFix.mockRejectedValue(new Error("ECONNREFUSED"));
 
     const result = await invokeDokployAI({
@@ -64,11 +64,13 @@ describe("invokeDokployAI", () => {
     });
 
     expect(result.fixed).toBe(false);
-    expect(result.description).toContain("AI unavailable");
-    expect(logLines.some((l) => l.includes("⚠ Dokploy AI unavailable"))).toBe(true);
+    expect(result.description).toContain("Automated diagnosis unavailable");
+    // The user-facing log must not leak internal infrastructure detail.
+    expect(logLines.some((l) => l.includes("Automated diagnosis unavailable"))).toBe(true);
+    expect(logLines.some((l) => /dokploy/i.test(l))).toBe(false);
   });
 
-  it("returns { fixed: false } when Dokploy API returns an error", async () => {
+  it("returns { fixed: false } without leaking detail when the recovery API errors", async () => {
     mockClient.triggerAIFix.mockRejectedValue(
       new DokployError("Service unavailable", 503, "application.aiFixDeployment"),
     );
@@ -80,7 +82,7 @@ describe("invokeDokployAI", () => {
     });
 
     expect(result.fixed).toBe(false);
-    expect(result.description).toContain("API error (503)");
+    expect(result.description).toContain("Automated diagnosis unavailable");
   });
 
   it("never throws — always returns a result", async () => {
@@ -138,6 +140,6 @@ describe("invokeDokployAI", () => {
       log: mockLog,
     });
 
-    expect(logLines[0]).toContain("[stage:ai-recovery] Triggering Dokploy AI diagnosis");
+    expect(logLines[0]).toContain("[stage:ai-recovery] Running automated deployment diagnosis");
   });
 });
