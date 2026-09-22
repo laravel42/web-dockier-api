@@ -93,10 +93,25 @@ export async function stageConfigureApp(params: {
   // (saveGitProvider, saveBuildType, ...) fail with "Application not found".
   // If it's gone, clear the stale mapping and create a fresh application.
   let applicationId: string;
+  // Dokploy's Swarm service name for this app — needed later to locate the
+  // running container for command execution. Captured from create/lookup and
+  // persisted on the mapping.
+  let appName: string | undefined;
   const existing = await getApplication(projectId);
 
   if (existing && (await applicationExists(existing.dokployApplicationId, client))) {
     applicationId = existing.dokployApplicationId;
+    // Refresh appName from Dokploy if we don't already have it stored (e.g.
+    // app created before appName was persisted). Best-effort — a lookup miss
+    // just leaves it unset and command execution falls back gracefully.
+    if (!existing.appName) {
+      try {
+        const app = await client.getApplication(applicationId);
+        appName = app?.appName || undefined;
+      } catch {
+        // ignore — appName stays unset
+      }
+    }
     await log(`[stage:configure-app] Reusing existing application: ${applicationId}`);
   } else {
     if (existing) {
@@ -113,11 +128,13 @@ export async function stageConfigureApp(params: {
       serverId,
     });
     applicationId = app.applicationId;
+    appName = app.appName || undefined;
 
     await upsertApplication({
       projectId,
       dokployApplicationId: applicationId,
       dokployServerId: serverId,
+      appName,
     });
 
     await log(`[stage:configure-app] Application created: ${applicationId}`);
@@ -171,12 +188,14 @@ export async function stageConfigureApp(params: {
     isStaticSpa: buildType === "static",
   });
 
-  // Update stored build type
+  // Update stored build type (and appName if we resolved a fresh one on the
+  // reuse path — omitted when undefined so we never clobber a stored value).
   await upsertApplication({
     projectId,
     dokployApplicationId: applicationId,
     dokployServerId: serverId,
     buildType,
+    appName,
   });
 
   // ─── Configure Environment Variables ────────────────────────────
@@ -192,7 +211,7 @@ export async function stageConfigureApp(params: {
   // (vps) OR the app's own env points at one (managed / external). This gates
   // whether Railpack should run Laravel migrations at container startup.
   const hasDatabase = provisionedDatabases.length > 0 || hasDbEnv(withDbEnv);
-  const finalEnv = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase);
+  const finalEnv = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase, repoAnalysis.techStack ?? []);
   if (provisionedDatabases.length > 0) {
     await log(`[stage:configure-app] Wired ${provisionedDatabases.length} self-hosted service(s) into the app env.`);
   }
@@ -285,9 +304,9 @@ function withRailpackPhpDefaults(
   buildType: DokployBuildType,
   primaryLanguage?: string,
   hasDatabase = false,
+  techStack: string[] = [],
 ): Array<{ name: string; value: string }> {
-  const isPhp = (primaryLanguage ?? "").toLowerCase().includes("php");
-  if (buildType !== "railpack" || !isPhp) return envVars;
+  if (buildType !== "railpack" || !isPhpApp(primaryLanguage, techStack)) return envVars;
 
   const has = (name: string) => envVars.some((v) => v.name === name);
   const additions: Array<{ name: string; value: string }> = [];
@@ -303,6 +322,23 @@ function withRailpackPhpDefaults(
   }
 
   return additions.length > 0 ? [...envVars, ...additions] : envVars;
+}
+
+/**
+ * Detect a PHP/Laravel app from EITHER the detected primary language OR the
+ * tech stack. Relying on `primaryLanguage` alone is fragile — a Laravel repo
+ * can be classified as "Blade", left blank, or mixed, and then the PHP
+ * extension defaults silently don't apply, causing composer to fail the build
+ * on missing ext-gd/intl/zip/sockets. Checking the tech stack ("php",
+ * "laravel", "filament", ...) as well makes detection robust.
+ */
+function isPhpApp(primaryLanguage: string | undefined, techStack: string[]): boolean {
+  const lang = (primaryLanguage ?? "").toLowerCase();
+  if (lang.includes("php") || lang.includes("laravel") || lang.includes("blade")) return true;
+  return techStack.some((s) => {
+    const t = s.toLowerCase();
+    return t.includes("php") || t.includes("laravel") || t.includes("filament") || t.includes("blade");
+  });
 }
 
 /** True if the env carries a SQL database connection (DB_HOST or DB_CONNECTION). */

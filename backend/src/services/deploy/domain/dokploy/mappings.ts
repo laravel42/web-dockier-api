@@ -11,6 +11,8 @@ import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery } from "../../../../shared/supabase/query.js";
 import { nowIso } from "../../../../shared/utils/time.js";
+import { encryptJson, decryptJson } from "../../../../shared/auth/crypto.js";
+import { logger } from "../../../../shared/logger.js";
 
 /**
  * Domain error for the Dokploy DB mapping layer.
@@ -40,6 +42,12 @@ export interface ServerMapping {
   serverIp: string;
   instanceId: string | null;
   serverStatus: string;
+  /**
+   * Dockier-owned SSH private key for this server, decrypted. Present only for
+   * servers provisioned after command-execution support (migration 0071) —
+   * null for older servers, which cannot run commands until re-provisioned.
+   */
+  sshPrivateKey: string | null;
 }
 
 export interface ApplicationMapping {
@@ -48,6 +56,12 @@ export interface ApplicationMapping {
   dokployApplicationId: string;
   dokployServerId: string | null;
   buildType: string;
+  /**
+   * Dokploy-assigned application `appName` (the Docker Swarm service name),
+   * used to locate the running container for command execution. Null for apps
+   * configured before this was persisted.
+   */
+  appName: string | null;
 }
 
 export interface DatabaseMapping {
@@ -157,7 +171,24 @@ export async function getServer(projectId: string): Promise<ServerMapping | null
     serverIp: data.server_ip,
     instanceId: data.instance_id,
     serverStatus: data.server_status,
+    sshPrivateKey: decryptServerKey(data.ssh_private_key_encrypted, data.project_id),
   };
+}
+
+/**
+ * Decrypt a stored server SSH private key. Returns null (never throws) when the
+ * key is absent or can't be decrypted — command execution then reports the key
+ * as unavailable rather than crashing an unrelated flow (e.g. a redeploy that
+ * only reads the server mapping to reuse the box).
+ */
+function decryptServerKey(encrypted: string | null, projectId: string): string | null {
+  if (!encrypted) return null;
+  try {
+    return decryptJson(encrypted) as string;
+  } catch (err) {
+    logger.warn({ err, projectId }, "[dokploy-mappings] Failed to decrypt server SSH key");
+    return null;
+  }
 }
 
 /**
@@ -171,21 +202,29 @@ export async function upsertServer(params: {
   serverIp: string;
   instanceId?: string;
   serverStatus?: string;
+  /**
+   * Dockier-owned SSH private key (plaintext) to persist encrypted. Omit to
+   * leave any existing stored key untouched — redeploys that only refresh
+   * status/ip must not wipe the key they need for command execution.
+   */
+  sshPrivateKey?: string;
 }): Promise<ServerMapping> {
+  const row_ = {
+    project_id: params.projectId,
+    provider_id: params.providerId,
+    dokploy_server_id: params.dokployServerId,
+    server_ip: params.serverIp,
+    instance_id: params.instanceId ?? null,
+    server_status: params.serverStatus ?? "provisioning",
+    updated_at: nowIso(),
+    // Only touch the key column when a new key is supplied, so redeploys that
+    // reuse the box preserve the existing encrypted key.
+    ...(params.sshPrivateKey ? { ssh_private_key_encrypted: encryptJson(params.sshPrivateKey) } : {}),
+  };
+
   const { data, error } = await supabaseAdmin
     .from("dokploy_servers")
-    .upsert(
-      {
-        project_id: params.projectId,
-        provider_id: params.providerId,
-        dokploy_server_id: params.dokployServerId,
-        server_ip: params.serverIp,
-        instance_id: params.instanceId ?? null,
-        server_status: params.serverStatus ?? "provisioning",
-        updated_at: nowIso(),
-      },
-      { onConflict: "project_id" },
-    )
+    .upsert(row_, { onConflict: "project_id" })
     .select("*")
     .single();
 
@@ -201,6 +240,7 @@ export async function upsertServer(params: {
     serverIp: row.server_ip,
     instanceId: row.instance_id,
     serverStatus: row.server_status,
+    sshPrivateKey: decryptServerKey(row.ssh_private_key_encrypted, row.project_id),
   };
 }
 
@@ -249,6 +289,7 @@ export async function getApplication(projectId: string): Promise<ApplicationMapp
     dokployApplicationId: data.dokploy_application_id,
     dokployServerId: data.dokploy_server_id,
     buildType: data.build_type,
+    appName: data.app_name ?? null,
   };
 }
 
@@ -261,6 +302,12 @@ export async function upsertApplication(params: {
   dokployApplicationId: string;
   dokployServerId?: string;
   buildType?: string;
+  /**
+   * Dokploy-assigned `appName` (Swarm service name). Omit to leave an existing
+   * stored value untouched — later upserts (e.g. build-type update) shouldn't
+   * clobber it.
+   */
+  appName?: string;
 }): Promise<ApplicationMapping> {
   const { data, error } = await supabaseAdmin
     .from("dokploy_applications")
@@ -271,6 +318,7 @@ export async function upsertApplication(params: {
         dokploy_server_id: params.dokployServerId ?? null,
         build_type: params.buildType ?? "nixpacks",
         updated_at: nowIso(),
+        ...(params.appName ? { app_name: params.appName } : {}),
       },
       { onConflict: "project_id" },
     )
@@ -287,6 +335,7 @@ export async function upsertApplication(params: {
     dokployApplicationId: row.dokploy_application_id,
     dokployServerId: row.dokploy_server_id,
     buildType: row.build_type,
+    appName: row.app_name ?? null,
   };
 }
 

@@ -135,6 +135,7 @@ describe("mappings — getServer", () => {
       serverIp: "10.0.0.1",
       instanceId: "i-abc123",
       serverStatus: "ready",
+      sshPrivateKey: null,
     });
   });
 
@@ -199,6 +200,7 @@ describe("mappings — getApplication", () => {
       dokployApplicationId: "app-1",
       dokployServerId: "srv-1",
       buildType: "nixpacks",
+      appName: null,
     });
   });
 });

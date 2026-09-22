@@ -672,6 +672,7 @@ export type Database = {
           server_ip: string;
           instance_id: string | null;
           server_status: string;
+          ssh_private_key_encrypted: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -688,6 +689,7 @@ export type Database = {
           dokploy_application_id: string;
           dokploy_server_id: string | null;
           build_type: string;
+          app_name: string | null;
           created_at: string;
           updated_at: string;
         };

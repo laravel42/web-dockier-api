@@ -22,6 +22,7 @@ import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey, t
 import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
 import { provisionGceInstance } from "../provisioning/gcp-gce.js";
 import { waitForSsh } from "../provisioning/wait-for-ssh.js";
+import { generateDockierSshKey } from "../provisioning/ssh-keygen.js";
 import { sleep } from "../../../../../shared/utils/time.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 import type { ServerValidation } from "../types.js";
@@ -29,6 +30,13 @@ import type { ServerValidation } from "../types.js";
 export interface ProvisionServerResult {
   dokployServerId: string;
   serverIp: string;
+  /**
+   * True when an existing, still-valid server was reused; false when a fresh
+   * server was provisioned. A fresh server means any previously provisioned
+   * databases (which lived on the OLD box) are gone, so the pipeline must clear
+   * their stale mappings and recreate them on the new server.
+   */
+  reused: boolean;
 }
 
 /**
@@ -61,6 +69,7 @@ export async function stageProvisionServer(params: {
       return {
         dokployServerId: existing.dokployServerId,
         serverIp: existing.serverIp,
+        reused: true,
       };
     }
     await log(
@@ -143,6 +152,11 @@ async function provisionAwsServer(params: {
   // The Dokploy key's public half must be installed on the VM so Dokploy can SSH in.
   const sshPublicKey = await getDokployPublicKey(client, sshKeyId);
 
+  // Dockier's OWN key — installed alongside Dokploy's so Dockier can SSH in to
+  // run commands (post-deploy scripts + on-demand). Private half is persisted
+  // encrypted on the server mapping.
+  const dockierKey = generateDockierSshKey(`dockier-${projectId.slice(0, 8)}`);
+
   let instanceId: string;
   let serverIp: string;
   try {
@@ -150,6 +164,7 @@ async function provisionAwsServer(params: {
       credentials: toAwsCredentials(credential, region),
       instanceType,
       sshPublicKey,
+      extraPublicKeys: [dockierKey.publicKeyOpenssh],
       keyPairName: `dockier-${projectId.slice(0, 8)}`,
       instanceName: `dockier-${projectId.slice(0, 8)}`,
       tags: attributionTags(projectId, tenantId),
@@ -173,7 +188,7 @@ async function provisionAwsServer(params: {
     throw new Error(`Provisioned instance ${instanceId} (${serverIp}) did not become SSH-reachable in time`);
   }
 
-  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, client, log });
+  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, sshPrivateKey: dockierKey.privateKeyPem, client, log });
 }
 
 /**
@@ -204,6 +219,9 @@ async function provisionGcpServer(params: {
 
   const sshPublicKey = await getDokployPublicKey(client, sshKeyId);
 
+  // Dockier's own key for command execution (see the AWS path for rationale).
+  const dockierKey = generateDockierSshKey(`dockier-${projectId.slice(0, 8)}`);
+
   let instanceId: string;
   let serverIp: string;
   try {
@@ -212,6 +230,7 @@ async function provisionGcpServer(params: {
       region,
       machineType: instanceType,
       sshPublicKey,
+      extraPublicKeys: [dockierKey.publicKeyOpenssh],
       instanceName: `dockier-${projectId.slice(0, 8)}`,
       labels: attributionTags(projectId, tenantId),
       log: (line) => log(`[stage:provision-server] ${line}`),
@@ -232,7 +251,7 @@ async function provisionGcpServer(params: {
     throw new Error(`Provisioned instance ${instanceId} (${serverIp}) did not become SSH-reachable in time`);
   }
 
-  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, client, log });
+  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, sshPrivateKey: dockierKey.privateKeyPem, client, log });
 }
 
 /**
@@ -347,10 +366,12 @@ export async function registerServerInDokploy(params: {
   providerId: string;
   serverIp: string;
   instanceId?: string;
+  /** Dockier-owned SSH private key (PEM) to persist encrypted for command execution. */
+  sshPrivateKey?: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, serverIp, instanceId, client, log } = params;
+  const { projectId, providerId, serverIp, instanceId, sshPrivateKey, client, log } = params;
 
   const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
   if (!sshKeyId) {
@@ -395,7 +416,7 @@ export async function registerServerInDokploy(params: {
     throw new Error("Server setup failed: Dokploy network not installed after setup");
   }
 
-  // Store mapping
+  // Store mapping (persists the Dockier SSH key encrypted when supplied).
   await upsertServer({
     projectId,
     providerId,
@@ -403,11 +424,13 @@ export async function registerServerInDokploy(params: {
     serverIp,
     instanceId,
     serverStatus: "ready",
+    sshPrivateKey,
   });
 
   await log(`[stage:provision-server] ✓ Server ready: ${serverIp} (${server.serverId})`);
   return {
     dokployServerId: server.serverId,
     serverIp,
+    reused: false,
   };
 }

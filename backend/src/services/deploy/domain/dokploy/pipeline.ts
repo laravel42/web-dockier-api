@@ -19,12 +19,14 @@ import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 import { getErrDetail } from "../../../../shared/utils/error-message.js";
 
+import { deleteDatabaseMappings } from "./mappings.js";
 import { stageEnsureProject } from "./stages/ensure-project.js";
 import { stageSyncGit } from "./stages/sync-git.js";
 import { stageProvisionServer } from "./stages/provision-server.js";
 import { stageProvisionDatabases } from "./stages/provision-databases.js";
 import { stageConfigureApp } from "./stages/configure-app.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
+import { stageRunPostDeploy } from "./stages/run-post-deploy.js";
 import { revealEnv } from "../../../projects/domain/env.js";
 
 // Real builds (dependency install + framework build + image build) commonly
@@ -79,6 +81,17 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
 
     const envVars = projectId ? await loadProjectEnvVars(tenantId, projectId) : [];
 
+    // A freshly provisioned server has NONE of the previously created database
+    // services (they lived on the old, now-deleted box). Their mappings are
+    // stale — reusing them makes the app connect to a hostname that no longer
+    // resolves ("getaddrinfo ... failed"), which crashes Laravel at startup and
+    // yields Bad Gateway. Clear them so the DB stage recreates fresh services
+    // on the new server.
+    if (!serverResult.reused) {
+      await deleteDatabaseMappings(projectId || deploymentId);
+      await log("[stage:provision-databases] New server provisioned — recreating self-hosted services on it.");
+    }
+
     // ─── Stage 4: Provision self-hosted databases (vps services) ─
     // Runs before configure-app so the app's env can be wired to the DBs.
     const dbResult = await stageProvisionDatabases({
@@ -126,6 +139,15 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
     });
+
+    // ─── Stage 6: Post-deploy commands ───────────────────────────
+    // Run the project's user-defined post-deploy commands inside the running
+    // container. Best-effort + non-fatal — a failure here never fails the
+    // deploy (see stageRunPostDeploy).
+    if (projectId) {
+      await stageRunPostDeploy({ projectId, log });
+      checkTimeout();
+    }
 
     // ─── Success ─────────────────────────────────────────────────
     await updateStatus(deploymentId, "success");

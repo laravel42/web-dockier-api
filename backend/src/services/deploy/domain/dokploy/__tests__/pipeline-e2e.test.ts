@@ -77,6 +77,7 @@ vi.mock("../mappings.js", () => ({
   // Database mappings: no existing DB by default; upsert is a no-op recorder.
   getDatabase: vi.fn(async () => null),
   upsertDatabase: vi.fn(async (p: Record<string, unknown>) => ({ id: "dbm-1", ...p })),
+  deleteDatabaseMappings: vi.fn(async () => undefined),
 }));
 
 // ─── Git + env boundaries ──────────────────────────────────────────
@@ -128,7 +129,7 @@ vi.mock("../client.js", () => ({
 // provision-server is the one stage that reaches into cloud SDKs; keep it
 // mocked so this test stays a Dokploy-orchestration test (the EC2/GCE
 // provisioners have their own dedicated unit tests).
-const mockProvisionServer = vi.fn(async (..._a: unknown[]) => ({ dokployServerId: "srv-1", serverIp: "10.0.0.9" }));
+const mockProvisionServer = vi.fn(async (..._a: unknown[]) => ({ dokployServerId: "srv-1", serverIp: "10.0.0.9", reused: true }));
 vi.mock("../stages/provision-server.js", () => ({
   stageProvisionServer: (...a: unknown[]) => mockProvisionServer(...a),
 }));

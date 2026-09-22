@@ -45,6 +45,12 @@ export interface ProvisionEc2Params {
   instanceType?: string;
   /** Public SSH key to install for the default user (the Dokploy-managed key). */
   sshPublicKey: string;
+  /**
+   * Additional public SSH keys to install in root's authorized_keys (OpenSSH
+   * line format), e.g. Dockier's own key for command execution. Installed
+   * alongside `sshPublicKey`.
+   */
+  extraPublicKeys?: string[];
   /** Stable name for the imported EC2 key pair (e.g. per-project). */
   keyPairName: string;
   /** Tag value applied to the instance Name tag. */
@@ -83,14 +89,20 @@ const SWAP_SIZE = "4G";
  * allocate memory"). Swap lets a spike spill to disk instead of killing the
  * build. It complements the larger default instance type, not replaces it.
  */
-function rootSshUserData(sshPublicKey: string): string {
+function rootSshUserData(sshPublicKey: string, extraPublicKeys: string[] = []): string {
+  // All keys go into authorized_keys: the first (Dokploy's) is written to
+  // create the file; each extra (e.g. Dockier's command-exec key) is appended.
+  const keyLines = [
+    `echo ${JSON.stringify(sshPublicKey.trim())} > /root/.ssh/authorized_keys`,
+    ...extraPublicKeys.map((k) => `echo ${JSON.stringify(k.trim())} >> /root/.ssh/authorized_keys`),
+  ];
   const script = [
     "#!/bin/bash",
     "set -e",
     "mkdir -p /root/.ssh",
     "chmod 700 /root/.ssh",
     // Write the raw key (no forced-command wrapper) so root login is unrestricted.
-    `echo ${JSON.stringify(sshPublicKey.trim())} > /root/.ssh/authorized_keys`,
+    ...keyLines,
     "chmod 600 /root/.ssh/authorized_keys",
     // Ensure sshd allows root login with keys.
     "sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config",
@@ -106,7 +118,7 @@ function rootSshUserData(sshPublicKey: string): string {
  * Throws with actionable messages on credential/quota/permission failures.
  */
 export async function provisionEc2Instance(params: ProvisionEc2Params): Promise<ProvisionEc2Result> {
-  const { credentials, instanceType, sshPublicKey, keyPairName, instanceName } = params;
+  const { credentials, instanceType, sshPublicKey, extraPublicKeys, keyPairName, instanceName } = params;
   const log = params.log ?? (() => {});
 
   const {
@@ -170,7 +182,7 @@ export async function provisionEc2Instance(params: ProvisionEc2Params): Promise<
       SecurityGroupIds: [securityGroupId],
       // Enable root SSH on first boot so Dokploy (which connects as root) can
       // run its server setup — Ubuntu blocks root SSH by default.
-      UserData: rootSshUserData(sshPublicKey),
+      UserData: rootSshUserData(sshPublicKey, extraPublicKeys),
       BlockDeviceMappings: [{
         DeviceName: "/dev/sda1",
         Ebs: { VolumeSize: 30, VolumeType: "gp3", DeleteOnTermination: true },

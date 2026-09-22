@@ -32,6 +32,11 @@ export interface GceProvisionParams {
   machineType?: string;
   /** Public SSH key to install (the Dokploy-managed key). */
   sshPublicKey: string;
+  /**
+   * Additional public SSH keys to install for root (OpenSSH line format), e.g.
+   * Dockier's own key for command execution. Installed alongside `sshPublicKey`.
+   */
+  extraPublicKeys?: string[];
   /** Instance name (GCE naming rules: lowercase, digits, hyphens). */
   instanceName: string;
   /** Extra labels for cost attribution / traceability (e.g. dockier-project, dockier-tenant). Sanitized to GCP label rules. */
@@ -87,7 +92,10 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
       name,
       machineType,
       sourceImage: UBUNTU_SOURCE_IMAGE,
-      sshKeys: `root:${params.sshPublicKey}`,
+      // GCE ssh-keys metadata is newline-separated "user:key" entries.
+      sshKeys: [params.sshPublicKey, ...(params.extraPublicKeys ?? [])]
+        .map((k) => `root:${k.trim()}`)
+        .join("\n"),
       diskSizeGb: 30,
       tags: [NETWORK_TAG],
       labels: sanitizeLabels(params.labels),

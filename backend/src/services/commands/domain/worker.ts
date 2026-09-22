@@ -25,6 +25,8 @@ import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/
 import { getProviderCredentialsSafe, toAwsCredentials, type ProviderCredential } from "../../../lib/provider-credentials.js";
 import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
 import type { InfraMetadata } from "../../deploy/types.js";
+import { resolveDokployCommandTarget, execInDokployContainer } from "../../deploy/domain/dokploy/command-exec.js";
+import { getServer as getDokployServer } from "../../deploy/domain/dokploy/mappings.js";
 
 export interface CommandJobInput {
   commandId: string;
@@ -55,6 +57,18 @@ interface ProviderInfo {
  * Resolve the execution target for a project by finding its active deployment
  * and looking up the server connection details.
  */
+/**
+ * Whether a project was deployed via Dokploy (has a server mapping). Best-effort
+ * — a lookup error returns false so command routing falls back to native.
+ */
+async function projectHasDokployServer(projectId: string): Promise<boolean> {
+  try {
+    return (await getDokployServer(projectId)) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveExecutionTarget(
   projectId: string,
   tenantId: string,
@@ -393,6 +407,25 @@ async function processCommandJob(input: CommandJobInput): Promise<void> {
   logger.info(`[command-exec] Processing command ${commandId}: ${command.slice(0, 80)}`);
 
   try {
+    // Dokploy-deployed projects run commands over SSH into the running
+    // container (works for any stack). We detect these by the presence of a
+    // Dokploy server mapping rather than a global flag, so a workspace that
+    // mixes deploy backends still routes each project correctly.
+    const dokployTarget = await resolveDokployCommandTarget(projectId);
+    if (dokployTarget.target) {
+      const result = await execInDokployContainer(dokployTarget.target, command);
+      const status = result.timedOut ? "timed_out" : result.exitCode === 0 ? "finished" : "failed";
+      await updateCommandStatus(commandId, status, result.output);
+      logger.info(`[command-exec] Command ${commandId} completed with status: ${status}`);
+      return;
+    }
+    // If a Dokploy server exists but isn't runnable (not ready / missing key),
+    // surface that reason instead of falling through to native resolution.
+    if (await projectHasDokployServer(projectId)) {
+      await updateCommandStatus(commandId, "failed", dokployTarget.errorMessage || "Cannot run command on this deployment yet.");
+      return;
+    }
+
     const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
 
     if (!target) {

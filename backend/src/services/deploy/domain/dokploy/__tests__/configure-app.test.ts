@@ -159,6 +159,23 @@ describe("stageConfigureApp — Railpack PHP env defaults", () => {
     expect(envMap().RAILPACK_PHP_EXTENSIONS).toContain("intl");
   });
 
+  it("applies PHP extension defaults when detected via techStack even if primaryLanguage is not php", async () => {
+    await stageConfigureApp({
+      ...base,
+      // primaryLanguage misdetected (e.g. "blade" comes back empty), but the
+      // tech stack clearly identifies a Laravel/Filament app.
+      repoAnalysis: { hasDockerfile: false, isStaticSite: false, primaryLanguage: "", techStack: ["laravel", "filament"] },
+      client: client as unknown as DokployClient,
+      provisionedDatabases: [],
+      envVars: [{ name: "APP_ENV", value: "production" }],
+    });
+
+    expect(envMap().RAILPACK_PHP_EXTENSIONS).toContain("gd");
+    expect(envMap().RAILPACK_PHP_EXTENSIONS).toContain("intl");
+    expect(envMap().RAILPACK_PHP_EXTENSIONS).toContain("zip");
+    expect(envMap().RAILPACK_PHP_EXTENSIONS).toContain("sockets");
+  });
+
   it("does not apply Railpack PHP defaults for a non-PHP app", async () => {
     await stageConfigureApp({
       ...base,

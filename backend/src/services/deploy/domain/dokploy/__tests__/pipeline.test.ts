@@ -18,6 +18,13 @@ vi.mock("../../deployments.js", () => ({
   getDeploymentCurrentStatus: (...args: unknown[]) => mockGetDeploymentCurrentStatus(...args),
 }));
 
+// Mappings: the pipeline clears stale DB mappings when a fresh server is
+// provisioned. Mock the module so we can assert that without a real DB.
+const mockDeleteDatabaseMappings = vi.fn().mockResolvedValue(undefined);
+vi.mock("../mappings.js", () => ({
+  deleteDatabaseMappings: (...args: unknown[]) => mockDeleteDatabaseMappings(...args),
+}));
+
 vi.mock("../../../../../shared/supabase/client.js", () => ({
   supabaseAdmin: {
     from: vi.fn().mockReturnValue({
@@ -45,6 +52,7 @@ const mockSyncGit = vi.fn().mockResolvedValue({
 const mockProvisionServer = vi.fn().mockResolvedValue({
   dokployServerId: "srv-1",
   serverIp: "10.0.0.1",
+  reused: true,
 });
 const mockConfigureApp = vi.fn().mockResolvedValue({
   dokployApplicationId: "app-1",
@@ -69,6 +77,10 @@ vi.mock("../stages/configure-app.js", () => ({
 }));
 vi.mock("../stages/trigger-deploy.js", () => ({
   stageDeployWithRetry: (...args: unknown[]) => mockDeployWithRetry(...args),
+}));
+const mockRunPostDeploy = vi.fn().mockResolvedValue(undefined);
+vi.mock("../stages/run-post-deploy.js", () => ({
+  stageRunPostDeploy: (...args: unknown[]) => mockRunPostDeploy(...args),
 }));
 vi.mock("../../../../projects/domain/env.js", () => ({
   revealEnv: vi.fn().mockResolvedValue({ exists: false, content: null }),
@@ -196,7 +208,7 @@ describe("executeDokployPipeline", () => {
   });
 
   it("passes server ID from provision-server to configure-app", async () => {
-    mockProvisionServer.mockResolvedValueOnce({ dokployServerId: "srv-99", serverIp: "192.168.1.1" });
+    mockProvisionServer.mockResolvedValueOnce({ dokployServerId: "srv-99", serverIp: "192.168.1.1", reused: true });
 
     await executeDokployPipeline(basePipelineInput);
 
@@ -205,6 +217,23 @@ describe("executeDokployPipeline", () => {
         serverId: "srv-99",
       }),
     );
+  });
+
+  it("clears stale database mappings when the server was freshly provisioned (not reused)", async () => {
+    mockProvisionServer.mockResolvedValueOnce({ dokployServerId: "srv-new", serverIp: "5.6.7.8", reused: false });
+
+    await executeDokployPipeline(basePipelineInput);
+
+    // A fresh server means the old DBs are gone; their mappings must be cleared
+    // so they're recreated on the new box (fixes "getaddrinfo failed" Bad Gateway).
+    expect(mockDeleteDatabaseMappings).toHaveBeenCalledWith("project-1");
+  });
+
+  it("does NOT clear database mappings when the server is reused", async () => {
+    // default mockProvisionServer resolves reused: true
+    await executeDokployPipeline(basePipelineInput);
+
+    expect(mockDeleteDatabaseMappings).not.toHaveBeenCalled();
   });
 
   it("stores appUrl in database on success", async () => {
