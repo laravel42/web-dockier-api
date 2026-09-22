@@ -65,6 +65,7 @@ const upsertApplication = vi.fn(async (p: Record<string, unknown>) => {
   return application;
 });
 const deleteTenantProject = vi.fn(async () => { tenantProject = null; });
+const deleteApplicationMapping = vi.fn(async () => { application = null; });
 
 vi.mock("../mappings.js", () => ({
   getTenantProject: vi.fn(async () => tenantProject),
@@ -72,6 +73,10 @@ vi.mock("../mappings.js", () => ({
   deleteTenantProject: (...a: unknown[]) => deleteTenantProject(...(a as [])),
   getApplication: vi.fn(async () => application),
   upsertApplication: (...a: unknown[]) => upsertApplication(...(a as [Record<string, unknown>])),
+  deleteApplicationMapping: (...a: unknown[]) => deleteApplicationMapping(...(a as [])),
+  // Database mappings: no existing DB by default; upsert is a no-op recorder.
+  getDatabase: vi.fn(async () => null),
+  upsertDatabase: vi.fn(async (p: Record<string, unknown>) => ({ id: "dbm-1", ...p })),
 }));
 
 // ─── Git + env boundaries ──────────────────────────────────────────
@@ -79,8 +84,9 @@ vi.mock("../mappings.js", () => ({
 vi.mock("../../../../../shared/service-clients/git-connections.js", () => ({
   getGitConnectionCredentials: vi.fn(async () => ({ provider: "github", endpoint: null })),
 }));
+const revealEnv = vi.fn(async () => ({ exists: true, content: "FOO=bar\n# comment\nBAZ=qux" }));
 vi.mock("../../../../projects/domain/env.js", () => ({
-  revealEnv: vi.fn(async () => ({ exists: true, content: "FOO=bar\n# comment\nBAZ=qux" })),
+  revealEnv: (...a: unknown[]) => revealEnv(...(a as [])),
 }));
 
 // ─── Dokploy HTTP client (fake) ────────────────────────────────────
@@ -98,10 +104,21 @@ const clientMethods = {
   saveBuildType: vi.fn(async () => undefined),
   saveEnvironment: vi.fn(async () => undefined),
   deploy: vi.fn(async () => undefined),
-  getApplication: vi.fn(async () => ({ applicationStatus: "done", appName: "my-app" })),
+  getApplication: vi.fn(async () => ({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" })),
   // Deploy status is tracked via the latest deployment record; default to a
   // successful one.
   listDeployments: vi.fn(async () => [{ deploymentId: "d1", status: "done", createdAt: "x" }]),
+  // Domain resolution after a successful deploy.
+  listDomains: vi.fn(async () => [] as Array<{ host: string; https: boolean; port: number | null }>),
+  generateDomain: vi.fn(async () => "app-my-app-98-93-35-222.sslip.io"),
+  createDomain: vi.fn(async () => ({ domainId: "dom-1", host: "app-my-app-98-93-35-222.sslip.io", https: false, port: 3000, path: "/", applicationId: "app-1" })),
+  // Self-hosted database services.
+  createMysql: vi.fn(async () => ({ id: "my-1", appName: "myapp-database-abcdef", name: "db", databaseName: "appdb", databaseUser: "dockier", databasePassword: "pw" })),
+  deployMysql: vi.fn(async () => undefined),
+  createPostgres: vi.fn(async () => ({ id: "pg-1", appName: "myapp-database-abcdef", name: "db", databaseName: "appdb", databaseUser: "dockier", databasePassword: "pw" })),
+  deployPostgres: vi.fn(async () => undefined),
+  createRedis: vi.fn(async () => ({ id: "r-1", appName: "myapp-cache-abcdef", name: "cache", databasePassword: "pw" })),
+  deployRedis: vi.fn(async () => undefined),
   triggerAIFix: vi.fn(async () => ({ applied: true, summary: "bumped node version" })),
 };
 vi.mock("../client.js", () => ({
@@ -145,8 +162,9 @@ beforeEach(() => {
   tenantProject = null;
   application = null;
   mockGetDeploymentCurrentStatus.mockResolvedValue("pending");
-  clientMethods.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app" });
+  clientMethods.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
   clientMethods.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+  clientMethods.listDomains.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -236,6 +254,76 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     );
   });
 
+  it("injects Railpack PHP defaults (extensions + skip migrations) for PHP apps", async () => {
+    await executeDokployPipeline(input({ primaryLanguage: "php" }));
+
+    // The env sent to Dokploy includes the default PHP extensions and disables
+    // build-time migrations, so Laravel/Filament apps build without repo changes.
+    const envCalls = clientMethods.saveEnvironment.mock.calls as unknown as Array<[{ env: string }]>;
+    const envCall = envCalls.at(-1)?.[0];
+    expect(envCall?.env).toContain("RAILPACK_PHP_EXTENSIONS=");
+    expect(envCall?.env).toContain("intl");
+    expect(envCall?.env).toContain("gd");
+    expect(envCall?.env).toContain("RAILPACK_SKIP_MIGRATIONS=true");
+  });
+
+  it("does not inject PHP defaults for non-PHP apps", async () => {
+    await executeDokployPipeline(input({ primaryLanguage: "typescript" }));
+
+    const envCalls = clientMethods.saveEnvironment.mock.calls as unknown as Array<[{ env: string }]>;
+    const envCall = envCalls.at(-1)?.[0];
+    expect(envCall?.env).not.toContain("RAILPACK_PHP_EXTENSIONS");
+  });
+
+  it("treats managed services as no-ops (app uses its own credentials) and still deploys", async () => {
+    // A managed database means the app connects to an external DB via its own
+    // env vars — nothing to provision. The deploy should succeed and simply
+    // note the managed service; no DB-provisioning calls happen.
+    await executeDokployPipeline(input({
+      services: [{ type: "database", name: "MySQL", mode: "managed" }],
+    }));
+
+    expect(statusCalls).toContain("success");
+    expect(logLines.some((l) => /Managed services/i.test(l))).toBe(true);
+    // Env is still configured (managed DB creds ride along in the app env).
+    expect(clientMethods.saveEnvironment).toHaveBeenCalled();
+  });
+
+  it("provisions a self-hosted (vps) database and its connection env OVERRIDES the app's dev-time DB_HOST", async () => {
+    // The project env carries dev-time defaults (DB_HOST=127.0.0.1) that would
+    // cause "connection refused" in the container. For a self-hosted DB the
+    // provisioned host must win.
+    revealEnv.mockResolvedValueOnce({ exists: true, content: "DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306" });
+
+    await executeDokployPipeline(input({
+      services: [{ type: "database", name: "MySQL/PostgreSQL", mode: "vps" }],
+    }));
+
+    expect(statusCalls).toContain("success");
+    // DB_CONNECTION=mysql is honored (name "MySQL/PostgreSQL" must NOT force postgres).
+    expect(clientMethods.createMysql).toHaveBeenCalled();
+    expect(clientMethods.createPostgres).not.toHaveBeenCalled();
+
+    const envCalls = clientMethods.saveEnvironment.mock.calls as unknown as Array<[{ env: string }]>;
+    const env = envCalls.at(-1)?.[0]?.env ?? "";
+    // Provisioned host wins over the user's 127.0.0.1.
+    expect(env).toContain("DB_HOST=myapp-database-abcdef");
+    expect(env).not.toContain("DB_HOST=127.0.0.1");
+  });
+
+  it("provisions a single Redis shared across queue + broadcasting (not one each)", async () => {
+    await executeDokployPipeline(input({
+      services: [
+        { type: "queue", name: "Queue", mode: "vps" },
+        { type: "broadcasting", name: "Broadcasting", mode: "vps" },
+      ],
+    }));
+
+    expect(statusCalls).toContain("success");
+    // One Redis, not two.
+    expect(clientMethods.createRedis).toHaveBeenCalledTimes(1);
+  });
+
   it("reuses an existing Dokploy project mapping (idempotent)", async () => {
     tenantProject = { id: "tp-x", organizationId: "tenant-1", dokployProjectId: "dpj-existing", dokployEnvironmentId: "env-existing" };
 
@@ -283,5 +371,26 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(deleteTenantProject).toHaveBeenCalled();
     // ...and a new project created (nothing to adopt: listProjects is empty by default).
     expect(clientMethods.createProject).toHaveBeenCalled();
+  });
+
+  it("clears a stale application mapping when the mapped app was deleted, then recreates", async () => {
+    // A mapping row points at an application that no longer exists in Dokploy
+    // (deleted out-of-band). The existence check (getApplication) 404s on that
+    // id, so configure-app must clear the mapping and create a fresh app rather
+    // than calling saveGitProvider on the dead id (which 404s "not found").
+    application = { id: "am-x", projectId: "project-1", dokployApplicationId: "app-deleted", dokployServerId: "srv-1", buildType: "railpack" };
+    deleteApplicationMapping.mockClear();
+    clientMethods.createApplication.mockClear();
+    // First getApplication call is the existence check → reject (deleted).
+    // Later calls (appUrl extraction on success) → resolve normally.
+    clientMethods.getApplication
+      .mockRejectedValueOnce(new Error("404 Application not found"))
+      .mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+
+    await executeDokployPipeline(input());
+
+    // Stale application mapping cleared, and a fresh application created.
+    expect(deleteApplicationMapping).toHaveBeenCalled();
+    expect(clientMethods.createApplication).toHaveBeenCalled();
   });
 });

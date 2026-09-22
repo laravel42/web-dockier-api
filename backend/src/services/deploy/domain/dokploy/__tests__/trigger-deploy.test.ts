@@ -15,6 +15,9 @@ describe("stageTriggerDeploy", () => {
     deploy: ReturnType<typeof vi.fn>;
     getApplication: ReturnType<typeof vi.fn>;
     listDeployments: ReturnType<typeof vi.fn>;
+    listDomains: ReturnType<typeof vi.fn>;
+    generateDomain: ReturnType<typeof vi.fn>;
+    createDomain: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   let mockLog: (line: string) => Promise<void>;
@@ -30,6 +33,9 @@ describe("stageTriggerDeploy", () => {
       deploy: vi.fn().mockResolvedValue(undefined),
       getApplication: vi.fn(),
       listDeployments: vi.fn().mockResolvedValue([]),
+      listDomains: vi.fn().mockResolvedValue([]),
+      generateDomain: vi.fn().mockResolvedValue("app-my-app-98-93-35-222.sslip.io"),
+      createDomain: vi.fn().mockResolvedValue({ domainId: "dom-1", host: "app-my-app-98-93-35-222.sslip.io", https: false, port: 3000, path: "/", applicationId: "app-1" }),
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };
@@ -46,7 +52,7 @@ describe("stageTriggerDeploy", () => {
     mockClient.listDeployments
       .mockResolvedValueOnce([])
       .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
-    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app" });
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
 
     const result = await stageTriggerDeploy({
       applicationId: "app-1",
@@ -58,6 +64,66 @@ describe("stageTriggerDeploy", () => {
     expect(result.status).toBe("done");
     expect(result.appUrl).toContain("my-app");
     expect(mockClient.deploy).toHaveBeenCalledWith({ applicationId: "app-1", title: "Dockier deploy" });
+  });
+
+  it("generates and registers a domain on success when the app has none", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+    mockClient.listDomains.mockResolvedValue([]); // no existing domain
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+    });
+
+    expect(mockClient.generateDomain).toHaveBeenCalledWith("my-app", "srv-1");
+    expect(mockClient.createDomain).toHaveBeenCalled();
+    expect(result.appUrl).toBe("http://app-my-app-98-93-35-222.sslip.io");
+  });
+
+  it("routes railpack apps to container port 80, others to 3000", async () => {
+    const run = async (buildType: string) => {
+      mockClient.createDomain.mockClear();
+      mockClient.listDeployments
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+      mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+      mockClient.listDomains.mockResolvedValue([]);
+      await stageTriggerDeploy({
+        applicationId: "app-1",
+        client: mockClient as unknown as DokployClient,
+        log: mockLog,
+        buildType,
+        pollIntervalMs: 100,
+      });
+      return (mockClient.createDomain.mock.calls.at(-1)?.[0] as { port: number }).port;
+    };
+
+    expect(await run("railpack")).toBe(80);
+    expect(await run("nixpacks")).toBe(3000);
+    expect(await run("dockerfile")).toBe(3000);
+  });
+
+  it("reuses an existing domain instead of generating a new one", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+    mockClient.listDomains.mockResolvedValue([{ host: "existing.example.com", https: true, port: 443 }]);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+    });
+
+    expect(mockClient.generateDomain).not.toHaveBeenCalled();
+    expect(result.appUrl).toBe("https://existing.example.com");
   });
 
   it("returns error when the deployment status becomes 'error'", async () => {
@@ -173,6 +239,9 @@ describe("stageDeployWithRetry", () => {
     deploy: ReturnType<typeof vi.fn>;
     getApplication: ReturnType<typeof vi.fn>;
     listDeployments: ReturnType<typeof vi.fn>;
+    listDomains: ReturnType<typeof vi.fn>;
+    generateDomain: ReturnType<typeof vi.fn>;
+    createDomain: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   let mockLog: (line: string) => Promise<void>;
@@ -188,6 +257,9 @@ describe("stageDeployWithRetry", () => {
       deploy: vi.fn().mockResolvedValue(undefined),
       getApplication: vi.fn().mockResolvedValue({ applicationStatus: "done", appName: "my-app" }),
       listDeployments: vi.fn().mockResolvedValue([]),
+      listDomains: vi.fn().mockResolvedValue([]),
+      generateDomain: vi.fn().mockResolvedValue("app-my-app-98-93-35-222.sslip.io"),
+      createDomain: vi.fn().mockResolvedValue({ domainId: "dom-1", host: "app-my-app-98-93-35-222.sslip.io", https: false, port: 3000, path: "/", applicationId: "app-1" }),
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };

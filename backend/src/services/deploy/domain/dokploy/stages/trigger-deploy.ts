@@ -23,10 +23,12 @@ export async function stageTriggerDeploy(params: {
   applicationId: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
+  /** Build type of the app — determines the container port for the domain. */
+  buildType?: string;
   pollIntervalMs?: number;
   timeoutMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
+  const { applicationId, client, log, buildType = "", pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
 
   // Capture the set of existing deployment ids BEFORE triggering, so we can
   // identify the NEW deployment this trigger creates and follow only its
@@ -50,7 +52,7 @@ export async function stageTriggerDeploy(params: {
 
     if (status === "done") {
       const app = await client.getApplication(applicationId);
-      const appUrl = extractAppUrl(app);
+      const appUrl = await resolveAppUrl(applicationId, app, client, log, containerPortForBuildType(buildType));
       await log(`[stage:deploy] ✓ Deployment successful! URL: ${appUrl || "(pending domain)"}`);
       return { status: "done", appUrl };
     }
@@ -77,10 +79,11 @@ export async function stageDeployWithRetry(params: {
   applicationId: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
+  buildType?: string;
   maxAttempts?: number;
   pollIntervalMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, maxAttempts = 3, pollIntervalMs } = params;
+  const { applicationId, client, log, buildType, maxAttempts = 3, pollIntervalMs } = params;
 
   let lastFailureReason: string | undefined;
 
@@ -91,6 +94,7 @@ export async function stageDeployWithRetry(params: {
       applicationId,
       client,
       log,
+      buildType,
       pollIntervalMs,
     });
 
@@ -175,10 +179,76 @@ async function reportBuildFailure(
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-function extractAppUrl(app: { appName: string }): string {
-  // Dokploy assigns URLs based on appName + configured domain.
-  // The exact URL depends on Traefik/domain config in Dokploy.
-  // For now, return the app name — the full URL resolution
-  // will come from querying the Dokploy domains API.
-  return app.appName ? `https://${app.appName}.dokploy.local` : "";
+/**
+ * Resolve the real, reachable URL for a deployed app.
+ *
+ * A Dokploy app has no public URL until a domain is registered (Traefik routes
+ * by domain). So on success we:
+ *   1. reuse an already-registered domain if one exists, else
+ *   2. generate a free sslip.io host (embeds the server IP, no DNS setup) and
+ *      register it via domain.create.
+ * Returns the http(s) URL, or "" if a domain couldn't be established (deploy
+ * still succeeded — the URL is just not available yet). Never throws.
+ */
+async function resolveAppUrl(
+  applicationId: string,
+  app: { appName?: string; serverId?: string | null },
+  client: DokployClient,
+  log: (line: string) => Promise<void>,
+  containerPort: number,
+): Promise<string> {
+  try {
+    // 1. Reuse an existing domain if the app already has one.
+    const existing = await client.listDomains(applicationId);
+    const already = existing[0];
+    if (already?.host) {
+      return toUrl(already.host, already.https);
+    }
+
+    // 2. Generate + register a free sslip.io domain.
+    if (!app.appName || !app.serverId) return "";
+    const host = await client.generateDomain(app.appName, app.serverId);
+    if (!host) return "";
+
+    const created = await client.createDomain({
+      host,
+      applicationId,
+      // The port Traefik forwards to must match the port the app container
+      // listens on, or requests get "Bad Gateway". This depends on the
+      // builder/framework (see containerPortForBuildType).
+      port: containerPort,
+      https: false, // sslip.io free domains are HTTP-only
+      domainType: "application",
+      certificateType: "none",
+    });
+    await log(`[stage:deploy] Assigned domain: ${created.host}`);
+    return toUrl(created.host, created.https);
+  } catch {
+    // Domain setup is best-effort — the deploy already succeeded.
+    return "";
+  }
 }
+
+/**
+ * The container port Traefik should route to, by build type.
+ *
+ * - railpack: serves PHP via FrankenPHP/Caddy on port 80; static sites via
+ *   Caddy on 80; Node apps typically honor PORT=3000. Railpack's PHP/static
+ *   images listen on 80, which is the common case, so default railpack to 80.
+ * - dockerfile/nixpacks/other: Dokploy's conventional app port is 3000.
+ *
+ * A wrong port is the classic "Bad Gateway" cause: Traefik routes fine but the
+ * container isn't listening where it forwards.
+ */
+function containerPortForBuildType(buildType: string): number {
+  return buildType === "railpack" ? 80 : 3000;
+}
+
+/** Build an http(s) URL from a Dokploy domain host. */
+function toUrl(host: string, https: boolean): string {
+  // The container port is internal to Traefik; the public URL is on the
+  // standard 80/443 for the scheme, so it's just scheme://host.
+  return `${https ? "https" : "http"}://${host}`;
+}
+
+

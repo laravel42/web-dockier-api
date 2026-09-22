@@ -50,6 +50,17 @@ export interface ApplicationMapping {
   buildType: string;
 }
 
+export interface DatabaseMapping {
+  id: string;
+  projectId: string;
+  serviceType: string;
+  engine: string;
+  dokployDatabaseId: string;
+  dbHost: string;
+  dbName: string | null;
+  dbUser: string | null;
+}
+
 // ─── Tenant Project Mappings ───────────────────────────────────────
 
 /**
@@ -289,6 +300,87 @@ export async function deleteApplicationMapping(projectId: string): Promise<void>
     .eq("project_id", projectId);
 
   throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_applications row" });
+}
+
+// ─── Database Mappings ─────────────────────────────────────────────
+
+function rowToDatabaseMapping(data: Record<string, unknown>): DatabaseMapping {
+  return {
+    id: data.id as string,
+    projectId: data.project_id as string,
+    serviceType: data.service_type as string,
+    engine: data.engine as string,
+    dokployDatabaseId: data.dokploy_database_id as string,
+    dbHost: data.db_host as string,
+    dbName: (data.db_name as string | null) ?? null,
+    dbUser: (data.db_user as string | null) ?? null,
+  };
+}
+
+/**
+ * Get the database mapping for a project + service type (e.g. "database",
+ * "cache"). A project may have several rows, one per service type.
+ */
+export async function getDatabase(projectId: string, serviceType: string): Promise<DatabaseMapping | null> {
+  const { data, error } = await supabaseAdmin
+    .from("dokploy_databases")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("service_type", serviceType)
+    .maybeSingle();
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to query dokploy_databases" });
+  if (!data) return null;
+  return rowToDatabaseMapping(data);
+}
+
+/**
+ * Create or update a database mapping.
+ * Uses ON CONFLICT on (project_id, service_type).
+ */
+export async function upsertDatabase(params: {
+  projectId: string;
+  serviceType: string;
+  engine: string;
+  dokployDatabaseId: string;
+  dbHost: string;
+  dbName?: string | null;
+  dbUser?: string | null;
+}): Promise<DatabaseMapping> {
+  const { data, error } = await supabaseAdmin
+    .from("dokploy_databases")
+    .upsert(
+      {
+        project_id: params.projectId,
+        service_type: params.serviceType,
+        engine: params.engine,
+        dokploy_database_id: params.dokployDatabaseId,
+        db_host: params.dbHost,
+        db_name: params.dbName ?? null,
+        db_user: params.dbUser ?? null,
+        updated_at: nowIso(),
+      },
+      { onConflict: "project_id,service_type" },
+    )
+    .select("*")
+    .single();
+
+  const row = unwrapQuery(data, error, DokployMappingError, {
+    internalMsg: "Failed to upsert dokploy_databases",
+  });
+  return rowToDatabaseMapping(row);
+}
+
+/**
+ * Delete all database mapping rows for a project (used during teardown).
+ */
+export async function deleteDatabaseMappings(projectId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("dokploy_databases")
+    .delete()
+    .eq("project_id", projectId);
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_databases rows" });
 }
 
 // ─── Composite Get-or-Create Helpers ───────────────────────────────

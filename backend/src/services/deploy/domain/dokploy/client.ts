@@ -22,6 +22,11 @@ import type {
   DokployDeployment,
   SaveBuildTypeParams,
   SaveEnvironmentParams,
+  CreateDomainParams,
+  DokployDomain,
+  CreateSqlDatabaseParams,
+  CreateRedisParams,
+  DokployDatabase,
   SaveGithubProviderParams,
   SaveGitlabProviderParams,
   SaveCustomGitProviderParams,
@@ -72,6 +77,22 @@ function buildQueryString(input: unknown): string {
     params.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
   }
   return params.toString();
+}
+
+/**
+ * Normalize a database create response into the common DokployDatabase shape.
+ * The id field name differs per engine (mysqlId/postgresId/redisId), so the
+ * caller passes the expected key.
+ */
+function normalizeDatabase(raw: Record<string, unknown>, idKey: string): DokployDatabase {
+  return {
+    id: String(raw[idKey] ?? ""),
+    appName: String(raw.appName ?? ""),
+    name: String(raw.name ?? ""),
+    databaseName: typeof raw.databaseName === "string" ? raw.databaseName : undefined,
+    databaseUser: typeof raw.databaseUser === "string" ? raw.databaseUser : undefined,
+    databasePassword: String(raw.databasePassword ?? ""),
+  };
 }
 
 function normalizeCreatedProject(
@@ -215,6 +236,65 @@ export class DokployClient {
 
   async saveEnvironment(params: SaveEnvironmentParams): Promise<void> {
     await this.mutation<unknown>("application.saveEnvironment", params);
+  }
+
+  // ─── Domains ───────────────────────────────────────────────────
+
+  /**
+   * Generate a free sslip.io/traefik.me host string for an app (does NOT
+   * persist it — use createDomain to register it). The host embeds the server
+   * IP so it resolves without any DNS setup.
+   */
+  async generateDomain(appName: string, serverId: string): Promise<string> {
+    return this.mutation<string>("domain.generateDomain", { appName, serverId });
+  }
+
+  /** Register a domain for an application so Traefik routes traffic to it. */
+  async createDomain(params: CreateDomainParams): Promise<DokployDomain> {
+    return this.mutation<DokployDomain>("domain.create", params);
+  }
+
+  /** List domains registered for an application. */
+  async listDomains(applicationId: string): Promise<DokployDomain[]> {
+    try {
+      const rows = await this.query<DokployDomain[]>("domain.byApplicationId", { applicationId });
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // ─── Databases (self-hosted services) ──────────────────────────
+  //
+  // create registers the DB service; deploy actually starts its container.
+  // The create response's `appName` is the internal Docker hostname the app
+  // uses to reach the DB (DB_HOST / REDIS_HOST).
+
+  async createMysql(params: CreateSqlDatabaseParams): Promise<DokployDatabase> {
+    const raw = await this.mutation<Record<string, unknown>>("mysql.create", params);
+    return normalizeDatabase(raw, "mysqlId");
+  }
+
+  async deployMysql(mysqlId: string): Promise<void> {
+    await this.mutation<unknown>("mysql.deploy", { mysqlId });
+  }
+
+  async createPostgres(params: CreateSqlDatabaseParams): Promise<DokployDatabase> {
+    const raw = await this.mutation<Record<string, unknown>>("postgres.create", params);
+    return normalizeDatabase(raw, "postgresId");
+  }
+
+  async deployPostgres(postgresId: string): Promise<void> {
+    await this.mutation<unknown>("postgres.deploy", { postgresId });
+  }
+
+  async createRedis(params: CreateRedisParams): Promise<DokployDatabase> {
+    const raw = await this.mutation<Record<string, unknown>>("redis.create", params);
+    return normalizeDatabase(raw, "redisId");
+  }
+
+  async deployRedis(redisId: string): Promise<void> {
+    await this.mutation<unknown>("redis.deploy", { redisId });
   }
 
   // ─── Git Providers ─────────────────────────────────────────────

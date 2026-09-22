@@ -16,7 +16,7 @@
  */
 
 import type { DokployClient } from "../client.js";
-import { getServer, upsertServer, updateServerStatus } from "../mappings.js";
+import { getServer, upsertServer, updateServerStatus, deleteServerMapping } from "../mappings.js";
 import { env } from "../../../../../shared/config.js";
 import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey, type ProviderCredential } from "../../../../../lib/provider-credentials.js";
 import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
@@ -48,18 +48,27 @@ export async function stageProvisionServer(params: {
 
   await log("[stage:provision-server] Checking for existing server...");
 
-  // Check if we already have a healthy server for this project
+  // Reuse the mapped server only if it is marked ready AND still exists in
+  // Dokploy. A server deleted out-of-band (e.g. removed in the Dokploy UI, or
+  // its VM terminated) leaves a dangling mapping row; blindly reusing it points
+  // the whole deploy at a server that is no longer there — which later fails
+  // deep in configure-app/deploy. If it's gone, clear the stale mapping and
+  // provision a fresh server.
   const existing = await getServer(projectId);
   if (existing && existing.serverStatus === "ready") {
-    await log(`[stage:provision-server] ✓ Reusing existing server: ${existing.serverIp}`);
-    return {
-      dokployServerId: existing.dokployServerId,
-      serverIp: existing.serverIp,
-    };
-  }
-
-  // If server exists but is in error/provisioning state, we'll re-provision
-  if (existing && existing.serverStatus === "error") {
+    if (await serverExists(existing.dokployServerId, client)) {
+      await log(`[stage:provision-server] ✓ Reusing existing server: ${existing.serverIp}`);
+      return {
+        dokployServerId: existing.dokployServerId,
+        serverIp: existing.serverIp,
+      };
+    }
+    await log(
+      `[stage:provision-server] Mapped server ${existing.dokployServerId} no longer exists — clearing stale mapping and re-provisioning.`,
+    );
+    await deleteServerMapping(projectId);
+  } else if (existing && existing.serverStatus === "error") {
+    // Server exists but is in error state — re-provision.
     await log("[stage:provision-server] Existing server is in error state, re-provisioning...");
   }
 
@@ -231,6 +240,21 @@ async function provisionGcpServer(params: {
  * instances on a tenant's cloud account are traceable back to Dockier.
  * Keys are lowercase to satisfy GCP label rules (AWS tag keys are case-flexible).
  */
+/**
+ * Check whether a Dokploy server still exists, by id. Returns false if
+ * `server.one` reports it missing (or any lookup error), so a
+ * deleted/unreachable server is treated as "re-provision" rather than fatal.
+ */
+async function serverExists(serverId: string, client: DokployClient): Promise<boolean> {
+  try {
+    const server = await client.getServer(serverId);
+    return Boolean(server?.serverId);
+  } catch {
+    // server.one throws (typically 404) when the server was deleted.
+    return false;
+  }
+}
+
 function attributionTags(projectId: string, tenantId?: string): Record<string, string> {
   const tags: Record<string, string> = {
     "dockier-managed": "true",

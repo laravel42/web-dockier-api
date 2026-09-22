@@ -22,6 +22,7 @@ import { getErrDetail } from "../../../../shared/utils/error-message.js";
 import { stageEnsureProject } from "./stages/ensure-project.js";
 import { stageSyncGit } from "./stages/sync-git.js";
 import { stageProvisionServer } from "./stages/provision-server.js";
+import { stageProvisionDatabases } from "./stages/provision-databases.js";
 import { stageConfigureApp } from "./stages/configure-app.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
 import { revealEnv } from "../../../projects/domain/env.js";
@@ -74,12 +75,26 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     ]);
     checkTimeout();
 
-    // ─── Stage 4: Configure Application ──────────────────────────
     await updateStatus(deploymentId, "deploying");
 
     const envVars = projectId ? await loadProjectEnvVars(tenantId, projectId) : [];
 
-    const { dokployApplicationId } = await stageConfigureApp({
+    // ─── Stage 4: Provision self-hosted databases (vps services) ─
+    // Runs before configure-app so the app's env can be wired to the DBs.
+    const dbResult = await stageProvisionDatabases({
+      projectId: projectId || deploymentId,
+      projectName: repoToAppName(repo),
+      environmentId: dokployEnvironmentId,
+      serverId: serverResult.dokployServerId,
+      services: event.services ?? [],
+      envVars,
+      client,
+      log,
+    });
+    checkTimeout();
+
+    // ─── Stage 5: Configure Application ──────────────────────────
+    const { dokployApplicationId, buildType } = await stageConfigureApp({
       projectId: projectId || deploymentId,
       projectName: repoToAppName(repo),
       environmentId: dokployEnvironmentId,
@@ -91,6 +106,8 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
       },
+      services: event.services,
+      provisionedDatabases: dbResult.databases,
       envVars,
       client,
       log,
@@ -105,6 +122,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       applicationId: dokployApplicationId,
       client,
       log,
+      buildType,
       maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
     });

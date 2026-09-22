@@ -172,6 +172,79 @@ export interface SaveEnvironmentParams {
   createEnvFile?: boolean;
 }
 
+export interface CreateDomainParams {
+  host: string;
+  applicationId: string;
+  port: number;
+  https: boolean;
+  domainType: "application" | "compose";
+  certificateType: "none" | "letsencrypt";
+  path?: string;
+}
+
+export interface DokployDomain {
+  domainId: string;
+  host: string;
+  port: number | null;
+  https: boolean;
+  path: string | null;
+  applicationId: string | null;
+}
+
+/**
+ * A backing service (database/cache/etc.) detected for a deployment.
+ *
+ * - `type`: category — "database", "cache", "queue", "storage", etc.
+ * - `name`: human label (e.g. "MySQL").
+ * - `mode`: "vps" = self-hosted (provision it on the server), "managed" = the
+ *   app uses an externally hosted service via its own env credentials (no-op
+ *   for provisioning).
+ */
+export interface DeployService {
+  type: string;
+  name: string;
+  mode: string;
+}
+
+// ─── Databases (self-hosted services) ──────────────────────────────
+
+/** Common create params for SQL databases (mysql/postgres/mariadb). */
+export interface CreateSqlDatabaseParams {
+  name: string;
+  appName: string;
+  environmentId: string;
+  databaseName: string;
+  databaseUser: string;
+  databasePassword: string;
+  dockerImage: string;
+  serverId?: string;
+}
+
+/** Create params for a Redis service (no user/db name). */
+export interface CreateRedisParams {
+  name: string;
+  appName: string;
+  environmentId: string;
+  databasePassword: string;
+  dockerImage: string;
+  serverId?: string;
+}
+
+/**
+ * A created Dokploy database service. `appName` is the internal Docker service
+ * hostname other containers (the app) use to reach it over the Dokploy
+ * network — i.e. the value for DB_HOST / REDIS_HOST.
+ */
+export interface DokployDatabase {
+  /** One of mysqlId / postgresId / redisId depending on engine. */
+  id: string;
+  appName: string;
+  name: string;
+  databaseName?: string;
+  databaseUser?: string;
+  databasePassword: string;
+}
+
 // ─── Git Providers ─────────────────────────────────────────────────
 
 export interface SaveGithubProviderParams {

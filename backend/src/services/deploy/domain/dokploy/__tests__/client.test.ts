@@ -394,6 +394,44 @@ describe("DokployClient", () => {
       expect(calledUrl).toContain("project.all");
       expect(calledUrl).not.toContain("input=");
     });
+
+    it("createMysql posts to mysql.create and normalizes mysqlId → id + appName host", async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ result: { data: {
+          mysqlId: "db-1", appName: "probe-mysql-ufxl6t", name: "probe-mysql",
+          databaseName: "appdb", databaseUser: "appuser", databasePassword: "pw",
+        } } }), { status: 200 }),
+      );
+
+      const db = await client.createMysql({
+        name: "probe-mysql", appName: "probe-mysql", environmentId: "env-1",
+        databaseName: "appdb", databaseUser: "appuser", databasePassword: "pw", dockerImage: "mysql:8",
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dokploy.test/api/mysql.create",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(db.id).toBe("db-1");
+      expect(db.appName).toBe("probe-mysql-ufxl6t"); // internal DB host
+      expect(db.databaseName).toBe("appdb");
+    });
+
+    it("createRedis normalizes redisId and deployRedis posts the id", async () => {
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify({ result: { data: { redisId: "r-1", appName: "redis-abc", name: "cache", databasePassword: "pw" } } }), { status: 200 }),
+      );
+      const db = await client.createRedis({ name: "cache", appName: "cache", environmentId: "env-1", databasePassword: "pw", dockerImage: "redis:7" });
+      expect(db.id).toBe("r-1");
+      expect(db.appName).toBe("redis-abc");
+
+      fetchMock.mockResolvedValue(new Response("", { status: 200 }));
+      await client.deployRedis("r-1");
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "https://dokploy.test/api/redis.deploy",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ redisId: "r-1" }) }),
+      );
+    });
   });
 
   // ─── Edge Cases ──────────────────────────────────────────────────

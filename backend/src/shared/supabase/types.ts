@@ -697,6 +697,28 @@ export type Database = {
         Relationships: [];
       };
 
+      dokploy_databases: {
+        Row: {
+          id: string;
+          project_id: string;
+          service_type: string;
+          engine: string;
+          dokploy_database_id: string;
+          db_host: string;
+          db_name: string | null;
+          db_user: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["dokploy_databases"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["dokploy_databases"]["Row"],
+            "project_id" | "service_type" | "engine" | "dokploy_database_id" | "db_host"
+          >;
+        Update: Partial<Database["public"]["Tables"]["dokploy_databases"]["Row"]>;
+        Relationships: [];
+      };
+
       // ─── Processes (background processes + scheduled jobs) ────────────
 
       background_processes: {
