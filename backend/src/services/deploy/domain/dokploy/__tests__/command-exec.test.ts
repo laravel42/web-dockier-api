@@ -109,6 +109,9 @@ describe("execInDokployContainer", () => {
     expect(args).toContain("StrictHostKeyChecking=no");
     // The remote script resolves the container by appName and execs the command.
     const remote = args[args.length - 1];
+    // Primary resolution targets the running Swarm task (survives rollouts),
+    // with a name-match fallback.
+    expect(remote).toContain("label=com.docker.swarm.service.name=myapp-abc123");
     expect(remote).toContain('docker ps --filter "name=myapp-abc123"');
     expect(remote).toContain("docker exec");
     expect(remote).toContain("echo hello");

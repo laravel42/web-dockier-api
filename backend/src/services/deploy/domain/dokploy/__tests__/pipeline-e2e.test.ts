@@ -78,6 +78,7 @@ vi.mock("../mappings.js", () => ({
   getDatabase: vi.fn(async () => null),
   upsertDatabase: vi.fn(async (p: Record<string, unknown>) => ({ id: "dbm-1", ...p })),
   deleteDatabaseMappings: vi.fn(async () => undefined),
+  deleteDatabaseMapping: vi.fn(async () => undefined),
 }));
 
 // ─── Git + env boundaries ──────────────────────────────────────────
@@ -120,6 +121,8 @@ const clientMethods = {
   deployPostgres: vi.fn(async () => undefined),
   createRedis: vi.fn(async () => ({ id: "r-1", appName: "myapp-cache-abcdef", name: "cache", databasePassword: "pw" })),
   deployRedis: vi.fn(async () => undefined),
+  // Reused DB services are verified to still exist; default to "exists".
+  databaseExists: vi.fn(async () => true),
   triggerAIFix: vi.fn(async () => ({ applied: true, summary: "bumped node version" })),
 };
 vi.mock("../client.js", () => ({
@@ -307,8 +310,9 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
 
     const envCalls = clientMethods.saveEnvironment.mock.calls as unknown as Array<[{ env: string }]>;
     const env = envCalls.at(-1)?.[0]?.env ?? "";
-    // Provisioned host wins over the user's 127.0.0.1.
-    expect(env).toContain("DB_HOST=myapp-database-abcdef");
+    // Provisioned host wins over the user's 127.0.0.1, and is the
+    // Swarm-resolvable tasks.<appName> form so the app can actually reach it.
+    expect(env).toContain("DB_HOST=tasks.myapp-database-abcdef");
     expect(env).not.toContain("DB_HOST=127.0.0.1");
   });
 

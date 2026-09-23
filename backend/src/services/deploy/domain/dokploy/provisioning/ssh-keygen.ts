@@ -8,58 +8,98 @@
  * provision time (alongside Dokploy's), and persist the PRIVATE half encrypted
  * on the server mapping. Dockier then SSHes in as root to `docker exec`.
  *
- * ed25519 is used: small keys, universally supported by modern OpenSSH, and
- * the OpenSSH public-key line format is trivial to emit for authorized_keys.
+ * Key type: RSA-2048.
+ *
+ * We intentionally do NOT use ed25519 here, even though it's smaller/nicer:
+ * OpenSSH's `ssh -i` only accepts ed25519 private keys in the native OpenSSH
+ * private-key container (`-----BEGIN OPENSSH PRIVATE KEY-----`), and Node's
+ * `crypto` cannot export that container — it only emits PKCS#8/SEC1/PKCS#1.
+ * An ed25519 key exported as PKCS#8 PEM makes `ssh -i` fail with
+ * `Load key "...": invalid format` → `Permission denied (publickey)`. RSA does
+ * not have this problem: OpenSSH reads RSA private keys from the traditional
+ * PKCS#1 PEM (`-----BEGIN RSA PRIVATE KEY-----`) that Node can export directly,
+ * so command execution works without any hand-rolled key container.
  */
 
 import { generateKeyPairSync, createPublicKey } from "node:crypto";
 
 export interface DockierSshKeyPair {
-  /** PEM-encoded PKCS#8 private key (what we store, encrypted, and write to a temp file for `ssh -i`). */
+  /**
+   * RSA private key as traditional PKCS#1 PEM (`-----BEGIN RSA PRIVATE KEY-----`).
+   * This is the format `ssh -i` reads directly — what we store (encrypted) and
+   * write to a temp file for command execution.
+   */
   privateKeyPem: string;
-  /** OpenSSH authorized_keys line, e.g. "ssh-ed25519 AAAA... dockier". */
+  /** OpenSSH authorized_keys line, e.g. "ssh-rsa AAAA... dockier". */
   publicKeyOpenssh: string;
 }
 
 /**
- * Generate an ed25519 keypair for Dockier's SSH access to a server.
+ * Generate an RSA-2048 keypair for Dockier's SSH access to a server.
  *
- * Returns the private key as PKCS#8 PEM (usable directly by `ssh -i`) and the
+ * Returns the private key as PKCS#1 PEM (usable directly by `ssh -i`) and the
  * public key in OpenSSH single-line format (usable directly in authorized_keys).
  */
 export function generateDockierSshKey(comment = "dockier"): DockierSshKeyPair {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 
-  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const publicKeyOpenssh = toOpensshPublicKey(publicKey, comment);
+  // PKCS#1 ("BEGIN RSA PRIVATE KEY") is the traditional OpenSSH-readable PEM.
+  const privateKeyPem = privateKey.export({ type: "pkcs1", format: "pem" }).toString();
+  const publicKeyOpenssh = toOpensshRsaPublicKey(publicKey, comment);
 
   return { privateKeyPem, publicKeyOpenssh };
 }
 
 /**
- * Convert a Node ed25519 public KeyObject into an OpenSSH authorized_keys line.
+ * Convert a Node RSA public KeyObject into an OpenSSH authorized_keys line.
  *
- * OpenSSH wire format for ed25519:
- *   string  "ssh-ed25519"
- *   string  <32-byte raw public key>
- * each `string` is a 4-byte big-endian length prefix followed by the bytes.
- * The blob is base64-encoded and prefixed with the key type + suffixed with a
- * comment.
+ * OpenSSH wire format for RSA:
+ *   string  "ssh-rsa"
+ *   mpint   e   (public exponent)
+ *   mpint   n   (modulus)
+ * where each `string`/`mpint` is a 4-byte big-endian length prefix followed by
+ * the bytes. The concatenated blob is base64-encoded, prefixed with the key
+ * type and suffixed with a comment.
+ *
+ * We read e/n from the key's JWK (base64url) rather than parsing DER, which
+ * keeps the encoding straightforward and correct.
  */
-function toOpensshPublicKey(publicKey: ReturnType<typeof createPublicKey>, comment: string): string {
-  // The 32-byte raw ed25519 public key sits at the end of the DER (SPKI). The
-  // SPKI prefix for ed25519 is a fixed 12-byte header, so the raw key is the
-  // final 32 bytes of the DER encoding.
-  const der = publicKey.export({ type: "spki", format: "der" });
-  const raw = der.subarray(der.length - 32);
+function toOpensshRsaPublicKey(publicKey: ReturnType<typeof createPublicKey>, comment: string): string {
+  const jwk = publicKey.export({ format: "jwk" }) as { e?: string; n?: string };
+  if (!jwk.e || !jwk.n) {
+    throw new Error("Failed to derive RSA public key components (e/n) for OpenSSH encoding");
+  }
 
-  const keyType = Buffer.from("ssh-ed25519", "ascii");
+  const e = base64UrlToBuffer(jwk.e);
+  const n = base64UrlToBuffer(jwk.n);
+
   const blob = Buffer.concat([
-    lengthPrefixed(keyType),
-    lengthPrefixed(raw),
+    lengthPrefixed(Buffer.from("ssh-rsa", "ascii")),
+    lengthPrefixed(toMpint(e)),
+    lengthPrefixed(toMpint(n)),
   ]);
 
-  return `ssh-ed25519 ${blob.toString("base64")} ${comment}`;
+  return `ssh-rsa ${blob.toString("base64")} ${comment}`;
+}
+
+/** Decode a base64url string (JWK encoding) into a Buffer. */
+function base64UrlToBuffer(b64url: string): Buffer {
+  return Buffer.from(b64url, "base64url");
+}
+
+/**
+ * Normalize a big-endian integer to the SSH `mpint` representation: strip
+ * leading zero bytes, then prepend a single 0x00 if the high bit of the first
+ * byte is set (so the value is never interpreted as negative).
+ */
+function toMpint(buf: Buffer): Buffer {
+  let start = 0;
+  while (start < buf.length - 1 && buf[start] === 0x00) start++;
+  const trimmed = buf.subarray(start);
+  if (trimmed.length > 0 && (trimmed[0] & 0x80) !== 0) {
+    return Buffer.concat([Buffer.from([0x00]), trimmed]);
+  }
+  return Buffer.from(trimmed);
 }
 
 /** Prefix a buffer with its 4-byte big-endian length (SSH wire "string"). */

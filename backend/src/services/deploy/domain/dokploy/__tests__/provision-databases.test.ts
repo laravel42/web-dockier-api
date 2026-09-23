@@ -7,9 +7,11 @@ const upsertDatabase = vi.fn(async (p: Record<string, unknown>) => {
   return dbRow;
 });
 
+const deleteDatabaseMapping = vi.fn(async (_projectId: string, _serviceType: string) => undefined);
 vi.mock("../mappings.js", () => ({
   getDatabase: vi.fn(async () => dbRow),
   upsertDatabase: (...a: unknown[]) => upsertDatabase(...(a as [Record<string, unknown>])),
+  deleteDatabaseMapping: (...a: unknown[]) => deleteDatabaseMapping(...(a as [string, string])),
 }));
 
 const { stageProvisionDatabases } = await import("../stages/provision-databases.js");
@@ -23,6 +25,7 @@ describe("stageProvisionDatabases", () => {
     deployPostgres: ReturnType<typeof vi.fn>;
     createRedis: ReturnType<typeof vi.fn>;
     deployRedis: ReturnType<typeof vi.fn>;
+    databaseExists: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   const log = async (l: string) => { logLines.push(l); };
@@ -30,6 +33,7 @@ describe("stageProvisionDatabases", () => {
   beforeEach(() => {
     dbRow = null;
     logLines = [];
+    deleteDatabaseMapping.mockClear();
     client = {
       createMysql: vi.fn(async () => ({ id: "my-1", appName: "app-database-abc", name: "n", databaseName: "appdb", databaseUser: "dockier", databasePassword: "pw" })),
       deployMysql: vi.fn(async () => undefined),
@@ -37,6 +41,9 @@ describe("stageProvisionDatabases", () => {
       deployPostgres: vi.fn(async () => undefined),
       createRedis: vi.fn(async () => ({ id: "r-1", appName: "app-cache-abc", name: "n", databasePassword: "pw" })),
       deployRedis: vi.fn(async () => undefined),
+      // Default: a mapped service still exists (reuse path). Individual tests
+      // override this to false to exercise the stale-mapping recreate path.
+      databaseExists: vi.fn(async () => true),
     };
   });
 
@@ -72,10 +79,12 @@ describe("stageProvisionDatabases", () => {
 
     expect(client.createMysql).toHaveBeenCalledOnce();
     expect(client.deployMysql).toHaveBeenCalledWith("my-1");
+    // The mapping stores the RAW service appName…
     expect(upsertDatabase).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "proj-1", serviceType: "database", engine: "mysql", dbHost: "app-database-abc" }),
     );
-    expect(result.databases[0]).toMatchObject({ engine: "mysql", host: "app-database-abc", port: 3306, password: "pw" });
+    // …but the app receives the Swarm-resolvable tasks.<appName> host.
+    expect(result.databases[0]).toMatchObject({ engine: "mysql", host: "tasks.app-database-abc", port: 3306, password: "pw" });
   });
 
   it("chooses postgres when DB_CONNECTION=pgsql", async () => {
@@ -101,7 +110,7 @@ describe("stageProvisionDatabases", () => {
     });
     expect(client.createRedis).toHaveBeenCalledOnce();
     expect(client.deployRedis).toHaveBeenCalledWith("r-1");
-    expect(result.databases[0]).toMatchObject({ engine: "redis", host: "app-cache-abc", port: 6379 });
+    expect(result.databases[0]).toMatchObject({ engine: "redis", host: "tasks.app-cache-abc", port: 6379 });
   });
 
   it("reuses an existing mapped database instead of creating a new one", async () => {
@@ -120,8 +129,52 @@ describe("stageProvisionDatabases", () => {
       envVars: [],
     });
 
+    expect(client.databaseExists).toHaveBeenCalledWith("mysql", "my-old");
     expect(client.createMysql).not.toHaveBeenCalled();
-    expect(result.databases[0]).toMatchObject({ engine: "mysql", host: "existing-host" });
+    expect(deleteDatabaseMapping).not.toHaveBeenCalled();
+    // Reuse path also hands the app the Swarm-resolvable host.
+    expect(result.databases[0]).toMatchObject({ engine: "mysql", host: "tasks.existing-host" });
+  });
+
+  it("recreates the service when the mapped DB no longer exists in Dokploy (stale mapping)", async () => {
+    dbRow = {
+      id: "dbm-1", projectId: "proj-1", serviceType: "database", engine: "mysql",
+      dokployDatabaseId: "my-gone", dbHost: "dead-host", dbName: "credito_filament", dbUser: "dockier",
+    };
+    // The mapped service was deleted out-of-band in Dokploy.
+    client.databaseExists.mockResolvedValue(false);
+
+    const result = await stageProvisionDatabases({
+      ...base,
+      client: client as unknown as DokployClient,
+      log,
+      services: [{ type: "database", name: "Database", mode: "vps" }],
+      envVars: [{ name: "DB_CONNECTION", value: "mysql" }, { name: "DB_DATABASE", value: "credito_filament" }],
+    });
+
+    // Stale mapping cleared, then a fresh service created and wired in.
+    expect(client.databaseExists).toHaveBeenCalledWith("mysql", "my-gone");
+    expect(deleteDatabaseMapping).toHaveBeenCalledWith("proj-1", "database");
+    expect(client.createMysql).toHaveBeenCalledOnce();
+    expect(result.databases[0]).toMatchObject({ engine: "mysql", host: "tasks.app-database-abc" });
+    expect(logLines.some((l) => /no longer exists — clearing stale mapping/i.test(l))).toBe(true);
+  });
+
+  it("does not double-prefix a reused host that is already tasks.-normalized", async () => {
+    dbRow = {
+      id: "dbm-1", projectId: "proj-1", serviceType: "database", engine: "mysql",
+      dokployDatabaseId: "my-old", dbHost: "tasks.existing-host", dbName: "appdb", dbUser: "dockier",
+    };
+
+    const result = await stageProvisionDatabases({
+      ...base,
+      client: client as unknown as DokployClient,
+      log,
+      services: [{ type: "database", name: "Database", mode: "vps" }],
+      envVars: [],
+    });
+
+    expect(result.databases[0]).toMatchObject({ engine: "mysql", host: "tasks.existing-host" });
   });
 
   it("creates the mysql db with the app's own DB_DATABASE/DB_USERNAME/DB_PASSWORD when set", async () => {

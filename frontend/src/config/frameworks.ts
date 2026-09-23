@@ -14,12 +14,18 @@ export interface FrameworkCategory {
 // Deploy scripts run INSIDE the Docker container after it starts.
 // No cd, git pull, or package install — those happen at build time.
 
+// Laravel/Statamic on Railpack: the container's startup sequence already runs
+// `php artisan migrate --force` and `php artisan optimize` (which rebuilds the
+// config/route/view/event caches) against the real runtime env, every deploy.
+// So the default post-deploy script must NOT repeat migrate/config:cache/etc.:
+// re-running `config:cache` in a bare `docker exec` shell (which may not carry
+// the app's runtime env) bakes a broken config over the good one and yields a
+// Bad Gateway. Leave this empty by default; add only genuinely one-off commands.
 const LARAVEL_DEPLOY = `# Laravel post-deploy commands
-php artisan migrate --force
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-php artisan queue:restart`;
+# Migrations and cache optimization run automatically at container startup
+# (php artisan migrate --force + php artisan optimize), so nothing is needed here.
+# Add only extra one-off commands you want to run after each deploy, e.g.:
+#   php artisan db:seed --force`;
 
 const SYMFONY_DEPLOY = `# Symfony post-deploy commands
 php bin/console doctrine:migrations:migrate --no-interaction

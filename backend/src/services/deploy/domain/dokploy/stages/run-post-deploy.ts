@@ -21,15 +21,52 @@ import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 /** Cap on the whole script, mirroring the native post-deploy guard. */
 const MAX_SCRIPT_LENGTH = 10_000;
 
+/**
+ * Commands that Railpack's PHP `start-container.sh` already runs at container
+ * startup (in the real runtime env, every deploy): `migrate`, `storage:link`,
+ * and the `optimize` family — which rebuilds config/route/view/event caches.
+ * Re-running these here over `docker exec` is at best redundant and at worst
+ * harmful: a bare exec shell may not carry the app's runtime env, so
+ * `config:cache` can bake a broken config (DB pointing at 127.0.0.1) over the
+ * good one the container built at boot, producing a Bad Gateway.
+ *
+ * A `php artisan` command line is considered "startup-covered" if it invokes
+ * one of these. Matched against the artisan sub-command token.
+ */
+const STARTUP_COVERED_ARTISAN = new Set([
+  "migrate",
+  "optimize",
+  "optimize:clear",
+  "config:cache",
+  "config:clear",
+  "route:cache",
+  "route:clear",
+  "view:cache",
+  "view:clear",
+  "event:cache",
+  "event:clear",
+  "storage:link",
+]);
+
 export async function stageRunPostDeploy(params: {
   projectId: string;
+  /**
+   * Dokploy build type for this app. When "railpack" and the app is PHP, the
+   * container's own startup runs the standard Laravel release sequence, so
+   * startup-covered commands are skipped here (see STARTUP_COVERED_ARTISAN).
+   */
+  buildType?: string;
+  /** Detected primary language (used with techStack to identify PHP apps). */
+  primaryLanguage?: string;
+  /** Detected tech stack (used with primaryLanguage to identify PHP apps). */
+  techStack?: string[];
   /** How long to keep retrying container readiness before giving up (ms). */
   readinessTimeoutMs?: number;
   /** Test seam: sleep implementation. */
   sleep?: (ms: number) => Promise<void>;
   log: (line: string) => Promise<void>;
 }): Promise<void> {
-  const { projectId, log } = params;
+  const { projectId, buildType, primaryLanguage, techStack = [], log } = params;
   const sleep = params.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const readinessTimeoutMs = params.readinessTimeoutMs ?? 120_000;
 
@@ -50,12 +87,30 @@ export async function stageRunPostDeploy(params: {
     return;
   }
 
-  // Any real work? (ignore blank lines and `#` comments)
-  const hasWork = script.split("\n").some((line) => {
+  // On Railpack PHP apps the container's startup already runs migrate +
+  // optimize (config/route/view/event caches) against the real env. Drop any
+  // command line that startup already covers, so we neither duplicate work nor
+  // risk clobbering the boot-time config cache from a bare exec shell.
+  const runnable = isRailpackPhp(buildType, primaryLanguage, techStack)
+    ? stripStartupCovered(script)
+    : script;
+
+  // Any real work left? (ignore blank lines and `#` comments)
+  const hasWork = runnable.split("\n").some((line) => {
     const l = line.trim();
     return l && !l.startsWith("#");
   });
-  if (!hasWork) return;
+  if (!hasWork) {
+    if (isRailpackPhp(buildType, primaryLanguage, techStack) && hasNonComment(script)) {
+      await log(
+        "[stage:post-deploy] Migrations and cache optimization run automatically at container startup — no extra post-deploy commands to run.",
+      );
+    }
+    return;
+  }
+
+  // From here on, run only the commands not already handled at startup.
+  script = runnable;
 
   // Resolve the SSH + container target. If unavailable (older server without a
   // Dockier key, app not located), skip with a clear, non-fatal note.
@@ -89,6 +144,60 @@ export async function stageRunPostDeploy(params: {
     await log(`[stage:post-deploy] Post-deploy commands exited with code ${result.exitCode} (deploy still succeeded).`);
   }
   if (tail) await log(`[stage:post-deploy] Output:\n${tail}`);
+}
+
+/** True if the script has at least one non-blank, non-comment line. */
+function hasNonComment(script: string): boolean {
+  return script.split("\n").some((line) => {
+    const l = line.trim();
+    return l && !l.startsWith("#");
+  });
+}
+
+/**
+ * Detect a Railpack PHP app (the case where the container's startup already
+ * runs the Laravel release sequence). Mirrors configure-app's PHP detection:
+ * primaryLanguage alone is unreliable (a Laravel repo can be classified as
+ * "Blade"/blank), so we also check the tech stack.
+ */
+function isRailpackPhp(buildType: string | undefined, primaryLanguage: string | undefined, techStack: string[]): boolean {
+  if (buildType !== "railpack") return false;
+  const lang = (primaryLanguage ?? "").toLowerCase();
+  if (lang.includes("php") || lang.includes("laravel") || lang.includes("blade")) return true;
+  return techStack.some((s) => {
+    const t = s.toLowerCase();
+    return t.includes("php") || t.includes("laravel") || t.includes("filament") || t.includes("blade");
+  });
+}
+
+/**
+ * Remove `php artisan <cmd>` lines whose sub-command is already run by
+ * Railpack's PHP startup (see STARTUP_COVERED_ARTISAN). Non-artisan lines and
+ * artisan commands NOT in the covered set (e.g. `db:seed`, `horizon:publish`)
+ * are preserved, so users can still add genuinely one-off commands. Comments
+ * and blank lines are passed through untouched.
+ */
+function stripStartupCovered(script: string): string {
+  return script
+    .split("\n")
+    .filter((line) => {
+      const l = line.trim();
+      if (!l || l.startsWith("#")) return true; // keep comments/blanks
+      const sub = artisanSubCommand(l);
+      return !(sub && STARTUP_COVERED_ARTISAN.has(sub));
+    })
+    .join("\n");
+}
+
+/**
+ * Extract the artisan sub-command token from a command line, or null if the
+ * line isn't a `php artisan <cmd>` invocation. Tolerates a leading path/binary
+ * (e.g. `/usr/bin/php artisan migrate`) and extra flags after the sub-command.
+ */
+function artisanSubCommand(line: string): string | null {
+  // Match: (optional path)php  artisan  <subcommand>
+  const m = line.match(/(?:^|\s)php\s+artisan\s+([^\s]+)/i);
+  return m ? m[1].toLowerCase() : null;
 }
 
 /**

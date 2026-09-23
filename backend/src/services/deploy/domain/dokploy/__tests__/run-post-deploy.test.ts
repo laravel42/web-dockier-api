@@ -100,4 +100,71 @@ describe("stageRunPostDeploy", () => {
     await expect(stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep })).resolves.toBeUndefined();
     expect(mockResolveTarget).not.toHaveBeenCalled();
   });
+
+  // ─── Railpack PHP: startup already runs the Laravel release sequence ──────
+
+  it("skips entirely for a Railpack PHP app when the script is only startup-covered commands", async () => {
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript:
+        "# Laravel post-deploy commands\nphp artisan migrate --force\nphp artisan config:cache\nphp artisan route:cache\nphp artisan view:cache",
+    });
+
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "railpack",
+      techStack: ["php", "laravel"],
+      log,
+      sleep: noSleep,
+    });
+
+    // Nothing runs — startup handles migrate + optimize.
+    expect(mockResolveTarget).not.toHaveBeenCalled();
+    expect(mockExecInContainer).not.toHaveBeenCalled();
+    expect(logs.some((l) => /run automatically at container startup/i.test(l))).toBe(true);
+  });
+
+  it("runs only the NON-startup-covered commands for a Railpack PHP app", async () => {
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript: "php artisan migrate --force\nphp artisan config:cache\nphp artisan db:seed --force",
+    });
+    mockResolveTarget.mockResolvedValue({ target: TARGET });
+    mockExecInContainer
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false }) // readiness
+      .mockResolvedValueOnce({ exitCode: 0, output: "Seeded.\n", timedOut: false });
+
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "railpack",
+      primaryLanguage: "PHP",
+      log,
+      sleep: noSleep,
+    });
+
+    expect(mockExecInContainer).toHaveBeenCalledTimes(2);
+    const ran = mockExecInContainer.mock.calls[1][1] as string;
+    // The one-off seed survives; startup-covered migrate/config:cache are stripped.
+    expect(ran).toContain("php artisan db:seed --force");
+    expect(ran).not.toContain("migrate --force");
+    expect(ran).not.toContain("config:cache");
+  });
+
+  it("does NOT strip startup-covered commands for a non-Railpack (or non-PHP) build", async () => {
+    mockGetProjectDeployConfig.mockResolvedValue({ deployScript: "php artisan migrate --force" });
+    mockResolveTarget.mockResolvedValue({ target: TARGET });
+    mockExecInContainer
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false }) // readiness
+      .mockResolvedValueOnce({ exitCode: 0, output: "Migrated.\n", timedOut: false });
+
+    // buildType "dockerfile" → gate off → the migrate command runs as-is.
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "dockerfile",
+      techStack: ["php", "laravel"],
+      log,
+      sleep: noSleep,
+    });
+
+    expect(mockExecInContainer).toHaveBeenCalledTimes(2);
+    expect(mockExecInContainer.mock.calls[1][1]).toContain("php artisan migrate --force");
+  });
 });

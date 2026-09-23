@@ -164,8 +164,23 @@ export async function execInDokployContainer(
 function buildRemoteScript(appName: string, command: string): string {
   const escaped = command.replace(/'/g, "'\\''");
   // Note: appName is validated against SAFE_NAME before we get here.
+  //
+  // Resolving the target container correctly matters during a Swarm rollout:
+  // right after a deploy, the OLD task can still be draining while the NEW one
+  // starts, so a plain `docker ps --filter name=<appName> | head -n1` may exec
+  // into a container that's about to die (or the wrong replica). We therefore:
+  //   1. Ask Swarm for the RUNNING task of the service and map it to its
+  //      container id (the authoritative "current" container).
+  //   2. Fall back to `docker ps` (running, newest first) if the service query
+  //      yields nothing — e.g. non-Swarm setups or transient states.
+  // `docker exec` on the resolved task inherits the app's real runtime env
+  // (the same env the container was started with), so commands like
+  // `php artisan migrate` see the injected DB credentials rather than defaults.
   return [
-    `CID=$(docker ps --filter "name=${appName}" --filter "status=running" --format "{{.ID}}" | head -n1);`,
+    // 1. Prefer the running Swarm task's container id.
+    `CID=$(docker ps --filter "label=com.docker.swarm.service.name=${appName}" --filter "status=running" --format "{{.ID}}" | head -n1);`,
+    // 2. Fall back to a name match (newest running container first).
+    `if [ -z "$CID" ]; then CID=$(docker ps --filter "name=${appName}" --filter "status=running" --format "{{.ID}}" | head -n1); fi;`,
     `if [ -z "$CID" ]; then echo "The application container is not running." >&2; exit 1; fi;`,
     `docker exec "$CID" sh -c '${escaped}'`,
   ].join(" ");

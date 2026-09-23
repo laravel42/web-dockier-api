@@ -432,6 +432,22 @@ export async function deleteDatabaseMappings(projectId: string): Promise<void> {
   throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_databases rows" });
 }
 
+/**
+ * Delete a SINGLE database mapping row for a project + service type. Used to
+ * clear a stale mapping when the referenced Dokploy service no longer exists,
+ * so the provision stage recreates just that one service (unlike
+ * deleteDatabaseMappings, which clears every row for the project).
+ */
+export async function deleteDatabaseMapping(projectId: string, serviceType: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("dokploy_databases")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("service_type", serviceType);
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_databases row" });
+}
+
 // ─── Composite Get-or-Create Helpers ───────────────────────────────
 // These are the primary API for pipeline stages. They return existing
 // mappings or create new ones atomically (via upsert).

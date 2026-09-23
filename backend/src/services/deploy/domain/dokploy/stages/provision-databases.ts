@@ -17,7 +17,7 @@
 
 import type { DokployClient } from "../client.js";
 import type { DeployService, DokployDatabase } from "../types.js";
-import { getDatabase, upsertDatabase } from "../mappings.js";
+import { getDatabase, upsertDatabase, deleteDatabaseMapping } from "../mappings.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 
 /** A provisioned self-hosted service's connection details, for env injection. */
@@ -26,7 +26,11 @@ export interface ProvisionedDatabase {
   serviceType: string;
   /** Engine: "mysql" | "postgres" | "redis". */
   engine: string;
-  /** Internal hostname the app connects to (DB_HOST / REDIS_HOST). */
+  /**
+   * Internal hostname the app connects to (DB_HOST / REDIS_HOST). This is the
+   * Swarm-resolvable `tasks.<appName>` form, not the bare service name — see
+   * toSwarmResolvableHost for why.
+   */
   host: string;
   port: number;
   database?: string;
@@ -49,6 +53,36 @@ const DEFAULT_PORTS: Record<string, number> = {
   postgres: 5432,
   redis: 6379,
 };
+
+/**
+ * Convert a Dokploy service `appName` into the host the APP should actually use
+ * to reach it: the Swarm-native `tasks.<appName>` form.
+ *
+ * Why not the bare `appName`: Dokploy deploys every database/app as a Docker
+ * Swarm service in VIP (virtual-IP) mode. The bare service name resolves to a
+ * virtual IP served by IPVS — but on some hosts (notably minimal/again-AWS
+ * kernels, or when Swarm's advertise address is misconfigured) that VIP name
+ * fails to resolve at all, producing exactly:
+ *
+ *   getaddrinfo for <appName> failed: Name or service not known
+ *
+ * which crashes Laravel's startup `migrate` and yields a Bad Gateway. Docker
+ * Swarm always publishes a second DNS name, `tasks.<service>`, that resolves
+ * directly to the running task container IPs and bypasses the VIP/IPVS layer
+ * entirely. Dokploy documents this as the way to reach a deployed service by
+ * name. It's correct whether or not VIP mode is healthy, so we always use it
+ * for the app→DB connection.
+ *
+ * Idempotent: an already-prefixed or empty host is returned unchanged, so
+ * reused mappings (whose stored host may already be normalized) never become
+ * `tasks.tasks.<name>`.
+ */
+export function toSwarmResolvableHost(appName: string): string {
+  const host = appName.trim();
+  if (!host) return host;
+  if (host.startsWith("tasks.")) return host;
+  return `tasks.${host}`;
+}
 
 /**
  * Provision all vps-mode services for the project.
@@ -114,9 +148,13 @@ export async function stageProvisionDatabases(params: {
 
 /**
  * Provision (or reuse) a single database service and return its connection
- * details. Reuse is verified against Dokploy's mapping — since Dokploy has no
- * cheap per-id existence check for DBs here, we trust the stored mapping and
- * only create when none exists.
+ * details. A mapped service is reused only if it STILL EXISTS in Dokploy: a
+ * service deleted out-of-band (e.g. removed in the Dokploy UI) leaves a
+ * dangling mapping row whose hostname no longer resolves, which wires the app
+ * to a dead DB_HOST and crashes it at startup ("getaddrinfo ... Name or service
+ * not known" → Bad Gateway). When the service is gone we clear the stale
+ * mapping and recreate it — mirroring the applicationExists() self-healing in
+ * configure-app.
  */
 async function ensureDatabase(params: {
   projectId: string;
@@ -133,19 +171,32 @@ async function ensureDatabase(params: {
 
   const existing = await getDatabase(projectId, serviceType);
   if (existing) {
-    await log(`[stage:provision-databases] ✓ Reusing existing ${existing.engine} service: ${existing.dbHost}`);
-    return {
-      serviceType,
-      engine: existing.engine,
-      host: existing.dbHost,
-      port: DEFAULT_PORTS[existing.engine] ?? 0,
-      database: existing.dbName ?? undefined,
-      user: existing.dbUser ?? undefined,
-      // The password lives only in Dokploy; on reuse we don't re-read it. The
-      // app's env already carries it from the first provision, so env injection
-      // only fills host/port/name/user when absent (see configure-app).
-      password: "",
-    };
+    // Only reuse if the service still exists in Dokploy. A dangling mapping
+    // (service deleted out-of-band) would otherwise wire the app to a hostname
+    // that no longer resolves — the exact cause of the startup DB failure.
+    if (await client.databaseExists(existing.engine, existing.dokployDatabaseId)) {
+      await log(`[stage:provision-databases] ✓ Reusing existing ${existing.engine} service: ${existing.dbHost}`);
+      return {
+        serviceType,
+        engine: existing.engine,
+        // The stored dbHost is the raw service appName; the app must reach it via
+        // the Swarm-resolvable tasks.<appName> form (see toSwarmResolvableHost).
+        host: toSwarmResolvableHost(existing.dbHost),
+        port: DEFAULT_PORTS[existing.engine] ?? 0,
+        database: existing.dbName ?? undefined,
+        user: existing.dbUser ?? undefined,
+        // The password lives only in Dokploy; on reuse we don't re-read it. The
+        // app's env already carries it from the first provision, so env injection
+        // only fills host/port/name/user when absent (see configure-app).
+        password: "",
+      };
+    }
+
+    // Stale mapping: the referenced service is gone. Clear it and recreate.
+    await log(
+      `[stage:provision-databases] Mapped ${existing.engine} service ${existing.dbHost} no longer exists — clearing stale mapping and recreating.`,
+    );
+    await deleteDatabaseMapping(projectId, serviceType);
   }
 
   await log(`[stage:provision-databases] Provisioning ${engine} service for "${serviceType}"...`);
@@ -228,7 +279,10 @@ async function ensureDatabase(params: {
   return {
     serviceType,
     engine,
-    host: created.appName,
+    // Store the raw appName on the mapping (above), but hand the app the
+    // Swarm-resolvable tasks.<appName> host so DB_HOST/REDIS_HOST resolve even
+    // when the bare VIP service name doesn't (see toSwarmResolvableHost).
+    host: toSwarmResolvableHost(created.appName),
     port: DEFAULT_PORTS[engine],
     database: created.databaseName ?? (engine === "redis" ? undefined : dbName),
     user: created.databaseUser ?? (engine === "redis" ? undefined : dbUser),

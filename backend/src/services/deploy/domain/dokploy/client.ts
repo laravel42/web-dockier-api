@@ -297,6 +297,48 @@ export class DokployClient {
     await this.mutation<unknown>("redis.deploy", { redisId });
   }
 
+  // ─── Database existence checks ─────────────────────────────────
+  //
+  // Fetch a single service by its engine-specific id (mysql.one / postgres.one
+  // / redis.one). These throw (typically 404) when the service was deleted
+  // out-of-band in Dokploy — callers use that to detect a stale mapping and
+  // recreate, mirroring getApplication for apps. The id parameter name differs
+  // per engine, matching Dokploy's schema.
+
+  async getMysql(mysqlId: string): Promise<DokployDatabase> {
+    const raw = await this.query<Record<string, unknown>>("mysql.one", { mysqlId });
+    return normalizeDatabase(raw, "mysqlId");
+  }
+
+  async getPostgres(postgresId: string): Promise<DokployDatabase> {
+    const raw = await this.query<Record<string, unknown>>("postgres.one", { postgresId });
+    return normalizeDatabase(raw, "postgresId");
+  }
+
+  async getRedis(redisId: string): Promise<DokployDatabase> {
+    const raw = await this.query<Record<string, unknown>>("redis.one", { redisId });
+    return normalizeDatabase(raw, "redisId");
+  }
+
+  /**
+   * Whether a self-hosted database service still exists in Dokploy, by engine +
+   * id. Returns false on any lookup error (404 / deleted / unreachable) so a
+   * dangling mapping is treated as "recreate" rather than fatal. Never throws.
+   */
+  async databaseExists(engine: string, databaseId: string): Promise<boolean> {
+    if (!databaseId) return false;
+    try {
+      let svc: DokployDatabase;
+      if (engine === "redis") svc = await this.getRedis(databaseId);
+      else if (engine === "postgres") svc = await this.getPostgres(databaseId);
+      else svc = await this.getMysql(databaseId);
+      return Boolean(svc?.id);
+    } catch {
+      // .one throws (typically 404) when the service was deleted.
+      return false;
+    }
+  }
+
   // ─── Git Providers ─────────────────────────────────────────────
 
   async saveGithubProvider(params: SaveGithubProviderParams): Promise<void> {

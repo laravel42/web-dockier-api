@@ -289,7 +289,11 @@ function mergeEnv(
  *    `optimize` rebuilds the config/route/view/event caches — i.e. it covers
  *    `config:cache`, `route:cache`, and `view:cache`. So letting migrations run
  *    delivers the standard Laravel post-deploy sequence with no start-command
- *    override.
+ *    override. Because startup already runs this sequence, the after-deploy
+ *    post-deploy stage (run-post-deploy.ts) deliberately skips these
+ *    startup-covered commands for Railpack PHP apps — re-running `config:cache`
+ *    over `docker exec` (which may lack the runtime env) would bake a broken
+ *    config and cause a Bad Gateway.
  *
  *    We only force SKIP_MIGRATIONS=true when NO database is reachable at
  *    startup (no provisioned vps DB and no DB_* in the app env). Without a DB,

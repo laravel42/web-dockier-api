@@ -144,8 +144,19 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // Run the project's user-defined post-deploy commands inside the running
     // container. Best-effort + non-fatal — a failure here never fails the
     // deploy (see stageRunPostDeploy).
+    //
+    // buildType + language are passed so the stage can skip commands that the
+    // container's own startup already runs (Railpack PHP runs migrate +
+    // optimize at boot). Re-running those here via `docker exec` is redundant
+    // and can bake a broken config, causing Bad Gateway — so we don't.
     if (projectId) {
-      await stageRunPostDeploy({ projectId, log });
+      await stageRunPostDeploy({
+        projectId,
+        buildType,
+        primaryLanguage: event.primaryLanguage,
+        techStack: event.techStack,
+        log,
+      });
       checkTimeout();
     }
 
