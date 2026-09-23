@@ -494,6 +494,8 @@ export type Database = {
           security_rule_id: string;
           username: string;
           password_hash: string;
+          /** Encrypted-at-rest copy of the plaintext password (for the Dokploy security.create path). Never exposed via API. */
+          password_encrypted: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["security_rule_credentials"]["Row"]> &

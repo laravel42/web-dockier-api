@@ -30,6 +30,10 @@ import type {
   SaveGithubProviderParams,
   SaveGitlabProviderParams,
   SaveCustomGitProviderParams,
+  CreateSecurityParams,
+  DokploySecurity,
+  CreateRedirectParams,
+  DokployRedirect,
   DeployParams,
   AIFixResult,
   CreateSSHKeyParams,
@@ -351,6 +355,58 @@ export class DokployClient {
 
   async saveGitProvider(params: SaveCustomGitProviderParams): Promise<void> {
     await this.mutation<unknown>("application.saveGitProvider", params);
+  }
+
+  // ─── Traefik middlewares: Security (Basic Auth) + Redirects ────────
+  //
+  // Dokploy stores these per-application and manages the Traefik middleware for
+  // us: security.create makes a BasicAuth middleware (APR1-hashed) + attaches
+  // it to the app's router; redirect.create makes a redirect-regex rule. We
+  // read existing entries from application.one (which includes `security[]` and
+  // `redirects[]`) to reconcile, and create/delete by id.
+
+  /** Create a Basic Auth credential on an application (Traefik BasicAuth). */
+  async createSecurity(params: CreateSecurityParams): Promise<DokploySecurity> {
+    return this.mutation<DokploySecurity>("security.create", params);
+  }
+
+  /** Delete a Basic Auth credential by its securityId. */
+  async deleteSecurity(securityId: string): Promise<void> {
+    await this.mutation<unknown>("security.delete", { securityId });
+  }
+
+  /**
+   * Create a redirect-regex rule on an application.
+   *
+   * NOTE: the tRPC route is `redirects.create` (PLURAL) — `redirect.create`
+   * (singular) 404s. Verified against a live Dokploy instance. Security's route
+   * is `security.create` (singular), so the two intentionally differ.
+   */
+  async createRedirect(params: CreateRedirectParams): Promise<DokployRedirect> {
+    return this.mutation<DokployRedirect>("redirects.create", params);
+  }
+
+  /** Delete a redirect rule by its redirectId (plural route, see createRedirect). */
+  async deleteRedirect(redirectId: string): Promise<void> {
+    await this.mutation<unknown>("redirects.delete", { redirectId });
+  }
+
+  /**
+   * Read the security + redirect entries currently attached to an application.
+   * Best-effort: returns empty arrays if the app can't be read or doesn't carry
+   * them, so reconciliation can still proceed (it will just create desired
+   * state). Never throws.
+   */
+  async listAppMiddlewares(applicationId: string): Promise<{ security: DokploySecurity[]; redirects: DokployRedirect[] }> {
+    try {
+      const app = await this.getApplication(applicationId);
+      return {
+        security: Array.isArray(app?.security) ? app.security : [],
+        redirects: Array.isArray(app?.redirects) ? app.redirects : [],
+      };
+    } catch {
+      return { security: [], redirects: [] };
+    }
   }
 
   // ─── Deployments ───────────────────────────────────────────────

@@ -137,6 +137,17 @@ vi.mock("../stages/provision-server.js", () => ({
   stageProvisionServer: (...a: unknown[]) => mockProvisionServer(...a),
 }));
 
+// The post-deploy network stage delegates to the network dokploy-applier; that
+// has its own unit tests (dokploy-applier.test.ts). Mock it here so this
+// orchestration test doesn't reach into the network service's DB/client.
+const mockApplyNetworkDokploy = vi.fn(async (_args: { tenantId: string; projectId: string }) => ({
+  success: true,
+  message: "Applied 0 security credential(s) and 0 redirect(s).",
+}));
+vi.mock("../../../network/domain/dokploy-applier.js", () => ({
+  applyNetworkRulesDokploy: (args: { tenantId: string; projectId: string }) => mockApplyNetworkDokploy(args),
+}));
+
 const { executeDokployPipeline } = await import("../pipeline.js");
 
 // ─── Fixtures ──────────────────────────────────────────────────────

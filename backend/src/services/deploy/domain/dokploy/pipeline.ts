@@ -160,6 +160,21 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       checkTimeout();
     }
 
+    // ─── Stage 7: Network rules (security + redirects) ───────────
+    // Reconcile the project's Basic Auth + redirect rules onto the Dokploy
+    // app's Traefik middlewares. Best-effort + non-fatal — a failure here
+    // never fails the deploy.
+    if (projectId) {
+      try {
+        const { applyNetworkRulesDokploy } = await import("../../../network/domain/dokploy-applier.js");
+        const netResult = await applyNetworkRulesDokploy({ tenantId, projectId });
+        await log(`[stage:network] ${netResult.message}`);
+      } catch (netErr) {
+        await log(`[stage:network] Skipped applying network rules: ${getErrDetail(netErr)}`);
+      }
+      checkTimeout();
+    }
+
     // ─── Success ─────────────────────────────────────────────────
     await updateStatus(deploymentId, "success");
     await log(`✓ Deployment complete! App URL: ${deployResult.appUrl || "(pending)"}`);

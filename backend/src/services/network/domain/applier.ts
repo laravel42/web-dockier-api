@@ -346,6 +346,18 @@ export async function applyNetworkRules(params: {
 }): Promise<ApplyResult> {
   const { tenantId, projectId } = params;
 
+  // Route Dokploy-deployed projects to the Dokploy (Traefik middleware)
+  // strategy. The nginx/SSM path below only applies to legacy AWS EC2 VPS
+  // deploys. Detection is by the presence of a dokploy_applications mapping.
+  try {
+    const { isDokployProject, applyNetworkRulesDokploy } = await import("./dokploy-applier.js");
+    if (await isDokployProject(projectId)) {
+      return await applyNetworkRulesDokploy({ tenantId, projectId });
+    }
+  } catch (err) {
+    logger.warn(`[network] Dokploy strategy check failed, falling back to nginx path: ${getErrMsg(err)}`);
+  }
+
   try {
     // 1. Fetch rules
     const [securityRules, redirectRules] = await Promise.all([

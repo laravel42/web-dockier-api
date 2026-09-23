@@ -119,6 +119,10 @@ export interface DokployApplication {
   branch: string | null;
   env: string | null;
   createdAt: string;
+  /** Traefik BasicAuth entries attached to the app (present in application.one). */
+  security?: DokploySecurity[];
+  /** Traefik redirect-regex rules attached to the app (present in application.one). */
+  redirects?: DokployRedirect[];
 }
 
 /**
@@ -243,6 +247,39 @@ export interface DokployDatabase {
   databaseName?: string;
   databaseUser?: string;
   databasePassword: string;
+}
+
+// ─── Traefik middlewares: Security (Basic Auth) + Redirects ────────
+
+/** Params for security.create — a single HTTP Basic Auth credential on an app. */
+export interface CreateSecurityParams {
+  applicationId: string;
+  username: string;
+  password: string;
+}
+
+/** A Dokploy security (Basic Auth) entry, as returned in application.one. */
+export interface DokploySecurity {
+  securityId: string;
+  username: string;
+  applicationId: string | null;
+}
+
+/** Params for redirect.create — a single Traefik redirect-regex rule on an app. */
+export interface CreateRedirectParams {
+  applicationId: string;
+  regex: string;
+  replacement: string;
+  permanent: boolean;
+}
+
+/** A Dokploy redirect entry, as returned in application.one. */
+export interface DokployRedirect {
+  redirectId: string;
+  regex: string;
+  replacement: string;
+  permanent: boolean;
+  applicationId: string | null;
 }
 
 // ─── Git Providers ─────────────────────────────────────────────────

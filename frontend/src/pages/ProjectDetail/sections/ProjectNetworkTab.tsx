@@ -327,7 +327,7 @@ function CreateSecurityRuleModal({
             Path <span className="text-text-muted/60 ml-1 font-normal">Optional</span>
           </label>
           <p className="text-xs text-text-muted mb-1.5">
-            Leave blank to password protect all routes within your site. Any valid Nginx location path is acceptable.
+            Leave blank to password protect all routes within your site. A path prefix (e.g. /admin) scopes protection to that path.
           </p>
           <Input id={`${fid}-path-optional`}
             type="text"
@@ -574,7 +574,7 @@ function RedirectRulesSection({
       <div className="px-4 py-3 border-b border-border">
         <h3 className="text-sm font-semibold text-text">Redirect rules</h3>
         <p className="text-xs text-text-muted mt-0.5">
-          Configure simple redirect rules for your site. Redirects are handled by Nginx and not by your application.
+          Configure simple redirect rules for your site. Redirects are handled at the proxy layer, not by your application.
         </p>
       </div>
 
@@ -842,7 +842,7 @@ export default function ProjectNetworkTab({ project }: Props) {
     <div className="space-y-6 overflow-y-auto pr-1">
       <TabPanelHeader
         title="Network"
-        description="Manage security credentials and redirect rules applied by Nginx."
+        description="Manage security credentials and redirect rules applied at the proxy layer."
       />
       {/* Sync status bar */}
       {hasRules && canManage && (
