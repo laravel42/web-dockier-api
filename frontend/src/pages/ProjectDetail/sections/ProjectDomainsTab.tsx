@@ -652,9 +652,9 @@ function NginxConfigModal({
   }, [projectId]);
 
   return (
-    <Modal open onClose={onClose} title="Edit Nginx configuration">
+    <Modal open onClose={onClose} title="Proxy configuration">
       <p className="text-xs text-text-muted mb-4">
-        Updating the configuration will <strong className="text-text">require Nginx to be reloaded</strong>.
+        A read-only preview of the generated reverse-proxy configuration for your domains and certificates.
       </p>
       {loading && (
         <div className="flex items-center justify-center py-8">
@@ -781,7 +781,7 @@ export default function ProjectDomainsTab({ project }: Props) {
               onClick={() => setShowNginxModal(true)}
               iconLeft={<SquarePenIcon className="size-3.5" />}
             >
-              Edit Nginx configuration
+              View proxy configuration
             </Button>
           </div>
         )}

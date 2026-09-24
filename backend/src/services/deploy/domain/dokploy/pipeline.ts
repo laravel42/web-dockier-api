@@ -175,6 +175,22 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       checkTimeout();
     }
 
+    // ─── Stage 8: Custom domains + SSL ───────────────────────────
+    // Register the project's user custom domains on the Dokploy app and
+    // request Let's Encrypt via Traefik. Best-effort + non-fatal — a failure
+    // here never fails the deploy. (The auto sslip.io domain is set during the
+    // deploy stage and preserved here.)
+    if (projectId) {
+      try {
+        const { applyDomainConfigDokploy } = await import("../../../domains/domain/dokploy-applier.js");
+        const domResult = await applyDomainConfigDokploy({ tenantId, projectId });
+        await log(`[stage:domains] ${domResult.message}`);
+      } catch (domErr) {
+        await log(`[stage:domains] Skipped applying domains: ${getErrDetail(domErr)}`);
+      }
+      checkTimeout();
+    }
+
     // ─── Success ─────────────────────────────────────────────────
     await updateStatus(deploymentId, "success");
     await log(`✓ Deployment complete! App URL: ${deployResult.appUrl || "(pending)"}`);

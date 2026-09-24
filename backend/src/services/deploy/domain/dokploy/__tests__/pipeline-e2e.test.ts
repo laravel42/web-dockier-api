@@ -148,6 +148,14 @@ vi.mock("../../../network/domain/dokploy-applier.js", () => ({
   applyNetworkRulesDokploy: (args: { tenantId: string; projectId: string }) => mockApplyNetworkDokploy(args),
 }));
 
+const mockApplyDomainsDokploy = vi.fn(async (_args: { tenantId: string; projectId: string }) => ({
+  success: true,
+  message: "Applied 0 custom domains to the deployed application.",
+}));
+vi.mock("../../../domains/domain/dokploy-applier.js", () => ({
+  applyDomainConfigDokploy: (args: { tenantId: string; projectId: string }) => mockApplyDomainsDokploy(args),
+}));
+
 const { executeDokployPipeline } = await import("../pipeline.js");
 
 // ─── Fixtures ──────────────────────────────────────────────────────

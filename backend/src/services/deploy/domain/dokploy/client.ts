@@ -268,6 +268,11 @@ export class DokployClient {
     }
   }
 
+  /** Delete a registered domain by its domainId (route is singular: domain.delete). */
+  async deleteDomain(domainId: string): Promise<void> {
+    await this.mutation<unknown>("domain.delete", { domainId });
+  }
+
   // ─── Databases (self-hosted services) ──────────────────────────
   //
   // create registers the DB service; deploy actually starts its container.

@@ -193,6 +193,8 @@ export interface DokployDomain {
   https: boolean;
   path: string | null;
   applicationId: string | null;
+  /** "none" for the auto sslip.io domain, "letsencrypt" for user domains we register. */
+  certificateType?: "none" | "letsencrypt" | string;
 }
 
 /**

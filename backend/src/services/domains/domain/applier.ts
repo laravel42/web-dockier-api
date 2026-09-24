@@ -104,6 +104,17 @@ export async function applyDomainConfig(params: {
 }): Promise<ApplyDomainsResult> {
   const { tenantId, projectId } = params;
 
+  // Dokploy-deployed projects register domains on the Dokploy app (Traefik +
+  // Let's Encrypt). The nginx/certbot path below is legacy AWS EC2 VPS only.
+  try {
+    const { isDokployProject, applyDomainConfigDokploy } = await import("./dokploy-applier.js");
+    if (await isDokployProject(projectId)) {
+      return await applyDomainConfigDokploy({ tenantId, projectId });
+    }
+  } catch (err) {
+    logger.warn(`[domains] Dokploy strategy check failed, falling back to nginx path: ${getErrMsg(err)}`);
+  }
+
   try {
     // 1. Fetch domains and certificates
     const [domains, certificates] = await Promise.all([
@@ -179,6 +190,19 @@ export async function issueCertificate(params: {
 
   // Defense-in-depth: validate domain name before interpolating into shell scripts
   assertSafeDomainName(domainName);
+
+  // On Dokploy, Let's Encrypt is issued by Traefik when the domain is
+  // registered with certificateType=letsencrypt. So "issuing a certificate"
+  // just means reconciling domains — applyDomainConfigDokploy does that and
+  // marks the cert active. No certbot/SSM on this path.
+  try {
+    const { isDokployProject, applyDomainConfigDokploy } = await import("./dokploy-applier.js");
+    if (await isDokployProject(projectId)) {
+      return await applyDomainConfigDokploy({ tenantId, projectId });
+    }
+  } catch (err) {
+    logger.warn(`[domains] Dokploy cert strategy check failed, falling back to certbot path: ${getErrMsg(err)}`);
+  }
 
   try {
     // 1. Resolve target
@@ -259,18 +283,34 @@ export async function verifyDomainDns(params: {
   const { tenantId, projectId, domainName } = params;
 
   try {
-    const { target, errorMessage } = await resolveDomainTarget(projectId, tenantId);
-
-    if (!target) {
-      return { verified: false, message: errorMessage || "No active deployment found." };
+    // On Dokploy, the server IP comes from the dokploy_servers mapping (no host
+    // shell access). Fall back to the legacy VPS path (curl on the EC2 host).
+    let serverIp = "";
+    try {
+      const { isDokployProject } = await import("./dokploy-applier.js");
+      if (await isDokployProject(projectId)) {
+        const { getServer } = await import("../../deploy/domain/dokploy/mappings.js");
+        const server = await getServer(projectId);
+        serverIp = (server?.serverIp || "").trim();
+        if (!serverIp) {
+          return { verified: false, message: "No Dokploy server is provisioned for this project yet." };
+        }
+      }
+    } catch (err) {
+      logger.warn(`[domains] Dokploy DNS-verify path failed, trying nginx path: ${getErrMsg(err)}`);
     }
 
-    // Get the server's public IP
-    const ipResult = await executeOnHost(target, "curl -s ifconfig.me || curl -s icanhazip.com");
-    const serverIp = ipResult.output.trim();
-
-    if (!serverIp || ipResult.exitCode !== 0) {
-      return { verified: false, message: "Could not determine server IP." };
+    if (!serverIp) {
+      const { target, errorMessage } = await resolveDomainTarget(projectId, tenantId);
+      if (!target) {
+        return { verified: false, message: errorMessage || "No active deployment found." };
+      }
+      // Get the server's public IP from the host
+      const ipResult = await executeOnHost(target, "curl -s ifconfig.me || curl -s icanhazip.com");
+      serverIp = ipResult.output.trim();
+      if (!serverIp || ipResult.exitCode !== 0) {
+        return { verified: false, message: "Could not determine server IP." };
+      }
     }
 
     // Resolve the domain's A record via DNS
