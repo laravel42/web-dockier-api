@@ -231,6 +231,12 @@ export interface CreateDeploymentParams {
   instanceType?: string;
   /** Target region override. Falls back to the provider's configured region. */
   region?: string;
+  /**
+   * Explicit server start command derived from repo analysis. Handed to
+   * Railpack by the Dokploy pipeline for SSR Node apps that don't declare a
+   * `start` script (otherwise the container runs nothing → Bad Gateway).
+   */
+  startCommand?: string;
   /** Request ID for end-to-end log correlation. */
   correlationId?: string;
 }
@@ -263,6 +269,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
     services,
     instanceType,
     region,
+    startCommand,
     correlationId,
   } = params;
 
@@ -339,6 +346,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
       useRepoDockerfile,
       instanceType,
       region: region || providerRow.region || undefined,
+      startCommand,
       correlationId,
     });
   }

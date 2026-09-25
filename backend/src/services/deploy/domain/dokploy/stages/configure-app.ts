@@ -64,6 +64,13 @@ export interface RepoAnalysisInfo {
   publishDirectory?: string;
   primaryLanguage?: string;
   techStack?: string[];
+  /**
+   * Explicit server start command derived from repo analysis. When present and
+   * the build is railpack, it's injected as RAILPACK_DEPLOY_START_CMD so
+   * Railpack launches the right process for apps whose repo has no `start`
+   * script (e.g. SSR Astro → "node ./dist/server/entry.mjs").
+   */
+  startCommand?: string;
 }
 
 /**
@@ -232,7 +239,14 @@ export async function stageConfigureApp(params: {
   const withPhpDefaults = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase, repoAnalysis.techStack ?? []);
   // Node railpack apps need PORT/HOST so the server listens where Traefik
   // routes (and on all interfaces). No-op for PHP/static/non-railpack.
-  const finalEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
+  const withNodeEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
+  // Hand Railpack an explicit start command when analysis derived one (e.g. SSR
+  // Astro with no `start` script). Without this, Railpack finds no start
+  // command and the container runs nothing → Bad Gateway.
+  const finalEnv = withRailpackStartCommand(withNodeEnv, buildType, repoAnalysis.startCommand);
+  if (buildType === "railpack" && repoAnalysis.startCommand && !envHas(withNodeEnv, "RAILPACK_DEPLOY_START_CMD")) {
+    await log(`[stage:configure-app] Using derived start command: ${repoAnalysis.startCommand}`);
+  }
   if (provisionedDatabases.length > 0) {
     await log(`[stage:configure-app] Wired ${provisionedDatabases.length} self-hosted service(s) into the app env.`);
   }
@@ -503,4 +517,28 @@ function nodeRuntimeEnv(
   if (!has("HOST")) additions.push({ name: "HOST", value: "0.0.0.0" });
 
   return additions.length > 0 ? [...envVars, ...additions] : envVars;
+}
+
+/** True if an env list already contains a variable by name. */
+function envHas(envVars: Array<{ name: string; value: string }>, name: string): boolean {
+  return envVars.some((v) => v.name === name);
+}
+
+/**
+ * Inject RAILPACK_DEPLOY_START_CMD when a start command was derived at analysis
+ * time. Railpack honors this env as the container start command, which fixes
+ * apps whose repo declares no `start` script (Railpack would otherwise find no
+ * start command and the container runs nothing → Bad Gateway).
+ *
+ * Applies only to railpack builds; never overrides a user-set value. Other
+ * build types ignore it (a Dockerfile has its own CMD; static has no server).
+ */
+function withRailpackStartCommand(
+  envVars: Array<{ name: string; value: string }>,
+  buildType: DokployBuildType,
+  startCommand: string | undefined,
+): Array<{ name: string; value: string }> {
+  if (buildType !== "railpack" || !startCommand) return envVars;
+  if (envHas(envVars, "RAILPACK_DEPLOY_START_CMD")) return envVars;
+  return [...envVars, { name: "RAILPACK_DEPLOY_START_CMD", value: startCommand }];
 }

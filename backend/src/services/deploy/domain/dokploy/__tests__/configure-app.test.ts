@@ -364,7 +364,7 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
   };
 
   const run = async (
-    repoAnalysis: { hasDockerfile: boolean; isStaticSite: boolean; primaryLanguage?: string; techStack?: string[] },
+    repoAnalysis: { hasDockerfile: boolean; isStaticSite: boolean; primaryLanguage?: string; techStack?: string[]; startCommand?: string },
     envVars: Array<{ name: string; value: string }> = [],
   ) =>
     stageConfigureApp({ ...base, repoAnalysis, envVars, client: client as unknown as DokployClient });
@@ -414,5 +414,55 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     );
     expect(result.containerPort).toBe(3000);
     expect(envMap().PORT).toBeUndefined();
+  });
+
+  it("injects RAILPACK_DEPLOY_START_CMD for a railpack app when a start command is derived", async () => {
+    await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "javascript",
+        techStack: ["Node.js", "Astro"],
+        startCommand: "node ./dist/server/entry.mjs",
+      },
+      [{ name: "PUBLIC_URL", value: "https://example.com" }],
+    );
+    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBe("node ./dist/server/entry.mjs");
+  });
+
+  it("does not inject a start command when none was derived", async () => {
+    await run(
+      { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Astro"] },
+      [{ name: "PUBLIC_URL", value: "https://example.com" }],
+    );
+    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBeUndefined();
+  });
+
+  it("does not inject RAILPACK_DEPLOY_START_CMD for a dockerfile build", async () => {
+    await run(
+      {
+        hasDockerfile: true,
+        isStaticSite: false,
+        primaryLanguage: "javascript",
+        techStack: ["Node.js"],
+        startCommand: "node ./dist/server/entry.mjs",
+      },
+      [{ name: "APP_ENV", value: "production" }],
+    );
+    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBeUndefined();
+  });
+
+  it("does not override a user-set RAILPACK_DEPLOY_START_CMD", async () => {
+    await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "javascript",
+        techStack: ["Node.js", "Astro"],
+        startCommand: "node ./dist/server/entry.mjs",
+      },
+      [{ name: "RAILPACK_DEPLOY_START_CMD", value: "node custom.mjs" }],
+    );
+    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBe("node custom.mjs");
   });
 });

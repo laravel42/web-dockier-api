@@ -86,6 +86,12 @@ vi.mock("../mappings.js", () => ({
 vi.mock("../../../../../shared/service-clients/git-connections.js", () => ({
   getGitConnectionCredentials: vi.fn(async () => ({ provider: "github", endpoint: null })),
 }));
+// Runtime resolution fetches repo config files over the network; stub it so
+// this orchestration test stays offline. Its own logic is covered by
+// resolve-runtime.test.ts / deploy-runtime.test.ts. Default: no override.
+vi.mock("../stages/resolve-runtime.js", () => ({
+  resolveRuntimeStartCommand: vi.fn(async () => ({})),
+}));
 const revealEnv = vi.fn(async () => ({ exists: true, content: "FOO=bar\n# comment\nBAZ=qux" }));
 vi.mock("../../../../projects/domain/env.js", () => ({
   revealEnv: (...a: unknown[]) => revealEnv(...(a as [])),
@@ -224,7 +230,8 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
 
     // Env vars parsed (FOO, BAZ) and sent. A Node railpack app (techStack
     // "node") also gets PORT/HOST injected so Traefik can reach the server.
-    const envArg = (clientMethods.saveEnvironment.mock.calls.at(-1)?.[0] as { env: string }).env;
+    const lastEnvCall = clientMethods.saveEnvironment.mock.calls.at(-1) as unknown as [{ env: string }] | undefined;
+    const envArg = lastEnvCall?.[0].env ?? "";
     expect(envArg).toContain("FOO=bar");
     expect(envArg).toContain("BAZ=qux");
     expect(envArg).toContain("PORT=3000");

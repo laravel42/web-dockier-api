@@ -234,6 +234,56 @@ describe("stageTriggerDeploy", () => {
     expect(logLines.some((l) => /server build failed|building your application/i.test(l))).toBe(true);
     expect(logLines.some((l) => /repository/i.test(l))).toBe(true);
   });
+
+  it("gives actionable start-command guidance for a server app with no start command", async () => {
+    mockClient.listDeployments.mockResolvedValue([
+      { deploymentId: "d1", status: "error", title: "Build astro app", errorMessage: null, createdAt: "x" },
+    ]);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: {
+        buildType: "railpack",
+        framework: "astro",
+        kind: "server",
+        startCommandApplied: false,
+        repoHasStartScript: false,
+      },
+    });
+
+    expect(result.status).toBe("error");
+    // Names the missing start command and the concrete Astro fix.
+    expect(result.failureReason).toMatch(/start command/i);
+    expect(result.failureReason).toContain("node ./dist/server/entry.mjs");
+    expect(logLines.some((l) => /start.*script|node \.\/dist\/server\/entry\.mjs/i.test(l))).toBe(true);
+  });
+
+  it("does NOT give start-command guidance when a start command was applied", async () => {
+    mockClient.listDeployments.mockResolvedValue([
+      { deploymentId: "d1", status: "error", title: "Build astro app", errorMessage: null, createdAt: "x" },
+    ]);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: {
+        buildType: "railpack",
+        framework: "astro",
+        kind: "server",
+        startCommandApplied: true,
+        repoHasStartScript: false,
+      },
+    });
+
+    // Falls back to the generic repository guidance.
+    expect(result.failureReason).toMatch(/repository/i);
+    expect(result.failureReason).not.toMatch(/No start command was detected/i);
+  });
 });
 
 describe("stageDeployWithRetry", () => {

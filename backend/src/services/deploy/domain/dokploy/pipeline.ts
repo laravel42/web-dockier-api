@@ -25,6 +25,7 @@ import { stageSyncGit } from "./stages/sync-git.js";
 import { stageProvisionServer } from "./stages/provision-server.js";
 import { stageProvisionDatabases } from "./stages/provision-databases.js";
 import { stageConfigureApp } from "./stages/configure-app.js";
+import { resolveRuntimeStartCommand } from "./stages/resolve-runtime.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
 import { stageRunPostDeploy } from "./stages/run-post-deploy.js";
 import { revealEnv } from "../../../projects/domain/env.js";
@@ -106,6 +107,19 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     });
     checkTimeout();
 
+    // Resolve a server start command for apps whose repo has no `start` script
+    // (e.g. SSR Astro via @astrojs/node). Prefer one already on the event;
+    // otherwise re-derive it from the repo's config files (no clone). Non-fatal
+    // — undefined just lets Railpack infer as before.
+    const resolvedRuntime = await resolveRuntimeStartCommand({
+      gitConnectionId,
+      repo,
+      branch,
+      explicit: event.startCommand,
+      log,
+    });
+    const { startCommand } = resolvedRuntime;
+
     // ─── Stage 5: Configure Application ──────────────────────────
     const { dokployApplicationId, buildType, containerPort } = await stageConfigureApp({
       projectId: projectId || deploymentId,
@@ -124,6 +138,10 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         isStaticSite: false,
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
+        // Explicit start command (SSR Astro via @astrojs/node →
+        // "node ./dist/server/entry.mjs"). configure-app hands it to Railpack so
+        // the server actually launches.
+        startCommand,
       },
       services: event.services,
       provisionedDatabases: dbResult.databases,
@@ -142,6 +160,15 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       client,
       log,
       containerPort,
+      // Framework-aware context so a build failure can surface actionable
+      // guidance (e.g. "add a start script") instead of the generic message.
+      runtimeHint: {
+        buildType,
+        framework: resolvedRuntime.framework,
+        kind: resolvedRuntime.kind,
+        startCommandApplied: Boolean(startCommand),
+        repoHasStartScript: resolvedRuntime.hasStartScript,
+      },
       maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
     });

@@ -17,6 +17,24 @@ export interface DeployResult {
 }
 
 /**
+ * Lightweight, framework-aware context for failure messaging. Lets a build
+ * failure surface actionable guidance instead of the generic "check the repo".
+ * Everything is best-effort — a missing hint just yields the generic message.
+ */
+export interface RuntimeHint {
+  /** Dokploy build type in use (railpack/static/dockerfile/...). */
+  buildType?: string;
+  /** Detected framework (e.g. "astro"), when known. */
+  framework?: string;
+  /** True if we handed Railpack an explicit start command for this deploy. */
+  startCommandApplied?: boolean;
+  /** True if the repo declares its own `start` script. */
+  repoHasStartScript?: boolean;
+  /** Whether the app is a server (needs a running process) vs static. */
+  kind?: "server" | "static";
+}
+
+/**
  * Trigger deployment and poll until success or failure.
  */
 export async function stageTriggerDeploy(params: {
@@ -30,10 +48,12 @@ export async function stageTriggerDeploy(params: {
    * not provided.
    */
   containerPort?: number;
+  /** Framework-aware context for a clearer failure message (best-effort). */
+  runtimeHint?: RuntimeHint;
   pollIntervalMs?: number;
   timeoutMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort = 3000, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
+  const { applicationId, client, log, containerPort = 3000, runtimeHint, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
 
   // Capture the set of existing deployment ids BEFORE triggering, so we can
   // identify the NEW deployment this trigger creates and follow only its
@@ -64,7 +84,7 @@ export async function stageTriggerDeploy(params: {
 
     if (status === "error") {
       await log("[stage:deploy] ✗ Deployment failed");
-      const failureReason = await reportBuildFailure(applicationId, client, log);
+      const failureReason = await reportBuildFailure(applicationId, client, log, runtimeHint);
       return { status: "error", appUrl: "", failureReason };
     }
 
@@ -86,10 +106,12 @@ export async function stageDeployWithRetry(params: {
   log: (line: string) => Promise<void>;
   /** Container port Traefik routes to (see stageTriggerDeploy). */
   containerPort?: number;
+  /** Framework-aware context for a clearer failure message (best-effort). */
+  runtimeHint?: RuntimeHint;
   maxAttempts?: number;
   pollIntervalMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort, maxAttempts = 3, pollIntervalMs } = params;
+  const { applicationId, client, log, containerPort, runtimeHint, maxAttempts = 3, pollIntervalMs } = params;
 
   let lastFailureReason: string | undefined;
 
@@ -101,6 +123,7 @@ export async function stageDeployWithRetry(params: {
       client,
       log,
       containerPort,
+      runtimeHint,
       pollIntervalMs,
     });
 
@@ -150,6 +173,7 @@ async function reportBuildFailure(
   applicationId: string,
   client: DokployClient,
   log: (line: string) => Promise<void>,
+  runtimeHint?: RuntimeHint,
 ): Promise<string> {
   let commit = "";
   try {
@@ -170,6 +194,31 @@ async function reportBuildFailure(
   if (commit) {
     await log(`[stage:deploy] Failing commit: ${commit}`);
   }
+
+  // Framework-aware guidance for the most common self-inflicted case: a
+  // server app (Railpack Node) with no start command. When the repo declares
+  // no `start` script AND we couldn't derive one, Railpack builds the app but
+  // has nothing to run, so the container serves nothing (Bad Gateway) or the
+  // build/deploy is reported failed. Tell the user exactly how to fix it,
+  // since they can't see the raw build log.
+  const missingStart =
+    runtimeHint?.buildType === "railpack" &&
+    runtimeHint.kind === "server" &&
+    !runtimeHint.startCommandApplied &&
+    !runtimeHint.repoHasStartScript;
+
+  if (missingStart) {
+    const suggested = runtimeHint?.framework === "astro" ? "node ./dist/server/entry.mjs" : "your server entry (e.g. node ./dist/server/entry.mjs)";
+    await log(
+      `[stage:deploy] No production start command was detected for this ${runtimeHint?.framework ?? "server"} app. ` +
+      `Railpack built it but has no command to run the server. Add a "start" script to package.json, e.g.: ` +
+      `"start": "${suggested}". Then redeploy.`,
+    );
+    return commit
+      ? `No start command was detected for this ${runtimeHint?.framework ?? "server"} app (commit "${commit}"). Add a "start" script to package.json (e.g. "${suggested}") and redeploy.`
+      : `No start command was detected for this ${runtimeHint?.framework ?? "server"} app. Add a "start" script to package.json (e.g. "${suggested}") and redeploy.`;
+  }
+
   await log(
     "[stage:deploy] This stage compiles and installs YOUR application, so the cause is " +
     "almost always in the repository — a failing build/install step, a missing dependency, " +

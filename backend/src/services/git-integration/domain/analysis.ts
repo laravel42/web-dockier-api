@@ -5,6 +5,7 @@ import { suggestDeployOptions } from "./deploy-options.js";
 import { detectServices, type DetectedService } from "./services.js";
 import { detectTechStack, type TechStackItem } from "./tech-stack.js";
 import { scanSensitiveData, type SensitiveField } from "./sensitive-data-scanner.js";
+import { detectDeployRuntime, DEPLOY_RUNTIME_FILES, type DeployRuntime } from "./deploy-runtime.js";
 
 export type { SensitiveField } from "./sensitive-data-scanner.js";
 
@@ -74,6 +75,12 @@ export type RepoAnalysisResult = {
   hasCi: boolean;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
+  /**
+   * Derived runtime descriptor (kind/startCommand/port/confidence). Present
+   * when the repo is a recognized Node app; drives whether the deploy pipeline
+   * hands Railpack an explicit start command. See detectDeployRuntime.
+   */
+  deployRuntime?: DeployRuntime;
   _scannersRan: boolean;
 };
 
@@ -154,6 +161,20 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
   // config/migration files. Runs after the dependency scan so package names feed in.
   const detectedServices = detectServices(files, dependencies);
 
+  // Derive a deploy-runtime descriptor (kind/startCommand/port). Fetch the
+  // framework configs it needs (package.json is usually already in configFiles;
+  // the framework configs are not). Best-effort — a fetch miss just lowers
+  // confidence.
+  const runtimeFiles: Record<string, string> = { ...configFiles };
+  for (const candidate of DEPLOY_RUNTIME_FILES) {
+    if (Object.keys(runtimeFiles).some((f) => f.toLowerCase().endsWith(candidate))) continue;
+    const path = files.find((file) => file.toLowerCase().endsWith(candidate));
+    if (!path) continue;
+    const content = await fetchRepoFile(connection, ref, path);
+    if (content) runtimeFiles[path] = content;
+  }
+  const deployRuntime = detectDeployRuntime(runtimeFiles) ?? undefined;
+
   return {
     techStack: mergedTechStack,
     deployOptions: suggestDeployOptions(mergedTechStack, hasDocker, files.length).map((option) => ({
@@ -167,6 +188,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
     hasDocker,
     hasCi,
     dependencies: dependencies.length > 0 ? dependencies : undefined,
+    deployRuntime,
     _scannersRan: true,
   };
 }
