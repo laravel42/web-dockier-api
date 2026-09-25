@@ -222,10 +222,13 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
       expect.objectContaining({ buildType: "railpack" }),
     );
 
-    // Env vars parsed (FOO, BAZ) and sent.
-    expect(clientMethods.saveEnvironment).toHaveBeenCalledWith(
-      expect.objectContaining({ env: "FOO=bar\nBAZ=qux" }),
-    );
+    // Env vars parsed (FOO, BAZ) and sent. A Node railpack app (techStack
+    // "node") also gets PORT/HOST injected so Traefik can reach the server.
+    const envArg = (clientMethods.saveEnvironment.mock.calls.at(-1)?.[0] as { env: string }).env;
+    expect(envArg).toContain("FOO=bar");
+    expect(envArg).toContain("BAZ=qux");
+    expect(envArg).toContain("PORT=3000");
+    expect(envArg).toContain("HOST=0.0.0.0");
 
     // Deploy triggered and succeeded.
     expect(clientMethods.deploy).toHaveBeenCalled();

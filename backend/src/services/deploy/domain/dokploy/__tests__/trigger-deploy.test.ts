@@ -85,8 +85,8 @@ describe("stageTriggerDeploy", () => {
     expect(result.appUrl).toBe("http://app-my-app-98-93-35-222.sslip.io");
   });
 
-  it("routes railpack apps to container port 80, others to 3000", async () => {
-    const run = async (buildType: string) => {
+  it("registers the domain on the container port it is given", async () => {
+    const run = async (containerPort?: number) => {
       mockClient.createDomain.mockClear();
       mockClient.listDeployments
         .mockResolvedValueOnce([])
@@ -97,15 +97,17 @@ describe("stageTriggerDeploy", () => {
         applicationId: "app-1",
         client: mockClient as unknown as DokployClient,
         log: mockLog,
-        buildType,
+        containerPort,
         pollIntervalMs: 100,
       });
       return (mockClient.createDomain.mock.calls.at(-1)?.[0] as { port: number }).port;
     };
 
-    expect(await run("railpack")).toBe(80);
-    expect(await run("nixpacks")).toBe(3000);
-    expect(await run("dockerfile")).toBe(3000);
+    // PHP/static railpack resolves to 80 upstream; Node railpack to 3000.
+    expect(await run(80)).toBe(80);
+    expect(await run(3000)).toBe(3000);
+    // Defaults to 3000 when not provided.
+    expect(await run(undefined)).toBe(3000);
   });
 
   it("reuses an existing domain instead of generating a new one", async () => {

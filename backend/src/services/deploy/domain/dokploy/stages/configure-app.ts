@@ -35,9 +35,27 @@ const RAILPACK_VERSION = "0.15.4";
  */
 const DEFAULT_PHP_EXTENSIONS = ["gd", "intl", "zip", "sockets", "bcmath", "exif", "pcntl"];
 
+/**
+ * The port a Node railpack app is told to listen on (via PORT) and that Traefik
+ * is routed to. Railpack's PHP/static images serve on 80, but a Node server
+ * (Express, Astro's @astrojs/node SSR, Nuxt, etc.) listens on whatever PORT
+ * says — and defaults vary (Astro's Node adapter is 4321). We pin a single
+ * value, inject it as PORT so the server honors it, and route Traefik to the
+ * same number. A mismatch here is the classic "Bad Gateway": Traefik forwards
+ * to a port nothing is listening on. 3000 is Dokploy's conventional app port.
+ */
+const NODE_RAILPACK_PORT = 3000;
+
 export interface ConfigureAppResult {
   dokployApplicationId: string;
   buildType: DokployBuildType;
+  /**
+   * The container port Traefik must route the app's domain to. Derived from
+   * the build type and language (Node railpack → NODE_RAILPACK_PORT; PHP/static
+   * railpack → 80; other builders → 3000). The deploy stage uses this to
+   * register the domain on the right port.
+   */
+  containerPort: number;
 }
 
 export interface RepoAnalysisInfo {
@@ -211,7 +229,10 @@ export async function stageConfigureApp(params: {
   // (vps) OR the app's own env points at one (managed / external). This gates
   // whether Railpack should run Laravel migrations at container startup.
   const hasDatabase = provisionedDatabases.length > 0 || hasDbEnv(withDbEnv);
-  const finalEnv = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase, repoAnalysis.techStack ?? []);
+  const withPhpDefaults = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase, repoAnalysis.techStack ?? []);
+  // Node railpack apps need PORT/HOST so the server listens where Traefik
+  // routes (and on all interfaces). No-op for PHP/static/non-railpack.
+  const finalEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
   if (provisionedDatabases.length > 0) {
     await log(`[stage:configure-app] Wired ${provisionedDatabases.length} self-hosted service(s) into the app env.`);
   }
@@ -228,8 +249,9 @@ export async function stageConfigureApp(params: {
     });
   }
 
-  await log(`[stage:configure-app] ✓ Application configured (build: ${buildType})`);
-  return { dokployApplicationId: applicationId, buildType };
+  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
+  await log(`[stage:configure-app] ✓ Application configured (build: ${buildType}, port: ${containerPort})`);
+  return { dokployApplicationId: applicationId, buildType, containerPort };
 }
 
 /**
@@ -373,7 +395,19 @@ function determineBuildType(analysis: RepoAnalysisInfo): DokployBuildType {
   // Priority 1: Existing Dockerfile
   if (analysis.hasDockerfile) return "dockerfile";
 
-  // Priority 2: Static site
+  // Priority 2: Pre-built static site.
+  //
+  // Dokploy's "static" build type does NOT build the app — it wraps a tiny
+  // nginx image that COPYs an ALREADY-BUILT publish directory (e.g. `dist`)
+  // from the repo. It only works when that built output is committed to the
+  // repository. It is NOT the right choice for a source-only static generator
+  // (Astro, Vite, Angular, ...): those produce `dist/` at build time, so a
+  // "static" build fails with `COPY dist .: "/dist": not found`.
+  //
+  // Source-only static generators must build with Railpack (Priority 3), which
+  // runs the install+build and serves the output over Caddy on port 80. So we
+  // only pick "static" when an explicit upstream signal says the built output
+  // is present in the repo — never inferred from the tech stack alone.
   if (analysis.isStaticSite) return "static";
 
   // Priority 3: Everything else → Railpack.
@@ -387,4 +421,86 @@ function determineBuildType(analysis: RepoAnalysisInfo): DokployBuildType {
   // that allow-list let unrecognized-language repos silently fall through to
   // Nixpacks and fail.
   return "railpack";
+}
+
+// ─── Port / runtime detection ────────────────────────────────────
+
+/**
+ * Detect a Node.js app from the primary language or tech stack.
+ *
+ * Node railpack apps (Express, Nuxt, SvelteKit, Remix, SSR Astro via
+ * @astrojs/node, ...) run a Node server that binds the PORT env var, unlike
+ * railpack's PHP/static images which serve on 80. Detecting Node lets us inject
+ * PORT/HOST and route Traefik to the matching port.
+ */
+function isNodeApp(primaryLanguage: string | undefined, techStack: string[]): boolean {
+  const lang = (primaryLanguage ?? "").toLowerCase();
+  if (lang.includes("javascript") || lang.includes("typescript") || lang.includes("node")) return true;
+  return techStack.some((s) => {
+    const t = s.toLowerCase();
+    return (
+      t.includes("node") ||
+      t.includes("javascript") ||
+      t.includes("typescript") ||
+      t.includes("astro") ||
+      t.includes("next") ||
+      t.includes("nuxt") ||
+      t.includes("remix") ||
+      t.includes("svelte") ||
+      t.includes("express") ||
+      t.includes("fastify") ||
+      t.includes("nest") ||
+      t.includes("vite")
+    );
+  });
+}
+
+/**
+ * Resolve the container port Traefik must route the app's domain to.
+ *
+ *  - railpack + Node → NODE_RAILPACK_PORT: a Node server honors the PORT env we
+ *    inject (see nodeRuntimeEnv), so we route to that same port.
+ *  - railpack + non-Node (PHP/static via Caddy) → 80.
+ *  - any other builder (dockerfile/nixpacks) → Dokploy's conventional 3000.
+ *
+ * A wrong port is the classic Bad Gateway: Traefik routes fine but the
+ * container isn't listening where it forwards.
+ */
+export function resolveContainerPort(
+  buildType: DokployBuildType,
+  primaryLanguage: string | undefined,
+  techStack: string[],
+): number {
+  if (buildType === "railpack") {
+    return isNodeApp(primaryLanguage, techStack) ? NODE_RAILPACK_PORT : 80;
+  }
+  return 3000;
+}
+
+/**
+ * Env defaults that make a Node railpack server reachable by Traefik:
+ *
+ *  - PORT: the port we route the domain to. Node servers (incl. Astro's Node
+ *    adapter, which otherwise defaults to 4321) bind PORT when set.
+ *  - HOST=0.0.0.0: many Node servers (again incl. Astro's Node adapter) default
+ *    to localhost, which only accepts connections from inside the container —
+ *    Traefik, in its own container, can't reach it. Binding all interfaces
+ *    fixes the "connection refused"/Bad Gateway.
+ *
+ * Applied only to Node railpack apps, and never overrides a user-set value.
+ */
+function nodeRuntimeEnv(
+  envVars: Array<{ name: string; value: string }>,
+  buildType: DokployBuildType,
+  primaryLanguage: string | undefined,
+  techStack: string[],
+): Array<{ name: string; value: string }> {
+  if (buildType !== "railpack" || !isNodeApp(primaryLanguage, techStack)) return envVars;
+
+  const has = (name: string) => envVars.some((v) => v.name === name);
+  const additions: Array<{ name: string; value: string }> = [];
+  if (!has("PORT")) additions.push({ name: "PORT", value: String(NODE_RAILPACK_PORT) });
+  if (!has("HOST")) additions.push({ name: "HOST", value: "0.0.0.0" });
+
+  return additions.length > 0 ? [...envVars, ...additions] : envVars;
 }

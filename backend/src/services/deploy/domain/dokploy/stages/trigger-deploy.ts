@@ -23,12 +23,17 @@ export async function stageTriggerDeploy(params: {
   applicationId: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
-  /** Build type of the app — determines the container port for the domain. */
-  buildType?: string;
+  /**
+   * The container port Traefik should route the app's domain to. Resolved
+   * upstream from build type + language (see resolveContainerPort in
+   * configure-app). Defaults to 3000 (Dokploy's conventional app port) when
+   * not provided.
+   */
+  containerPort?: number;
   pollIntervalMs?: number;
   timeoutMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, buildType = "", pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
+  const { applicationId, client, log, containerPort = 3000, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
 
   // Capture the set of existing deployment ids BEFORE triggering, so we can
   // identify the NEW deployment this trigger creates and follow only its
@@ -52,7 +57,7 @@ export async function stageTriggerDeploy(params: {
 
     if (status === "done") {
       const app = await client.getApplication(applicationId);
-      const appUrl = await resolveAppUrl(applicationId, app, client, log, containerPortForBuildType(buildType));
+      const appUrl = await resolveAppUrl(applicationId, app, client, log, containerPort);
       await log(`[stage:deploy] ✓ Deployment successful! URL: ${appUrl || "(pending domain)"}`);
       return { status: "done", appUrl };
     }
@@ -79,11 +84,12 @@ export async function stageDeployWithRetry(params: {
   applicationId: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
-  buildType?: string;
+  /** Container port Traefik routes to (see stageTriggerDeploy). */
+  containerPort?: number;
   maxAttempts?: number;
   pollIntervalMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, buildType, maxAttempts = 3, pollIntervalMs } = params;
+  const { applicationId, client, log, containerPort, maxAttempts = 3, pollIntervalMs } = params;
 
   let lastFailureReason: string | undefined;
 
@@ -94,7 +100,7 @@ export async function stageDeployWithRetry(params: {
       applicationId,
       client,
       log,
-      buildType,
+      containerPort,
       pollIntervalMs,
     });
 
@@ -227,21 +233,6 @@ async function resolveAppUrl(
     // Domain setup is best-effort — the deploy already succeeded.
     return "";
   }
-}
-
-/**
- * The container port Traefik should route to, by build type.
- *
- * - railpack: serves PHP via FrankenPHP/Caddy on port 80; static sites via
- *   Caddy on 80; Node apps typically honor PORT=3000. Railpack's PHP/static
- *   images listen on 80, which is the common case, so default railpack to 80.
- * - dockerfile/nixpacks/other: Dokploy's conventional app port is 3000.
- *
- * A wrong port is the classic "Bad Gateway" cause: Traefik routes fine but the
- * container isn't listening where it forwards.
- */
-function containerPortForBuildType(buildType: string): number {
-  return buildType === "railpack" ? 80 : 3000;
 }
 
 /** Build an http(s) URL from a Dokploy domain host. */

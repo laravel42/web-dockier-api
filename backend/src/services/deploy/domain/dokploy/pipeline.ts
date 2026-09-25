@@ -107,7 +107,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     checkTimeout();
 
     // ─── Stage 5: Configure Application ──────────────────────────
-    const { dokployApplicationId, buildType } = await stageConfigureApp({
+    const { dokployApplicationId, buildType, containerPort } = await stageConfigureApp({
       projectId: projectId || deploymentId,
       projectName: repoToAppName(repo),
       environmentId: dokployEnvironmentId,
@@ -115,6 +115,12 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       gitConfig: gitResult.gitConfig,
       repoAnalysis: {
         hasDockerfile: event.hasDocker ?? false,
+        // "static" here means a repo that ships its ALREADY-BUILT output (so
+        // Dokploy's nginx "static" build type can just COPY it). Source-only
+        // static generators like Astro/Vite must build with Railpack instead,
+        // which runs the build and serves the result. No signal for committed
+        // build output flows through the deploy event, so this is false: Astro
+        // et al. correctly fall through to Railpack in determineBuildType().
         isStaticSite: false,
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
@@ -135,7 +141,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       applicationId: dokployApplicationId,
       client,
       log,
-      buildType,
+      containerPort,
       maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
     });

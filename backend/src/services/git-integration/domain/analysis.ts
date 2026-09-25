@@ -139,7 +139,6 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
   const techStack = detectTechStack(files);
   const hasDocker = files.some((file) => /Dockerfile/i.test(file));
   const hasCi = files.some((file) => /\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|\.circleci/i.test(file));
-  const detectedServices = detectServices(files);
 
   const configFiles: Record<string, string> = {};
   for (const candidate of CONFIG_FILES_TO_FETCH) {
@@ -151,6 +150,9 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
 
   const dependencies = await scanDependencies(configFiles);
   const mergedTechStack = enrichTechStackFromDependencies(techStack, dependencies);
+  // Detect services from declared dependencies (strongest signal) plus anchored
+  // config/migration files. Runs after the dependency scan so package names feed in.
+  const detectedServices = detectServices(files, dependencies);
 
   return {
     techStack: mergedTechStack,
