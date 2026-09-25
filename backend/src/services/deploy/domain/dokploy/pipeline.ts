@@ -13,7 +13,15 @@
 
 import type { PipelineInput } from "../pipeline/shared.js";
 import { createDokployClient } from "./client.js";
-import { appendLog, updateStatus } from "../pipeline/helpers.js";
+import {
+  appendLog,
+  updateStatus,
+  emitDeploySuccessNotification,
+  emitDeployFailureNotification,
+} from "../pipeline/helpers.js";
+import { markProjectInfraLive } from "../lifecycle/project-teardown.js";
+import { clearRepoFaviconFromAnalysisCache } from "../../../git-integration/domain/cache.js";
+import { logger } from "../../../../shared/logger.js";
 import { getDeploymentCurrentStatus } from "../deployments.js";
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
@@ -145,6 +153,10 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
         framework: resolvedRuntime.framework,
+        runtime: resolvedRuntime.runtime,
+        // PHP version drives builder selection: Railpack needs 8.2+, so an older
+        // app falls back to Nixpacks instead of failing at plan time.
+        phpVersion: resolvedRuntime.phpVersion,
         // Explicit start command (SSR Astro via @astrojs/node →
         // "node ./dist/server/entry.mjs"). configure-app hands it to Railpack so
         // the server actually launches.
@@ -199,6 +211,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
         log,
+        advise: advisories.add,
       });
       checkTimeout();
     }
@@ -260,7 +273,11 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     }
 
     // ─── Success ─────────────────────────────────────────────────
-    await updateStatus(deploymentId, "success");
+    // Write the app URL ATOMICALLY with the success status. Writing it after
+    // flipping to "success" is a race: clients that poll for a terminal status
+    // (the deploy wizard) stop and render as soon as they see "success", so they
+    // captured an empty app_url and showed no URL at all.
+    await updateStatus(deploymentId, "success", deployResult.appUrl ? { app_url: deployResult.appUrl } : undefined);
     await log(`✓ Deployment complete! App URL: ${deployResult.appUrl || "(pending)"}`);
 
     // Report what Dockier adjusted on the user's behalf. The deploy succeeded —
@@ -269,14 +286,23 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     for (const line of renderAdvisories(advisories.list())) {
       await log(line);
     }
+    // (app_url is persisted with the success status above, not separately.)
 
-    // Store app URL in deployment record
-    if (deployResult.appUrl) {
-      await supabaseAdmin
-        .from("deployments")
-        .update({ app_url: deployResult.appUrl })
-        .eq("id", deploymentId);
-    }
+    // ─── Post-success bookkeeping ────────────────────────────────
+    // Parity with the native pipeline's finalize step. Without these the
+    // deployment looks fine but the PROJECT does not: infra_state stays "none",
+    // so the UI reports "No infrastructure" and the Tear Down button is
+    // disabled (it requires "live") — leaving users unable to destroy resources
+    // they just created. Notifications and the favicon cache were missing too.
+    await markProjectInfraLive(projectId);
+    await clearRepoFaviconFromAnalysisCache(repo, branch, logger);
+    emitDeploySuccessNotification({
+      tenantId,
+      deploymentId,
+      repo,
+      branch,
+      appUrl: deployResult.appUrl || undefined,
+    });
   } catch (err) {
     const message = getErrDetail(err);
     await log(`✗ Pipeline failed: ${message}`);
@@ -285,6 +311,16 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     } catch {
       // Best-effort status update
     }
+    // Surface the failure through the user's notification channels, as the
+    // native pipeline does — otherwise a failed Dokploy deploy is silent.
+    emitDeployFailureNotification({
+      tenantId,
+      deploymentId,
+      repo,
+      branch,
+      reason: message,
+      category: "build",
+    });
   }
 }
 

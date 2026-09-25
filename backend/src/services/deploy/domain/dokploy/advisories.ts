@@ -31,7 +31,9 @@ export type AdvisoryCode =
   | "php-extension-defaults"
   | "migrations-skipped"
   | "database-env-overridden"
-  | "domain-port-corrected";
+  | "domain-port-corrected"
+  | "php-version-unsupported-by-railpack"
+  | "migrations-not-configured";
 
 export interface AdvisoryCollector {
   add(advisory: Advisory): void;
@@ -128,5 +130,21 @@ export function domainPortCorrectedAdvisory(from: number | null, to: number): Ad
   return {
     code: "domain-port-corrected",
     applied: `The app's domain was forwarding to port ${from ?? "(unset)"}, which no longer matches the app; Dockier corrected it to ${to}.`,
+  };
+}
+
+export function migrationsNotConfiguredAdvisory(): Advisory {
+  return {
+    code: "migrations-not-configured",
+    applied: "This build does not run database migrations at container startup, and the project has no migration command configured — so migrations did not run.",
+    recommendation: 'Add "php artisan migrate --force" to the project\'s post-deploy commands (Project → Settings → Deployments) so schema changes are applied on each deploy.',
+  };
+}
+
+export function phpVersionUnsupportedAdvisory(phpVersion: string): Advisory {
+  return {
+    code: "php-version-unsupported-by-railpack",
+    applied: `Your composer.json allows PHP ${phpVersion}, which the default builder (Railpack) cannot install — it supports PHP 8.2 and newer. Dockier built this project with Nixpacks instead.`,
+    recommendation: `Raise the PHP constraint in composer.json to "^8.2" or newer (the builder resolves the lowest version your constraint allows). PHP ${phpVersion} is also past its official security-support window.`,
   };
 }

@@ -123,6 +123,134 @@ describe("stageRunPostDeploy", () => {
     expect(logs.some((l) => /run automatically at container startup/i.test(l))).toBe(true);
   });
 
+  it("keeps queue:restart but strips the cache/migrate commands from the default Laravel template (Railpack)", async () => {
+    // Mirrors the shipped LARAVEL_DEPLOY default. On Railpack, startup already
+    // handles migrate + the cache family; queue:restart is NOT startup-covered
+    // and must still run so workers pick up the new code.
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript: [
+        "# Laravel post-deploy commands",
+        "php artisan migrate --force",
+        "php artisan config:cache",
+        "php artisan route:cache",
+        "php artisan view:cache",
+        "php artisan queue:restart",
+      ].join("\n"),
+    });
+    mockResolveTarget.mockResolvedValue({ target: TARGET });
+    mockExecInContainer
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false })
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false });
+
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "railpack",
+      primaryLanguage: "PHP",
+      techStack: ["PHP", "Laravel"],
+      log,
+      sleep: noSleep,
+    });
+
+    const ran = mockExecInContainer.mock.calls[1][1] as string;
+    expect(ran).toContain("php artisan queue:restart");
+    expect(ran).not.toContain("migrate --force");
+    expect(ran).not.toContain("config:cache");
+    expect(ran).not.toContain("route:cache");
+    expect(ran).not.toContain("view:cache");
+  });
+
+  it("runs the whole default Laravel template on a nixpacks build (nothing is startup-covered)", async () => {
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript: [
+        "php artisan migrate --force",
+        "php artisan config:cache",
+        "php artisan queue:restart",
+      ].join("\n"),
+    });
+    mockResolveTarget.mockResolvedValue({ target: TARGET });
+    mockExecInContainer
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false })
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false });
+
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "nixpacks",
+      primaryLanguage: "PHP",
+      techStack: ["PHP", "Laravel"],
+      log,
+      sleep: noSleep,
+    });
+
+    const ran = mockExecInContainer.mock.calls[1][1] as string;
+    expect(ran).toContain("php artisan migrate --force");
+    expect(ran).toContain("php artisan config:cache");
+    expect(ran).toContain("php artisan queue:restart");
+  });
+
+  it("advises when a non-Railpack PHP build has no migration command configured", async () => {
+    // Nixpacks (PHP < 8.2) runs nothing at startup, so migrations come ONLY from
+    // post-deploy commands. A comment-only script means they silently never run.
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript: "# Laravel post-deploy commands\n# nothing needed here",
+    });
+
+    const advisories: Array<{ code: string }> = [];
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "nixpacks",
+      primaryLanguage: "PHP",
+      techStack: ["PHP", "Laravel"],
+      log,
+      sleep: noSleep,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories.map((a) => a.code)).toContain("migrations-not-configured");
+  });
+
+  it("does NOT advise when the script already runs migrations", async () => {
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript: "php artisan migrate --force",
+    });
+    mockResolveTarget.mockResolvedValue({ target: TARGET });
+    // Readiness probe, then the script itself.
+    mockExecInContainer
+      .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false })
+      .mockResolvedValueOnce({ exitCode: 0, output: "Migrated.\n", timedOut: false });
+
+    const advisories: Array<{ code: string }> = [];
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "nixpacks",
+      primaryLanguage: "PHP",
+      techStack: ["PHP", "Laravel"],
+      log,
+      sleep: noSleep,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories.map((a) => a.code)).not.toContain("migrations-not-configured");
+  });
+
+  it("does NOT advise for a Railpack PHP app (startup runs migrations)", async () => {
+    mockGetProjectDeployConfig.mockResolvedValue({
+      deployScript: "# nothing here",
+    });
+
+    const advisories: Array<{ code: string }> = [];
+    await stageRunPostDeploy({
+      projectId: "p1",
+      buildType: "railpack",
+      primaryLanguage: "PHP",
+      techStack: ["PHP", "Laravel"],
+      log,
+      sleep: noSleep,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories).toEqual([]);
+  });
+
   it("runs only the NON-startup-covered commands for a Railpack PHP app", async () => {
     mockGetProjectDeployConfig.mockResolvedValue({
       deployScript: "php artisan migrate --force\nphp artisan config:cache\nphp artisan db:seed --force",

@@ -14,17 +14,37 @@ export interface FrameworkCategory {
 // Deploy scripts run INSIDE the Docker container after it starts.
 // No cd, git pull, or package install — those happen at build time.
 
-// Laravel/Statamic on Railpack: the container's startup sequence already runs
-// `php artisan migrate --force` and `php artisan optimize` (which rebuilds the
-// config/route/view/event caches) against the real runtime env, every deploy.
-// So the default post-deploy script must NOT repeat migrate/config:cache/etc.:
-// re-running `config:cache` in a bare `docker exec` shell (which may not carry
-// the app's runtime env) bakes a broken config over the good one and yields a
-// Bad Gateway. Leave this empty by default; add only genuinely one-off commands.
+// Laravel/Statamic: declare the real release commands here.
+//
+// Which builder runs the app decides whether these are needed, and the backend
+// handles that for us rather than the template having to guess:
+//   - Railpack (PHP 8.2+): its `start-container.sh` already runs
+//     `php artisan migrate --force` + `php artisan optimize` against the real
+//     runtime env on every boot. The post-deploy stage therefore STRIPS the
+//     startup-covered commands (migrate + the config/route/view cache family),
+//     so they are not re-run in a bare `docker exec` shell — which could bake a
+//     broken config cache over the good one and cause a Bad Gateway.
+//   - Nixpacks (PHP older than 8.2): nothing runs at startup, so these commands
+//     execute here — which is the only way migrations happen for those apps.
+// Keeping the real commands in the template means both builders behave
+// correctly; an empty template silently skipped migrations on Nixpacks.
+//
+// Two deliberate choices:
+//   - The cache commands are listed explicitly rather than as `php artisan
+//     optimize`, because `optimize` covers different caches across Laravel
+//     versions (views are included in 11+ but not in 10 and earlier).
+//   - `queue:restart` is intentionally NOT startup-covered, so it runs on every
+//     builder. Workers must be signalled after a deploy to pick up new code; it
+//     is a harmless no-op when no workers are running.
 const LARAVEL_DEPLOY = `# Laravel post-deploy commands
-# Migrations and cache optimization run automatically at container startup
-# (php artisan migrate --force + php artisan optimize), so nothing is needed here.
-# Add only extra one-off commands you want to run after each deploy, e.g.:
+# These run after each deploy. On builders that already run them at container
+# startup, Dockier skips them automatically — so it is safe to leave them here.
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan queue:restart
+# Add any extra one-off commands below, e.g.:
 #   php artisan db:seed --force`;
 
 const SYMFONY_DEPLOY = `# Symfony post-deploy commands

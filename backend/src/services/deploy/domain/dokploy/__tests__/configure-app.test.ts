@@ -251,6 +251,8 @@ describe("stageConfigureApp — build type selection", () => {
     primaryLanguage?: string;
     techStack?: string[];
     publishDirectory?: string;
+    runtime?: string;
+    phpVersion?: string;
   }) => {
     await stageConfigureApp({ ...base, repoAnalysis, client: client as unknown as DokployClient });
   };
@@ -305,6 +307,74 @@ describe("stageConfigureApp — build type selection", () => {
   it("defaults an unknown stack to railpack", async () => {
     await run({ hasDockerfile: false, isStaticSite: false, primaryLanguage: "", techStack: [] });
     expect(buildTypeArg().buildType).toBe("railpack");
+  });
+
+  it("falls back to nixpacks for PHP older than Railpack supports (8.1)", async () => {
+    await run({
+      hasDockerfile: false,
+      isStaticSite: false,
+      primaryLanguage: "php",
+      techStack: ["PHP", "Laravel"],
+      runtime: "php",
+      phpVersion: "8.1",
+    });
+    expect(buildTypeArg().buildType).toBe("nixpacks");
+  });
+
+  it("keeps railpack for PHP 8.2 and newer", async () => {
+    for (const version of ["8.2", "8.3", "8.4"]) {
+      vi.clearAllMocks();
+      await run({
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "php",
+        techStack: ["PHP", "Laravel"],
+        runtime: "php",
+        phpVersion: version,
+      });
+      expect(buildTypeArg().buildType).toBe("railpack");
+    }
+  });
+
+  it("falls back to nixpacks for PHP 7.x", async () => {
+    await run({
+      hasDockerfile: false,
+      isStaticSite: false,
+      primaryLanguage: "php",
+      techStack: ["PHP"],
+      runtime: "php",
+      phpVersion: "7.4",
+    });
+    expect(buildTypeArg().buildType).toBe("nixpacks");
+  });
+
+  it("keeps railpack when the PHP version is unknown (conservative)", async () => {
+    await run({ hasDockerfile: false, isStaticSite: false, primaryLanguage: "php", techStack: ["PHP"], runtime: "php" });
+    expect(buildTypeArg().buildType).toBe("railpack");
+  });
+
+  it("does not apply the PHP version rule to non-PHP apps", async () => {
+    await run({
+      hasDockerfile: false,
+      isStaticSite: false,
+      primaryLanguage: "javascript",
+      techStack: ["Node.js"],
+      runtime: "node",
+      phpVersion: "8.1",
+    });
+    expect(buildTypeArg().buildType).toBe("railpack");
+  });
+
+  it("prefers a repo Dockerfile over the nixpacks PHP fallback", async () => {
+    await run({
+      hasDockerfile: true,
+      isStaticSite: false,
+      primaryLanguage: "php",
+      techStack: ["PHP"],
+      runtime: "php",
+      phpVersion: "8.1",
+    });
+    expect(buildTypeArg().buildType).toBe("dockerfile");
   });
 });
 
@@ -370,7 +440,16 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
   };
 
   const run = async (
-    repoAnalysis: { hasDockerfile: boolean; isStaticSite: boolean; primaryLanguage?: string; techStack?: string[]; startCommand?: string },
+    repoAnalysis: {
+      hasDockerfile: boolean;
+      isStaticSite: boolean;
+      primaryLanguage?: string;
+      techStack?: string[];
+      startCommand?: string;
+      framework?: string;
+      runtime?: string;
+      phpVersion?: string;
+    },
     envVars: Array<{ name: string; value: string }> = [],
   ) =>
     stageConfigureApp({ ...base, repoAnalysis, envVars, client: client as unknown as DokployClient });
@@ -411,6 +490,59 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     const env = envMap();
     expect(env.PORT).toBeUndefined();
     expect(env.HOST).toBeUndefined();
+  });
+
+  it("routes a nixpacks PHP fallback to port 80 (nginx), not 3000", async () => {
+    const result = await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "php",
+        techStack: ["PHP", "Laravel"],
+        runtime: "php",
+        phpVersion: "8.1",
+      },
+      [{ name: "APP_ENV", value: "production" }],
+    );
+    expect(result.buildType).toBe("nixpacks");
+    expect(result.containerPort).toBe(80);
+  });
+
+  it("advises when an old PHP version forces the Nixpacks builder", async () => {
+    const advisories: Array<{ code: string }> = [];
+    await stageConfigureApp({
+      ...base,
+      repoAnalysis: {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "php",
+        techStack: ["PHP", "Laravel"],
+        runtime: "php",
+        phpVersion: "8.1",
+      },
+      envVars: [{ name: "APP_ENV", value: "production" }],
+      client: client as unknown as DokployClient,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories.map((a) => a.code)).toContain("php-version-unsupported-by-railpack");
+  });
+
+  it("does not inject Railpack PHP env on a nixpacks fallback build", async () => {
+    await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "php",
+        techStack: ["PHP", "Laravel"],
+        runtime: "php",
+        phpVersion: "8.1",
+      },
+      [{ name: "APP_ENV", value: "production" }],
+    );
+    const env = envMap();
+    expect(env.RAILPACK_PHP_EXTENSIONS).toBeUndefined();
+    expect(env.RAILPACK_SKIP_MIGRATIONS).toBeUndefined();
   });
 
   it("routes a dockerfile app to port 3000 (no Node env injected)", async () => {
@@ -474,12 +606,36 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     );
   });
 
-  it("does not set a run command when no start command was derived", async () => {
+  it("CLEARS a stale run command when no start command was derived", async () => {
+    // `command` persists on the Dokploy application, so a value from an earlier
+    // deploy (e.g. a PHP supervisord path) would survive and break the container.
+    // Reconciling to "" makes redeploys self-healing.
     await run(
       { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Astro"] },
       [{ name: "PUBLIC_URL", value: "https://example.com" }],
     );
-    expect(client.updateApplication).not.toHaveBeenCalled();
+    expect(client.updateApplication).toHaveBeenCalledWith(
+      expect.objectContaining({ command: "" }),
+    );
+  });
+
+  it("clears the run command for a PHP nixpacks build (never injects supervisord)", async () => {
+    await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "php",
+        techStack: ["PHP", "Laravel"],
+        runtime: "php",
+        phpVersion: "8.1",
+        // Even if an upstream caller supplied one, PHP must not get a run command.
+        startCommand: "/usr/bin/supervisord -c /etc/supervisor/conf.d/app.conf",
+      },
+      [{ name: "APP_ENV", value: "production" }],
+    );
+    expect(client.updateApplication).toHaveBeenCalledWith(
+      expect.objectContaining({ command: "" }),
+    );
   });
 
   it("does not fail the stage when setting the run command errors", async () => {

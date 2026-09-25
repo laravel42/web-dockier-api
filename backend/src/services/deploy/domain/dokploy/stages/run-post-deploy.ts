@@ -17,6 +17,7 @@
 import { resolveDokployCommandTarget, execInDokployContainer } from "../command-exec.js";
 import { getProjectDeployConfig } from "../../../../../shared/service-clients/projects.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
+import { type Advisory, migrationsNotConfiguredAdvisory } from "../advisories.js";
 
 /** Cap on the whole script, mirroring the native post-deploy guard. */
 const MAX_SCRIPT_LENGTH = 10_000;
@@ -65,8 +66,10 @@ export async function stageRunPostDeploy(params: {
   /** Test seam: sleep implementation. */
   sleep?: (ms: number) => Promise<void>;
   log: (line: string) => Promise<void>;
+  /** Optional sink for user-facing advisories (see advisories.ts). */
+  advise?: (advisory: Advisory) => void;
 }): Promise<void> {
-  const { projectId, buildType, primaryLanguage, techStack = [], log } = params;
+  const { projectId, buildType, primaryLanguage, techStack = [], log, advise } = params;
   const sleep = params.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const readinessTimeoutMs = params.readinessTimeoutMs ?? 120_000;
 
@@ -78,6 +81,19 @@ export async function stageRunPostDeploy(params: {
   } catch (err) {
     await log(`[stage:post-deploy] Skipped loading post-deploy commands: ${getErrMsg(err)}`);
     return;
+  }
+
+  // A PHP app whose builder does NOT run migrations at startup (i.e. anything
+  // other than Railpack PHP) gets them ONLY from these post-deploy commands. If
+  // none are configured, migrations silently never run — flag it, since projects
+  // created before the default template included them are in exactly that state.
+  if (isPhpApp(primaryLanguage, techStack) && !isRailpackPhp(buildType, primaryLanguage, techStack)) {
+    if (!/\bartisan\s+migrate\b/.test(script)) {
+      await log(
+        "[stage:post-deploy] This build does not run database migrations at container startup, and no migration command is configured — migrations did NOT run.",
+      );
+      advise?.(migrationsNotConfiguredAdvisory());
+    }
   }
 
   if (!script) return; // nothing configured
@@ -160,6 +176,15 @@ function hasNonComment(script: string): boolean {
  * primaryLanguage alone is unreliable (a Laravel repo can be classified as
  * "Blade"/blank), so we also check the tech stack.
  */
+function isPhpApp(primaryLanguage: string | undefined, techStack: string[]): boolean {
+  const lang = (primaryLanguage ?? "").toLowerCase();
+  if (lang.includes("php") || lang.includes("laravel") || lang.includes("blade")) return true;
+  return techStack.some((s) => {
+    const t = s.toLowerCase();
+    return t.includes("php") || t.includes("laravel") || t.includes("filament") || t.includes("statamic") || t.includes("blade");
+  });
+}
+
 function isRailpackPhp(buildType: string | undefined, primaryLanguage: string | undefined, techStack: string[]): boolean {
   if (buildType !== "railpack") return false;
   const lang = (primaryLanguage ?? "").toLowerCase();

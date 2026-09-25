@@ -20,6 +20,7 @@ import {
   phpExtensionDefaultsAdvisory,
   migrationsSkippedAdvisory,
   databaseEnvOverriddenAdvisory,
+  phpVersionUnsupportedAdvisory,
 } from "../advisories.js";
 
 /**
@@ -75,6 +76,13 @@ export interface RepoAnalysisInfo {
   techStack?: string[];
   /** Detected framework (e.g. "astro"), used to word advisories precisely. */
   framework?: string;
+  /** Detected runtime ("php", "node", ...). Drives builder selection. */
+  runtime?: string;
+  /**
+   * Detected PHP version (e.g. "8.1"). Railpack supports only PHP 8.2+, so an
+   * older version forces a Nixpacks build instead.
+   */
+  phpVersion?: string;
   /**
    * Explicit server start command derived from repo analysis. When present and
    * the build is railpack, it's injected as RAILPACK_START_CMD so
@@ -211,6 +219,15 @@ export async function stageConfigureApp(params: {
   const buildType = determineBuildType(repoAnalysis);
   await log(`[stage:configure-app] Setting build type: ${buildType}`);
 
+  // A PHP version Railpack can't build is the one case where we silently switch
+  // builders; tell the user, since the real fix is upgrading PHP.
+  if (buildType === "nixpacks" && requiresNixpacksForPhp(repoAnalysis)) {
+    await log(
+      `[stage:configure-app] PHP ${repoAnalysis.phpVersion} is not supported by Railpack (needs 8.2+) — using Nixpacks for this build.`,
+    );
+    advise?.(phpVersionUnsupportedAdvisory(repoAnalysis.phpVersion ?? "unknown"));
+  }
+
   // Dokploy's saveBuildType requires the full field set as non-optional, even
   // for build types that don't use them. Send empty-string defaults and
   // override only the fields relevant to the chosen build type.
@@ -295,18 +312,27 @@ export async function stageConfigureApp(params: {
     });
   }
 
-  // Builder-independent start-command override. Railpack's RAILPACK_START_CMD is
-  // documented as a CLI `--env` build variable, so app env may not reach it;
-  // Dokploy's own application `command` overrides the container's entrypoint
-  // regardless of builder. Best-effort — a failure here still leaves the env var
-  // in place and never fails the deploy.
-  if (buildType === "railpack" && repoAnalysis.startCommand) {
-    try {
-      await client.updateApplication({ applicationId, command: repoAnalysis.startCommand });
+  // Builder-independent start-command override, RECONCILED on every deploy.
+  //
+  // Railpack's RAILPACK_START_CMD is documented as a CLI `--env` build variable,
+  // so app env may not reach it; Dokploy's own application `command` overrides
+  // the container's entrypoint regardless of builder.
+  //
+  // Crucially this must be reconciled, not just set: `command` persists on the
+  // application, so a value written by an earlier deploy survives into later
+  // ones. A stale command (e.g. a PHP supervisord path from before we narrowed
+  // injection to Node) leaves the container unable to start at all — an
+  // un-debuggable Bad Gateway that a redeploy would NOT clear. So when we have
+  // no command to set, we explicitly clear it. Dockier owns this field, the same
+  // way it owns build type, env, and the git source.
+  const desiredCommand = buildType === "railpack" && repoAnalysis.startCommand ? repoAnalysis.startCommand : "";
+  try {
+    await client.updateApplication({ applicationId, command: desiredCommand });
+    if (desiredCommand) {
       await log("[stage:configure-app] Applied start command to the application (run command).");
-    } catch (err) {
-      await log(`[stage:configure-app] Could not set the application run command (continuing): ${getErrMsg(err)}`);
     }
+  } catch (err) {
+    await log(`[stage:configure-app] Could not reconcile the application run command (continuing): ${getErrMsg(err)}`);
   }
 
   const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
@@ -470,7 +496,15 @@ function determineBuildType(analysis: RepoAnalysisInfo): DokployBuildType {
   // is present in the repo — never inferred from the tech stack alone.
   if (analysis.isStaticSite) return "static";
 
-  // Priority 3: Everything else → Railpack.
+  // Priority 3: PHP older than Railpack supports → Nixpacks.
+  //
+  // Railpack builds PHP on FrankenPHP and documents support for PHP 8.2+ only;
+  // an older constraint fails the build outright at plan time with
+  // "No version available for php 8.1". Nixpacks still handles those versions,
+  // so fall back to it rather than failing a deployable app.
+  if (requiresNixpacksForPhp(analysis)) return "nixpacks";
+
+  // Priority 4: Everything else → Railpack.
   //
   // Railpack is the newer successor to Nixpacks and is our standard builder for
   // source-based deploys. It tracks current runtime versions (so it avoids
@@ -481,6 +515,39 @@ function determineBuildType(analysis: RepoAnalysisInfo): DokployBuildType {
   // that allow-list let unrecognized-language repos silently fall through to
   // Nixpacks and fail.
   return "railpack";
+}
+
+/**
+ * Minimum PHP version Railpack can build. Railpack's PHP provider runs on
+ * FrankenPHP and documents support for 8.2 and above; anything older fails at
+ * plan time ("No version available for php 8.1").
+ */
+const RAILPACK_MIN_PHP = { major: 8, minor: 2 };
+
+/** Parse a "major.minor" PHP version. Returns null when unparseable. */
+function parsePhpVersion(version: string | undefined): { major: number; minor: number } | null {
+  if (!version) return null;
+  const match = version.match(/(\d+)\.(\d+)/);
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]) };
+}
+
+/**
+ * True when the app is PHP on a version Railpack can't build, so the deploy must
+ * use Nixpacks instead. Conservative: an unknown/unparseable version keeps the
+ * Railpack default (the analyzer already defaults modern PHP to 8.4).
+ */
+export function requiresNixpacksForPhp(analysis: Pick<RepoAnalysisInfo, "runtime" | "phpVersion" | "primaryLanguage" | "techStack">): boolean {
+  const isPhp =
+    analysis.runtime === "php" ||
+    isPhpApp(analysis.primaryLanguage, analysis.techStack ?? []);
+  if (!isPhp) return false;
+
+  const parsed = parsePhpVersion(analysis.phpVersion);
+  if (!parsed) return false;
+
+  return parsed.major < RAILPACK_MIN_PHP.major ||
+    (parsed.major === RAILPACK_MIN_PHP.major && parsed.minor < RAILPACK_MIN_PHP.minor);
 }
 
 // ─── Port / runtime detection ────────────────────────────────────
@@ -533,6 +600,12 @@ export function resolveContainerPort(
 ): number {
   if (buildType === "railpack") {
     return isNodeApp(primaryLanguage, techStack) ? NODE_RAILPACK_PORT : 80;
+  }
+  // Nixpacks serves PHP behind nginx on port 80 (same as Railpack's FrankenPHP),
+  // so a PHP app that fell back to Nixpacks must still be routed to 80 — routing
+  // it to 3000 would be an instant Bad Gateway.
+  if (buildType === "nixpacks" && isPhpApp(primaryLanguage, techStack)) {
+    return 80;
   }
   return 3000;
 }

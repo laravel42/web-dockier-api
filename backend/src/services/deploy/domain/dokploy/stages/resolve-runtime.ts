@@ -35,6 +35,13 @@ export interface ResolvedRuntime {
    * Cloudflare adapter) and therefore has no startable Node server.
    */
   platformAdapter?: boolean;
+  /** Detected runtime ("php", "node", ...) — used for builder selection. */
+  runtime?: string;
+  /**
+   * Detected PHP version from composer.json (e.g. "8.1"). Railpack only supports
+   * 8.2+, so this drives a fallback to Nixpacks for older apps.
+   */
+  phpVersion?: string;
 }
 
 /**
@@ -74,6 +81,8 @@ export async function resolveRuntimeStartCommand(params: {
       kind: runtime.kind,
       hasStartScript: runtime.hasStartScript,
       platformAdapter: runtime.platformAdapter,
+      runtime: runtime.config.runtime,
+      phpVersion: runtime.config.phpVersion || undefined,
     };
 
     if (runtime.platformAdapter) {

@@ -9,9 +9,23 @@ const mockAppendLog = vi.fn().mockResolvedValue(undefined);
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
 const mockGetDeploymentCurrentStatus = vi.fn().mockResolvedValue("pending");
 
+const mockEmitSuccess = vi.fn();
+const mockEmitFailure = vi.fn();
 vi.mock("../../pipeline/helpers.js", () => ({
   appendLog: (...args: unknown[]) => mockAppendLog(...args),
   updateStatus: (...args: unknown[]) => mockUpdateStatus(...args),
+  emitDeploySuccessNotification: (...args: unknown[]) => mockEmitSuccess(...args),
+  emitDeployFailureNotification: (...args: unknown[]) => mockEmitFailure(...args),
+}));
+
+// Post-success bookkeeping shared with the native pipeline.
+const mockMarkInfraLive = vi.fn().mockResolvedValue(undefined);
+vi.mock("../../lifecycle/project-teardown.js", () => ({
+  markProjectInfraLive: (...args: unknown[]) => mockMarkInfraLive(...args),
+}));
+const mockClearFavicon = vi.fn().mockResolvedValue(undefined);
+vi.mock("../../../../git-integration/domain/cache.js", () => ({
+  clearRepoFaviconFromAnalysisCache: (...args: unknown[]) => mockClearFavicon(...args),
 }));
 
 vi.mock("../../deployments.js", () => ({
@@ -247,11 +261,44 @@ describe("executeDokployPipeline", () => {
     expect(mockDeleteDatabaseMappings).not.toHaveBeenCalled();
   });
 
-  it("stores appUrl in database on success", async () => {
-    const { supabaseAdmin } = await import("../../../../../shared/supabase/client.js");
+  it("marks the project's infrastructure live on success (enables teardown)", async () => {
+    await executeDokployPipeline(basePipelineInput);
+
+    // Without this the project shows "No infrastructure" and the Tear Down
+    // button stays disabled, so users cannot destroy what they just created.
+    expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1");
+  });
+
+  it("emits a success notification and clears the favicon cache on success", async () => {
+    await executeDokployPipeline(basePipelineInput);
+
+    expect(mockEmitSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-1", repo: "owner/my-app", branch: "main" }),
+    );
+    expect(mockClearFavicon).toHaveBeenCalled();
+  });
+
+  it("emits a failure notification when a stage throws", async () => {
+    mockConfigureApp.mockRejectedValueOnce(new Error("Config failed"));
 
     await executeDokployPipeline(basePipelineInput);
 
-    expect(supabaseAdmin.from).toHaveBeenCalledWith("deployments");
+    expect(mockEmitFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-1", repo: "owner/my-app" }),
+    );
+    expect(mockMarkInfraLive).not.toHaveBeenCalled();
+  });
+
+  it("persists appUrl ATOMICALLY with the success status", async () => {
+    await executeDokployPipeline(basePipelineInput);
+
+    // Writing app_url after flipping to "success" raced the wizard, which stops
+    // polling on a terminal status and captured an empty URL. It must land in the
+    // same update as the status.
+    expect(mockUpdateStatus).toHaveBeenCalledWith(
+      "deploy-1",
+      "success",
+      expect.objectContaining({ app_url: expect.stringContaining("http") }),
+    );
   });
 });

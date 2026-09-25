@@ -116,6 +116,27 @@ describe("resolveRuntimeStartCommand", () => {
     expect(result.platformAdapter).toBe(true);
   });
 
+  it("never injects a start command for a PHP app (the analyzer's is image-specific)", async () => {
+    // Laravel's analyzer startCommand is "/usr/bin/supervisord -c ...", which
+    // only exists in Dockier's generated PHP image. Handing it to Railpack or
+    // Nixpacks produces a container that cannot start at all.
+    serveRepo(
+      ["composer.json", "package.json", "artisan"],
+      {
+        "composer.json": JSON.stringify({ require: { php: "^8.1", "laravel/framework": "^10.0" } }),
+        "package.json": JSON.stringify({ devDependencies: { vite: "^5.0.0" }, scripts: { build: "vite build" } }),
+      },
+    );
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.startCommand).toBeUndefined();
+    // And a Laravel app is a server, never "static" — even though its
+    // package.json makes the Node analyzer flag static assets.
+    expect(result.kind).toBe("server");
+    expect(result.runtime).toBe("php");
+    expect(result.phpVersion).toBe("8.1");
+  });
+
   it("does NOT override a static Astro site (no adapter, no server output)", async () => {
     serveRepo(
       ["package.json"],

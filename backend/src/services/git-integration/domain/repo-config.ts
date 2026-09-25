@@ -137,16 +137,34 @@ export async function analyzeRepoRuntime(connection: ConnectionLike, ref: RepoRe
     } catch { /* ignore */ }
   }
 
-  const kind: "server" | "static" = config.features.has("static-export") && !config.features.has("ssr")
-    ? "static"
-    : (config.features.has("ssr") ? "server" : (config.runtime === "unknown" ? "static" : "server"));
+  // Derive kind from the RUNTIME first. Feature flags alone are unreliable here:
+  // a Laravel repo usually also has a package.json, so the Node analyzer runs
+  // and can add "static-export" (Vite assets with a build script and no start
+  // script) before the PHP analyzer takes over the runtime. Reading features
+  // first made such apps look static, which is plainly wrong for Laravel.
+  let kind: "server" | "static";
+  if (config.runtime === "php" || config.runtime === "python" || config.runtime === "go") {
+    kind = "server";
+  } else if (config.runtime === "node") {
+    kind = config.features.has("ssr") ? "server" : (config.features.has("static-export") ? "static" : "server");
+  } else {
+    kind = "static";
+  }
 
-  // Only inject a start command when the repo has none AND the analyzer produced
-  // a concrete server entry (not a "<pm> start" passthrough that assumes a start
-  // script). "node ..." / "./app" / server binaries qualify; "pnpm start" etc.
-  // do not.
+  // Only inject a start command for NODE apps.
+  //
+  // This is deliberately narrow. The analyzer's `startCommand` exists primarily
+  // to feed Dockier's own Dockerfile generator, so for non-Node runtimes it can
+  // be an artifact of that image rather than a portable command — Laravel's is
+  // "/usr/bin/supervisord -c /etc/supervisor/conf.d/app.conf", which only exists
+  // in the generated PHP image. Handing that to Railpack/Nixpacks produces a
+  // container that cannot start at all (Bad Gateway). For PHP/Python/Go the
+  // builder already knows how to run the app, so we never override it.
+  //
+  // Within Node we still skip "<pm> start" passthroughs, which assume the very
+  // start script we've established is missing.
   let injectableStartCommand: string | undefined;
-  if (!hasStartScript && config.startCommand) {
+  if (config.runtime === "node" && !hasStartScript && config.startCommand) {
     const isPassthrough = /\b(start|serve)\b/.test(config.startCommand) && /(npm|pnpm|yarn|bun)/.test(config.startCommand);
     if (!isPassthrough) injectableStartCommand = config.startCommand;
   }

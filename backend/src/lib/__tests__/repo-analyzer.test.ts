@@ -110,6 +110,28 @@ describe("analyzeRepoFiles (filesystem-agnostic core)", () => {
     expect(config.phpExtensions).toContain("pdo_mysql");
   });
 
+  it("reads the PHP version as the constraint's lower bound (what builders resolve)", () => {
+    // Railpack resolves the lowest version a constraint allows, so "^8.1" means
+    // it tries PHP 8.1 — which it cannot install. Our detection must match that
+    // resolution for the Nixpacks fallback to trigger correctly.
+    const caret = analyzeRepoFiles(new MapRepoFiles({
+      "composer.json": JSON.stringify({ require: { php: "^8.1", "laravel/framework": "^10.0" } }),
+    }));
+    expect(caret.phpVersion).toBe("8.1");
+
+    const range = analyzeRepoFiles(new MapRepoFiles({
+      "composer.json": JSON.stringify({ require: { php: ">=8.2 <8.4" } }),
+    }));
+    expect(range.phpVersion).toBe("8.2");
+  });
+
+  it("defaults PHP to a modern version when composer.json declares no constraint", () => {
+    const config = analyzeRepoFiles(new MapRepoFiles({
+      "composer.json": JSON.stringify({ require: { "laravel/framework": "^11.0" } }),
+    }));
+    expect(config.phpVersion).toBe("8.4");
+  });
+
   it("detects a Go app from go.mod", () => {
     const files = new MapRepoFiles({ "go.mod": "module example.com/app\n\ngo 1.23\n" });
     const config = analyzeRepoFiles(files);

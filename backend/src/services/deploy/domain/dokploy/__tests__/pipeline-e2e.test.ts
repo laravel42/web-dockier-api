@@ -27,9 +27,22 @@ const mockAppendLog = vi.fn(async (_id: string, line: string) => { logLines.push
 const mockUpdateStatus = vi.fn(async (_id: string, status: string) => { statusCalls.push(status); });
 const mockGetDeploymentCurrentStatus = vi.fn().mockResolvedValue("pending");
 
+const mockEmitSuccess = vi.fn();
+const mockEmitFailure = vi.fn();
 vi.mock("../../pipeline/helpers.js", () => ({
   appendLog: (...a: unknown[]) => mockAppendLog(...(a as [string, string])),
   updateStatus: (...a: unknown[]) => mockUpdateStatus(...(a as [string, string])),
+  emitDeploySuccessNotification: (...a: unknown[]) => mockEmitSuccess(...(a as [])),
+  emitDeployFailureNotification: (...a: unknown[]) => mockEmitFailure(...(a as [])),
+}));
+// Post-success bookkeeping (project infra_state, favicon cache) — mocked so this
+// orchestration test doesn't reach the DB for them.
+const mockMarkInfraLive = vi.fn(async () => undefined);
+vi.mock("../../lifecycle/project-teardown.js", () => ({
+  markProjectInfraLive: (...a: unknown[]) => mockMarkInfraLive(...(a as [])),
+}));
+vi.mock("../../../../git-integration/domain/cache.js", () => ({
+  clearRepoFaviconFromAnalysisCache: vi.fn(async () => undefined),
 }));
 vi.mock("../../deployments.js", () => ({
   getDeploymentCurrentStatus: (...a: unknown[]) => mockGetDeploymentCurrentStatus(...a),
@@ -247,8 +260,13 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(clientMethods.deploy).toHaveBeenCalled();
     expect(statusCalls).toEqual(expect.arrayContaining(["building", "deploying", "success"]));
 
-    // App URL persisted.
-    expect(dbUpdateEq).toHaveBeenCalled();
+    // App URL persisted ATOMICALLY with the success status (a later write raced
+    // clients that stop polling once they see a terminal status).
+    expect(mockUpdateStatus).toHaveBeenCalledWith(
+      expect.any(String),
+      "success",
+      expect.objectContaining({ app_url: expect.stringContaining("sslip.io") }),
+    );
   });
 
   it("recovers via automated diagnosis: first deploy errors, retry succeeds", async () => {
