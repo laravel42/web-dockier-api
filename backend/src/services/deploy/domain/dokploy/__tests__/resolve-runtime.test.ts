@@ -88,6 +88,34 @@ describe("resolveRuntimeStartCommand", () => {
     expect(result.hasStartScript).toBe(true);
   });
 
+  it("detects the node adapter from astro.config when the dep is missing from package.json", async () => {
+    serveRepo(
+      ["package.json", "astro.config.mjs"],
+      {
+        "package.json": pkg({ deps: { astro: "^5.0.0" }, scripts: { build: "astro build" } }),
+        "astro.config.mjs": "import node from '@astrojs/node';\nexport default defineConfig({ output: 'server', adapter: node({ mode: 'standalone' }) });",
+      },
+    );
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.startCommand).toBe("node ./dist/server/entry.mjs");
+    expect(result.kind).toBe("server");
+  });
+
+  it("flags a platform adapter and does not inject a start command", async () => {
+    serveRepo(
+      ["package.json", "astro.config.mjs"],
+      {
+        "package.json": pkg({ deps: { astro: "^5.0.0", "@astrojs/vercel": "^8.0.0" }, scripts: { build: "astro build" } }),
+        "astro.config.mjs": "import vercel from '@astrojs/vercel';\nexport default defineConfig({ output: 'server', adapter: vercel() });",
+      },
+    );
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.startCommand).toBeUndefined();
+    expect(result.platformAdapter).toBe(true);
+  });
+
   it("does NOT override a static Astro site (no adapter, no server output)", async () => {
     serveRepo(
       ["package.json"],

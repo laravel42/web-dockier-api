@@ -43,6 +43,30 @@ describe("analyzeRepoFiles (filesystem-agnostic core)", () => {
     expect(config.startCommand).toBe("");
   });
 
+  it("detects the node adapter from astro.config even when the dep is not in the app's package.json (monorepo)", () => {
+    // In a workspace the adapter often lives in another package's manifest, so
+    // a deps-only check would miss it and mislabel the app as static.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { astro: "^5.0.0" }, scripts: { build: "astro build" } }),
+      "astro.config.mjs": "import node from '@astrojs/node';\nexport default defineConfig({ output: 'server', adapter: node({ mode: 'standalone' }) });",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("ssr")).toBe(true);
+    expect(config.startCommand).toBe("node ./dist/server/entry.mjs");
+  });
+
+  it("flags an Astro platform adapter and does NOT synthesize a node entry", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { astro: "^5.0.0", "@astrojs/vercel": "^8.0.0" }, scripts: { build: "astro build" } }),
+      "astro.config.mjs": "import vercel from '@astrojs/vercel';\nexport default defineConfig({ output: 'server', adapter: vercel() });",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("ssr")).toBe(true);
+    expect(config.features.has("astro-platform-adapter")).toBe(true);
+    // No startable Node server → no synthesized command.
+    expect(config.startCommand).toBe("");
+  });
+
   it("detects static Astro (no adapter, no server output)", () => {
     const files = new MapRepoFiles({
       "package.json": pkg({ deps: { astro: "^5.0.0" }, scripts: { build: "astro build" } }),

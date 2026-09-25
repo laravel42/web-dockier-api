@@ -101,6 +101,13 @@ export interface RepoRuntimeInfo {
   /** Whether the repo's package.json declares its own `start` script. */
   hasStartScript: boolean;
   /**
+   * Set when the app builds for a platform-specific runtime (Astro's
+   * Vercel/Netlify/Cloudflare adapters) rather than a self-runnable Node
+   * server. Such a build produces no startable process, so the deploy should
+   * say so explicitly rather than fail with a vague gateway error.
+   */
+  platformAdapter?: boolean;
+  /**
    * A start command safe to hand a builder (Railpack) ONLY when the repo has no
    * `start` script and the analyzer synthesized a concrete server entry (e.g.
    * SSR Astro → "node ./dist/server/entry.mjs"). Undefined when the repo owns
@@ -144,5 +151,11 @@ export async function analyzeRepoRuntime(connection: ConnectionLike, ref: RepoRe
     if (!isPassthrough) injectableStartCommand = config.startCommand;
   }
 
-  return { config, kind, hasStartScript, injectableStartCommand };
+  return {
+    config,
+    kind,
+    hasStartScript,
+    injectableStartCommand,
+    platformAdapter: config.features.has("astro-platform-adapter") || undefined,
+  };
 }

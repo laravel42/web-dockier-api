@@ -27,6 +27,8 @@ import { stageProvisionDatabases } from "./stages/provision-databases.js";
 import { stageConfigureApp } from "./stages/configure-app.js";
 import { resolveRuntimeStartCommand } from "./stages/resolve-runtime.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
+import { stageVerifyDeploy } from "./stages/verify-deploy.js";
+import { createAdvisoryCollector, renderAdvisories } from "./advisories.js";
 import { stageRunPostDeploy } from "./stages/run-post-deploy.js";
 import { revealEnv } from "../../../projects/domain/env.js";
 
@@ -50,6 +52,10 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
   const client = createDokployClient();
   const log = async (line: string) => appendLog(deploymentId, `[${ts()}] ${line}`);
   const startTime = Date.now();
+  // Collects the automatic adjustments the pipeline makes on the user's behalf
+  // (missing start script, injected PORT/HOST, ...) so a successful deploy can
+  // still report what needs attention in the repository.
+  const advisories = createAdvisoryCollector();
 
   const checkTimeout = () => {
     if (Date.now() - startTime > PIPELINE_TIMEOUT_MS) {
@@ -138,6 +144,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         isStaticSite: false,
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
+        framework: resolvedRuntime.framework,
         // Explicit start command (SSR Astro via @astrojs/node →
         // "node ./dist/server/entry.mjs"). configure-app hands it to Railpack so
         // the server actually launches.
@@ -148,6 +155,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       envVars,
       client,
       log,
+      advise: advisories.add,
     });
     checkTimeout();
 
@@ -168,7 +176,9 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         kind: resolvedRuntime.kind,
         startCommandApplied: Boolean(startCommand),
         repoHasStartScript: resolvedRuntime.hasStartScript,
+        platformAdapter: resolvedRuntime.platformAdapter,
       },
+      advise: advisories.add,
       maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
     });
@@ -224,9 +234,41 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       checkTimeout();
     }
 
+    // ─── Stage 9: Verify the app actually serves traffic ─────────
+    // Dokploy reporting "done" only means the build succeeded — it says nothing
+    // about whether the container serves requests. Probe the URL so a Bad
+    // Gateway is visible (and diagnosed) here instead of being discovered by the
+    // user. Strictly diagnostic: never fails the deploy.
+    if (deployResult.appUrl) {
+      try {
+        await stageVerifyDeploy({
+          appUrl: deployResult.appUrl,
+          containerPort,
+          log,
+          runtimeHint: {
+            buildType,
+            framework: resolvedRuntime.framework,
+            kind: resolvedRuntime.kind,
+            startCommandApplied: Boolean(startCommand),
+            repoHasStartScript: resolvedRuntime.hasStartScript,
+            platformAdapter: resolvedRuntime.platformAdapter,
+          },
+        });
+      } catch (verifyErr) {
+        await log(`[stage:verify] Skipped verification: ${getErrDetail(verifyErr)}`);
+      }
+    }
+
     // ─── Success ─────────────────────────────────────────────────
     await updateStatus(deploymentId, "success");
     await log(`✓ Deployment complete! App URL: ${deployResult.appUrl || "(pending)"}`);
+
+    // Report what Dockier adjusted on the user's behalf. The deploy succeeded —
+    // these are advisories so the gaps get fixed in the repo rather than relying
+    // on the platform to paper over them forever.
+    for (const line of renderAdvisories(advisories.list())) {
+      await log(line);
+    }
 
     // Store app URL in deployment record
     if (deployResult.appUrl) {

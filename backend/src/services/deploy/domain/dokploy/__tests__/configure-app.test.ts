@@ -499,6 +499,70 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     expect(envMap().RAILPACK_START_CMD).toBe("node ./dist/server/entry.mjs");
   });
 
+  it("records advisories for the adjustments it makes", async () => {
+    const advisories: Array<{ code: string }> = [];
+    await stageConfigureApp({
+      ...base,
+      repoAnalysis: {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "javascript",
+        techStack: ["Node.js", "Astro"],
+        framework: "astro",
+        startCommand: "node ./dist/server/entry.mjs",
+      },
+      envVars: [{ name: "PUBLIC_URL", value: "https://example.com" }],
+      client: client as unknown as DokployClient,
+      advise: (a) => advisories.push(a),
+    });
+
+    const codes = advisories.map((a) => a.code);
+    // Missing start script + injected PORT/HOST are both user-actionable.
+    expect(codes).toContain("missing-start-script");
+    expect(codes).toContain("injected-port-host");
+  });
+
+  it("does not advise about PORT when the user already set it", async () => {
+    const advisories: Array<{ code: string }> = [];
+    await stageConfigureApp({
+      ...base,
+      repoAnalysis: { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js"] },
+      envVars: [{ name: "PORT", value: "8080" }, { name: "HOST", value: "0.0.0.0" }],
+      client: client as unknown as DokployClient,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories.map((a) => a.code)).not.toContain("injected-port-host");
+  });
+
+  it("advises when migrations are skipped for a PHP app with no database", async () => {
+    const advisories: Array<{ code: string }> = [];
+    await stageConfigureApp({
+      ...base,
+      repoAnalysis: { hasDockerfile: false, isStaticSite: false, primaryLanguage: "php", techStack: ["PHP", "Laravel"] },
+      envVars: [{ name: "APP_ENV", value: "production" }],
+      client: client as unknown as DokployClient,
+      advise: (a) => advisories.push(a),
+    });
+
+    const codes = advisories.map((a) => a.code);
+    expect(codes).toContain("migrations-skipped");
+    expect(codes).toContain("php-extension-defaults");
+  });
+
+  it("records no advisories when nothing needed adjusting", async () => {
+    const advisories: Array<{ code: string }> = [];
+    await stageConfigureApp({
+      ...base,
+      repoAnalysis: { hasDockerfile: true, isStaticSite: false, primaryLanguage: "go", techStack: ["Go", "Docker"] },
+      envVars: [{ name: "APP_ENV", value: "production" }],
+      client: client as unknown as DokployClient,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories).toEqual([]);
+  });
+
   it("does not override a user-set RAILPACK_START_CMD", async () => {
     await run(
       {

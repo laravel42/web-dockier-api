@@ -92,6 +92,12 @@ vi.mock("../../../../../shared/service-clients/git-connections.js", () => ({
 vi.mock("../stages/resolve-runtime.js", () => ({
   resolveRuntimeStartCommand: vi.fn(async () => ({})),
 }));
+// The verify stage probes the app URL over HTTP. Stub it so this orchestration
+// test makes no network calls (its logic is covered by verify-deploy.test.ts).
+const mockVerifyDeploy = vi.fn(async () => ({ ok: true, status: 200, reason: "ok" as const }));
+vi.mock("../stages/verify-deploy.js", () => ({
+  stageVerifyDeploy: (...a: unknown[]) => mockVerifyDeploy(...(a as [])),
+}));
 const revealEnv = vi.fn(async () => ({ exists: true, content: "FOO=bar\n# comment\nBAZ=qux" }));
 vi.mock("../../../../projects/domain/env.js", () => ({
   revealEnv: (...a: unknown[]) => revealEnv(...(a as [])),

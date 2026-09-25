@@ -82,6 +82,17 @@ const mockRunPostDeploy = vi.fn().mockResolvedValue(undefined);
 vi.mock("../stages/run-post-deploy.js", () => ({
   stageRunPostDeploy: (...args: unknown[]) => mockRunPostDeploy(...args),
 }));
+// Runtime resolution + URL verification both reach the network; mock them so
+// this orchestration test stays offline and fast. Their logic is covered by
+// resolve-runtime.test.ts and verify-deploy.test.ts.
+const mockResolveRuntime = vi.fn().mockResolvedValue({});
+vi.mock("../stages/resolve-runtime.js", () => ({
+  resolveRuntimeStartCommand: (...args: unknown[]) => mockResolveRuntime(...args),
+}));
+const mockVerifyDeploy = vi.fn().mockResolvedValue({ ok: true, status: 200, reason: "ok" });
+vi.mock("../stages/verify-deploy.js", () => ({
+  stageVerifyDeploy: (...args: unknown[]) => mockVerifyDeploy(...args),
+}));
 vi.mock("../../../../projects/domain/env.js", () => ({
   revealEnv: vi.fn().mockResolvedValue({ exists: false, content: null }),
 }));

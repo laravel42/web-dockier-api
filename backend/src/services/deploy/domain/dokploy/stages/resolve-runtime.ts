@@ -30,6 +30,11 @@ export interface ResolvedRuntime {
   kind?: "server" | "static";
   /** Whether the repo declares its own `start` script. */
   hasStartScript?: boolean;
+  /**
+   * True when the build targets a platform runtime (Astro Vercel/Netlify/
+   * Cloudflare adapter) and therefore has no startable Node server.
+   */
+  platformAdapter?: boolean;
 }
 
 /**
@@ -68,7 +73,16 @@ export async function resolveRuntimeStartCommand(params: {
       framework: runtime.config.framework || undefined,
       kind: runtime.kind,
       hasStartScript: runtime.hasStartScript,
+      platformAdapter: runtime.platformAdapter,
     };
+
+    if (runtime.platformAdapter) {
+      await log(
+        `[stage:configure-app] This Astro app uses a platform adapter (Vercel/Netlify/Cloudflare), which builds a ` +
+        `serverless handler rather than a Node server. To deploy it here, switch to @astrojs/node with ` +
+        `mode: "standalone".`,
+      );
+    }
 
     if (runtime.injectableStartCommand) {
       await log(

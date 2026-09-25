@@ -155,6 +155,28 @@ describe("stageTriggerDeploy", () => {
     expect(logLines.some((l) => /updating to 3000/i.test(l))).toBe(true);
   });
 
+  it("records an advisory when it corrects a stale domain port", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+    mockClient.listDomains.mockResolvedValue([
+      { domainId: "dom-9", host: "app.sslip.io", https: false, port: 80, path: "/", certificateType: "none" },
+    ]);
+
+    const advisories: Array<{ code: string }> = [];
+    await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      containerPort: 3000,
+      pollIntervalMs: 100,
+      advise: (a) => advisories.push(a),
+    });
+
+    expect(advisories.map((a) => a.code)).toContain("domain-port-corrected");
+  });
+
   it("does not fail when reconciling the domain port errors", async () => {
     mockClient.listDeployments
       .mockResolvedValueOnce([])
@@ -308,6 +330,24 @@ describe("stageTriggerDeploy", () => {
     expect(result.failureReason).toMatch(/start command/i);
     expect(result.failureReason).toContain("node ./dist/server/entry.mjs");
     expect(logLines.some((l) => /start.*script|node \.\/dist\/server\/entry\.mjs/i.test(l))).toBe(true);
+  });
+
+  it("gives platform-adapter guidance instead of start-command guidance", async () => {
+    mockClient.listDeployments.mockResolvedValue([
+      { deploymentId: "d1", status: "error", title: "Build astro app", errorMessage: null, createdAt: "x" },
+    ]);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: { buildType: "railpack", framework: "astro", kind: "server", platformAdapter: true },
+    });
+
+    expect(result.failureReason).toMatch(/platform adapter/i);
+    expect(result.failureReason).toMatch(/@astrojs\/node/);
+    expect(result.failureReason).not.toMatch(/No start command was detected/i);
   });
 
   it("does NOT give start-command guidance when a start command was applied", async () => {

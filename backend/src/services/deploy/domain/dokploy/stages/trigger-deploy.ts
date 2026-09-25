@@ -8,6 +8,7 @@
 import type { DokployClient } from "../client.js";
 import { invokeDokployAI } from "./ai-recovery.js";
 import { sleep } from "../../../../../shared/utils/time.js";
+import { type Advisory, domainPortCorrectedAdvisory } from "../advisories.js";
 
 export interface DeployResult {
   status: "done" | "error";
@@ -32,6 +33,12 @@ export interface RuntimeHint {
   repoHasStartScript?: boolean;
   /** Whether the app is a server (needs a running process) vs static. */
   kind?: "server" | "static";
+  /**
+   * True when the build targets a platform runtime (Astro Vercel/Netlify/
+   * Cloudflare adapter) — it produces no startable Node server, so the guidance
+   * is "switch to @astrojs/node", not "add a start script".
+   */
+  platformAdapter?: boolean;
 }
 
 /**
@@ -50,10 +57,12 @@ export async function stageTriggerDeploy(params: {
   containerPort?: number;
   /** Framework-aware context for a clearer failure message (best-effort). */
   runtimeHint?: RuntimeHint;
+  /** Optional sink for user-facing advisories (see advisories.ts). */
+  advise?: (advisory: Advisory) => void;
   pollIntervalMs?: number;
   timeoutMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort = 3000, runtimeHint, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
+  const { applicationId, client, log, containerPort = 3000, runtimeHint, advise, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
 
   // Capture the set of existing deployment ids BEFORE triggering, so we can
   // identify the NEW deployment this trigger creates and follow only its
@@ -77,7 +86,7 @@ export async function stageTriggerDeploy(params: {
 
     if (status === "done") {
       const app = await client.getApplication(applicationId);
-      const appUrl = await resolveAppUrl(applicationId, app, client, log, containerPort);
+      const appUrl = await resolveAppUrl(applicationId, app, client, log, containerPort, advise);
       await log(`[stage:deploy] ✓ Deployment successful! URL: ${appUrl || "(pending domain)"}`);
       return { status: "done", appUrl };
     }
@@ -108,10 +117,12 @@ export async function stageDeployWithRetry(params: {
   containerPort?: number;
   /** Framework-aware context for a clearer failure message (best-effort). */
   runtimeHint?: RuntimeHint;
+  /** Optional sink for user-facing advisories (see advisories.ts). */
+  advise?: (advisory: Advisory) => void;
   maxAttempts?: number;
   pollIntervalMs?: number;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort, runtimeHint, maxAttempts = 3, pollIntervalMs } = params;
+  const { applicationId, client, log, containerPort, runtimeHint, advise, maxAttempts = 3, pollIntervalMs } = params;
 
   let lastFailureReason: string | undefined;
 
@@ -124,6 +135,7 @@ export async function stageDeployWithRetry(params: {
       log,
       containerPort,
       runtimeHint,
+      advise,
       pollIntervalMs,
     });
 
@@ -201,6 +213,19 @@ async function reportBuildFailure(
   // has nothing to run, so the container serves nothing (Bad Gateway) or the
   // build/deploy is reported failed. Tell the user exactly how to fix it,
   // since they can't see the raw build log.
+  // A platform-adapter build has no startable Node server; the fix is to change
+  // the adapter, not to add a start script.
+  if (runtimeHint?.platformAdapter) {
+    await log(
+      "[stage:deploy] This Astro app is built with a platform adapter (Vercel/Netlify/Cloudflare), which " +
+      "produces a serverless handler rather than a Node server. Switch to @astrojs/node with " +
+      'mode: "standalone" to deploy it here.',
+    );
+    return commit
+      ? `This Astro app uses a platform adapter (Vercel/Netlify/Cloudflare) and has no Node server to run (commit "${commit}"). Switch to @astrojs/node with mode: "standalone".`
+      : 'This Astro app uses a platform adapter (Vercel/Netlify/Cloudflare) and has no Node server to run. Switch to @astrojs/node with mode: "standalone".';
+  }
+
   const missingStart =
     runtimeHint?.buildType === "railpack" &&
     runtimeHint.kind === "server" &&
@@ -251,6 +276,7 @@ async function resolveAppUrl(
   client: DokployClient,
   log: (line: string) => Promise<void>,
   containerPort: number,
+  advise?: (advisory: Advisory) => void,
 ): Promise<string> {
   try {
     // 1. Reuse an existing domain if the app already has one.
@@ -276,6 +302,7 @@ async function resolveAppUrl(
             domainType: "application",
             certificateType: (already.certificateType as "none" | "letsencrypt") ?? "none",
           });
+          advise?.(domainPortCorrectedAdvisory(already.port, containerPort));
         } catch {
           // Best-effort: leave the domain as-is rather than failing the deploy.
           await log("[stage:deploy] Could not update the existing domain's port (continuing).");

@@ -124,24 +124,42 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     config.framework = "astro";
     config.frameworkVersion = cleanVersion(allDeps["astro"]);
     config.port = 3000;
-    const hasAdapter = allDeps["@astrojs/node"] || allDeps["@astrojs/vercel"] || allDeps["@astrojs/netlify"] || allDeps["@astrojs/cloudflare"];
-    // Astro can also declare SSR via output:"server"/"hybrid" in its config
-    // without a start script; read it so config-only SSR is detected too.
-    let configSaysServer = false;
+
+    // Read astro.config.* once: it carries BOTH the output mode and the adapter.
+    // The adapter must be detected from the config as well as from
+    // package.json, because in a monorepo the adapter dependency often lives in
+    // a workspace package rather than the app's own manifest — checking deps
+    // alone misses it and we'd wrongly treat an SSR app as static.
+    let astroConfig = "";
     for (const cfgName of ["astro.config.mjs", "astro.config.ts", "astro.config.js", "astro.config.mts", "astro.config.cjs"]) {
       const content = readApp(cfgName);
       if (content !== null) {
-        configSaysServer = /output\s*:\s*['"](server|hybrid)['"]/.test(content);
+        astroConfig = content;
         break;
       }
     }
-    if (hasAdapter || pkg.scripts?.start || configSaysServer) {
+
+    const configSaysServer = /output\s*:\s*['"](server|hybrid)['"]/.test(astroConfig);
+    const nodeAdapter = Boolean(allDeps["@astrojs/node"]) || /@astrojs\/node/.test(astroConfig);
+    // Platform adapters build for a host-specific runtime (a serverless handler),
+    // NOT a self-runnable Node server — so we must never synthesize a node entry
+    // for them.
+    const platformAdapter =
+      Boolean(allDeps["@astrojs/vercel"] || allDeps["@astrojs/netlify"] || allDeps["@astrojs/cloudflare"]) ||
+      /@astrojs\/(vercel|netlify|cloudflare)/.test(astroConfig);
+
+    if (nodeAdapter || platformAdapter || pkg.scripts?.start || configSaysServer) {
       config.features.add("ssr");
-      // The @astrojs/node standalone adapter emits a runnable server. Record a
-      // start command so downstream builders (and Railpack override) can launch
-      // it when the repo declares no `start` script.
-      if (allDeps["@astrojs/node"] && !pkg.scripts?.start) {
-        config.startCommand = "node ./dist/server/entry.mjs";
+      if (nodeAdapter) {
+        // The @astrojs/node standalone adapter emits a runnable server at this
+        // path. Record it so downstream builders (and the Railpack start-command
+        // override) can launch it when the repo declares no `start` script.
+        if (!pkg.scripts?.start) config.startCommand = "node ./dist/server/entry.mjs";
+      } else if (platformAdapter) {
+        // Buildable, but its output targets Vercel/Netlify/Cloudflare — there is
+        // no Node server to start. Flag it so the deploy can explain that
+        // clearly instead of failing with a vague gateway error.
+        config.features.add("astro-platform-adapter");
       }
     } else {
       config.features.add("static-export");

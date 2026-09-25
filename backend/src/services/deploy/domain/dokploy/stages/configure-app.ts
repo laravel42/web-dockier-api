@@ -13,6 +13,14 @@ import { getApplication, upsertApplication, deleteApplicationMapping } from "../
 import type { GitProviderConfig } from "./sync-git.js";
 import type { ProvisionedDatabase } from "./provision-databases.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
+import {
+  type Advisory,
+  missingStartScriptAdvisory,
+  injectedPortHostAdvisory,
+  phpExtensionDefaultsAdvisory,
+  migrationsSkippedAdvisory,
+  databaseEnvOverriddenAdvisory,
+} from "../advisories.js";
 
 /**
  * Railpack version to pin for railpack builds. Dokploy tags the builder image
@@ -65,6 +73,8 @@ export interface RepoAnalysisInfo {
   publishDirectory?: string;
   primaryLanguage?: string;
   techStack?: string[];
+  /** Detected framework (e.g. "astro"), used to word advisories precisely. */
+  framework?: string;
   /**
    * Explicit server start command derived from repo analysis. When present and
    * the build is railpack, it's injected as RAILPACK_START_CMD so
@@ -95,8 +105,15 @@ export async function stageConfigureApp(params: {
   envVars: Array<{ name: string; value: string }>;
   client: DokployClient;
   log: (line: string) => Promise<void>;
+  /**
+   * Optional sink for user-facing advisories about the automatic adjustments
+   * this stage makes (missing start script, injected PORT/HOST, ...). The
+   * pipeline renders them as a summary so a successful deploy still tells the
+   * user what Dockier compensated for. Omitted in unit tests.
+   */
+  advise?: (advisory: Advisory) => void;
 }): Promise<ConfigureAppResult> {
-  const { projectId, projectName, environmentId, serverId, gitConfig, repoAnalysis, services = [], provisionedDatabases = [], envVars, client, log } = params;
+  const { projectId, projectName, environmentId, serverId, gitConfig, repoAnalysis, services = [], provisionedDatabases = [], envVars, client, log, advise } = params;
 
   // Managed-mode services need no provisioning — the app connects to them via
   // its own env credentials (RDS/Neon/Upstash/etc.). vps-mode services are
@@ -247,9 +264,23 @@ export async function stageConfigureApp(params: {
   const finalEnv = withRailpackStartCommand(withNodeEnv, buildType, repoAnalysis.startCommand);
   if (buildType === "railpack" && repoAnalysis.startCommand && !envHas(withNodeEnv, "RAILPACK_START_CMD")) {
     await log(`[stage:configure-app] Using derived start command: ${repoAnalysis.startCommand}`);
+    advise?.(missingStartScriptAdvisory(repoAnalysis.startCommand, repoAnalysis.framework));
   }
   if (provisionedDatabases.length > 0) {
     await log(`[stage:configure-app] Wired ${provisionedDatabases.length} self-hosted service(s) into the app env.`);
+    advise?.(databaseEnvOverriddenAdvisory(provisionedDatabases.length));
+  }
+
+  // Report the runtime/extension defaults we injected above, comparing against
+  // the caller's original env so we only advise on values WE added.
+  if (!envHas(envVars, "PORT") && envHas(finalEnv, "PORT")) {
+    advise?.(injectedPortHostAdvisory(NODE_RAILPACK_PORT));
+  }
+  if (!envHas(envVars, "RAILPACK_PHP_EXTENSIONS") && envHas(finalEnv, "RAILPACK_PHP_EXTENSIONS")) {
+    advise?.(phpExtensionDefaultsAdvisory(DEFAULT_PHP_EXTENSIONS));
+  }
+  if (!envHas(envVars, "RAILPACK_SKIP_MIGRATIONS") && envHas(finalEnv, "RAILPACK_SKIP_MIGRATIONS")) {
+    advise?.(migrationsSkippedAdvisory());
   }
   if (finalEnv.length > 0) {
     await log(`[stage:configure-app] Setting ${finalEnv.length} environment variables...`);
