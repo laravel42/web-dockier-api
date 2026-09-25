@@ -19,8 +19,8 @@ import type { DokployClient } from "../client.js";
 import { getServer, upsertServer, updateServerStatus, deleteServerMapping } from "../mappings.js";
 import { env } from "../../../../../shared/config.js";
 import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey, type ProviderCredential } from "../../../../../lib/provider-credentials.js";
-import { provisionEc2Instance } from "../provisioning/aws-ec2.js";
-import { provisionGceInstance } from "../provisioning/gcp-gce.js";
+import { provisionEc2Instance, ec2InstanceIsAlive } from "../provisioning/aws-ec2.js";
+import { provisionGceInstance, gceInstanceIsAlive } from "../provisioning/gcp-gce.js";
 import { waitForSsh } from "../provisioning/wait-for-ssh.js";
 import { generateDockierSshKey } from "../provisioning/ssh-keygen.js";
 import { sleep } from "../../../../../shared/utils/time.js";
@@ -56,15 +56,21 @@ export async function stageProvisionServer(params: {
 
   await log("[stage:provision-server] Checking for existing server...");
 
-  // Reuse the mapped server only if it is marked ready AND still exists in
-  // Dokploy. A server deleted out-of-band (e.g. removed in the Dokploy UI, or
-  // its VM terminated) leaves a dangling mapping row; blindly reusing it points
-  // the whole deploy at a server that is no longer there — which later fails
-  // deep in configure-app/deploy. If it's gone, clear the stale mapping and
-  // provision a fresh server.
+  // Reuse the mapped server only if it is marked ready, still exists in Dokploy,
+  // AND its underlying VM is still alive.
+  //
+  // Checking the Dokploy record alone is not enough: the record routinely
+  // outlives the machine. A teardown that terminates the VM but fails to remove
+  // the Dokploy server record (Dokploy rejects removal while services remain)
+  // leaves a record that still resolves, so reuse "succeeded" and pointed the
+  // whole deploy at a terminated instance — every SSH-dependent step then failed
+  // confusingly. Verify the VM itself and re-provision when it's gone.
   const existing = await getServer(projectId);
   if (existing && existing.serverStatus === "ready") {
-    if (await serverExists(existing.dokployServerId, client)) {
+    const recordExists = await serverExists(existing.dokployServerId, client);
+    const vmAlive = recordExists ? await mappedInstanceIsAlive(existing, log) : false;
+
+    if (recordExists && vmAlive) {
       await log(`[stage:provision-server] ✓ Reusing existing server: ${existing.serverIp}`);
       return {
         dokployServerId: existing.dokployServerId,
@@ -72,10 +78,16 @@ export async function stageProvisionServer(params: {
         reused: true,
       };
     }
+
     await log(
-      `[stage:provision-server] Mapped server ${existing.dokployServerId} no longer exists — clearing stale mapping and re-provisioning.`,
+      recordExists
+        ? `[stage:provision-server] Mapped server ${existing.serverIp} is no longer running — clearing stale mapping and re-provisioning.`
+        : `[stage:provision-server] Mapped server ${existing.dokployServerId} no longer exists — clearing stale mapping and re-provisioning.`,
     );
     await deleteServerMapping(projectId);
+    // The dead server's self-hosted services died with it, but their mappings are
+    // cleared by the pipeline (which drops them whenever the server is not
+    // reused) — not here, so that rule lives in exactly one place.
   } else if (existing && existing.serverStatus === "error") {
     // Server exists but is in error state — re-provision.
     await log("[stage:provision-server] Existing server is in error state, re-provisioning...");
@@ -300,6 +312,46 @@ async function getDokployPublicKey(client: DokployClient, sshKeyId: string): Pro
 }
 
 /**
+ * Whether the VM behind a mapped server is still alive.
+ *
+ * Resolves the mapping's provider credentials and asks the cloud API directly.
+ * Best-effort and deliberately conservative:
+ *  - no recorded instanceId (e.g. a pre-provisioned/BYO server) → assume alive,
+ *    since Dockier never created a VM for it and must not re-provision one.
+ *  - credentials unavailable or the check errors → treat as NOT alive, because
+ *    silently reusing a dead server is the failure mode we're fixing.
+ */
+async function mappedInstanceIsAlive(
+  existing: { instanceId?: string | null; providerId: string; serverIp: string },
+  log: (line: string) => Promise<void>,
+): Promise<boolean> {
+  if (!existing.instanceId) return true;
+
+  try {
+    const creds = await getProviderCredentialsSafe(existing.providerId);
+    if (!creds) {
+      await log("[stage:provision-server] Could not resolve provider credentials to verify the existing server.");
+      return false;
+    }
+
+    if (creds.credential.kind === "aws") {
+      return await ec2InstanceIsAlive(
+        toAwsCredentials(creds.credential, creds.region || "us-east-1"),
+        existing.instanceId,
+      );
+    }
+    if (creds.credential.kind === "gcp") {
+      return await gceInstanceIsAlive(toGcpServiceAccountKey(creds.credential), existing.instanceId);
+    }
+    // Unknown provider — can't verify; assume alive rather than destroying a
+    // server we don't understand.
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Run Dokploy `server.setup` + `server.validate`, retrying until the server is
  * fully provisioned (Docker installed) or attempts are exhausted.
  *
@@ -316,7 +368,7 @@ async function getDokployPublicKey(client: DokployClient, sshKeyId: string): Pro
  *
  * Both are retried with a delay. We only return once Docker reports enabled.
  */
-async function setupAndValidateWithRetry(
+export async function setupAndValidateWithRetry(
   client: DokployClient,
   serverId: string,
   log: (line: string) => Promise<void>,
@@ -331,24 +383,41 @@ async function setupAndValidateWithRetry(
       await client.setupServer(serverId);
       const validation = await client.validateServer(serverId);
 
-      if (validation.docker?.enabled) {
+      // Wait for BOTH Docker and the Dokploy overlay network.
+      //
+      // Setup installs Docker, then initializes Swarm, then creates the
+      // `dokploy-network` overlay. Returning as soon as Docker was enabled left
+      // a race: the caller requires the network, so a server that just needed a
+      // few more seconds failed hard with "Dokploy network not installed after
+      // setup" and the whole deploy aborted. Both must be ready before we
+      // consider the server provisioned.
+      if (validation.docker?.enabled && validation.isDokployNetworkInstalled) {
         return validation;
       }
 
-      // Setup accepted but Docker not up yet — keep waiting.
-      lastErr = new Error("Docker not installed yet");
       if (attempt < attempts) {
-        await log(`[stage:provision-server] Docker not ready yet (attempt ${attempt}/${attempts}); waiting for server setup to finish...`);
+        if (!validation.docker?.enabled) {
+          lastErr = new Error("Docker not installed yet");
+          await log(`[stage:provision-server] Docker not ready yet (attempt ${attempt}/${attempts}); waiting for server setup to finish...`);
+        } else {
+          lastErr = new Error("Dokploy network not created yet");
+          await log(`[stage:provision-server] Docker is ready; waiting for the Dokploy network (attempt ${attempt}/${attempts})...`);
+        }
         await sleep(delayMs);
         continue;
       }
-      throw new Error("Server setup failed: Docker was not installed within the expected time");
+
+      throw new Error(
+        validation.docker?.enabled
+          ? "Server setup failed: the Dokploy network was not created within the expected time"
+          : "Server setup failed: Docker was not installed within the expected time",
+      );
     } catch (err) {
       lastErr = err;
       const msg = getErrMsg(err);
       // Retry the transient "not SSH-ready" / connection signals; fail fast on
       // anything structural (bad serverId, auth, etc.).
-      const transient = /please log|failed to parse output|docker not installed yet|ECONNREFUSED|timed out|connection/i.test(msg);
+      const transient = /please log|failed to parse output|docker not installed yet|dokploy network not created yet|ECONNREFUSED|timed out|connection/i.test(msg);
       if (!transient || attempt === attempts) throw err;
       await log(`[stage:provision-server] Server not ready yet (attempt ${attempt}/${attempts}); retrying...`);
       await sleep(delayMs);
@@ -407,13 +476,14 @@ export async function registerServerInDokploy(params: {
   await log(`[stage:provision-server] Server registered (${server.serverId}). Running setup (Docker, Traefik, buildpacks)...`);
 
   await log("[stage:provision-server] Validating server readiness...");
-  // Retries until Docker is enabled (or attempts exhausted), so on return
-  // docker.enabled is guaranteed true.
-  const validation = await setupAndValidateWithRetry(client, server.serverId, log);
-
-  if (!validation.isDokployNetworkInstalled) {
+  // Retries until BOTH Docker is enabled and the Dokploy network exists (or
+  // attempts are exhausted, in which case it throws). On return the server is
+  // fully provisioned, so no further readiness guard is needed here.
+  try {
+    await setupAndValidateWithRetry(client, server.serverId, log);
+  } catch (err) {
     await updateServerStatus(projectId, "error");
-    throw new Error("Server setup failed: Dokploy network not installed after setup");
+    throw err;
   }
 
   // Store mapping (persists the Dockier SSH key encrypted when supplied).

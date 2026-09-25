@@ -692,6 +692,8 @@ export type Database = {
           dokploy_server_id: string | null;
           build_type: string;
           app_name: string | null;
+          /** Resolved Traefik forward port (see migration 0073). */
+          container_port: number | null;
           created_at: string;
           updated_at: string;
         };

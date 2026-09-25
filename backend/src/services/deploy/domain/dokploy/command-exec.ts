@@ -180,7 +180,14 @@ function buildRemoteScript(appName: string, command: string): string {
     // 1. Prefer the running Swarm task's container id.
     `CID=$(docker ps --filter "label=com.docker.swarm.service.name=${appName}" --filter "status=running" --format "{{.ID}}" | head -n1);`,
     // 2. Fall back to a name match (newest running container first).
-    `if [ -z "$CID" ]; then CID=$(docker ps --filter "name=${appName}" --filter "status=running" --format "{{.ID}}" | head -n1); fi;`,
+    //
+    // ANCHORED on purpose. Docker's `name` filter is a substring/regex match, so
+    // a bare `name=<appName>` can match a DIFFERENT project's container on a
+    // shared box (e.g. appName "shop" matching "shop-staging.1.xyz") and then
+    // `docker exec` the user's command — a migration, say — inside the wrong
+    // application. Swarm task containers are named `<appName>.<slot>.<taskid>`,
+    // so anchor to the start and require the dot separator.
+    `if [ -z "$CID" ]; then CID=$(docker ps --filter "name=^/?${appName}\\." --filter "status=running" --format "{{.ID}}" | head -n1); fi;`,
     `if [ -z "$CID" ]; then echo "The application container is not running." >&2; exit 1; fi;`,
     `docker exec "$CID" sh -c '${escaped}'`,
   ].join(" ");

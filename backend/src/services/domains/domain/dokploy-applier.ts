@@ -46,12 +46,23 @@ export async function isDokployProject(projectId: string): Promise<boolean> {
 }
 
 /**
- * The container port Traefik should forward a domain to, by build type — must
- * match the port the app listens on (railpack PHP/static serve on 80; other
- * builders default to 3000). Mirrors trigger-deploy's containerPortForBuildType.
+ * The container port Traefik should forward a domain to.
+ *
+ * Prefers the port RESOLVED AND STORED at deploy time, where both the builder
+ * and the app's runtime were known. Re-deriving it here from `buildType` alone
+ * is not possible correctly: railpack serves Node apps on 3000 but PHP/static on
+ * 80, and a PHP app that fell back to nixpacks also serves on 80. Getting it
+ * wrong registers the domain on a port nothing listens on — Let's Encrypt
+ * succeeds, the UI shows a healthy certificate, and the domain returns Bad
+ * Gateway.
+ *
+ * The fallback only applies to applications deployed before the port was
+ * persisted; their next deploy fills it in.
  */
-function containerPortForBuildType(buildType: string | undefined): number {
-  return buildType === "railpack" ? 80 : 3000;
+function resolveDomainPort(mapping: { containerPort: number | null; buildType: string }): number {
+  if (mapping.containerPort && mapping.containerPort > 0) return mapping.containerPort;
+  // Legacy rows: keep the historical guess rather than inventing a new one.
+  return mapping.buildType === "railpack" ? 80 : 3000;
 }
 
 /**
@@ -85,7 +96,7 @@ export async function applyDomainConfigDokploy(params: {
       return { success: true, message: "No Dokploy application yet. Domains will be applied on next deployment." };
     }
     const applicationId = mapping.dokployApplicationId;
-    const port = containerPortForBuildType(mapping.buildType);
+    const port = resolveDomainPort(mapping);
 
     const dbDomains = await listDomains({ tenantId, projectId });
     const client = createDokployClient();

@@ -62,6 +62,14 @@ export interface ApplicationMapping {
    * configured before this was persisted.
    */
   appName: string | null;
+  /**
+   * Container port Traefik must forward to, resolved at deploy time where the
+   * builder AND the app's runtime are both known. Consumers must prefer this
+   * over re-deriving from `buildType`, which cannot distinguish railpack-Node
+   * (3000) from railpack-PHP (80). Null for apps deployed before this was
+   * persisted — callers fall back to a buildType guess until the next deploy.
+   */
+  containerPort: number | null;
 }
 
 export interface DatabaseMapping {
@@ -290,6 +298,7 @@ export async function getApplication(projectId: string): Promise<ApplicationMapp
     dokployServerId: data.dokploy_server_id,
     buildType: data.build_type,
     appName: data.app_name ?? null,
+    containerPort: data.container_port ?? null,
   };
 }
 
@@ -308,6 +317,10 @@ export async function upsertApplication(params: {
    * clobber it.
    */
   appName?: string;
+  /**
+   * Resolved container port. Omit to leave an existing stored value untouched.
+   */
+  containerPort?: number;
 }): Promise<ApplicationMapping> {
   const { data, error } = await supabaseAdmin
     .from("dokploy_applications")
@@ -319,6 +332,7 @@ export async function upsertApplication(params: {
         build_type: params.buildType ?? "nixpacks",
         updated_at: nowIso(),
         ...(params.appName ? { app_name: params.appName } : {}),
+        ...(params.containerPort !== undefined ? { container_port: params.containerPort } : {}),
       },
       { onConflict: "project_id" },
     )
@@ -336,6 +350,7 @@ export async function upsertApplication(params: {
     dokployServerId: row.dokploy_server_id,
     buildType: row.build_type,
     appName: row.app_name ?? null,
+    containerPort: row.container_port ?? null,
   };
 }
 
@@ -421,6 +436,22 @@ export async function upsertDatabase(params: {
 }
 
 /**
+ * All database mapping rows for a project (one per service type).
+ *
+ * Teardown needs to enumerate them: Dokploy refuses to remove a server that
+ * still hosts services, so every provisioned database must be deleted first.
+ */
+export async function listDatabases(projectId: string): Promise<DatabaseMapping[]> {
+  const { data, error } = await supabaseAdmin
+    .from("dokploy_databases")
+    .select("*")
+    .eq("project_id", projectId);
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to list dokploy_databases rows" });
+  return (data ?? []).map(rowToDatabaseMapping);
+}
+
+/**
  * Delete all database mapping rows for a project (used during teardown).
  */
 export async function deleteDatabaseMappings(projectId: string): Promise<void> {
@@ -449,8 +480,27 @@ export async function deleteDatabaseMapping(projectId: string, serviceType: stri
 }
 
 // ─── Composite Get-or-Create Helpers ───────────────────────────────
-// These are the primary API for pipeline stages. They return existing
-// mappings or create new ones atomically (via upsert).
+//
+// DEPRECATED — NOT USED BY THE PIPELINE, AND NOT SAFE TO WIRE IN AS-IS.
+//
+// An earlier comment here claimed these were "the primary API for pipeline
+// stages". They are not: nothing outside this file's tests calls them, and the
+// live stages (ensure-project, provision-server, configure-app,
+// provision-databases) each implement their own reconcile instead.
+//
+// The difference is the point. Every one of these helpers returns a stored
+// mapping WITHOUT verifying the Dokploy/cloud resource it references still
+// exists, which is the single defect that produced a string of "reused" a
+// deleted project / terminated VM / missing application bugs. Specifically:
+//   - getOrCreateTenantProject: no projectExists check, no adopt-by-name, and an
+//     optimistic `environments[0]` read for the environment id.
+//   - getOrCreateServer: no serverExists / VM liveness check, and it treats a
+//     "provisioning" row as reusable.
+//   - getOrCreateApplication: no applicationExists check, and it never persists
+//     appName — wiring it in would silently break command execution.
+//
+// Prefer the stage implementations. If these are ever revived, they must adopt
+// the same verify-then-reconcile shape first.
 
 import type { DokployClient } from "./client.js";
 

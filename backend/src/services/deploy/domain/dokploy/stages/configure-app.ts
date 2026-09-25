@@ -248,14 +248,21 @@ export async function stageConfigureApp(params: {
     isStaticSpa: buildType === "static",
   });
 
-  // Update stored build type (and appName if we resolved a fresh one on the
-  // reuse path — omitted when undefined so we never clobber a stored value).
+  // Resolve the container port here, where the builder AND the runtime are both
+  // known, and PERSIST it. Consumers that run outside a deploy (the custom-domain
+  // applier) cannot re-derive it correctly from buildType alone, so storing it
+  // keeps a single source of truth instead of two derivations that drift.
+  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
+
+  // Update stored build type + port (and appName if we resolved a fresh one on
+  // the reuse path — omitted when undefined so we never clobber a stored value).
   await upsertApplication({
     projectId,
     dokployApplicationId: applicationId,
     dokployServerId: serverId,
     buildType,
     appName,
+    containerPort,
   });
 
   // ─── Configure Environment Variables ────────────────────────────
@@ -335,7 +342,6 @@ export async function stageConfigureApp(params: {
     await log(`[stage:configure-app] Could not reconcile the application run command (continuing): ${getErrMsg(err)}`);
   }
 
-  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
   await log(`[stage:configure-app] ✓ Application configured (build: ${buildType}, port: ${containerPort})`);
   return { dokployApplicationId: applicationId, buildType, containerPort };
 }

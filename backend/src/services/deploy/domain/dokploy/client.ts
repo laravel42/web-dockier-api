@@ -338,6 +338,31 @@ export class DokployClient {
     return normalizeDatabase(raw, "redisId");
   }
 
+  // ─── Database removal ──────────────────────────────────────────
+  //
+  // Needed for teardown: Dokploy refuses `server.remove` while the server still
+  // hosts services ("Server has active services, please delete them first"), so
+  // provisioned databases must be deleted before the server.
+
+  async deleteMysql(mysqlId: string): Promise<void> {
+    await this.mutation<unknown>("mysql.remove", { mysqlId });
+  }
+
+  async deletePostgres(postgresId: string): Promise<void> {
+    await this.mutation<unknown>("postgres.remove", { postgresId });
+  }
+
+  async deleteRedis(redisId: string): Promise<void> {
+    await this.mutation<unknown>("redis.remove", { redisId });
+  }
+
+  /** Delete a self-hosted database service by engine + id. */
+  async deleteDatabase(engine: string, databaseId: string): Promise<void> {
+    if (engine === "redis") return this.deleteRedis(databaseId);
+    if (engine === "postgres") return this.deletePostgres(databaseId);
+    return this.deleteMysql(databaseId);
+  }
+
   /**
    * Whether a self-hosted database service still exists in Dokploy, by engine +
    * id. Returns false on any lookup error (404 / deleted / unreachable) so a

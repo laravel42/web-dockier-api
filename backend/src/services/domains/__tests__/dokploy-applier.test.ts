@@ -86,6 +86,51 @@ describe("applyDomainConfigDokploy", () => {
     expect(mockClient.createDomain).toHaveBeenCalledWith(expect.objectContaining({ port: 3000 }));
   });
 
+  it("prefers the stored container port over any build-type guess", async () => {
+    // A railpack NODE app listens on 3000, but the old buildType-only derivation
+    // returned 80 for anything railpack — registering the domain on a dead port
+    // (healthy-looking certificate, Bad Gateway in the browser).
+    mockGetApplication.mockResolvedValue({
+      dokployApplicationId: "app-1",
+      buildType: "railpack",
+      containerPort: 3000,
+    });
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "node.example.com" }]);
+    mockClient.listDomains.mockResolvedValue([]);
+
+    await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(mockClient.createDomain).toHaveBeenCalledWith(expect.objectContaining({ port: 3000 }));
+  });
+
+  it("uses the stored port for a PHP app that fell back to nixpacks (80, not 3000)", async () => {
+    mockGetApplication.mockResolvedValue({
+      dokployApplicationId: "app-1",
+      buildType: "nixpacks",
+      containerPort: 80,
+    });
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "php.example.com" }]);
+    mockClient.listDomains.mockResolvedValue([]);
+
+    await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(mockClient.createDomain).toHaveBeenCalledWith(expect.objectContaining({ port: 80 }));
+  });
+
+  it("falls back to the build-type guess for legacy rows with no stored port", async () => {
+    mockGetApplication.mockResolvedValue({
+      dokployApplicationId: "app-1",
+      buildType: "railpack",
+      containerPort: null,
+    });
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "legacy.example.com" }]);
+    mockClient.listDomains.mockResolvedValue([]);
+
+    await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(mockClient.createDomain).toHaveBeenCalledWith(expect.objectContaining({ port: 80 }));
+  });
+
   it("preserves the auto sslip.io domain and removes user domains dropped from the DB", async () => {
     mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack" });
     // DB has no user domains anymore.

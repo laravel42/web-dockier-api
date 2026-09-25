@@ -112,7 +112,11 @@ describe("execInDokployContainer", () => {
     // Primary resolution targets the running Swarm task (survives rollouts),
     // with a name-match fallback.
     expect(remote).toContain("label=com.docker.swarm.service.name=myapp-abc123");
-    expect(remote).toContain('docker ps --filter "name=myapp-abc123"');
+    // The name fallback must be ANCHORED: Docker's name filter is a substring
+    // match, so an unanchored appName could resolve another project's container
+    // on a shared box and exec the command in the wrong app.
+    expect(remote).toContain('docker ps --filter "name=^/?myapp-abc123\\."');
+    expect(remote).not.toContain('--filter "name=myapp-abc123"');
     expect(remote).toContain("docker exec");
     expect(remote).toContain("echo hello");
   });

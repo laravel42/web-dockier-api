@@ -375,6 +375,42 @@ function wrapAwsError(err: unknown, action: string): Error {
 // ─── Teardown ────────────────────────────────────────────────────
 
 /**
+ * Whether an EC2 instance is still alive (pending/running/stopping/stopped —
+ * i.e. NOT terminated and not missing).
+ *
+ * Used before reusing a mapped server: the Dokploy server record can outlive the
+ * VM (e.g. a teardown that terminated the instance but failed to remove the
+ * record), and reusing that mapping points the whole deploy at a machine that no
+ * longer exists. Returns false when the instance is gone or its state cannot be
+ * determined, so the caller re-provisions rather than failing deep in the deploy.
+ */
+export async function ec2InstanceIsAlive(
+  credentials: Ec2Credentials,
+  instanceId: string,
+): Promise<boolean> {
+  if (!instanceId) return false;
+
+  const { EC2Client, DescribeInstancesCommand } = await getEc2();
+  const ec2 = new EC2Client({
+    region: credentials.region,
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+    },
+  });
+
+  try {
+    const result = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [instanceId] }));
+    const state = result.Reservations?.[0]?.Instances?.[0]?.State?.Name;
+    return Boolean(state) && state !== "terminated" && state !== "shutting-down";
+  } catch {
+    // InvalidInstanceID.NotFound, permissions, transient API error — treat as
+    // "cannot confirm alive". Re-provisioning is safe; reusing a dead box is not.
+    return false;
+  }
+}
+
+/**
  * Terminate an EC2 instance. Idempotent: a missing instance is treated as
  * already-terminated (success). Used by project teardown.
  */

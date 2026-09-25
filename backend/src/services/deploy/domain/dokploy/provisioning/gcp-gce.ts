@@ -133,6 +133,32 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
 // ─── Teardown ────────────────────────────────────────────────────
 
 /**
+ * Whether a Compute Engine instance still exists.
+ *
+ * Mirrors `ec2InstanceIsAlive`: used before reusing a mapped server, since the
+ * Dokploy server record can outlive the VM. Returns false when the instance is
+ * gone or cannot be confirmed, so the caller re-provisions instead of pointing
+ * the deploy at a machine that no longer exists.
+ */
+export async function gceInstanceIsAlive(
+  serviceAccountKey: string,
+  instanceName: string,
+  zone?: string,
+): Promise<boolean> {
+  if (!instanceName) return false;
+  try {
+    const client = await createGcpClient(serviceAccountKey);
+    if (zone) {
+      const found = await client.findInstance(instanceName);
+      return Boolean(found);
+    }
+    return Boolean(await client.findInstance(instanceName));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Delete a Compute Engine instance. Idempotent: a missing instance is treated
  * as already-gone (success). Prefers the known `zone` and only falls back to a
  * cross-zone lookup when it isn't provided. Mirrors `terminateEc2Instance`.

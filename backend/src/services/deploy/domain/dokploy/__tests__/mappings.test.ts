@@ -201,6 +201,7 @@ describe("mappings — getApplication", () => {
       dokployServerId: "srv-1",
       buildType: "nixpacks",
       appName: null,
+      containerPort: null,
     });
   });
 });
