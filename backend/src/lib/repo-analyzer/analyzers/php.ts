@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { RepoConfig } from "../types.js";
+import type { RepoFiles } from "../repo-files.js";
+import { joinPath } from "../repo-files.js";
 import { NATIVE_DEPS_MAP } from "../constants.js";
 import { cleanVersion } from "../utils.js";
 
@@ -10,10 +10,15 @@ interface PhpComposerPackage {
   scripts?: Record<string, string>;
 }
 
-export function analyzePhpProject(appDir: string, config: RepoConfig) {
+export function analyzePhpProject(files: RepoFiles, appDir: string, config: RepoConfig) {
+  const readApp = (name: string) => files.read(joinPath(appDir, name));
+  const existsApp = (name: string) => files.exists(joinPath(appDir, name));
+
   let composer: PhpComposerPackage;
+  const composerRaw = readApp("composer.json");
+  if (composerRaw === null) return;
   try {
-    composer = JSON.parse(readFileSync(join(appDir, "composer.json"), "utf-8"));
+    composer = JSON.parse(composerRaw);
   } catch { return; }
 
   config.runtime = "php";
@@ -48,26 +53,29 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
     }
   }
 
-  try {
-    const lock = JSON.parse(readFileSync(join(appDir, "composer.lock"), "utf-8")) as {
-      packages?: Array<{ require?: Record<string, string> }>;
-      "packages-dev"?: Array<{ require?: Record<string, string> }>;
-    };
-    for (const pkg of [...(lock.packages || []), ...(lock["packages-dev"] || [])]) {
-      if (!pkg.require) continue;
-      for (const dep of Object.keys(pkg.require)) {
-        if (dep.startsWith("ext-")) {
-          const ext = dep.replace("ext-", "");
-          if (!extensions.has(ext)) {
-            extensions.add(ext);
-            if (NATIVE_DEPS_MAP[`ext-${ext}`] && !config.nativeDeps.some(d => d.name === `ext-${ext}`)) {
-              config.nativeDeps.push({ name: `ext-${ext}`, ...NATIVE_DEPS_MAP[`ext-${ext}`] });
+  const lockRaw = readApp("composer.lock");
+  if (lockRaw !== null) {
+    try {
+      const lock = JSON.parse(lockRaw) as {
+        packages?: Array<{ require?: Record<string, string> }>;
+        "packages-dev"?: Array<{ require?: Record<string, string> }>;
+      };
+      for (const pkg of [...(lock.packages || []), ...(lock["packages-dev"] || [])]) {
+        if (!pkg.require) continue;
+        for (const dep of Object.keys(pkg.require)) {
+          if (dep.startsWith("ext-")) {
+            const ext = dep.replace("ext-", "");
+            if (!extensions.has(ext)) {
+              extensions.add(ext);
+              if (NATIVE_DEPS_MAP[`ext-${ext}`] && !config.nativeDeps.some(d => d.name === `ext-${ext}`)) {
+                config.nativeDeps.push({ name: `ext-${ext}`, ...NATIVE_DEPS_MAP[`ext-${ext}`] });
+              }
             }
           }
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   if (composer.require?.["laravel/framework"]) {
     for (const ext of ["zip", "intl", "bcmath", "pcntl", "pdo_mysql", "pdo_pgsql", "gd", "redis"]) {
@@ -89,7 +97,7 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
       config.features.add("octane");
       config.startCommand = "php artisan octane:start --host=0.0.0.0 --port=8080";
     }
-    if (existsSync(join(appDir, "app/Console/Kernel.php"))) config.features.add("scheduler");
+    if (existsApp("app/Console/Kernel.php")) config.features.add("scheduler");
   } else if (composer.require?.["symfony/framework-bundle"]) {
     config.framework = "symfony";
     config.frameworkVersion = cleanVersion(composer.require["symfony/framework-bundle"]);
@@ -103,9 +111,9 @@ export function analyzePhpProject(appDir: string, config: RepoConfig) {
     config.composerScripts = Object.keys(composer.scripts);
   }
 
-  if (existsSync(join(appDir, "package.json"))) {
+  if (existsApp("package.json")) {
     config.features.add("node-assets");
-    if (existsSync(join(appDir, "pnpm-lock.yaml"))) config.features.add("node-pm-pnpm");
-    else if (existsSync(join(appDir, "yarn.lock"))) config.features.add("node-pm-yarn");
+    if (existsApp("pnpm-lock.yaml")) config.features.add("node-pm-pnpm");
+    else if (existsApp("yarn.lock")) config.features.add("node-pm-yarn");
   }
 }

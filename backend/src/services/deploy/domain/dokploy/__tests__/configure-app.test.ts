@@ -29,6 +29,7 @@ describe("stageConfigureApp — Railpack PHP env defaults", () => {
     saveGitProvider: ReturnType<typeof vi.fn>;
     saveBuildType: ReturnType<typeof vi.fn>;
     saveEnvironment: ReturnType<typeof vi.fn>;
+    updateApplication: ReturnType<typeof vi.fn>;
   };
   const log = async () => {};
 
@@ -42,6 +43,7 @@ describe("stageConfigureApp — Railpack PHP env defaults", () => {
       saveGitProvider: vi.fn(async () => undefined),
       saveBuildType: vi.fn(async () => undefined),
       saveEnvironment: vi.fn(async (p: { env: string }) => { savedEnv = p.env; }),
+      updateApplication: vi.fn(async () => undefined),
     };
   });
 
@@ -206,6 +208,7 @@ describe("stageConfigureApp — build type selection", () => {
     saveGitProvider: ReturnType<typeof vi.fn>;
     saveBuildType: ReturnType<typeof vi.fn>;
     saveEnvironment: ReturnType<typeof vi.fn>;
+    updateApplication: ReturnType<typeof vi.fn>;
   };
   const log = async () => {};
 
@@ -218,6 +221,7 @@ describe("stageConfigureApp — build type selection", () => {
       saveGitProvider: vi.fn(async () => undefined),
       saveBuildType: vi.fn(async () => undefined),
       saveEnvironment: vi.fn(async () => undefined),
+      updateApplication: vi.fn(async () => undefined),
     };
   });
 
@@ -320,6 +324,7 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     saveGitProvider: ReturnType<typeof vi.fn>;
     saveBuildType: ReturnType<typeof vi.fn>;
     saveEnvironment: ReturnType<typeof vi.fn>;
+    updateApplication: ReturnType<typeof vi.fn>;
   };
   const log = async () => {};
 
@@ -333,6 +338,7 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       saveGitProvider: vi.fn(async () => undefined),
       saveBuildType: vi.fn(async () => undefined),
       saveEnvironment: vi.fn(async (p: { env: string }) => { savedEnv = p.env; }),
+      updateApplication: vi.fn(async () => undefined),
     };
   });
 
@@ -416,7 +422,7 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     expect(envMap().PORT).toBeUndefined();
   });
 
-  it("injects RAILPACK_DEPLOY_START_CMD for a railpack app when a start command is derived", async () => {
+  it("injects RAILPACK_START_CMD for a railpack app when a start command is derived", async () => {
     await run(
       {
         hasDockerfile: false,
@@ -427,7 +433,7 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       },
       [{ name: "PUBLIC_URL", value: "https://example.com" }],
     );
-    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBe("node ./dist/server/entry.mjs");
+    expect(envMap().RAILPACK_START_CMD).toBe("node ./dist/server/entry.mjs");
   });
 
   it("does not inject a start command when none was derived", async () => {
@@ -435,10 +441,10 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Astro"] },
       [{ name: "PUBLIC_URL", value: "https://example.com" }],
     );
-    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBeUndefined();
+    expect(envMap().RAILPACK_START_CMD).toBeUndefined();
   });
 
-  it("does not inject RAILPACK_DEPLOY_START_CMD for a dockerfile build", async () => {
+  it("does not inject RAILPACK_START_CMD for a dockerfile build", async () => {
     await run(
       {
         hasDockerfile: true,
@@ -449,10 +455,10 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       },
       [{ name: "APP_ENV", value: "production" }],
     );
-    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBeUndefined();
+    expect(envMap().RAILPACK_START_CMD).toBeUndefined();
   });
 
-  it("does not override a user-set RAILPACK_DEPLOY_START_CMD", async () => {
+  it("also sets Dokploy's native application run command (builder-independent)", async () => {
     await run(
       {
         hasDockerfile: false,
@@ -461,8 +467,49 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
         techStack: ["Node.js", "Astro"],
         startCommand: "node ./dist/server/entry.mjs",
       },
-      [{ name: "RAILPACK_DEPLOY_START_CMD", value: "node custom.mjs" }],
+      [{ name: "PUBLIC_URL", value: "https://example.com" }],
     );
-    expect(envMap().RAILPACK_DEPLOY_START_CMD).toBe("node custom.mjs");
+    expect(client.updateApplication).toHaveBeenCalledWith(
+      expect.objectContaining({ command: "node ./dist/server/entry.mjs" }),
+    );
+  });
+
+  it("does not set a run command when no start command was derived", async () => {
+    await run(
+      { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Astro"] },
+      [{ name: "PUBLIC_URL", value: "https://example.com" }],
+    );
+    expect(client.updateApplication).not.toHaveBeenCalled();
+  });
+
+  it("does not fail the stage when setting the run command errors", async () => {
+    client.updateApplication.mockRejectedValueOnce(new Error("400 bad request"));
+    const result = await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "javascript",
+        techStack: ["Node.js", "Astro"],
+        startCommand: "node ./dist/server/entry.mjs",
+      },
+      [{ name: "PUBLIC_URL", value: "https://example.com" }],
+    );
+    // Stage still completes and the env override remains in place.
+    expect(result.containerPort).toBe(3000);
+    expect(envMap().RAILPACK_START_CMD).toBe("node ./dist/server/entry.mjs");
+  });
+
+  it("does not override a user-set RAILPACK_START_CMD", async () => {
+    await run(
+      {
+        hasDockerfile: false,
+        isStaticSite: false,
+        primaryLanguage: "javascript",
+        techStack: ["Node.js", "Astro"],
+        startCommand: "node ./dist/server/entry.mjs",
+      },
+      [{ name: "RAILPACK_START_CMD", value: "node custom.mjs" }],
+    );
+    expect(envMap().RAILPACK_START_CMD).toBe("node custom.mjs");
   });
 });

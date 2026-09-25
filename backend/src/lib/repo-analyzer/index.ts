@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { RepoConfig } from "./types.js";
 import { detectSubDir } from "./detect-subdir.js";
 import { analyzeNodeProject } from "./analyzers/node.js";
@@ -11,17 +9,23 @@ import { generatePhpDockerfile } from "./dockerfiles/php.js";
 import { generatePythonDockerfile } from "./dockerfiles/python.js";
 import { generateGoDockerfile } from "./dockerfiles/go.js";
 import { finalizeNodeVersion } from "./utils.js";
+import type { RepoFiles } from "./repo-files.js";
+import { joinPath } from "./repo-files.js";
+import { DiskRepoFiles } from "./repo-files-disk.js";
 
 // Re-export everything for public API
 export type { DetectedStack, RepoConfig, NativeDep, DockerFix } from "./types.js";
+export type { RepoFiles } from "./repo-files.js";
+export { MapRepoFiles } from "./repo-files.js";
+export { DiskRepoFiles } from "./repo-files-disk.js";
 export { configSummary } from "./utils.js";
 export { resolvePhpVersion } from "./dockerfiles/php.js";
 export { patchDockerfile } from "./docker-fixer.js";
 export { buildWithRailpack, isRailpackAvailable, buildWithNixpacks, isNixpacksAvailable } from "./builders.js";
 export type { CliBuildResult, RailpackBuildResult, NixpacksBuildResult } from "./builders.js";
 
-export function analyzeRepoConfig(repoDir: string): RepoConfig {
-  const config: RepoConfig = {
+function emptyRepoConfig(): RepoConfig {
+  return {
     runtime: "unknown",
     runtimeVersion: "",
     packageManager: "unknown",
@@ -43,30 +47,47 @@ export function analyzeRepoConfig(repoDir: string): RepoConfig {
     subDir: "",
     features: new Set(),
   };
+}
 
-  const subDir = detectSubDir(repoDir);
+/**
+ * Analyze a repository from any file source (disk or fetched), producing a
+ * RepoConfig. This is the filesystem-agnostic core: both the native pipeline
+ * (via a cloned directory) and the Dokploy pipeline (via fetched files) run it.
+ */
+export function analyzeRepoFiles(files: RepoFiles): RepoConfig {
+  const config = emptyRepoConfig();
+
+  const subDir = detectSubDir(files);
   config.subDir = subDir;
-  const appDir = subDir ? join(repoDir, subDir) : repoDir;
+  const appDir = subDir; // repo-root-relative; "" means root
 
-  if (existsSync(join(appDir, "package.json"))) analyzeNodeProject(appDir, repoDir, config);
-  if (existsSync(join(appDir, "composer.json"))) analyzePhpProject(appDir, config);
-  if (existsSync(join(appDir, "requirements.txt")) || existsSync(join(appDir, "pyproject.toml")) || existsSync(join(appDir, "Pipfile")) || existsSync(join(appDir, "manage.py"))) {
-    analyzePythonProject(appDir, config);
+  const inApp = (name: string) => joinPath(appDir, name);
+
+  if (files.exists(inApp("package.json"))) analyzeNodeProject(files, appDir, config);
+  if (files.exists(inApp("composer.json"))) analyzePhpProject(files, appDir, config);
+  if (files.exists(inApp("requirements.txt")) || files.exists(inApp("pyproject.toml")) || files.exists(inApp("Pipfile")) || files.exists(inApp("manage.py"))) {
+    analyzePythonProject(files, appDir, config);
   }
-  if (existsSync(join(appDir, "go.mod"))) analyzeGoProject(appDir, config);
+  if (files.exists(inApp("go.mod"))) analyzeGoProject(files, appDir, config);
 
   for (const f of [".nvmrc", ".node-version"]) {
-    const p = join(appDir, f);
-    if (!existsSync(p)) continue;
-    try {
-      const v = readFileSync(p, "utf-8").trim().replace(/^v/, "");
-      if (v && /^\d+/.test(v)) config.nodeVersion = v.split(".")[0];
-    } catch {}
+    const raw = files.read(inApp(f));
+    if (raw === null) continue;
+    const v = raw.trim().replace(/^v/, "");
+    if (v && /^\d+/.test(v)) config.nodeVersion = v.split(".")[0];
   }
 
   finalizeNodeVersion(config);
 
   return config;
+}
+
+/**
+ * Analyze a cloned repository directory (native pipeline). Thin wrapper over
+ * analyzeRepoFiles backed by the filesystem.
+ */
+export function analyzeRepoConfig(repoDir: string): RepoConfig {
+  return analyzeRepoFiles(new DiskRepoFiles(repoDir));
 }
 
 /** Convert a RepoConfig to the discriminated-union DetectedStack type. */

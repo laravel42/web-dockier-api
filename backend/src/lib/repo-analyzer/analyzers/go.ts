@@ -1,19 +1,19 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { RepoConfig } from "../types.js";
+import type { RepoFiles } from "../repo-files.js";
+import { joinPath } from "../repo-files.js";
 
-export function analyzeGoProject(appDir: string, config: RepoConfig) {
+export function analyzeGoProject(files: RepoFiles, appDir: string, config: RepoConfig) {
   config.runtime = "go";
   config.packageManager = "go";
 
-  try {
-    const goMod = readFileSync(join(appDir, "go.mod"), "utf-8");
+  const goMod = files.read(joinPath(appDir, "go.mod"));
+  if (goMod !== null) {
     const verMatch = goMod.match(/^go\s+(\d+\.\d+)/m);
     if (verMatch) {
       config.goVersion = verMatch[1];
       config.runtimeVersion = verMatch[1];
     }
-  } catch {}
+  }
 
   if (!config.goVersion) {
     config.goVersion = "1.22";

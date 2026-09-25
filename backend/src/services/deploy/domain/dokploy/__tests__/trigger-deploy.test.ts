@@ -18,6 +18,7 @@ describe("stageTriggerDeploy", () => {
     listDomains: ReturnType<typeof vi.fn>;
     generateDomain: ReturnType<typeof vi.fn>;
     createDomain: ReturnType<typeof vi.fn>;
+    updateDomain: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   let mockLog: (line: string) => Promise<void>;
@@ -36,6 +37,7 @@ describe("stageTriggerDeploy", () => {
       listDomains: vi.fn().mockResolvedValue([]),
       generateDomain: vi.fn().mockResolvedValue("app-my-app-98-93-35-222.sslip.io"),
       createDomain: vi.fn().mockResolvedValue({ domainId: "dom-1", host: "app-my-app-98-93-35-222.sslip.io", https: false, port: 3000, path: "/", applicationId: "app-1" }),
+      updateDomain: vi.fn().mockResolvedValue(undefined),
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };
@@ -115,17 +117,64 @@ describe("stageTriggerDeploy", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
     mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
-    mockClient.listDomains.mockResolvedValue([{ host: "existing.example.com", https: true, port: 443 }]);
+    mockClient.listDomains.mockResolvedValue([{ domainId: "dom-9", host: "existing.example.com", https: true, port: 443 }]);
 
     const result = await stageTriggerDeploy({
       applicationId: "app-1",
       client: mockClient as unknown as DokployClient,
       log: mockLog,
+      containerPort: 443,
       pollIntervalMs: 100,
     });
 
     expect(mockClient.generateDomain).not.toHaveBeenCalled();
     expect(result.appUrl).toBe("https://existing.example.com");
+  });
+
+  it("reconciles a reused domain whose port no longer matches the container", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+    // Domain left over from a Caddy-on-80 build; the app now listens on 3000.
+    mockClient.listDomains.mockResolvedValue([
+      { domainId: "dom-9", host: "app.sslip.io", https: false, port: 80, path: "/", certificateType: "none" },
+    ]);
+
+    await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      containerPort: 3000,
+      pollIntervalMs: 100,
+    });
+
+    expect(mockClient.updateDomain).toHaveBeenCalledWith(
+      expect.objectContaining({ domainId: "dom-9", host: "app.sslip.io", port: 3000 }),
+    );
+    expect(logLines.some((l) => /updating to 3000/i.test(l))).toBe(true);
+  });
+
+  it("does not fail when reconciling the domain port errors", async () => {
+    mockClient.listDeployments
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ deploymentId: "d1", status: "done", createdAt: "x" }]);
+    mockClient.getApplication.mockResolvedValue({ applicationStatus: "done", appName: "my-app", serverId: "srv-1" });
+    mockClient.listDomains.mockResolvedValue([
+      { domainId: "dom-9", host: "app.sslip.io", https: false, port: 80, path: "/", certificateType: "none" },
+    ]);
+    mockClient.updateDomain.mockRejectedValueOnce(new Error("400"));
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      containerPort: 3000,
+      pollIntervalMs: 100,
+    });
+
+    expect(result.status).toBe("done");
+    expect(result.appUrl).toBe("http://app.sslip.io");
   });
 
   it("returns error when the deployment status becomes 'error'", async () => {
@@ -294,6 +343,7 @@ describe("stageDeployWithRetry", () => {
     listDomains: ReturnType<typeof vi.fn>;
     generateDomain: ReturnType<typeof vi.fn>;
     createDomain: ReturnType<typeof vi.fn>;
+    updateDomain: ReturnType<typeof vi.fn>;
   };
   let logLines: string[];
   let mockLog: (line: string) => Promise<void>;
@@ -312,6 +362,7 @@ describe("stageDeployWithRetry", () => {
       listDomains: vi.fn().mockResolvedValue([]),
       generateDomain: vi.fn().mockResolvedValue("app-my-app-98-93-35-222.sslip.io"),
       createDomain: vi.fn().mockResolvedValue({ domainId: "dom-1", host: "app-my-app-98-93-35-222.sslip.io", https: false, port: 3000, path: "/", applicationId: "app-1" }),
+      updateDomain: vi.fn().mockResolvedValue(undefined),
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };

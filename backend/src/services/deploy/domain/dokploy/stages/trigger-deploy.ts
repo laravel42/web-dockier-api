@@ -254,9 +254,35 @@ async function resolveAppUrl(
 ): Promise<string> {
   try {
     // 1. Reuse an existing domain if the app already has one.
+    //
+    // A reused domain keeps the port it was originally registered with. If that
+    // no longer matches where the container listens (e.g. the app moved from a
+    // Caddy-on-80 build to a Node-on-3000 build), Traefik forwards to a dead
+    // port and every request is a Bad Gateway. Reconcile it.
     const existing = await client.listDomains(applicationId);
     const already = existing[0];
     if (already?.host) {
+      if (already.port !== containerPort) {
+        await log(
+          `[stage:deploy] Existing domain ${already.host} points at port ${already.port ?? "(unset)"}; updating to ${containerPort}.`,
+        );
+        try {
+          await client.updateDomain({
+            domainId: already.domainId,
+            host: already.host,
+            port: containerPort,
+            https: already.https,
+            path: already.path ?? "/",
+            domainType: "application",
+            certificateType: (already.certificateType as "none" | "letsencrypt") ?? "none",
+          });
+        } catch {
+          // Best-effort: leave the domain as-is rather than failing the deploy.
+          await log("[stage:deploy] Could not update the existing domain's port (continuing).");
+        }
+      } else {
+        await log(`[stage:deploy] Reusing domain ${already.host} (port ${containerPort}).`);
+      }
       return toUrl(already.host, already.https);
     }
 

@@ -60,9 +60,9 @@ export interface PipelineInput {
   /** Target region for provisioning. Falls back to the provider's configured region. */
   region?: string;
   /**
-   * Explicit server start command derived from repo analysis (detectDeployRuntime).
-   * The Dokploy pipeline hands this to Railpack so SSR Node apps without a
-   * `start` script actually launch. Undefined → let the builder infer it.
+   * Explicit server start command (from repo analysis). The Dokploy pipeline
+   * hands this to Railpack so SSR Node apps without a `start` script actually
+   * launch. Undefined → the pipeline re-derives it, else the builder infers it.
    */
   startCommand?: string;
   /** Deploy status poll interval (ms) for the Dokploy pipeline. Test-only override; defaults to 5000. */

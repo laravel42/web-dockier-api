@@ -47,10 +47,10 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
           skipPipeline: z.boolean().optional(),
           templateId: z.string().max(100).optional(),
           services: z.array(serviceEntrySchema).max(20).optional(),
-          // Derived server start command (from repo analysis, see
-          // detectDeployRuntime). When present, the Dokploy pipeline hands it to
-          // Railpack so SSR Node apps without a `start` script (e.g. Astro
-          // @astrojs/node) actually launch their server instead of 502-ing.
+          // Optional explicit server start command. When present, the Dokploy
+          // pipeline hands it to Railpack so SSR Node apps without a `start`
+          // script (e.g. Astro @astrojs/node) launch instead of 502-ing. When
+          // omitted, the pipeline re-derives it via the repo analyzer.
           startCommand: z.string().max(500).optional(),
           // Selected plan's instance size + region — used by the Dokploy pipeline
           // to provision a VPS on the tenant's cloud account (see REQ-4).

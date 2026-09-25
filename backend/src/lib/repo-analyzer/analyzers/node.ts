@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { RepoConfig } from "../types.js";
+import type { RepoFiles } from "../repo-files.js";
+import { joinPath } from "../repo-files.js";
 import { NATIVE_DEPS_MAP } from "../constants.js";
 import { cleanVersion } from "../utils.js";
 
@@ -14,10 +14,22 @@ interface NodePackageJson {
   workspaces?: string[] | { packages: string[] };
 }
 
-export function analyzeNodeProject(appDir: string, repoDir: string, config: RepoConfig) {
+/**
+ * Analyze a Node.js project. `appDir` is the app subdirectory relative to the
+ * repo root ("" when at root); lockfiles are additionally checked at the repo
+ * root to support monorepos whose lockfile lives above the app.
+ */
+export function analyzeNodeProject(files: RepoFiles, appDir: string, config: RepoConfig) {
+  const inApp = (name: string) => joinPath(appDir, name);
+  const readApp = (name: string) => files.read(inApp(name));
+  const existsApp = (name: string) => files.exists(inApp(name));
+  const existsRoot = (name: string) => files.exists(name);
+
   let pkg: NodePackageJson;
+  const pkgRaw = readApp("package.json");
+  if (pkgRaw === null) return;
   try {
-    pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf-8"));
+    pkg = JSON.parse(pkgRaw);
   } catch { return; }
 
   config.runtime = "node";
@@ -34,20 +46,20 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     const [pm, ver] = (pkg.packageManager as string).split("@");
     config.packageManager = pm as RepoConfig["packageManager"];
     config.packageManagerVersion = ver?.split("+")[0] || "";
-  } else if (existsSync(join(appDir, "pnpm-lock.yaml")) || existsSync(join(repoDir, "pnpm-lock.yaml"))) {
+  } else if (existsApp("pnpm-lock.yaml") || existsRoot("pnpm-lock.yaml")) {
     config.packageManager = "pnpm";
     config.packageManagerVersion = "10.14.0";
-  } else if (existsSync(join(appDir, "yarn.lock")) || existsSync(join(repoDir, "yarn.lock"))) {
+  } else if (existsApp("yarn.lock") || existsRoot("yarn.lock")) {
     config.packageManager = "yarn";
     config.packageManagerVersion = "4.5.0";
-  } else if (existsSync(join(appDir, "bun.lockb"))) {
+  } else if (existsApp("bun.lockb")) {
     config.packageManager = "bun";
   } else {
     config.packageManager = "npm";
   }
 
   // Detect workspace (pnpm-workspace.yaml or yarn workspaces in package.json)
-  if (existsSync(join(appDir, "pnpm-workspace.yaml")) || existsSync(join(repoDir, "pnpm-workspace.yaml"))) {
+  if (existsApp("pnpm-workspace.yaml") || existsRoot("pnpm-workspace.yaml")) {
     config.features.add("workspace");
   } else if (pkg.workspaces) {
     config.features.add("workspace");
@@ -66,18 +78,15 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     config.frameworkVersion = cleanVersion(allDeps["next"]);
     config.port = 3000;
     for (const cfgName of ["next.config.ts", "next.config.mjs", "next.config.js"]) {
-      const cfgPath = join(appDir, cfgName);
-      if (existsSync(cfgPath)) {
-        try {
-          const content = readFileSync(cfgPath, "utf-8");
-          config.hasStandalone = content.includes("standalone");
-          if (content.includes("output:") && content.includes("export")) config.features.add("static-export");
-          if (content.includes("serverActions") || content.includes("server actions")) config.features.add("server-actions");
-        } catch {}
+      const content = readApp(cfgName);
+      if (content !== null) {
+        config.hasStandalone = content.includes("standalone");
+        if (content.includes("output:") && content.includes("export")) config.features.add("static-export");
+        if (content.includes("serverActions") || content.includes("server actions")) config.features.add("server-actions");
         break;
       }
     }
-    if (existsSync(join(appDir, "app/api")) || existsSync(join(appDir, "pages/api"))) {
+    if (existsApp("app/api") || existsApp("pages/api")) {
       config.features.add("api-routes");
     }
     config.features.add("ssr");
@@ -87,16 +96,13 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     config.port = 3000;
     let isStatic = false;
     for (const cfgName of ["nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js"]) {
-      const cfgPath = join(appDir, cfgName);
-      if (existsSync(cfgPath)) {
-        try {
-          const content = readFileSync(cfgPath, "utf-8");
-          if (/nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(content)
-            || /ssr\s*:\s*false/.test(content)
-            || /preset\s*:\s*['"]static['"]/.test(content)) {
-            isStatic = true;
-          }
-        } catch {}
+      const content = readApp(cfgName);
+      if (content !== null) {
+        if (/nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(content)
+          || /ssr\s*:\s*false/.test(content)
+          || /preset\s*:\s*['"]static['"]/.test(content)) {
+          isStatic = true;
+        }
         break;
       }
     }
@@ -119,8 +125,24 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     config.frameworkVersion = cleanVersion(allDeps["astro"]);
     config.port = 3000;
     const hasAdapter = allDeps["@astrojs/node"] || allDeps["@astrojs/vercel"] || allDeps["@astrojs/netlify"] || allDeps["@astrojs/cloudflare"];
-    if (hasAdapter || pkg.scripts?.start) {
+    // Astro can also declare SSR via output:"server"/"hybrid" in its config
+    // without a start script; read it so config-only SSR is detected too.
+    let configSaysServer = false;
+    for (const cfgName of ["astro.config.mjs", "astro.config.ts", "astro.config.js", "astro.config.mts", "astro.config.cjs"]) {
+      const content = readApp(cfgName);
+      if (content !== null) {
+        configSaysServer = /output\s*:\s*['"](server|hybrid)['"]/.test(content);
+        break;
+      }
+    }
+    if (hasAdapter || pkg.scripts?.start || configSaysServer) {
       config.features.add("ssr");
+      // The @astrojs/node standalone adapter emits a runnable server. Record a
+      // start command so downstream builders (and Railpack override) can launch
+      // it when the repo declares no `start` script.
+      if (allDeps["@astrojs/node"] && !pkg.scripts?.start) {
+        config.startCommand = "node ./dist/server/entry.mjs";
+      }
     } else {
       config.features.add("static-export");
     }
@@ -162,9 +184,10 @@ export function analyzeNodeProject(appDir: string, repoDir: string, config: Repo
     }
   }
 
+  // A repo `start` script wins over any framework default we set above.
   if (pkg.scripts?.start) config.startCommand = `${config.packageManager === "npm" ? "npm" : config.packageManager} start`;
-  else if (pkg.scripts?.serve) config.startCommand = `${config.packageManager === "npm" ? "npm run" : config.packageManager} serve`;
-  else if (pkg.main) config.startCommand = `node ${pkg.main}`;
+  else if (!config.startCommand && pkg.scripts?.serve) config.startCommand = `${config.packageManager === "npm" ? "npm run" : config.packageManager} serve`;
+  else if (!config.startCommand && pkg.main) config.startCommand = `node ${pkg.main}`;
 
   for (const [depName, depInfo] of Object.entries(NATIVE_DEPS_MAP)) {
     if (allDeps[depName]) {

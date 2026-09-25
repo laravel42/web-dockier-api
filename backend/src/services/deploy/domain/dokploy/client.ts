@@ -23,6 +23,7 @@ import type {
   SaveBuildTypeParams,
   SaveEnvironmentParams,
   CreateDomainParams,
+  UpdateDomainParams,
   DokployDomain,
   CreateSqlDatabaseParams,
   CreateRedisParams,
@@ -256,6 +257,14 @@ export class DokployClient {
   /** Register a domain for an application so Traefik routes traffic to it. */
   async createDomain(params: CreateDomainParams): Promise<DokployDomain> {
     return this.mutation<DokployDomain>("domain.create", params);
+  }
+
+  /**
+   * Update an existing domain — used to fix a stale forwarding port on a reused
+   * domain, which otherwise causes a Bad Gateway.
+   */
+  async updateDomain(params: UpdateDomainParams): Promise<void> {
+    await this.mutation<unknown>("domain.update", params);
   }
 
   /** List domains registered for an application. */

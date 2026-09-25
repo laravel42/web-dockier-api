@@ -6,24 +6,20 @@
  * builds them but derives no start command, so the container runs nothing and
  * every request is a Bad Gateway (the Astro `@astrojs/node` case).
  *
- * To fix that without depending on the frontend passing anything, this helper
- * re-derives the start command inside the pipeline: it fetches the handful of
- * root manifest/config files over the git provider API (no clone) and runs the
- * shared `detectDeployRuntime`. It returns a start command ONLY when detection
- * is high-confidence; otherwise it returns undefined and the pipeline lets
- * Railpack infer as before.
+ * This helper re-derives the start command inside the pipeline using the SAME
+ * repo analyzer the native pipeline uses (`analyzeRepoRuntime`), run over files
+ * fetched from the git provider API (no clone). It returns a start command ONLY
+ * when the repo has no `start` script and the analyzer produced a concrete
+ * server entry; otherwise it returns undefined and the pipeline lets Railpack
+ * infer as before.
  *
- * Best-effort and non-fatal: any fetch/detection failure returns undefined so a
- * deploy never breaks because runtime resolution had a hiccup.
+ * Best-effort and non-fatal: any failure returns undefined so a deploy never
+ * breaks because runtime resolution had a hiccup.
  */
 
 import { getGitConnectionCredentials } from "../../../../../shared/service-clients/git-connections.js";
-import { fetchRepoFile, type ConnectionLike, type RepoRef } from "../../../../git-integration/domain/providers/provider-client.js";
-import {
-  detectDeployRuntime,
-  DEPLOY_RUNTIME_FILES,
-  HIGH_CONFIDENCE,
-} from "../../../../git-integration/domain/deploy-runtime.js";
+import { type ConnectionLike, type RepoRef } from "../../../../git-integration/domain/providers/provider-client.js";
+import { analyzeRepoRuntime } from "../../../../git-integration/domain/repo-config.js";
 
 export interface ResolvedRuntime {
   /** High-confidence start command, or undefined to let Railpack infer. */
@@ -67,36 +63,18 @@ export async function resolveRuntimeStartCommand(params: {
     const [owner, repository] = parseOwnerRepo(repo);
     const ref: RepoRef = { owner, repo: repository, branch };
 
-    // Fetch the known root config files directly by path (avoids a full tree
-    // listing). Misses are fine — detection degrades to lower confidence.
-    const files: Record<string, string> = {};
-    await Promise.all(
-      DEPLOY_RUNTIME_FILES.map(async (name) => {
-        try {
-          const content = await fetchRepoFile(connection, ref, name);
-          if (content) files[name] = content;
-        } catch {
-          // ignore individual fetch failures
-        }
-      }),
-    );
-
-    const runtime = detectDeployRuntime(files);
-    if (!runtime) return {};
-
-    const descriptor = {
-      framework: runtime.framework,
+    const runtime = await analyzeRepoRuntime(connection, ref);
+    const descriptor: ResolvedRuntime = {
+      framework: runtime.config.framework || undefined,
       kind: runtime.kind,
       hasStartScript: runtime.hasStartScript,
     };
 
-    // Only override Railpack when we're confident AND the repo doesn't already
-    // declare its own start script (Railpack would use that itself).
-    if (runtime.startCommand && runtime.confidence >= HIGH_CONFIDENCE && !runtime.hasStartScript) {
+    if (runtime.injectableStartCommand) {
       await log(
-        `[stage:configure-app] Detected ${runtime.framework ?? "server"} app with no start script — using "${runtime.startCommand}".`,
+        `[stage:configure-app] Detected ${runtime.config.framework || "server"} app with no start script — using "${runtime.injectableStartCommand}".`,
       );
-      return { startCommand: runtime.startCommand, ...descriptor };
+      return { startCommand: runtime.injectableStartCommand, ...descriptor };
     }
 
     return descriptor;

@@ -1,23 +1,40 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import type { RepoFiles } from "./repo-files.js";
+import { joinPath } from "./repo-files.js";
 
-export function detectSubDir(repoDir: string): string {
-  const rootFiles = readdirSync(repoDir);
-  const frameworkConfigs = ["next.config.js", "next.config.ts", "next.config.mjs", "nuxt.config.ts", "vite.config.ts", "angular.json", "remix.config.js", "astro.config.mjs"];
-  if (frameworkConfigs.some(f => rootFiles.includes(f))) return "";
-  if (rootFiles.includes("package.json")) {
+const FRAMEWORK_CONFIGS = [
+  "next.config.js", "next.config.ts", "next.config.mjs",
+  "nuxt.config.ts", "vite.config.ts", "angular.json",
+  "remix.config.js", "astro.config.mjs",
+];
+
+const CANDIDATE_SUBDIRS = [
+  "app", "frontend", "web", "client",
+  "packages/app", "packages/web", "apps/web", "apps/frontend", "src",
+];
+
+/**
+ * Detect the application subdirectory within a repo (monorepo support).
+ *
+ * Returns "" when the app lives at the repo root — which is the case when a
+ * framework config sits at the root, or when the root package.json declares a
+ * build/start script. Otherwise probes a fixed list of conventional subdirs for
+ * a package.json + framework config.
+ *
+ * Filesystem-agnostic: works off any RepoFiles (disk or fetched).
+ */
+export function detectSubDir(files: RepoFiles): string {
+  if (FRAMEWORK_CONFIGS.some((f) => files.exists(f))) return "";
+
+  if (files.exists("package.json")) {
     try {
-      const pkg = JSON.parse(readFileSync(join(repoDir, "package.json"), "utf-8"));
+      const pkg = JSON.parse(files.read("package.json") ?? "{}") as { scripts?: { build?: string; start?: string } };
       if (pkg.scripts?.build || pkg.scripts?.start) return "";
-    } catch {}
+    } catch { /* fall through to subdir probing */ }
   }
 
-  const subdirs = ["app", "frontend", "web", "client", "packages/app", "packages/web", "apps/web", "apps/frontend", "src"];
-  for (const sub of subdirs) {
-    const subPath = join(repoDir, sub);
-    if (existsSync(subPath) && existsSync(join(subPath, "package.json"))) {
-      const subFiles = readdirSync(subPath);
-      if (frameworkConfigs.some(f => subFiles.includes(f))) return sub;
+  for (const sub of CANDIDATE_SUBDIRS) {
+    if (files.exists(joinPath(sub, "package.json"))) {
+      if (FRAMEWORK_CONFIGS.some((f) => files.exists(joinPath(sub, f)))) return sub;
     }
   }
   return "";

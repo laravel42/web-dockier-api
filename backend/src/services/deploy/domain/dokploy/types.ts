@@ -186,6 +186,20 @@ export interface CreateDomainParams {
   path?: string;
 }
 
+/**
+ * Params for updating an existing domain. Used to reconcile a reused domain's
+ * port when the container's listening port changed (stale port = Bad Gateway).
+ */
+export interface UpdateDomainParams {
+  domainId: string;
+  host: string;
+  port: number;
+  https: boolean;
+  domainType: "application" | "compose";
+  certificateType: "none" | "letsencrypt";
+  path?: string;
+}
+
 export interface DokployDomain {
   domainId: string;
   host: string;

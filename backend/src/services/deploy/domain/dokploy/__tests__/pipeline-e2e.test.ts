@@ -88,7 +88,7 @@ vi.mock("../../../../../shared/service-clients/git-connections.js", () => ({
 }));
 // Runtime resolution fetches repo config files over the network; stub it so
 // this orchestration test stays offline. Its own logic is covered by
-// resolve-runtime.test.ts / deploy-runtime.test.ts. Default: no override.
+// resolve-runtime.test.ts. Default: no override.
 vi.mock("../stages/resolve-runtime.js", () => ({
   resolveRuntimeStartCommand: vi.fn(async () => ({})),
 }));

@@ -12,6 +12,7 @@ import type { DokployBuildType, DeployService } from "../types.js";
 import { getApplication, upsertApplication, deleteApplicationMapping } from "../mappings.js";
 import type { GitProviderConfig } from "./sync-git.js";
 import type { ProvisionedDatabase } from "./provision-databases.js";
+import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 
 /**
  * Railpack version to pin for railpack builds. Dokploy tags the builder image
@@ -66,7 +67,7 @@ export interface RepoAnalysisInfo {
   techStack?: string[];
   /**
    * Explicit server start command derived from repo analysis. When present and
-   * the build is railpack, it's injected as RAILPACK_DEPLOY_START_CMD so
+   * the build is railpack, it's injected as RAILPACK_START_CMD so
    * Railpack launches the right process for apps whose repo has no `start`
    * script (e.g. SSR Astro → "node ./dist/server/entry.mjs").
    */
@@ -244,7 +245,7 @@ export async function stageConfigureApp(params: {
   // Astro with no `start` script). Without this, Railpack finds no start
   // command and the container runs nothing → Bad Gateway.
   const finalEnv = withRailpackStartCommand(withNodeEnv, buildType, repoAnalysis.startCommand);
-  if (buildType === "railpack" && repoAnalysis.startCommand && !envHas(withNodeEnv, "RAILPACK_DEPLOY_START_CMD")) {
+  if (buildType === "railpack" && repoAnalysis.startCommand && !envHas(withNodeEnv, "RAILPACK_START_CMD")) {
     await log(`[stage:configure-app] Using derived start command: ${repoAnalysis.startCommand}`);
   }
   if (provisionedDatabases.length > 0) {
@@ -261,6 +262,20 @@ export async function stageConfigureApp(params: {
       buildSecrets: "",
       createEnvFile: true,
     });
+  }
+
+  // Builder-independent start-command override. Railpack's RAILPACK_START_CMD is
+  // documented as a CLI `--env` build variable, so app env may not reach it;
+  // Dokploy's own application `command` overrides the container's entrypoint
+  // regardless of builder. Best-effort — a failure here still leaves the env var
+  // in place and never fails the deploy.
+  if (buildType === "railpack" && repoAnalysis.startCommand) {
+    try {
+      await client.updateApplication({ applicationId, command: repoAnalysis.startCommand });
+      await log("[stage:configure-app] Applied start command to the application (run command).");
+    } catch (err) {
+      await log(`[stage:configure-app] Could not set the application run command (continuing): ${getErrMsg(err)}`);
+    }
   }
 
   const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
@@ -525,13 +540,20 @@ function envHas(envVars: Array<{ name: string; value: string }>, name: string): 
 }
 
 /**
- * Inject RAILPACK_DEPLOY_START_CMD when a start command was derived at analysis
- * time. Railpack honors this env as the container start command, which fixes
- * apps whose repo declares no `start` script (Railpack would otherwise find no
- * start command and the container runs nothing → Bad Gateway).
+ * Inject RAILPACK_START_CMD when a start command was derived at analysis time.
  *
- * Applies only to railpack builds; never overrides a user-set value. Other
- * build types ignore it (a Dockerfile has its own CMD; static has no server).
+ * Railpack reads this as the container start command, which fixes apps whose
+ * repo declares no `start` script (Railpack otherwise derives no start command,
+ * the image gets no CMD, and the container runs nothing → Bad Gateway).
+ *
+ * NOTE: Railpack documents build-configuration variables as passed via the CLI's
+ * `--env`, not read from the ambient process environment. Whether the host
+ * forwards app env into the Railpack invocation is host-specific, so we ALSO set
+ * Dokploy's native application `command` (see applyStartCommandOverride) as a
+ * builder-independent belt-and-braces override.
+ *
+ * Applies only to railpack builds; never overrides a user-set value. Other build
+ * types ignore it (a Dockerfile has its own CMD; static has no server).
  */
 function withRailpackStartCommand(
   envVars: Array<{ name: string; value: string }>,
@@ -539,6 +561,6 @@ function withRailpackStartCommand(
   startCommand: string | undefined,
 ): Array<{ name: string; value: string }> {
   if (buildType !== "railpack" || !startCommand) return envVars;
-  if (envHas(envVars, "RAILPACK_DEPLOY_START_CMD")) return envVars;
-  return [...envVars, { name: "RAILPACK_DEPLOY_START_CMD", value: startCommand }];
+  if (envHas(envVars, "RAILPACK_START_CMD")) return envVars;
+  return [...envVars, { name: "RAILPACK_START_CMD", value: startCommand }];
 }
