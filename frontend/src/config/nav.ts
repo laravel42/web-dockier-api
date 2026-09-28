@@ -33,7 +33,7 @@ export const sidebarNavGroups: NavGroupConfig[] = [
     items: [
       { to: "/projects", label: "Projects", icon: "projects" },
       { to: "/deploy", label: "Deploy", icon: "deploy", permission: "deploy:view" },
-      { to: "/security", label: "Security", icon: "security" },
+      { to: "/security", label: "Security", icon: "security", permission: "scan:view" },
     ],
   },
   {
