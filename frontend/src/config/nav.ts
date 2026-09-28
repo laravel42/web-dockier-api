@@ -1,3 +1,5 @@
+import type { PermissionKey } from "./permissions";
+
 export type NavIconName =
   | "dashboard"
   | "projects"
@@ -14,7 +16,7 @@ export interface NavItemConfig {
   /** Match pathname exactly (e.g. dashboard home) */
   exact?: boolean;
   /** When set, nav item is hidden unless the user has this permission */
-  permission?: string;
+  permission?: PermissionKey;
 }
 
 export interface NavGroupConfig {
@@ -31,7 +33,7 @@ export const sidebarNavGroups: NavGroupConfig[] = [
     items: [
       { to: "/projects", label: "Projects", icon: "projects" },
       { to: "/deploy", label: "Deploy", icon: "deploy", permission: "deploy:view" },
-      { to: "/security", label: "Security", icon: "security" },
+      { to: "/security", label: "Security", icon: "security", permission: "scan:view" },
     ],
   },
   {

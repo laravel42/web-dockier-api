@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { authApi } from "../services/api";
 import { useAuth } from "./AuthContext";
+import type { PermissionKey } from "../config/permissions";
 
 interface PermissionsContextValue {
   permissions: Set<string>;
@@ -8,9 +9,10 @@ interface PermissionsContextValue {
   roleName: string;
   isOwner: boolean;
   loading: boolean;
-  has: (permission: string) => boolean;
-  hasAny: (...permissions: string[]) => boolean;
-  hasAll: (...permissions: string[]) => boolean;
+  /** Note: returns false while `loading` is true — check `loading` before rendering a denied state. */
+  has: (permission: PermissionKey) => boolean;
+  hasAny: (...permissions: PermissionKey[]) => boolean;
+  hasAll: (...permissions: PermissionKey[]) => boolean;
   refresh: () => void;
 }
 
@@ -62,15 +64,15 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   // Re-fetch permissions whenever the token changes (login, tenant switch, logout)
   useEffect(() => { fetchPermissions(); }, [fetchPermissions]);
 
-  const has = useCallback((p: string) => {
+  const has = useCallback((p: PermissionKey) => {
     if (loading) return false;
     return permissions.has(p);
   }, [permissions, loading]);
-  const hasAny = useCallback((...ps: string[]) => {
+  const hasAny = useCallback((...ps: PermissionKey[]) => {
     if (loading) return false;
     return ps.some(p => permissions.has(p));
   }, [permissions, loading]);
-  const hasAll = useCallback((...ps: string[]) => {
+  const hasAll = useCallback((...ps: PermissionKey[]) => {
     if (loading) return false;
     return ps.every(p => permissions.has(p));
   }, [permissions, loading]);

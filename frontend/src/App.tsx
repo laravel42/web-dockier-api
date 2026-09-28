@@ -54,8 +54,21 @@ export default function App() {
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:projectId" element={<ProjectDetail />} />
-                    <Route path="/security" element={<SecurityScans />} />
-                    <Route element={<ScanDetail />}>
+                    <Route
+                      path="/security"
+                      element={
+                        <PermissionRoute permission="scan:view">
+                          <SecurityScans />
+                        </PermissionRoute>
+                      }
+                    />
+                    <Route
+                      element={
+                        <PermissionRoute permission="scan:view">
+                          <ScanDetail />
+                        </PermissionRoute>
+                      }
+                    >
                       <Route path="/security/project/:projectId" />
                       <Route path="/security/:scanId" />
                     </Route>

@@ -31,6 +31,7 @@ import {
   visibleSettingsSectionTabs,
 } from "../settings/settingsNav";
 import { usePermissions } from "@/context/PermissionsContext";
+import type { PermissionKey } from "@/config/permissions";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useIsMdUp } from "@/hooks/useMediaQuery";
 import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
@@ -102,7 +103,7 @@ type MainTabKey = typeof MAIN_TABS[number]["key"];
 
 function isMainTabVisible(
   key: MainTabKey,
-  has: (permission: string) => boolean,
+  has: (permission: PermissionKey) => boolean,
   isOwner: boolean,
   runtimeVisible: boolean,
 ): boolean {

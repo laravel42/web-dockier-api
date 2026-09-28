@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { usePermissions } from "../context/PermissionsContext";
 import PageLoading from "./ui/PageLoading";
+import type { PermissionKey } from "../config/permissions";
 
 interface PermissionRouteProps {
-  permission: string;
+  permission: PermissionKey;
   children: ReactNode;
   redirectTo?: string;
 }
