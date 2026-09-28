@@ -7,6 +7,7 @@ vi.mock("../../deploy/domain/dokploy/mappings.js", () => ({
 }));
 
 const mockClient = {
+  getApplication: vi.fn(async () => ({ applicationId: "app-1" })),
   listAppMiddlewares: vi.fn(),
   deleteSecurity: vi.fn(async () => undefined),
   deleteRedirect: vi.fn(async () => undefined),
@@ -84,6 +85,7 @@ describe("isDokployProject", () => {
 describe("applyNetworkRulesDokploy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClient.getApplication.mockResolvedValue({ applicationId: "app-1" });
     mockClient.listAppMiddlewares.mockResolvedValue({ security: [], redirects: [] });
     mockListRedirectRules.mockResolvedValue([]);
     mockListSecurityRulesWithSecrets.mockResolvedValue([]);
@@ -131,7 +133,29 @@ describe("applyNetworkRulesDokploy", () => {
     mockClient.createSecurity.mockRejectedValueOnce(new Error("dokploy 500"));
 
     const res = await applyNetworkRulesDokploy({ tenantId: "t1", projectId: "p1" });
-    expect(res.success).toBe(true); // non-fatal
+    // A credential that did NOT apply must not be reported as success: these are
+    // access controls, and a clean-looking result hid unapplied Basic Auth.
+    expect(res.success).toBe(false);
     expect(res.message).toMatch(/skipped/i);
+  });
+
+  it("refuses to reconcile — without deleting anything — when the application is gone", async () => {
+    // The reconcile is destructive (clear, then recreate). If the app no longer
+    // exists, the deletes would strip access controls we then cannot restore, and
+    // the old code still reported "Applied 0 security credential(s)" as success.
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1" });
+    mockClient.getApplication.mockRejectedValue(new Error("404 not found"));
+    mockListSecurityRulesWithSecrets.mockResolvedValue([
+      { id: "sr1", name: "admin", path: null, credentials: [{ username: "bob", password: "pw" }] },
+    ]);
+
+    const res = await applyNetworkRulesDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(res.success).toBe(false);
+    expect(res.message).toMatch(/no longer exists/i);
+    // Nothing destructive ran.
+    expect(mockClient.deleteSecurity).not.toHaveBeenCalled();
+    expect(mockClient.deleteRedirect).not.toHaveBeenCalled();
+    expect(mockClient.createSecurity).not.toHaveBeenCalled();
   });
 });

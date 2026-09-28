@@ -46,6 +46,23 @@ export async function isDokployProject(projectId: string): Promise<boolean> {
 }
 
 /**
+ * Whether the Dokploy application still exists. False on any lookup error, so a
+ * deleted or unreachable app is treated as "do not reconcile" rather than
+ * silently reconciling against nothing.
+ */
+async function applicationExists(
+  applicationId: string,
+  client: ReturnType<typeof createDokployClient>,
+): Promise<boolean> {
+  try {
+    const app = await client.getApplication(applicationId);
+    return Boolean(app?.applicationId);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Convert a stored redirect rule (fromPath/toPath + type) into Dokploy's
  * regex/replacement/permanent shape for a Traefik `redirectRegex` middleware.
  *
@@ -105,6 +122,27 @@ export async function applyNetworkRulesDokploy(params: {
 
     const client = createDokployClient();
 
+    // 0. Confirm the application actually exists BEFORE touching anything.
+    //
+    // This reconcile is destructive: it deletes the app's existing middlewares
+    // and then recreates them from our DB. If the app is gone (deleted in the
+    // Dokploy UI, or a stale mapping), `listAppMiddlewares` swallows the error
+    // and returns empty arrays, every create then fails individually into a
+    // warn log, and the function still returned success with
+    // "Applied 0 security credential(s) and 0 redirect(s)" — so an operator
+    // believed Basic Auth was live when it was not applied at all. Fail loudly
+    // instead, and fail BEFORE deleting, so we never strip access controls we
+    // then cannot restore.
+    if (!(await applicationExists(applicationId, client))) {
+      logger.warn({ projectId, applicationId }, "[network:dokploy] application missing — skipping reconcile");
+      return {
+        success: false,
+        message:
+          "Could not apply network rules: the deployed application no longer exists. " +
+          "Redeploy the project, then the rules will be applied.",
+      };
+    }
+
     // 1. Read existing middlewares and clear them (full reconcile).
     const existing = await client.listAppMiddlewares(applicationId);
     for (const s of existing.security) {
@@ -136,12 +174,14 @@ export async function applyNetworkRulesDokploy(params: {
 
     // 3. Recreate redirects from our DB.
     let redirectCount = 0;
+    let failedRedirects = 0;
     for (const rule of redirectRules) {
       const { regex, replacement, permanent } = redirectToDokploy(rule);
       try {
         await client.createRedirect({ applicationId, regex, replacement, permanent });
         redirectCount++;
       } catch (e) {
+        failedRedirects++;
         logger.warn({ err: getErrMsg(e), ruleId: rule.id }, "[network:dokploy] failed to create redirect");
       }
     }
@@ -156,7 +196,15 @@ export async function applyNetworkRulesDokploy(params: {
     if (skippedCreds > 0) {
       message += ` ${skippedCreds} credential(s) were skipped because their password could not be recovered — recreate them.`;
     }
-    return { success: true, message };
+    if (failedRedirects > 0) {
+      message += ` ${failedRedirects} redirect(s) could not be applied.`;
+    }
+
+    // Report failure when anything did not apply. These are access-control and
+    // routing rules, so a partially-applied reconcile must never look like a
+    // clean success — the previous behavior hid unapplied Basic Auth entirely.
+    const fullyApplied = skippedCreds === 0 && failedRedirects === 0;
+    return { success: fullyApplied, message };
   } catch (err) {
     const msg = getErrMsg(err);
     logger.error({ err: msg, projectId }, "[network:dokploy] error applying rules");
