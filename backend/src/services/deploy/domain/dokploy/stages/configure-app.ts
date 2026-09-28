@@ -72,6 +72,18 @@ export interface RepoAnalysisInfo {
   hasDockerfile: boolean;
   isStaticSite: boolean;
   publishDirectory?: string;
+  /**
+   * Whether the repo produces a long-running server process or a static bundle,
+   * as classified by the repo analyzer (`analyzeRepoRuntime`).
+   *
+   * Distinct from `isStaticSite`, which is narrower: that one means "the built
+   * output is already committed to the repo". A source-only Vite/Astro/Angular
+   * SPA is `kind: "static"` with `isStaticSite: false` — Railpack builds it and
+   * serves the output, so it has no Node process and no PORT to bind. Port
+   * resolution needs this distinction; inferring from the language alone routes
+   * such apps to the Node port and Bad Gateways them.
+   */
+  kind?: "server" | "static";
   primaryLanguage?: string;
   techStack?: string[];
   /** Detected framework (e.g. "astro"), used to word advisories precisely. */
@@ -252,7 +264,7 @@ export async function stageConfigureApp(params: {
   // known, and PERSIST it. Consumers that run outside a deploy (the custom-domain
   // applier) cannot re-derive it correctly from buildType alone, so storing it
   // keeps a single source of truth instead of two derivations that drift.
-  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
+  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind);
 
   // Update stored build type + port (and appName if we resolved a fresh one on
   // the reuse path — omitted when undefined so we never clobber a stored value).
@@ -281,7 +293,7 @@ export async function stageConfigureApp(params: {
   const withPhpDefaults = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase, repoAnalysis.techStack ?? []);
   // Node railpack apps need PORT/HOST so the server listens where Traefik
   // routes (and on all interfaces). No-op for PHP/static/non-railpack.
-  const withNodeEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? []);
+  const withNodeEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind);
   // Hand Railpack an explicit start command when analysis derived one (e.g. SSR
   // Astro with no `start` script). Without this, Railpack finds no start
   // command and the container runs nothing → Bad Gateway.
@@ -591,20 +603,31 @@ function isNodeApp(primaryLanguage: string | undefined, techStack: string[]): bo
 /**
  * Resolve the container port Traefik must route the app's domain to.
  *
- *  - railpack + Node → NODE_RAILPACK_PORT: a Node server honors the PORT env we
- *    inject (see nodeRuntimeEnv), so we route to that same port.
- *  - railpack + non-Node (PHP/static via Caddy) → 80.
+ *  - railpack + static bundle → 80: Railpack builds the bundle and serves the
+ *    output over Caddy. There is no Node process, so PORT is meaningless here
+ *    even when the project is written in TypeScript.
+ *  - railpack + Node server → NODE_RAILPACK_PORT: a Node server honors the PORT
+ *    env we inject (see nodeRuntimeEnv), so we route to that same port.
+ *  - railpack + non-Node (PHP via FrankenPHP) → 80.
  *  - any other builder (dockerfile/nixpacks) → Dokploy's conventional 3000.
  *
  * A wrong port is the classic Bad Gateway: Traefik routes fine but the
  * container isn't listening where it forwards.
+ *
+ * `kind` comes from the repo analyzer and is what separates a static bundle from
+ * a Node server. Without it `isNodeApp` treats "written in TS/JS" as "runs a
+ * Node server", which sent every Vite/Astro/Angular SPA to port 3000 while Caddy
+ * served on 80. It is optional so callers that genuinely cannot classify the
+ * repo (analysis failed) keep the previous language-based behaviour.
  */
 export function resolveContainerPort(
   buildType: DokployBuildType,
   primaryLanguage: string | undefined,
   techStack: string[],
+  kind?: "server" | "static",
 ): number {
   if (buildType === "railpack") {
+    if (kind === "static") return 80;
     return isNodeApp(primaryLanguage, techStack) ? NODE_RAILPACK_PORT : 80;
   }
   // Nixpacks serves PHP behind nginx on port 80 (same as Railpack's FrankenPHP),
@@ -627,14 +650,18 @@ export function resolveContainerPort(
  *    fixes the "connection refused"/Bad Gateway.
  *
  * Applied only to Node railpack apps, and never overrides a user-set value.
+ * Skipped for static bundles: they are served by Caddy on 80, so injecting
+ * PORT=3000 would advertise a port nothing listens on.
  */
 function nodeRuntimeEnv(
   envVars: Array<{ name: string; value: string }>,
   buildType: DokployBuildType,
   primaryLanguage: string | undefined,
   techStack: string[],
+  kind?: "server" | "static",
 ): Array<{ name: string; value: string }> {
-  if (buildType !== "railpack" || !isNodeApp(primaryLanguage, techStack)) return envVars;
+  if (buildType !== "railpack" || kind === "static") return envVars;
+  if (!isNodeApp(primaryLanguage, techStack)) return envVars;
 
   const has = (name: string) => envVars.some((v) => v.name === name);
   const additions: Array<{ name: string; value: string }> = [];

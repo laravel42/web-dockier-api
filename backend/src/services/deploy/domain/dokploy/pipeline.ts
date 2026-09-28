@@ -150,6 +150,12 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         // build output flows through the deploy event, so this is false: Astro
         // et al. correctly fall through to Railpack in determineBuildType().
         isStaticSite: false,
+        // Separate, broader signal: does this repo produce a server process or a
+        // static bundle? A source-only Vite/Astro/Angular SPA is "static" here
+        // while isStaticSite stays false above — Railpack still has to build it.
+        // Port resolution needs this: without it, a TypeScript SPA is treated as
+        // a Node server and routed to 3000 while Caddy serves the bundle on 80.
+        kind: resolvedRuntime.kind,
         primaryLanguage: event.primaryLanguage,
         techStack: event.techStack,
         framework: resolvedRuntime.framework,

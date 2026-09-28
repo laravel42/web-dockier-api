@@ -151,13 +151,31 @@ function diagnoseGateway(containerPort: number, hint?: RuntimeHint): string[] {
     return lines;
   }
 
+  // A static bundle has no server process, so the PORT/0.0.0.0 advice below is
+  // meaningless for it — following it would send the user looking for a listener
+  // that is never supposed to exist. Railpack serves the built output over Caddy
+  // on port 80, so the real causes are a port mismatch or an empty build output.
+  if (hint?.kind === "static") {
+    if (containerPort !== 80) {
+      lines.push(
+        `Most likely cause: this is a static site with no server process, but Traefik is forwarding to port ` +
+        `${containerPort}. Railpack serves a built static bundle over Caddy on port 80.`,
+      );
+    } else {
+      lines.push(
+        "Most likely cause: the build produced no served output. This was detected as a static site, so there is " +
+        "no server process to start — check that the build wrote files to its publish directory (dist, build, out, " +
+        "or .output/public) and that the output contains an index.html.",
+      );
+    }
+    lines.push("If this app actually needs a server process, that detection may be wrong — check for a start script.");
+    return lines;
+  }
+
   lines.push(
     `Traefik is forwarding to container port ${containerPort}, but nothing is listening there. Check that ` +
     `your app binds the PORT environment variable (Dockier sets PORT=${containerPort}) and listens on ` +
     `0.0.0.0 rather than localhost.`,
   );
-  if (hint?.kind === "static") {
-    lines.push("This app was detected as a static site; if it actually needs a server process, that detection may be wrong.");
-  }
   return lines;
 }

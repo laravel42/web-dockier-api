@@ -75,6 +75,41 @@ describe("stageVerifyDeploy", () => {
     expect(logLines.some((l) => /node \.\/dist\/server\/entry\.mjs/.test(l))).toBe(true);
   });
 
+  it("diagnoses a static bundle on the wrong port, without PORT-binding advice", async () => {
+    const fetchImpl = vi.fn(async () => resp(502));
+    await stageVerifyDeploy({
+      appUrl: "http://app.test",
+      containerPort: 3000,
+      log,
+      attempts: 1,
+      intervalMs: 0,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      runtimeHint: { buildType: "railpack", framework: "astro", kind: "static", repoHasStartScript: false },
+    });
+    expect(logLines.some((l) => /static site with no server process/i.test(l))).toBe(true);
+    expect(logLines.some((l) => /Caddy on port 80/.test(l))).toBe(true);
+    // A static bundle never binds PORT, so that advice must not appear — it sends
+    // the user hunting for a listener that is not supposed to exist.
+    expect(logLines.some((l) => /binds the PORT environment variable/.test(l))).toBe(false);
+    expect(logLines.some((l) => /0\.0\.0\.0/.test(l))).toBe(false);
+  });
+
+  it("diagnoses an empty build output when a static bundle is on the right port", async () => {
+    const fetchImpl = vi.fn(async () => resp(502));
+    await stageVerifyDeploy({
+      appUrl: "http://app.test",
+      containerPort: 80,
+      log,
+      attempts: 1,
+      intervalMs: 0,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      runtimeHint: { buildType: "railpack", kind: "static", repoHasStartScript: false },
+    });
+    expect(logLines.some((l) => /build produced no served output/i.test(l))).toBe(true);
+    expect(logLines.some((l) => /index\.html/.test(l))).toBe(true);
+    expect(logLines.some((l) => /binds the PORT environment variable/.test(l))).toBe(false);
+  });
+
   it("diagnoses a platform adapter on a gateway error", async () => {
     const fetchImpl = vi.fn(async () => resp(502));
     await stageVerifyDeploy({
