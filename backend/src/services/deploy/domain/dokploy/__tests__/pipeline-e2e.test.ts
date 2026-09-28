@@ -384,6 +384,12 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
 
   it("reuses an existing Dokploy project mapping (idempotent)", async () => {
     tenantProject = { id: "tp-x", organizationId: "tenant-1", dokployProjectId: "dpj-existing", dokployEnvironmentId: "env-existing" };
+    // The live project must actually carry that environment, otherwise the stage
+    // correctly treats the stored id as stale and re-resolves it.
+    clientMethods.getProject.mockResolvedValue({
+      projectId: "dpj-existing",
+      environments: [{ environmentId: "env-existing", name: "production" }],
+    });
 
     await executeDokployPipeline(input());
 
@@ -391,6 +397,30 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(clientMethods.createApplication).toHaveBeenCalledWith(
       expect.objectContaining({ environmentId: "env-existing" }),
     );
+  });
+
+  it("re-resolves a stale environment id rather than deploying against one that no longer exists", async () => {
+    // Project id survived but its environment was deleted/recreated (UI action,
+    // instance rebuild). Previously only the project id was verified, so the dead
+    // environment flowed into configure-app and every deploy failed forever.
+    tenantProject = { id: "tp-x", organizationId: "tenant-1", dokployProjectId: "dpj-existing", dokployEnvironmentId: "env-DELETED" };
+    clientMethods.getProject.mockResolvedValue({
+      projectId: "dpj-existing",
+      environments: [{ environmentId: "env-fresh", name: "production" }],
+    });
+
+    await executeDokployPipeline(input());
+
+    // Reused the project, but with the environment that actually exists...
+    expect(clientMethods.createProject).not.toHaveBeenCalled();
+    expect(clientMethods.createApplication).toHaveBeenCalledWith(
+      expect.objectContaining({ environmentId: "env-fresh" }),
+    );
+    // ...and healed the mapping so later runs don't repeat the lookup.
+    expect(createTenantProject).toHaveBeenCalledWith(
+      expect.objectContaining({ dokployEnvironmentId: "env-fresh" }),
+    );
+    expect(logLines.some((l) => /no longer exists on this project/i.test(l))).toBe(true);
   });
 
   it("adopts an existing Dokploy project by name instead of creating a duplicate", async () => {

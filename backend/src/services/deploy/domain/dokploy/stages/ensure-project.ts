@@ -95,11 +95,28 @@ export async function stageEnsureProject(params: {
   //    to reconcile/create.
   const existing = await getTenantProject(organizationId);
   if (existing) {
-    if (await projectExists(existing.dokployProjectId, client)) {
+    const project = await fetchProject(existing.dokployProjectId, client);
+    if (project) {
+      // The project exists — but the ENVIRONMENT id stored alongside it must be
+      // validated too. Verifying only the project id let a stale environment
+      // through: if the environment was deleted/recreated (UI action, Dokploy
+      // instance rebuilt or restored) while the project id survived, every
+      // subsequent deploy failed in configure-app with an opaque Dokploy error,
+      // forever, because nothing ever refreshed the mapping.
+      const environmentId = await reconcileEnvironmentId(project, existing.dokployEnvironmentId, client, log);
+
+      if (environmentId !== existing.dokployEnvironmentId) {
+        await createTenantProject({
+          organizationId,
+          dokployProjectId: existing.dokployProjectId,
+          dokployEnvironmentId: environmentId,
+        });
+      }
+
       await log(`[stage:ensure-project] ✓ Reusing existing project: ${existing.dokployProjectId}`);
       return {
         dokployProjectId: existing.dokployProjectId,
-        dokployEnvironmentId: existing.dokployEnvironmentId,
+        dokployEnvironmentId: environmentId,
       };
     }
     await log(
@@ -145,18 +162,59 @@ export async function stageEnsureProject(params: {
 }
 
 /**
- * Check whether a Dokploy project still exists, by id.
- * Returns false if `project.one` reports it missing (or any lookup error),
- * so a deleted/unreachable project is treated as "recreate" rather than fatal.
+ * Fetch a Dokploy project by id, or null when it no longer exists.
+ *
+ * Returns the project BODY rather than a boolean: the response carries the
+ * project's environments, which the caller needs to validate the stored
+ * environment id. (The previous version discarded it and checked existence
+ * only, which is how a stale environment id survived.)
  */
-async function projectExists(projectId: string, client: DokployClient): Promise<boolean> {
+async function fetchProject(projectId: string, client: DokployClient): Promise<DokployProject | null> {
   try {
     const project = await client.getProject(projectId);
-    return Boolean(project?.projectId);
+    return project?.projectId ? project : null;
   } catch {
     // project.one throws (typically 404) when the project was deleted.
-    return false;
+    return null;
   }
+}
+
+/**
+ * Validate the stored environment id against the live project, re-resolving it
+ * when it no longer exists.
+ *
+ * Conservative: when the project response carries no environment list at all
+ * (older Dokploy versions omit it), the stored id is kept rather than assumed
+ * bad — we only act on positive evidence that the environment is gone.
+ */
+async function reconcileEnvironmentId(
+  project: DokployProject,
+  storedEnvironmentId: string,
+  client: DokployClient,
+  log: (line: string) => Promise<void>,
+): Promise<string> {
+  const known = knownEnvironmentIds(project);
+
+  // No evidence either way — keep what we have.
+  if (known.length === 0) return storedEnvironmentId;
+  if (storedEnvironmentId && known.includes(storedEnvironmentId)) return storedEnvironmentId;
+
+  const resolved = await resolveDefaultEnvironmentId(project, client);
+  await log(
+    `[stage:ensure-project] Stored environment ${storedEnvironmentId || "(empty)"} no longer exists on this project — using ${resolved}.`,
+  );
+  return resolved;
+}
+
+/** Every environment id visible on a project response, across the shape variants. */
+function knownEnvironmentIds(project: DokployProject): string[] {
+  const ids: string[] = [];
+  if (project.environmentId) ids.push(project.environmentId);
+  if (project.environment?.environmentId) ids.push(project.environment.environmentId);
+  for (const env of project.environments ?? []) {
+    if (env.environmentId) ids.push(env.environmentId);
+  }
+  return ids;
 }
 
 /**
