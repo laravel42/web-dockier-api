@@ -196,7 +196,9 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
   typed.post(
     "/integrations/pm/issues",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      // Matches the git-provider equivalent (POST /git/connections/:id/issues).
+      // This endpoint is only reached from "Create issue" on a scan finding.
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_CREATE_ISSUE),
       schema: {
         tags: ["integrations"],
         summary: "Create PM issue/ticket",

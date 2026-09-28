@@ -249,7 +249,11 @@ interface FindingRowProps {
 
 function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, mrCreating, onCreateIssue, onCreateMR }: FindingRowProps) {
   const { has } = usePermissions();
-  const canManageScans = has("scan:manage");
+  // Mirrors backend enforcement: POST /git/connections/:id/issues and
+  // POST /integrations/pm/issues require scan:create_issue, while
+  // POST /git/connections/:id/create-mr requires scan:create_mr.
+  const canCreateIssue = has("scan:create_issue") && (pmIntegrations.length > 0 || hasConnectionId);
+  const canCreateMR = has("scan:create_mr") && hasConnectionId;
 
   return (
     <div className="p-3  pl-9">
@@ -257,19 +261,21 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
         <SeverityBadge severity={f.severity as "error" | "warning" | "info"} />
         <span className="text-xs text-text-muted font-mono">L{f.startLine}</span>
         <span className="text-xs text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
-        {canManageScans && (pmIntegrations.length > 0 || hasConnectionId) && (
+        {(canCreateIssue || canCreateMR) && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
-            <Button
-              variant="outline-primary"
-              size="sm"
-              onClick={() => onCreateIssue(f)}
-              iconLeft={
-                <CirclePlusIcon className="size-4" />
-              }
-            >
-              Create issue
-            </Button>
-            {hasConnectionId && (
+            {canCreateIssue && (
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => onCreateIssue(f)}
+                iconLeft={
+                  <CirclePlusIcon className="size-4" />
+                }
+              >
+                Create issue
+              </Button>
+            )}
+            {canCreateMR && (
               <Button
                 variant="primary"
                 size="sm"
