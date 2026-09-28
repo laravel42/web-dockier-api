@@ -4,96 +4,13 @@ import SettingsModalFooter from "./SettingsModalFooter";
 import Button from "./ui/Button";
 import { Input } from "./ui/input";
 import { SearchIcon, CheckIcon, MinusIcon, ChevronDownIcon, LockIcon } from "lucide-react";
-
-interface Permission {
-  key: string;
-  label: string;
-  locked?: boolean;
-}
-
-interface PermissionGroup {
-  name: string;
-  permissions: Permission[];
-}
-
-const PERMISSION_GROUPS: PermissionGroup[] = [
-  {
-    name: "Credential",
-    permissions: [
-      { key: "credential:view", label: "Allow members to view credentials", locked: true },
-      { key: "credential:manage", label: "Allow members to manage credentials" },
-    ],
-  },
-  {
-    name: "Team",
-    permissions: [
-      { key: "team:view", label: "Allow members to view teams", locked: true },
-      { key: "team:create", label: "Allow members to create teams" },
-      { key: "team:delete", label: "Allow members to delete teams and team members" },
-    ],
-  },
-  {
-    name: "Project",
-    permissions: [
-      { key: "project:view", label: "Allow members to view projects" },
-      { key: "project:create", label: "Allow members to create projects" },
-      { key: "project:manage", label: "Allow members to manage projects" },
-      { key: "project:delete", label: "Allow members to delete projects" },
-    ],
-  },
-  {
-    name: "Deploy",
-    permissions: [
-      { key: "deploy:view", label: "Allow members to view deployments" },
-      { key: "deploy:create", label: "Allow members to create deployments" },
-      { key: "deploy:manage", label: "Allow members to manage deployments" },
-    ],
-  },
-  {
-    name: "Security Scans",
-    permissions: [
-      { key: "scan:view", label: "Allow members to view security scan results" },
-      { key: "scan:run", label: "Allow members to run security scans" },
-      { key: "scan:manage", label: "Allow members to manage scan settings and rules" },
-      { key: "scan:create_issue", label: "Allow members to create issues from findings" },
-      { key: "scan:create_mr", label: "Allow members to create fix merge requests from findings" },
-    ],
-  },
-  {
-    name: "Notification",
-    permissions: [
-      { key: "notification:view", label: "Allow members to view notifications" },
-      { key: "notification:manage", label: "Allow members to manage notification channels" },
-      { key: "notification:send", label: "Allow members to send notifications" },
-    ],
-  },
-  {
-    name: "User",
-    permissions: [
-      { key: "user:view", label: "Allow members to view users" },
-      { key: "user:manage", label: "Allow members to manage users" },
-      { key: "user:delete", label: "Allow members to delete users" },
-    ],
-  },
-  {
-    name: "Roles",
-    permissions: [
-      { key: "role:view", label: "Allow members to view roles and permissions", locked: true },
-      { key: "role:manage", label: "Allow members to create, edit, and delete roles" },
-    ],
-  },
-  {
-    name: "Billing",
-    permissions: [
-      { key: "billing:view", label: "Allow members to view billing" },
-      { key: "billing:manage", label: "Allow members to manage billing" },
-    ],
-  },
-];
-
-const ALL_LOCKED = PERMISSION_GROUPS.flatMap((g) =>
-  g.permissions.filter((p) => p.locked).map((p) => p.key)
-);
+import {
+  PERMISSION_SECTIONS,
+  ASSIGNABLE_PERMISSION_KEYS,
+  BASELINE_PERMISSION_KEYS,
+  type PermissionGroup,
+  type PermissionSection,
+} from "../config/permissions";
 
 interface Props {
   open: boolean;
@@ -129,10 +46,20 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(initialData?.permissions?.length ? initialData.permissions : ALL_LOCKED)
+    new Set(initialData?.permissions?.length ? initialData.permissions : BASELINE_PERMISSION_KEYS)
   );
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  /**
+   * Permissions the role already holds that this editor does not render
+   * (e.g. legacy `team:*` grants). Preserved verbatim on save so an unrelated
+   * edit never silently strips them.
+   */
+  const unmanaged = useMemo(
+    () => (initialData?.permissions ?? []).filter((p) => !ASSIGNABLE_PERMISSION_KEYS.includes(p)),
+    [initialData],
+  );
 
   const toggle = (key: string, locked?: boolean) => {
     if (locked) return;
@@ -144,16 +71,26 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
     });
   };
 
-  const selectAll = () => {
-    const all = new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key)));
-    setSelected(all);
+  const selectAll = () => setSelected(new Set(ASSIGNABLE_PERMISSION_KEYS));
+
+  const deselectAll = () => setSelected(new Set(BASELINE_PERMISSION_KEYS));
+
+  /** Toggle every unlocked permission in a group on or off together. */
+  const toggleGroupSelection = (group: PermissionGroup) => {
+    const unlocked = group.permissions.filter((p) => !p.locked).map((p) => p.key);
+    if (unlocked.length === 0) return;
+    const allOn = unlocked.every((k) => selected.has(k));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const key of unlocked) {
+        if (allOn) next.delete(key);
+        else next.add(key);
+      }
+      return next;
+    });
   };
 
-  const deselectAll = () => {
-    setSelected(new Set(ALL_LOCKED));
-  };
-
-  const toggleGroup = (group: string) => {
+  const toggleCollapse = (group: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(group)) next.delete(group);
@@ -162,16 +99,23 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
     });
   };
 
-  const filteredGroups = useMemo(() => {
-    if (!search.trim()) return PERMISSION_GROUPS;
+  const filteredSections = useMemo<PermissionSection[]>(() => {
+    if (!search.trim()) return PERMISSION_SECTIONS;
     const q = search.toLowerCase();
-    return PERMISSION_GROUPS.map((g) => ({
-      ...g,
-      permissions: g.permissions.filter(
-        (p) => p.key.toLowerCase().includes(q) || p.label.toLowerCase().includes(q)
-      ),
-    })).filter((g) => g.permissions.length > 0);
+    return PERMISSION_SECTIONS.map((section) => ({
+      ...section,
+      groups: section.groups
+        .map((g) => ({
+          ...g,
+          permissions: g.permissions.filter(
+            (p) => p.key.toLowerCase().includes(q) || p.label.toLowerCase().includes(q) || g.name.toLowerCase().includes(q)
+          ),
+        }))
+        .filter((g) => g.permissions.length > 0),
+    })).filter((section) => section.groups.length > 0);
   }, [search]);
+
+  const hasResults = filteredSections.length > 0;
 
   const getGroupCheckState = (group: PermissionGroup) => {
     const keys = group.permissions.map((p) => p.key);
@@ -181,9 +125,15 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
     return "partial";
   };
 
+  const selectedCount = useMemo(
+    () => ASSIGNABLE_PERMISSION_KEYS.filter((k) => selected.has(k)).length,
+    [selected],
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ name, description, permissions: Array.from(selected) });
+    const permissions = Array.from(new Set([...selected, ...BASELINE_PERMISSION_KEYS, ...unmanaged]));
+    onSubmit({ name, description, permissions });
   };
 
   return (
@@ -222,7 +172,12 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
 
         {/* Permissions */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <p className="mb-2 shrink-0 text-sm font-semibold text-foreground">Permissions</p>
+          <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">Permissions</p>
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              {selectedCount} of {ASSIGNABLE_PERMISSION_KEYS.length} selected
+            </p>
+          </div>
 
           {/* Search */}
           <div className="relative mb-3">
@@ -233,98 +188,119 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search"
+              placeholder="Search permissions"
+              aria-label="Search permissions"
               className="pl-9"
             />
           </div>
 
-          {/* Permission groups */}
+          {/* Sections → groups → permissions */}
           <div className="min-h-0 flex-1 overflow-y-auto rounded-(--radius-input) border border-border">
-            {filteredGroups.map((group) => {
-              const checkState = getGroupCheckState(group);
-              const isCollapsed = collapsed.has(group.name);
+            {filteredSections.map((section) => (
+              <div key={section.name} className="border-b border-border last:border-b-0">
+                <div className="bg-muted/40 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground">{section.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{section.description}</p>
+                </div>
 
-              return (
-                <div key={group.name} className="border-b border-border last:border-b-0">
-                  {/* Group header */}
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.name)}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/50"
-                  >
-                    {/* Group checkbox indicator */}
-                    <span
-                      className={`flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors ${
-                        checkState === "all" || checkState === "partial"
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background"
-                      }`}
-                    >
-                      {checkState === "all" && (
-                        <CheckIcon className="size-3" />
-                      )}
-                      {checkState === "partial" && (
-                        <MinusIcon className="size-3" />
-                      )}
-                    </span>
-                    <span className="flex-1 text-left text-sm font-semibold text-foreground">{group.name}</span>
-                    <ChevronDownIcon
-                      className={`size-4 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-180"}`}
-                    />
-                  </button>
+                {section.groups.map((group) => {
+                  const checkState = getGroupCheckState(group);
+                  const isCollapsed = collapsed.has(group.name);
 
-                  {/* Permission items */}
-                  {!isCollapsed && (
-                    <div>
-                      {group.permissions.map((perm) => (
-                        <div
-                          key={perm.key}
-                          className={`flex items-start gap-2.5 px-3 py-2 pl-5 transition-colors hover:bg-muted/50 ${
-                            perm.locked ? "cursor-default" : "cursor-pointer"
+                  return (
+                    <div key={group.name} className="border-t border-border">
+                      {/* Group header: checkbox toggles the group, the rest collapses it */}
+                      <div className="flex w-full items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/50">
+                        <span
+                          role="checkbox"
+                          aria-checked={checkState === "all" ? true : checkState === "none" ? false : "mixed"}
+                          aria-label={`All ${group.name} permissions`}
+                          tabIndex={0}
+                          onClick={() => toggleGroupSelection(group)}
+                          onKeyDown={(e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              toggleGroupSelection(group);
+                            }
+                          }}
+                          className={`flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded border transition-colors ${
+                            checkState === "all" || checkState === "partial"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background"
                           }`}
                         >
-                          <span
-                            role="checkbox"
-                            aria-checked={selected.has(perm.key)}
-                            aria-disabled={perm.locked || undefined}
-                            aria-label={perm.key}
-                            tabIndex={perm.locked ? -1 : 0}
-                            onClick={(e) => { e.preventDefault(); toggle(perm.key, perm.locked); }}
-                            onKeyDown={(e) => {
-                              if (e.key === " " || e.key === "Enter") {
-                                e.preventDefault();
-                                toggle(perm.key, perm.locked);
-                              }
-                            }}
-                            className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors ${
-                              selected.has(perm.key)
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border bg-background"
-                            } ${perm.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
-                          >
-                            {selected.has(perm.key) && (
-                              <CheckIcon className="size-3" />
-                            )}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-sm font-medium ${perm.locked ? "text-muted-foreground" : "text-foreground"}`}>
-                                {perm.key}
+                          {checkState === "all" && (
+                            <CheckIcon className="size-3" />
+                          )}
+                          {checkState === "partial" && (
+                            <MinusIcon className="size-3" />
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleCollapse(group.name)}
+                          aria-expanded={!isCollapsed}
+                          className="flex flex-1 items-center gap-2 text-left"
+                        >
+                          <span className="flex-1 text-sm font-semibold text-foreground">{group.name}</span>
+                          <ChevronDownIcon
+                            className={`size-4 text-muted-foreground transition-transform ${isCollapsed ? "" : "rotate-180"}`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Permission items */}
+                      {!isCollapsed && (
+                        <div>
+                          {group.permissions.map((perm) => (
+                            <div
+                              key={perm.key}
+                              className={`flex items-start gap-2.5 px-3 py-2 pl-5 transition-colors hover:bg-muted/50 ${
+                                perm.locked ? "cursor-default" : "cursor-pointer"
+                              }`}
+                            >
+                              <span
+                                role="checkbox"
+                                aria-checked={selected.has(perm.key)}
+                                aria-disabled={perm.locked || undefined}
+                                aria-label={perm.label}
+                                tabIndex={perm.locked ? -1 : 0}
+                                onClick={(e) => { e.preventDefault(); toggle(perm.key, perm.locked); }}
+                                onKeyDown={(e) => {
+                                  if (e.key === " " || e.key === "Enter") {
+                                    e.preventDefault();
+                                    toggle(perm.key, perm.locked);
+                                  }
+                                }}
+                                className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded border transition-colors ${
+                                  selected.has(perm.key)
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-background"
+                                } ${perm.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
+                              >
+                                {selected.has(perm.key) && (
+                                  <CheckIcon className="size-3" />
+                                )}
                               </span>
-                              {perm.locked && (
-                                <LockIcon className="size-3.5 text-muted-foreground" />
-                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium text-foreground">{perm.label}</span>
+                                  {perm.locked && (
+                                    <LockIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Always granted" />
+                                  )}
+                                </div>
+                                <p className="mt-0.5 font-mono text-xs text-muted-foreground">{perm.key}</p>
+                              </div>
                             </div>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{perm.label}</p>
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-            {filteredGroups.length === 0 && (
+                  );
+                })}
+              </div>
+            ))}
+            {!hasResults && (
               <div className="px-3 py-6 text-center text-sm text-muted-foreground">No permissions found</div>
             )}
           </div>
