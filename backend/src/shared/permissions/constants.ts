@@ -130,6 +130,32 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
 ];
 
 /**
+ * Permissions that every role implicitly holds.
+ *
+ * These are read-only and required for the app shell to function at all:
+ * without `role:view` a member cannot see the role they were assigned, and
+ * without `credential:view` they cannot see the git connection backing their
+ * own projects. The role editor renders them as locked checkboxes; this
+ * constant is what makes that lock truthful, since roles can also be created
+ * and updated directly through the API.
+ *
+ * Applied after the "cannot assign permissions you do not possess" escalation
+ * check — both are view-only, so granting them is never an escalation.
+ */
+export const BASELINE_PERMISSIONS: PermissionKey[] = [
+  PERMISSIONS.ROLE_VIEW,
+  PERMISSIONS.CREDENTIAL_VIEW,
+];
+
+/**
+ * Merge the baseline permissions into a requested permission set, preserving
+ * order and removing duplicates.
+ */
+export function withBaselinePermissions(permissions: string[]): string[] {
+  return Array.from(new Set<string>([...BASELINE_PERMISSIONS, ...permissions]));
+}
+
+/**
  * Critical permissions that require special handling.
  * These cannot be assigned by users who don't already possess them.
  */

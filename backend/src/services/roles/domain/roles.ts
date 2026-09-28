@@ -4,7 +4,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
-import { ALL_PERMISSIONS } from "../../../shared/permissions/constants.js";
+import { ALL_PERMISSIONS, withBaselinePermissions } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
 
@@ -128,6 +128,9 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
     throw new RolesError("Cannot assign permissions you do not possess", "forbidden");
   }
 
+  // Every role implicitly holds the read-only baseline permissions.
+  const effectivePermissions = withBaselinePermissions(permissions);
+
   const id = randomUUID();
   const { error } = await supabaseAdmin.from("roles").insert({
     id,
@@ -145,8 +148,8 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
   });
 
   // Insert permissions
-  if (permissions.length > 0) {
-    const permRows = permissions.map((permKey) => ({ role_id: id, permission_id: permKey }));
+  if (effectivePermissions.length > 0) {
+    const permRows = effectivePermissions.map((permKey) => ({ role_id: id, permission_id: permKey }));
     const { error: permError } = await supabaseAdmin.from("role_permissions").insert(permRows);
     if (permError) {
       // Clean up the orphaned role
@@ -166,7 +169,7 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
     isSystem: false,
     isEditable: true,
     isDeletable: true,
-    permissions,
+    permissions: effectivePermissions,
   };
 }
 
@@ -242,12 +245,15 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
       throw new RolesError("Cannot assign permissions you do not possess", "forbidden");
     }
 
+    // Every role implicitly holds the read-only baseline permissions.
+    const effectivePermissions = withBaselinePermissions(params.permissions);
+
     const { error: rpcError } = await (supabaseAdmin.rpc as any)("replace_role_permissions", {
       _role_id: roleId,
-      _permission_ids: params.permissions,
+      _permission_ids: effectivePermissions,
     });
     throwOnError(rpcError, RolesError, { internalMsg: "Failed to update permissions" });
-    finalPermissions = params.permissions;
+    finalPermissions = effectivePermissions;
   } else {
     const { data: perms, error: permsError } = await supabaseAdmin
       .from("role_permissions")
