@@ -106,8 +106,16 @@ export interface WizardState {
   // Step 1
   selectedProvider: string;
   selectedProviderId: string;
-  // Deploy strategy (always VPS — EC2 for AWS, Compute Engine for GCP)
-  deployStrategy: "vps";
+  /**
+   * Where the app runs.
+   *  - "vps"    → a virtual machine (EC2 / Compute Engine) via Dokploy
+   *  - "static" → object storage + CDN (S3 + CloudFront / GCS + Cloud CDN)
+   *
+   * Chosen in the Plan step. Once repo analysis exposes a static/server
+   * classification, this should be pre-selected from it rather than left to the
+   * user to get right — see .kiro/specs/static-deploy-targets task 3.
+   */
+  deployStrategy: "vps" | "static";
   // Env Vars
   envVars: Array<{ name: string; value: string }>;
   // Analysis

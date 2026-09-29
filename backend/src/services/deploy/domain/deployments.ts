@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, unwrapQuery, assertOwnership, normalizePagination, paginatedQuery } from "../../../shared/supabase/query.js";
-import type { DeploymentRow, DeploymentStatus, ServiceEntry } from "../types.js";
+import type { DeployStrategy, DeploymentRow, DeploymentStatus, ServiceEntry } from "../types.js";
 import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";
 import { createDeploymentRecord } from "./processor.js";
@@ -221,7 +221,7 @@ export interface CreateDeploymentParams {
   techStack?: string[];
   primaryLanguage?: string;
   registryUrl?: string;
-  deployStrategy?: string;
+  deployStrategy?: DeployStrategy;
   buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   useRepoDockerfile?: boolean;
   skipPipeline?: boolean;
@@ -286,8 +286,14 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
   // the provision-server stage with an opaque error — after the user has
   // already committed to the deploy. Check up front and reject with a clear,
   // actionable message instead.
+  // Static deploys are exempt: they never provision a VPS. They go to object
+  // storage + CDN via the native pipeline (see routePipeline), which resolves
+  // credentials itself in stageProviderCredentials and fails there with a
+  // specific error if they are unusable.
   const dokployAutoProvision =
-    env.DEPLOY_PROVIDER === "dokploy" && !process.env.DOKPLOY_DEFAULT_SERVER_IP;
+    env.DEPLOY_PROVIDER === "dokploy" &&
+    !process.env.DOKPLOY_DEFAULT_SERVER_IP &&
+    deployStrategy !== "static";
   if (dokployAutoProvision && !skipPipeline) {
     const creds = await getProviderCredentialsSafe(providerId);
     if (!creds || !hasUsableCredential(creds.credential)) {
@@ -313,7 +319,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
       techStack,
       primaryLanguage,
       hasDocker: buildMethod === "dockerfile",
-      deployStrategy: (deployStrategy as "vps" | "managed" | "static" | undefined) ?? "managed",
+      deployStrategy: deployStrategy ?? "managed",
       templateId,
       buildMethod,
       registryUrl,

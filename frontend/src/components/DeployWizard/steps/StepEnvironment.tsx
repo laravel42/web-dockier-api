@@ -1,19 +1,77 @@
 import type { WizardState } from "../types";
 import { PROVIDER_REGIONS } from "../constants";
 import { getPlans } from "../plans";
-import { CircleCheckIcon, FlaskConicalIcon, RocketIcon } from "lucide-react";
+import { CircleCheckIcon, FlaskConicalIcon, RocketIcon, ServerIcon, GlobeIcon } from "lucide-react";
 
-export default function StepEnvironment({ state, templateId, onChange, onRegionChange }: {
+/** Per-provider names for the static hosting stack, for accurate labelling. */
+const STATIC_STACK: Record<string, string> = {
+  aws: "S3 + CloudFront",
+  gcp: "Cloud Storage + Cloud CDN",
+};
+
+export default function StepEnvironment({ state, templateId, onChange, onRegionChange, onStrategyChange }: {
   state: WizardState;
   templateId?: string;
   onChange: (env: "staging" | "production", plan: number) => void;
   onRegionChange: (region: string) => void;
+  onStrategyChange: (strategy: "vps" | "static") => void;
 }) {
   const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, templateId);
   const regions = PROVIDER_REGIONS[state.selectedProvider] || [];
+  const isStatic = state.deployStrategy === "static";
+  const staticStack = STATIC_STACK[state.selectedProvider] || "object storage + CDN";
 
   return (
     <div className="space-y-4">
+      {/* Deploy target */}
+      <div>
+        <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Deploy target</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => onStrategyChange("vps")}
+            aria-pressed={!isStatic}
+            className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
+              !isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <ServerIcon className="size-4 text-text-secondary shrink-0" />
+              <span className="text-sm font-semibold text-text">Server</span>
+              {!isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
+            </div>
+            <p className="text-xs/relaxed text-text-muted">
+              Runs your app on a virtual machine. Needed for a backend, server-side rendering, or a database.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onStrategyChange("static")}
+            aria-pressed={isStatic}
+            className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
+              isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <GlobeIcon className="size-4 text-text-secondary shrink-0" />
+              <span className="text-sm font-semibold text-text">Static hosting</span>
+              {isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
+            </div>
+            <p className="text-xs/relaxed text-text-muted">
+              Uploads your built site to {staticStack}. No server to pay for, served from the edge. Only for sites
+              that build to static files.
+            </p>
+          </button>
+        </div>
+        {isStatic && (
+          <p className="mt-2 text-xs/relaxed text-text-muted">
+            Your site is built from source and the output uploaded, so no instance size applies. Apps that need a
+            server process (Laravel, Django, SSR Next/Nuxt/Astro) are rejected before anything is provisioned.
+          </p>
+        )}
+      </div>
+
       {/* Environment toggle */}
       <div>
         <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Environment</p>
@@ -68,7 +126,8 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
         </div>
       )}
 
-      {/* Plans */}
+      {/* Plans — instance sizing only applies when a server is provisioned. */}
+      {!isStatic && (
       <div>
         <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Deployment Plans</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -121,6 +180,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -3,9 +3,36 @@ import { buildDockerUserData } from "./user-data.js";
 
 /** Generate a Pulumi TypeScript program for AWS */
 export function buildAws(p: DeployParams): string {
+  if (p.deployStrategy === "static") return buildAwsStaticNote(p);
   if (p.deployStrategy === "vps") return buildAwsEc2(p);
   // "managed" or default → ECS Fargate
   return buildAwsEcsFargate(p);
+}
+
+/**
+ * AWS static sites are provisioned by CloudFormation (the s3.yml template in
+ * AwsS3Adapter), not Pulumi — unlike GCP static, which does use a Pulumi
+ * program. But a tofu_script is generated and stored on every deployment row,
+ * so returning nothing here would leave the ECS Fargate program on a static
+ * deployment: misleading to anyone reading the record, and a trap for any
+ * future code that decides to execute a stored script.
+ *
+ * Emit an inert, self-explaining placeholder instead.
+ */
+function buildAwsStaticNote(p: DeployParams): string {
+  return `// ─────────────────────────────────────────────────
+// AWS S3 + CloudFront static site — no Pulumi program
+// App: ${p.appName}
+// Repo: ${p.repo}@${p.branch} | Region: ${p.region}
+// ─────────────────────────────────────────────────
+//
+// This deploy strategy is provisioned through CloudFormation, not Pulumi.
+// The stack is created from s3.yml by AwsS3Adapter, which also builds the
+// site and uploads the output to S3. There is intentionally no
+// infrastructure-as-code to run here.
+//
+// Estimated resources: S3 bucket, CloudFront distribution, Origin Access Control.
+`;
 }
 
 function buildAwsEcsFargate(p: DeployParams): string {

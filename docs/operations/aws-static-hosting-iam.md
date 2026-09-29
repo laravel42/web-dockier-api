@@ -1,0 +1,164 @@
+# AWS IAM policy for static site hosting
+
+Static deploys (`deployStrategy: "static"`) run through `AwsS3Adapter`, which uses
+the **tenant's own AWS credentials** from their configured server provider. Those
+credentials need permissions beyond a VPS/ECS deploy, because the adapter creates
+an S3 bucket and a CloudFront distribution directly.
+
+Derived from `backend/src/services/deploy/domain/adapters/aws-s3.ts`, the
+`s3.yml` CloudFormation template, and `infra/aws-helpers.ts`. If any of those
+change, update this document.
+
+## Resource namespace
+
+Every bucket Dockier creates is `dockier-<account-id>-…`:
+
+| Resource | Name |
+|---|---|
+| Built site | `dockier-<account-id>-<repo>-static` |
+| CloudFormation template staging | `dockier-<account-id>-templates` |
+
+Both are produced by `staticSiteBucketName()` / `templateBucketName()` in the
+adapter — the naming rule lives there and nowhere else. `s3.yml` receives the
+bucket name through its required `SourceBucket` parameter rather than deriving it,
+so the two cannot drift.
+
+Two reasons for this shape. S3 bucket names are **globally unique across all of
+AWS**, so the account id is what stops a generic repo name colliding with a
+stranger's bucket. And it lets the policy below scope S3 to
+`arn:aws:s3:::dockier-*` instead of a pattern like `*-static-site`, which would
+grant access to any similarly-named bucket in any account.
+
+The site bucket name is deliberately **stable across deploys** — derived from the
+account and repo only. `destroy()` recomputes it to delete the bucket and the
+CloudFront origin points at it, so folding anything per-deploy into the name
+would create a new bucket each deploy, orphan the previous one, and leave
+teardown deleting the wrong thing.
+
+> **Note:** CloudFormation **stack** names are still `image-builder-app-<name>`
+> via `lib/naming.ts`. That prefix is legacy, shared with the EC2 and ECS
+> adapters, and cannot be renamed without orphaning live stacks — see the
+> namespace-migration task in `.kiro/specs/static-deploy-targets/tasks.md`.
+
+## What the adapter does, and what each step needs
+
+| Step | Code | Permission |
+|---|---|---|
+| Resolve account id | `getAwsAccountId()` | `sts:GetCallerIdentity` |
+| Check / create the site bucket | `ensureS3Bucket()` → `HeadBucket`, `CreateBucket` | `s3:ListBucket`, `s3:CreateBucket` |
+| Allow CloudFront OAC to read | `PutPublicAccessBlockCommand` | `s3:PutBucketPublicAccessBlock` |
+| Upload the built site | `syncFilesToS3()` | `s3:PutObject` |
+| Stage the CFN template | `ensureS3Bucket` + `PutObject` on the templates bucket | `s3:CreateBucket`, `s3:PutObject` |
+| Create / update the stack | `createOrUpdateStack()`, `pollStackStatus()` | `cloudformation:CreateStack`, `UpdateStack`, `DescribeStacks` |
+| Bucket policy for the distribution | `AWS::S3::BucketPolicy` in `s3.yml` | `s3:PutBucketPolicy`, `s3:GetBucketPolicy` |
+| CDN + origin access | `AWS::CloudFront::Distribution`, `AWS::CloudFront::OriginAccessControl` | `cloudfront:*Distribution*`, `cloudfront:*OriginAccessControl*` |
+| Teardown | `destroy()` | `s3:DeleteObject`, `s3:DeleteBucket`, `cloudformation:DeleteStack`, `cloudfront:DeleteDistribution` |
+
+Without a CloudFormation service role, CloudFormation performs its operations
+using the permissions of the **calling identity**. That is why the caller needs
+the CloudFront and bucket-policy permissions even though CloudFormation makes
+those calls. Introducing a dedicated service role later would move those
+permissions onto the role and require only `iam:PassRole` here — a worthwhile
+tightening, but out of scope for now.
+
+## Policy
+
+CloudFormation actions are limited to the four the code actually invokes
+(`CreateStack`, `UpdateStack`, `DescribeStacks`, `DeleteStack`). If we later
+surface stack events in deploy logs, `cloudformation:DescribeStackEvents` will
+need adding — it is deliberately absent rather than granted speculatively.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AccountIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DockierBuckets",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPolicy",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucket"
+      ],
+      "Resource": "arn:aws:s3:::dockier-*"
+    },
+    {
+      "Sid": "DockierBucketObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::dockier-*/*"
+    },
+    {
+      "Sid": "StackManagement",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DeleteStack"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CdnDistribution",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateDistribution",
+        "cloudfront:GetDistribution",
+        "cloudfront:GetDistributionConfig",
+        "cloudfront:UpdateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:TagResource",
+        "cloudfront:CreateOriginAccessControl",
+        "cloudfront:GetOriginAccessControl",
+        "cloudfront:UpdateOriginAccessControl",
+        "cloudfront:DeleteOriginAccessControl"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+CloudFront does not support resource-level permissions for these actions, hence
+`"Resource": "*"` there.
+
+`cloudfront:CreateInvalidation` is **not** included. No code path calls
+CloudFront directly today, so it would be an unused grant. It becomes necessary
+when we add explicit invalidation — see the notes below.
+
+## Notes
+
+- **`s3:ListBucket` covers `HeadBucket`.** There is no `s3:HeadBucket` action —
+  the existence check in `ensureS3Bucket` is authorized by `s3:ListBucket`. A
+  missing bucket surfaces as a 404 and the adapter creates it; a *permissions*
+  failure surfaces as a 403 and is rethrown.
+- **Cache invalidation is not currently needed for correctness.** The
+  distribution uses CloudFront's CachingOptimized policy
+  (`658327ea-f89d-4fab-a63d-7e88639e58f6`), which respects origin
+  `Cache-Control`. The adapter uploads HTML as `no-cache` and hashed assets as
+  `immutable`, so a redeploy serves fresh content. Explicit invalidation is still
+  worth adding for forced refreshes and for sites with unhashed assets.
+- **First distribution is slow.** CloudFront takes 15–20 minutes to provision and
+  about as long to delete. A deploy sitting in `deploying` is usually normal.
+- **`us-east-1` is special.** `CreateBucket` omits `LocationConstraint` there and
+  sets it everywhere else; handled in `lib/aws.ts`.
+- **SPA error mapping.** `s3.yml` maps 403 and 404 to `/index.html` with a 200.
+  Correct for a single-page app, questionable for a multi-page static site, which
+  loses real 404s. Revisit when the static feature covers both.
+- **Custom domains are not covered.** They additionally need ACM in `us-east-1`
+  plus DNS — Phase 4 of `.kiro/specs/static-deploy-targets/`.

@@ -23,31 +23,57 @@ import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
 
 /**
- * Sanitize a name for use as an S3 bucket name.
- * S3 bucket naming rules:
- * - 3–63 characters
- * - Lowercase letters, numbers, and hyphens only
- * - Must start and end with a letter or number
- * - No consecutive periods or hyphens adjacent to periods
+ * Every bucket Dockier creates is namespaced `dockier-<account-id>-…`.
+ *
+ * Two reasons. S3 bucket names are globally unique across all of AWS, so an
+ * unqualified name like `my-site-static` collides with whoever registered it
+ * first — the account id makes it ours. And it lets the tenant's IAM policy
+ * scope S3 access to `arn:aws:s3:::dockier-*` instead of a wildcard that would
+ * match unrelated buckets in their account. See
+ * docs/operations/aws-static-hosting-iam.md.
  */
-function sanitizeBucketName(name: string): string {
+const BUCKET_PREFIX = "dockier";
+
+/** Max length of an S3 bucket name. */
+const MAX_BUCKET_NAME = 63;
+
+/**
+ * Sanitize a fragment for use inside an S3 bucket name.
+ * S3 naming rules: lowercase letters, numbers and hyphens only, 3–63 characters
+ * total, must start and end alphanumeric, no hyphens adjacent to periods.
+ */
+function sanitizeBucketFragment(name: string, maxLength: number): string {
   let sanitized = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")  // Replace invalid chars (underscores, dots, etc.) with hyphens
     .replace(/-{2,}/g, "-")        // Collapse consecutive hyphens
     .replace(/^-+|-+$/g, "");      // Trim leading/trailing hyphens
 
-  // Ensure minimum length
-  if (sanitized.length < 3) {
-    sanitized = sanitized.padEnd(3, "0");
+  if (sanitized.length < 1) sanitized = "app";
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.slice(0, maxLength).replace(/-+$/, "");
   }
-
-  // Truncate to leave room for the "-static-site" suffix (63 - 12 = 51)
-  if (sanitized.length > 51) {
-    sanitized = sanitized.slice(0, 51).replace(/-+$/, "");
-  }
-
   return sanitized;
+}
+
+/**
+ * Bucket holding the built site.
+ *
+ * Derived from the account id and the repo name ONLY — deliberately stable
+ * across deploys. `destroy()` recomputes this name to delete the bucket, and the
+ * CloudFormation stack's origin points at it, so folding anything per-deploy
+ * (a deployment id, a commit) into the name would create a fresh bucket on every
+ * deploy, orphan the previous one, and leave teardown deleting the wrong thing.
+ */
+export function staticSiteBucketName(accountId: string, repoName: string): string {
+  const fixed = `${BUCKET_PREFIX}-${accountId}--static`.length;
+  const repo = sanitizeBucketFragment(repoName, MAX_BUCKET_NAME - fixed);
+  return `${BUCKET_PREFIX}-${accountId}-${repo}-static`;
+}
+
+/** Bucket used to stage CloudFormation templates. One per account. */
+export function templateBucketName(accountId: string): string {
+  return `${BUCKET_PREFIX}-${accountId}-templates`;
 }
 
 /**
@@ -147,8 +173,9 @@ export class AwsS3Adapter implements DeployAdapter {
       );
     }
     // 4. Create S3 bucket if it doesn't exist
-    const websiteBucket = `${sanitizeBucketName(repoName)}-static-site`;
+    const websiteBucket = staticSiteBucketName(accountId, repoName);
     await appendLog("── Upload to S3 ───────────────────");
+    await appendLog(`ℹ Bucket: ${websiteBucket}`);
 
     const { S3Client, PutObjectCommand, PutPublicAccessBlockCommand } = await getS3();
     const s3 = new S3Client({ region, credentials });
@@ -176,8 +203,7 @@ export class AwsS3Adapter implements DeployAdapter {
     const templateBody = readCfnTemplate("s3.yml");
 
     // 7. Upload template to S3
-    const codebuildProject = "image-builder";
-    const templateBucket = `${codebuildProject}-templates-${accountId}`;
+    const templateBucket = templateBucketName(accountId);
     const templateKey = "s3.yml";
 
     await ensureS3Bucket(region, credentials, templateBucket);
@@ -192,11 +218,16 @@ export class AwsS3Adapter implements DeployAdapter {
     const templateUrl = `https://${templateBucket}.s3.amazonaws.com/${templateKey}`;
     await appendLog("✓ Template uploaded to S3");
 
-    // 8. Build CloudFormation parameters
-    const sanitizedName = sanitizeBucketName(repoName);
+    // 8. Build CloudFormation parameters.
+    //
+    // SourceBucket is authoritative: the template references it for the bucket
+    // policy and the CloudFront origin rather than re-deriving the name, so the
+    // naming rule lives in one place (staticSiteBucketName) instead of being
+    // duplicated in YAML. AppName is only used for human-facing labels — the
+    // OAC name, the distribution comment, and tags.
     const stackName = stackNameFor(repoName);
     const params = [
-      { ParameterKey: "AppName", ParameterValue: sanitizedName },
+      { ParameterKey: "AppName", ParameterValue: sanitizeBucketFragment(repoName, 40) },
       { ParameterKey: "SourceBucket", ParameterValue: websiteBucket },
       { ParameterKey: "BuildId", ParameterValue: deploymentId },
     ];
@@ -308,11 +339,24 @@ export class AwsS3Adapter implements DeployAdapter {
     // Delete CloudFormation stack (fire and forget — CloudFront distributions take 15-20 min to delete)
     await destroyCfnStack(stackName, ctx.region, credentials, ctx.appendLog, errors);
 
-    // Delete S3 static site bucket (empty objects first, do this before stack finishes deleting)
+    // Delete S3 static site bucket (empty objects first, do this before stack finishes deleting).
+    //
+    // The bucket name is account-scoped, and DestroyContext carries no account id,
+    // so resolve it via STS. Without it we cannot name the bucket and would leave
+    // a paid-for bucket behind, so a failure here is reported rather than ignored.
     try {
+      const accountId = await getAwsAccountId(ctx.region, credentials);
+      if (!accountId) {
+        errors.push("Could not determine AWS account ID — static site bucket not deleted");
+        return {
+          success: false,
+          message: `Destroyed stack ${stackName}; bucket left in place: ${errors.join("; ")}`,
+          errors,
+        };
+      }
       const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await getS3();
       const s3 = new S3Client({ region: ctx.region, credentials });
-      const bucketName = `${sanitizeBucketName(ctx.appName)}-static-site`;
+      const bucketName = staticSiteBucketName(accountId, ctx.appName);
       let continuationToken: string | undefined;
       do {
         const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, ContinuationToken: continuationToken }));
@@ -323,7 +367,18 @@ export class AwsS3Adapter implements DeployAdapter {
       } while (continuationToken);
       await s3.send(new DeleteBucketCommand({ Bucket: bucketName }));
       await ctx.appendLog(`✓ S3 bucket ${bucketName} deleted`);
-    } catch {}
+    } catch (e: unknown) {
+      // An already-absent bucket is a success, not a failure. Anything else
+      // leaves a bucket the tenant keeps paying for, so surface it instead of
+      // swallowing it (this used to be an empty catch).
+      const message = e instanceof Error ? e.message : String(e);
+      if (/NoSuchBucket|NotFound/i.test(message)) {
+        await ctx.appendLog("ℹ Static site bucket already gone");
+      } else {
+        errors.push(`Bucket delete: ${message}`);
+        await ctx.appendLog(`⚠ Could not delete the static site bucket: ${message}`);
+      }
+    }
 
     return {
       success: errors.length === 0,

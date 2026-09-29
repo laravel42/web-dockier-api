@@ -41,7 +41,11 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
           techStack: z.array(z.string().max(50)).max(20).optional(),
           primaryLanguage: z.string().max(50).optional(),
           registryUrl: z.string().max(500).optional(),
-          deployStrategy: z.string().max(50).optional(),
+          // Matches /deploy/tofu/generate. Previously z.string().max(50), which
+          // let an unrecognized value through to be silently coerced to
+          // "managed" downstream — so a typo picked a different deploy target
+          // instead of failing the request.
+          deployStrategy: z.enum(["vps", "managed", "static"]).optional(),
           buildMethod: z.enum(["dockerfile", "railpack", "nixpacks", "codebuild"]).optional(),
           useRepoDockerfile: z.boolean().optional(),
           skipPipeline: z.boolean().optional(),

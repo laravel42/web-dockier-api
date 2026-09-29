@@ -33,6 +33,22 @@ const DEPLOY_TEMPLATES: DeployTemplate[] = [
     buildMethod: "dockerfile",
   },
   {
+    // Without this entry, resolveDeployTemplate finds no aws+static match and
+    // falls through to DEPLOY_TEMPLATES[0] (aws-managed-node), silently giving a
+    // static deploy an ECS template and the wrong build_method.
+    //
+    // buildMethod is nominal here: AwsS3Adapter builds the site itself with the
+    // repo's own package manager and never builds a container image.
+    id: "aws-static-generic",
+    provider: "aws",
+    strategy: "static",
+    runtimeFamily: "generic",
+    label: "AWS S3 + CloudFront",
+    description: "Static hosting on S3 with a CloudFront CDN distribution.",
+    defaultServices: [],
+    buildMethod: "dockerfile",
+  },
+  {
     id: "gcp-managed-service",
     provider: "gcp",
     strategy: "managed",

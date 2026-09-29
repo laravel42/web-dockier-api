@@ -1,9 +1,19 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Deploy a static website with CloudFront CDN (S3 bucket created by CodeBuild).
+# Static website on S3 behind CloudFront, with Origin Access Control.
+#
+# The bucket is created and populated by AwsS3Adapter BEFORE this stack is
+# deployed; the stack only attaches the bucket policy and fronts it with a CDN.
+#
+# SourceBucket is authoritative and required. The bucket naming rule lives in
+# staticSiteBucketName() in the adapter and must NOT be duplicated here — a
+# derived name like "${AppName}-static-site" has to agree with the adapter for
+# the origin to resolve at all, and drifted from it once already.
+Description: Deploy a static website with CloudFront CDN over an existing S3 bucket.
 
 Parameters:
   AppName:
     Type: String
+    Description: Human-facing label for the OAC name, distribution comment and tags.
   BuildId:
     Type: String
     Default: ""
@@ -12,13 +22,14 @@ Parameters:
     Default: ""
   SourceBucket:
     Type: String
-    Default: ""
+    Description: Name of the existing S3 bucket holding the built site.
+    MinLength: 3
 
 Resources:
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Sub "${AppName}-static-site"
+      Bucket: !Ref SourceBucket
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -27,7 +38,7 @@ Resources:
             Principal:
               Service: cloudfront.amazonaws.com
             Action: s3:GetObject
-            Resource: !Sub "arn:aws:s3:::${AppName}-static-site/*"
+            Resource: !Sub "arn:aws:s3:::${SourceBucket}/*"
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
@@ -52,7 +63,7 @@ Resources:
         PriceClass: PriceClass_100
         Origins:
           - Id: S3Origin
-            DomainName: !Sub "${AppName}-static-site.s3.${AWS::Region}.amazonaws.com"
+            DomainName: !Sub "${SourceBucket}.s3.${AWS::Region}.amazonaws.com"
             OriginAccessControlId: !Ref OriginAccessControl
             S3OriginConfig:
               OriginAccessIdentity: ""
@@ -87,6 +98,6 @@ Outputs:
   DistributionDomain:
     Value: !GetAtt Distribution.DomainName
   WebsiteBucketName:
-    Value: !Sub "${AppName}-static-site"
+    Value: !Ref SourceBucket
   BuildId:
     Value: !Ref BuildId

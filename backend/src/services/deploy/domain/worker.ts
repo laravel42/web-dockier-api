@@ -16,7 +16,16 @@ import { assertDokployConfigured } from "./dokploy/config.js";
 import { env } from "../../../shared/config.js";
 
 /**
- * Route to the appropriate pipeline based on DEPLOY_PROVIDER config.
+ * Route to the appropriate pipeline.
+ *
+ * Static sites always take the native path, whatever DEPLOY_PROVIDER says.
+ * Object storage + CDN (S3+CloudFront / GCS+Cloud CDN) is both cheaper and
+ * faster for them than running nginx on a VPS: no instance is consumed and the
+ * content is served from the edge rather than one region. Dokploy has no
+ * equivalent target — its own "static" build type only copies build output that
+ * is already committed to the repo, which is a different thing entirely.
+ *
+ * Otherwise:
  * - "dokploy" → Dokploy PaaS pipeline (project → server → app → deploy)
  * - "native"  → Legacy CloudFormation/Pulumi pipeline (clone → build → provision)
  *
@@ -24,6 +33,9 @@ import { env } from "../../../shared/config.js";
  * failures deep inside the pipeline.
  */
 async function routePipeline(event: PipelineInput): Promise<void> {
+  if (event.deployStrategy === "static") {
+    return executePipeline(event);
+  }
   if (env.DEPLOY_PROVIDER === "dokploy") {
     // Fail fast with a single clear error if the Dokploy provider is
     // misconfigured, before the deployment flips to "building" and crashes

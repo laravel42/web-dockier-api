@@ -14,6 +14,7 @@ import { unwrapQuery, assertOwnership } from "../../../shared/supabase/query.js"
 import { getProviderCredentialsSafe } from "../../../lib/provider-credentials.js";
 import { DeployError } from "./providers.js";
 import { createAndEnqueueDeployment } from "./deployments.js";
+import { toDeployStrategy } from "../types.js";
 
 type BuildMethod = "dockerfile" | "railpack" | "nixpacks" | "codebuild";
 
@@ -47,7 +48,7 @@ export async function redeployLatest(deploymentId: string, tenantId: string, cor
     projectId: source.project_id || undefined,
     repo: source.repo,
     branch: source.branch,
-    deployStrategy: source.deploy_strategy || "managed",
+    deployStrategy: toDeployStrategy(source.deploy_strategy),
     buildMethod,
     correlationId: correlationId ? `redeploy:${correlationId}` : undefined,
   });
@@ -80,7 +81,7 @@ export async function rollbackToDeployment(deploymentId: string, tenantId: strin
     projectId: source.project_id || undefined,
     repo: source.repo,
     branch: source.branch,
-    deployStrategy: source.deploy_strategy || "managed",
+    deployStrategy: toDeployStrategy(source.deploy_strategy),
     buildMethod,
     correlationId: correlationId ? `rollback:${source.commit_hash}:${correlationId}` : `rollback:${source.commit_hash}`,
   });

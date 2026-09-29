@@ -9,6 +9,7 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createAndEnqueueDeployment } from "./deployments.js";
+import { toDeployStrategy } from "../types.js";
 
 export interface GitPushEvent {
   /** Full repo identifier (e.g., "owner/repo") */
@@ -123,7 +124,9 @@ async function triggerDeployForProject(
     projectId: project.id,
     repo: project.repository,
     branch: project.branch,
-    deployStrategy: lastDeploy.deploy_strategy || "managed",
+    // Carries the target forward: once a project has deployed statically, later
+    // pushes stay on the static path instead of silently reverting to a VPS.
+    deployStrategy: toDeployStrategy(lastDeploy.deploy_strategy),
     correlationId: `push-to-deploy:${event.commitSha ?? "unknown"}`,
   });
 

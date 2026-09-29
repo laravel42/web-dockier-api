@@ -12,6 +12,36 @@ export type DeploymentRow = TableRow<"deployments">;
 
 export type DeploymentStatus = "pending" | "building" | "deploying" | "success" | "failed" | "destroyed" | "cancelled";
 
+/**
+ * Where a deployment runs.
+ *
+ *  - "vps"     → a single virtual machine (EC2 / Compute Engine)
+ *  - "managed" → a managed container runtime (ECS Fargate / Cloud Run)
+ *  - "static"  → object storage + CDN (S3 + CloudFront / GCS + Cloud CDN)
+ *
+ * Routing depends on this: "static" always takes the native pipeline regardless
+ * of DEPLOY_PROVIDER, because Dokploy has no object-storage target.
+ */
+export type DeployStrategy = "vps" | "managed" | "static";
+
+const DEPLOY_STRATEGIES: readonly DeployStrategy[] = ["vps", "managed", "static"];
+
+/**
+ * Narrow an untrusted string to a DeployStrategy, falling back to `fallback`.
+ *
+ * `deployments.deploy_strategy` is a plain TEXT column, so any value read back
+ * from the database is `string` as far as the type system is concerned. Use this
+ * at those boundaries (redeploy, rollback, push-to-deploy) rather than casting —
+ * a cast would let an unexpected value reach adapter lookup, where
+ * `getAdapter(provider, strategy)` throws a much less obvious error.
+ */
+export function toDeployStrategy(
+  value: string | null | undefined,
+  fallback: DeployStrategy = "managed",
+): DeployStrategy {
+  return DEPLOY_STRATEGIES.includes(value as DeployStrategy) ? (value as DeployStrategy) : fallback;
+}
+
 export type PostDeployCommand = {
   command: string;
   enabled: boolean;

@@ -31,15 +31,15 @@ See `requirements.md` and `design.md`. Verify file:line references against the c
   - [ ] 3.7 Allow editing `deployTarget` after creation in project settings, following the `pushToDeploy` pattern (`ProjectDetail/settings/DeploymentsSection.tsx:21-24`).
 
 - [ ] 4. Route static deploys to the native pipeline
-  - [ ] 4.1 Make `routePipeline` strategy-aware (`deploy/domain/worker.ts:27`): `deployStrategy === "static"` → `executePipeline`, regardless of `DEPLOY_PROVIDER`. `deployStrategy` is already on `PipelineInput`.
-  - [ ] 4.2 Exempt static from the Dokploy credential pre-flight (`deployments.ts:289-303`) — it checks a VPS-provisioning precondition that does not apply.
-  - [ ] 4.3 Derive `deployStrategy` from `project.settings.deployTarget` in `createAndEnqueueDeployment` when the caller sends none, so push-to-deploy and webhooks inherit it.
-  - [ ] 4.4 Tighten `deployStrategy` to `z.enum(["vps","managed","static"])` in `routes/deployments.ts:44` and drop the blind cast at `deployments.ts:316`.
-  - [ ] 4.5 Unit-test routing: static → native under `DEPLOY_PROVIDER=dokploy`; server → Dokploy; auto → unchanged.
+  - [x] 4.1 Make `routePipeline` strategy-aware (`deploy/domain/worker.ts:27`): `deployStrategy === "static"` → `executePipeline`, regardless of `DEPLOY_PROVIDER`. `deployStrategy` is already on `PipelineInput`.
+  - [x] 4.2 Exempt static from the Dokploy credential pre-flight (`deployments.ts:289-303`) — it checks a VPS-provisioning precondition that does not apply.
+  - [ ] 4.3 Derive `deployStrategy` from `project.settings.deployTarget` in `createAndEnqueueDeployment` when the caller sends none, so push-to-deploy and webhooks inherit it. — **blocked on task 2** (persistence). Partially mitigated: push-to-deploy now carries the previous deployment's strategy forward via `toDeployStrategy`, so a project that has deployed statically once stays static.
+  - [x] 4.4 Tighten `deployStrategy` to `z.enum(["vps","managed","static"])` in `routes/deployments.ts:44` and drop the blind cast at `deployments.ts:316`. — Also added a shared `DeployStrategy` type and `toDeployStrategy()` narrowing helper in `deploy/types.ts`, applied at the three DB boundaries that read the free-text `deploy_strategy` column (redeploy, rollback, push-to-deploy). Down payment on task 10.2.
+  - [x] 4.5 Unit-test routing: static → native under `DEPLOY_PROVIDER=dokploy`; server → Dokploy; auto → unchanged. — 7 cases in `domain/__tests__/route-pipeline.test.ts`.
 
 - [ ] 5. Make the AWS static path correct
-  - [ ] 5.1 Add an `aws-static-generic` entry to `DEPLOY_TEMPLATES` (`planning/templates.ts`). Without it, `resolveDeployTemplate` falls through to `DEPLOY_TEMPLATES[0]` = `aws-managed-node`, giving static deploys an ECS template and the wrong `build_method`.
-  - [ ] 5.2 Add a `static` branch to `buildAws()` (`pulumi-templates/aws.ts:6`) emitting an inert program. AWS static provisions via CloudFormation; today it would generate an ECS Fargate program.
+  - [x] 5.1 Add an `aws-static-generic` entry to `DEPLOY_TEMPLATES` (`planning/templates.ts`). Without it, `resolveDeployTemplate` falls through to `DEPLOY_TEMPLATES[0]` = `aws-managed-node`, giving static deploys an ECS template and the wrong `build_method`. — 6 tests in `planning/__tests__/templates.test.ts` pin every (provider, strategy) pair.
+  - [x] 5.2 Add a `static` branch to `buildAws()` (`pulumi-templates/aws.ts:6`) emitting an inert program. AWS static provisions via CloudFormation; today it would generate an ECS Fargate program.
   - [ ] 5.3 Implement build-time env vars for static (REQ-4.4). Resolve **OQ-4** (where they come from) first. Without this, a Vite SPA ships pointing at the wrong API URL.
   - [ ] 5.4 Improve static deploy logging: target, bucket, distribution id, file count.
   - [ ] 5.5 Add the first tests for `AwsS3Adapter` — at minimum `supports()`, `sanitizeBucketName()`, and the `getStaticDeployBlockReason` guard. No adapter tests exist today.
@@ -73,6 +73,32 @@ See `requirements.md` and `design.md`. Verify file:line references against the c
   - [ ] 9.1 ACM certificate issuance in `us-east-1` for CloudFront.
   - [ ] 9.2 Add the alternate domain name to the distribution and wire DNS.
   - [ ] 9.3 A static applier in the domains service, which today has only a Dokploy applier.
+
+## Resource namespace & CDN follow-ups
+
+- [x] 11. Namespace static-hosting buckets under `dockier-*`
+  - [x] 11.1 `dockier-<account-id>-<repo>-static` for the site and `dockier-<account-id>-templates` for CFN staging, replacing `<repo>-static-site` and `image-builder-templates-<account>`. Account id gives global uniqueness (S3 names are global); the prefix lets tenant IAM scope to `arn:aws:s3:::dockier-*` instead of `*-static-site`, which would match unrelated buckets in other accounts.
+  - [x] 11.2 Name stays derived from account + repo only — deliberately stable across deploys, because `destroy()` recomputes it and the CloudFront origin points at it. A per-deploy component would orphan a bucket per deploy and break teardown.
+  - [x] 11.3 `s3.yml` now takes the bucket through its required `SourceBucket` parameter instead of interpolating `${AppName}-static-site` in four places, so the naming rule exists only in the adapter.
+  - [x] 11.4 15 tests in `adapters/__tests__/aws-s3-naming.test.ts` covering stability, per-account and per-repo uniqueness, and the S3 naming rules including the recomputed 63-char budget.
+  - [x] 11.5 Fixed an empty `catch {}` in `destroy()` that silently swallowed bucket-deletion failures, leaving a bucket the tenant keeps paying for. An already-absent bucket is now treated as success; anything else is reported.
+  - Done before the first successful static deploy, so no buckets existed to migrate. Renaming after one would have needed a migration.
+
+- [ ] 12. CloudFront invalidation on redeploy
+  - [ ] 12.1 Nothing in the codebase calls CloudFront directly — there is no invalidation on redeploy. Not currently a correctness bug: the distribution uses CachingOptimized, which respects origin `Cache-Control`, and the adapter uploads HTML as `no-cache` with hashed assets as `immutable`. It matters for forced refreshes and for sites with unhashed assets.
+  - [ ] 12.2 Add `cloudfront:CreateInvalidation` to the documented IAM policy at the same time — deliberately omitted today rather than granted unused.
+
+- [ ] 13. Migrate the rest of the AWS resource namespace to `dockier-*` (needs a migration plan)
+  - [ ] 13.1 `stackNameFor()` in `lib/naming.ts` produces `image-builder-app-<name>` and is shared by the EC2, ECS and S3 adapters. **Live EC2/ECS deployments use these stack names** — renaming would make Dockier lose track of every existing stack, so teardown would target a non-existent stack and orphan the real infrastructure.
+  - [ ] 13.2 Needs either a grandfathering lookup (try the new name, fall back to the legacy one) or a one-off migration recorded per deployment. Unlike task 11 this cannot be done for free.
+  - [ ] 13.3 Same question for ECR repositories and any IAM roles/instance profiles created by the adapters.
+
+- [ ] 14. Skip Dockerfile generation for static deploys
+  - [ ] 14.1 `stageAnalyze` calls `analyzeAndGenerate` unconditionally (`pipeline/stages.ts:99`), so a static deploy generates a Dockerfile it never uses — and pays for an OpenAI call in the AI review. Observed in the first live static deploy: `✓ AI improved Dockerfile [3.8s]`. Skip when `ctx.isStaticDeploy`.
+
+- [ ] 15. Investigate framework misdetection on Astro repos
+  - [ ] 15.1 A repo with `astro@7.2.2` in its dependencies logged `Framework: spa 7.2.2`. The SPA fallback branch takes its version from React/Vue/Vite, so 7.2.2 matching Astro's version suggests an unexpected path through `repo-analyzer/analyzers/node.ts` — possibly related to the workspace detection (`Features: workspace, static-export`).
+  - [ ] 15.2 Harmless today: `static-export` was still detected, which is what `getStaticDeployBlockReason` checks, and the build succeeded. It matters for task 3, where detection drives the static proposal.
 
 ## Cleanup (independent)
 
