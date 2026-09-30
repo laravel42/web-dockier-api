@@ -158,13 +158,44 @@ describe("applyDomainConfigDokploy", () => {
     expect(mockClient.deleteDomain).not.toHaveBeenCalled();
   });
 
-  it("never throws — a createDomain error is logged and reported as a soft result", async () => {
+  // Reporting a registration failure as success is how a missing custom domain
+  // stayed invisible: the deploy log printed "Applied 1 custom domain" while
+  // Dokploy had rejected it, so the only trace was a logger.warn.
+  it("never throws, but reports a createDomain failure as unsuccessful and names the host", async () => {
     mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack" });
     mockListDomains.mockResolvedValue([{ id: "dom1", name: "app.example.com" }]);
     mockClient.listDomains.mockResolvedValue([]);
     mockClient.createDomain.mockRejectedValueOnce(new Error("dokploy 500"));
 
-    await expect(applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" })).resolves.toMatchObject({ success: true });
+    const res = await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("app.example.com");
+    expect(res.message).toContain("dokploy 500");
+  });
+
+  it("does not mark a certificate active for a domain that failed to register", async () => {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack" });
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "app.example.com" }]);
+    mockClient.listDomains.mockResolvedValue([]);
+    mockClient.createDomain.mockRejectedValueOnce(new Error("dokploy 500"));
+
+    await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    // ssl_certificates must not be updated when nothing was registered.
+    expect(certUpdates).toHaveLength(0);
+  });
+
+  it("reports how many domains were newly registered vs already present", async () => {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack" });
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "new.example.com" }, { id: "dom2", name: "old.example.com" }]);
+    mockClient.listDomains.mockResolvedValue([{ domainId: "existing", host: "old.example.com", certificateType: "letsencrypt" }]);
+
+    const res = await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("1 newly registered");
+    expect(res.message).toContain("1 already present");
   });
 });
 

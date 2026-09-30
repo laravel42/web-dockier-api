@@ -28,12 +28,16 @@ vi.mock("../mappings.js", () => ({
 const deleteApplication = vi.fn().mockResolvedValue(undefined);
 const deleteServer = vi.fn().mockResolvedValue(undefined);
 const deleteDatabase = vi.fn().mockResolvedValue(undefined);
+const listDomains = vi.fn().mockResolvedValue([]);
+const deleteDomain = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../client.js", () => ({
   createDokployClient: () => ({
     deleteApplication: (...a: unknown[]) => deleteApplication(...a),
     deleteServer: (...a: unknown[]) => deleteServer(...a),
     deleteDatabase: (...a: unknown[]) => deleteDatabase(...a),
+    listDomains: (...a: unknown[]) => listDomains(...a),
+    deleteDomain: (...a: unknown[]) => deleteDomain(...a),
   }),
 }));
 
@@ -94,6 +98,8 @@ const DATABASES = [
 
 afterEach(() => {
   vi.clearAllMocks();
+  listDomains.mockResolvedValue([]);
+  deleteDomain.mockResolvedValue(undefined);
   listDatabases.mockResolvedValue([]);
   deleteServerMapping.mockResolvedValue(undefined);
   deleteApplicationMapping.mockResolvedValue(undefined);
@@ -139,6 +145,62 @@ describe("teardownDokployProject — AWS happy path", () => {
     );
     expect(deleteApplicationMapping).toHaveBeenCalledWith("proj-1");
     expect(deleteServerMapping).toHaveBeenCalledWith("proj-1");
+  });
+
+  // A Traefik host can only be claimed by one application. A domain left behind
+  // on a deleted app makes the NEXT deploy's domain.create fail on a host that
+  // is still held, so the project's custom domain silently never comes back.
+  it("deletes the application's domains BEFORE the application itself", async () => {
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(APPLICATION);
+    listDomains.mockResolvedValue([
+      { domainId: "dom-1", host: "app.example.com" },
+      { domainId: "dom-2", host: "app-my-app-1-2-3-4.sslip.io" },
+    ]);
+
+    const order: string[] = [];
+    deleteDomain.mockImplementation(async (id: string) => { order.push(`domain:${id}`); });
+    deleteApplication.mockImplementation(async () => { order.push("application"); });
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(listDomains).toHaveBeenCalledWith("app-xyz");
+    expect(order).toEqual(["domain:dom-1", "domain:dom-2", "application"]);
+    expect(result.status).toBe("torn_down");
+  });
+
+  it("skips domains with no domainId rather than calling delete with undefined", async () => {
+    getServer.mockResolvedValue(null);
+    getApplication.mockResolvedValue(APPLICATION);
+    listDomains.mockResolvedValue([{ domainId: "", host: "broken.example.com" }]);
+
+    await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(deleteDomain).not.toHaveBeenCalled();
+    expect(deleteApplication).toHaveBeenCalledWith("app-xyz");
+  });
+
+  it("reports partial when a domain cannot be removed, keeping it retryable", async () => {
+    getServer.mockResolvedValue(null);
+    getApplication.mockResolvedValue(APPLICATION);
+    listDomains.mockResolvedValue([{ domainId: "dom-1", host: "app.example.com" }]);
+    deleteDomain.mockRejectedValueOnce(new Error("dokploy 500"));
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(result.status).toBe("partial");
+    expect(result.message).toContain("app.example.com");
+  });
+
+  it("treats an already-deleted domain as removed", async () => {
+    getServer.mockResolvedValue(null);
+    getApplication.mockResolvedValue(APPLICATION);
+    listDomains.mockResolvedValue([{ domainId: "dom-1", host: "app.example.com" }]);
+    deleteDomain.mockRejectedValueOnce(new Error("Domain not found"));
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(result.status).toBe("torn_down");
   });
 
   it("skips VM termination when the server has no instanceId", async () => {

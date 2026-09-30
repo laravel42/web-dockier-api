@@ -76,7 +76,28 @@ export async function teardownDokployProject(
   const steps: DokployTeardownStep[] = [];
   const client = createDokployClient();
 
-  // ─── 1. Remove the Dokploy application ─────────────────────────
+  // ─── 1. Remove the application's domains ───────────────────────
+  //
+  // MUST happen before the application: once it is gone its domains can no
+  // longer be enumerated. Whether Dokploy cascades domain rows on
+  // `application.remove` is undocumented, and a Traefik host can only be
+  // claimed by one application — so a domain left behind makes the NEXT deploy's
+  // `domain.create` fail on a host that is still held by a deleted app, and the
+  // project's custom domain silently never comes back.
+  if (application) {
+    for (const domain of await client.listDomains(application.dokployApplicationId)) {
+      if (!domain.domainId) continue;
+      steps.push(
+        await runStep(
+          `dokploy domain ${domain.host || domain.domainId}`,
+          () => client.deleteDomain(domain.domainId),
+          "record",
+        ),
+      );
+    }
+  }
+
+  // ─── 2. Remove the Dokploy application ─────────────────────────
   let applicationRemoved = true;
   if (application) {
     const step = await runStep(
@@ -88,7 +109,7 @@ export async function teardownDokployProject(
     applicationRemoved = step.success;
   }
 
-  // ─── 2. Remove provisioned database services ───────────────────
+  // ─── 3. Remove provisioned database services ───────────────────
   //
   // MUST happen before the server: Dokploy rejects `server.remove` while the
   // server still hosts services ("Server has active services, please delete
@@ -104,7 +125,7 @@ export async function teardownDokployProject(
     if (!step.success) databasesRemoved = false;
   }
 
-  // ─── 3. Remove the Dokploy remote server ───────────────────────
+  // ─── 4. Remove the Dokploy remote server ───────────────────────
   let serverRemoved = true;
   // Tracks whether the cloud VM is gone. Starts null = "no VM involved", which
   // is distinct from true/false: a BYO/pre-provisioned server (instanceId null)
@@ -121,7 +142,7 @@ export async function teardownDokployProject(
     steps.push(step);
     serverRemoved = step.success;
 
-    // ─── 4. Terminate the cloud VM on the tenant's account ───────
+    // ─── 5. Terminate the cloud VM on the tenant's account ───────
     // Runs even if the Dokploy record removal failed: the VM is the billable
     // resource, so stopping it is the priority.
     if (server.instanceId) {
@@ -131,7 +152,7 @@ export async function teardownDokployProject(
     }
   }
 
-  // ─── 5. Delete the mapping rows ────────────────────────────────
+  // ─── 6. Delete the mapping rows ────────────────────────────────
   //
   // A mapping row exists to keep a handle on something that still needs
   // cleanup, so it is dropped once that thing is gone. Deleting rows after a

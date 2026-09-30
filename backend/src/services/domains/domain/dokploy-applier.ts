@@ -106,10 +106,22 @@ export async function applyDomainConfigDokploy(params: {
     const existingByHost = new Map(existing.map((d) => [normHost(d.host), d]));
 
     // 1. Register user domains present in the DB but not on the app.
+    //
+    // A failure here is collected rather than swallowed. Reporting success for a
+    // domain Dokploy rejected is worse than the failure itself: the deploy log
+    // said "Applied 1 custom domain" while the domain was not registered, so the
+    // only trace was a logger.warn nobody reads, and the domain silently 404s.
     let created = 0;
+    const failures: Array<{ host: string; message: string }> = [];
+    // Hosts that are actually on the app after this pass — used below so a
+    // failed registration does not get its certificate marked active.
+    const liveHosts = new Set<string>();
     for (const d of dbDomains) {
       const host = normHost(d.name);
-      if (existingByHost.has(host)) continue; // already registered
+      if (existingByHost.has(host)) {
+        liveHosts.add(host); // already registered
+        continue;
+      }
       try {
         await client.createDomain({
           host: d.name,
@@ -120,8 +132,11 @@ export async function applyDomainConfigDokploy(params: {
           certificateType: "letsencrypt",
         });
         created++;
+        liveHosts.add(host);
       } catch (e) {
-        logger.warn({ err: getErrMsg(e), host: d.name, projectId }, "[domains:dokploy] failed to register domain");
+        const message = getErrMsg(e);
+        failures.push({ host: d.name, message });
+        logger.warn({ err: message, host: d.name, projectId }, "[domains:dokploy] failed to register domain");
       }
     }
 
@@ -140,17 +155,37 @@ export async function applyDomainConfigDokploy(params: {
       }
     }
 
-    // 3. Mark Let's Encrypt certificates for still-present domains as active.
-    //    Traefik issues them asynchronously once DNS resolves; we reflect the
-    //    "requested/registered" state as active so the UI isn't stuck pending.
-    await markLetsEncryptActive(tenantId, projectId, desiredHosts);
+    // 3. Mark Let's Encrypt certificates for domains actually on the app as
+    //    active. Traefik issues them asynchronously once DNS resolves; we
+    //    reflect the "requested/registered" state as active so the UI isn't
+    //    stuck pending. Domains that failed to register are excluded — marking
+    //    those active would claim a certificate for a domain Traefik never saw.
+    await markLetsEncryptActive(tenantId, projectId, liveHosts);
 
-    logger.info({ projectId, applicationId, created, removed }, "[domains:dokploy] reconciled domains");
+    logger.info({ projectId, applicationId, created, removed, failed: failures.length }, "[domains:dokploy] reconciled domains");
 
     const domainWord = dbDomains.length === 1 ? "domain" : "domains";
+
+    if (failures.length > 0) {
+      const detail = failures.map((f) => `${f.host} (${f.message})`).join("; ");
+      return {
+        success: false,
+        message:
+          `Failed to register ${failures.length} of ${dbDomains.length} custom ${domainWord} on the deployed application: ${detail}.` +
+          (created > 0 ? ` ${created} registered successfully.` : ""),
+      };
+    }
+
+    if (dbDomains.length === 0) {
+      return { success: true, message: "No custom domains configured for this project." };
+    }
+
     return {
       success: true,
-      message: `Applied ${dbDomains.length} custom ${domainWord} to the deployed application (Let's Encrypt requested; certificates issue once DNS points at the server).`,
+      message:
+        `Applied ${dbDomains.length} custom ${domainWord} to the deployed application ` +
+        `(${created} newly registered, ${dbDomains.length - created} already present; ` +
+        `Let's Encrypt requested — certificates issue once DNS points at the server).`,
     };
   } catch (err) {
     const msg = getErrMsg(err);
