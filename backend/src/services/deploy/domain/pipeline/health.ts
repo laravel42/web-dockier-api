@@ -8,6 +8,7 @@
 import { pollUntil } from "../infra/poll-until.js";
 import { appendLog } from "./helpers.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
+import { NATIVE_STAGE, stageMarker } from "../../../../lib/logging.js";
 
 /**
  * Wait for the deployed application to become reachable.
@@ -22,7 +23,7 @@ export async function waitForAppReady(deploymentId: string, appUrl: string): Pro
   if (!appUrl) return false;
 
   await appendLog(deploymentId, `[${ts()}]`);
-  await appendLog(deploymentId, `[${ts()}] ── Health Check ──────────────────`);
+  await appendLog(deploymentId, `[${ts()}] ${stageMarker(NATIVE_STAGE.VERIFY)} ── Health Check ──────────────────`);
   await appendLog(deploymentId, `[${ts()}] ℹ Waiting for application to become reachable...`);
 
   const result = await pollUntil({

@@ -74,6 +74,36 @@ See `requirements.md` and `design.md`. Verify file:line references against the c
   - [ ] 9.2 Add the alternate domain name to the distribution and wire DNS.
   - [ ] 9.3 A static applier in the domains service, which today has only a Dokploy applier.
 
+## Deploy timeline
+
+- [x] 16. Show a static-appropriate stage timeline in the Deploy step
+  - [x] 16.1 `STAGE_DEFS` in `StepDeploy.tsx` was hardcoded to Dokploy's five stages, so a static deploy displayed "Create Project / Sync Git Credentials / Provision Server / Configure Application / Deploy" — none of which happen — and every step stayed pending because the native pipeline emits `── Section ──` headers, not `[stage:xxx]` markers. Replaced with a per-strategy stage list: static gets Clone → Analyze → Build Site → Upload Files → Provision CDN → Verify.
+  - [x] 16.2 Added `NATIVE_STAGE` ids + `stageMarker()` to `lib/logging.ts` and extended `ContextualLogger.section(title, stageId?)` so tagging a section emits the marker. Tagged the six native boundaries: clone and analyze (`lib/build-pipeline.ts`), build-site/upload/cdn (`adapters/aws-s3.ts`), verify (`pipeline/health.ts`). The console logger ignores the id, so image-builder and scan logs are unchanged.
+  - [x] 16.3 Parser now advances earlier stages when a later one starts. The native pipeline only marks section *starts*, so without this every step would spin forever. Also marks all stages complete on a succeeded deployment, since the last native section is followed by untagged lines. Failed stages are never downgraded.
+  - [x] 16.4 Extracted the parsing into `steps/deployStages.ts` — it is the real logic and was untestable inside a component file (also silenced two `react-refresh/only-export-components` warnings). 11 tests in `frontend/src/__tests__/deploy-stages.test.ts` built from the real log of the first successful static deploy, including a case asserting the Dokploy timeline still behaves as before.
+  - Not covered: a native **vps/managed** deploy would show the Dokploy timeline, since the strategy, not the pipeline, selects the list. Unreachable today (static is the only native path from the UI). Revisit if `DEPLOY_PROVIDER=native` is ever used for servers.
+
+## Routing on the deployed site
+
+- [x] 17. Make clean URLs and 404s work on a deployed static site
+  - [x] 17.1 **Root cause:** OAC requires an S3 *REST* origin, which resolves a request path to an object key verbatim — no `.html` suffixing, no directory index resolution beyond `DefaultRootObject` for `/`. A site built to `editor.html` was unreachable at `/editor`.
+  - [x] 17.2 **Why it was invisible:** `s3.yml` mapped 403 *and* 404 to `/index.html` with a **200**, so every missing page silently rendered the homepage with a success status. Observed live: a 41-page Astro site where every sub-page showed the homepage and only same-page anchors worked.
+  - [x] 17.3 Added an `AWS::CloudFront::Function` on viewer-request that appends `index.html` to trailing-slash paths and `.html` to extensionless ones, leaving paths with an extension alone. ES5-only — the `cloudfront-js-2.0` runtime is not a full modern JS environment.
+  - [x] 17.4 Replaced the hardcoded SPA fallback with `ErrorPagePath` / `ErrorResponseCode` parameters, set per deploy by `notFoundBehaviourFor()`: SPA → `/index.html` + 200 (client-side routing needs it), multi-page → `/404.html` + 404, multi-page with no 404 page → `/index.html` + 404.
+  - [x] 17.5 Site shape is decided from the **uploaded object keys**, not the detected framework — the Astro repo that exposed this was misdetected as framework `spa` (task 15), so the label cannot be trusted while the file layout is ground truth. A `404.html` outweighs the page count.
+  - [x] 17.6 `cloudfront:*Function*` permissions added to `docs/operations/aws-static-hosting-iam.md`. Without them stack creation now fails outright rather than degrading — existing deployments need the policy updated before their next deploy.
+  - [x] 17.7 9 tests in `adapters/__tests__/aws-s3-naming.test.ts` using the real file list from the failing build, including one asserting a multi-page site never gets a 200.
+  - Residual gap: a directory-format build (`editor/index.html`) is only reachable at `/editor/` with the trailing slash, since the function cannot probe S3 to choose between `/editor.html` and `/editor/index.html`. Astro and Next emit trailing slashes for that format by default, so it works in practice. Revisit if a generator turns up that does neither.
+
+## Diagnosability
+
+- [x] 18. Surface why a CloudFormation stack failed
+  - [x] 18.1 A rolled-back stack reports an empty `StackStatusReason`, so `pollStackStatus` logged the status as its own reason: `CloudFormation stack failed: UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS — UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS`. Useless. Added `describeStackFailureReason()`, which reads `DescribeStackEvents`, keeps genuine `*_FAILED` resource events, drops CloudFormation's "Resource creation/update cancelled" noise, and reports the **oldest** failure — the one that triggered the rollback.
+  - [x] 18.2 Fixed a substring-matching bug in the poller: `CFN_FAILURE_PATTERNS` are matched with `includes()`, and `UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS` contains `UPDATE_ROLLBACK_COMPLETE`, so a rollback still in flight was reported as terminal — before its events were even written. Transient `*_IN_PROGRESS` states are now skipped first.
+  - [x] 18.3 Added `cloudformation:DescribeStackEvents` to the documented policy. This reverses an earlier least-privilege trim: the principle (grant only what's invoked) was right, but the correct response was to invoke it rather than stay blind. Diagnosis is best-effort — a missing permission degrades to a warning rather than replacing the deploy failure with a different one.
+  - [x] 18.4 Changed `ErrorResponseCode` to a `Number` parameter. `CustomErrorResponse.ResponseCode` is an integer property and relying on CloudFormation to coerce a String parameter was an avoidable suspect while debugging this rollback.
+  - [x] 18.5 7 tests in `infra/__tests__/cfn-failure-reason.test.ts`, including root-cause ordering, noise filtering, and graceful degradation without the IAM permission.
+
 ## Resource namespace & CDN follow-ups
 
 - [x] 11. Namespace static-hosting buckets under `dockier-*`

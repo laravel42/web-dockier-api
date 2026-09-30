@@ -24,6 +24,24 @@ Parameters:
     Type: String
     Description: Name of the existing S3 bucket holding the built site.
     MinLength: 3
+  # How to answer a request for a path that has no object behind it.
+  #
+  # A single-page app needs the shell returned with a 200 so its client-side
+  # router can handle the route. A multi-page site must NOT do that — it makes
+  # every missing page render the homepage with a success status, which is
+  # indistinguishable from "navigation is broken". The adapter decides by
+  # counting HTML files in the build output; see looksLikeSpa() in aws-s3.ts.
+  ErrorPagePath:
+    Type: String
+    Default: /index.html
+    Description: Object returned for 403/404 (e.g. /index.html for an SPA, /404.html for a multi-page site).
+  ErrorResponseCode:
+    # Number, not String: CustomErrorResponse.ResponseCode is an integer property,
+    # and relying on CloudFormation to coerce a string parameter is an avoidable
+    # source of update failures.
+    Type: Number
+    Default: 200
+    Description: HTTP status returned with ErrorPagePath. 200 for SPA routing, 404 for a real not-found.
 
 Resources:
   BucketPolicy:
@@ -42,6 +60,47 @@ Resources:
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  # Maps clean URLs onto the objects that actually exist.
+  #
+  # OAC requires an S3 REST origin, and a REST origin resolves the request path
+  # to an object key verbatim — it does not append ".html" and does not resolve
+  # directory index documents (only the distribution's DefaultRootObject, and
+  # only for "/"). So a site built to editor.html is unreachable at /editor
+  # without this rewrite: S3 returns no-such-key and the request falls through to
+  # CustomErrorResponses, which is how "every page shows the homepage" happens.
+  #
+  #   /                    → DefaultRootObject handles it
+  #   /about/              → /about/index.html   (Astro/Next directory format)
+  #   /about               → /about.html         (Astro file format, Vite MPA)
+  #   /assets/app.abc123.js → untouched (has an extension)
+  #
+  # ES5-only: the cloudfront-js-2.0 runtime is not a full modern JS environment.
+  UriRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${AppName}-uri-rewrite"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Append index.html / .html so clean URLs resolve to S3 objects
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+
+          if (uri.charAt(uri.length - 1) === '/') {
+            request.uri = uri + 'index.html';
+            return request;
+          }
+
+          var lastSegment = uri.substring(uri.lastIndexOf('/') + 1);
+          if (lastSegment.indexOf('.') === -1) {
+            request.uri = uri + '.html';
+          }
+
+          return request;
+        }
 
   OriginAccessControl:
     Type: AWS::CloudFront::OriginAccessControl
@@ -75,14 +134,20 @@ Resources:
           Compress: true
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt UriRewriteFunction.FunctionMetadata.FunctionARN
+        # 403 is listed alongside 404 deliberately: with OAC the bucket policy
+        # grants s3:GetObject but not s3:ListBucket, so S3 answers a missing key
+        # with AccessDenied (403) rather than NoSuchKey (404).
         CustomErrorResponses:
           - ErrorCode: 403
-            ResponseCode: 200
-            ResponsePagePath: /index.html
+            ResponseCode: !Ref ErrorResponseCode
+            ResponsePagePath: !Ref ErrorPagePath
             ErrorCachingMinTTL: 10
           - ErrorCode: 404
-            ResponseCode: 200
-            ResponsePagePath: /index.html
+            ResponseCode: !Ref ErrorResponseCode
+            ResponsePagePath: !Ref ErrorPagePath
             ErrorCachingMinTTL: 10
       Tags:
         - Key: Name

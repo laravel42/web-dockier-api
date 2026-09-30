@@ -52,6 +52,7 @@ teardown deleting the wrong thing.
 | Create / update the stack | `createOrUpdateStack()`, `pollStackStatus()` | `cloudformation:CreateStack`, `UpdateStack`, `DescribeStacks` |
 | Bucket policy for the distribution | `AWS::S3::BucketPolicy` in `s3.yml` | `s3:PutBucketPolicy`, `s3:GetBucketPolicy` |
 | CDN + origin access | `AWS::CloudFront::Distribution`, `AWS::CloudFront::OriginAccessControl` | `cloudfront:*Distribution*`, `cloudfront:*OriginAccessControl*` |
+| Clean-URL rewriting | `AWS::CloudFront::Function` in `s3.yml` | `cloudfront:CreateFunction`, `PublishFunction`, `UpdateFunction`, `DescribeFunction`, `GetFunction`, `DeleteFunction` |
 | Teardown | `destroy()` | `s3:DeleteObject`, `s3:DeleteBucket`, `cloudformation:DeleteStack`, `cloudfront:DeleteDistribution` |
 
 Without a CloudFormation service role, CloudFormation performs its operations
@@ -63,10 +64,15 @@ tightening, but out of scope for now.
 
 ## Policy
 
-CloudFormation actions are limited to the four the code actually invokes
-(`CreateStack`, `UpdateStack`, `DescribeStacks`, `DeleteStack`). If we later
-surface stack events in deploy logs, `cloudformation:DescribeStackEvents` will
-need adding — it is deliberately absent rather than granted speculatively.
+CloudFormation actions are limited to the five the code actually invokes:
+`CreateStack`, `UpdateStack`, `DescribeStacks`, `DeleteStack`, and
+`DescribeStackEvents`.
+
+`DescribeStackEvents` is what makes a failed deploy diagnosable. A rolled-back
+stack reports an empty `StackStatusReason`, so without events the log can only
+say "UPDATE_ROLLBACK_COMPLETE" and the user has no idea which resource broke.
+Diagnosis is best-effort — if the permission is missing, the deploy still fails
+with the status alone plus a warning, rather than failing differently.
 
 ```json
 {
@@ -109,6 +115,7 @@ need adding — it is deliberately absent rather than granted speculatively.
         "cloudformation:CreateStack",
         "cloudformation:UpdateStack",
         "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
         "cloudformation:DeleteStack"
       ],
       "Resource": "*"
@@ -126,7 +133,14 @@ need adding — it is deliberately absent rather than granted speculatively.
         "cloudfront:CreateOriginAccessControl",
         "cloudfront:GetOriginAccessControl",
         "cloudfront:UpdateOriginAccessControl",
-        "cloudfront:DeleteOriginAccessControl"
+        "cloudfront:DeleteOriginAccessControl",
+        "cloudfront:CreateFunction",
+        "cloudfront:PublishFunction",
+        "cloudfront:UpdateFunction",
+        "cloudfront:DescribeFunction",
+        "cloudfront:GetFunction",
+        "cloudfront:DeleteFunction",
+        "cloudfront:ListTagsForResource"
       ],
       "Resource": "*"
     }
@@ -157,8 +171,30 @@ when we add explicit invalidation — see the notes below.
   about as long to delete. A deploy sitting in `deploying` is usually normal.
 - **`us-east-1` is special.** `CreateBucket` omits `LocationConstraint` there and
   sets it everywhere else; handled in `lib/aws.ts`.
-- **SPA error mapping.** `s3.yml` maps 403 and 404 to `/index.html` with a 200.
-  Correct for a single-page app, questionable for a multi-page static site, which
-  loses real 404s. Revisit when the static feature covers both.
+- **`cloudfront:ListTagsForResource` is required even though no Dockier code
+  calls it.** CloudFormation's *read* handler for CloudFront resources looks up
+  tags, and a `Fn::GetAtt` against a resource triggers that read. Without it,
+  `!GetAtt UriRewriteFunction.FunctionMetadata.FunctionARN` fails with
+  `Access denied for operation 'AWS::CloudFront::Function'` **after** the function
+  has been created successfully, and the whole stack update rolls back. Using the
+  alternative `FunctionARN` attribute does not avoid it — both go through the same
+  read handler. This is the one permission that cannot be derived from the
+  adapter's own SDK calls.
+  If a future template change *removes* a tag rather than changing its value,
+  `cloudfront:UntagResource` will be needed too; changing a value only needs
+  `TagResource`, which is already granted.
+- **Clean URLs need the CloudFront Function.** OAC requires an S3 *REST* origin,
+  which resolves a request path to an object key verbatim — no `.html` suffixing
+  and no directory index resolution beyond `DefaultRootObject` for `/`. Without
+  the `UriRewriteFunction` in `s3.yml`, a site built to `editor.html` is
+  unreachable at `/editor`: S3 answers no-such-key and the request falls through
+  to `CustomErrorResponses`. If the new `cloudfront:*Function*` permissions are
+  missing, stack creation fails outright rather than degrading.
+- **Error responses are per-site-shape.** `ErrorPagePath` / `ErrorResponseCode`
+  are set by the adapter from the build's object keys (`notFoundBehaviourFor()`):
+  an SPA gets `/index.html` with 200 so its router can handle the route, a
+  multi-page site gets `/404.html` with 404. The template previously hardcoded
+  the SPA behaviour for everything, which made every sub-page of a multi-page
+  site render the homepage with a success status.
 - **Custom domains are not covered.** They additionally need ACM in `us-east-1`
   plus DNS — Phase 4 of `.kiro/specs/static-deploy-targets/`.

@@ -6,7 +6,7 @@ vi.mock("../../../../../lib/provider-credentials.js", () => ({
   toAwsCredentials: vi.fn(() => ({ accessKeyId: "", secretAccessKey: "" })),
 }));
 
-const { staticSiteBucketName, templateBucketName } = await import("../aws-s3.js");
+const { staticSiteBucketName, templateBucketName, looksLikeSpa, notFoundBehaviourFor } = await import("../aws-s3.js");
 
 const ACCOUNT = "251486138355"; // 12 digits, as AWS account ids always are
 
@@ -93,5 +93,83 @@ describe("templateBucketName", () => {
     // Was `image-builder-templates-<account>`, which fell outside a dockier-*
     // scoped IAM policy.
     expect(templateBucketName(ACCOUNT)).not.toContain("image-builder");
+  });
+});
+
+describe("looksLikeSpa / notFoundBehaviourFor", () => {
+  /**
+   * How CloudFront answers a path with no object behind it.
+   *
+   * The original template mapped 403/404 to /index.html with a **200** for every
+   * static site. For a multi-page build that makes every sub-page render the
+   * homepage with a success status — indistinguishable from broken navigation,
+   * and it hides real 404s. Observed live on a 41-page Astro site.
+   *
+   * The decision is made from the uploaded object keys, not the detected
+   * framework: that same Astro repo was misdetected as framework "spa", so the
+   * label cannot be trusted. The file layout can.
+   */
+
+  /** Trimmed from the real build that exposed the bug (Astro, build.format: "file"). */
+  const ASTRO_MPA = [
+    "index.html",
+    "404.html",
+    "editor.html",
+    "es.html",
+    "templates.html",
+    "templates/abstract.html",
+    "es/editor-de-correo-online.html",
+    "robots.txt",
+    "sitemap-index.xml",
+    "_astro/preset-business.DK5tXpO4.avif",
+  ];
+
+  /** A Vite/React SPA: one HTML shell, hashed assets, no 404 page. */
+  const VITE_SPA = [
+    "index.html",
+    "assets/index-BMiW7tC5.js",
+    "assets/index-DdfsWXQS.css",
+    "favicon.ico",
+  ];
+
+  it("treats a one-page build with hashed assets as an SPA", () => {
+    expect(looksLikeSpa(VITE_SPA)).toBe(true);
+  });
+
+  it("serves the shell with a 200 for an SPA, so client-side routing works", () => {
+    expect(notFoundBehaviourFor(VITE_SPA)).toEqual({ pagePath: "/index.html", responseCode: "200" });
+  });
+
+  it("does not treat a multi-page Astro build as an SPA", () => {
+    expect(looksLikeSpa(ASTRO_MPA)).toBe(false);
+  });
+
+  it("returns a real 404 from the generator's own 404 page for a multi-page site", () => {
+    expect(notFoundBehaviourFor(ASTRO_MPA)).toEqual({ pagePath: "/404.html", responseCode: "404" });
+  });
+
+  it("never returns a 200 for a multi-page site — this was the bug", () => {
+    expect(notFoundBehaviourFor(ASTRO_MPA).responseCode).not.toBe("200");
+  });
+
+  it("treats a 404.html as multi-page even with a single other page", () => {
+    // A dedicated 404 page is something only a multi-page generator emits, so it
+    // outweighs the page count.
+    expect(looksLikeSpa(["index.html", "404.html"])).toBe(false);
+  });
+
+  it("falls back to the homepage body but keeps a 404 status when no 404 page exists", () => {
+    const keys = ["index.html", "about.html", "contact.html"];
+    expect(notFoundBehaviourFor(keys)).toEqual({ pagePath: "/index.html", responseCode: "404" });
+  });
+
+  it("is case-insensitive about extensions and the 404 page", () => {
+    expect(looksLikeSpa(["Index.HTML", "404.HTML"])).toBe(false);
+    expect(looksLikeSpa(["Index.HTML"])).toBe(true);
+  });
+
+  it("treats an output with no HTML at all as an SPA shell rather than crashing", () => {
+    // Degenerate, but ensureIndexHtml runs before this so it should not happen.
+    expect(looksLikeSpa(["assets/app.js"])).toBe(true);
   });
 });

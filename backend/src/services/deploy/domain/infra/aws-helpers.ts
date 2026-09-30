@@ -426,6 +426,70 @@ export async function destroyCfnStack(
   }
 }
 
+// ─── CloudFormation Failure Diagnosis ──────────────────────────────
+
+/**
+ * Explain why a stack operation failed, from its events.
+ *
+ * `DescribeStacks` alone is not enough: a rolled-back stack usually reports an
+ * empty `StackStatusReason`, so the only thing surfacing was the status echoed
+ * back ("UPDATE_ROLLBACK_COMPLETE — UPDATE_ROLLBACK_COMPLETE"), which tells the
+ * user nothing. The real cause is on the individual resource event that failed
+ * first, in its `ResourceStatusReason`.
+ *
+ * Best-effort: returns an empty string if events cannot be read (for example
+ * when the credentials lack `cloudformation:DescribeStackEvents`) so diagnosis
+ * never turns a deploy failure into a different, more confusing failure.
+ */
+export async function describeStackFailureReason(
+  cfn: CloudFormationClient,
+  stackName: string,
+  appendLog: (line: string) => Promise<void>,
+): Promise<string> {
+  try {
+    const { DescribeStackEventsCommand } = await getCfn();
+    const result = await cfn.send(new DescribeStackEventsCommand({ StackName: stackName }));
+    const events = result.StackEvents || [];
+
+    // Events come back newest-first. Keep only genuine resource failures, and
+    // drop CloudFormation's own bookkeeping noise: once one resource fails, every
+    // sibling gets "Resource creation cancelled" / "Resource update cancelled",
+    // which would bury the actual reason.
+    const failures = events
+      .filter((e) => (e.ResourceStatus || "").endsWith("_FAILED"))
+      .filter((e) => {
+        const reason = e.ResourceStatusReason || "";
+        return reason && !/^Resource (creation|update) cancelled/i.test(reason);
+      });
+
+    if (failures.length === 0) return "";
+
+    // Oldest failure first — that is the one that triggered the rollback.
+    const rootCauses = failures.reverse();
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    for (const event of rootCauses) {
+      const key = event.LogicalResourceId || "";
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const resourceType = event.ResourceType ? ` (${event.ResourceType})` : "";
+      lines.push(`${key}${resourceType}: ${event.ResourceStatusReason}`);
+    }
+
+    for (const line of lines.slice(0, 5)) {
+      await appendLog(`✗ ${line}`);
+    }
+
+    return lines[0] ?? "";
+  } catch (e: unknown) {
+    const msg = getErrMsg(e);
+    await appendLog(
+      `⚠ Could not read CloudFormation stack events to explain the failure: ${msg.slice(0, 160)}`,
+    );
+    return "";
+  }
+}
+
 // ─── CloudFormation Polling ────────────────────────────────────────
 
 /**
@@ -478,8 +542,22 @@ export async function pollStackStatus(opts: {
         return { appUrl, serverIp: publicIp || undefined, outputs };
       }
 
+      // Transient states must be checked BEFORE the failure patterns. The
+      // patterns are substring matches, and "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS"
+      // contains "UPDATE_ROLLBACK_COMPLETE" — so a rollback still in flight was
+      // reported as the terminal failure, before its events were even written.
+      // Waiting for the real terminal state is also what makes the event-based
+      // diagnosis below useful.
+      if (stackStatus.endsWith("_IN_PROGRESS")) {
+        await appendLog(`ℹ CloudFormation: ${stackStatus}...`);
+        continue;
+      }
+
       if (CFN_FAILURE_PATTERNS.some((p) => stackStatus.includes(p))) {
-        const reason = stack.StackStatusReason || stackStatus;
+        // StackStatusReason is typically empty on a rollback, so ask the events
+        // which resource actually failed and why.
+        const detail = await describeStackFailureReason(cfn, stackName, appendLog);
+        const reason = detail || stack.StackStatusReason || stackStatus;
         throw new Error(`CloudFormation stack failed: ${stackStatus} — ${reason}`);
       }
 

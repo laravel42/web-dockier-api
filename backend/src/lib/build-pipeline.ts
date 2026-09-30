@@ -23,7 +23,7 @@ import {
 } from "./repo-analyzer/ai-review.js";
 import { reviewCacheKey, getCachedReview, setCachedReview } from "./repo-analyzer/review-cache.js";
 import type { ContextualLogger } from "./logging.js";
-import { BuildError } from "./logging.js";
+import { BuildError, NATIVE_STAGE } from "./logging.js";
 
 // ─── Constants ─────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ export interface AnalyzeResult {
 export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
   const { git, branch, shortId, logger } = opts;
 
-  await logger.section("Clone Repository");
+  await logger.section("Clone Repository", NATIVE_STAGE.CLONE);
 
   const cloneUrl = buildCloneUrl({
     provider: git.provider,
@@ -206,7 +206,7 @@ function applyKnownPlatform(config: RepoConfig, platform: string): void {
 export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeResult> {
   const { repoDir, logger, skipExistingDockerfile, knownPlatform, commitHash } = opts;
 
-  await logger.section("Analyze Repository");
+  await logger.section("Analyze Repository", NATIVE_STAGE.ANALYZE);
 
   // Detect tech stack
   const repoConfig = analyzeRepoConfig(repoDir);

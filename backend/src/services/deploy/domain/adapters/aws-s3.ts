@@ -20,6 +20,7 @@ import {
 import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, ensureS3Bucket, type AwsCredentials } from "../../../../lib/aws.js";
 import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
+import { NATIVE_STAGE, stageMarker } from "../../../../lib/logging.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
 
 /**
@@ -74,6 +75,49 @@ export function staticSiteBucketName(accountId: string, repoName: string): strin
 /** Bucket used to stage CloudFormation templates. One per account. */
 export function templateBucketName(accountId: string): string {
   return `${BUCKET_PREFIX}-${accountId}-templates`;
+}
+
+/** How CloudFront should answer a request with no object behind it. */
+export interface NotFoundBehaviour {
+  /** Object to return. */
+  pagePath: string;
+  /** HTTP status to return with it. */
+  responseCode: string;
+}
+
+/**
+ * Decide how to handle a request for a path that does not exist, based on what
+ * the build actually produced.
+ *
+ * A single-page app serves its shell for every unknown path with a 200 so the
+ * client-side router can take over. A multi-page site must not: doing so makes
+ * every sub-page render the homepage with a success status, which looks exactly
+ * like broken navigation and hides real 404s. This was the original behaviour
+ * for every static site and it broke multi-page builds.
+ *
+ * Decided from the uploaded object keys rather than the detected framework —
+ * the framework label is unreliable (an Astro repo was detected as "spa"),
+ * whereas the file layout is ground truth.
+ */
+export function looksLikeSpa(objectKeys: string[]): boolean {
+  const htmlKeys = objectKeys.filter((k) => k.toLowerCase().endsWith(".html"));
+  // A dedicated 404 page is something only a multi-page generator emits.
+  const has404 = htmlKeys.some((k) => k.toLowerCase() === "404.html");
+  if (has404) return false;
+  // One HTML file and nothing else to route to: an SPA shell.
+  return htmlKeys.length <= 1;
+}
+
+/** Resolve the CloudFront error behaviour for a build's object keys. */
+export function notFoundBehaviourFor(objectKeys: string[]): NotFoundBehaviour {
+  if (looksLikeSpa(objectKeys)) {
+    return { pagePath: "/index.html", responseCode: "200" };
+  }
+  const has404 = objectKeys.some((k) => k.toLowerCase() === "404.html");
+  // Multi-page: return a real not-found status. Prefer the generator's own 404
+  // page; fall back to the homepage body, but still with a 404 status so the
+  // response is at least honest.
+  return { pagePath: has404 ? "/404.html" : "/index.html", responseCode: "404" };
 }
 
 /**
@@ -145,7 +189,7 @@ export class AwsS3Adapter implements DeployAdapter {
     await appendLog("ℹ Static site — skipping Docker build");
 
     // 2. Build the static site locally
-    await appendLog("── Build Static Site ──────────────");
+    await appendLog(`${stageMarker(NATIVE_STAGE.BUILD_SITE)} ── Build Static Site ──────────────`);
     const blockReason = getStaticDeployBlockReason({
       detectedStack: ctx.detectedStack,
       repoDir,
@@ -174,7 +218,7 @@ export class AwsS3Adapter implements DeployAdapter {
     }
     // 4. Create S3 bucket if it doesn't exist
     const websiteBucket = staticSiteBucketName(accountId, repoName);
-    await appendLog("── Upload to S3 ───────────────────");
+    await appendLog(`${stageMarker(NATIVE_STAGE.UPLOAD)} ── Upload to S3 ───────────────────`);
     await appendLog(`ℹ Bucket: ${websiteBucket}`);
 
     const { S3Client, PutObjectCommand, PutPublicAccessBlockCommand } = await getS3();
@@ -196,10 +240,18 @@ export class AwsS3Adapter implements DeployAdapter {
     }));
 
     // 5. Sync static files to S3 with correct content types and cache headers
-    await this.syncFilesToS3(s3, websiteBucket, uploadDir, appendLog);
+    const objectKeys = await this.syncFilesToS3(s3, websiteBucket, uploadDir, appendLog);
+
+    // Decide how CloudFront answers unknown paths, from what the build produced.
+    const notFound = notFoundBehaviourFor(objectKeys);
+    await appendLog(
+      looksLikeSpa(objectKeys)
+        ? "ℹ Single-page app detected — unknown paths will serve index.html (client-side routing)"
+        : `ℹ Multi-page site detected — unknown paths will return ${notFound.responseCode} from ${notFound.pagePath}`,
+    );
 
     // 6. Read the s3.yml CloudFormation template
-    await appendLog("── CloudFormation Deploy ──────────");
+    await appendLog(`${stageMarker(NATIVE_STAGE.CDN)} ── CloudFormation Deploy ──────────`);
     const templateBody = readCfnTemplate("s3.yml");
 
     // 7. Upload template to S3
@@ -230,6 +282,8 @@ export class AwsS3Adapter implements DeployAdapter {
       { ParameterKey: "AppName", ParameterValue: sanitizeBucketFragment(repoName, 40) },
       { ParameterKey: "SourceBucket", ParameterValue: websiteBucket },
       { ParameterKey: "BuildId", ParameterValue: deploymentId },
+      { ParameterKey: "ErrorPagePath", ParameterValue: notFound.pagePath },
+      { ParameterKey: "ErrorResponseCode", ParameterValue: notFound.responseCode },
     ];
 
     // 9. Create or update CloudFormation stack
@@ -274,7 +328,7 @@ export class AwsS3Adapter implements DeployAdapter {
     bucket: string,
     uploadDir: string,
     appendLog: (line: string) => Promise<void>,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const { PutObjectCommand } = await getS3();
 
     let fileCount = 0;
@@ -327,6 +381,7 @@ export class AwsS3Adapter implements DeployAdapter {
       await Promise.all(batch.map(uploadFile));
     }
     await appendLog(`✓ ${fileCount} files uploaded to s3://${bucket}`);
+    return filesToUpload.map((f) => f.objectKey);
   }
 
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {

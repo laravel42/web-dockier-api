@@ -2,110 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { WizardState } from "../types";
 import { CheckIcon, XIcon, ExternalLinkIcon } from "lucide-react";
 import Spinner from "@/components/Spinner";
-
-// ─── Stage Parsing ─────────────────────────────────────────────────
-
-type StageStatus = "pending" | "in-progress" | "success" | "failed";
-
-interface PipelineStage {
-  id: string;
-  label: string;
-  status: StageStatus;
-  logs: string[];
-}
-
-interface AIRetryInfo {
-  attempt: number;
-  maxAttempts: number;
-  fixDescription: string | null;
-}
-
-const STAGE_DEFS = [
-  { id: "ensure-project", label: "Create Project" },
-  { id: "sync-git", label: "Sync Git Credentials" },
-  { id: "provision-server", label: "Provision Server" },
-  { id: "configure-app", label: "Configure Application" },
-  { id: "deploy", label: "Deploy" },
-] as const;
-
-/**
- * Parse deploy log lines into structured pipeline stages.
- * Backend logs use markers like `[stage:ensure-project] ...`
- *
- * `deployFailed` reconciles the timeline against the deployment's terminal
- * status. A pipeline can fail between stage markers — or in the top-level
- * catch handler, whose "✗ Pipeline failed: ..." line carries no `[stage:xxx]`
- * marker — which would otherwise leave the active stage stuck showing a
- * spinner forever. When the deploy has failed, the stage that was still
- * in-progress is marked failed instead.
- */
-function parseStages(
-  logs: string[],
-  deployFailed: boolean,
-): { stages: PipelineStage[]; retries: AIRetryInfo[] } {
-  const stages: PipelineStage[] = STAGE_DEFS.map((def) => ({
-    id: def.id,
-    label: def.label,
-    status: "pending",
-    logs: [],
-  }));
-
-  const retries: AIRetryInfo[] = [];
-  const stageMap = new Map(stages.map((s) => [s.id, s]));
-
-  for (const line of logs) {
-    // Match [stage:xxx] markers
-    const stageMatch = line.match(/\[stage:([\w-]+)\]/);
-    if (stageMatch) {
-      const stageId = stageMatch[1];
-      const stage = stageMap.get(stageId);
-      if (stage) {
-        stage.logs.push(line);
-
-        // Determine status from markers
-        if (line.includes("✓")) {
-          stage.status = "success";
-        } else if (line.includes("✗")) {
-          stage.status = "failed";
-        } else if (stage.status === "pending") {
-          stage.status = "in-progress";
-        }
-      }
-
-      // Parse AI recovery info
-      if (stageId === "ai-recovery" && line.includes("Fix applied:")) {
-        const descMatch = line.match(/Fix applied:\s*(.+)/);
-        retries.push({
-          attempt: retries.length + 1,
-          maxAttempts: 3,
-          fixDescription: descMatch?.[1] || "Applied automatic fix",
-        });
-      }
-    }
-
-    // Parse deploy attempts
-    const attemptMatch = line.match(/Attempt (\d+)\/(\d+)/);
-    if (attemptMatch) {
-      const [, attempt, max] = attemptMatch;
-      // Update retry tracking
-      if (parseInt(attempt) > 1) {
-        const lastRetry = retries[retries.length - 1];
-        if (lastRetry) lastRetry.maxAttempts = parseInt(max);
-      }
-    }
-  }
-
-  // Reconcile against the deployment's terminal status. If the deploy failed
-  // but no stage carried a "✗" marker (e.g. it died in the untagged top-level
-  // catch handler), the last stage that started is where it broke — mark it
-  // failed so the timeline stops spinning and shows an X.
-  if (deployFailed && !stages.some((s) => s.status === "failed")) {
-    const lastActive = [...stages].reverse().find((s) => s.status === "in-progress");
-    if (lastActive) lastActive.status = "failed";
-  }
-
-  return { stages, retries };
-}
+import { parseStages, type StageStatus } from "./deployStages";
 
 // ─── Component ─────────────────────────────────────────────────────
 
@@ -123,8 +20,8 @@ export default function StepDeploy({ state }: { state: WizardState }) {
   const isSuccess = state.deployStatus === "success";
 
   const { stages, retries } = useMemo(
-    () => parseStages(state.deployLogs, isFailed),
-    [state.deployLogs, isFailed],
+    () => parseStages(state.deployLogs, isFailed, state.deployStrategy, isSuccess),
+    [state.deployLogs, isFailed, state.deployStrategy, isSuccess],
   );
 
   // Surface the failure reason from the top-level "✗ Pipeline failed: ..." log
