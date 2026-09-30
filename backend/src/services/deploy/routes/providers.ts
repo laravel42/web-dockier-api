@@ -5,14 +5,12 @@ import { getAuth } from "../../../shared/auth/auth.js";
 import { providerSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../../shared/schemas/responses.js";
-import { requireInternalToken } from "../../../shared/http/security.js";
 import {
   createProvider,
   listProviders,
   updateProvider,
   deleteProvider,
 } from "../domain/providers.js";
-import { getProviderCredentials, toAwsCredentials } from "../../../lib/provider-credentials.js";
 
 // ─── Per-provider credential request shapes ────────────────────────
 // Credential fields differ per provider, so the request body is a union
@@ -146,36 +144,13 @@ export async function registerProviderRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.get(
-    "/deploy/providers/:providerId/credentials",
-    {
-      preHandler: requireInternalToken,
-      schema: {
-        tags: ["deploy"],
-        summary: "Get provider AWS credentials (service-to-service)",
-        params: z.object({ providerId: z.uuid() }),
-        response: {
-          200: z.object({
-            provider: z.string(),
-            region: z.string(),
-            accessKeyId: z.string(),
-            secretAccessKey: z.string(),
-          }),
-        },
-      },
-    },
-    async (request) => {
-      // This internal endpoint only serves AWS credentials (its historical
-      // consumers were AWS-only). GCP credentials are resolved in-process via
-      // getProviderCredentials, never over this endpoint.
-      const resolved = await getProviderCredentials(request.params.providerId);
-      const aws = toAwsCredentials(resolved.credential);
-      return {
-        provider: resolved.provider,
-        region: resolved.region,
-        accessKeyId: aws.accessKeyId,
-        secretAccessKey: aws.secretAccessKey,
-      };
-    },
-  );
+  // REMOVED: GET /deploy/providers/:providerId/credentials
+  //
+  // Returned a tenant's raw AWS access key id and secret access key looked up by
+  // providerId alone, with no organization_id filter — so any caller past the
+  // pre-handler could enumerate provider ids and read any tenant's cloud
+  // credentials. It had zero callers: all 29 credential resolutions happen
+  // in-process via getProviderCredentials / getProviderCredentialsSafe.
+  // Deleted rather than tenant-scoped, since there is no consumer to scope it
+  // for. Do not reintroduce an HTTP endpoint that returns a secret.
 }

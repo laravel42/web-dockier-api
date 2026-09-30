@@ -8,11 +8,9 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { connectionIdParamsSchema, connectionSchema, listConnectionsResponseSchema, providerSchema, successResponseSchema } from "../schemas.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { requireInternalToken } from "../../../shared/http/security.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import {
-  getConnection,
   createConnection,
   listConnections,
   deleteConnection,
@@ -116,22 +114,16 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.get(
-    "/git/connections/:connectionId/scan-auth",
-    {
-      preHandler: requireInternalToken,
-      schema: {
-        tags: ["git-integration"],
-        summary: "Get connection token for scanning (internal)",
-        params: connectionIdParamsSchema,
-        response: { 200: z.object({ provider: z.string(), token: z.string(), endpoint: z.string() }) },
-      },
-    },
-    async (request) => {
-      const conn = await getConnection(request.params.connectionId);
-      return { provider: conn.provider, token: conn.personal_token, endpoint: conn.endpoint ?? "" };
-    },
-  );
+  // REMOVED: GET /git/connections/:connectionId/scan-auth
+  //
+  // Returned a connection's plaintext git PAT looked up by id alone, with no
+  // organization_id filter — so any caller past the pre-handler could enumerate
+  // connection ids and read any tenant's token. It had zero callers: everything
+  // in-process resolves credentials through getGitConnectionCredentials() in
+  // shared/service-clients, and the Python SAST workers never fetch git
+  // credentials at all. Deleted rather than tenant-scoped, since there is no
+  // consumer to scope it for. Do not reintroduce an HTTP endpoint that returns
+  // a secret; use the in-process service client.
 
   typed.get(
     "/git/connections/:connectionId/repos",

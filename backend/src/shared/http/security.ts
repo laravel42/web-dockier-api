@@ -5,6 +5,35 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { env } from "../config.js";
+import { logger } from "../logger.js";
+
+/**
+ * Environments where an unconfigured secret may fall back to allowing the
+ * request, so local development and the test suite work without one.
+ *
+ * Deliberately an explicit allowlist rather than `NODE_ENV !== "production"`.
+ * That earlier check meant every other value — "staging", "preview", or an
+ * unset NODE_ENV, which `config.ts` defaults to "development" — silently
+ * accepted unauthenticated requests on internal and webhook endpoints. Those
+ * are exactly the internet-reachable environments where nobody notices.
+ */
+const SECRET_OPTIONAL_ENVS = new Set(["development", "test"]);
+
+/**
+ * Decide whether to allow a request whose verifying secret is not configured.
+ *
+ * Returns true only in an explicitly permitted environment, and warns every
+ * time so the bypass is visible in logs rather than silent.
+ */
+function allowUnverifiedRequest(request: FastifyRequest, guard: string, secretName: string): boolean {
+  if (!SECRET_OPTIONAL_ENVS.has(env.NODE_ENV)) return false;
+  logger.warn(
+    { guard, nodeEnv: env.NODE_ENV, method: request.method, url: request.url },
+    `[security] ${secretName} is not configured — allowing an unverified request because NODE_ENV=${env.NODE_ENV}. ` +
+    "This must never happen in a deployed environment.",
+  );
+  return true;
+}
 
 // ─── Search Input Sanitization ─────────────────────────────────────
 
@@ -76,10 +105,9 @@ export async function requireWebhookSignature(request: FastifyRequest, reply: Fa
   const secret = env.WEBHOOK_SECRET;
 
   if (!secret) {
-    if (env.NODE_ENV === "production") {
+    if (!allowUnverifiedRequest(request, "requireWebhookSignature", "WEBHOOK_SECRET")) {
       return reply.unauthorized("Webhook secret not configured");
     }
-    // Development: allow unsigned requests
     return;
   }
 
@@ -115,10 +143,9 @@ export async function requireInternalToken(request: FastifyRequest, reply: Fasti
   const secret = env.INTERNAL_SERVICE_TOKEN || env.WEBHOOK_SECRET;
 
   if (!secret) {
-    if (env.NODE_ENV === "production") {
+    if (!allowUnverifiedRequest(request, "requireInternalToken", "INTERNAL_SERVICE_TOKEN")) {
       return reply.unauthorized("Internal token not configured");
     }
-    // Development: allow unauthenticated access
     return;
   }
 
