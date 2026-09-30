@@ -60,18 +60,6 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
   return (
     <Modal open={open} onClose={handleClose} title="New Project" size="lg">
       <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 space-y-4">
-        <div>
-          <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
-          <Input
-            id="project-name"
-            type="text"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="My App"
-            required
-          />
-        </div>
-
         {error && (
           <div className="rounded-(--radius-input) bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">
             {error}
@@ -103,6 +91,20 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
           <div>
             <span id={`${fid}-repository`} className="block text-sm font-medium text-text-secondary mb-1.5">Repository</span>
             <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={handleRepoChange} repos={repos} loading={loadingRepos} onRefresh={refreshRepos} refreshing={refreshingRepos} onSearch={searchRepos} searching={searchingRepos} hasMore={hasMoreRepos} />
+          </div>
+        )}
+
+        {selectedRepo && (
+          <div>
+            <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
+            <Input
+              id="project-name"
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="My App"
+              required
+            />
           </div>
         )}
 
