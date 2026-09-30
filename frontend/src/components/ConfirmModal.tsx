@@ -69,13 +69,9 @@ export default function ConfirmModal({
           Cancel
         </Button>
         <Button
+          variant={destructive ? "primary" : "outline-danger"}
           onClick={() => void handleConfirm()}
           loading={pending}
-          className={
-            destructive
-              ? "bg-danger-700 text-white hover:bg-danger-700/90"
-              : undefined
-          }
         >
           {confirmLabel}
         </Button>
