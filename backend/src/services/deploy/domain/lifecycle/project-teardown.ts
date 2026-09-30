@@ -17,7 +17,7 @@ import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials
 import { parseInfra } from "../../types.js";
 import { getAdapter } from "../adapters/index.js";
 import type { DestroyContext, DestroyResult } from "../adapters/types.js";
-import { teardownDokployProject } from "./dokploy-teardown.js";
+import { teardownDokployProject, type DokployTeardownResult } from "./dokploy-teardown.js";
 
 /**
  * A distinct live stack belonging to a project, with everything needed to
@@ -259,26 +259,31 @@ export interface TeardownDeps {
   destroy?: (stack: ResolvedStack) => Promise<DestroyResult>;
 }
 
-/**
- * Teardown path for Dokploy-provisioned projects. Delegates to the Dokploy
- * teardown module and maps its result into the shared `TeardownResult` shape,
- * updating `infra_state` on full success.
- */
-async function teardownViaDokploy(projectId: string, tenantId: string): Promise<TeardownResult> {
-  const result = await teardownDokployProject(projectId, tenantId);
-
-  const perStack: TeardownStackResult[] = result.steps.map((step) => ({
+/** Map Dokploy teardown steps into the shared per-stack result shape. */
+function dokployPerStack(result: DokployTeardownResult): TeardownStackResult[] {
+  return result.steps.map((step) => ({
     stackName: step.resource,
     success: step.success,
     message: step.message,
     errors: step.success ? [] : [step.message],
   }));
+}
 
-  if (result.status === "torn_down") {
-    await setProjectInfraState(projectId, tenantId, "torn_down");
-  }
-
-  return { status: result.status, message: result.message, perStack };
+/**
+ * Whether a resolved stack must be torn down through the native adapters even
+ * when the Dokploy provider is active.
+ *
+ * Static sites always DEPLOY through the native path whatever DEPLOY_PROVIDER
+ * says (see `routePipeline` in ../worker.ts): object storage + CDN is cheaper
+ * and faster than nginx on a VPS, and Dokploy has no equivalent target. So they
+ * must also be TORN DOWN through the native path. Routing on the provider flag
+ * alone sent these projects to the Dokploy teardown, which found no dokploy_*
+ * rows, reported "nothing to tear down", and left the bucket, the CDN
+ * distribution and the CloudFormation stack running — then project deletion
+ * dropped the rows that named them, making them unreachable from the product.
+ */
+function isNativeOnlyStack(stack: ResolvedStack): boolean {
+  return stack.deployStrategy === "static";
 }
 
 export async function teardownProjectInfrastructure(
@@ -286,31 +291,22 @@ export async function teardownProjectInfrastructure(
   tenantId: string,
   deps: TeardownDeps = {},
 ): Promise<TeardownResult> {
-  // Dokploy deployments don't create Pulumi/CFN stacks — their infrastructure
-  // is a VPS + Dokploy records tracked in the dokploy_* tables. Route teardown
-  // to the Dokploy-specific path when that provider is active.
-  if (env.DEPLOY_PROVIDER === "dokploy") {
-    return teardownViaDokploy(projectId, tenantId);
-  }
-
   const resolve = deps.resolve ?? resolveProjectStacks;
   const destroy = deps.destroy ?? destroyStack;
+  const dokployActive = env.DEPLOY_PROVIDER === "dokploy";
 
-  const stacks = await resolve(projectId, tenantId);
+  // Dokploy deploys create no Pulumi/CFN stack — their infrastructure is a VPS
+  // plus Dokploy records in the dokploy_* tables. When Dokploy is active the
+  // only stacks worth resolving are the ones it never owned (static sites); a
+  // project whose strategy changed between deploys can legitimately have both,
+  // so the two paths are additive rather than exclusive.
+  const resolved = await resolve(projectId, tenantId);
+  const stacks = dokployActive ? resolved.filter(isNativeOnlyStack) : resolved;
 
-  if (stacks.length === 0) {
-    logger.info({ projectId }, "[teardown] No provisioned infrastructure to tear down");
-    return {
-      status: "nothing_to_tear_down",
-      message: "No provisioned infrastructure found for this project.",
-      perStack: [],
-    };
-  }
-
-  const perStack: TeardownStackResult[] = [];
+  const stackResults: TeardownStackResult[] = [];
   for (const stack of stacks) {
     const result = await destroy(stack);
-    perStack.push({
+    stackResults.push({
       stackName: stack.stackName,
       success: result.success,
       message: result.message,
@@ -318,20 +314,43 @@ export async function teardownProjectInfrastructure(
     });
   }
 
-  const allSucceeded = perStack.every((s) => s.success);
+  const dokployResult = dokployActive ? await teardownDokployProject(projectId, tenantId) : null;
+  const perStack: TeardownStackResult[] = [
+    ...stackResults,
+    ...(dokployResult ? dokployPerStack(dokployResult) : []),
+  ];
 
-  if (allSucceeded) {
+  const foundDokployInfra = dokployResult !== null && dokployResult.status !== "nothing_to_tear_down";
+  if (stacks.length === 0 && !foundDokployInfra) {
+    logger.info({ projectId }, "[teardown] No provisioned infrastructure to tear down");
+    return {
+      status: "nothing_to_tear_down",
+      message: "No provisioned infrastructure found for this project.",
+      perStack,
+    };
+  }
+
+  const failed = perStack.filter((s) => !s.success).map((s) => s.stackName);
+  const stacksSucceeded = stackResults.every((s) => s.success);
+  // Dokploy decides its own status: it reports `torn_down` when every billable
+  // cloud resource is gone even if some of its own records could not be removed,
+  // so that verdict is carried through rather than recomputed from the steps.
+  const dokploySucceeded = dokployResult === null || dokployResult.status !== "partial";
+
+  if (stacksSucceeded && dokploySucceeded) {
     await setProjectInfraState(projectId, tenantId, "torn_down");
-    logger.info({ projectId, stacks: perStack.length }, "[teardown] Project infrastructure torn down");
+    logger.info({ projectId, stacks: stacks.length, dokploy: dokployResult?.status ?? "skipped" }, "[teardown] Project infrastructure torn down");
     return {
       status: "torn_down",
-      message: `Tore down ${perStack.length} stack(s).`,
+      message: [
+        stacks.length > 0 ? `Tore down ${stacks.length} stack(s).` : "",
+        dokployResult && foundDokployInfra ? dokployResult.message : "",
+      ].filter(Boolean).join(" ") || `Tore down ${perStack.length} resource(s).`,
       perStack,
     };
   }
 
   // Partial failure — leave infra_state as "live" since live resources may remain.
-  const failed = perStack.filter((s) => !s.success).map((s) => s.stackName);
   logger.warn({ projectId, failed }, "[teardown] Project infrastructure teardown partially failed");
   return {
     status: "partial",

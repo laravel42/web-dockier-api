@@ -300,7 +300,7 @@ export async function deleteProject(projectId: string, tenantId: string) {
   // (potentially slow) infrastructure teardown.
   const { data: existing, error: findError } = await supabaseAdmin
     .from("projects")
-    .select("id")
+    .select("id,infra_state")
     .eq("id", projectId)
     .eq("organization_id", tenantId)
     .maybeSingle();
@@ -312,7 +312,7 @@ export async function deleteProject(projectId: string, tenantId: string) {
   // Best-effort: release provisioned infrastructure (VPS + Dokploy resources)
   // before removing the project row, so we don't orphan billable cloud VMs.
   // Never block deletion on teardown failure — surface it in logs instead.
-  await teardownProjectInfraSafely(projectId, tenantId);
+  await teardownProjectInfraSafely(projectId, tenantId, (existing as { infra_state?: string }).infra_state);
 
   const { data, error } = await supabaseAdmin
     .from("projects")
@@ -333,7 +333,7 @@ export async function deleteProject(projectId: string, tenantId: string) {
  * and deploy services. Teardown failures are logged but do not block project
  * deletion — a stuck/unreachable provider must not make projects undeletable.
  */
-async function teardownProjectInfraSafely(projectId: string, tenantId: string): Promise<void> {
+async function teardownProjectInfraSafely(projectId: string, tenantId: string, infraState?: string): Promise<void> {
   try {
     const { teardownProjectInfrastructure } = await import(
       "../../deploy/domain/lifecycle/project-teardown.js"
@@ -342,6 +342,17 @@ async function teardownProjectInfraSafely(projectId: string, tenantId: string): 
     if (result.status === "partial") {
       const { logger } = await import("../../../shared/logger.js");
       logger.warn({ projectId, result }, "[projects] Infrastructure teardown incomplete on project delete");
+    }
+    // The project believed it had live infrastructure but teardown found nothing
+    // to remove. Deleting the row now drops the only records that name those
+    // resources, so they can no longer be reached through the product — log loudly
+    // rather than letting the discrepancy disappear with the row.
+    if (result.status === "nothing_to_tear_down" && infraState === "live") {
+      const { logger } = await import("../../../shared/logger.js");
+      logger.error(
+        { projectId, result },
+        "[projects] Project infra_state was live but teardown found nothing — resources may be orphaned",
+      );
     }
   } catch (err) {
     const { logger } = await import("../../../shared/logger.js");
