@@ -1,4 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * `createDokployClient()` reads the validated `env` object, so the config
+ * module is mocked for this whole file (same getter-backed pattern as
+ * `__tests__/config.test.ts`). The DokployClient class tests below construct
+ * the client explicitly and never read config, so the mock is inert for them.
+ */
+const mockEnv: Record<string, unknown> = {};
+
+vi.mock("../../../../../shared/config.js", () => ({
+  get env() { return mockEnv; },
+}));
+
+function setMockEnv(values: Record<string, unknown>) {
+  for (const k of Object.keys(mockEnv)) delete mockEnv[k];
+  Object.assign(mockEnv, values);
+}
+
 import { DokployClient } from "../client.js";
 import { DokployError } from "../types.js";
 
@@ -530,12 +548,11 @@ describe("DokployClient", () => {
 
 describe("createDokployClient", () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
+    setMockEnv({});
   });
 
   it("throws when DOKPLOY_API_URL is missing", async () => {
-    vi.stubEnv("DOKPLOY_API_URL", "");
-    vi.stubEnv("DOKPLOY_API_TOKEN", "token");
+    setMockEnv({ DOKPLOY_API_TOKEN: "token" });
 
     const { createDokployClient } = await import("../client.js");
 
@@ -543,12 +560,33 @@ describe("createDokployClient", () => {
   });
 
   it("throws when DOKPLOY_API_TOKEN is missing", async () => {
-    vi.stubEnv("DOKPLOY_API_URL", "https://dokploy.test/api");
-    vi.stubEnv("DOKPLOY_API_TOKEN", "");
+    setMockEnv({ DOKPLOY_API_URL: "https://dokploy.test/api" });
 
     const { createDokployClient } = await import("../client.js");
 
     expect(() => createDokployClient()).toThrow(/DOKPLOY_API_TOKEN is required/);
+  });
+
+  it("builds a client from the validated config when both are set", async () => {
+    setMockEnv({
+      DOKPLOY_API_URL: "https://dokploy.test/api",
+      DOKPLOY_API_TOKEN: "token",
+    });
+
+    const { createDokployClient } = await import("../client.js");
+
+    expect(createDokployClient()).toBeInstanceOf(DokployClient);
+  });
+
+  it("ignores process.env — the values come from the validated config only", async () => {
+    vi.stubEnv("DOKPLOY_API_URL", "https://from-process-env.test/api");
+    vi.stubEnv("DOKPLOY_API_TOKEN", "process-env-token");
+    setMockEnv({ DOKPLOY_API_TOKEN: "token" });
+
+    const { createDokployClient } = await import("../client.js");
+
+    expect(() => createDokployClient()).toThrow(/DOKPLOY_API_URL is required/);
+    vi.unstubAllEnvs();
   });
 });
 

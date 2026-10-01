@@ -43,6 +43,7 @@ import type {
 import { DokployError } from "./types.js";
 import { sleep } from "../../../../shared/utils/time.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { env } from "../../../../shared/config.js";
 
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -607,10 +608,14 @@ export class DokployClient {
 /**
  * Create a DokployClient from environment configuration.
  * Throws if required env vars are not set.
+ *
+ * Reads the validated `env` object rather than `process.env` directly, so the
+ * URL has already been through `z.string().url()` and the init-order Proxy
+ * guard reports a clear error if this is called before `initConfig()`.
  */
 export function createDokployClient(): DokployClient {
-  const baseUrl = process.env.DOKPLOY_API_URL;
-  const apiToken = process.env.DOKPLOY_API_TOKEN;
+  const baseUrl = env.DOKPLOY_API_URL;
+  const apiToken = env.DOKPLOY_API_TOKEN;
 
   if (!baseUrl) throw new Error("DOKPLOY_API_URL is required when DEPLOY_PROVIDER=dokploy");
   if (!apiToken) throw new Error("DOKPLOY_API_TOKEN is required when DEPLOY_PROVIDER=dokploy");
