@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { type ServiceName } from "./shared/constants/services.js";
@@ -8,6 +9,7 @@ import { rawBodyPlugin } from "./shared/http/raw-body.js";
 import { registerDomainErrorHandler } from "./shared/http/error-handler.js";
 import { LOG_REDACT_PATHS, redactedReqSerializer } from "./shared/http/log-redaction.js";
 import { registerPlatformPlugins } from "./shared/http/openapi.js";
+import { isQueueReady } from "./shared/database/queue.js";
 import { registerAuthRoutes } from "./services/auth/routes.js";
 import { registerCodeAnalysisRoutes } from "./services/code-analysis/routes.js";
 import { registerDeployRoutes } from "./services/deploy/routes.js";
@@ -86,6 +88,13 @@ export async function buildApp(service: ServiceName) {
     // the IP-keyed rateLimit() collapses into one global bucket
     // (see shared/http/rate-limit.ts).
     trustProxy: 1,
+    // Prefer an inbound correlation id so a trace started by the frontend or a
+    // load balancer survives the backend boundary. Fastify's default is a
+    // per-process counter ("req-1", "req-2", ...) that restarts on every
+    // deploy and collides across the instances the service registry can split
+    // into, which makes an id ambiguous in aggregated logs.
+    requestIdHeader: "x-request-id",
+    genReqId: () => randomUUID(),
   });
 
   await app.register(rawBodyPlugin);
@@ -95,7 +104,27 @@ export async function buildApp(service: ServiceName) {
   await registerPlatformPlugins(app, service);
   registerDomainErrorHandler(app);
 
+  // Liveness: is the process up and serving? Deliberately a static literal —
+  // existing platform probes depend on this exact payload.
   app.get("/healthz", async () => ({ status: "ok", service }));
+
+  // Readiness: is the process able to do useful work? Distinct from /healthz
+  // because run-server.ts tolerates a failed queue start by design and serves
+  // traffic anyway, falling back to in-process execution. That state is
+  // invisible to /healthz — "deploys aren't starting" while health is green —
+  // so report the queue explicitly here.
+  //
+  // Not wired to a platform probe: a readiness check that fails closed would
+  // stop traffic to an instance that is still serving HTTP correctly.
+  app.get("/readyz", async (_request, reply) => {
+    const queueReady = isQueueReady();
+    return reply.code(queueReady ? 200 : 503).send({
+      status: queueReady ? "ready" : "degraded",
+      service,
+      queue: queueReady ? "ready" : "unavailable",
+    });
+  });
+
   await registerCoreRoutesByService(app, service);
 
   return app;
