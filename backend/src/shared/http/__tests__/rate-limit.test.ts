@@ -8,9 +8,16 @@
  * These tests pin EXISTING behaviour.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createTestEnv } from "../../__tests__/test-helpers.js";
 import { rateLimit, tenantRateLimit, clearRateLimitStore } from "../rate-limit.js";
+
+// Needed only by the trustProxy suite at the bottom, which boots the real app.
+vi.mock("../../config.js", () => ({ env: createTestEnv() }));
+vi.mock("../../supabase/client.js", () => ({
+  supabaseAdmin: { from: vi.fn(), auth: { signInWithOtp: vi.fn(), verifyOtp: vi.fn() } },
+}));
 
 interface Doubles {
   request: FastifyRequest;
@@ -212,5 +219,68 @@ describe("tenantRateLimit", () => {
 
     expect(headers).toEqual({});
     expect(tooMany).toEqual([]);
+  });
+});
+
+// ─── trustProxy ────────────────────────────────────────────────────
+
+/**
+ * `rateLimit()` keys on `request.ip`, which Fastify derives from
+ * `X-Forwarded-For` only when `trustProxy` is set. These tests boot the real
+ * app (buildApp sets `trustProxy: 1`) so they fail if that option is dropped.
+ *
+ * The numeric form matters: it trusts only the LAST hop, so prepending a fake
+ * address neither evades the sender's own limit nor poisons another client's.
+ */
+describe("rateLimit behind a trusted proxy", () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    const { buildApp } = await import("../../../app.js");
+    app = await buildApp("auth");
+
+    // Routes must be registered before the first inject() boots the instance.
+    app.get(
+      "/__rate-limit/distinct",
+      { preHandler: rateLimit({ max: 1, windowMs: 60_000, prefix: "xff-distinct" }) },
+      async () => ({ ok: true }),
+    );
+    app.get(
+      "/__rate-limit/last-hop",
+      { preHandler: rateLimit({ max: 1, windowMs: 60_000, prefix: "xff-last-hop" }) },
+      async () => ({ ok: true }),
+    );
+
+    await app.ready();
+  });
+
+  function get(url: string, forwardedFor: string) {
+    return app.inject({ method: "GET", url, headers: { "x-forwarded-for": forwardedFor } });
+  }
+
+  it("gives two distinct client IPs distinct buckets", async () => {
+    const first = await get("/__rate-limit/distinct", "1.2.3.4");
+    expect(first.statusCode).toBe(200);
+
+    // A different client is unaffected by the first client's traffic.
+    const second = await get("/__rate-limit/distinct", "5.6.7.8");
+    expect(second.statusCode).toBe(200);
+
+    // ...while the first client is still held to its own limit.
+    const firstAgain = await get("/__rate-limit/distinct", "1.2.3.4");
+    expect(firstAgain.statusCode).toBe(429);
+  });
+
+  it("keys the bucket on the last X-Forwarded-For hop, so a prepended address is ignored", async () => {
+    const spoofed = await get("/__rate-limit/last-hop", "1.2.3.4, 5.6.7.8");
+    expect(spoofed.statusCode).toBe(200);
+
+    // Same real client (last hop 5.6.7.8) — the prepended entry bought nothing.
+    const sameClient = await get("/__rate-limit/last-hop", "5.6.7.8");
+    expect(sameClient.statusCode).toBe(429);
+
+    // ...and the prepended address did not poison 1.2.3.4's own bucket.
+    const victim = await get("/__rate-limit/last-hop", "1.2.3.4");
+    expect(victim.statusCode).toBe(200);
   });
 });

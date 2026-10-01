@@ -77,6 +77,15 @@ export async function buildApp(service: ServiceName) {
     // from when it's received to when the response must be sent. Individual
     // routes override with handlerTimeout for specific operations.
     requestTimeout: 60_000,
+    // Numeric form on purpose: it trusts only the LAST N hops of
+    // X-Forwarded-For, so a client cannot spoof its address by prepending
+    // entries (which `true` would allow). 1 = Railway's single proxy hop —
+    // raise it if another proxy layer is added in front.
+    //
+    // Without this, request.ip is the proxy's address for every client and
+    // the IP-keyed rateLimit() collapses into one global bucket
+    // (see shared/http/rate-limit.ts).
+    trustProxy: 1,
   });
 
   await app.register(rawBodyPlugin);
