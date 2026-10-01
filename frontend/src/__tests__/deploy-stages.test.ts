@@ -118,6 +118,131 @@ describe("parseStages — static pipeline", () => {
   });
 });
 
+/**
+ * The `[stage:<id>]` marker contract, frontend half.
+ *
+ * AUTHORITY for the set of emitted ids is `backend/src/lib/logging.ts`
+ * (NATIVE_STAGE + DOKPLOY_STAGE, asserted there in
+ * `backend/src/lib/__tests__/logging.test.ts`). The backend may not be imported
+ * from here — they are separate packages — so the list is duplicated below as a
+ * literal. If a stage id is renamed in `lib/logging.ts`, this is the test that
+ * should fail.
+ *
+ * The relation is a SUBSET, not equality: the backend emits markers for work
+ * that is not a timeline step (post-deploy commands, AI recovery, network and
+ * domain application), and the timeline deliberately ignores them.
+ */
+const BACKEND_STAGE_IDS = [
+  // DOKPLOY_STAGE
+  "ensure-project",
+  "sync-git",
+  "provision-server",
+  "provision-databases",
+  "configure-app",
+  "deploy",
+  "post-deploy",
+  "ai-recovery",
+  "network",
+  "domains",
+  "verify",
+  // NATIVE_STAGE
+  "clone",
+  "analyze",
+  "build-site",
+  "upload",
+  "cdn",
+  "build-image",
+  "provision",
+] as const;
+
+describe("the [stage:<id>] marker contract", () => {
+  const timelineIds = (strategy: string) => stageDefsFor(strategy).map((s) => s.id);
+
+  it("renders only ids the backend actually emits", () => {
+    const emitted = new Set<string>(BACKEND_STAGE_IDS);
+    for (const strategy of ["static", "vps"]) {
+      const unknown = timelineIds(strategy).filter((id) => !emitted.has(id));
+      expect(unknown).toEqual([]);
+    }
+  });
+
+  it("extracts every backend id with the parser regex, hyphens included", () => {
+    for (const id of BACKEND_STAGE_IDS) {
+      const match = `[2026-09-29 22:20:03] [stage:${id}] ── Something ───`.match(
+        /\[stage:([\w-]+)\]/,
+      );
+      expect(match?.[1]).toBe(id);
+    }
+  });
+
+  it("resolves a log line to a stage for EVERY id in the Dokploy timeline", () => {
+    const ids = timelineIds("vps");
+    const logs = ids.map((id) => `[2026-09-29 10:00:00] [stage:${id}] ── ${id} ───`);
+    const { stages } = parseStages(logs, false, "vps", false);
+
+    for (const id of ids) {
+      const stage = stages.find((s) => s.id === id);
+      expect(stage, `no stage resolved for ${id}`).toBeDefined();
+      expect(stage?.logs.length, `no log line attached to ${id}`).toBeGreaterThan(0);
+      expect(stage?.status).not.toBe("pending");
+    }
+  });
+
+  it("resolves a log line to a stage for EVERY id in the static timeline", () => {
+    const ids = timelineIds("static");
+    const logs = ids.map((id) => `[2026-09-29 22:20:00] [stage:${id}] ── ${id} ───`);
+    const { stages } = parseStages(logs, false, "static", false);
+
+    for (const id of ids) {
+      const stage = stages.find((s) => s.id === id);
+      expect(stage, `no stage resolved for ${id}`).toBeDefined();
+      expect(stage?.logs.length, `no log line attached to ${id}`).toBeGreaterThan(0);
+      expect(stage?.status).not.toBe("pending");
+    }
+  });
+
+  it("ignores backend ids that are not timeline steps without breaking the timeline", () => {
+    const timeline = new Set<string>([...timelineIds("vps"), ...timelineIds("static")]);
+    const nonTimeline = BACKEND_STAGE_IDS.filter((id) => !timeline.has(id));
+
+    // Every id the backend emits but the timeline does not render. Pinned so a
+    // new backend stage is a deliberate decision on this side too.
+    expect([...nonTimeline].sort()).toEqual([
+      "ai-recovery",
+      "build-image",
+      "domains",
+      "network",
+      "post-deploy",
+      "provision",
+      "provision-databases",
+    ]);
+
+    const logs = [
+      "[2026-09-29 10:00:01] [stage:ensure-project] ✓ Project ready",
+      ...nonTimeline.map((id) => `[2026-09-29 10:00:02] [stage:${id}] ── ${id} ───`),
+    ];
+    const { stages } = parseStages(logs, false, "vps", false);
+
+    expect(stages.map((s) => s.id)).toEqual(timelineIds("vps"));
+    expect(stages.find((s) => s.id === "ensure-project")?.status).toBe("success");
+    expect(stages.find((s) => s.id === "sync-git")?.status).toBe("pending");
+  });
+
+  it("still reads the ai-recovery marker for retry info even though it is not a step", () => {
+    const logs = [
+      "[2026-09-29 10:00:01] [stage:deploy] Attempt 1/3",
+      "[2026-09-29 10:00:02] [stage:ai-recovery] ✓ Fix applied: pinned the base image",
+      "[2026-09-29 10:00:03] [stage:deploy] Attempt 2/3",
+    ];
+    const { stages, retries } = parseStages(logs, false, "vps", false);
+
+    expect(stages.map((s) => s.id)).not.toContain("ai-recovery");
+    expect(retries).toEqual([
+      { attempt: 1, maxAttempts: 3, fixDescription: "pinned the base image" },
+    ]);
+  });
+});
+
 describe("parseStages — Dokploy pipeline is unaffected", () => {
   const DOKPLOY_LOG = [
     "[2026-09-29 10:00:01] [stage:ensure-project] ✓ Project ready",

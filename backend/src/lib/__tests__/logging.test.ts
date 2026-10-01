@@ -1,7 +1,9 @@
 /**
  * Deploy Pipeline Logging — Unit Tests
  *
- * Covers the stage-marker format, the NATIVE_STAGE vocabulary, and both
+ * Covers the stage-marker format, the NATIVE_STAGE / DOKPLOY_STAGE
+ * vocabularies and the `[stage:<id>]` contract with the frontend deploy
+ * timeline, plus both
  * ContextualLogger implementations. `logTimestamp` is mocked so the asserted
  * line formats are exact, and the shared pino logger is mocked so the console
  * logger's routing is observable.
@@ -33,6 +35,8 @@ vi.mock("../../shared/logger.js", () => ({
 const {
   stageMarker,
   NATIVE_STAGE,
+  DOKPLOY_STAGE,
+  ALL_STAGE_IDS,
   createDeployLogger,
   createConsoleLogger,
   BuildError,
@@ -74,6 +78,149 @@ describe("NATIVE_STAGE", () => {
     for (const id of Object.values(NATIVE_STAGE)) {
       expect(id).toMatch(/^[\w-]+$/);
     }
+  });
+});
+
+// ─── The [stage:<id>] marker contract ──────────────────────────────
+
+/**
+ * The deploy timeline is driven entirely by `[stage:<id>]` markers in the log,
+ * so the marker FORMAT and the set of ids are a cross-package contract with the
+ * frontend. Renaming an id, or changing the marker's shape, silently leaves a
+ * timeline step pending forever — there is no type checking across the two
+ * packages to catch it (AGENTS.md forbids importing one from the other).
+ *
+ * These tests pin both halves on the backend side: the exact marker text, and
+ * the full emitted vocabulary. The frontend half lives in
+ * `frontend/src/__tests__/deploy-stages.test.ts`.
+ */
+describe("the [stage:<id>] marker contract", () => {
+  it("formats every declared id as exactly `[stage:${id}]`", () => {
+    for (const id of ALL_STAGE_IDS) {
+      expect(stageMarker(id)).toBe(`[stage:${id}]`);
+    }
+  });
+
+  it("declares the exact Dokploy pipeline vocabulary", () => {
+    expect(DOKPLOY_STAGE).toEqual({
+      ENSURE_PROJECT: "ensure-project",
+      SYNC_GIT: "sync-git",
+      PROVISION_SERVER: "provision-server",
+      PROVISION_DATABASES: "provision-databases",
+      CONFIGURE_APP: "configure-app",
+      DEPLOY: "deploy",
+      POST_DEPLOY: "post-deploy",
+      AI_RECOVERY: "ai-recovery",
+      NETWORK: "network",
+      DOMAINS: "domains",
+      VERIFY: "verify",
+    });
+  });
+
+  it("pins the full set of emitted stage ids across both pipelines", () => {
+    // Union of NATIVE_STAGE and DOKPLOY_STAGE, deduplicated. Confirmed against
+    // every `[stage:...]` producer under backend/src.
+    expect([...ALL_STAGE_IDS].sort()).toEqual([
+      "ai-recovery",
+      "analyze",
+      "build-image",
+      "build-site",
+      "cdn",
+      "clone",
+      "configure-app",
+      "deploy",
+      "domains",
+      "ensure-project",
+      "network",
+      "post-deploy",
+      "provision",
+      "provision-databases",
+      "provision-server",
+      "sync-git",
+      "upload",
+      "verify",
+    ]);
+  });
+
+  it("deduplicates `verify`, which both pipelines emit", () => {
+    expect(NATIVE_STAGE.VERIFY).toBe(DOKPLOY_STAGE.VERIFY);
+    expect(ALL_STAGE_IDS.filter((id) => id === "verify")).toHaveLength(1);
+    expect(new Set(ALL_STAGE_IDS).size).toBe(ALL_STAGE_IDS.length);
+  });
+
+  it("keeps every id extractable by the frontend parser regex", () => {
+    // The parser at frontend/src/components/DeployWizard/steps/deployStages.ts
+    // is /\[stage:([\w-]+)\]/ — hyphenated ids must survive it intact.
+    for (const id of ALL_STAGE_IDS) {
+      const match = /\[stage:([\w-]+)\]/.exec(`[2025-01-01 00:00:00] ${stageMarker(id)} ── X ──`);
+      expect(match?.[1]).toBe(id);
+    }
+  });
+
+  /**
+   * Cross-package assertion. This is a SUBSET relation, not equality: the
+   * backend intentionally emits ids that are not timeline steps (post-deploy,
+   * ai-recovery, network, domains, provision-databases, build-image, provision).
+   *
+   * AGENTS.md forbids importing frontend code from the backend, so the frontend
+   * list is duplicated here as a literal. AUTHORITY for the frontend side is
+   * `frontend/src/components/DeployWizard/steps/deployStages.ts`
+   * (DOKPLOY_STAGE_DEFS + STATIC_STAGE_DEFS); authority for the backend side is
+   * `backend/src/lib/logging.ts`.
+   */
+  it("emits every id the frontend timeline renders (frontend ids ⊆ backend ids)", () => {
+    const FRONTEND_TIMELINE_IDS = [
+      // DOKPLOY_STAGE_DEFS
+      "ensure-project",
+      "sync-git",
+      "provision-server",
+      "configure-app",
+      "deploy",
+      // STATIC_STAGE_DEFS
+      "clone",
+      "analyze",
+      "build-site",
+      "upload",
+      "cdn",
+      "verify",
+    ];
+
+    const emitted = new Set(ALL_STAGE_IDS);
+    const missing = FRONTEND_TIMELINE_IDS.filter((id) => !emitted.has(id));
+    expect(missing).toEqual([]);
+  });
+
+  it("documents the backend-only ids the frontend timeline deliberately ignores", () => {
+    const FRONTEND_TIMELINE_IDS = new Set([
+      "ensure-project",
+      "sync-git",
+      "provision-server",
+      "configure-app",
+      "deploy",
+      "clone",
+      "analyze",
+      "build-site",
+      "upload",
+      "cdn",
+      "verify",
+    ]);
+
+    expect(ALL_STAGE_IDS.filter((id) => !FRONTEND_TIMELINE_IDS.has(id)).sort()).toEqual([
+      "ai-recovery",
+      "build-image",
+      "domains",
+      "network",
+      "post-deploy",
+      "provision",
+      "provision-databases",
+    ]);
+  });
+
+  it("produces the exact prefixes the Dokploy stage files used to hand-write", () => {
+    // Output-preservation guard for the literal → stageMarker() refactor in
+    // dokploy/stages/run-post-deploy.ts and dokploy/stages/ai-recovery.ts.
+    expect(stageMarker(DOKPLOY_STAGE.POST_DEPLOY)).toBe("[stage:post-deploy]");
+    expect(stageMarker(DOKPLOY_STAGE.AI_RECOVERY)).toBe("[stage:ai-recovery]");
   });
 });
 

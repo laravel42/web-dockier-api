@@ -37,8 +37,7 @@ export interface ContextualLogger {
  * renders its timeline from these markers. Renaming one without updating the
  * frontend's stage list leaves that step permanently pending, which is exactly
  * how the timeline came to show Dokploy's stages for a static deploy. The
- * Dokploy pipeline has its own separate vocabulary (`ensure-project`,
- * `sync-git`, `provision-server`, `configure-app`, `deploy`).
+ * Dokploy pipeline has its own separate vocabulary — see `DOKPLOY_STAGE` below.
  */
 export const NATIVE_STAGE = {
   CLONE: "clone",
@@ -58,6 +57,52 @@ export const NATIVE_STAGE = {
 } as const;
 
 export type NativeStageId = (typeof NATIVE_STAGE)[keyof typeof NATIVE_STAGE];
+
+/**
+ * Stage ids for the Dokploy pipeline, emitted as `[stage:<id>]` markers in the
+ * deploy log by `deploy/domain/dokploy/stages/*` and `dokploy/pipeline.ts`.
+ *
+ * Same contract warning as `NATIVE_STAGE`: the frontend deploy timeline
+ * (`DeployWizard/steps/deployStages.ts`) renders itself from these markers, so
+ * renaming one without updating the frontend's stage list leaves that step
+ * permanently pending. The frontend timeline is deliberately a SUBSET of this
+ * vocabulary — `POST_DEPLOY`, `AI_RECOVERY`, `NETWORK`, `DOMAINS` and
+ * `PROVISION_DATABASES` are logged for the user but are not timeline steps.
+ */
+export const DOKPLOY_STAGE = {
+  /** Map the tenant onto a Dokploy project. */
+  ENSURE_PROJECT: "ensure-project",
+  /** Prepare the git provider credentials Dokploy will clone with. */
+  SYNC_GIT: "sync-git",
+  /** Ensure a remote server is registered and healthy. */
+  PROVISION_SERVER: "provision-server",
+  /** Create any databases the app declared. */
+  PROVISION_DATABASES: "provision-databases",
+  /** Create/configure the Dokploy application (build type, env, git source). */
+  CONFIGURE_APP: "configure-app",
+  /** Trigger the deploy and poll it to completion. */
+  DEPLOY: "deploy",
+  /** Run the project's user-defined post-deploy commands. */
+  POST_DEPLOY: "post-deploy",
+  /** Dokploy's built-in AI diagnosing a failed deploy before a retry. */
+  AI_RECOVERY: "ai-recovery",
+  /** Apply the project's network/service links. */
+  NETWORK: "network",
+  /** Attach the project's domains. */
+  DOMAINS: "domains",
+  /** Shared with the native pipeline: confirm the deployed app answers. */
+  VERIFY: "verify",
+} as const;
+
+export type DokployStageId = (typeof DOKPLOY_STAGE)[keyof typeof DOKPLOY_STAGE];
+
+/**
+ * Every stage id either pipeline can emit, deduplicated (`verify` is shared).
+ * Exists so the marker contract can be asserted in one place.
+ */
+export const ALL_STAGE_IDS: readonly string[] = [
+  ...new Set<string>([...Object.values(NATIVE_STAGE), ...Object.values(DOKPLOY_STAGE)]),
+];
 
 /** Format a stage marker for inclusion in a raw log line. */
 export function stageMarker(stageId: string): string {

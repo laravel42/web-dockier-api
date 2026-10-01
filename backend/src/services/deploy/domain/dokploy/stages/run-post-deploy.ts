@@ -17,7 +17,15 @@
 import { resolveDokployCommandTarget, execInDokployContainer } from "../command-exec.js";
 import { getProjectDeployConfig } from "../../../../../shared/service-clients/projects.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
+import { DOKPLOY_STAGE, stageMarker } from "../../../../../lib/logging.js";
 import { type Advisory, migrationsNotConfiguredAdvisory } from "../advisories.js";
+
+/**
+ * Stage marker prefix for every line this stage writes. Built from the shared
+ * vocabulary in `lib/logging.ts` rather than hand-written, so the id cannot
+ * drift from the frontend timeline contract. Resolves to "[stage:post-deploy]".
+ */
+const MARKER = stageMarker(DOKPLOY_STAGE.POST_DEPLOY);
 
 /** Cap on the whole script, mirroring the native post-deploy guard. */
 const MAX_SCRIPT_LENGTH = 10_000;
@@ -79,7 +87,7 @@ export async function stageRunPostDeploy(params: {
     const config = await getProjectDeployConfig(projectId);
     script = (config?.deployScript ?? "").trim();
   } catch (err) {
-    await log(`[stage:post-deploy] Skipped loading post-deploy commands: ${getErrMsg(err)}`);
+    await log(`${MARKER} Skipped loading post-deploy commands: ${getErrMsg(err)}`);
     return;
   }
 
@@ -90,7 +98,7 @@ export async function stageRunPostDeploy(params: {
   if (isPhpApp(primaryLanguage, techStack) && !isRailpackPhp(buildType, primaryLanguage, techStack)) {
     if (!/\bartisan\s+migrate\b/.test(script)) {
       await log(
-        "[stage:post-deploy] This build does not run database migrations at container startup, and no migration command is configured — migrations did NOT run.",
+        `${MARKER} This build does not run database migrations at container startup, and no migration command is configured — migrations did NOT run.`,
       );
       advise?.(migrationsNotConfiguredAdvisory());
     }
@@ -99,7 +107,7 @@ export async function stageRunPostDeploy(params: {
   if (!script) return; // nothing configured
 
   if (script.length > MAX_SCRIPT_LENGTH) {
-    await log("[stage:post-deploy] Post-deploy commands exceed the 10KB limit — skipping.");
+    await log(`${MARKER} Post-deploy commands exceed the 10KB limit — skipping.`);
     return;
   }
 
@@ -119,7 +127,7 @@ export async function stageRunPostDeploy(params: {
   if (!hasWork) {
     if (isRailpackPhp(buildType, primaryLanguage, techStack) && hasNonComment(script)) {
       await log(
-        "[stage:post-deploy] Migrations and cache optimization run automatically at container startup — no extra post-deploy commands to run.",
+        `${MARKER} Migrations and cache optimization run automatically at container startup — no extra post-deploy commands to run.`,
       );
     }
     return;
@@ -132,18 +140,18 @@ export async function stageRunPostDeploy(params: {
   // Dockier key, app not located), skip with a clear, non-fatal note.
   const { target, errorMessage } = await resolveDokployCommandTarget(projectId);
   if (!target) {
-    await log(`[stage:post-deploy] Skipping post-deploy commands: ${errorMessage}`);
+    await log(`${MARKER} Skipping post-deploy commands: ${errorMessage}`);
     return;
   }
 
-  await log("[stage:post-deploy] Running post-deploy commands...");
+  await log(`${MARKER} Running post-deploy commands...`);
 
   // Wait for the container to be running before executing (the deploy may have
   // just started it). We probe with a trivial command until it succeeds or the
   // readiness window elapses.
   const ready = await waitForContainer(target, readinessTimeoutMs, sleep, log);
   if (!ready) {
-    await log("[stage:post-deploy] The application container did not become ready in time — skipping post-deploy commands.");
+    await log(`${MARKER} The application container did not become ready in time — skipping post-deploy commands.`);
     return;
   }
 
@@ -153,13 +161,13 @@ export async function stageRunPostDeploy(params: {
   const tail = result.output.trim().split("\n").slice(-20).join("\n");
 
   if (result.timedOut) {
-    await log("[stage:post-deploy] Post-deploy commands timed out.");
+    await log(`${MARKER} Post-deploy commands timed out.`);
   } else if (result.exitCode === 0) {
-    await log("[stage:post-deploy] ✓ Post-deploy commands completed.");
+    await log(`${MARKER} ✓ Post-deploy commands completed.`);
   } else {
-    await log(`[stage:post-deploy] Post-deploy commands exited with code ${result.exitCode} (deploy still succeeded).`);
+    await log(`${MARKER} Post-deploy commands exited with code ${result.exitCode} (deploy still succeeded).`);
   }
-  if (tail) await log(`[stage:post-deploy] Output:\n${tail}`);
+  if (tail) await log(`${MARKER} Output:\n${tail}`);
 }
 
 /** True if the script has at least one non-blank, non-comment line. */
@@ -242,7 +250,7 @@ async function waitForContainer(
     attempt++;
     const probe = await execInDokployContainer(target, "true", { timeoutMs: 20_000 });
     if (probe.exitCode === 0) return true;
-    if (attempt % 3 === 0) await log("[stage:post-deploy] Waiting for the application to be ready...");
+    if (attempt % 3 === 0) await log(`${MARKER} Waiting for the application to be ready...`);
     await sleep(5_000);
   }
   return false;

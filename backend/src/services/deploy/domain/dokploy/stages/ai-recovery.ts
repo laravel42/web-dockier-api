@@ -11,6 +11,14 @@
  */
 
 import type { DokployClient } from "../client.js";
+import { DOKPLOY_STAGE, stageMarker } from "../../../../../lib/logging.js";
+
+/**
+ * Stage marker prefix for every line this stage writes. Built from the shared
+ * vocabulary in `lib/logging.ts` rather than hand-written, so the id cannot
+ * drift from the frontend timeline contract. Resolves to "[stage:ai-recovery]".
+ */
+const MARKER = stageMarker(DOKPLOY_STAGE.AI_RECOVERY);
 
 export interface AIRecoveryResult {
   fixed: boolean;
@@ -29,24 +37,24 @@ export async function invokeDokployAI(params: {
   const { applicationId, client, log } = params;
 
   try {
-    await log("[stage:ai-recovery] Running automated deployment diagnosis...");
+    await log(`${MARKER} Running automated deployment diagnosis...`);
 
     const result = await client.triggerAIFix(applicationId);
 
     if (result.applied) {
       const description = result.summary || "Applied automatic fix";
-      await log(`[stage:ai-recovery] ✓ Fix applied: ${description}`);
+      await log(`${MARKER} ✓ Fix applied: ${description}`);
       return { fixed: true, description };
     }
 
-    await log("[stage:ai-recovery] Diagnosis completed but no automatic fix was applied");
+    await log(`${MARKER} Diagnosis completed but no automatic fix was applied`);
     return { fixed: false, description: result.summary || "No actionable fix found" };
   } catch (err) {
     // Non-fatal — automated recovery is best-effort. Keep the underlying
     // detail out of the user-facing log (it can reference internal infra);
     // just note that automated recovery wasn't available.
     void err;
-    await log("[stage:ai-recovery] Automated diagnosis unavailable — continuing.");
+    await log(`${MARKER} Automated diagnosis unavailable — continuing.`);
     return { fixed: false, description: "Automated diagnosis unavailable" };
   }
 }
