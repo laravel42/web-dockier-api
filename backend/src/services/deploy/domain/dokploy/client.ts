@@ -506,8 +506,12 @@ export class DokployClient {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       if (attempt > 0) {
-        const delay = RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
-        await sleep(delay);
+        // Exponential backoff with jitter. Without the random factor,
+        // concurrent deploys that fail against the same Dokploy instance retry
+        // in lockstep and all re-converge on it at 1s/2s/4s, extending the very
+        // outage they're waiting out. Jitter spreads them across the window.
+        const base = RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
+        await sleep(base * (0.5 + Math.random() * 0.5));
       }
 
       try {
