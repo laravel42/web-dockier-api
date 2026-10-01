@@ -513,70 +513,76 @@ export class DokployClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        const response = await fetch(url, {
-          method,
-          headers: {
-            // Dokploy authenticates via the `x-api-key` header, not
-            // `Authorization: Bearer`. See https://docs.dokploy.com/docs/api
-            // and https://github.com/Dokploy/dokploy/issues/4024.
-            "x-api-key": this.apiToken,
-            "Content-Type": "application/json",
-          },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-          signal: controller.signal,
-        });
+        // `finally` rather than a success-path clearTimeout: a rejected fetch
+        // (network error, abort) used to leave the timer pending for the full
+        // timeout on every attempt, keeping the event loop busy and holding a
+        // reference to the controller after the attempt was already over.
+        try {
+          const response = await fetch(url, {
+            method,
+            headers: {
+              // Dokploy authenticates via the `x-api-key` header, not
+              // `Authorization: Bearer`. See https://docs.dokploy.com/docs/api
+              // and https://github.com/Dokploy/dokploy/issues/4024.
+              "x-api-key": this.apiToken,
+              "Content-Type": "application/json",
+            },
+            body: body !== undefined ? JSON.stringify(body) : undefined,
+            signal: controller.signal,
+          });
 
-        clearTimeout(timeoutId);
+          if (response.ok) {
+            // Read as text first: several Dokploy mutations (server.setup,
+            // saveBuildType, saveEnvironment, deploy, ...) return a 2xx with an
+            // EMPTY body. Calling response.json() on an empty body throws
+            // "Unexpected end of JSON input" — which, inside this retry loop,
+            // turned a server-side SUCCESS into a 4-attempt failure. Treat an
+            // empty/whitespace body as a successful void result.
+            const text = await response.text();
+            if (text.trim() === "") {
+              return undefined as T;
+            }
 
-        if (response.ok) {
-          // Read as text first: several Dokploy mutations (server.setup,
-          // saveBuildType, saveEnvironment, deploy, ...) return a 2xx with an
-          // EMPTY body. Calling response.json() on an empty body throws
-          // "Unexpected end of JSON input" — which, inside this retry loop,
-          // turned a server-side SUCCESS into a 4-attempt failure. Treat an
-          // empty/whitespace body as a successful void result.
-          const text = await response.text();
-          if (text.trim() === "") {
-            return undefined as T;
+            let json: { result?: { data?: T } } | T;
+            try {
+              json = JSON.parse(text) as { result?: { data?: T } } | T;
+            } catch {
+              // A malformed body on a 2xx won't fix itself on retry. Use a 4xx
+              // status code so the catch below classifies it as non-retryable
+              // and throws immediately instead of looping.
+              throw new DokployError(
+                `Dokploy API returned a non-JSON body (HTTP ${response.status}): ${text.slice(0, 200)}`,
+                422,
+                endpoint || url,
+              );
+            }
+
+            // tRPC wraps results in { result: { data: ... } }
+            if (json && typeof json === "object" && "result" in json && json.result && typeof json.result === "object" && "data" in json.result) {
+              return json.result.data as T;
+            }
+            return json as T;
           }
 
-          let json: { result?: { data?: T } } | T;
-          try {
-            json = JSON.parse(text) as { result?: { data?: T } } | T;
-          } catch {
-            // A malformed body on a 2xx won't fix itself on retry. Use a 4xx
-            // status code so the catch below classifies it as non-retryable
-            // and throws immediately instead of looping.
+          // Non-retryable client errors (4xx)
+          if (response.status >= 400 && response.status < 500) {
+            const errorBody = await response.text().catch(() => "");
             throw new DokployError(
-              `Dokploy API returned a non-JSON body (HTTP ${response.status}): ${text.slice(0, 200)}`,
-              422,
+              `Dokploy API error: ${response.status} ${response.statusText} — ${errorBody}`,
+              response.status,
               endpoint || url,
             );
           }
 
-          // tRPC wraps results in { result: { data: ... } }
-          if (json && typeof json === "object" && "result" in json && json.result && typeof json.result === "object" && "data" in json.result) {
-            return json.result.data as T;
-          }
-          return json as T;
-        }
-
-        // Non-retryable client errors (4xx)
-        if (response.status >= 400 && response.status < 500) {
-          const errorBody = await response.text().catch(() => "");
-          throw new DokployError(
-            `Dokploy API error: ${response.status} ${response.statusText} — ${errorBody}`,
+          // Retryable server errors (5xx)
+          lastError = new DokployError(
+            `Dokploy API server error: ${response.status} ${response.statusText}`,
             response.status,
             endpoint || url,
           );
+        } finally {
+          clearTimeout(timeoutId);
         }
-
-        // Retryable server errors (5xx)
-        lastError = new DokployError(
-          `Dokploy API server error: ${response.status} ${response.statusText}`,
-          response.status,
-          endpoint || url,
-        );
       } catch (err) {
         if (err instanceof DokployError && err.statusCode >= 400 && err.statusCode < 500) {
           throw err; // Don't retry client errors

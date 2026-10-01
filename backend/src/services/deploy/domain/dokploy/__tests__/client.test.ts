@@ -551,3 +551,35 @@ describe("createDokployClient", () => {
     expect(() => createDokployClient()).toThrow(/DOKPLOY_API_TOKEN is required/);
   });
 });
+
+// ─── Request Timeout Cleanup ───────────────────────────────────────
+
+describe("request timeout cleanup", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("clears the per-attempt timeout when a fetch attempt rejects", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("socket hang up"));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
+
+    const client = new DokployClient({
+      baseUrl: "https://dokploy.test/api",
+      apiToken: "test-token",
+      timeout: 5000,
+      // No retries, so the failed attempt is not followed by a backoff
+      // `sleep()` timer that would make the pending count ambiguous.
+      maxRetries: 0,
+    });
+
+    const pendingBefore = vi.getTimerCount();
+
+    await expect(client.getProject("p1")).rejects.toThrow(DokployError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(pendingBefore);
+  });
+});
