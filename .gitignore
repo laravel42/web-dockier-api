@@ -21,3 +21,9 @@ supabase/.temp
 
 # Railway
 .railway
+
+# Agent scratch output (investigation reports, run plans, reviews)
+.agents/
+
+# Git worktrees created for agent runs
+.worktrees/
