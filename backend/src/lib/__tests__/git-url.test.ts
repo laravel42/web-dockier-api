@@ -1,9 +1,10 @@
 /**
  * Authenticated Clone URL Builder — Unit Tests
  *
- * These tests pin EXISTING behaviour, including two rough edges documented
- * inline: the empty-token fallback ignores the provider, and a non-URL
- * `endpoint` throws out of `new URL()`.
+ * Two former rough edges are now fixed and covered as regressions: the
+ * empty-token fallback is provider-aware (it used to always return a
+ * github.com URL), and a non-URL `endpoint` raises a descriptive error
+ * instead of a raw TypeError out of `new URL()`.
  */
 
 import { describe, it, expect } from "vitest";
@@ -82,13 +83,13 @@ describe("buildCloneUrl — gitlab_self_hosted", () => {
     );
   });
 
-  // NOTE: suspected bug — a malformed endpoint reaches `new URL()` unguarded, so
-  // a misconfigured connection surfaces as a raw TypeError ("Invalid URL")
-  // instead of a user-facing message. Asserted as today's behaviour.
-  it("throws a raw URL parse error for a non-URL endpoint", () => {
+  // Regression: a malformed endpoint used to reach `new URL()` unguarded and
+  // surface as a raw TypeError ("Invalid URL"), naming neither the setting nor
+  // the bad value.
+  it("throws a descriptive error naming the bad endpoint", () => {
     expect(() =>
       buildCloneUrl({ provider: "gitlab_self_hosted", token: TOKEN, repo: REPO, endpoint: "not a url" }),
-    ).toThrow(TypeError);
+    ).toThrow('Invalid git provider endpoint: "not a url"');
   });
 
   it("throws for an endpoint missing its scheme", () => {
@@ -129,17 +130,24 @@ describe("buildCloneUrl — no token", () => {
     expect(buildCloneUrl({ provider: "github", token: "", repo: REPO })).toBe(`https://github.com/${REPO}.git`);
   });
 
-  // NOTE: suspected bug — the empty-token branch runs before the provider
-  // switch, so a tokenless GitLab or Bitbucket repo is cloned from github.com.
-  // Asserted as today's behaviour.
-  it("returns a GitHub URL even for non-GitHub providers", () => {
-    expect(buildCloneUrl({ provider: "gitlab", token: "", repo: REPO })).toBe(`https://github.com/${REPO}.git`);
-    expect(buildCloneUrl({ provider: "bitbucket", token: "", repo: REPO })).toBe(`https://github.com/${REPO}.git`);
+  // Regression: the empty-token branch used to run before the provider switch,
+  // so a tokenless GitLab or Bitbucket repo was cloned from github.com.
+  it("uses the provider's own host for non-GitHub providers", () => {
+    expect(buildCloneUrl({ provider: "gitlab", token: "", repo: REPO })).toBe(`https://gitlab.com/${REPO}.git`);
+    expect(buildCloneUrl({ provider: "bitbucket", token: "", repo: REPO })).toBe(`https://bitbucket.org/${REPO}.git`);
   });
 
-  // Same branch: an unsupported provider with no token never reaches the throw.
-  it("does not throw for an unsupported provider when the token is empty", () => {
-    expect(buildCloneUrl({ provider: "svn", token: "", repo: REPO })).toBe(`https://github.com/${REPO}.git`);
+  it("honours a self-hosted endpoint with no token", () => {
+    expect(
+      buildCloneUrl({ provider: "gitlab_self_hosted", token: "", repo: REPO, endpoint: "https://git.acme.dev" }),
+    ).toBe(`https://git.acme.dev/${REPO}.git`);
+  });
+
+  // Same branch: an unsupported provider with no token now reaches the throw.
+  it("throws for an unsupported provider even when the token is empty", () => {
+    expect(() => buildCloneUrl({ provider: "svn", token: "", repo: REPO })).toThrow(
+      "Unsupported git provider: svn",
+    );
   });
 });
 
