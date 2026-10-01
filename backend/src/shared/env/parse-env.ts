@@ -70,7 +70,11 @@ export function parseEnvContent(content: string): Array<{ name: string; value: s
     const eqIdx = trimmed.indexOf("=");
     if (eqIdx === -1) continue;
 
-    const name = trimmed.slice(0, eqIdx).trim();
+    // `export KEY=value` is valid in a shell-sourced .env; without stripping
+    // the prefix the key becomes "export KEY", which is not a usable env name.
+    let name = trimmed.slice(0, eqIdx).trim();
+    if (name.startsWith("export ")) name = name.slice("export ".length).trim();
+
     let value = trimmed.slice(eqIdx + 1);
 
     // Handle quoted values (may be multi-line)
@@ -83,13 +87,18 @@ export function parseEnvContent(content: string): Array<{ name: string; value: s
       continue;
     }
 
-    // Single-line: strip surrounding quotes
+    // Single-line: a quoted value is taken verbatim; only an unquoted value
+    // can carry an inline comment.
+    //
+    // Order matters. Stripping the quotes first and *then* testing for a
+    // leading quote can never detect one, which silently truncated any quoted
+    // value containing " #" — e.g. PASSWORD="p@ss #1" became "p@ss".
     value = value.trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    const isQuoted =
+      (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
+    if (isQuoted) {
       value = value.slice(1, -1);
-    }
-    // Remove inline comments (unquoted)
-    if (!value.startsWith('"') && !value.startsWith("'")) {
+    } else {
       const commentIdx = value.indexOf(" #");
       if (commentIdx > -1) value = value.slice(0, commentIdx).trimEnd();
     }

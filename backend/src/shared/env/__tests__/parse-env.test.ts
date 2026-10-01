@@ -88,17 +88,39 @@ describe("parseEnvContent — values", () => {
     expect(parseEnvContent("TAG=v1#2")).toEqual([{ name: "TAG", value: "v1#2" }]);
   });
 
-  // NOTE: suspected bug — inline-comment stripping runs AFTER the surrounding
-  // quotes are removed, so a quoted value containing " #" is truncated. A
-  // password like "p@ss #1" silently becomes "p@ss".
-  it("truncates a quoted value at ' #' because quotes are stripped first", () => {
-    expect(parseEnvContent('PASSWORD="p@ss #1"')).toEqual([{ name: "PASSWORD", value: "p@ss" }]);
+  // Regression: inline-comment stripping used to run after the surrounding
+  // quotes were removed, so a quoted value containing " #" was truncated and a
+  // password like "p@ss #1" silently became "p@ss".
+  it("keeps ' #' inside a quoted value", () => {
+    expect(parseEnvContent('PASSWORD="p@ss #1"')).toEqual([{ name: "PASSWORD", value: "p@ss #1" }]);
   });
 
-  // NOTE: suspected bug — `export ` is not recognised, so the prefix ends up in
-  // the key name. `.env` files written with `export` produce unusable names.
-  it("does not strip an 'export ' prefix — it becomes part of the key", () => {
-    expect(parseEnvContent("export A=1")).toEqual([{ name: "export A", value: "1" }]);
+  it("keeps ' #' inside a single-quoted value", () => {
+    expect(parseEnvContent("PASSWORD='p@ss #1'")).toEqual([{ name: "PASSWORD", value: "p@ss #1" }]);
+  });
+
+  // NOTE: suspected bug, pre-existing and deliberately left alone — a trailing
+  // comment AFTER a closing quote is not supported. The line opens with a quote
+  // and does not end with one, so the multi-line detector claims it and the
+  // value is flushed at EOF with the quote and comment still attached. Fixing
+  // this means changing multi-line detection, which is riskier than the quote
+  // ordering fix above and belongs in its own change.
+  it("mis-parses a trailing comment after a quoted value", () => {
+    expect(parseEnvContent('NAME="my app" # note')).toEqual([{ name: "NAME", value: 'my app" # note' }]);
+  });
+
+  // Regression: the `export ` prefix used to end up in the key name, so an
+  // .env written for shell sourcing produced unusable names like "export A".
+  it("strips an 'export ' prefix from the key", () => {
+    expect(parseEnvContent("export A=1")).toEqual([{ name: "A", value: "1" }]);
+  });
+
+  it("strips 'export ' on a multi-line quoted value too", () => {
+    expect(parseEnvContent('export CERT="a\nb"')).toEqual([{ name: "CERT", value: "a\nb" }]);
+  });
+
+  it("does not treat a key merely starting with 'export' as prefixed", () => {
+    expect(parseEnvContent("exported=1")).toEqual([{ name: "exported", value: "1" }]);
   });
 });
 
