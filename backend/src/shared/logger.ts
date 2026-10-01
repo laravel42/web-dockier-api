@@ -20,9 +20,15 @@
  */
 
 import { pino } from "pino";
+import { LOG_REDACT_PATHS, redactedReqSerializer } from "./http/log-redaction.js";
 
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
+  // Same redaction as the Fastify request logger (see app.ts): credential
+  // headers are censored and a `?token=` query param is masked, so a request
+  // logged from a worker or guard can't leak a JWT either.
+  redact: { paths: LOG_REDACT_PATHS, censor: "REDACTED" },
+  serializers: { req: redactedReqSerializer },
 });
 
 export type Logger = typeof logger;

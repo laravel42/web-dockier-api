@@ -6,6 +6,7 @@ import { authorizationPlugin } from "./shared/permissions/authorization.js";
 import { projectAccessPlugin } from "./shared/http/project-access.js";
 import { rawBodyPlugin } from "./shared/http/raw-body.js";
 import { registerDomainErrorHandler } from "./shared/http/error-handler.js";
+import { LOG_REDACT_PATHS, redactedReqSerializer } from "./shared/http/log-redaction.js";
 import { registerPlatformPlugins } from "./shared/http/openapi.js";
 import { registerAuthRoutes } from "./services/auth/routes.js";
 import { registerCodeAnalysisRoutes } from "./services/code-analysis/routes.js";
@@ -61,7 +62,14 @@ async function registerCoreRoutesByService(app: FastifyInstance, service: Servic
 export async function buildApp(service: ServiceName) {
   const app = Fastify({
     // Disabled under test so request logs don't drown out the suite output.
-    logger: process.env.NODE_ENV === "test" ? false : true,
+    // Otherwise: strip credential headers and mask the `?token=` query param
+    // the scan WebSocket route uses, so JWTs never reach the request log.
+    logger: process.env.NODE_ENV === "test"
+      ? false
+      : {
+        redact: { paths: LOG_REDACT_PATHS, censor: "REDACTED" },
+        serializers: { req: redactedReqSerializer },
+      },
     // Global connection timeout (30s). Limits how long the server waits for
     // the full HTTP request headers to arrive after a socket is opened.
     connectionTimeout: 30_000,
