@@ -51,6 +51,27 @@ const envSchema = z
     DOKPLOY_API_TOKEN: z.string().min(1).optional(),
     /** Default SSH key ID registered in Dokploy for remote server access. */
     DOKPLOY_SSH_KEY_ID: z.string().min(1).optional(),
+    /**
+     * Fallback IP for the Dokploy remote server when no per-deploy server was
+     * provisioned. No default: read at
+     * `deploy/domain/dokploy/stages/provision-server.ts` and truthiness-checked
+     * at `deploy/domain/deployments.ts`, both of which handle "unset".
+     */
+    DOKPLOY_DEFAULT_SERVER_IP: z.string().min(1).optional(),
+    /**
+     * Public base URL of this API, used when building user-facing links.
+     * Deliberately NOT given a schema default — the fallback
+     * `|| "https://api.dockier.dev"` lives at the read site in
+     * `observe/domain/mappers.ts`, and an unset value must reach it.
+     */
+    API_PUBLIC_URL: z.string().url().optional(),
+    /**
+     * Direct (non-pooled) Postgres URL for DDL and long-running maintenance.
+     * No default: `backend/src/scripts/cleanup-scans.ts` falls back to
+     * DATABASE_URL, and `infra/setup-external-db.sh` reads it outside this
+     * process.
+     */
+    DIRECT_URL: z.string().min(1).optional(),
     /** When true, the Fastify backend does not consume `security-scan` — SAST workers do. */
     DISABLE_TS_SCAN_WORKER: z
       .enum(["true", "false"])
