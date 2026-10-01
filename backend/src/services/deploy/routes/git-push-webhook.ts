@@ -13,7 +13,13 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireWebhookSignature } from "../../../shared/http/security.js";
+import { rateLimit } from "../../../shared/http/rate-limit.js";
 import { handleGitPushEvent, type GitPushEvent } from "../domain/push-to-deploy.js";
+import {
+  getProjectForDeployHook,
+  readStoredDeployHookToken,
+  verifyDeployHookToken,
+} from "../domain/deploy-hook.js";
 import { logger } from "../../../shared/logger.js";
 
 export async function registerGitPushWebhookRoutes(app: FastifyInstance) {
@@ -57,12 +63,17 @@ export async function registerGitPushWebhookRoutes(app: FastifyInstance) {
    * Project-specific deploy hook (token-based, no HMAC required).
    *
    * Simpler alternative for setups where configuring HMAC secrets on the
-   * Git provider is cumbersome. The token is a short prefix of the project ID
-   * (not cryptographically strong but sufficient for triggering a deploy).
+   * Git provider is cumbersome. The token is the strong random value stored at
+   * `settings.deployHookToken` when push-to-deploy is enabled; the legacy
+   * project-id prefix stays accepted so already-configured hook URLs keep
+   * working. See ../domain/deploy-hook.ts.
+   *
+   * Rate limited per IP because the token is the only credential.
    */
   typed.post(
     "/projects/:projectId/deploy/hook",
     {
+      preHandler: rateLimit({ max: 5, windowMs: 60_000, prefix: "deploy-hook" }),
       schema: {
         tags: ["deploy"],
         summary: "Trigger deploy via project-specific hook URL",
@@ -75,25 +86,20 @@ export async function registerGitPushWebhookRoutes(app: FastifyInstance) {
       const { projectId } = request.params;
       const { token } = request.query;
 
-      // Validate token matches the expected prefix
-      const expectedToken = projectId.slice(0, 8);
-      if (token !== expectedToken) {
-        return { success: false, message: "Invalid deploy token" };
-      }
-
-      // Fetch project to get repo + branch info
-      const { data: project, error } = await (await import("../../../shared/supabase/client.js")).supabaseAdmin
-        .from("projects")
-        .select("id, organization_id, repository, branch, connection_id, settings")
-        .eq("id", projectId)
-        .maybeSingle();
-
+      // Fetch project first: it carries both the repo/branch info and the
+      // stored token the provided one is verified against.
+      const { project, error } = await getProjectForDeployHook(projectId);
       if (error || !project) {
         return { success: false, message: "Project not found" };
       }
 
-      // Check pushToDeploy is enabled
       const settings = project.settings as Record<string, unknown> | null;
+
+      if (!verifyDeployHookToken({ projectId, provided: token, storedToken: readStoredDeployHookToken(settings) })) {
+        return { success: false, message: "Invalid deploy token" };
+      }
+
+      // Check pushToDeploy is enabled
       if (!settings?.pushToDeploy) {
         return { success: false, message: "Push to deploy is not enabled for this project" };
       }

@@ -6,6 +6,7 @@ import { nowIso } from "../../../shared/utils/time.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { escapePostgrestLike } from "../../../shared/http/security.js";
+import { generateDeployHookToken } from "../../deploy/domain/deploy-hook.js";
 import { rowToProject } from "./mappers.js";
 import { saveWpConfig, generateWpConfig } from "./wp-config.js";
 
@@ -102,6 +103,22 @@ async function latestCommitByProject(tenantId: string, projectIds?: string[]): P
   return out;
 }
 
+/**
+ * Issue a strong deploy hook token whenever push-to-deploy is on and the
+ * project does not have one yet.
+ *
+ * The deploy hook's only credential is its token, so a project with
+ * push-to-deploy enabled must not rely on the caller-derivable legacy prefix.
+ * Idempotent: an existing token is NEVER rotated, so hook URLs already handed
+ * out keep working. `projectSettingsSchema` is `.passthrough()`, so no schema
+ * change is needed to carry the extra key.
+ */
+function withDeployHookToken(settings: Record<string, unknown>): Record<string, unknown> {
+  if (settings.pushToDeploy !== true) return settings;
+  if (typeof settings.deployHookToken === "string" && settings.deployHookToken.length > 0) return settings;
+  return { ...settings, deployHookToken: generateDeployHookToken() };
+}
+
 export interface CreateProjectParams {
   tenantId: string;
   name: string;
@@ -132,7 +149,7 @@ export async function createProject(params: CreateProjectParams) {
     source_type: params.sourceType ?? "repository",
     template: params.template ?? "",
     config: (params.config ?? {}) as unknown as Json,
-    settings: (params.settings ?? {}) as unknown as Json,
+    settings: withDeployHookToken(params.settings ?? {}) as unknown as Json,
     created_at: now,
   };
   const { error } = await supabaseAdmin.from("projects").insert(payload);
@@ -277,7 +294,7 @@ export async function updateProject(params: UpdateProjectParams) {
       verified.settings !== null && typeof verified.settings === "object" && !Array.isArray(verified.settings)
         ? (verified.settings as Record<string, unknown>)
         : {};
-    updates.settings = { ...existingSettings, ...params.settings } as unknown as Json;
+    updates.settings = withDeployHookToken({ ...existingSettings, ...params.settings }) as unknown as Json;
   }
 
   const { data, error } = await supabaseAdmin
