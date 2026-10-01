@@ -60,7 +60,8 @@ async function registerCoreRoutesByService(app: FastifyInstance, service: Servic
 
 export async function buildApp(service: ServiceName) {
   const app = Fastify({
-    logger: true,
+    // Disabled under test so request logs don't drown out the suite output.
+    logger: process.env.NODE_ENV === "test" ? false : true,
     // Global connection timeout (30s). Limits how long the server waits for
     // the full HTTP request headers to arrive after a socket is opened.
     connectionTimeout: 30_000,

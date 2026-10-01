@@ -14,6 +14,9 @@ export default defineConfig({
           environment: "node",
           testTimeout: 30000,
           setupFiles: ["./backend/src/shared/__tests__/setup.ts"],
+          // Applied before any module loads, so pino reads "silent" even though
+          // the setup file's own imports are hoisted above its statements.
+          env: { LOG_LEVEL: "silent" },
         },
       },
       "./frontend/vitest.config.ts",

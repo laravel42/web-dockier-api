@@ -1,3 +1,8 @@
+// Defensive fallback for running a file outside the root config (which sets
+// test.env). The imports below are hoisted above this statement, so pino may
+// already have read LOG_LEVEL — vitest.config.mts is the authoritative fix.
+process.env.LOG_LEVEL ??= "silent";
+
 /**
  * Global test setup/teardown for the backend test suite.
  *
