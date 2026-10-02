@@ -7,6 +7,16 @@
 export function getErrMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;
+
+  // Not every thrown value is an Error. PostgREST/Supabase errors and several
+  // SDK clients reject with a plain object carrying `message`, which
+  // `String(err)` renders as the useless "[object Object]" — losing the only
+  // part that says what actually failed.
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+
   return String(err);
 }
 

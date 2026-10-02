@@ -8,9 +8,12 @@
  * the implementation applies ±25% jitter.
  *
  * RetryOptions declares `attempts`, `backoffMs`, `timeoutMs`, `shouldRetry` and
- * `label` — there is no `onRetry` hook, so none is tested.
+ * `label` — there is no `onRetry` hook, so none is tested. The shared logger is
+ * mocked so the retry log line is assertable.
  *
- * These tests pin EXISTING behaviour.
+ * Two former rough edges are now fixed and covered as regressions: `attempts`
+ * below 1 is clamped (it used to skip the loop and reject with `undefined`),
+ * and `label` is actually read (it used to be declared but never used).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -26,10 +29,14 @@ vi.mock("../time.js", async (importOriginal) => {
   };
 });
 
+const warn = vi.fn();
+vi.mock("../../logger.js", () => ({ logger: { warn: (...args: unknown[]) => warn(...args) } }));
+
 const { withRetry } = await import("../retry.js");
 
 beforeEach(() => {
   sleepDelays.length = 0;
+  warn.mockClear();
 });
 
 afterEach(() => {
@@ -108,12 +115,29 @@ describe("withRetry — exhaustion", () => {
     );
   });
 
-  // NOTE: suspected bug — `attempts: 0` skips the loop entirely, so the wrapped
-  // function never runs and `withRetry` rejects with `undefined`.
-  it("never calls the function and throws undefined when attempts is 0", async () => {
+  // Regression: `attempts: 0` used to skip the loop entirely, so the wrapped
+  // function never ran and the caller got a rejection with `undefined`.
+  it("clamps attempts 0 to a single call", async () => {
     const fn = vi.fn(async () => "ok");
-    await expect(withRetry(fn, { attempts: 0 })).rejects.toBeUndefined();
-    expect(fn).not.toHaveBeenCalled();
+    await expect(withRetry(fn, { attempts: 0 })).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(sleepDelays).toEqual([]);
+  });
+
+  it("clamps a negative attempts value to a single call and rethrows", async () => {
+    const fn = vi.fn(async () => {
+      throw new Error("once");
+    });
+    await expect(withRetry(fn, { attempts: -5 })).rejects.toThrow("once");
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("floors a fractional attempts value", async () => {
+    const fn = vi.fn(async () => {
+      throw new Error("always");
+    });
+    await expect(withRetry(fn, { attempts: 2.9, backoffMs: 10 })).rejects.toThrow("always");
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -248,5 +272,66 @@ describe("withRetry — timeoutMs", () => {
 
   it("accepts a label without changing the outcome", async () => {
     await expect(withRetry(async () => "ok", { label: "s3-put" })).resolves.toBe("ok");
+  });
+});
+
+/**
+ * `label` was declared and documented but never read by the implementation, so
+ * the entire retry loop was silent: a call that only succeeded on its third
+ * attempt looked identical to one that succeeded immediately.
+ */
+describe("withRetry — retry logging", () => {
+  it("logs nothing when the first attempt succeeds", async () => {
+    await withRetry(async () => "ok", { label: "s3-put" });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("logs once per retry, tagged with the label and the failure reason", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      if (calls < 3) throw new Error(`boom ${calls}`);
+      return "ok";
+    };
+
+    await expect(withRetry(fn, { attempts: 3, backoffMs: 10, label: "s3-put" })).resolves.toBe("ok");
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    const [context, message] = warn.mock.calls[0] as [Record<string, unknown>, string];
+    expect(context).toMatchObject({ label: "s3-put", attempt: 1, maxAttempts: 3, reason: "boom 1" });
+    expect(message).toBe("s3-put: attempt 1/3 failed, retrying");
+  });
+
+  it("falls back to a default label", async () => {
+    const fn = async () => {
+      throw new Error("always");
+    };
+
+    await expect(withRetry(fn, { attempts: 2, backoffMs: 10 })).rejects.toThrow("always");
+
+    const [context] = warn.mock.calls[0] as [Record<string, unknown>, string];
+    expect(context).toMatchObject({ label: "withRetry" });
+  });
+
+  it("does not log when shouldRetry declines, since no retry happens", async () => {
+    const fn = async () => {
+      throw new Error("client error");
+    };
+
+    await expect(
+      withRetry(fn, { attempts: 5, backoffMs: 10, label: "s3-put", shouldRetry: () => false }),
+    ).rejects.toThrow("client error");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("reports a non-Error rejection reason", async () => {
+    const fn = async () => Promise.reject({ message: "postgrest exploded" });
+
+    await expect(withRetry(fn, { attempts: 2, backoffMs: 10, label: "db" })).rejects.toEqual({
+      message: "postgrest exploded",
+    });
+
+    const [context] = warn.mock.calls[0] as [Record<string, unknown>, string];
+    expect(context).toMatchObject({ reason: "postgrest exploded" });
   });
 });

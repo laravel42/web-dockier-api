@@ -3,7 +3,11 @@
  *
  * `getErrMsg` is used in every `catch (e: unknown)` block; `getErrDetail`
  * additionally unwraps one level of `cause` so PostgREST failures stay
- * diagnosable in deploy logs. These tests pin EXISTING behaviour.
+ * diagnosable in deploy logs.
+ *
+ * Regression covered here: `getErrMsg` now unwraps a `message` field from a
+ * non-Error object, which it used to render as "[object Object]". That also
+ * improves `getErrDetail`'s base message for the same inputs.
  */
 
 import { describe, it, expect } from "vitest";
@@ -40,10 +44,27 @@ describe("getErrMsg", () => {
     expect(getErrMsg({})).toBe("[object Object]");
   });
 
-  // NOTE: suspected gap — a non-Error object carrying a `message` field (the
-  // shape PostgREST returns) is not unwrapped, so the useful text is lost.
-  it("does NOT unwrap a message field from a plain object", () => {
-    expect(getErrMsg({ message: "duplicate key" })).toBe("[object Object]");
+  // Regression: a non-Error object carrying a `message` field (the shape
+  // PostgREST and several SDKs reject with) used to stringify to
+  // "[object Object]", losing the only useful text.
+  it("unwraps a message field from a plain object", () => {
+    expect(getErrMsg({ message: "duplicate key" })).toBe("duplicate key");
+  });
+
+  it("unwraps the message from a full PostgREST-shaped object", () => {
+    expect(getErrMsg({ message: "permission denied", details: null, hint: null, code: "42501" })).toBe(
+      "permission denied",
+    );
+  });
+
+  it("ignores a non-string message", () => {
+    expect(getErrMsg({ message: 42 })).toBe("[object Object]");
+    expect(getErrMsg({ message: null })).toBe("[object Object]");
+    expect(getErrMsg({ message: { nested: "no" } })).toBe("[object Object]");
+  });
+
+  it("ignores an empty-string message", () => {
+    expect(getErrMsg({ message: "" })).toBe("[object Object]");
   });
 
   it("stringifies an array", () => {
@@ -68,7 +89,9 @@ describe("getErrDetail — no cause", () => {
   it("ignores a falsy cause", () => {
     const err = new Error("boom", { cause: "" });
     expect(getErrDetail(err)).toBe("boom");
-    expect(getErrDetail({ message: "x", cause: 0 })).toBe("[object Object]");
+    // Base message comes from getErrMsg, which now unwraps a plain object's
+    // `message` instead of rendering it as "[object Object]".
+    expect(getErrDetail({ message: "x", cause: 0 })).toBe("x");
   });
 });
 
@@ -133,6 +156,6 @@ describe("getErrDetail — primitive cause", () => {
   });
 
   it("reads cause from a non-Error object too", () => {
-    expect(getErrDetail({ message: "ignored", cause: "root reason" })).toBe("[object Object] (root reason)");
+    expect(getErrDetail({ message: "outer reason", cause: "root reason" })).toBe("outer reason (root reason)");
   });
 });
