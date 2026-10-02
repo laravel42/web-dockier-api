@@ -14,6 +14,26 @@ const supabaseSecretKeySchema = z
   .min(20)
   .refine(isSupabaseSecretKey, "Must be a Supabase secret key (sb_secret_...)");
 
+/**
+ * An optional variable where a blank value means "not set".
+ *
+ * A `.env` legitimately contains lines like `KEY=` — a placeholder, a value
+ * commented out with a trailing `# note`, or a key left blank for an
+ * environment that doesn't need it. Those arrive as `""`, not `undefined`.
+ *
+ * Plain `.optional()` admits only `undefined`, so `""` falls through to the
+ * inner schema and fails `.min(1)` / `.url()`, crashing boot over a variable
+ * nobody actually set. Normalizing blank to `undefined` first means the read
+ * sites' own "unset" handling applies, which is what happened before these
+ * variables were brought under the schema.
+ */
+function optionalEnv<T extends z.ZodType>(schema: T) {
+  return z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    schema.optional(),
+  );
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z.string().default("development"),
@@ -23,55 +43,55 @@ const envSchema = z
       .default("gateway"),
     SUPABASE_URL: z.url(),
     SUPABASE_PUBLISHABLE_KEY: supabasePublishableKeySchema,
-    SUPABASE_SECRET_KEY: supabaseSecretKeySchema.optional(),
+    SUPABASE_SECRET_KEY: optionalEnv(supabaseSecretKeySchema),
     /** @deprecated Use SUPABASE_SECRET_KEY (sb_secret_...) instead. */
-    SUPABASE_SERVICE_ROLE_KEY: z.string().min(20).optional(),
+    SUPABASE_SERVICE_ROLE_KEY: optionalEnv(z.string().min(20)),
     JWT_SECRET: z.string().min(16),
     CORS_ORIGIN: z.string().default("*"),
-    OPENAI_API_KEY: z.string().optional(),
+    OPENAI_API_KEY: optionalEnv(z.string()),
     OPENAI_MODEL: z.string().default("gpt-4o-mini"),
     /** Toggle the AI Dockerfile review layer. Review runs only when an OpenAI key is also set. */
     AI_DOCKERFILE_REVIEW: z.enum(["on", "off"]).default("on"),
-    WEBHOOK_SECRET: z.string().optional(),
-    INTERNAL_SERVICE_TOKEN: z.string().min(16).optional(),
-    DEPLOY_CALLBACK_URL: z.string().optional(),
+    WEBHOOK_SECRET: optionalEnv(z.string()),
+    INTERNAL_SERVICE_TOKEN: optionalEnv(z.string().min(16)),
+    DEPLOY_CALLBACK_URL: optionalEnv(z.string()),
     IMAGE_BUILDER_CODEBUILD_PROJECT: z.string().min(1).default("image-builder"),
     PGBOSS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(5),
-    SONARQUBE_URL: z.string().url().optional(),
-    SONARQUBE_TOKEN: z.string().min(1).optional(),
-    RESEND_API_KEY: z.string().min(1).optional(),
-    RESEND_FROM_EMAIL: z.string().optional(),
-    DATABASE_URL: z.string().min(1).optional(),
-    ENV_ENCRYPTION_KEY: z.string().min(32).optional(),
+    SONARQUBE_URL: optionalEnv(z.string().url()),
+    SONARQUBE_TOKEN: optionalEnv(z.string().min(1)),
+    RESEND_API_KEY: optionalEnv(z.string().min(1)),
+    RESEND_FROM_EMAIL: optionalEnv(z.string()),
+    DATABASE_URL: optionalEnv(z.string().min(1)),
+    ENV_ENCRYPTION_KEY: optionalEnv(z.string().min(32)),
     /** Deploy provider: "native" for CloudFormation/Pulumi, "dokploy" for Dokploy-based pipeline. */
     DEPLOY_PROVIDER: z.enum(["native", "dokploy"]).default("native"),
     /** Dokploy instance base API URL (required when DEPLOY_PROVIDER=dokploy). */
-    DOKPLOY_API_URL: z.string().url().optional(),
+    DOKPLOY_API_URL: optionalEnv(z.string().url()),
     /** Dokploy API token for authentication (required when DEPLOY_PROVIDER=dokploy). */
-    DOKPLOY_API_TOKEN: z.string().min(1).optional(),
+    DOKPLOY_API_TOKEN: optionalEnv(z.string().min(1)),
     /** Default SSH key ID registered in Dokploy for remote server access. */
-    DOKPLOY_SSH_KEY_ID: z.string().min(1).optional(),
+    DOKPLOY_SSH_KEY_ID: optionalEnv(z.string().min(1)),
     /**
      * Fallback IP for the Dokploy remote server when no per-deploy server was
      * provisioned. No default: read at
      * `deploy/domain/dokploy/stages/provision-server.ts` and truthiness-checked
      * at `deploy/domain/deployments.ts`, both of which handle "unset".
      */
-    DOKPLOY_DEFAULT_SERVER_IP: z.string().min(1).optional(),
+    DOKPLOY_DEFAULT_SERVER_IP: optionalEnv(z.string().min(1)),
     /**
      * Public base URL of this API, used when building user-facing links.
      * Deliberately NOT given a schema default — the fallback
      * `|| "https://api.dockier.dev"` lives at the read site in
      * `observe/domain/mappers.ts`, and an unset value must reach it.
      */
-    API_PUBLIC_URL: z.string().url().optional(),
+    API_PUBLIC_URL: optionalEnv(z.string().url()),
     /**
      * Direct (non-pooled) Postgres URL for DDL and long-running maintenance.
      * No default: `backend/src/scripts/cleanup-scans.ts` falls back to
      * DATABASE_URL, and `infra/setup-external-db.sh` reads it outside this
      * process.
      */
-    DIRECT_URL: z.string().min(1).optional(),
+    DIRECT_URL: optionalEnv(z.string().min(1)),
     /** When true, the Fastify backend does not consume `security-scan` — SAST workers do. */
     DISABLE_TS_SCAN_WORKER: z
       .enum(["true", "false"])
