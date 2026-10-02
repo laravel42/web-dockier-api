@@ -1,11 +1,22 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FastifyInstance } from "fastify";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import type { TableRow } from "../../../shared/supabase/types.js";
 import { resolveAwsCredentials } from "../../../lib/provider-credentials.js";
 import { getCodeBuild, getCloudWatchLogs } from "../../../lib/aws-sdk.js";
 import { env } from "../../../shared/config.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
+
+type BuildRow = TableRow<"builds">;
+
+/** The build fields `refreshBuildStatus` reads or writes back. */
+type BuildStatusFields = Pick<
+  BuildRow,
+  "id" | "provider_id" | "codebuild_id" | "status" | "status_reason" | "started_at" | "finished_at"
+>;
+
+/** The build fields `fetchBuildLogs` needs to locate a CloudWatch stream. */
+type BuildLogFields = Pick<BuildRow, "provider_id" | "codebuild_id">;
 
 function imageBuilderProjectName(): string {
   return env.IMAGE_BUILDER_CODEBUILD_PROJECT;
@@ -25,7 +36,14 @@ export async function lookupCodeBuildId(credentials: { accessKeyId: string; secr
   return match?.id ?? null;
 }
 
-export async function refreshBuildStatus(row: any) {
+/**
+ * Refresh a build's status from CodeBuild and persist any change.
+ *
+ * Generic in the row type so the caller gets its own row shape back — the
+ * caller passes a full `builds` row and feeds the result straight to
+ * `rowToBuild`, which needs every column.
+ */
+export async function refreshBuildStatus<T extends BuildStatusFields>(row: T): Promise<T> {
   if (!row.codebuild_id || !row.provider_id) return row;
   const credentials = await resolveAwsCredentials(row.provider_id);
   if (!credentials) return row;
@@ -60,7 +78,7 @@ export async function refreshBuildStatus(row: any) {
   return { ...row, status, status_reason: statusReason };
 }
 
-export async function fetchBuildLogs(app: FastifyInstance, row: any, nextToken?: string) {
+export async function fetchBuildLogs(app: FastifyInstance, row: BuildLogFields, nextToken?: string) {
   const credentials = await resolveAwsCredentials(row.provider_id || "");
   if (!credentials || !row.codebuild_id) return { logs: ["Build not yet started in CodeBuild"], nextToken: undefined as string | undefined };
   try {

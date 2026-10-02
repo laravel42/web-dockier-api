@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapList, unwrapQuery } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapList, unwrapQuery, type PostgrestError } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { ALL_PERMISSIONS, withBaselinePermissions, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
@@ -235,7 +234,14 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     // Every role implicitly holds the read-only baseline permissions.
     const effectivePermissions = withBaselinePermissions(params.permissions);
 
-    const { error: rpcError } = await (supabaseAdmin.rpc as any)("replace_role_permissions", {
+    // The generated Supabase types don't cover custom RPCs, so narrow the
+    // signature rather than reaching for `any` (same pattern as
+    // auth/domain/tenant.ts's transfer_ownership call).
+    const replaceRolePermissionsRpc = supabaseAdmin.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ error: PostgrestError | null }>;
+    const { error: rpcError } = await replaceRolePermissionsRpc("replace_role_permissions", {
       _role_id: roleId,
       _permission_ids: effectivePermissions,
     });
