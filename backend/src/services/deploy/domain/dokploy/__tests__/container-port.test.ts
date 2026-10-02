@@ -41,6 +41,28 @@ describe("resolveContainerPort", () => {
     });
   });
 
+  /**
+   * Dokploy's own `static` build type serves the publish directory from an
+   * nginx wrapper on 80. It is unreachable from the active pipeline today
+   * (`pipeline.ts` hardcodes `isStaticSite: false`), so these cases guard
+   * against re-enabling that detection and silently routing every static
+   * domain to a port nothing listens on.
+   */
+  describe("static build type → 80", () => {
+    it("routes a static app to 80 regardless of kind", () => {
+      expect(resolveContainerPort("static", "typescript", ["Vite", "React"], "static")).toBe(80);
+      expect(resolveContainerPort("static", "javascript", ["Astro"])).toBe(80);
+    });
+
+    it("routes a static app to 80 even when the stack looks like a Node server", () => {
+      expect(resolveContainerPort("static", "typescript", ["Node.js", "Express"], "server")).toBe(80);
+    });
+
+    it("routes a static app to 80 with no language or stack information", () => {
+      expect(resolveContainerPort("static", undefined, [])).toBe(80);
+    });
+  });
+
   describe("railpack + Node server → 3000", () => {
     it("routes an SSR Astro app to the Node port", () => {
       expect(resolveContainerPort("railpack", "javascript", ["Astro"], "server")).toBe(3000);

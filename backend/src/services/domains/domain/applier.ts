@@ -64,14 +64,26 @@ async function updateCertificateStatus(
 }
 
 /**
- * Preview the generated nginx configuration without applying it.
- * Used by the "Edit Nginx configuration" modal to show the config read-only.
+ * Preview the proxy configuration without applying it, for the read-only
+ * "View proxy configuration" modal.
+ *
+ * Dispatches by project type like the apply and issue paths do: Dokploy
+ * projects get a description of the live Traefik routing, legacy VPS projects
+ * get the generated nginx config.
  */
 export async function previewDomainConfig(params: {
   tenantId: string;
   projectId: string;
 }): Promise<{ generatedConfig: string }> {
   const { tenantId, projectId } = params;
+
+  // Dokploy projects have no nginx config at all — Traefik routes by host.
+  // Without this branch the nginx generator ran unconditionally and showed
+  // Dokploy users a proxy_pass block for a server that does not exist.
+  const { isDokployProject, previewDomainConfigDokploy } = await import("./dokploy-applier.js");
+  if (await isDokployProject(projectId)) {
+    return await previewDomainConfigDokploy({ tenantId, projectId });
+  }
 
   const [domains, certificates] = await Promise.all([
     listDomains({ tenantId, projectId }),

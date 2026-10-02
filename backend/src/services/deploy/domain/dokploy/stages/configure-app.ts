@@ -630,6 +630,18 @@ export function resolveContainerPort(
     if (kind === "static") return 80;
     return isNodeApp(primaryLanguage, techStack) ? NODE_RAILPACK_PORT : 80;
   }
+  // Dokploy's `static` build type serves the publish directory from an nginx
+  // wrapper on port 80, same as railpack-static. Falling through to 3000 here
+  // would register the domain on a port nothing listens on: the certificate
+  // issues, the UI shows healthy, and the browser gets a Bad Gateway.
+  //
+  // Unreachable from the active pipeline today — `pipeline.ts` hardcodes
+  // `isStaticSite: false` because Dokploy's static type only copies
+  // already-committed build output. Handled anyway so re-enabling that
+  // detection can't quietly break every static domain.
+  if (buildType === "static") {
+    return 80;
+  }
   // Nixpacks serves PHP behind nginx on port 80 (same as Railpack's FrankenPHP),
   // so a PHP app that fell back to Nixpacks must still be routed to 80 — routing
   // it to 3000 would be an instant Bad Gateway.

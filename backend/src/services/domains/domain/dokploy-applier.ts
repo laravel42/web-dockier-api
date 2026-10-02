@@ -59,10 +59,16 @@ export async function isDokployProject(projectId: string): Promise<boolean> {
  * The fallback only applies to applications deployed before the port was
  * persisted; their next deploy fills it in.
  */
+/** Build types whose container serves HTTP on port 80 rather than 3000. */
+const PORT_80_BUILD_TYPES = new Set(["railpack", "static"]);
+
 function resolveDomainPort(mapping: { containerPort: number | null; buildType: string }): number {
   if (mapping.containerPort && mapping.containerPort > 0) return mapping.containerPort;
   // Legacy rows: keep the historical guess rather than inventing a new one.
-  return mapping.buildType === "railpack" ? 80 : 3000;
+  // `static` is included because Dokploy serves a static app from nginx on 80 —
+  // a stored `build_type = "static"` row with no persisted port would otherwise
+  // be guessed as 3000 and return Bad Gateway behind a valid certificate.
+  return PORT_80_BUILD_TYPES.has(mapping.buildType) ? 80 : 3000;
 }
 
 /**
@@ -224,4 +230,78 @@ async function markLetsEncryptActive(tenantId: string, projectId: string, hosts:
     // Non-fatal — cert status is cosmetic on the Dokploy path.
     logger.warn({ err: getErrMsg(e), projectId }, "[domains:dokploy] failed to update certificate status");
   }
+}
+
+/**
+ * Render a read-only description of the routing Dokploy/Traefik actually serves
+ * for this project's domains.
+ *
+ * The shared `previewDomainConfig` used to fall through to the nginx generator
+ * for every project, so a Dokploy user opening "View proxy configuration" was
+ * shown an nginx `proxy_pass http://127.0.0.1:8080` block that exists nowhere —
+ * wrong server, wrong port, wrong mechanism. There is no nginx on this path:
+ * Traefik routes by host and terminates TLS itself.
+ *
+ * Reports Dokploy's live domain list when it can be read, and falls back to the
+ * desired state from our own tables when it can't, so the modal still renders
+ * something truthful if Dokploy is unreachable. Returns text because the caller's
+ * contract is `{ generatedConfig: string }` and the modal displays it verbatim.
+ */
+export async function previewDomainConfigDokploy(params: {
+  tenantId: string;
+  projectId: string;
+}): Promise<{ generatedConfig: string }> {
+  const { tenantId, projectId } = params;
+
+  const lines: string[] = [
+    "# Routing is managed by Dokploy and served by Traefik.",
+    "# There is no nginx config for this project — Traefik routes by Host header",
+    "# and terminates TLS, forwarding plain HTTP to the container port below.",
+    "#",
+    "# This view is read-only. Edit domains from the Domains tab.",
+    "",
+  ];
+
+  const mapping = await getApplication(projectId);
+  if (!mapping?.dokployApplicationId) {
+    lines.push("No Dokploy application yet — domains are applied on the next deployment.");
+    return { generatedConfig: lines.join("\n") };
+  }
+
+  const port = resolveDomainPort(mapping);
+  lines.push(`Application: ${mapping.dokployApplicationId}`);
+  lines.push(`Container port: ${port}${mapping.containerPort ? "" : " (inferred — redeploy to persist)"}`);
+  lines.push("");
+
+  try {
+    const client = createDokployClient();
+    const existing = await client.listDomains(mapping.dokployApplicationId);
+
+    if (existing.length === 0) {
+      lines.push("No domains registered on the application.");
+      return { generatedConfig: lines.join("\n") };
+    }
+
+    lines.push("Registered domains (live from Dokploy):");
+    for (const d of existing) {
+      const scheme = d.https ? "https" : "http";
+      const cert = d.certificateType && d.certificateType !== "none" ? d.certificateType : "none";
+      const auto = isAutoDomain(d) ? "  [auto-assigned, not editable]" : "";
+      lines.push(`  ${scheme}://${d.host} → :${d.port ?? port}   cert: ${cert}${auto}`);
+    }
+  } catch (e) {
+    // Preview must never fail the request — fall back to desired state.
+    logger.warn({ err: getErrMsg(e), projectId }, "[domains:dokploy] could not read live domains for preview");
+    const dbDomains = await listDomains({ tenantId, projectId });
+
+    lines.push("Could not reach Dokploy — showing desired state from Dockier:");
+    if (dbDomains.length === 0) {
+      lines.push("  (no domains configured)");
+    }
+    for (const d of dbDomains) {
+      lines.push(`  https://${d.name} → :${port}   cert: letsencrypt`);
+    }
+  }
+
+  return { generatedConfig: lines.join("\n") };
 }

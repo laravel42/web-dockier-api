@@ -38,7 +38,9 @@ vi.mock("../../../shared/supabase/client.js", () => ({
   },
 }));
 
-const { applyDomainConfigDokploy, isDokployProject } = await import("../domain/dokploy-applier.js");
+const { applyDomainConfigDokploy, isDokployProject, previewDomainConfigDokploy } = await import(
+  "../domain/dokploy-applier.js"
+);
 
 describe("applyDomainConfigDokploy", () => {
   beforeEach(() => {
@@ -215,5 +217,124 @@ describe("isDokployProject", () => {
   it("false (never throws) on lookup error", async () => {
     mockGetApplication.mockRejectedValueOnce(new Error("db"));
     await expect(isDokployProject("p1")).resolves.toBe(false);
+  });
+});
+
+/**
+ * Legacy rows (deployed before `container_port` was persisted) fall back to a
+ * build-type guess. `static` must guess 80: Dokploy serves a static app from
+ * nginx on 80, and guessing 3000 registers the domain on a dead port — the
+ * certificate issues, the UI shows healthy, the browser gets a Bad Gateway.
+ */
+describe("applyDomainConfigDokploy — legacy port fallback by build type", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    certUpdates.length = 0;
+    mockClient.listDomains.mockResolvedValue([]);
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "app.example.com" }]);
+  });
+  afterEach(() => vi.clearAllMocks());
+
+  /** Apply with a legacy row (no persisted port) and assert the guessed port. */
+  async function expectGuessedPort(buildType: string, port: number): Promise<void> {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType, containerPort: null });
+    await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+    expect(mockClient.createDomain).toHaveBeenCalledWith(expect.objectContaining({ port }));
+  }
+
+  it("guesses 80 for a legacy static row", async () => {
+    await expectGuessedPort("static", 80);
+  });
+
+  it("guesses 80 for a legacy railpack row", async () => {
+    await expectGuessedPort("railpack", 80);
+  });
+
+  it("guesses 3000 for a legacy dockerfile row", async () => {
+    await expectGuessedPort("dockerfile", 3000);
+  });
+
+  it("prefers the persisted port over the build-type guess", async () => {
+    mockGetApplication.mockResolvedValue({
+      dokployApplicationId: "app-1",
+      buildType: "static",
+      containerPort: 8123,
+    });
+
+    await applyDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(mockClient.createDomain).toHaveBeenCalledWith(expect.objectContaining({ port: 8123 }));
+  });
+});
+
+describe("previewDomainConfigDokploy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient.listDomains.mockResolvedValue([]);
+    mockListDomains.mockResolvedValue([]);
+  });
+  afterEach(() => vi.clearAllMocks());
+
+  it("never emits nginx directives", async () => {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack", containerPort: 80 });
+    mockClient.listDomains.mockResolvedValue([
+      { domainId: "d1", host: "app.example.com", port: 80, https: true, certificateType: "letsencrypt" },
+    ]);
+
+    const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(generatedConfig).not.toMatch(/proxy_pass|server_name|listen\s+\d/);
+    expect(generatedConfig).toMatch(/Traefik/);
+  });
+
+  it("lists the live domains with scheme, port and certificate type", async () => {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack", containerPort: 80 });
+    mockClient.listDomains.mockResolvedValue([
+      { domainId: "d1", host: "app.example.com", port: 80, https: true, certificateType: "letsencrypt" },
+      { domainId: "d2", host: "abc.sslip.io", port: 80, https: false, certificateType: "none" },
+    ]);
+
+    const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(generatedConfig).toContain("https://app.example.com → :80");
+    expect(generatedConfig).toContain("letsencrypt");
+
+    // The auto domain is annotated on its OWN line so a user doesn't try to
+    // manage it, and the user domain is not annotated.
+    const lines = generatedConfig.split("\n");
+    const autoLine = lines.find((l) => l.includes("abc.sslip.io"));
+    const userLine = lines.find((l) => l.includes("app.example.com"));
+    expect(autoLine).toContain("auto-assigned");
+    expect(autoLine).toContain("http://abc.sslip.io");
+    expect(userLine).not.toContain("auto-assigned");
+  });
+
+  it("reports the inferred port when none is persisted", async () => {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "static", containerPort: null });
+
+    const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(generatedConfig).toContain("Container port: 80");
+    expect(generatedConfig).toMatch(/inferred/);
+  });
+
+  it("falls back to desired state when Dokploy is unreachable", async () => {
+    mockGetApplication.mockResolvedValue({ dokployApplicationId: "app-1", buildType: "railpack", containerPort: 80 });
+    mockClient.listDomains.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    mockListDomains.mockResolvedValue([{ id: "dom1", name: "app.example.com" }]);
+
+    const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(generatedConfig).toMatch(/Could not reach Dokploy/);
+    expect(generatedConfig).toContain("https://app.example.com → :80");
+  });
+
+  it("says domains apply on next deployment when there is no application", async () => {
+    mockGetApplication.mockResolvedValue(null);
+
+    const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(generatedConfig).toMatch(/next deployment/i);
+    expect(mockClient.listDomains).not.toHaveBeenCalled();
   });
 });
