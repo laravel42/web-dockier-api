@@ -126,6 +126,22 @@ export interface Traceable {
 export interface WorkerOptions {
   /** Number of retries on failure (default: 2) */
   retryLimit?: number;
+  /**
+   * Seconds to wait before the first retry, doubling on each subsequent one
+   * when `retryBackoff` is enabled (default: 30).
+   */
+  retryDelaySeconds?: number;
+  /**
+   * Spread retries out exponentially instead of firing them back to back
+   * (default: true). pg-boss applies its own jitter on top.
+   *
+   * pg-boss defaults `retryDelay` to 0, so previously every attempt landed
+   * within seconds of the first — no help at all against the failures that
+   * actually dominate here: a rate-limited provider API, or a dependency
+   * that is briefly down. Backing off gives the dependency time to recover
+   * before the last attempt is spent.
+   */
+  retryBackoff?: boolean;
   /** Max seconds a job can run before expiring (default: 1200) */
   expireInSeconds?: number;
   /** Batch size for work polling (default: 1) */
@@ -160,6 +176,8 @@ export function createWorker<T>(
 ): WorkerInstance<T> {
   const {
     retryLimit = 2,
+    retryDelaySeconds = 30,
+    retryBackoff = true,
     expireInSeconds = 1200,
     batchSize = 1,
     pollingIntervalSeconds = 5,
@@ -209,6 +227,8 @@ export function createWorker<T>(
     if (isQueueReady() && boss) {
       await boss.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
+        retryDelay: retryDelaySeconds,
+        retryBackoff,
         expireInSeconds,
         ...(singletonKey ? { singletonKey } : {}),
       });

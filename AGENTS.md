@@ -54,6 +54,30 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
 - **Auth:** Supabase passwordless (OTP) → tenant-scoped JWT for API calls. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`. Optional TOTP 2FA.
 - **Row mapping:** Database rows use snake_case. API responses use camelCase. Each service has a `rowToX()` mapper function.
 
+### Platform hardening
+
+Cross-cutting behaviour configured on the Fastify factory in `backend/src/app.ts` and in `backend/src/shared/http/`. Treat these as load-bearing — each one exists for a specific failure that already happened or was one refactor away.
+
+- **`trustProxy: 1`** — numeric on purpose. It trusts only the LAST hop of `X-Forwarded-For`, so a client cannot spoof its address by prepending entries (which `true` would allow). `1` is Railway's single proxy hop; raise it only if another proxy layer is added. Without it `request.ip` is the proxy's address for every caller and the IP-keyed `rateLimit()` in `shared/http/rate-limit.ts` collapses into one global bucket. Covered by tests that inject `x-forwarded-for`.
+- **Log redaction** — `shared/http/log-redaction.ts` provides `LOG_REDACT_PATHS` and `redactedReqSerializer`, wired into BOTH the Fastify request logger (`app.ts`) and the standalone worker logger (`shared/logger.ts`). Credential headers are censored and the `?token=` query param is masked, because the scan WebSocket route takes its JWT in the query string (browsers cannot set headers on a `WebSocket`) and Fastify logs full request URLs. Any new logger must reuse both exports.
+- **Security response headers** — an `onSend` hook in `shared/http/openapi.ts` sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and HSTS. Deliberately a hook rather than `@fastify/helmet`: four static headers do not justify the dependency. The `/docs` subtree is excluded so swagger-ui's own `staticCSP` applies, and an existing header is never clobbered. No CSP — this is a JSON API and a wrong policy would break the docs UI.
+- **Request ids** — `requestIdHeader: "x-request-id"` with a `randomUUID()` fallback, so a trace started by the frontend or a load balancer survives the backend boundary. Fastify's default per-process counter restarted on every deploy and collided across split service instances. `request.id` flows into pg-boss as `correlationId` (see `shared/database/queue.ts`), so worker logs join up with the originating request.
+- **Health vs readiness** — `GET /healthz` is liveness and is a static literal; existing platform probes depend on its exact payload, so do not change it. `GET /readyz` is readiness and reports `isQueueReady()` (200 `ready` / 503 `degraded`), because `run-server.ts` tolerates a failed queue start by design and serves traffic anyway — a state `/healthz` cannot express. `/readyz` is intentionally NOT wired to a platform probe: failing closed would pull traffic from an instance that is still serving HTTP correctly.
+- **Job retries** — `createWorker` in `shared/database/queue.ts` sets `retryBackoff` with a 30s base delay. pg-boss defaults `retryDelay` to 0, which fired every attempt within seconds of the first and was useless against the failures that dominate here (rate-limited provider APIs, briefly-down dependencies). There is still no dead-letter queue: an exhausted job is logged and dropped.
+
+### Deploy hook authentication
+
+`POST /projects/:projectId/deploy/hook` (`backend/src/services/deploy/routes/git-push-webhook.ts`) accepts **two** token forms, and both must keep working:
+
+1. A cryptographically random per-project token stored in the existing `projects.settings` jsonb column (no dedicated column, no migration).
+2. The legacy `projectId.slice(0, 8)` prefix, kept as a fallback because hook URLs are already deployed in the wild.
+
+Form 2 is not real authentication — it is derived from the `projectId` in the request path, so anyone who can build the URL can compute it. It survives only for backward compatibility; never present it as a security control, and do not extend the pattern to new routes. The route is rate-limited (5/min) because it is an unauthenticated path into the most expensive operation in the product. Tokens are compared with `timingSafeEqual`, mirroring `verifyWebhookSignature` in `shared/http/security.ts`.
+
+The response shape is deliberately `200 { success: false }` on a bad token rather than a `401`. That is worse REST but a client may depend on it; changing it is a contract break.
+
+The sibling route `POST /deploy/webhook/git-push` is different — it is protected by `requireWebhookSignature` and is the pattern to copy for new webhooks.
+
 ### Dockerfile generation + AI review (legacy pipeline)
 
 The **legacy** (`DEPLOY_PROVIDER=native`) deploy pipeline generates a Dockerfile during the analyze stage via `analyzeAndGenerate()` in `backend/src/lib/build-pipeline.ts`.
