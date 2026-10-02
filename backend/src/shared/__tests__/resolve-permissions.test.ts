@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
-import { createTestEnv, signTestToken, TEST_USER_ID, TEST_TENANT_ID, TEST_EMAIL, TEST_ROLE_ID } from "./test-helpers.js";
+import { createTestEnv, signTestToken, TEST_USER_ID, TEST_TENANT_ID, TEST_ROLE_ID } from "./test-helpers.js";
 import { PERMISSIONS } from "../permissions/constants.js";
 
 // ─── Mocks ─────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ let app: FastifyInstance;
 beforeAll(async () => {
   const sensible = await import("@fastify/sensible");
   const { authPlugin } = await import("../auth/auth.js");
-  const { authorizationPlugin, clearPermissionCache } = await import("../permissions/authorization.js");
+  const { authorizationPlugin } = await import("../permissions/authorization.js");
 
   app = Fastify();
   await app.register(sensible.default);

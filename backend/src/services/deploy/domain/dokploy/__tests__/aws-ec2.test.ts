@@ -112,10 +112,31 @@ function routeSend(opts: {
   });
 }
 
+// The subset of each EC2 command input these tests assert on. Declared here
+// rather than pulled from the AWS SDK types so the tests stay readable and
+// don't depend on the SDK's deeply-optional shapes.
+interface RunInstancesInput {
+  InstanceType: string;
+  KeyName: string;
+  ImageId: string;
+  SecurityGroupIds: string[];
+  BlockDeviceMappings: Array<{ Ebs: { VolumeSize: number; VolumeType: string } }>;
+  TagSpecifications: Array<{ Tags: Array<{ Key: string; Value: string }> }>;
+}
+
+interface ImportKeyPairInput {
+  KeyName: string;
+  PublicKeyMaterial: Buffer;
+}
+
+interface AuthorizeIngressInput {
+  IpPermissions: Array<{ FromPort: number }>;
+}
+
 /** Find the input passed to `send` for a given command type. */
-function inputFor(type: string): any {
+function inputFor<T>(type: string): T {
   const call = sendMock.mock.calls.find((c) => c[0]?.__type === type);
-  return call?.[0]?.input;
+  return call?.[0]?.input as T;
 }
 
 afterEach(() => {
@@ -149,7 +170,7 @@ describe("provisionEc2Instance — happy path", () => {
 
     await provisionEc2Instance(baseParams({ instanceType: "m6i.large" }));
 
-    const input = inputFor("RunInstances");
+    const input = inputFor<RunInstancesInput>("RunInstances");
     expect(input.InstanceType).toBe("m6i.large");
     expect(input.KeyName).toBe("dockier-abc12345");
     expect(input.SecurityGroupIds).toEqual(["sg-123"]);
@@ -164,7 +185,7 @@ describe("provisionEc2Instance — happy path", () => {
 
     await provisionEc2Instance(baseParams({ instanceType: undefined }));
 
-    expect(inputFor("RunInstances").InstanceType).toBe("t3.medium");
+    expect(inputFor<RunInstancesInput>("RunInstances").InstanceType).toBe("t3.medium");
   });
 
   it("imports the SSH key with the provided public key material", async () => {
@@ -172,7 +193,7 @@ describe("provisionEc2Instance — happy path", () => {
 
     await provisionEc2Instance(baseParams());
 
-    const input = inputFor("ImportKeyPair");
+    const input = inputFor<ImportKeyPairInput>("ImportKeyPair");
     expect(input.KeyName).toBe("dockier-abc12345");
     expect(Buffer.from(input.PublicKeyMaterial).toString()).toBe("ssh-ed25519 AAAA... dockier");
   });
@@ -182,7 +203,7 @@ describe("provisionEc2Instance — happy path", () => {
 
     await provisionEc2Instance(baseParams({ tags: { "dockier-project": "proj-1", "dockier-tenant": "tenant-9" } }));
 
-    const tags = inputFor("RunInstances").TagSpecifications[0].Tags as Array<{ Key: string; Value: string }>;
+    const tags = inputFor<RunInstancesInput>("RunInstances").TagSpecifications[0].Tags;
     const byKey = Object.fromEntries(tags.map((t) => [t.Key, t.Value]));
     expect(byKey["Name"]).toBe("dockier-abc12345");
     expect(byKey["ManagedBy"]).toBe("dockier");
@@ -207,7 +228,7 @@ describe("provisionEc2Instance — AMI resolution", () => {
 
     await provisionEc2Instance(baseParams());
 
-    expect(inputFor("RunInstances").ImageId).toBe("ami-new");
+    expect(inputFor<RunInstancesInput>("RunInstances").ImageId).toBe("ami-new");
   });
 
   it("throws a clear error when no Ubuntu AMI is found", async () => {
@@ -227,7 +248,7 @@ describe("provisionEc2Instance — security group", () => {
 
     await provisionEc2Instance(baseParams());
 
-    expect(inputFor("RunInstances").SecurityGroupIds).toEqual(["sg-existing"]);
+    expect(inputFor<RunInstancesInput>("RunInstances").SecurityGroupIds).toEqual(["sg-existing"]);
     // No create call when one already exists.
     expect(sendMock.mock.calls.some((c) => c[0].__type === "CreateSecurityGroup")).toBe(false);
   });
@@ -237,8 +258,8 @@ describe("provisionEc2Instance — security group", () => {
 
     await provisionEc2Instance(baseParams());
 
-    const ingress = inputFor("AuthorizeSecurityGroupIngress");
-    const ports = ingress.IpPermissions.map((p: any) => p.FromPort).sort((a: number, b: number) => a - b);
+    const ingress = inputFor<AuthorizeIngressInput>("AuthorizeSecurityGroupIngress");
+    const ports = ingress.IpPermissions.map((p) => p.FromPort).sort((a, b) => a - b);
     expect(ports).toEqual([22, 80, 443]);
   });
 

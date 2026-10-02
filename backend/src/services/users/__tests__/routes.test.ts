@@ -11,7 +11,6 @@ import {
   TEST_TENANT_ID,
   TEST_USER_ID,
   TEST_ROLE_ID,
-  TEST_EMAIL,
   authHeader,
   createTestEnv,
   setupPermissionMocks,

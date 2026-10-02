@@ -9,8 +9,6 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
   TEST_TENANT_ID,
-  TEST_USER_ID,
-  TEST_ROLE_ID,
   authHeader,
   createTestEnv,
   setupPermissionMocks,

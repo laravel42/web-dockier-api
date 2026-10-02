@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestEnv } from "../../../../../shared/__tests__/test-helpers.js";
 
 // ─── Supabase Mock ─────────────────────────────────────────────────

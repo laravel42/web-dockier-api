@@ -159,7 +159,7 @@ describe("POST /auth/passwordless/start", () => {
   it("returns 429 when rate limited by Supabase", async () => {
     mockAuth.signInWithOtp.mockResolvedValue({ error: { message: "rate limit exceeded" } });
     const { DomainError } = await import("../../../shared/supabase/errors.js");
-    mockThrowAuthError.mockImplementation((msg: string) => {
+    mockThrowAuthError.mockImplementation((_msg: string) => {
       throw new DomainError("Too many attempts", "too_many_requests");
     });
 

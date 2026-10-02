@@ -23,7 +23,7 @@ import {
   canManageRole,
   type ResolvedAuth,
 } from "../permissions/authorization.js";
-import { PERMISSIONS, CRITICAL_PERMISSIONS, type PermissionKey } from "../permissions/constants.js";
+import { PERMISSIONS, CRITICAL_PERMISSIONS } from "../permissions/constants.js";
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
