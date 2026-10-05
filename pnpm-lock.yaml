@@ -46,6 +46,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^2.0.107
         version: 2.0.107(zod@4.3.6)
+      '@aws-sdk/client-acm':
+        specifier: 3.1104.0
+        version: 3.1104.0
       '@aws-sdk/client-cloudformation':
         specifier: ^3.1104.0
         version: 3.1104.0
@@ -81,7 +84,7 @@ importers:
         version: 3.1104.0
       '@blocknote/xl-ai':
         specifier: 0.51.4
-        version: 0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@tiptap/pm@3.26.1)(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)(zod@4.3.6)
+        version: 0.51.4(@floating-ui/dom@1.8.0)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@tiptap/pm@3.26.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)(zod@4.3.6)
       '@dockier/shared-types':
         specifier: workspace:*
         version: link:../packages/shared-types
@@ -393,6 +396,10 @@ packages:
 
   '@aws-sdk/checksums@3.1000.26':
     resolution: {integrity: sha512-CGznePoL+1oWCSzqmkvlYMpWQEZohPR3LntjKXXfVH+oh6Kd8d+yHLkjpiAGwPIHAxFe4OAq3aKfRnv/wqWIyA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-acm@3.1104.0':
+    resolution: {integrity: sha512-Vy3SExNsoXKbtMk3z3WkmR+n/FCO1njQBA0AqcsA9ap+ywL52tTyo/5jfQxsGuUiu7xjFZ0jN//QQs3Cbsa+NA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-cloudformation@3.1104.0':
@@ -6840,6 +6847,17 @@ snapshots:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
+  '@aws-sdk/client-acm@3.1104.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.6
+      '@aws-sdk/credential-provider-node': 3.972.78
+      '@aws-sdk/types': 3.974.2
+      '@smithy/core': 3.31.1
+      '@smithy/fetch-http-handler': 5.6.13
+      '@smithy/node-http-handler': 4.9.13
+      '@smithy/types': 4.16.1
+      tslib: 2.8.1
+
   '@aws-sdk/client-cloudformation@3.1104.0':
     dependencies:
       '@aws-sdk/core': 3.977.6
@@ -7406,10 +7424,10 @@ snapshots:
       - refractor
       - sugar-high
 
-  '@blocknote/mantine@0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)':
+  '@blocknote/mantine@0.51.4(@floating-ui/dom@1.8.0)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       '@blocknote/core': 0.51.4(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@types/hast@3.0.4)(refractor@5.0.0)
-      '@blocknote/react': 0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)
+      '@blocknote/react': 0.51.4(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@mantine/core': 9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@mantine/hooks': 9.3.1(react@19.2.5)
       react: 19.2.5
@@ -7427,7 +7445,7 @@ snapshots:
       - refractor
       - sugar-high
 
-  '@blocknote/react@0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)':
+  '@blocknote/react@0.51.4(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       '@blocknote/core': 0.51.4(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@types/hast@3.0.4)(refractor@5.0.0)
       '@emoji-mart/data': 1.2.1
@@ -7457,13 +7475,13 @@ snapshots:
       - refractor
       - sugar-high
 
-  '@blocknote/xl-ai@0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@tiptap/pm@3.26.1)(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)(zod@4.3.6)':
+  '@blocknote/xl-ai@0.51.4(@floating-ui/dom@1.8.0)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@tiptap/pm@3.26.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider-utils': 4.0.29(zod@4.3.6)
       '@ai-sdk/react': 3.0.208(react@19.2.5)(zod@4.3.6)
       '@blocknote/core': 0.51.4(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@types/hast@3.0.4)(refractor@5.0.0)
-      '@blocknote/mantine': 0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)
-      '@blocknote/react': 0.51.4(@floating-ui/dom@1.8.0)(@lezer/common@1.5.1)(@lezer/highlight@1.2.3)(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(refractor@5.0.0)
+      '@blocknote/mantine': 0.51.4(@floating-ui/dom@1.8.0)(@mantine/core@9.3.1(@mantine/hooks@9.3.1(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@mantine/hooks@9.3.1(react@19.2.5))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@blocknote/react': 0.51.4(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@floating-ui/react': 0.27.19(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@handlewithcare/prosemirror-suggest-changes': 0.1.8(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)
       '@tiptap/core': 3.26.1(@tiptap/pm@3.26.1)

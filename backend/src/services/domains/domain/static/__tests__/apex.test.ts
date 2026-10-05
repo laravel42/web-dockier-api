@@ -1,0 +1,99 @@
+/**
+ * Apex-domain detection — Unit Tests
+ *
+ * This gate decides whether a domain is refused on AWS, so a false positive
+ * blocks a domain that would have worked and a false negative produces a CNAME
+ * instruction the user's DNS provider will reject at the zone root.
+ */
+
+import { describe, it, expect } from "vitest";
+import { apexRefusalMessage, isApexDomain, normalizeHost } from "../apex.js";
+
+describe("normalizeHost", () => {
+  it("lowercases and strips a trailing dot", () => {
+    expect(normalizeHost("WWW.Example.COM.")).toBe("www.example.com");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(normalizeHost("  example.com  ")).toBe("example.com");
+  });
+
+  it("returns an empty string for empty input", () => {
+    expect(normalizeHost("")).toBe("");
+    expect(normalizeHost("   ")).toBe("");
+  });
+});
+
+describe("isApexDomain — standard TLDs", () => {
+  it("treats a two-label domain as the apex", () => {
+    expect(isApexDomain("example.com")).toBe(true);
+    expect(isApexDomain("acme.io")).toBe(true);
+    expect(isApexDomain("dockier.dev")).toBe(true);
+  });
+
+  it("treats a subdomain as not the apex", () => {
+    expect(isApexDomain("www.example.com")).toBe(false);
+    expect(isApexDomain("app.acme.io")).toBe(false);
+  });
+
+  it("treats a deep subdomain as not the apex", () => {
+    expect(isApexDomain("a.b.c.example.com")).toBe(false);
+  });
+
+  it("is case- and trailing-dot-insensitive", () => {
+    expect(isApexDomain("Example.COM.")).toBe(true);
+    expect(isApexDomain("WWW.Example.com")).toBe(false);
+  });
+});
+
+describe("isApexDomain — two-label public suffixes", () => {
+  it("treats example.co.uk as the apex, not co.uk", () => {
+    expect(isApexDomain("example.co.uk")).toBe(true);
+    expect(isApexDomain("www.example.co.uk")).toBe(false);
+  });
+
+  it("handles the other listed multi-label suffixes", () => {
+    expect(isApexDomain("example.com.au")).toBe(true);
+    expect(isApexDomain("www.example.com.au")).toBe(false);
+    expect(isApexDomain("example.co.jp")).toBe(true);
+    expect(isApexDomain("shop.example.co.jp")).toBe(false);
+  });
+
+  it("does not mistake an unlisted three-label domain for an apex", () => {
+    // .co.xyz is not a known two-label suffix, so this is a subdomain of
+    // co.xyz — correctly not the apex.
+    expect(isApexDomain("example.co.xyz")).toBe(false);
+  });
+});
+
+describe("isApexDomain — edge cases", () => {
+  it("returns false for a wildcard, which is not the apex itself", () => {
+    expect(isApexDomain("*.example.com")).toBe(false);
+  });
+
+  it("returns false for a single label", () => {
+    expect(isApexDomain("localhost")).toBe(false);
+  });
+
+  it("returns false for empty input", () => {
+    expect(isApexDomain("")).toBe(false);
+    expect(isApexDomain("   ")).toBe(false);
+  });
+});
+
+describe("apexRefusalMessage", () => {
+  it("names the domain, the reason, and a concrete alternative", () => {
+    const msg = apexRefusalMessage("example.com");
+
+    expect(msg).toContain("example.com");
+    // The actionable suggestion.
+    expect(msg).toContain("www.example.com");
+    // The reason, not just "unsupported".
+    expect(msg).toContain("CNAME");
+    expect(msg).toMatch(/ALIAS|ANAME/);
+  });
+
+  it("normalizes the domain it echoes back", () => {
+    expect(apexRefusalMessage("Example.COM.")).toContain("example.com");
+  });
+});

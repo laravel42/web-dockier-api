@@ -42,6 +42,31 @@ export async function getActiveDeployment(
   projectId: string,
   tenantId: string,
 ): Promise<ActiveDeployment | null> {
+  const result = await lookupActiveDeployment(projectId, tenantId);
+  return result.ok ? result.deployment : null;
+}
+
+/**
+ * Outcome of an active-deployment lookup, distinguishing "the query failed"
+ * from "there is no deployment".
+ */
+export type ActiveDeploymentLookup =
+  | { ok: true; deployment: ActiveDeployment | null }
+  | { ok: false; error: string };
+
+/**
+ * Like `getActiveDeployment`, but reports a query failure instead of folding it
+ * into `null`.
+ *
+ * `getActiveDeployment` cannot tell a caller why it returned null, so a
+ * transient database error becomes indistinguishable from "nothing deployed
+ * yet". Callers that act on that distinction — a retryable failure versus a
+ * genuine unsupported state — must use this instead.
+ */
+export async function lookupActiveDeployment(
+  projectId: string,
+  tenantId: string,
+): Promise<ActiveDeploymentLookup> {
   const { data, error } = await supabaseAdmin
     .from("deployments")
     .select("id, provider_id, deploy_strategy, app_url, docker_image, repo, infra")
@@ -54,17 +79,20 @@ export async function getActiveDeployment(
 
   if (error) {
     logger.warn({ err: error, projectId }, "[service-clients] Failed to fetch active deployment");
-    return null;
+    return { ok: false, error: error.message || "deployment lookup failed" };
   }
-  if (!data) return null;
+  if (!data) return { ok: true, deployment: null };
 
   return {
-    id: data.id,
-    providerId: data.provider_id,
-    deployStrategy: data.deploy_strategy,
-    appUrl: data.app_url,
-    dockerImage: data.docker_image,
-    repo: data.repo,
-    infra: parseInfra(data.infra as Record<string, unknown> | null),
+    ok: true,
+    deployment: {
+      id: data.id,
+      providerId: data.provider_id,
+      deployStrategy: data.deploy_strategy,
+      appUrl: data.app_url,
+      dockerImage: data.docker_image,
+      repo: data.repo,
+      infra: parseInfra(data.infra as Record<string, unknown> | null),
+    },
   };
 }

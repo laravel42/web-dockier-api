@@ -28,6 +28,7 @@ let _ecs: typeof import("@aws-sdk/client-ecs") | null = null;
 let _ecr: typeof import("@aws-sdk/client-ecr") | null = null;
 let _secretsManager: typeof import("@aws-sdk/client-secrets-manager") | null = null;
 let _cloudwatchLogs: typeof import("@aws-sdk/client-cloudwatch-logs") | null = null;
+let _acm: typeof import("@aws-sdk/client-acm") | null = null;
 
 // ─── Lazy loaders ──────────────────────────────────────────────────
 
@@ -37,6 +38,17 @@ export async function getS3() {
 
 export async function getCfn() {
   return (_cfn ??= await import("@aws-sdk/client-cloudformation"));
+}
+
+/**
+ * AWS Certificate Manager.
+ *
+ * Only used by the static-hosting custom-domain flow, and always against
+ * us-east-1 — CloudFront accepts certificates from no other region. Lazy so a
+ * GCP-only or Dokploy-only install never loads the module.
+ */
+export async function getAcm() {
+  return (_acm ??= await import("@aws-sdk/client-acm"));
 }
 
 export async function getSsm() {

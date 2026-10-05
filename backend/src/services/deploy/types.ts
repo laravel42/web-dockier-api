@@ -108,6 +108,22 @@ export type InfraMetadata = {
 
   // ── GCP common ──
   gcpProjectId?: string;
+
+  // ── Static hosting (S3 + CloudFront / GCS + Cloud CDN) ──
+  //
+  // The CDN handle. Without these a later domain-apply has no way to reach the
+  // CDN that fronts the bucket: the values exist on ProvisionResult.outputs at
+  // deploy time and were previously dropped, forcing a DescribeStacks recovery
+  // on AWS and a name-prefix search on GCP.
+  //
+  /** CloudFront distribution id (AWS static). */
+  distributionId?: string;
+  /** CloudFront distribution domain, e.g. d111111abcdef8.cloudfront.net — the CNAME target. */
+  distributionDomain?: string;
+  /** Global anycast IP of the GCP HTTPS load balancer — the A record target. */
+  cdnIp?: string;
+  /** Origin bucket holding the built site. */
+  staticBucket?: string;
 };
 
 /**

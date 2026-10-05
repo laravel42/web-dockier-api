@@ -13,6 +13,7 @@ import {
   verifyDnsResponseSchema,
   configPreviewResponseSchema,
   applyDomainResponseSchema,
+  dnsInstructionsResponseSchema,
 } from "./schemas.js";
 import {
   listDomains,
@@ -24,7 +25,12 @@ import {
   createCertificate,
   deleteCertificate,
 } from "./domain/domains.js";
-import { applyDomainConfig, verifyDomainDns, previewDomainConfig } from "./domain/applier.js";
+import {
+  applyDomainConfig,
+  verifyDomainDns,
+  previewDomainConfig,
+  getDomainDnsInstructions,
+} from "./domain/applier.js";
 import { enqueueDomainApply, enqueueCertificateIssue } from "./domain/worker.js";
 
 export async function registerDomainsRoutes(app: FastifyInstance) {
@@ -250,6 +256,40 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         return { verified: false, message: "Domain not found" };
       }
       return await verifyDomainDns({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        domainName: domain.name,
+      });
+    },
+  );
+
+  // ─── DNS Instructions ───
+
+  typed.get(
+    "/projects/:projectId/domains/:domainId/dns-instructions",
+    {
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
+      schema: {
+        tags: ["domains"],
+        summary: "The DNS records a user must publish for a domain",
+        params: z.object({
+          projectId: z.uuid(),
+          domainId: z.uuid(),
+        }),
+        response: { 200: dnsInstructionsResponseSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const domain = await getDomainById({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        domainId: request.params.domainId,
+      });
+      if (!domain) {
+        return { supported: false as const, records: [], note: "", message: "Domain not found." };
+      }
+      return await getDomainDnsInstructions({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         domainName: domain.name,

@@ -21,6 +21,7 @@ import { nowIso } from "../../../shared/utils/time.js";
 import { listDomains, listCertificates } from "./domains.js";
 import type { SslCertificateRow } from "../schemas.js";
 import { assertSafeDomainName, resolveDomainTarget, executeOnHost } from "./applier-target.js";
+import { lookupActiveDeployment, type ActiveDeployment } from "../../../shared/service-clients/deployments.js";
 import {
   generateDomainNginxConfig,
   buildApplyDomainConfigScript,
@@ -31,6 +32,27 @@ export interface ApplyDomainsResult {
   success: boolean;
   message: string;
   generatedConfig?: string;
+}
+
+/**
+ * Return the active deployment when the project is a static (object storage +
+ * CDN) deployment, otherwise null.
+ *
+ * Returns null on a lookup failure too: the callers all have their own
+ * fallthrough for "no deployment", and this keeps the static check from
+ * hijacking a VPS project because of a transient read error.
+ */
+async function resolveStaticDeployment(
+  projectId: string,
+  tenantId: string,
+): Promise<ActiveDeployment | null> {
+  const lookup = await lookupActiveDeployment(projectId, tenantId);
+  if (!lookup.ok) {
+    logger.warn(`[domains] Deployment lookup failed for project ${projectId}: ${lookup.error}`);
+    return null;
+  }
+  const deployment = lookup.deployment;
+  return deployment && deployment.deployStrategy === "static" ? deployment : null;
 }
 
 /**
@@ -85,6 +107,13 @@ export async function previewDomainConfig(params: {
     return await previewDomainConfigDokploy({ tenantId, projectId });
   }
 
+  // Static sites are served by a CDN — also no nginx.
+  const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
+  if (staticDeployment) {
+    const { previewDomainConfigStatic } = await import("./static/index.js");
+    return await previewDomainConfigStatic({ tenantId, projectId, deployment: staticDeployment });
+  }
+
   const [domains, certificates] = await Promise.all([
     listDomains({ tenantId, projectId }),
     listCertificates({ tenantId, projectId }),
@@ -127,6 +156,13 @@ export async function applyDomainConfig(params: {
     logger.warn(`[domains] Dokploy strategy check failed, falling back to nginx path: ${getErrMsg(err)}`);
   }
 
+  // Static sites (object storage + CDN) attach domains to the CDN, not a host.
+  const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
+  if (staticDeployment) {
+    const { applyDomainConfigStatic } = await import("./static/index.js");
+    return await applyDomainConfigStatic({ tenantId, projectId, deployment: staticDeployment });
+  }
+
   try {
     // 1. Fetch domains and certificates
     const [domains, certificates] = await Promise.all([
@@ -138,9 +174,13 @@ export async function applyDomainConfig(params: {
     const { target, appName, errorMessage } = await resolveDomainTarget(projectId, tenantId);
 
     if (!target) {
+      // success:false, not true. Reporting success for work that did not happen
+      // made a domain look configured while it could never serve: the apply job
+      // completed, nothing was logged, and the only way to learn the truth was
+      // to click "Sync now".
       return {
-        success: true,
-        message: errorMessage || "Domain configuration saved. It will be applied on next deployment.",
+        success: false,
+        message: errorMessage || "Could not resolve a deployment to apply the domain to.",
       };
     }
 
@@ -214,6 +254,15 @@ export async function issueCertificate(params: {
     }
   } catch (err) {
     logger.warn(`[domains] Dokploy cert strategy check failed, falling back to certbot path: ${getErrMsg(err)}`);
+  }
+
+  // Static sites: certificates are provider-issued (ACM), so there is nothing
+  // for a manual issuance step to do. Refuse explicitly and record why on the
+  // row, rather than leaving it 'pending' forever.
+  const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
+  if (staticDeployment) {
+    const { issueCertificateStatic } = await import("./static/index.js");
+    return await issueCertificateStatic({ certificateId });
   }
 
   try {
@@ -295,6 +344,14 @@ export async function verifyDomainDns(params: {
   const { tenantId, projectId, domainName } = params;
 
   try {
+    // Static sites are CNAME-based (CloudFront), so the A-record comparison
+    // below cannot work for them — CloudFront answers with rotating edge IPs.
+    const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
+    if (staticDeployment) {
+      const { verifyDomainDnsStatic } = await import("./static/index.js");
+      return await verifyDomainDnsStatic({ tenantId, projectId, domainName, deployment: staticDeployment });
+    }
+
     // On Dokploy, the server IP comes from the dokploy_servers mapping (no host
     // shell access). Fall back to the legacy VPS path (curl on the EC2 host).
     let serverIp = "";
@@ -352,4 +409,57 @@ export async function verifyDomainDns(params: {
     const msg = getErrMsg(err);
     return { verified: false, message: `DNS verification error: ${msg}` };
   }
+}
+
+export interface DnsInstructionsResult {
+  supported: boolean;
+  domainName?: string;
+  records: Array<{ name: string; type: string; value: string; purpose: string }>;
+  note: string;
+  message?: string;
+}
+
+/**
+ * The DNS records a user must publish for a domain.
+ *
+ * Static sites need two (a certificate-validation CNAME and a routing CNAME to
+ * the CDN) and the user cannot guess either, so they are surfaced explicitly.
+ * The VPS and Dokploy paths already tell the user to point an A record at the
+ * server IP that the Domains tab shows, so they report `supported: false` and
+ * the UI keeps its existing guidance.
+ */
+export async function getDomainDnsInstructions(params: {
+  tenantId: string;
+  projectId: string;
+  domainName: string;
+}): Promise<DnsInstructionsResult> {
+  const { tenantId, projectId, domainName } = params;
+
+  const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
+  if (!staticDeployment) {
+    return {
+      supported: false,
+      records: [],
+      note: "",
+      message: "Point an A record at the server IP shown for this project.",
+    };
+  }
+
+  const { getDomainDnsInstructionsStatic } = await import("./static/index.js");
+  const result = await getDomainDnsInstructionsStatic({
+    projectId,
+    domainName,
+    deployment: staticDeployment,
+  });
+
+  if ("error" in result) {
+    return { supported: false, records: [], note: "", message: result.error };
+  }
+
+  return {
+    supported: true,
+    domainName: result.domainName,
+    records: result.records,
+    note: result.note,
+  };
 }

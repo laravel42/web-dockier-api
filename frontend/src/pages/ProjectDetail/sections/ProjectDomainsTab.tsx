@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useId } from "react";
-import { domainsApi } from "@/services/domains";
+import { domainsApi, type DnsInstructions } from "@/services/domains";
 import type { Domain, SslCertificate } from "@/types";
 import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
@@ -48,6 +48,28 @@ function DomainRow({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<{ verified: boolean; message: string } | null>(null);
+  const [instructions, setInstructions] = useState<DnsInstructions | null>(null);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [instructionsError, setInstructionsError] = useState("");
+
+  // Fetched on demand rather than with the list: the records come from the live
+  // CDN and certificate, so one request per domain only when a user asks.
+  const handleToggleInstructions = async () => {
+    setMenuOpen(false);
+    if (instructionsOpen) {
+      setInstructionsOpen(false);
+      return;
+    }
+    setInstructionsOpen(true);
+    if (instructions) return;
+
+    setInstructionsError("");
+    try {
+      setInstructions(await domainsApi.dnsInstructions(projectId, domain.id));
+    } catch (err: unknown) {
+      setInstructionsError((err as Error).message || "Could not load DNS records");
+    }
+  };
 
   // Errors propagate so ConfirmModal can surface them in place; a toast behind a
   // closing modal is how a failed delete became invisible.
@@ -161,6 +183,13 @@ function DomainRow({
                     <CircleCheckIcon className="size-3.5" />
                     {verifying ? "Verifying…" : "Verify DNS"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleInstructions}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-card/60 hover:text-text"
+                  >
+                    {instructionsOpen ? "Hide DNS records" : "Show DNS records"}
+                  </button>
                   <div className="my-1 border-t border-border" />
                   <button
                     type="button"
@@ -184,6 +213,52 @@ function DomainRow({
           : "bg-warning-surface text-warning-ink border border-warning-line"
       }`}>
         {dnsStatus.message}
+      </div>
+    )}
+    {instructionsOpen && (
+      <div className="mx-4 mb-3 rounded-md border border-border bg-card/40 p-3 ">
+        {instructionsError ? (
+          <p className="text-xs text-danger-300">{instructionsError}</p>
+        ) : !instructions ? (
+          <p className="text-xs text-text-muted">Loading DNS records…</p>
+        ) : !instructions.supported ? (
+          <p className="text-xs text-text-muted">{instructions.message}</p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs font-medium text-text">
+              Add these records at your DNS provider
+            </p>
+            <div className="space-y-2">
+              {instructions.records.map((record) => (
+                <div
+                  key={`${record.type}-${record.name}`}
+                  className="rounded border border-border bg-bg/40 px-2.5 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={settingsBadgeCls.muted}>{record.type}</span>
+                        <span className="truncate font-mono text-xs text-text">{record.name}</span>
+                      </div>
+                      <p className="mt-1 break-all font-mono text-xs text-text-muted">
+                        {record.value}
+                      </p>
+                      <p className="mt-1 text-xs text-text-muted">{record.purpose}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard.writeText(record.value)}
+                      className="shrink-0 rounded border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:bg-card/60 hover:text-text"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-text-muted">{instructions.note}</p>
+          </>
+        )}
       </div>
     )}
     </div>
@@ -355,6 +430,9 @@ function CertificateRow({
     lets_encrypt: "Let's Encrypt",
     custom: "Custom",
     clone: "Clone",
+    // Provider-issued, for static (CDN) deployments.
+    acm: "AWS Certificate Manager",
+    gcp_managed: "Google-managed",
   };
 
   const statusColors: Record<SslCertificate["status"], string> = {
@@ -531,6 +609,15 @@ function CertificatesSection({
 
 // ─── Create Certificate Modal ───
 
+/**
+ * The certificate types a client may request.
+ *
+ * `acm` and `gcp_managed` are deliberately excluded: they are issued and
+ * renewed by the cloud provider for static (CDN) deployments, so there is
+ * nothing to create by hand.
+ */
+type ClientCertificateType = "lets_encrypt" | "custom" | "clone";
+
 function CreateCertificateModal({
   projectId,
   onClose,
@@ -541,12 +628,12 @@ function CreateCertificateModal({
   onCreated: () => void;
 }) {
   const fid = useId();
-  const [type, setType] = useState<SslCertificate["type"]>("lets_encrypt");
+  const [type, setType] = useState<ClientCertificateType>("lets_encrypt");
   const [domainName, setDomainName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const typeOptions: Array<{ value: SslCertificate["type"]; label: string; description: string }> = [
+  const typeOptions: Array<{ value: ClientCertificateType; label: string; description: string }> = [
     { value: "lets_encrypt", label: "Let's Encrypt", description: "Free automated certificate" },
     { value: "custom", label: "Existing certificate", description: "Upload your own certificate" },
     { value: "clone", label: "Clone certificate", description: "Clone from another site" },

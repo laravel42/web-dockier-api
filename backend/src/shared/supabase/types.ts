@@ -547,6 +547,15 @@ export type Database = {
           domain_name: string;
           expires_at: string | null;
           issued_at: string | null;
+          /** ACM certificate ARN, or a GCP sslCertificates self-link. */
+          provider_ref: string | null;
+          /** The DNS record the user must publish: { name, type, value }. */
+          validation_record: Json | null;
+          /** Where the certificate is in the provider handshake (see 0075). */
+          verification_state: string;
+          verification_message: string | null;
+          /** When the CDN frontend update was started, for out-of-band observation. */
+          attach_started_at: string | null;
           created_at: string;
           updated_at: string;
         };

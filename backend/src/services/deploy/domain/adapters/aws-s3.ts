@@ -286,6 +286,50 @@ export class AwsS3Adapter implements DeployAdapter {
       { ParameterKey: "ErrorResponseCode", ParameterValue: notFound.responseCode },
     ];
 
+    // Carry the project's existing custom domains through the deploy. Passing
+    // empty values would make CloudFormation strip the aliases and certificate
+    // off the distribution, taking a working domain offline on an unrelated push.
+    //
+    // Both are only sent together: CloudFront rejects a distribution that has
+    // aliases but the default certificate, so if the certificate is not issued
+    // yet the aliases wait for the domains applier to attach them.
+    // projectId is optional on the pipeline event; with no project there are no
+    // domains to preserve and both parameters stay empty.
+    //
+    // Lazily imported: the service client pulls in the Supabase admin client,
+    // which reads validated config at module load. A static import here would
+    // put that in the module graph of anything importing this adapter — the
+    // naming unit tests import it without booting config.
+    const domainProjectId = ctx.event.projectId;
+    let domainNames: string[] = [];
+    let certificateArn: string | null = null;
+    if (domainProjectId) {
+      const { listProjectDomainNames, findIssuedAcmArnForDomains } = await import(
+        "../../../../shared/service-clients/domains.js"
+      );
+      domainNames = await listProjectDomainNames(domainProjectId);
+      certificateArn = await findIssuedAcmArnForDomains(domainProjectId, domainNames);
+    }
+    const aliasesToApply = certificateArn ? domainNames : [];
+
+    params.push(
+      { ParameterKey: "DomainAliases", ParameterValue: aliasesToApply.join(",") },
+      { ParameterKey: "CertificateArn", ParameterValue: certificateArn ?? "" },
+    );
+
+    if (domainNames.length > 0 && !certificateArn) {
+      await appendLog(
+        `  Custom domains are configured but no certificate is issued yet — they will be attached once validation completes.`,
+      );
+    } else if (aliasesToApply.length > 0) {
+      await appendLog(`✓ Preserving ${aliasesToApply.length} custom domain(s) on the distribution`);
+    }
+
+    // The template gained DomainAliases/CertificateArn, so the first deploy
+    // after this change runs a real CloudFront distribution update even when
+    // both are empty. Resolved behaviour is identical; it just takes longer.
+    await appendLog("  Note: CloudFront distribution updates take 5-20 minutes.");
+
     // 9. Create or update CloudFormation stack
     const { CloudFormationClient } = await getCfn();
     const cfn = new CloudFormationClient({ region, credentials });

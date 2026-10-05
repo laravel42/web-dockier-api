@@ -1,6 +1,22 @@
 import { request } from "./request";
 import type { Domain, SslCertificate } from "../types";
 
+export interface DnsRecordInstruction {
+  name: string;
+  type: string;
+  value: string;
+  purpose: string;
+}
+
+export interface DnsInstructions {
+  /** false when this deployment type has no specific records to publish. */
+  supported: boolean;
+  domainName?: string;
+  records: DnsRecordInstruction[];
+  note: string;
+  message?: string;
+}
+
 export const domainsApi = {
   // Domains
   listDomains: (projectId: string) =>
@@ -56,6 +72,14 @@ export const domainsApi = {
     request<{ verified: boolean; serverIp?: string; resolvedIp?: string; message: string }>(
       `/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domainId)}/verify-dns`,
       { method: "POST" },
+    ),
+
+  // The DNS records the user must publish. Static (CDN) deployments need a
+  // CNAME to the distribution plus a certificate-validation record, neither of
+  // which the user can guess.
+  dnsInstructions: (projectId: string, domainId: string) =>
+    request<DnsInstructions>(
+      `/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domainId)}/dns-instructions`,
     ),
 
   // Preview nginx config (read-only, no side effects)

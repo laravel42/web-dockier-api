@@ -252,6 +252,20 @@ function buildInfraMetadata(ctx: {
     infra.cloudRunService = containerName;
   }
 
+  // Static hosting: persist the CDN handle. These values are only available on
+  // the provision outputs, and without storing them a later domain-apply has
+  // nothing to attach a certificate to — it would have to rediscover the CDN by
+  // DescribeStacks (AWS) or a name-prefix search (GCP) on every call.
+  if (ctx.deployStrategy === "static") {
+    const out = ctx.provision.outputs ?? {};
+    if (out.DistributionId) infra.distributionId = out.DistributionId;
+    if (out.DistributionDomain) infra.distributionDomain = out.DistributionDomain;
+    if (out.WebsiteBucketName) infra.staticBucket = out.WebsiteBucketName;
+    // GCP's Pulumi outputs use lowerCamel keys.
+    if (out.cdnIp) infra.cdnIp = out.cdnIp;
+    if (out.bucketName) infra.staticBucket = out.bucketName;
+  }
+
   return infra;
 }
 

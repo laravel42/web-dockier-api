@@ -42,6 +42,21 @@ Parameters:
     Type: Number
     Default: 200
     Description: HTTP status returned with ErrorPagePath. 200 for SPA routing, 404 for a real not-found.
+  DomainAliases:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Custom domains to serve (CNAME targets). Empty = CloudFront default domain only.
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM certificate ARN in us-east-1 covering every DomainAliases entry. Empty = CloudFront default certificate.
+
+Conditions:
+  # A CommaDelimitedList defaulting to "" yields a single empty element, so test
+  # the joined value rather than the list length — Fn::Length is not available
+  # outside the language-extensions transform.
+  HasAliases: !Not [!Equals [!Join ["", !Ref DomainAliases], ""]]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
 
 Resources:
   BucketPolicy:
@@ -120,6 +135,23 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2and3
         PriceClass: PriceClass_100
+        # AWS::NoValue removes the property entirely. An empty Aliases list is
+        # rejected, and a distribution carrying aliases while using the default
+        # CloudFront certificate is rejected too — so both appear or neither.
+        #
+        # Every alias MUST be covered by CertificateArn or CloudFront rejects the
+        # update. An alias already claimed by another distribution fails with
+        # CNAMEAlreadyExists.
+        Aliases: !If [HasAliases, !Ref DomainAliases, !Ref "AWS::NoValue"]
+        # sni-only, never vip: vip costs ~$600/month per distribution and exists
+        # only for pre-SNI clients. TLSv1.2_2021 is the strictest value this
+        # repo's own scanner rule (aws-cloudfront-insecure-tls.yaml) permits.
+        ViewerCertificate: !If
+          - HasCertificate
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         Origins:
           - Id: S3Origin
             DomainName: !Sub "${SourceBucket}.s3.${AWS::Region}.amazonaws.com"
