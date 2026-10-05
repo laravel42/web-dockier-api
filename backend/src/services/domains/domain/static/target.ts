@@ -13,10 +13,30 @@ import { deriveRepoName, stackNameFor } from "../../../../lib/naming.js";
 import {
   getProviderCredentialsSafe,
   toAwsCredentials,
+  toGcpServiceAccountKey,
 } from "../../../../lib/provider-credentials.js";
+import { createGcpClient, type GcpClient } from "../../../deploy/domain/infra/gcp-client.js";
+import {
+  getGlobalAddressValue,
+  listGlobalResourceNames,
+} from "../../../deploy/domain/infra/gcp-static-lb.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import type { ActiveDeployment } from "../../../../shared/service-clients/deployments.js";
+
+export interface GcpStaticTarget {
+  kind: "gcp-static";
+  projectId: string;
+  gcpProjectId: string;
+  client: GcpClient;
+  /** The global anycast IP users point an A record at. */
+  cdnIp: string;
+  /** Resource-name prefix the Pulumi program emits, e.g. "myapp". */
+  appName: string;
+  /** Discovered and used verbatim — never reconstructed. */
+  urlMapSelfLink: string;
+  bucketName: string;
+}
 
 export interface AwsStaticTarget {
   kind: "aws-static";
@@ -31,7 +51,7 @@ export interface AwsStaticTarget {
   websiteBucket: string;
 }
 
-export type StaticTarget = AwsStaticTarget;
+export type StaticTarget = AwsStaticTarget | GcpStaticTarget;
 
 export interface StaticTargetResolution {
   target: StaticTarget | null;
@@ -67,14 +87,7 @@ export async function resolveStaticTarget(params: {
   const provider = (deployment.infra?.provider ?? creds.provider).toLowerCase();
 
   if (provider === "gcp") {
-    return {
-      target: null,
-      retryable: false,
-      errorMessage:
-        "Custom domains for static sites are available on AWS (S3 + CloudFront) today. " +
-        "Google Cloud static hosting support is in progress. In the meantime, deploying this " +
-        "project with the Server target gives it a custom domain with automatic HTTPS.",
-    };
+    return await resolveGcpStaticTarget({ projectId, deployment, creds });
   }
 
   if (provider !== "aws") {
@@ -175,4 +188,83 @@ async function describeStaticStackOutputs(params: {
     );
     return empty;
   }
+}
+
+async function resolveGcpStaticTarget(params: {
+  projectId: string;
+  deployment: ActiveDeployment;
+  creds: { provider: string; region: string; credential: Parameters<typeof toGcpServiceAccountKey>[0] };
+}): Promise<StaticTargetResolution> {
+  const { projectId, deployment, creds } = params;
+
+  let client: GcpClient;
+  try {
+    const serviceAccountKey = toGcpServiceAccountKey(creds.credential);
+    client = await createGcpClient(serviceAccountKey);
+  } catch (err) {
+    return {
+      target: null,
+      retryable: true,
+      errorMessage: `Could not authenticate with Google Cloud: ${getErrMsg(err)}`,
+    };
+  }
+
+  // The Pulumi program names every LB resource `<appName>-<role>[-<suffix>]`,
+  // where appName comes from the repo. Discovery uses that prefix and the
+  // discovered names are used VERBATIM — reconstructing them would guess at the
+  // optional suffix and miss.
+  const appName = deriveRepoName(deployment.repo);
+
+  const urlMapNames = await listGlobalResourceNames(client, "urlMaps", `${appName}-url-map`);
+  if (urlMapNames.length === 0) {
+    return {
+      target: null,
+      retryable: true,
+      errorMessage:
+        "Could not locate the load balancer for this site. Redeploy the project and try again.",
+    };
+  }
+  const urlMapSelfLink = `https://www.googleapis.com/compute/v1/projects/${client.getProjectId()}/global/urlMaps/${urlMapNames[0]}`;
+
+  // Prefer the LIVE address over the persisted one. A redeploy that took
+  // gcp-storage's wipe-and-retry path can legitimately have replaced the global
+  // address, and creating the :443 rule against a dead IP would either fail or
+  // bind an address the user's A record does not point at — surfacing later as
+  // a certificate stuck on FAILED_NOT_VISIBLE naming the wrong IP.
+  let cdnIp = deployment.infra?.cdnIp ?? "";
+  const addressNames = await listGlobalResourceNames(client, "addresses", `${appName}-ip`);
+  if (addressNames.length > 0) {
+    const live = await getGlobalAddressValue(client, addressNames[0]);
+    if (live && live !== cdnIp) {
+      if (cdnIp) {
+        logger.warn(
+          { projectId, persisted: cdnIp, live },
+          "[domains:static:gcp] persisted CDN IP disagrees with the live address; using live",
+        );
+      }
+      cdnIp = live;
+    }
+  }
+
+  if (!cdnIp) {
+    return {
+      target: null,
+      retryable: true,
+      errorMessage:
+        "Could not determine the load balancer's IP address for this site. Redeploy the project and try again.",
+    };
+  }
+
+  return {
+    target: {
+      kind: "gcp-static",
+      projectId,
+      gcpProjectId: client.getProjectId(),
+      client,
+      cdnIp,
+      appName,
+      urlMapSelfLink,
+      bucketName: deployment.infra?.staticBucket ?? "",
+    },
+  };
 }

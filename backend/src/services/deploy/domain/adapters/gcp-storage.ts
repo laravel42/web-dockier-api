@@ -378,6 +378,27 @@ export class GcpStorageAdapter implements DeployAdapter {
 
     await ctx.appendLog("── Destroy GCP Storage + CDN ──────");
 
+    // The HTTPS front end (managed certificate, HTTPS proxy, :443 forwarding
+    // rule) is created by the domains service over REST and is therefore NOT in
+    // the Pulumi state — `pulumi destroy` cannot see it. Remove it explicitly
+    // or the forwarding rule survives teardown and keeps billing.
+    if (accessToken && gcpProjectId) {
+      try {
+        const appNamePrefix = ctx.repoName;
+        const { createGcpClient } = await import("../infra/gcp-client.js");
+        const { teardownGcpStaticHttps } = await import("../infra/gcp-static-lb.js");
+        const client = await createGcpClient(gcpServiceAccountKey);
+        const { errors: httpsErrors } = await teardownGcpStaticHttps(client, { appNamePrefix });
+        if (httpsErrors.length > 0) {
+          errors.push(...httpsErrors);
+        } else {
+          await ctx.appendLog("✓ HTTPS front end removed");
+        }
+      } catch (e: unknown) {
+        errors.push(`HTTPS teardown: ${getErrMsg(e)}`);
+      }
+    }
+
     if (stateMarker !== -1) {
       errors.push(...await destroyPulumiStack(ctx, stateMarker));
     } else if (accessToken && gcpProjectId) {

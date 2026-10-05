@@ -13,6 +13,7 @@ import type { ActiveDeployment } from "../../../../shared/service-clients/deploy
 import { listDomains } from "../domains.js";
 import { normalizeHost } from "./apex.js";
 import { awsDnsInstructions, reconcileAwsStaticDomains } from "./aws.js";
+import { gcpDnsInstructions, reconcileGcpStaticDomains } from "./gcp.js";
 import { findStaticCertRow } from "./certs.js";
 import { resolveStaticTarget } from "./target.js";
 
@@ -28,8 +29,8 @@ export interface ApplyDomainsResult {
  */
 const MANUAL_CERT_REFUSAL =
   "Certificates for static sites are requested and renewed automatically by your cloud provider " +
-  "(AWS Certificate Manager). Add the domain in the Domains tab and publish the DNS records shown " +
-  "there — no manual certificate is needed.";
+  "(AWS Certificate Manager, or Google-managed certificates). Add the domain in the Domains tab " +
+  "and publish the DNS records shown there — no manual certificate is needed.";
 
 /** Apply the project's domains to its CDN. */
 export async function applyDomainConfigStatic(params: {
@@ -50,12 +51,13 @@ export async function applyDomainConfigStatic(params: {
   }
 
   const domains = await listDomains({ tenantId, projectId });
-  const outcome = await reconcileAwsStaticDomains({
-    tenantId,
-    projectId,
-    target: resolution.target,
-    domains: domains.map((d) => ({ id: d.id, name: d.name })),
-  });
+  const mapped = domains.map((d) => ({ id: d.id, name: d.name }));
+  const target = resolution.target;
+
+  const outcome =
+    target.kind === "gcp-static"
+      ? await reconcileGcpStaticDomains({ tenantId, projectId, target, domains: mapped })
+      : await reconcileAwsStaticDomains({ tenantId, projectId, target, domains: mapped });
 
   return { success: outcome.success, message: outcome.message };
 }
@@ -100,6 +102,13 @@ export async function verifyDomainDnsStatic(params: {
       verified: false,
       message: resolution.errorMessage || "Could not resolve the CDN for this static site.",
     };
+  }
+
+  // GCP's load balancer owns a dedicated global anycast IP, so the A-record
+  // comparison the VPS path uses is already correct there — only the expected
+  // value differs. AWS needs a CNAME check instead (below).
+  if (resolution.target.kind === "gcp-static") {
+    return await verifyGcpARecord(resolution.target.cdnIp, normalizeHost(domainName));
   }
 
   const expected = normalizeHost(resolution.target.distributionDomain);
@@ -157,6 +166,58 @@ export async function verifyDomainDnsStatic(params: {
 }
 
 /**
+ * GCP: compare the domain's A record against the load balancer's own IP.
+ *
+ * Works identically for an apex and a subdomain, which is the advantage of a
+ * dedicated anycast address over a CNAME-only CDN.
+ */
+async function verifyGcpARecord(
+  expectedIp: string,
+  host: string,
+): Promise<{ verified: boolean; serverIp?: string; resolvedIp?: string; message: string }> {
+  try {
+    const addresses = await dns.resolve4(host);
+
+    if (addresses.includes(expectedIp)) {
+      return {
+        verified: true,
+        serverIp: expectedIp,
+        resolvedIp: expectedIp,
+        message: `${host} points at the load balancer (${expectedIp}).`,
+      };
+    }
+
+    if (addresses.length > 0) {
+      return {
+        verified: false,
+        serverIp: expectedIp,
+        resolvedIp: addresses[0],
+        message: `${host} resolves to ${addresses[0]}, but it must point at ${expectedIp}.`,
+      };
+    }
+
+    return {
+      verified: false,
+      serverIp: expectedIp,
+      message: `${host} has no A record. Add an A record pointing at ${expectedIp}.`,
+    };
+  } catch (err) {
+    const msg = getErrMsg(err);
+    if (/ENODATA|ENOTFOUND/i.test(msg)) {
+      return {
+        verified: false,
+        serverIp: expectedIp,
+        message:
+          `${host} has no A record yet. Add an A record pointing at ${expectedIp}. ` +
+          `DNS changes can take a few minutes to become visible, and the certificate is only ` +
+          `issued after Google can see this record.`,
+      };
+    }
+    return { verified: false, serverIp: expectedIp, message: `Could not resolve ${host}: ${msg}` };
+  }
+}
+
+/**
  * Detect an ALIAS/ANAME-flattened record by comparing the addresses the domain
  * resolves to against the CDN hostname's own addresses.
  *
@@ -210,14 +271,26 @@ export async function previewDomainConfigStatic(params: {
   }
 
   const target = resolution.target;
-  lines.push(`Distribution: ${target.distributionId}`);
-  lines.push(`CDN hostname:  ${target.distributionDomain}`);
-  if (target.websiteBucket) lines.push(`Origin bucket: ${target.websiteBucket} (private, OAC)`);
+  const routeTarget =
+    target.kind === "gcp-static" ? target.cdnIp : target.distributionDomain;
+
+  if (target.kind === "gcp-static") {
+    lines.push(`Load balancer IP: ${target.cdnIp}`);
+    if (target.bucketName) lines.push(`Origin bucket:    ${target.bucketName} (public)`);
+  } else {
+    lines.push(`Distribution: ${target.distributionId}`);
+    lines.push(`CDN hostname:  ${target.distributionDomain}`);
+    if (target.websiteBucket) lines.push(`Origin bucket: ${target.websiteBucket} (private, OAC)`);
+  }
   lines.push("");
 
   const domains = await listDomains({ tenantId, projectId });
   if (domains.length === 0) {
-    lines.push("No custom domains configured — the site is served on the CDN hostname above.");
+    lines.push(
+      target.kind === "gcp-static"
+        ? "No custom domains configured — the site is served on the load balancer IP above."
+        : "No custom domains configured — the site is served on the CDN hostname above.",
+    );
     return { generatedConfig: lines.join("\n") };
   }
 
@@ -225,7 +298,7 @@ export async function previewDomainConfigStatic(params: {
   for (const d of domains) {
     const cert = await findStaticCertRow(projectId, normalizeHost(d.name));
     const state = cert?.verificationState ?? "pending";
-    lines.push(`  ${normalizeHost(d.name)} → ${target.distributionDomain}   [${state}]`);
+    lines.push(`  ${normalizeHost(d.name)} → ${routeTarget}   [${state}]`);
     if (cert?.verificationMessage) lines.push(`      ${cert.verificationMessage}`);
   }
 
@@ -258,9 +331,16 @@ export async function getDomainDnsInstructionsStatic(params: {
   }
 
   const host = normalizeHost(domainName);
+  const target = resolution.target;
+
+  if (target.kind === "gcp-static") {
+    const { records, note } = gcpDnsInstructions({ target, domainName: host });
+    return { domainName: host, records, note };
+  }
+
   const cert = await findStaticCertRow(projectId, host);
   const { records, note } = awsDnsInstructions({
-    target: resolution.target,
+    target,
     domainName: host,
     validationRecord: cert?.validationRecord ?? null,
   });
