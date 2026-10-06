@@ -32,6 +32,13 @@ export interface ApplyDomainsResult {
   success: boolean;
   message: string;
   generatedConfig?: string;
+  /**
+   * Whether retrying could plausibly succeed.
+   *
+   * `undefined` on the VPS and Dokploy paths, which have no classifier — those
+   * keep the legacy substring rule in `worker.ts`. Only the static paths set it.
+   */
+  retryable?: boolean;
 }
 
 /**

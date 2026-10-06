@@ -10,6 +10,7 @@ import { registerDomainErrorHandler } from "./shared/http/error-handler.js";
 import { LOG_REDACT_PATHS, redactedReqSerializer } from "./shared/http/log-redaction.js";
 import { registerPlatformPlugins } from "./shared/http/openapi.js";
 import { isQueueReady } from "./shared/database/queue.js";
+import { getMigrationState } from "./shared/database/migration-state.js";
 import { registerAuthRoutes } from "./services/auth/routes.js";
 import { registerCodeAnalysisRoutes } from "./services/code-analysis/routes.js";
 import { registerDeployRoutes } from "./services/deploy/routes.js";
@@ -118,10 +119,17 @@ export async function buildApp(service: ServiceName) {
   // stop traffic to an instance that is still serving HTTP correctly.
   app.get("/readyz", async (_request, reply) => {
     const queueReady = isQueueReady();
-    return reply.code(queueReady ? 200 : 503).send({
-      status: queueReady ? "ready" : "degraded",
+    // A migration that was never applied is the same class of problem as a
+    // failed queue start: the process serves HTTP correctly while a feature
+    // is silently broken. `unknown` never degrades — see migration-state.ts.
+    const migrations = await getMigrationState();
+    const degraded = !queueReady || migrations.status === "pending";
+    return reply.code(degraded ? 503 : 200).send({
+      status: degraded ? "degraded" : "ready",
       service,
       queue: queueReady ? "ready" : "unavailable",
+      migrations: migrations.status,
+      ...(migrations.status === "pending" ? { pendingMigrations: migrations.versions } : {}),
     });
   });
 

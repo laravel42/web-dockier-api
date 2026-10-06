@@ -100,8 +100,15 @@ describe("health and readiness", () => {
     const body = res.json();
 
     // The queue is never started in tests, so this is the degraded branch.
+    // `migrations` is "unknown" because the tests run without DATABASE_URL,
+    // and unknown never contributes to degraded on its own.
     expect(res.statusCode).toBe(503);
-    expect(body).toEqual({ status: "degraded", service: "auth", queue: "unavailable" });
+    expect(body).toEqual({
+      status: "degraded",
+      service: "auth",
+      queue: "unavailable",
+      migrations: "unknown",
+    });
   });
 
   it("reports ready when the queue is up", async () => {
@@ -112,9 +119,74 @@ describe("health and readiness", () => {
       const res = await app.inject({ method: "GET", url: "/readyz" });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ status: "ready", service: "auth", queue: "ready" });
+      expect(res.json()).toEqual({
+        status: "ready",
+        service: "auth",
+        queue: "ready",
+        migrations: "unknown",
+      });
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("degrades and names the versions when migrations are pending", async () => {
+    // The incident's root cause, made visible to an operator. Without this a
+    // feature-killing schema gap is invisible outside application logs.
+    const queue = await import("../../database/queue.js");
+    const migrations = await import("../../database/migration-state.js");
+    const queueSpy = vi.spyOn(queue, "isQueueReady").mockReturnValue(true);
+    const migrationSpy = vi
+      .spyOn(migrations, "getMigrationState")
+      .mockResolvedValue({ status: "pending", versions: ["0075"] });
+
+    try {
+      const res = await app.inject({ method: "GET", url: "/readyz" });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({
+        status: "degraded",
+        service: "auth",
+        queue: "ready",
+        migrations: "pending",
+        pendingMigrations: ["0075"],
+      });
+    } finally {
+      queueSpy.mockRestore();
+      migrationSpy.mockRestore();
+    }
+  });
+
+  it("reports ready when the queue is up and the ledger is current", async () => {
+    const queue = await import("../../database/queue.js");
+    const migrations = await import("../../database/migration-state.js");
+    const queueSpy = vi.spyOn(queue, "isQueueReady").mockReturnValue(true);
+    const migrationSpy = vi
+      .spyOn(migrations, "getMigrationState")
+      .mockResolvedValue({ status: "ready" });
+
+    try {
+      const res = await app.inject({ method: "GET", url: "/readyz" });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({
+        status: "ready",
+        service: "auth",
+        queue: "ready",
+        migrations: "ready",
+      });
+      // No pendingMigrations key when nothing is pending.
+      expect(res.json()).not.toHaveProperty("pendingMigrations");
+    } finally {
+      queueSpy.mockRestore();
+      migrationSpy.mockRestore();
+    }
+  });
+
+  it("keeps /healthz byte-identical — platform probes depend on it", async () => {
+    const res = await app.inject({ method: "GET", url: "/healthz" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe(JSON.stringify({ status: "ok", service: "auth" }));
   });
 });

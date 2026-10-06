@@ -5,6 +5,7 @@ import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { ApiError } from "@/services/api-error";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
@@ -291,6 +292,17 @@ function DomainsSection({
   const [newDomain, setNewDomain] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * Shown only after the backend refuses an apex domain with
+   * `code: "apex_requires_ack"`. Error-driven rather than predicted, because
+   * the frontend cannot reliably tell an apex from a subdomain (two-label
+   * public suffixes like `example.co.uk`) and cannot know the cloud at all.
+   */
+  const [showApexAck, setShowApexAck] = useState(false);
+  const [apexAck, setApexAck] = useState(false);
+  /** A heads-up that the hostname already resolves elsewhere. Dismissible. */
+  const [advisory, setAdvisory] = useState("");
+  const errorId = useId();
   const toast = useToast();
 
   const primaryDomain = domains.find((d) => d.isPrimary);
@@ -302,11 +314,22 @@ function DomainsSection({
     setAdding(true);
     setError("");
     try {
-      await domainsApi.createDomain(projectId, { name: newDomain.trim() });
+      const created = await domainsApi.createDomain(projectId, {
+        name: newDomain.trim(),
+        ...(apexAck ? { apexAliasAck: true } : {}),
+      });
       setNewDomain("");
+      setShowApexAck(false);
+      setApexAck(false);
+      setAdvisory(created.warning ?? "");
       onRefresh();
     } catch (err: unknown) {
       setError((err as Error).message || "Failed to add domain");
+      // Keep the typed name in the field so the user only has to tick the box
+      // and resubmit, rather than retyping the domain.
+      if (err instanceof ApiError && err.code === "apex_requires_ack") {
+        setShowApexAck(true);
+      }
     } finally {
       setAdding(false);
     }
@@ -337,28 +360,67 @@ function DomainsSection({
 
       {/* Add domain form */}
       {canManage && (
-        <form onSubmit={handleAdd} className="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <Input
-            type="text"
-            className="flex-1"
-            placeholder="your-domain.com"
-            value={newDomain}
-            onChange={(e) => setNewDomain(e.target.value)}
-            disabled={adding}
-          />
-          <Button
-            type="submit"
-            variant="outline"
-            disabled={adding || !newDomain.trim()}
-            loading={adding}
-          >
-            {adding ? "Adding…" : "Add domain"}
-          </Button>
+        <form onSubmit={handleAdd} className="px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Input
+              type="text"
+              className="flex-1"
+              placeholder="your-domain.com"
+              value={newDomain}
+              onChange={(e) => setNewDomain(e.target.value)}
+              disabled={adding}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? errorId : undefined}
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={adding || !newDomain.trim()}
+              loading={adding}
+            >
+              {adding ? "Adding…" : "Add domain"}
+            </Button>
+          </div>
+
+          {error && (
+            <p id={errorId} role="alert" className="mt-2 text-xs text-danger-500">
+              {error}
+            </p>
+          )}
+
+          {showApexAck && (
+            <label className="mt-2 flex items-start gap-2 text-xs text-text-muted">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={apexAck}
+                onChange={(e) => setApexAck(e.target.checked)}
+                /* Focused on purpose: the box appears in response to the
+                   user's own submit and is the only thing that resolves the
+                   refusal rendered directly above it. */
+                autoFocus
+              />
+              <span>
+                My DNS provider supports ALIAS, ANAME, or CNAME flattening at the domain root.
+              </span>
+            </label>
+          )}
         </form>
       )}
 
-      {error && (
-        <p className="px-4 py-2 text-xs text-danger-500">{error}</p>
+      {advisory && (
+        <div className="flex items-start gap-2 border-b border-warning-line bg-warning-surface px-4 py-2 text-xs text-warning-ink">
+          <InfoIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <p className="flex-1">{advisory}</p>
+          <button
+            type="button"
+            onClick={() => setAdvisory("")}
+            className="shrink-0 underline"
+            aria-label="Dismiss this notice"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
       {/* Domain list */}

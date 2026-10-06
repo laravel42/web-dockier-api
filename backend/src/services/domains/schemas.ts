@@ -11,13 +11,31 @@ export const domainSchema = z.object({
   wildcard: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /**
+   * Advisory only, set on create when the hostname already resolves somewhere
+   * other than this project's CDN. Additive and never present on a list.
+   */
+  warning: z.string().optional(),
 });
 
+/**
+ * Deliberately only a length bound.
+ *
+ * The regex this replaces produced one message — "Invalid domain name format" —
+ * for every possible problem. Shape is validated by `validateDomainName`, which
+ * returns a message naming the specific rule that failed.
+ *
+ * `createCertificateBodySchema` keeps its own regex: no requirement covers it.
+ */
 export const createDomainBodySchema = z.object({
-  name: z.string().min(1).max(253).regex(
-    /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/,
-    "Invalid domain name format",
-  ),
+  name: z.string().min(1).max(253),
+  /**
+   * The user confirms their DNS provider supports ALIAS, ANAME or CNAME
+   * flattening at a zone root. Honoured only when the name really is an apex
+   * and the cloud really is AWS; sent anywhere else it is ignored, so a client
+   * that always sends it cannot change behaviour elsewhere.
+   */
+  apexAliasAck: z.boolean().optional(),
 });
 
 export const updateDomainBodySchema = z.object({
@@ -96,6 +114,8 @@ export const applyDomainResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   generatedConfig: z.string().optional(),
+  /** Additive: absent on the VPS and Dokploy paths, so the existing contract holds. */
+  retryable: z.boolean().optional(),
 });
 
 /**

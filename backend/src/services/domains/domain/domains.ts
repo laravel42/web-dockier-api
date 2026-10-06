@@ -71,6 +71,23 @@ export async function createDomain(params: {
 
   const isPrimary = (count ?? 0) === 0;
 
+  // Pre-check this project, because the unique index below is TENANT-wide
+  // (`idx_domains_name_unique` is on `(organization_id, name)`). The two
+  // conditions need different messages: one is "you already added this", the
+  // other is "another project owns it", and only the second needs the user to
+  // go somewhere else to fix it.
+  const { data: sameProject } = await supabaseAdmin
+    .from("domains")
+    .select("id")
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .eq("name", name)
+    .maybeSingle();
+
+  if (sameProject) {
+    throw new DomainsError(`"${name}" is already added to this project.`, "conflict");
+  }
+
   const { data, error } = await supabaseAdmin
     .from("domains")
     .insert({
@@ -82,7 +99,12 @@ export async function createDomain(params: {
     .select()
     .single();
 
-  if (error?.code === "23505") throw new DomainsError("Domain already exists", "conflict");
+  if (error?.code === "23505") {
+    throw new DomainsError(
+      `"${name}" is already used by another project in this organization. Remove it there first.`,
+      "conflict",
+    );
+  }
   throwOnError(error, DomainsError, { internalMsg: "Failed to create domain" });
   if (!data) throw new DomainsError("Failed to create domain", "internal");
 

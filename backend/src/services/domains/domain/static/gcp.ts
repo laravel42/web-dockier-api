@@ -100,11 +100,21 @@ export async function reconcileGcpStaticDomains(params: {
     const wanted = canonicalDomains(domains.map((d) => d.name));
 
     // ── Drop certificate rows for domains no longer configured ──
+    //
+    // A failed read is not an empty table: deriving "orphaned" from `[]` would
+    // delete every certificate row this project has. Skip the sweep instead.
     const existingRows = await listStaticCertRows(projectId);
-    const configured = new Set(wanted);
-    const orphaned = existingRows.filter((r) => !configured.has(normalizeHost(r.domainName)));
-    if (orphaned.length > 0) {
-      await deleteStaticCertRows(projectId, orphaned.map((r) => r.domainName));
+    if (!existingRows.ok) {
+      logger.warn(
+        { projectId, kind: existingRows.failure.kind },
+        "[domains:static:gcp] skipping orphan cleanup — certificate rows could not be read",
+      );
+    } else {
+      const configured = new Set(wanted);
+      const orphaned = existingRows.rows.filter((r) => !configured.has(normalizeHost(r.domainName)));
+      if (orphaned.length > 0) {
+        await deleteStaticCertRows(projectId, orphaned.map((r) => r.domainName));
+      }
     }
 
     if (wanted.length === 0) {
@@ -132,21 +142,23 @@ export async function reconcileGcpStaticDomains(params: {
     for (const d of domains) {
       const name = normalizeHost(d.name);
       if (!name) continue;
-      const row = await ensureStaticCertRow({
+      const ensured = await ensureStaticCertRow({
         tenantId,
         projectId,
         domainName: name,
         domainId: d.id,
         type: "gcp_managed",
       });
-      if (!row) {
+      if (!ensured.ok) {
+        // No row exists to carry the message, so it travels in the apply
+        // response and `GET /readyz` is the operator surface.
         return {
           success: false,
-          retryable: true,
-          message: `Could not record certificate state for ${name}. Try Sync again.`,
+          retryable: ensured.failure.retryable,
+          message: ensured.failure.message,
         };
       }
-      rows.set(name, row);
+      rows.set(name, ensured.row);
     }
 
     // ── The certificate ──
@@ -230,9 +242,16 @@ async function recordCertificateState(params: {
           : hardFailure
             ? `Certificate provisioning failed for ${name} (${domainState}). Check that the domain's CAA records permit Google to issue certificates.`
             : `Waiting for Google to issue the certificate for ${name}. This usually takes 15-60 minutes after the A record is live.`,
-      issuedAt: domainActive ? nowIso() : undefined,
-      attachStartedAt: nowIso(),
-    });
+      // WRITE-ONCE, was unconditional. Re-stamping on every active reconcile
+      // would make any `issued_at`-based budget unreachable.
+      issuedAt: domainActive && !row.issuedAt ? nowIso() : undefined,
+      // `attachStartedAt: nowIso()` was here, UNCONDITIONALLY, on every row
+      // write. Harmless when a user click was the only trigger; fatal under a
+      // repeating sweep, because a clock re-stamped on every look never ages
+      // and GCP's 24-hour and 72-hour deadlines would never fire. The
+      // phase-clock invariant in setCertState now stamps it only on a genuine
+      // phase change.
+    }, row.verificationState);
   }
 
   if (active) {

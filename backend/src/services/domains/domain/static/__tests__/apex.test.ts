@@ -83,7 +83,7 @@ describe("isApexDomain — edge cases", () => {
 
 describe("apexRefusalMessage", () => {
   it("names the domain, the reason, and a concrete alternative", () => {
-    const msg = apexRefusalMessage("example.com");
+    const msg = apexRefusalMessage("example.com", "add-form");
 
     expect(msg).toContain("example.com");
     // The actionable suggestion.
@@ -93,7 +93,31 @@ describe("apexRefusalMessage", () => {
     expect(msg).toMatch(/ALIAS|ANAME/);
   });
 
+  it("names all four ways forward, because 'apex is unsupported' is false", () => {
+    const msg = apexRefusalMessage("example.com", "add-form");
+
+    expect(msg).toContain("www.example.com"); // a subdomain
+    expect(msg).toMatch(/flattening/i); // provider-side flattening
+    expect(msg).toMatch(/Route 53/); // an A record with Alias enabled
+    expect(msg).toMatch(/GCP/); // the cloud where a root domain works natively
+  });
+
+  it("offers the checkbox only on the add form", () => {
+    const addForm = apexRefusalMessage("example.com", "add-form");
+    const persisted = apexRefusalMessage("example.com", "persisted");
+
+    expect(addForm).toMatch(/tick the box below/i);
+    // A persisted message has no checkbox to point at, so it must not imply one.
+    expect(persisted).not.toMatch(/tick the box/i);
+    expect(persisted).toMatch(/remove this domain and add it again/i);
+
+    // The explanation is shared, so the two surfaces cannot drift apart.
+    const shared = "which DNS does not permit at a domain root";
+    expect(addForm).toContain(shared);
+    expect(persisted).toContain(shared);
+  });
+
   it("normalizes the domain it echoes back", () => {
-    expect(apexRefusalMessage("Example.COM.")).toContain("example.com");
+    expect(apexRefusalMessage("Example.COM.", "add-form")).toContain("example.com");
   });
 });

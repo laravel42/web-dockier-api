@@ -35,6 +35,11 @@ export interface Domain {
   wildcard: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Advisory returned only when creating a domain that already resolves
+   * somewhere other than this project's CDN. Never present on a list.
+   */
+  warning?: string;
 }
 
 export interface SslCertificate {

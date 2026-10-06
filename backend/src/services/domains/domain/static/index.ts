@@ -21,6 +21,8 @@ export interface ApplyDomainsResult {
   success: boolean;
   message: string;
   generatedConfig?: string;
+  /** Whether retrying could plausibly succeed. Always set on the static paths. */
+  retryable?: boolean;
 }
 
 /**
@@ -59,7 +61,7 @@ export async function applyDomainConfigStatic(params: {
       ? await reconcileGcpStaticDomains({ tenantId, projectId, target, domains: mapped })
       : await reconcileAwsStaticDomains({ tenantId, projectId, target, domains: mapped });
 
-  return { success: outcome.success, message: outcome.message };
+  return { success: outcome.success, message: outcome.message, retryable: outcome.retryable };
 }
 
 /** There is no manual certificate step on a static site. */
@@ -296,9 +298,19 @@ export async function previewDomainConfigStatic(params: {
 
   lines.push("Custom domains:");
   for (const d of domains) {
-    const cert = await findStaticCertRow(projectId, normalizeHost(d.name));
+    const host = normalizeHost(d.name);
+    const found = await findStaticCertRow(projectId, host);
+    if (!found.ok) {
+      // Surface the failure rather than rendering a misleading `pending`:
+      // "pending" reads as "working on it", which is how the incident's
+      // schema-drift failure stayed invisible for so long.
+      lines.push(`  ${host} → ${routeTarget}   [unknown]`);
+      lines.push(`      ${found.failure.message}`);
+      continue;
+    }
+    const cert = found.row;
     const state = cert?.verificationState ?? "pending";
-    lines.push(`  ${normalizeHost(d.name)} → ${routeTarget}   [${state}]`);
+    lines.push(`  ${host} → ${routeTarget}   [${state}]`);
     if (cert?.verificationMessage) lines.push(`      ${cert.verificationMessage}`);
   }
 
@@ -338,11 +350,18 @@ export async function getDomainDnsInstructionsStatic(params: {
     return { domainName: host, records, note };
   }
 
-  const cert = await findStaticCertRow(projectId, host);
+  const found = await findStaticCertRow(projectId, host);
+  if (!found.ok) {
+    // Without the row there is no validation record to show, and inventing an
+    // instruction set that omits it would send the user to publish half of
+    // what they need.
+    return { error: found.failure.message };
+  }
+
   const { records, note } = awsDnsInstructions({
     target,
     domainName: host,
-    validationRecord: cert?.validationRecord ?? null,
+    validationRecord: found.row?.validationRecord ?? null,
   });
 
   return { domainName: host, records, note };

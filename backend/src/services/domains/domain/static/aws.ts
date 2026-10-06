@@ -26,6 +26,9 @@ import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { nowIso } from "../../../../shared/utils/time.js";
 import type { DnsValidationRecord } from "../mappers.js";
 import { isApexDomain, apexRefusalMessage, normalizeHost } from "./apex.js";
+import { listApexAcks } from "../apex-ack.js";
+import { CERT_DEADLINE_MS } from "./deadlines.js";
+import { classifyAwsError, type StaticFailure } from "./failures.js";
 import {
   deleteStaticCertRows,
   ensureStaticCertRow,
@@ -41,8 +44,9 @@ import type { AwsStaticTarget } from "./target.js";
  */
 const ACM_REGION = "us-east-1";
 
-/** How long we keep waiting for a certificate before calling it timed out. */
-const CERT_DEADLINE_MS = 2 * 60 * 60 * 1000; // 2 hours
+// CERT_DEADLINE_MS now lives in ./deadlines.js, alongside the per-cloud,
+// per-state tables that supersede it, so the constant and the tables cannot
+// drift. It survives only as isPastCertDeadline's default third argument.
 
 export interface StaticApplyOutcome {
   success: boolean;
@@ -69,6 +73,33 @@ function canonicalDomains(names: string[]): string[] {
 }
 
 /**
+ * Record a failure on every certificate row the reconcile holds.
+ *
+ * Two halves of one rule, and both matter:
+ *
+ *   - A PERMANENT failure (`retryable: false`) writes `verification_state =
+ *     'failed'`, because no amount of retrying will move it on.
+ *   - A TRANSIENT failure writes the message ONLY. Writing `failed` for a
+ *     CloudFormation `*_IN_PROGRESS` would turn a 30-second wait into a dead
+ *     end, and would move the phase clock on a state that has not changed.
+ */
+async function writeFailureToRows(
+  rows: Iterable<StaticCertRow>,
+  failure: StaticFailure,
+): Promise<void> {
+  for (const row of rows) {
+    await setCertState(
+      row.id,
+      {
+        ...(failure.retryable ? {} : { verificationState: "failed" as const }),
+        verificationMessage: failure.message,
+      },
+      row.verificationState,
+    );
+  }
+}
+
+/**
  * Reconcile a project's domains onto its CloudFront distribution.
  *
  * Never throws: returns an outcome the caller reports verbatim.
@@ -86,23 +117,31 @@ export async function reconcileAwsStaticDomains(params: {
     const usable: Array<{ id: string; name: string }> = [];
     const apexRejected: string[] = [];
 
+    // Two enforcement points is correct: the route owns the conversation with
+    // the user, this owns the invariant for a row created by any other path.
+    const acked = new Set(await listApexAcks(tenantId, projectId));
+
     for (const d of domains) {
       const name = normalizeHost(d.name);
-      if (isApexDomain(name)) {
+      if (isApexDomain(name) && !acked.has(name)) {
         apexRejected.push(name);
-        const row = await ensureStaticCertRow({
+        const ensured = await ensureStaticCertRow({
           tenantId,
           projectId,
           domainName: name,
           domainId: d.id,
           type: "acm",
         });
-        if (row) {
-          await setCertState(row.id, {
-            status: "failed",
-            verificationState: "failed",
-            verificationMessage: apexRefusalMessage(name),
-          });
+        if (ensured.ok) {
+          await setCertState(
+            ensured.row.id,
+            {
+              status: "failed",
+              verificationState: "failed",
+              verificationMessage: apexRefusalMessage(name, "persisted"),
+            },
+            ensured.row.verificationState,
+          );
         }
         continue;
       }
@@ -110,21 +149,39 @@ export async function reconcileAwsStaticDomains(params: {
     }
 
     // ── Drop certificate rows for domains no longer configured ──
+    //
+    // A FAILED read is not an empty table. If the list could not be read, skip
+    // orphan cleanup entirely and carry on: deriving "orphaned" from `[]` would
+    // delete every certificate row the project has.
     const existingRows = await listStaticCertRows(projectId);
-    const configured = new Set([...usable.map((d) => d.name), ...apexRejected]);
-    const orphaned = existingRows.filter((r) => !configured.has(normalizeHost(r.domainName)));
-    if (orphaned.length > 0) {
-      // Detach first: ACM refuses to delete a certificate a distribution is
-      // using, so the alias must come off before the certificate goes.
-      await deleteStaticCertRows(projectId, orphaned.map((r) => r.domainName));
+    if (!existingRows.ok) {
+      logger.warn(
+        { projectId, kind: existingRows.failure.kind },
+        "[domains:static:aws] skipping orphan cleanup — certificate rows could not be read",
+      );
+    } else {
+      const configured = new Set([...usable.map((d) => d.name), ...apexRejected]);
+      const orphaned = existingRows.rows.filter((r) => !configured.has(normalizeHost(r.domainName)));
+      if (orphaned.length > 0) {
+        // Detach first: ACM refuses to delete a certificate a distribution is
+        // using, so the alias must come off before the certificate goes.
+        await deleteStaticCertRows(projectId, orphaned.map((r) => r.domainName));
+      }
     }
 
     if (usable.length === 0) {
       // Nothing left to serve — clear the aliases off the distribution.
       const detached = await updateStackDomainParameters({ target, aliases: [], certificateArn: "" });
-      const apexNote = apexRejected.length > 0 ? ` ${apexRefusalMessage(apexRejected[0])}` : "";
+      // "persisted": an apply response has no checkbox to point the user at.
+      const apexNote =
+        apexRejected.length > 0 ? ` ${apexRefusalMessage(apexRejected[0], "persisted")}` : "";
       if (!detached.ok) {
-        return { success: false, retryable: detached.retryable, message: detached.message };
+        // No rows to write onto: the orphan sweep above has just removed them.
+        return {
+          success: false,
+          retryable: detached.failure.retryable,
+          message: detached.failure.message,
+        };
       }
       return {
         success: apexRejected.length === 0,
@@ -141,44 +198,58 @@ export async function reconcileAwsStaticDomains(params: {
     // ── Ensure a row per usable domain ──
     const rows = new Map<string, StaticCertRow>();
     for (const d of usable) {
-      const row = await ensureStaticCertRow({
+      const ensured = await ensureStaticCertRow({
         tenantId,
         projectId,
         domainName: d.name,
         domainId: d.id,
         type: "acm",
       });
-      if (!row) {
+      if (!ensured.ok) {
+        // No row exists to carry the message, so it travels in the apply
+        // response and `GET /readyz` is the operator surface.
         return {
           success: false,
-          retryable: true,
-          message: `Could not record certificate state for ${d.name}. Try Sync again.`,
+          retryable: ensured.failure.retryable,
+          message: ensured.failure.message,
         };
       }
-      rows.set(d.name, row);
+      rows.set(d.name, ensured.row);
     }
 
     // ── One certificate covering every usable domain ──
     const cert = await ensureCertificateForDomains({ target, projectId, wanted, rows: [...rows.values()] });
     if (!cert.ok) {
-      return { success: false, retryable: cert.retryable, message: cert.message };
+      // Write the classified failure onto every row we hold. Without this a
+      // permanently denied RequestCertificate leaves each row at `pending`
+      // with a null message — visibly stuck, with no explanation anywhere.
+      await writeFailureToRows(rows.values(), cert.failure);
+      return { success: false, retryable: cert.failure.retryable, message: cert.failure.message };
     }
 
     // Persist the ARN and each domain's own validation record.
     for (const [name, row] of rows) {
       const record = cert.validationRecords.get(name) ?? null;
-      await setCertState(row.id, {
-        providerRef: cert.arn,
-        validationRecord: record,
-        status: cert.issued ? "active" : "pending",
-        verificationState: cert.issued ? "attaching" : "awaiting_dns",
-        verificationMessage: cert.issued
-          ? "Certificate issued. Attaching it to the CDN — this usually takes 5-20 minutes."
-          : record
-            ? "Publish the validation record shown here, then the certificate will be issued automatically."
-            : "Waiting for the certificate validation record from AWS.",
-        issuedAt: cert.issued ? nowIso() : undefined,
-      });
+      await setCertState(
+        row.id,
+        {
+          providerRef: cert.arn,
+          validationRecord: record,
+          status: cert.issued ? "active" : "pending",
+          verificationState: cert.issued ? "attaching" : "awaiting_dns",
+          verificationMessage: cert.issued
+            ? "Certificate issued. Attaching it to the CDN — this usually takes 5-20 minutes."
+            : record
+              ? "Publish the validation record shown here, then the certificate will be issued automatically."
+              : "Waiting for the certificate validation record from AWS.",
+          // WRITE-ONCE. Re-stamping on every reconcile of an already-issued
+          // certificate would make the post-attach 72-hour routing deadline
+          // as unreachable as a re-stamped phase clock, because that deadline
+          // reads `issued_at`.
+          issuedAt: cert.issued && !row.issuedAt ? nowIso() : undefined,
+        },
+        row.verificationState,
+      );
     }
 
     if (!cert.issued) {
@@ -198,23 +269,26 @@ export async function reconcileAwsStaticDomains(params: {
       certificateArn: cert.arn,
     });
     if (!attach.ok) {
-      for (const row of rows.values()) {
-        await setCertState(row.id, {
-          verificationState: "failed",
-          verificationMessage: attach.message,
-        });
-      }
-      return { success: false, retryable: attach.retryable, message: attach.message };
+      await writeFailureToRows(rows.values(), attach.failure);
+      return { success: false, retryable: attach.failure.retryable, message: attach.failure.message };
     }
 
     for (const row of rows.values()) {
-      await setCertState(row.id, {
-        verificationState: attach.inProgress ? "attaching" : "live",
-        verificationMessage: attach.inProgress
-          ? "Certificate issued. The CDN update is in progress — usually 5-20 minutes."
-          : null,
-        attachStartedAt: attach.inProgress ? nowIso() : undefined,
-      });
+      // No explicit `attachStartedAt`: the phase-clock invariant in
+      // setCertState stamps it only if the state actually changes. The old
+      // unconditional `attach.inProgress ? nowIso() : undefined` re-stamped on
+      // every `attaching` write, which under a repeating sweep means the
+      // 90-minute attach deadline never fires.
+      await setCertState(
+        row.id,
+        {
+          verificationState: attach.inProgress ? "attaching" : "live",
+          verificationMessage: attach.inProgress
+            ? "Certificate issued. The CDN update is in progress — usually 5-20 minutes."
+            : null,
+        },
+        row.verificationState,
+      );
     }
 
     return {
@@ -237,7 +311,7 @@ interface CertificateResult {
   issued: boolean;
   validationRecords: Map<string, DnsValidationRecord>;
 }
-type CertificateFailure = { ok: false; retryable: boolean; message: string };
+type CertificateFailure = { ok: false; failure: StaticFailure };
 
 /**
  * Get a certificate covering exactly `wanted`, requesting one if needed.
@@ -299,7 +373,12 @@ async function ensureCertificateForDomains(params: {
     );
     const arn = res.CertificateArn;
     if (!arn) {
-      return { ok: false, retryable: true, message: "AWS did not return a certificate ARN. Try Sync again." };
+      return {
+        ok: false,
+        failure: classifyAwsError(new Error("RequestCertificate returned no CertificateArn"), {
+          operation: "acm:RequestCertificate",
+        }),
+      };
     }
 
     // ACM populates the validation records a few seconds after the request.
@@ -311,18 +390,12 @@ async function ensureCertificateForDomains(params: {
       validationRecords: described?.validationRecords ?? new Map(),
     };
   } catch (err) {
-    const msg = getErrMsg(err);
-    logger.error({ err: msg, projectId }, "[domains:static:aws] RequestCertificate failed");
-    if (/LimitExceeded/i.test(msg)) {
-      return {
-        ok: false,
-        retryable: false,
-        message:
-          "Your AWS account has reached its ACM certificate limit. Remove unused certificates in " +
-          "AWS Certificate Manager (us-east-1), or request a quota increase, then try again.",
-      };
-    }
-    return { ok: false, retryable: true, message: `Could not request a certificate: ${msg}` };
+    const failure = classifyAwsError(err, { operation: "acm:RequestCertificate" });
+    logger.error(
+      { projectId, kind: failure.kind, detail: failure.detail },
+      "[domains:static:aws] RequestCertificate failed",
+    );
+    return { ok: false, failure };
   }
 }
 
@@ -441,13 +514,14 @@ async function findAdoptableCertificate(
   return null;
 }
 
-interface StackUpdateResult {
-  ok: boolean;
-  retryable: boolean;
-  /** The CloudFront update is running; observe it later rather than waiting. */
-  inProgress: boolean;
-  message: string;
-}
+type StackUpdateResult =
+  | {
+      ok: true;
+      /** The CloudFront update is running; observe it later rather than waiting. */
+      inProgress: boolean;
+      message: string;
+    }
+  | { ok: false; failure: StaticFailure };
 
 /**
  * Point the distribution at a new alias list and certificate.
@@ -487,58 +561,41 @@ async function updateStackDomainParameters(params: {
       }),
     );
 
-    return { ok: true, retryable: false, inProgress: true, message: "CloudFront update started." };
+    return { ok: true, inProgress: true, message: "CloudFront update started." };
   } catch (err) {
     const msg = getErrMsg(err);
 
-    // Nothing to change — the distribution already has these aliases.
+    // Nothing to change — the distribution already has these aliases. Not a
+    // failure, so it is classified before anything else.
     if (/No updates are to be performed/i.test(msg)) {
-      return { ok: true, retryable: false, inProgress: false, message: "Distribution already up to date." };
+      return { ok: true, inProgress: false, message: "Distribution already up to date." };
     }
 
-    // The stack was created before the template gained these parameters.
-    if (/(Parameters?: \[)?(DomainAliases|CertificateArn)/i.test(msg) && /do not exist|not exist|invalid/i.test(msg)) {
-      return {
-        ok: false,
-        retryable: false,
-        inProgress: false,
-        message:
-          "This site was deployed before custom domains were supported. Redeploy the project once, " +
-          "then add the domain again — the redeploy adds the CloudFront settings a domain needs.",
-      };
-    }
-
-    if (/CNAMEAlreadyExists/i.test(msg)) {
-      return {
-        ok: false,
-        retryable: false,
-        inProgress: false,
-        message:
-          `One of these domains is already attached to another CloudFront distribution. ` +
-          `Remove it there first, or use a different subdomain.`,
-      };
-    }
-
-    if (/_IN_PROGRESS|is in .* state and can not be updated/i.test(msg)) {
-      return {
-        ok: false,
-        retryable: true,
-        inProgress: false,
-        message: "The site is already being updated. This will be retried shortly.",
-      };
-    }
-
-    logger.error({ err: msg, stackName: target.stackName }, "[domains:static:aws] stack update failed");
-    return { ok: false, retryable: true, inProgress: false, message: `Could not update the CDN: ${msg}` };
+    const failure = classifyAwsError(err, { operation: "cloudformation:UpdateStack" });
+    logger.error(
+      { stackName: target.stackName, kind: failure.kind, detail: failure.detail },
+      "[domains:static:aws] stack update failed",
+    );
+    return { ok: false, failure };
   }
 }
 
-/** True when a certificate has been waiting past the point worth waiting. */
-export function isPastCertDeadline(startedAtIso: string | null, now = Date.now()): boolean {
+/**
+ * True when a certificate has been waiting past the point worth waiting.
+ *
+ * `deadlineMs` is parameter THREE, not two: the existing tests pass `now`
+ * second, so inserting it earlier would break them. The default keeps every
+ * current caller meaning exactly what it meant before.
+ */
+export function isPastCertDeadline(
+  startedAtIso: string | null,
+  now = Date.now(),
+  deadlineMs = CERT_DEADLINE_MS,
+): boolean {
   if (!startedAtIso) return false;
   const started = Date.parse(startedAtIso);
   if (Number.isNaN(started)) return false;
-  return now - started > CERT_DEADLINE_MS;
+  return now - started > deadlineMs;
 }
 
 /** The DNS records a user must publish for an AWS static domain. */

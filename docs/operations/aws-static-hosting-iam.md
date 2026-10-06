@@ -54,6 +54,10 @@ teardown deleting the wrong thing.
 | CDN + origin access | `AWS::CloudFront::Distribution`, `AWS::CloudFront::OriginAccessControl` | `cloudfront:*Distribution*`, `cloudfront:*OriginAccessControl*` |
 | Clean-URL rewriting | `AWS::CloudFront::Function` in `s3.yml` | `cloudfront:CreateFunction`, `PublishFunction`, `UpdateFunction`, `DescribeFunction`, `GetFunction`, `DeleteFunction` |
 | Teardown | `destroy()` | `s3:DeleteObject`, `s3:DeleteBucket`, `cloudformation:DeleteStack`, `cloudfront:DeleteDistribution` |
+| Request a custom-domain certificate | `ensureCertificateForDomains()` in `domains/domain/static/aws.ts` | `acm:RequestCertificate`, `acm:AddTagsToCertificate` |
+| Read certificate status + validation record | `describeCertificateWithRetry()` | `acm:DescribeCertificate` |
+| Adopt an existing certificate | the adoption scan in `domains/domain/static/aws.ts` | `acm:ListCertificates`, `acm:ListTagsForCertificate` |
+| Attach the alias + certificate to the CDN | `updateStackDomainParameters()` | `cloudformation:UpdateStack` plus the CloudFront distribution-update actions already granted above |
 
 Without a CloudFormation service role, CloudFormation performs its operations
 using the permissions of the **calling identity**. That is why the caller needs
@@ -143,6 +147,23 @@ with the status alone plus a warning, rather than failing differently.
         "cloudfront:ListTagsForResource"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "StaticDomainCertificates",
+      "Effect": "Allow",
+      "Action": [
+        "acm:RequestCertificate",
+        "acm:AddTagsToCertificate",
+        "acm:DescribeCertificate",
+        "acm:ListTagsForCertificate"
+      ],
+      "Resource": "arn:aws:acm:us-east-1:<account-id>:certificate/*"
+    },
+    {
+      "Sid": "StaticDomainCertificateDiscovery",
+      "Effect": "Allow",
+      "Action": "acm:ListCertificates",
+      "Resource": "*"
     }
   ]
 }
@@ -150,6 +171,10 @@ with the status alone plus a warning, rather than failing differently.
 
 CloudFront does not support resource-level permissions for these actions, hence
 `"Resource": "*"` there.
+
+`acm:ListCertificates` is a list operation with no certificate in scope, so it
+does not support resource-level permissions either and must be `"*"`. The other
+four ACM actions are scoped to one region and one account.
 
 `cloudfront:CreateInvalidation` is **not** included. No code path calls
 CloudFront directly today, so it would be an unused grant. It becomes necessary
@@ -196,5 +221,42 @@ when we add explicit invalidation — see the notes below.
   multi-page site gets `/404.html` with 404. The template previously hardcoded
   the SPA behaviour for everything, which made every sub-page of a multi-page
   site render the homepage with a success status.
-- **Custom domains are not covered.** They additionally need ACM in `us-east-1`
-  plus DNS — Phase 4 of `.kiro/specs/static-deploy-targets/`.
+- **`acm:AddTagsToCertificate` is inferred, not observed.** `RequestCertificate`
+  is called with inline `Tags`, and AWS authorizes tag-on-create as a separate
+  action for most services — but this is derived from the ACM API contract rather
+  than from a distinct SDK call in the code. Dropping it is survivable: watch for
+  an `AddTagsToCertificate` denial on the first attach. It is scoped to the same
+  single ARN pattern as the other three, so including it costs nothing
+  meaningful. Do not drop `RequestCertificate`.
+
+## Custom domains
+
+Attaching a custom domain to a static site is covered by the policy above. Four
+things are worth knowing before debugging a failure.
+
+**ACM is the only new service.** The CloudFormation and CloudFront actions the
+domain flow uses are a strict subset of what a static deploy already exercises —
+the alias and certificate are attached by an `UpdateStack` against the existing
+stack, not by calling CloudFront directly. If a tenant can deploy a static site,
+the only grant they are missing is ACM.
+
+**Certificates are always requested in `us-east-1`.** `ACM_REGION` in
+`domains/domain/static/aws.ts` pins it, and CloudFront accepts a certificate from
+no other region whatever region the stack lives in. So the two ACM statements can
+be region-pinned, while the `StackManagement` statement cannot: a project's stack
+can live in any region, and pinning it would break the first project deployed
+outside `us-east-1`.
+
+**No Route 53 permission is required.** DNS verification is public resolution
+through `node:dns`, including the ALIAS-flattening fallback for apex domains.
+There is no AWS call anywhere in that path, and Dockier never writes to a
+tenant's DNS — the user publishes the routing record and the ACM validation
+record at their own provider.
+
+**No ACM certificate is ever deleted.** Changing a project's domain set requests
+a new certificate (ACM certificates are immutable in their name list), and
+removing a domain deletes only the database row. Nothing calls
+`acm:DeleteCertificate`. Unused `PENDING_VALIDATION` certificates therefore
+accumulate in `us-east-1` until the account hits its ACM quota, at which point
+the quota error tells the operator to clean up by hand. This is a known leak,
+tracked as a follow-up in `.kiro/specs/custom-domain-ux/plan.md`.

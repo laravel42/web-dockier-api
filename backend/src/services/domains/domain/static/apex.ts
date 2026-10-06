@@ -68,18 +68,41 @@ export function isApexDomain(host: string): boolean {
 }
 
 /**
+ * Where an apex refusal is being shown.
+ *
+ * `add-form` is the interactive path, which can offer the acknowledgement
+ * checkbox. `persisted` covers a message written onto a certificate row or
+ * returned in an apply response, where there is no checkbox to point at.
+ */
+export type ApexRefusalSurface = "add-form" | "persisted";
+
+/**
  * The message shown when an apex domain is rejected on AWS.
  *
- * Names the specific limitation and the two real ways out, because "unsupported"
- * alone leaves the user with no next step.
+ * Names the specific limitation and all four real ways out, because
+ * "unsupported" alone leaves the user with no next step — and because a blanket
+ * "apex is unsupported" would be false: flattening, Route 53 Alias and the GCP
+ * target all work.
  */
-export function apexRefusalMessage(host: string): string {
+export function apexRefusalMessage(host: string, surface: ApexRefusalSurface): string {
   const name = normalizeHost(host);
   const suggestion = `www.${name}`;
-  return (
+
+  // The explanation is shared so the two surfaces cannot drift apart. Only the
+  // closing instruction differs, because only one of them has a checkbox.
+  const explanation =
     `"${name}" is the root of its domain, and CloudFront can only be reached by a CNAME record, ` +
-    `which DNS does not permit at a domain root. Use a subdomain such as "${suggestion}" instead, ` +
-    `or point the root at CloudFront with an ALIAS/ANAME record if your DNS provider supports one ` +
-    `(Route 53, Cloudflare and several others do) and then add the subdomain here.`
-  );
+    `which DNS does not permit at a domain root — your DNS provider will reject it. ` +
+    `There are four ways forward: use a subdomain such as "${suggestion}"; use an ALIAS, ANAME ` +
+    `or CNAME-flattening record at the root if your DNS provider supports one (Cloudflare and ` +
+    `DNSimple do, among others); use a Route 53 A record with Alias enabled; or host this site ` +
+    `on the GCP static target, where a root domain works normally because the load balancer has ` +
+    `its own dedicated IP.`;
+
+  const closing =
+    surface === "add-form"
+      ? ` If your DNS provider supports ALIAS, ANAME or CNAME flattening, tick the box below and add "${name}" again.`
+      : ` Remove this domain and add it again to choose one of these.`;
+
+  return explanation + closing;
 }

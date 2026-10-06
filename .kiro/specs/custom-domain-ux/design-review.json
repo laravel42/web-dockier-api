@@ -1,0 +1,62 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "HIGH",
+      "title": "A permanently-failing attachment is re-enqueued every minute forever: `pending` has no deadline and a permanent reconcile failure writes no state",
+      "where": "design.md → D2 (give-up policy + cadence tables), Item 2 → Failure isolation and idempotency",
+      "problem": "The sweep admits `pending`, and `pending` is the resting state of a permanently broken attachment: verified at static/aws.ts:155-162, a failing `ensureCertificateForDomains` (the incident's acm:RequestCertificate AccessDenied) returns without any setCertState call, so the row stays `pending` with no message. The deadline table has no `pending` row and the `pending` cadence tier is a flat 1 min with no escalation, so the project is reconciled every minute indefinitely, making a denied ACM call plus DescribeStacks/GetCallerIdentity each time. Contradicts R2.11, NFR3 and R2.9.",
+      "fix": "(a) Specify that a reconcile returning `retryable: false` writes `verificationState: \"failed\"` plus the classified message onto every row it holds, including the currently state-less `!cert.ok` branch (mirror of 'A transient attach failure is not a terminal state'). (b) Add a `pending` deadline row for both clouds (e.g. 30 min on `created_at` → `timed_out`, with a redeploy/Resume message). (c) Escalate the `pending` cadence (1 min for the first 5 min of the phase, then 5 min)."
+    },
+    {
+      "id": 2,
+      "severity": "MEDIUM",
+      "title": "`resolveStaticCloud` cannot read `projects.settings` from the row it loads — `lookupActiveDeployment` never loads a project row",
+      "where": "design.md → D1 'Where the acknowledgement is stored' snippet comment, Item 1 → 'Apex policy and cloud resolution', first-review response row 7",
+      "problem": "Verified at shared/service-clients/deployments.ts:66-95: `lookupActiveDeployment` issues exactly one query against `deployments` selecting `id, provider_id, deploy_strategy, app_url, docker_image, repo, infra`. It never touches `projects` and never selects `settings`. The design asserts three times that `apexAliasAck` comes from 'the project row this function already loads' and that the add flow has 'exactly one project read and no separate settings query' — the stated reason the D1 gate needs no extra query.",
+      "fix": "State that `resolveStaticCloud` performs two reads: `lookupActiveDeployment`, plus `supabaseAdmin.from(\"projects\").select(\"settings\").eq(\"id\", projectId).eq(\"organization_id\", tenantId).maybeSingle()`. Give the second its own failure rule (a failed settings read yields `apexAliasAck: []`, so a stored ack is invisible and the apex is refused again — the safe direction, but it is the opposite of `cloud`'s fail-open rule and must be written down). Correct the three 'one project read' statements."
+    },
+    {
+      "id": 3,
+      "severity": "MEDIUM",
+      "title": "Resume endpoint rate limit names a non-existent option and a keying the codebase does not provide; the cited precedent is false",
+      "where": "design.md → D2 → 'Resuming a timed_out row' → Rate limit; Files touched (routes.ts row)",
+      "problem": "Verified at shared/http/rate-limit.ts:93-130: the factory is `rateLimit({ max, windowMs, prefix })` — there is no `windowSeconds` — and it keys on `request.ip`. The only non-IP variant is `tenantRateLimit` (keyed on tenantId); no project-keyed extractor exists. Separately, `POST /projects/:projectId/domains/apply` has no rate limit at all, so 'matching the apply route's treatment' is false; the only comparable call is the deploy hook at services/deploy/routes/git-push-webhook.ts:76.",
+      "fix": "Write it out as `preHandler: tenantRateLimit({ max: 10, windowMs: 60_000, prefix: \"domain-resume\" })` and replace the apply-route comparison with the deploy-hook precedent. If per-project keying is genuinely required, say explicitly that a third key extractor is being added to shared/http/rate-limit.ts and name it."
+    },
+    {
+      "id": 4,
+      "severity": "MEDIUM",
+      "title": "`pollIntervalMs` and `certDeadlineMs` are not total over the states the sweep's own filter admits",
+      "where": "design.md → D2 cadence table, deadline table, `certDeadlineMs` signature",
+      "problem": "The sweep selects four states across two clouds (nine pairs once AWS `awaiting_dns` splits on `status`). The cadence table covers 8 of 9 (GCP `attaching` missing); the deadline table covers 6 of 9 (AWS `pending`, GCP `pending`, GCP `attaching` missing). `certDeadlineMs` is typed `| null` but the design never says which inputs return `null` or how the sweep treats it, and `pollIntervalMs` has no stated default — two valid interpretations exist for every missing cell, and the permissive one produces finding 1's symptom.",
+      "fix": "Make both functions total and say so: either an exhaustive switch over a `(cloud, state)` discriminated union with a `never` default (forcing the GCP `attaching` decision to be explicit), or an explicit default line under each table stating the fallback interval, exactly which inputs yield `null`, and that the sweep treats `null` as 'cadence only, no deadline'. Add an 'unlisted pair' case to poll-sweep.test.ts."
+    },
+    {
+      "id": 5,
+      "severity": "NIT",
+      "title": "`apexRefusalMessage` has a third call site the two-surface signature does not assign",
+      "where": "design.md → D1 'Consequences to carry out'; Files touched (apex.ts / aws.ts rows)",
+      "problem": "The design names two consumers (route → \"add-form\", reconcile backstop → \"persisted\"). Source has three: static/aws.ts:124 calls `apexRefusalMessage(apexRejected[0])` in the 'no usable domains, detach everything' branch, whose output goes into an apply response message. A required second parameter breaks it at compile time with no assigned wording.",
+      "fix": "Add one line: the aws.ts:124 detach branch uses \"persisted\" (no checkbox exists there, and 'remove and re-add' is the correct instruction), and name the site in the aws.ts row of Files touched."
+    },
+    {
+      "id": 6,
+      "severity": "NIT",
+      "title": "The `updated_at` semantic change is user-visible and only the sweep-side effect is named",
+      "where": "design.md → Item 2 → 'The updated_at touch, and why no new column'",
+      "problem": "`updated_at` is mapped onto the certificate API response (services/domains/domain/mappers.ts:100) and `listCertificates` selects `*`, so after `touchCertPolled` every in-flight certificate permanently reports `updatedAt` of about a minute ago. The design claims the only side effect is deferring the next sweep by one interval.",
+      "fix": "Add a sentence confirming no surface renders certificate `updatedAt` as 'last changed' — and if ProjectDomainsTab does, relabel it or drop the field from that view. The no-new-column decision can stand."
+    },
+    {
+      "id": 7,
+      "severity": "NIT",
+      "title": "`CERT_DEADLINE_MS` is module-private, so 'survives as the function's default third argument' needs a stated home",
+      "where": "design.md → D2 'isPastCertDeadline is extended, not replaced'; Files touched (static/deadlines.ts)",
+      "problem": "`const CERT_DEADLINE_MS` at static/aws.ts:45 is not exported, `isPastCertDeadline` lives in aws.ts, and the deadline tables move to a new pure static/deadlines.ts. The design does not say where the constant ends up, and `deadlines.ts` importing from `aws.ts` would invert the intended dependency direction.",
+      "fix": "One line: `CERT_DEADLINE_MS` moves to and is exported from static/deadlines.ts; aws.ts imports it for the default argument, keeping deadlines.ts dependency-free and unit-testable."
+    }
+  ],
+  "reviewDoc": "/Users/oscar/projects/web-dockier-api/.kiro/specs/custom-domain-ux/design-review.md"
+}

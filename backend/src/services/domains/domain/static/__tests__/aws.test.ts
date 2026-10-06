@@ -65,20 +65,37 @@ interface Row {
   verificationState: string;
   verificationMessage: string | null;
   attachStartedAt: string | null;
+  createdAt?: string | null;
+  issuedAt?: string | null;
+  updatedAt?: string | null;
 }
 
 let rows: Row[] = [];
-const stateWrites: Array<{ id: string; update: Record<string, unknown> }> = [];
+const stateWrites: Array<{
+  id: string;
+  update: Record<string, unknown>;
+  currentState?: string;
+}> = [];
 const deletedRowNames: string[] = [];
+
+// Apex acknowledgements live in `projects.settings`; the reconcile reads them
+// as a backstop. Empty by default so the apex-refusal cases still refuse.
+let apexAcks: string[] = [];
+
+vi.mock("../../apex-ack.js", () => ({
+  listApexAcks: async () => apexAcks,
+}));
 
 vi.mock("../certs.js", () => ({
   STATIC_CERT_TYPES: ["acm", "gcp_managed"],
-  listStaticCertRows: async () => rows,
-  findStaticCertRow: async (_p: string, domainName: string) =>
-    rows.find((r) => r.domainName === domainName) ?? null,
+  listStaticCertRows: async () => ({ ok: true, rows }),
+  findStaticCertRow: async (_p: string, domainName: string) => ({
+    ok: true,
+    row: rows.find((r) => r.domainName === domainName) ?? null,
+  }),
   ensureStaticCertRow: async (p: { domainName: string }) => {
     const found = rows.find((r) => r.domainName === p.domainName);
-    if (found) return found;
+    if (found) return { ok: true, row: found };
     const row: Row = {
       id: `cert-${rows.length + 1}`,
       domainName: p.domainName,
@@ -91,10 +108,10 @@ vi.mock("../certs.js", () => ({
       attachStartedAt: null,
     };
     rows.push(row);
-    return row;
+    return { ok: true, row };
   },
-  setCertState: async (id: string, update: Record<string, unknown>) => {
-    stateWrites.push({ id, update });
+  setCertState: async (id: string, update: Record<string, unknown>, currentState?: string) => {
+    stateWrites.push({ id, update, currentState });
     const row = rows.find((r) => r.id === id);
     if (row) {
       if (typeof update.providerRef === "string") row.providerRef = update.providerRef;
@@ -151,6 +168,7 @@ beforeEach(() => {
   rows = [];
   stateWrites.length = 0;
   deletedRowNames.length = 0;
+  apexAcks = [];
   acmSend.mockReset();
   cfnSend.mockReset();
   acmCtorArgs.length = 0;
@@ -339,6 +357,79 @@ describe("reconcileAwsStaticDomains — attaching an issued certificate", () => 
     expect(stateWrites.some((w) => w.update.verificationState === "attaching")).toBe(true);
   });
 
+  it("never sends an unconditional phase clock, and always says what the row holds", async () => {
+    // The old code wrote `attachStartedAt: attach.inProgress ? nowIso() :
+    // undefined` on every `attaching` write. Under a repeating sweep a clock
+    // re-stamped on every look never ages, so the 90-minute attach deadline
+    // and both upper backoff tiers become unreachable. The decision now
+    // belongs to setCertState's phase-clock invariant, which needs to be told
+    // the row's persisted state.
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(stateWrites.length).toBeGreaterThan(0);
+    for (const write of stateWrites) {
+      expect(write.update.attachStartedAt).toBeUndefined();
+      expect(write.currentState).toBeTypeOf("string");
+    }
+  });
+
+  it("stamps issued_at once and never re-stamps it", async () => {
+    // The post-attach 72-hour routing deadline reads `issued_at`, so a
+    // re-stamp makes it as unreachable as a re-stamped phase clock.
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+    const firstStamps = stateWrites.filter((w) => w.update.issuedAt !== undefined);
+    expect(firstStamps.length).toBeGreaterThan(0);
+
+    // The row now carries an issuedAt; a second reconcile must not touch it.
+    for (const row of rows) row.issuedAt = "2026-10-01T00:00:00.000Z";
+    stateWrites.length = 0;
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(stateWrites.filter((w) => w.update.issuedAt !== undefined)).toHaveLength(0);
+  });
+
+  it("keeps a transient stack conflict out of `failed`", async () => {
+    // A CloudFormation update already running is a 30-second wait, not a dead
+    // end. Writing `failed` here would strand the attachment and, once the
+    // poller lands, re-stamp a phase clock whose state never actually changed.
+    cfnSend.mockRejectedValue(
+      new Error("Stack:arn is in UPDATE_IN_PROGRESS state and can not be updated"),
+    );
+
+    const res = await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.retryable).toBe(true);
+    expect(stateWrites.some((w) => w.update.verificationState === "failed")).toBe(false);
+    // The message is still recorded, so the row explains itself. The LAST
+    // write is the failure one — earlier writes in this reconcile persist the
+    // "attaching" narration before the stack update is attempted.
+    const messageWrites = stateWrites.filter((w) => w.update.verificationMessage !== undefined);
+    const lastMessage = messageWrites[messageWrites.length - 1];
+    expect(String(lastMessage?.update.verificationMessage)).toMatch(/already being updated/i);
+  });
+
   it("treats 'No updates are to be performed' as already live", async () => {
     cfnSend.mockRejectedValue(new Error("No updates are to be performed."));
 
@@ -413,6 +504,33 @@ describe("reconcileAwsStaticDomains — apex domains", () => {
     // No certificate requested, no distribution change for an impossible domain.
     const requests = acmSend.mock.calls.filter((c) => (c[0] as { __type: string }).__type === "RequestCertificate");
     expect(requests).toHaveLength(0);
+  });
+
+  it("attaches an apex the user has acknowledged as flattening-capable", async () => {
+    // D1: refuse by default, but honour an explicit confirmation. Route 53
+    // Alias and Cloudflare flattening both reach a CloudFront alias, so a
+    // blanket refusal would be wrong for those users.
+    apexAcks = ["example.com"];
+    acmSend.mockImplementation(async (c: { __type: string }) => {
+      if (c.__type === "ListCertificates") return { CertificateSummaryList: [] };
+      if (c.__type === "RequestCertificate") return { CertificateArn: "arn:acm:cert/apex" };
+      return describeResponse({ status: "PENDING_VALIDATION", domainName: "example.com" });
+    });
+
+    const res = await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "example.com" }],
+    });
+
+    expect(res.success).toBe(true);
+    // Refused, it would have written `failed` and requested nothing.
+    expect(stateWrites.some((w) => w.update.verificationState === "failed")).toBe(false);
+    const requests = acmSend.mock.calls.filter(
+      (c) => (c[0] as { __type: string }).__type === "RequestCertificate",
+    );
+    expect(requests).toHaveLength(1);
   });
 
   it("still serves the usable domains alongside a rejected apex", async () => {

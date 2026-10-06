@@ -26,11 +26,20 @@ export type {
 } from "../../../shared/workers/config-apply.js";
 
 /**
- * Determines if a failure is retryable. Soft failures (no deploy target yet)
- * should not be retried — the config will be applied on next deployment.
+ * Determines if a failure is retryable.
+ *
+ * Prefers the structured flag the static paths now set, because a permanent
+ * failure — a missing migration, a denied IAM action — can never succeed on
+ * retry, and burning pg-boss attempts on it only delays the real diagnosis.
+ *
+ * Falls back to the legacy substring rule when the flag is absent. That
+ * fallback is load-bearing, not vestigial: the VPS and Dokploy paths never set
+ * the flag, and the VPS path signals a soft failure ("no deploy target yet")
+ * through exactly this string.
  */
-function isRetryableFailure(message: string): boolean {
-  return !message.includes("will be applied on next deployment");
+function isRetryableFailure(result: { message: string; retryable?: boolean }): boolean {
+  if (result.retryable !== undefined) return result.retryable;
+  return !result.message.includes("will be applied on next deployment");
 }
 
 /**
@@ -40,7 +49,7 @@ function isRetryableFailure(message: string): boolean {
 export function registerDomainHandlers(): void {
   registerConfigApplyHandler("domain-apply", async (input: ConfigApplyJobInput) => {
     const result = await applyDomainConfig({ tenantId: input.tenantId, projectId: input.projectId });
-    if (!result.success && isRetryableFailure(result.message)) {
+    if (!result.success && isRetryableFailure(result)) {
       throw new Error(`Domain apply failed for project ${input.projectId}: ${result.message}`);
     }
   });

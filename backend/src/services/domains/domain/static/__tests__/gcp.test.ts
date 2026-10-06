@@ -88,6 +88,9 @@ interface Row {
   verificationState: string;
   verificationMessage: string | null;
   attachStartedAt: string | null;
+  createdAt?: string | null;
+  issuedAt?: string | null;
+  updatedAt?: string | null;
 }
 
 let rows: Row[] = [];
@@ -96,11 +99,14 @@ const deletedRowNames: string[] = [];
 
 vi.mock("../certs.js", () => ({
   STATIC_CERT_TYPES: ["acm", "gcp_managed"],
-  listStaticCertRows: async () => rows,
-  findStaticCertRow: async (_p: string, d: string) => rows.find((r) => r.domainName === d) ?? null,
+  listStaticCertRows: async () => ({ ok: true, rows }),
+  findStaticCertRow: async (_p: string, d: string) => ({
+    ok: true,
+    row: rows.find((r) => r.domainName === d) ?? null,
+  }),
   ensureStaticCertRow: async (p: { domainName: string }) => {
     const found = rows.find((r) => r.domainName === p.domainName);
-    if (found) return found;
+    if (found) return { ok: true, row: found };
     const row: Row = {
       id: `cert-${rows.length + 1}`,
       domainName: p.domainName,
@@ -113,7 +119,7 @@ vi.mock("../certs.js", () => ({
       attachStartedAt: null,
     };
     rows.push(row);
-    return row;
+    return { ok: true, row };
   },
   setCertState: async (id: string, update: Record<string, unknown>) => {
     stateWrites.push({ id, update });

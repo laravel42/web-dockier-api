@@ -36,8 +36,23 @@ export function registerDomainErrorHandler(app: FastifyInstance): void {
           return reply.notFound(msg);
         case "forbidden":
           return reply.forbidden(msg);
-        case "bad_request":
+        case "bad_request": {
+          // A machine-readable discriminator, so a client can react to a
+          // specific refusal rather than pattern-matching prose. Rides in
+          // `metadata` (already the fourth constructor argument), and the
+          // payload stays byte-identical to `reply.badRequest(msg)` when
+          // absent — no other service's bad_request changes shape.
+          const clientCode = error.metadata?.clientCode;
+          if (typeof clientCode === "string") {
+            return reply.code(400).send({
+              statusCode: 400,
+              error: "Bad Request",
+              message: msg,
+              code: clientCode,
+            });
+          }
           return reply.badRequest(msg);
+        }
         case "conflict":
           return reply.conflict(msg);
         case "unauthorized":

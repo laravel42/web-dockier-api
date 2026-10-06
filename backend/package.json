@@ -14,6 +14,7 @@
     "cleanup:scans": "tsx src/scripts/cleanup-scans.ts",
     "smoke:ai-review": "tsx src/scripts/ai-review-smoke.ts",
     "preflight:dokploy": "tsx src/scripts/dokploy-preflight.ts",
+    "migrations:manifest": "tsx src/scripts/generate-migration-manifest.ts",
     "start:auth": "SERVICE_NAME=auth tsx src/server.ts",
     "start:users": "SERVICE_NAME=users tsx src/server.ts",
     "start:projects": "SERVICE_NAME=projects tsx src/server.ts",

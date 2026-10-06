@@ -24,7 +24,13 @@ import {
   listCertificates,
   createCertificate,
   deleteCertificate,
+  DomainsError,
 } from "./domain/domains.js";
+import { validateDomainName } from "./domain/validation.js";
+import { appendApexAck, removeApexAck } from "./domain/apex-ack.js";
+import { existingRecordAdvisory } from "./domain/dns-advisory.js";
+import { resolveStaticCloud } from "./domain/static/cloud.js";
+import { isApexDomain, apexRefusalMessage } from "./domain/static/apex.js";
 import {
   applyDomainConfig,
   verifyDomainDns,
@@ -75,13 +81,56 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
+
+      const validated = validateDomainName(request.body.name);
+      if (!validated.ok) {
+        throw new DomainsError(validated.message, "bad_request");
+      }
+      const name = validated.name;
+      const projectId = request.params.projectId;
+
+      // Refuse an un-acknowledged apex HERE, at the moment of input, rather
+      // than letting the add succeed and the DNS instruction later tell the
+      // user to publish a record their provider will reject.
+      const { cloud, routeTarget, apexAliasAck } = await resolveStaticCloud(
+        projectId,
+        auth.tenantId,
+      );
+      const isApex = isApexDomain(name);
+      // The body is read FIRST: on a first add the stored list is always empty.
+      const acked = request.body.apexAliasAck === true || apexAliasAck.includes(name);
+
+      if (cloud === "aws" && isApex && !acked) {
+        throw new DomainsError(apexRefusalMessage(name, "add-form"), "bad_request", undefined, {
+          clientCode: "apex_requires_ack",
+        });
+      }
+
+      // Persisted BEFORE the domain row, never after: the reverse order leaves
+      // a window in which a reconcile refuses a domain the user just
+      // acknowledged and writes a confusing message onto it.
+      if (cloud === "aws" && isApex && request.body.apexAliasAck === true) {
+        const stored = await appendApexAck(auth.tenantId, projectId, name);
+        if (!stored) {
+          throw new DomainsError(
+            "Could not save your DNS provider confirmation, so the domain was not added. Try again.",
+            "internal",
+          );
+        }
+      }
+
       const domain = await createDomain({
         tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        name: request.body.name,
+        projectId,
+        // The normalized form, so `WWW.Example.com.` and `www.example.com`
+        // cannot both be stored as separate domains.
+        name,
       });
-      await enqueueDomainApply(auth.tenantId, request.params.projectId);
-      return domain;
+      await enqueueDomainApply(auth.tenantId, projectId);
+
+      // Advisory, never blocking: the domain is already created by this point.
+      const warning = await existingRecordAdvisory(name, routeTarget);
+      return warning ? { ...domain, warning } : domain;
     },
   );
 
@@ -131,11 +180,34 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
+
+      // Read the name before deleting, so the apex acknowledgement can be
+      // pruned. Best-effort: a failed read must not block the delete.
+      let removedName: string | null = null;
+      try {
+        const existing = await getDomainById({
+          tenantId: auth.tenantId,
+          projectId: request.params.projectId,
+          domainId: request.params.domainId,
+        });
+        removedName = existing?.name ?? null;
+      } catch {
+        removedName = null;
+      }
+
       await deleteDomain({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         domainId: request.params.domainId,
       });
+
+      // Prune the acknowledgement so delete-and-re-add refuses again and shows
+      // the explanation. Best-effort by design: a stale entry is a worse
+      // outcome than a failed prune, but neither justifies failing the delete.
+      if (removedName) {
+        await removeApexAck(auth.tenantId, request.params.projectId, removedName);
+      }
+
       await enqueueDomainApply(auth.tenantId, request.params.projectId);
       return { success: true as const };
     },

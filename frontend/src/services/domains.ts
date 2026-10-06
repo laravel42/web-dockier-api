@@ -24,7 +24,17 @@ export const domainsApi = {
       `/projects/${encodeURIComponent(projectId)}/domains`,
     ),
 
-  createDomain: (projectId: string, data: { name: string }) =>
+  createDomain: (
+    projectId: string,
+    data: {
+      name: string;
+      /**
+       * Confirms the user's DNS provider supports ALIAS, ANAME or CNAME
+       * flattening at a zone root. Only meaningful for an apex domain on AWS.
+       */
+      apexAliasAck?: boolean;
+    },
+  ) =>
     request<Domain>(
       `/projects/${encodeURIComponent(projectId)}/domains`,
       { method: "POST", body: JSON.stringify(data) },
