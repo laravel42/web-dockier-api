@@ -41,6 +41,27 @@ export function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, "");
 }
 
+/** Sorted, normalized, de-duplicated — the canonical form of a domain set. */
+export function canonicalDomains(names: string[]): string[] {
+  return [...new Set(names.map(normalizeHost).filter(Boolean))].sort();
+}
+
+/**
+ * A small deterministic string hash in base-36.
+ *
+ * Used to derive persisted identifiers (an ACM idempotency token, a GCP
+ * certificate name), so its output MUST stay stable — a changed value orphans
+ * a live resource. The callers wrap and truncate it differently; this is only
+ * the shared core: `(hash * 31 + charCode) | 0`, then `Math.abs(...).toString(36)`.
+ */
+export function stableHash36(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 /**
  * True when `host` is the root of its registrable zone — i.e. it has no
  * subdomain label and therefore cannot carry a CNAME.

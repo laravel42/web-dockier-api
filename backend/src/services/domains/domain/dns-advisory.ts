@@ -10,15 +10,12 @@
 import { promises as dns } from "node:dns";
 
 import { logger } from "../../../shared/logger.js";
+import { normalizeHost } from "./static/apex.js";
 
 /** Per-query budget. One try: a retry would double the worst case for nothing. */
 const RESOLVER_TIMEOUT_MS = 1200;
 /** Hard ceiling on the whole lookup, so an HTTP request cannot be held open. */
 const TOTAL_BUDGET_MS = 1500;
-
-function normalize(value: string): string {
-  return value.trim().toLowerCase().replace(/\.$/, "");
-}
 
 /** DNS answers that mean "nothing published", which is the happy path here. */
 function isNotFound(err: unknown): boolean {
@@ -31,14 +28,14 @@ async function lookup(host: string): Promise<{ cname: string[]; a: string[] } | 
 
   try {
     const cname = await resolver.resolveCname(host);
-    if (cname.length > 0) return { cname: cname.map(normalize), a: [] };
+    if (cname.length > 0) return { cname: cname.map(normalizeHost), a: [] };
   } catch (err) {
     if (!isNotFound(err)) throw err;
   }
 
   try {
     const a = await resolver.resolve4(host);
-    return { cname: [], a: a.map(normalize) };
+    return { cname: [], a: a.map(normalizeHost) };
   } catch (err) {
     if (!isNotFound(err)) throw err;
   }
@@ -65,7 +62,7 @@ export async function existingRecordAdvisory(
   host: string,
   routeTarget: string | null,
 ): Promise<string | undefined> {
-  const name = normalize(host);
+  const name = normalizeHost(host);
 
   let answer: Awaited<ReturnType<typeof lookup>>;
   try {
@@ -80,7 +77,7 @@ export async function existingRecordAdvisory(
 
   if (!answer) return undefined;
 
-  const target = routeTarget ? normalize(routeTarget) : null;
+  const target = routeTarget ? normalizeHost(routeTarget) : null;
 
   if (answer.cname.length > 0) {
     if (target && answer.cname.includes(target)) return undefined;

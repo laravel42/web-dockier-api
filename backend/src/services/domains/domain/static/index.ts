@@ -21,13 +21,8 @@ import { gcpDnsInstructions, reconcileGcpStaticDomains } from "./gcp.js";
 import { findStaticCertRow } from "./certs.js";
 import { resolveStaticTarget } from "./target.js";
 
-export interface ApplyDomainsResult {
-  success: boolean;
-  message: string;
-  generatedConfig?: string;
-  /** Whether retrying could plausibly succeed. Always set on the static paths. */
-  retryable?: boolean;
-}
+import type { ApplyDomainsResult } from "../mappers.js";
+export type { ApplyDomainsResult } from "../mappers.js";
 
 /**
  * Certificates for static sites are provider-issued; there is nothing for a

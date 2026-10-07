@@ -72,7 +72,7 @@ export function rowToDomain(row: DomainRow): DomainResponse {
  * must not break listing certificates, and the UI treats null as "no record to
  * publish yet".
  */
-function toValidationRecord(value: unknown): DnsValidationRecord | null {
+export function toValidationRecord(value: unknown): DnsValidationRecord | null {
   if (!value || typeof value !== "object") return null;
   const r = value as Record<string, unknown>;
   if (typeof r.name !== "string" || typeof r.type !== "string" || typeof r.value !== "string") {
@@ -99,4 +99,40 @@ export function rowToCertificate(row: SslCertificateRow): SslCertificateResponse
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * The outcome of applying a project's domain configuration.
+ *
+ * Declared ONCE here, and imported by every branch. It was previously written
+ * out in `applier.ts`, `static/index.ts` and `dokploy-applier.ts`
+ * independently, and the Dokploy copy had already drifted — it was missing
+ * `retryable`, which compiled silently because the field is optional, so the
+ * Dokploy path returned a result that could never carry retryability.
+ */
+export interface ApplyDomainsResult {
+  success: boolean;
+  message: string;
+  generatedConfig?: string;
+  /**
+   * Whether retrying could plausibly succeed.
+   *
+   * `undefined` on the VPS and Dokploy paths, which have no classifier — those
+   * keep the legacy substring rule in `worker.ts`. Only the static paths set it.
+   */
+  retryable?: boolean;
+}
+
+/**
+ * The outcome of one cloud's static-domain reconcile.
+ *
+ * Narrower than {@link ApplyDomainsResult}: a reconcile reports whether any
+ * domain is serving, which the dispatch layer above it does not.
+ */
+export interface StaticApplyOutcome {
+  success: boolean;
+  retryable?: boolean;
+  message: string;
+  /** True when at least one domain is serving over TLS. */
+  anyLive?: boolean;
 }

@@ -28,18 +28,11 @@ import {
   buildCertbotScript,
 } from "./nginx-config.js";
 
-export interface ApplyDomainsResult {
-  success: boolean;
-  message: string;
-  generatedConfig?: string;
-  /**
-   * Whether retrying could plausibly succeed.
-   *
-   * `undefined` on the VPS and Dokploy paths, which have no classifier — those
-   * keep the legacy substring rule in `worker.ts`. Only the static paths set it.
-   */
-  retryable?: boolean;
-}
+// Declared once in ./mappers.js. Re-exported here because callers import it
+// from this module, and imported locally because a re-export alone does not
+// bring the name into scope.
+import type { ApplyDomainsResult } from "./mappers.js";
+export type { ApplyDomainsResult } from "./mappers.js";
 
 /**
  * Return the active deployment when the project is a static (object storage +
@@ -60,6 +53,28 @@ async function resolveStaticDeployment(
   }
   const deployment = lookup.deployment;
   return deployment && deployment.deployStrategy === "static" ? deployment : null;
+}
+
+/**
+ * Whether a project is Dokploy-deployed, with the strategy CHECK guarded but
+ * the dispatch left to the caller.
+ *
+ * The `try` wraps only the import and the predicate. It used to wrap the
+ * dispatch too, so a thrown `applyDomainConfigDokploy` — a Dokploy API outage —
+ * was logged as a "strategy check" failure and fell through to the legacy
+ * nginx path, which then told the user "VPS deployments only": a permanent,
+ * wrong message for a transient fault. `isDokployProject` has its own internal
+ * catch and cannot throw, so this guard is belt-and-braces; the real error from
+ * the dispatch now propagates to the caller, where it belongs.
+ */
+async function isDokployDeployment(projectId: string): Promise<boolean> {
+  try {
+    const { isDokployProject } = await import("./dokploy-applier.js");
+    return await isDokployProject(projectId);
+  } catch (err) {
+    logger.warn(`[domains] Dokploy strategy check failed: ${getErrMsg(err)}`);
+    return false;
+  }
 }
 
 /**
@@ -109,8 +124,8 @@ export async function previewDomainConfig(params: {
   // Dokploy projects have no nginx config at all — Traefik routes by host.
   // Without this branch the nginx generator ran unconditionally and showed
   // Dokploy users a proxy_pass block for a server that does not exist.
-  const { isDokployProject, previewDomainConfigDokploy } = await import("./dokploy-applier.js");
-  if (await isDokployProject(projectId)) {
+  if (await isDokployDeployment(projectId)) {
+    const { previewDomainConfigDokploy } = await import("./dokploy-applier.js");
     return await previewDomainConfigDokploy({ tenantId, projectId });
   }
 
@@ -154,13 +169,9 @@ export async function applyDomainConfig(params: {
 
   // Dokploy-deployed projects register domains on the Dokploy app (Traefik +
   // Let's Encrypt). The nginx/certbot path below is legacy AWS EC2 VPS only.
-  try {
-    const { isDokployProject, applyDomainConfigDokploy } = await import("./dokploy-applier.js");
-    if (await isDokployProject(projectId)) {
-      return await applyDomainConfigDokploy({ tenantId, projectId });
-    }
-  } catch (err) {
-    logger.warn(`[domains] Dokploy strategy check failed, falling back to nginx path: ${getErrMsg(err)}`);
+  if (await isDokployDeployment(projectId)) {
+    const { applyDomainConfigDokploy } = await import("./dokploy-applier.js");
+    return await applyDomainConfigDokploy({ tenantId, projectId });
   }
 
   // Static sites (object storage + CDN) attach domains to the CDN, not a host.
@@ -254,13 +265,9 @@ export async function issueCertificate(params: {
   // registered with certificateType=letsencrypt. So "issuing a certificate"
   // just means reconciling domains — applyDomainConfigDokploy does that and
   // marks the cert active. No certbot/SSM on this path.
-  try {
-    const { isDokployProject, applyDomainConfigDokploy } = await import("./dokploy-applier.js");
-    if (await isDokployProject(projectId)) {
-      return await applyDomainConfigDokploy({ tenantId, projectId });
-    }
-  } catch (err) {
-    logger.warn(`[domains] Dokploy cert strategy check failed, falling back to certbot path: ${getErrMsg(err)}`);
+  if (await isDokployDeployment(projectId)) {
+    const { applyDomainConfigDokploy } = await import("./dokploy-applier.js");
+    return await applyDomainConfigDokploy({ tenantId, projectId });
   }
 
   // Static sites: certificates are provider-issued (ACM), so there is nothing

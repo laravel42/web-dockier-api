@@ -29,12 +29,13 @@ import {
   ensureManagedCertificate,
   listGlobalResourceNames,
   setProxySslCertificates,
+  teardownGcpStaticHttps,
   type ManagedCertificateState,
 } from "../../../deploy/domain/infra/gcp-static-lb.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { nowIso } from "../../../../shared/utils/time.js";
-import { normalizeHost } from "./apex.js";
+import { normalizeHost, canonicalDomains, stableHash36 } from "./apex.js";
 import {
   deleteStaticCertRows,
   ensureStaticCertRow,
@@ -51,17 +52,10 @@ import type { GcpStaticTarget } from "./target.js";
  */
 const MAX_DOMAINS_PER_CERTIFICATE = 100;
 
-export interface StaticApplyOutcome {
-  success: boolean;
-  retryable?: boolean;
-  message: string;
-  anyLive?: boolean;
-}
+import type { StaticApplyOutcome } from "../mappers.js";
+export type { StaticApplyOutcome } from "../mappers.js";
 
-/** Sorted, normalized, de-duplicated — the canonical form of a domain set. */
-function canonicalDomains(names: string[]): string[] {
-  return [...new Set(names.map(normalizeHost).filter(Boolean))].sort();
-}
+
 
 /**
  * A deterministic, GCP-legal certificate name derived from the domain set.
@@ -72,12 +66,7 @@ function canonicalDomains(names: string[]): string[] {
  * immutable-domain-list constraint requires.
  */
 export function certificateNameFor(appNamePrefix: string, domains: string[]): string {
-  const canonical = canonicalDomains(domains).join(",");
-  let hash = 0;
-  for (let i = 0; i < canonical.length; i++) {
-    hash = (hash * 31 + canonical.charCodeAt(i)) | 0;
-  }
-  const suffix = Math.abs(hash).toString(36).slice(0, 8);
+  const suffix = stableHash36(canonicalDomains(domains).join(",")).slice(0, 8);
   // Leave room for "-cert-" + suffix within 63 chars.
   const head = appNamePrefix.slice(0, 63 - 6 - suffix.length).replace(/-+$/, "");
   return `${head}-cert-${suffix}`;
@@ -297,9 +286,8 @@ async function deleteSupersededCertificates(
 
 /** Remove the HTTPS front end when the last domain is deleted. */
 async function teardownHttpsFrontEnd(target: GcpStaticTarget): Promise<void> {
-  const { teardownGcpStaticHttps } = await import(
-    "../../../deploy/domain/infra/gcp-static-lb.js"
-  );
+  // Statically imported above — the module is loaded before this can run, so
+  // the dynamic form bought nothing.
   const { errors } = await teardownGcpStaticHttps(target.client, { appNamePrefix: target.appName });
   if (errors.length > 0) {
     logger.warn(

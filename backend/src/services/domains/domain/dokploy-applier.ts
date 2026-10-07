@@ -29,11 +29,10 @@ import { getApplication } from "../../deploy/domain/dokploy/mappings.js";
 import type { DokployDomain } from "../../deploy/domain/dokploy/types.js";
 import { listDomains } from "./domains.js";
 
-export interface ApplyDomainsResult {
-  success: boolean;
-  message: string;
-  generatedConfig?: string;
-}
+// Declared once in ./mappers.js. This module's own copy had drifted — it was
+// missing `retryable`, which compiled silently because the field is optional.
+import type { ApplyDomainsResult } from "./mappers.js";
+export type { ApplyDomainsResult } from "./mappers.js";
 
 /** Whether a project is deployed via Dokploy (has an application mapping). */
 export async function isDokployProject(projectId: string): Promise<boolean> {

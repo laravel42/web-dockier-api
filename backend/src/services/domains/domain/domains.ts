@@ -63,11 +63,16 @@ export async function createDomain(params: {
   const { tenantId, projectId, name } = params;
 
   // Check if any domains exist already — first one becomes primary
-  const { count } = await supabaseAdmin
+  const { count, error: countError } = await supabaseAdmin
     .from("domains")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", tenantId)
     .eq("project_id", projectId);
+
+  // A swallowed read error here would make `count` undefined, `?? 0` would read
+  // it as zero, and the new domain would be inserted as primary alongside an
+  // existing one — two primaries. Surface the error instead of guessing.
+  throwOnError(countError, DomainsError, { internalMsg: "Failed to check existing domains" });
 
   const isPrimary = (count ?? 0) === 0;
 

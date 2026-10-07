@@ -101,16 +101,6 @@ export async function removeApexAck(
 }
 
 /** Whether `host` has been acknowledged for this project. */
-export async function isApexAcked(
-  tenantId: string,
-  projectId: string,
-  host: string,
-): Promise<boolean> {
-  const read = await readSettings(projectId, tenantId);
-  if (!read.ok) return false;
-  return ackList(read.settings).includes(normalizeHost(host));
-}
-
 /**
  * Every acknowledged hostname for this project.
  *

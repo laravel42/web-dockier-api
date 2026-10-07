@@ -14,6 +14,7 @@ import { classifyDbError, type StaticFailure } from "./failures.js";
 import { POLLABLE_CERT_STATES } from "./deadlines.js";
 import type { Json, TableUpdate } from "../../../../shared/supabase/types.js";
 import type { SslCertificateRow } from "../../schemas.js";
+import { toValidationRecord } from "../mappers.js";
 import type { CertVerificationState, DnsValidationRecord } from "../mappers.js";
 
 /** The platform-owned certificate types. */
@@ -63,17 +64,13 @@ export type EnsureCertRowResult = { ok: true; row: StaticCertRow } | CertRowFail
 export type FindCertRowResult = { ok: true; row: StaticCertRow | null } | CertRowFailure;
 
 function toStaticCertRow(row: SslCertificateRow): StaticCertRow {
-  const vr = row.validation_record as Record<string, unknown> | null;
   return {
     id: row.id,
     domainName: row.domain_name,
     type: row.type as StaticCertType,
     status: row.status,
     providerRef: row.provider_ref ?? null,
-    validationRecord:
-      vr && typeof vr.name === "string" && typeof vr.type === "string" && typeof vr.value === "string"
-        ? { name: vr.name, type: vr.type, value: vr.value }
-        : null,
+    validationRecord: toValidationRecord(row.validation_record),
     verificationState: (row.verification_state as CertVerificationState) ?? "pending",
     verificationMessage: row.verification_message ?? null,
     attachStartedAt: row.attach_started_at ?? null,

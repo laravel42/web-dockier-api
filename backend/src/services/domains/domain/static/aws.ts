@@ -25,9 +25,8 @@ import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { nowIso } from "../../../../shared/utils/time.js";
 import type { DnsValidationRecord } from "../mappers.js";
-import { isApexDomain, apexRefusalMessage, normalizeHost } from "./apex.js";
+import { isApexDomain, apexRefusalMessage, normalizeHost, canonicalDomains, stableHash36 } from "./apex.js";
 import { listApexAcks } from "../apex-ack.js";
-import { CERT_DEADLINE_MS } from "./deadlines.js";
 import { isValidationRecordVisible, verifyRoutingRecordAws } from "./routing.js";
 import { classifyAwsError, type StaticFailure } from "./failures.js";
 import {
@@ -45,17 +44,12 @@ import type { AwsStaticTarget } from "./target.js";
  */
 const ACM_REGION = "us-east-1";
 
-// CERT_DEADLINE_MS now lives in ./deadlines.js, alongside the per-cloud,
-// per-state tables that supersede it, so the constant and the tables cannot
-// drift. It survives only as isPastCertDeadline's default third argument.
+// The flat 2-hour certificate deadline that used to live here is gone. It is
+// superseded by the per-cloud, per-state tables in ./deadlines.js, which the
+// sweep in ./poll-sweep.js applies.
 
-export interface StaticApplyOutcome {
-  success: boolean;
-  retryable?: boolean;
-  message: string;
-  /** True when at least one domain is serving over TLS. */
-  anyLive?: boolean;
-}
+import type { StaticApplyOutcome } from "../mappers.js";
+export type { StaticApplyOutcome } from "../mappers.js";
 
 interface AcmClientBundle {
   acm: InstanceType<Awaited<ReturnType<typeof getAcm>>["ACMClient"]>;
@@ -68,10 +62,7 @@ async function acmClient(target: AwsStaticTarget): Promise<AcmClientBundle> {
   return { acm, mod };
 }
 
-/** Sorted, normalized, de-duplicated — the canonical form of a domain set. */
-function canonicalDomains(names: string[]): string[] {
-  return [...new Set(names.map(normalizeHost).filter(Boolean))].sort();
-}
+
 
 /**
  * Record a failure on every certificate row the reconcile holds.
@@ -463,12 +454,7 @@ async function ensureCertificateForDomains(params: {
  * request dedupes while a changed set does not.
  */
 function idempotencyToken(projectId: string, wanted: string[]): string {
-  const raw = `${projectId}-${wanted.join(",")}`;
-  let hash = 0;
-  for (let i = 0; i < raw.length; i++) {
-    hash = (hash * 31 + raw.charCodeAt(i)) | 0;
-  }
-  const suffix = Math.abs(hash).toString(36);
+  const suffix = stableHash36(`${projectId}-${wanted.join(",")}`);
   return `d${projectId.replace(/-/g, "").slice(0, 24)}${suffix}`.slice(0, 32);
 }
 
@@ -636,24 +622,6 @@ async function updateStackDomainParameters(params: {
     );
     return { ok: false, failure };
   }
-}
-
-/**
- * True when a certificate has been waiting past the point worth waiting.
- *
- * `deadlineMs` is parameter THREE, not two: the existing tests pass `now`
- * second, so inserting it earlier would break them. The default keeps every
- * current caller meaning exactly what it meant before.
- */
-export function isPastCertDeadline(
-  startedAtIso: string | null,
-  now = Date.now(),
-  deadlineMs = CERT_DEADLINE_MS,
-): boolean {
-  if (!startedAtIso) return false;
-  const started = Date.parse(startedAtIso);
-  if (Number.isNaN(started)) return false;
-  return now - started > deadlineMs;
 }
 
 /** The DNS records a user must publish for an AWS static domain. */

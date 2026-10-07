@@ -26,13 +26,6 @@ export type PollableCertState = Extract<
   "pending" | "awaiting_dns" | "provisioning" | "attaching"
 >;
 
-/**
- * The original flat 2-hour budget, kept as `isPastCertDeadline`'s default third
- * argument so nothing that calls it today changes meaning. Lives here rather
- * than in `aws.ts` so the tables and the constant cannot drift apart.
- */
-export const CERT_DEADLINE_MS = 2 * 60 * 60 * 1000;
-
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 
@@ -127,7 +120,7 @@ export interface CertDeadline {
  *
  * `null` has exactly ONE meaning: "poll on the cadence, never time out". The
  * sweep skips the deadline comparison entirely for such a row. It never falls
- * back to {@link CERT_DEADLINE_MS} and never treats `null` as expired.
+ * back to any other budget, and never treats `null` as expired.
  *
  * After this revision no input produces `null` — all nine pairs have a budget.
  * The type keeps it because a future pair may legitimately want cadence only.

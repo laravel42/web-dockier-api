@@ -143,7 +143,7 @@ vi.mock("../certs.js", () => ({
   },
 }));
 
-const { reconcileAwsStaticDomains, awsDnsInstructions, isPastCertDeadline } = await import("../aws.js");
+const { reconcileAwsStaticDomains, awsDnsInstructions } = await import("../aws.js");
 
 const TARGET = {
   kind: "aws-static" as const,
@@ -828,19 +828,3 @@ describe("awsDnsInstructions", () => {
   });
 });
 
-describe("isPastCertDeadline", () => {
-  it("is false for a null or unparseable timestamp", () => {
-    expect(isPastCertDeadline(null)).toBe(false);
-    expect(isPastCertDeadline("not a date")).toBe(false);
-  });
-
-  it("is false inside the two-hour window", () => {
-    const now = Date.parse("2026-01-01T02:00:00Z");
-    expect(isPastCertDeadline("2026-01-01T01:00:00Z", now)).toBe(false);
-  });
-
-  it("is true past the two-hour window", () => {
-    const now = Date.parse("2026-01-01T05:00:00Z");
-    expect(isPastCertDeadline("2026-01-01T01:00:00Z", now)).toBe(true);
-  });
-});

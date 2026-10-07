@@ -10,7 +10,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CERT_DEADLINE_MS,
   POLLABLE_CERT_STATES,
   asPollableState,
   certDeadlineMs,
@@ -170,8 +169,3 @@ describe("asPollableState", () => {
   });
 });
 
-describe("CERT_DEADLINE_MS", () => {
-  it("keeps the original flat budget for isPastCertDeadline's default", () => {
-    expect(CERT_DEADLINE_MS).toBe(2 * HOUR);
-  });
-});

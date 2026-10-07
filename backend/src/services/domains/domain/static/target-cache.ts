@@ -27,12 +27,6 @@ interface Entry {
 const cache = new Map<string, Entry>();
 const inFlight = new Map<string, Promise<Resolution>>();
 
-/** Visible for tests. */
-export function clearStaticTargetCache(): void {
-  cache.clear();
-  inFlight.clear();
-}
-
 export async function resolveStaticTargetCached(params: {
   projectId: string;
   deployment: ActiveDeployment;
