@@ -1,4 +1,5 @@
 import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
+import { fetchJson } from "../../../../shared/http/fetch.js";
 
 const API = "https://api.monday.com/v2";
 
@@ -12,13 +13,11 @@ interface MondayGraphQLResponse {
 }
 
 async function graphql(token: string, query: string): Promise<MondayGraphQLResponse | null> {
-  const res = await fetch(API, {
+  return fetchJson<MondayGraphQLResponse>(API, {
     method: "POST",
     headers: { Authorization: token, "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
   });
-  if (!res.ok) return null;
-  return (await res.json()) as MondayGraphQLResponse;
 }
 
 export const mondayProvider: PMProvider = {

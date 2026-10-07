@@ -1,4 +1,5 @@
 import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
+import { fetchJson, fetchWithTimeout } from "../../../../shared/http/fetch.js";
 
 export const basecampProvider: PMProvider = {
   teamLabel: "Account",
@@ -13,11 +14,11 @@ export const basecampProvider: PMProvider = {
   },
   async listTeamProjects(config, teamId) {
     if (!config.apiKey) return { projects: [] };
-    const res = await fetch(`https://3.basecampapi.com/${teamId}/projects.json`, {
-      headers: { Authorization: `Bearer ${config.apiKey}`, "User-Agent": "Dockier" },
-    });
-    if (!res.ok) return { projects: [] };
-    const projects = (await res.json()) as Array<{ id: number; name: string }>;
+    const projects = await fetchJson<Array<{ id: number; name: string }>>(
+      `https://3.basecampapi.com/${teamId}/projects.json`,
+      { headers: { Authorization: `Bearer ${config.apiKey}`, "User-Agent": "Dockier" } },
+    );
+    if (!projects) return { projects: [] };
     return { projects: projects.map((project) => ({ id: String(project.id), name: project.name })) };
   },
   async listTeamMembers(): Promise<{ members: TeamMember[] }> {
@@ -33,13 +34,13 @@ export const basecampProvider: PMProvider = {
       "User-Agent": "Dockier",
     };
 
-    const listsRes = await fetch(`${baseUrl}/buckets/${req.projectId}/todolists.json`, { headers });
+    const listsRes = await fetchWithTimeout(`${baseUrl}/buckets/${req.projectId}/todolists.json`, { headers });
     if (!listsRes.ok) throw new Error(`Basecamp todolist lookup failed (${listsRes.status})`);
     const lists = (await listsRes.json()) as Array<{ id: number; name: string }>;
 
     let listId = lists.find((list) => /dockier|triage|security/i.test(list.name))?.id;
     if (!listId) {
-      const createList = await fetch(`${baseUrl}/buckets/${req.projectId}/todolists.json`, {
+      const createList = await fetchWithTimeout(`${baseUrl}/buckets/${req.projectId}/todolists.json`, {
         method: "POST",
         headers,
         body: JSON.stringify({ name: "Dockier Triage" }),
@@ -49,7 +50,7 @@ export const basecampProvider: PMProvider = {
       listId = created.id;
     }
 
-    const todoRes = await fetch(`${baseUrl}/buckets/${req.projectId}/todolists/${listId}/todos.json`, {
+    const todoRes = await fetchWithTimeout(`${baseUrl}/buckets/${req.projectId}/todolists/${listId}/todos.json`, {
       method: "POST",
       headers,
       body: JSON.stringify({

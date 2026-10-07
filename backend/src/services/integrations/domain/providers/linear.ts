@@ -1,13 +1,12 @@
 import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
+import { fetchJson } from "../../../../shared/http/fetch.js";
 
 async function linearGraphql<T>(apiKey: string, query: string): Promise<T | null> {
-  const response = await fetch("https://api.linear.app/graphql", {
+  return fetchJson<T>("https://api.linear.app/graphql", {
     method: "POST",
     headers: { Authorization: apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
   });
-  if (!response.ok) return null;
-  return (await response.json()) as T;
 }
 
 export const linearProvider: PMProvider = {

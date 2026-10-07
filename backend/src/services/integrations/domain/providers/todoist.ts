@@ -1,4 +1,5 @@
 import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
+import { fetchJson, fetchWithTimeout } from "../../../../shared/http/fetch.js";
 
 const API = "https://api.todoist.com/rest/v2";
 
@@ -11,9 +12,11 @@ export const todoistProvider: PMProvider = {
   },
   async listTeamProjects(config) {
     if (!config.apiKey) return { projects: [] };
-    const res = await fetch(`${API}/projects`, { headers: { Authorization: `Bearer ${config.apiKey}` } });
-    if (!res.ok) return { projects: [] };
-    const projects = (await res.json()) as Array<{ id: string; name: string }>;
+    const projects = await fetchJson<Array<{ id: string; name: string }>>(
+      `${API}/projects`,
+      { headers: { Authorization: `Bearer ${config.apiKey}` } },
+    );
+    if (!projects) return { projects: [] };
     return { projects: projects.map((project) => ({ id: String(project.id), name: project.name })) };
   },
   async listTeamMembers(): Promise<{ members: TeamMember[] }> {
@@ -21,7 +24,7 @@ export const todoistProvider: PMProvider = {
   },
   async createIssue(req): Promise<CreateIssueResponse> {
     if (!req.config.apiKey) throw new Error("Todoist API key is required");
-    const res = await fetch(`${API}/tasks`, {
+    const res = await fetchWithTimeout(`${API}/tasks`, {
       method: "POST",
       headers: { Authorization: `Bearer ${req.config.apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ content: req.title, description: req.description, project_id: req.projectId || undefined }),

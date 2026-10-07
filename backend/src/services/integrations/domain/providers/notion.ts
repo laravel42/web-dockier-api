@@ -1,4 +1,5 @@
 import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
+import { fetchJson, fetchWithTimeout } from "../../../../shared/http/fetch.js";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2022-06-28";
@@ -16,13 +17,15 @@ export const notionProvider: PMProvider = {
   },
   async listTeamProjects(config) {
     if (!config.apiKey) return { projects: [] };
-    const res = await fetch(`${API}/search`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${config.apiKey}`, "Notion-Version": VERSION, "Content-Type": "application/json" },
-      body: JSON.stringify({ filter: { value: "database", property: "object" } }),
-    });
-    if (!res.ok) return { projects: [] };
-    const data = (await res.json()) as { results?: Array<{ id: string; title?: Array<{ plain_text?: string }> }> };
+    const data = await fetchJson<{ results?: Array<{ id: string; title?: Array<{ plain_text?: string }> }> }>(
+      `${API}/search`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${config.apiKey}`, "Notion-Version": VERSION, "Content-Type": "application/json" },
+        body: JSON.stringify({ filter: { value: "database", property: "object" } }),
+      },
+    );
+    if (!data) return { projects: [] };
     return { projects: (data.results ?? []).map((database) => ({ id: database.id, name: database.title?.[0]?.plain_text || "Untitled" })) };
   },
   async listTeamMembers(): Promise<{ members: TeamMember[] }> {
@@ -30,7 +33,7 @@ export const notionProvider: PMProvider = {
   },
   async createIssue(req): Promise<CreateIssueResponse> {
     if (!req.config.apiKey) throw new Error("Notion API key is required");
-    const res = await fetch(`${API}/pages`, {
+    const res = await fetchWithTimeout(`${API}/pages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${req.config.apiKey}`, "Notion-Version": VERSION, "Content-Type": "application/json" },
       body: JSON.stringify({

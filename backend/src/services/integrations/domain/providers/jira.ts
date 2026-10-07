@@ -1,5 +1,6 @@
 import type { CreateIssueResponse, PMProvider, TeamMember } from "../types.js";
 import { basicAuth, normalizeBaseUrl } from "./utils.js";
+import { fetchJson, fetchWithTimeout } from "../../../../shared/http/fetch.js";
 
 export const jiraProvider: PMProvider = {
   teamLabel: "Project",
@@ -7,21 +8,21 @@ export const jiraProvider: PMProvider = {
   async listTeams(config) {
     if (!config.host || !config.email || !config.apiToken) return { teams: [], teamLabel: this.teamLabel, projectLabel: this.projectLabel };
     const baseUrl = normalizeBaseUrl(config.host);
-    const response = await fetch(`${baseUrl}/rest/api/3/project?maxResults=50&orderBy=name`, {
-      headers: { Authorization: basicAuth(config.email, config.apiToken), Accept: "application/json" },
-    });
-    if (!response.ok) return { teams: [], teamLabel: this.teamLabel, projectLabel: this.projectLabel };
-    const projects = (await response.json()) as Array<{ id: string; name: string; key: string }>;
+    const projects = await fetchJson<Array<{ id: string; name: string; key: string }>>(
+      `${baseUrl}/rest/api/3/project?maxResults=50&orderBy=name`,
+      { headers: { Authorization: basicAuth(config.email, config.apiToken), Accept: "application/json" } },
+    );
+    if (!projects) return { teams: [], teamLabel: this.teamLabel, projectLabel: this.projectLabel };
     return { teams: projects.map((project) => ({ id: project.id, name: project.name, key: project.key })), teamLabel: this.teamLabel, projectLabel: this.projectLabel };
   },
   async listTeamMembers(config, teamId): Promise<{ members: TeamMember[] }> {
     if (!config.host || !config.email || !config.apiToken) return { members: [] };
     const baseUrl = normalizeBaseUrl(config.host);
-    const response = await fetch(`${baseUrl}/rest/api/3/user/assignable/search?project=${encodeURIComponent(teamId)}&maxResults=50`, {
-      headers: { Authorization: basicAuth(config.email, config.apiToken), Accept: "application/json" },
-    });
-    if (!response.ok) return { members: [] };
-    const members = (await response.json()) as Array<{ accountId: string; displayName: string; emailAddress?: string; avatarUrls?: Record<string, string> }>;
+    const members = await fetchJson<Array<{ accountId: string; displayName: string; emailAddress?: string; avatarUrls?: Record<string, string> }>>(
+      `${baseUrl}/rest/api/3/user/assignable/search?project=${encodeURIComponent(teamId)}&maxResults=50`,
+      { headers: { Authorization: basicAuth(config.email, config.apiToken), Accept: "application/json" } },
+    );
+    if (!members) return { members: [] };
     return { members: members.map((member) => ({ id: member.accountId, name: member.displayName, email: member.emailAddress, avatarUrl: member.avatarUrls?.["24x24"] })) };
   },
   async createIssue(req): Promise<CreateIssueResponse> {
@@ -39,7 +40,7 @@ export const jiraProvider: PMProvider = {
     };
     if (req.estimateMinutes) fields.timetracking = { originalEstimate: `${req.estimateMinutes}m` };
     if (req.assigneeId) fields.assignee = { accountId: req.assigneeId };
-    const response = await fetch(`${baseUrl}/rest/api/3/issue`, {
+    const response = await fetchWithTimeout(`${baseUrl}/rest/api/3/issue`, {
       method: "POST",
       headers: {
         Authorization: basicAuth(req.config.email, req.config.apiToken),
