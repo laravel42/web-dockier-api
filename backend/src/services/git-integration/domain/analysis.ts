@@ -8,17 +8,19 @@ import { scanSensitiveData, type SensitiveField } from "./sensitive-data-scanner
 
 export type { SensitiveField } from "./sensitive-data-scanner.js";
 
-type SensitiveTable = {
+export type SensitiveColumn = {
+  name: string;
+  type: string;
+  category: SensitiveField["sensitivity"];
+  sensitivity: "critical" | "high" | "medium";
+  reason: string;
+  confidence: number;
+};
+
+export type SensitiveTable = {
   name: string;
   riskScore: number;
-  columns: Array<{
-    name: string;
-    type: string;
-    category: SensitiveField["sensitivity"];
-    sensitivity: "critical" | "high" | "medium";
-    reason: string;
-    confidence: number;
-  }>;
+  columns: SensitiveColumn[];
 };
 
 export function analyzeSensitiveDataFromText(schema: string): { tables: SensitiveTable[]; summary: { totalTables: number; highRiskTables: number; criticalFindings: string[] } } {

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { analyzeSensitiveDataFromText, runRepoAnalysis } from "../domain/analysis.js";
+import { analyzeSensitiveDataFromText, runRepoAnalysis, type SensitiveColumn } from "../domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
 import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
@@ -106,7 +106,18 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         summary: "Scan repository for sensitive schema fields",
         params: z.object({ connectionId: z.uuid() }),
         querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
-        response: { 200: z.object({ sensitiveData: z.array(z.any()) }) },
+        response: {
+          200: z.object({
+            sensitiveData: z.array(
+              z.object({
+                entity: z.string(),
+                field: z.string(),
+                sensitivity: z.enum(["personal", "sensitive", "secret"]),
+                reason: z.string(),
+              }),
+            ),
+          }),
+        },
       },
     },
     async (request) => {
@@ -130,7 +141,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const analyzed = analyzeSensitiveDataFromText(schemaText);
       return {
         sensitiveData: analyzed.tables.flatMap((table) =>
-          table.columns.map((column: any) => ({
+          table.columns.map((column: SensitiveColumn) => ({
             entity: table.name,
             field: column.name,
             sensitivity: column.category,
@@ -151,7 +162,22 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         body: z.object({ schema: z.string(), projectId: z.string().optional() }),
         response: {
           200: z.object({
-            tables: z.array(z.any()),
+            tables: z.array(
+              z.object({
+                name: z.string(),
+                riskScore: z.number(),
+                columns: z.array(
+                  z.object({
+                    name: z.string(),
+                    type: z.string(),
+                    category: z.enum(["personal", "sensitive", "secret"]),
+                    sensitivity: z.enum(["critical", "high", "medium"]),
+                    reason: z.string(),
+                    confidence: z.number(),
+                  }),
+                ),
+              }),
+            ),
             summary: z.object({
               totalTables: z.number(),
               highRiskTables: z.number(),
