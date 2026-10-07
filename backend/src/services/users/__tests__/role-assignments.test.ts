@@ -31,7 +31,6 @@ vi.mock("../../../shared/supabase/client.js", () => ({
 // ─── Import after mocks ────────────────────────────────────────────
 
 const { validateRoleAssignment, assignRoleToUser, updateUserRole } = await import("../domain/role-assignments.js");
-const { UsersError } = await import("../domain/users.js");
 
 // ─── Test ResolvedAuth ─────────────────────────────────────────────
 
@@ -65,20 +64,6 @@ function mockRolesTable(result: { data: unknown; error: unknown }) {
     eq: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue(result),
-  };
-}
-
-function mockMembershipsTable(opts: {
-  insertResult?: { error: unknown };
-  selectResult?: { data: unknown; error: unknown };
-  updateResult?: { error: unknown };
-}) {
-  return {
-    select: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockResolvedValue({ error: opts.insertResult?.error ?? null }),
-    update: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    maybeSingle: vi.fn().mockResolvedValue(opts.selectResult ?? { data: null, error: null }),
   };
 }
 
