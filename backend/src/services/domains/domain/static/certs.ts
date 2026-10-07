@@ -11,6 +11,7 @@ import { supabaseAdmin } from "../../../../shared/supabase/client.js";
 import { logger } from "../../../../shared/logger.js";
 import { nowIso } from "../../../../shared/utils/time.js";
 import { classifyDbError, type StaticFailure } from "./failures.js";
+import { POLLABLE_CERT_STATES } from "./deadlines.js";
 import type { Json, TableUpdate } from "../../../../shared/supabase/types.js";
 import type { SslCertificateRow } from "../../schemas.js";
 import type { CertVerificationState, DnsValidationRecord } from "../mappers.js";
@@ -196,6 +197,79 @@ export async function findStaticCertRow(
     };
   }
   return { ok: true, row: data ? toStaticCertRow(data as SslCertificateRow) : null };
+}
+
+/** A row the sweep may need to look at, with its project for enqueueing. */
+export interface PollCandidateRow extends StaticCertRow {
+  projectId: string;
+  organizationId: string;
+}
+
+const POLL_SELECT_COLUMNS = `${SELECT_COLUMNS}, project_id, organization_id`;
+
+/** How many rows one sweep will consider. */
+const POLL_BATCH_LIMIT = 200;
+
+/**
+ * Candidate rows for one sweep pass.
+ *
+ * The state list is a strict subset of `idx_ssl_certificates_pending_verification`'s
+ * predicate (`verification_state NOT IN ('live','failed')`), so the partial
+ * index is usable. `timed_out` is excluded even though the index covers it: a
+ * timed-out row is terminal and must consume no poll slots.
+ *
+ * `ORDER BY updated_at ASC` is load-bearing, not cosmetic. The longest-unlooked-at
+ * rows are always in the batch, so an installation past the limit degrades to a
+ * longer effective interval for every row rather than starving any one of them.
+ * Slower, never stuck.
+ */
+export async function listCertRowsForPoll(): Promise<
+  { ok: true; rows: PollCandidateRow[] } | CertRowFailure
+> {
+  const { data, error } = await supabaseAdmin
+    .from("ssl_certificates")
+    .select(POLL_SELECT_COLUMNS)
+    .in("type", STATIC_CERT_TYPES as unknown as string[])
+    .in("verification_state", POLLABLE_CERT_STATES as unknown as string[])
+    .order("updated_at", { ascending: true })
+    .limit(POLL_BATCH_LIMIT);
+
+  if (error) {
+    logger.error({ err: error }, "[domains:static] failed to list poll candidates");
+    return { ok: false, failure: classifyDbError(error, { operation: "list poll candidates" }) };
+  }
+
+  return {
+    ok: true,
+    rows: (data ?? []).map((raw) => {
+      const row = raw as SslCertificateRow & { project_id: string; organization_id: string };
+      return {
+        ...toStaticCertRow(row),
+        projectId: row.project_id,
+        organizationId: row.organization_id,
+      };
+    }),
+  };
+}
+
+/**
+ * Record that the sweep LOOKED at this row.
+ *
+ * Touches `updated_at` and nothing else. The column's meaning is widened
+ * accordingly: it is "last time we looked", not "last time something changed".
+ * The sweep is its only writer for cadence purposes — see `poll-sweep.ts`.
+ */
+export async function touchCertPolled(certificateId: string): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from("ssl_certificates")
+    .update({ updated_at: nowIso() })
+    .eq("id", certificateId);
+
+  if (error) {
+    logger.error({ err: error, certificateId }, "[domains:static] failed to touch poll clock");
+    return false;
+  }
+  return true;
 }
 
 export interface CertStateUpdate {

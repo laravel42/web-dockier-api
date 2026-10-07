@@ -109,6 +109,7 @@ export const IMAGE_BUILD_QUEUE = "image-build";
 export const SECURITY_SCAN_QUEUE = "security-scan";
 export const COMMAND_EXEC_QUEUE = "command-exec";
 export const CONFIG_APPLY_QUEUE = "config-apply";
+export const CERT_POLL_QUEUE = "cert-poll";
 
 // ─── Generic Worker Factory ────────────────────────────────────────
 

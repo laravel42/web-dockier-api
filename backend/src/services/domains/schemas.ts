@@ -110,6 +110,47 @@ export const configPreviewResponseSchema = z.object({
   generatedConfig: z.string(),
 });
 
+export const attachmentStageSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  owner: z.enum(["you", "dockier", "aws", "google"]).optional(),
+  status: z.enum(["done", "current", "pending", "failed"]),
+  detail: z.string().optional(),
+  eta: z.string().optional(),
+});
+
+export const domainAttachmentResponseSchema = z.object({
+  supported: z.boolean(),
+  cloud: z.enum(["aws", "gcp"]).optional(),
+  /** An actionable reason the attachment cannot progress. */
+  blocker: z.string().optional(),
+  domains: z.array(
+    z.object({
+      domainId: z.string(),
+      domainName: z.string(),
+      verificationState: certVerificationStateSchema,
+      stages: z.array(attachmentStageSchema),
+      records: z.array(
+        z.object({
+          name: z.string(),
+          type: z.string(),
+          value: z.string(),
+          purpose: z.string(),
+        }),
+      ),
+      note: z.string(),
+      resumable: z.boolean(),
+    }),
+  ),
+});
+
+export const resumeDomainResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  /** So the card re-derives its stages immediately, not on the next poll. */
+  verificationState: certVerificationStateSchema,
+});
+
 export const applyDomainResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),

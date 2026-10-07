@@ -1,5 +1,5 @@
 import { request } from "./request";
-import type { Domain, SslCertificate } from "../types";
+import type { Domain, DomainAttachment, SslCertificate } from "../types";
 
 export interface DnsRecordInstruction {
   name: string;
@@ -40,6 +40,17 @@ export const domainsApi = {
       { method: "POST", body: JSON.stringify(data) },
     ),
 
+  /** Staged attachment progress for every domain on a project. */
+  attachment: (projectId: string) =>
+    request<DomainAttachment>(
+      `/projects/${encodeURIComponent(projectId)}/domains/attachment`,
+    ),
+  /** Retry a stalled or failed attachment. */
+  resume: (projectId: string, domainId: string) =>
+    request<{ success: boolean; message: string; verificationState: string }>(
+      `/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domainId)}/resume`,
+      { method: "POST" },
+    ),
   updateDomain: (
     projectId: string,
     domainId: string,

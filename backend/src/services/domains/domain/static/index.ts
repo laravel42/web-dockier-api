@@ -12,6 +12,10 @@ import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import type { ActiveDeployment } from "../../../../shared/service-clients/deployments.js";
 import { listDomains } from "../domains.js";
 import { normalizeHost } from "./apex.js";
+import { verifyRoutingRecordAws } from "./routing.js";
+import { resolveStaticTargetCached } from "./target-cache.js";
+import { buildAwsStages, buildGcpStages, type AttachmentStage } from "./stages.js";
+import type { CertVerificationState } from "../mappers.js";
 import { awsDnsInstructions, reconcileAwsStaticDomains } from "./aws.js";
 import { gcpDnsInstructions, reconcileGcpStaticDomains } from "./gcp.js";
 import { findStaticCertRow } from "./certs.js";
@@ -116,56 +120,42 @@ export async function verifyDomainDnsStatic(params: {
   const expected = normalizeHost(resolution.target.distributionDomain);
   const host = normalizeHost(domainName);
 
-  try {
-    const cnames = await dns.resolveCname(host);
-    const resolved = cnames.map(normalizeHost);
+  const check = await verifyRoutingRecordAws(host, expected);
 
-    if (resolved.includes(expected)) {
+  switch (check.outcome) {
+    case "verified":
       return {
         verified: true,
         serverIp: expected,
-        resolvedIp: resolved[0],
-        message: `${host} points at the CDN (${expected}).`,
+        resolvedIp: check.resolved,
+        message: check.message,
       };
-    }
-
-    if (resolved.length > 0) {
+    case "inconclusive":
+      // An ALIAS-flattened apex: the A set did not overlap the CDN's, which
+      // means UNKNOWN rather than unpublished, because CloudFront's edge IPs
+      // rotate between queries. Reported as unverified here (this endpoint
+      // answers "can I prove it?"), but the reconcile treats it as live for an
+      // apex — see the apex rule in reconcileAwsStaticDomains.
+      return { verified: false, serverIp: expected, message: check.message };
+    case "mismatched":
       return {
         verified: false,
         serverIp: expected,
-        resolvedIp: resolved[0],
-        message: `${host} is a CNAME to ${resolved[0]}, but it must point at ${expected}.`,
+        resolvedIp: check.resolved,
+        message: check.message,
       };
-    }
-
-    return {
-      verified: false,
-      serverIp: expected,
-      message: `${host} has no CNAME record. Add a CNAME pointing at ${expected}.`,
-    };
-  } catch (err) {
-    const msg = getErrMsg(err);
-
-    // A flattened apex (ALIAS/ANAME) answers A but not CNAME. Fall back to
-    // comparing the resolved addresses against the CDN's own, so a correctly
-    // configured ALIAS is not reported as broken.
-    if (/ENODATA|ENOTFOUND/i.test(msg)) {
-      const flattened = await verifyFlattenedAlias(host, expected);
-      if (flattened) return flattened;
-
-      return {
-        verified: false,
-        serverIp: expected,
-        message:
-          `${host} has no CNAME record yet. Add a CNAME pointing at ${expected}. ` +
-          `DNS changes can take a few minutes to become visible.`,
-      };
-    }
-
-    logger.warn({ err: msg, domainName: host, projectId }, "[domains:static] DNS verification failed");
-    return { verified: false, serverIp: expected, message: `Could not resolve ${host}: ${msg}` };
+    case "missing":
+      if (check.error) {
+        logger.warn(
+          { err: check.error, domainName: host, projectId },
+          "[domains:static] DNS verification failed",
+        );
+      }
+      return { verified: false, serverIp: expected, message: check.message };
   }
 }
+
+
 
 /**
  * GCP: compare the domain's A record against the load balancer's own IP.
@@ -219,35 +209,10 @@ async function verifyGcpARecord(
   }
 }
 
-/**
- * Detect an ALIAS/ANAME-flattened record by comparing the addresses the domain
- * resolves to against the CDN hostname's own addresses.
- *
- * Overlap is strong evidence the domain is served by the same distribution.
- * CloudFront returns different edges per query, so a miss is inconclusive, not
- * a failure — hence null rather than a negative verdict.
- */
-async function verifyFlattenedAlias(
-  host: string,
-  cdnHost: string,
-): Promise<{ verified: boolean; serverIp?: string; resolvedIp?: string; message: string } | null> {
-  try {
-    const [hostAddrs, cdnAddrs] = await Promise.all([dns.resolve4(host), dns.resolve4(cdnHost)]);
-    const cdnSet = new Set(cdnAddrs);
-    const shared = hostAddrs.find((a) => cdnSet.has(a));
-    if (shared) {
-      return {
-        verified: true,
-        serverIp: cdnHost,
-        resolvedIp: shared,
-        message: `${host} resolves to the CDN via a flattened ALIAS record.`,
-      };
-    }
-  } catch {
-    // Nothing to add — the caller reports the CNAME guidance.
-  }
-  return null;
-}
+// `verifyFlattenedAlias` moved into ./routing.js alongside
+// `verifyRoutingRecordAws`, which is its only caller. Kept there rather than
+// here so the reconcile can use the same check without importing this module
+// (which imports aws.ts, so the dependency would be circular).
 
 /** A truthful description of how a static site is routed. */
 export async function previewDomainConfigStatic(params: {
@@ -365,4 +330,110 @@ export async function getDomainDnsInstructionsStatic(params: {
   });
 
   return { domainName: host, records, note };
+}
+
+// ─── The attachment view ───────────────────────────────────────────
+
+export interface DomainAttachmentEntry {
+  domainId: string;
+  domainName: string;
+  verificationState: CertVerificationState;
+  stages: AttachmentStage[];
+  records: Array<{ name: string; type: string; value: string; purpose: string }>;
+  note: string;
+  resumable: boolean;
+}
+
+export interface DomainAttachmentView {
+  supported: boolean;
+  cloud?: "aws" | "gcp";
+  /** An actionable reason the attachment cannot progress at all. */
+  blocker?: string;
+  domains: DomainAttachmentEntry[];
+}
+
+/**
+ * Everything the Domains tab needs, in one request.
+ *
+ * When the target cannot be resolved we still return the domains with whatever
+ * state is persisted, and carry the actionable reason in `blocker`. Returning
+ * an empty list would show a user with a half-attached domain nothing at all,
+ * which is the failure mode this view exists to replace.
+ */
+export async function buildAttachmentView(params: {
+  tenantId: string;
+  projectId: string;
+  deployment: ActiveDeployment;
+}): Promise<DomainAttachmentView> {
+  const { tenantId, projectId, deployment } = params;
+
+  const domains = await listDomains({ tenantId, projectId });
+  const resolution = await resolveStaticTargetCached({ projectId, deployment });
+  const target = resolution.target;
+
+  const cloud = target ? (target.kind === "gcp-static" ? "gcp" : "aws") : undefined;
+
+  const entries: DomainAttachmentEntry[] = [];
+
+  for (const domain of domains) {
+    const host = normalizeHost(domain.name);
+    const found = await findStaticCertRow(projectId, host);
+
+    // A failed read is reported on the row rather than rendered as `pending`,
+    // which reads as "working on it" and is how a schema-drift failure stayed
+    // invisible for so long.
+    const row = found.ok ? found.row : null;
+    const verificationState: CertVerificationState = found.ok
+      ? (row?.verificationState ?? "pending")
+      : "failed";
+    const verificationMessage = found.ok ? (row?.verificationMessage ?? null) : found.failure.message;
+
+    const snapshot = {
+      domainName: host,
+      verificationState,
+      status: row?.status ?? "pending",
+      verificationMessage,
+    };
+
+    const view = cloud === "gcp" ? buildGcpStages(snapshot) : buildAwsStages(snapshot);
+
+    // Served fresh from the same builders the dns-instructions endpoint uses,
+    // so the two surfaces cannot show different records.
+    let records: DomainAttachmentEntry["records"] = [];
+    let note = "";
+    if (target) {
+      const instructions =
+        target.kind === "gcp-static"
+          ? gcpDnsInstructions({ target, domainName: host })
+          : awsDnsInstructions({
+              target,
+              domainName: host,
+              validationRecord: row?.validationRecord ?? null,
+            });
+      records = instructions.records;
+      note = instructions.note;
+    }
+
+    entries.push({
+      domainId: domain.id,
+      domainName: host,
+      verificationState,
+      stages: view.stages,
+      records,
+      note,
+      resumable: view.resumable,
+    });
+  }
+
+  return {
+    supported: true,
+    ...(cloud ? { cloud } : {}),
+    ...(target
+      ? {}
+      : {
+          blocker:
+            resolution.errorMessage || "Could not resolve the CDN for this static site.",
+        }),
+    domains: entries,
+  };
 }

@@ -470,3 +470,25 @@ export async function getDomainDnsInstructions(params: {
     note: result.note,
   };
 }
+
+/**
+ * The staged attachment view for a project's domains.
+ *
+ * `supported: false` for the Dokploy and legacy VPS branches, which keeps the
+ * frontend's "degrade to the old sync bar" decision a single condition rather
+ * than a per-branch UI.
+ */
+export async function getDomainAttachment(params: {
+  tenantId: string;
+  projectId: string;
+}): Promise<import("./static/index.js").DomainAttachmentView> {
+  const { tenantId, projectId } = params;
+
+  const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
+  if (!staticDeployment) {
+    return { supported: false, domains: [] };
+  }
+
+  const { buildAttachmentView } = await import("./static/index.js");
+  return await buildAttachmentView({ tenantId, projectId, deployment: staticDeployment });
+}

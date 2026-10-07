@@ -6,6 +6,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
 import { ApiError } from "@/services/api-error";
+import DomainAttachment from "./DomainAttachment";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
@@ -859,6 +860,8 @@ export default function ProjectDomainsTab({ project }: Props) {
   const [showNginxModal, setShowNginxModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ success: boolean; message: string } | null>(null);
+  /** True once the staged attachment card is showing, so the old bar stands down. */
+  const [stagedViewActive, setStagedViewActive] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!project.id || !canView) return;
@@ -936,8 +939,16 @@ export default function ProjectDomainsTab({ project }: Props) {
         )}
       </div>
 
-      {/* Sync status bar */}
-      {(domains.length > 0 || certificates.length > 0) && canManage && (
+      <DomainAttachment
+        projectId={project.id}
+        canManage={canManage}
+        onRefresh={fetchData}
+        onSupportedChange={setStagedViewActive}
+      />
+
+      {/* Sync status bar — kept unchanged for the branches with no staged view
+          (Dokploy, legacy VPS), where it is still the only progress surface. */}
+      {!stagedViewActive && (domains.length > 0 || certificates.length > 0) && canManage && (
         <div className="flex items-center justify-between rounded-lg border border-border px-4 py-2.5">
           <div className="flex items-center gap-2">
             {syncStatus && (

@@ -10,6 +10,7 @@ import { registerImageBuildWorker } from "./services/image-builder/domain/worker
 import { registerScanWorker } from "./services/code-analysis/domain/worker.js";
 import { registerCommandWorker } from "./services/commands/domain/worker.js";
 import { registerConfigApplyWorker } from "./shared/workers/config-apply.js";
+import { registerCertPollWorker } from "./shared/workers/cert-poll.js";
 import { registerDomainHandlers } from "./services/domains/domain/worker.js";
 import { registerNetworkHandlers } from "./services/network/domain/worker.js";
 import { seedCustomRules } from "./services/code-analysis/domain/seed-custom-rules.js";
@@ -68,6 +69,15 @@ const workerRegistry: WorkerEntry[] = [
       registerDomainHandlers();
       registerNetworkHandlers();
     },
+  },
+  {
+    // Deliberately NO onStartup hook: the loop below runs onStartup BEFORE
+    // register, and pgboss.schedule has a foreign key to the queue row that
+    // register() creates. Installing the schedule from a startup hook would
+    // throw `Queue cert-poll not found` on every first deploy, so
+    // registerCertPollWorker does register-then-schedule internally.
+    services: ["domains"],
+    register: registerCertPollWorker,
   },
 ];
 

@@ -28,6 +28,7 @@ import type { DnsValidationRecord } from "../mappers.js";
 import { isApexDomain, apexRefusalMessage, normalizeHost } from "./apex.js";
 import { listApexAcks } from "../apex-ack.js";
 import { CERT_DEADLINE_MS } from "./deadlines.js";
+import { isValidationRecordVisible, verifyRoutingRecordAws } from "./routing.js";
 import { classifyAwsError, type StaticFailure } from "./failures.js";
 import {
   deleteStaticCertRows,
@@ -252,6 +253,28 @@ export async function reconcileAwsStaticDomains(params: {
       );
     }
 
+    // Distinguish "the user has not published the validation record" from
+    // "AWS has it and is validating". ACM's API cannot tell these apart —
+    // ValidationStatus stays PENDING_VALIDATION for both until it flips — so
+    // resolving the record's own name is the only signal available, and it is
+    // what makes `provisioning` reachable at all.
+    if (!cert.issued) {
+      for (const [name, row] of rows) {
+        const record = cert.validationRecords.get(name);
+        if (!record) continue;
+        const visible = await isValidationRecordVisible(record.name);
+        if (!visible) continue;
+        await setCertState(
+          row.id,
+          {
+            verificationState: "provisioning",
+            verificationMessage: `The validation record for ${name} is visible. AWS usually issues the certificate within a few minutes.`,
+          },
+          "awaiting_dns",
+        );
+      }
+    }
+
     if (!cert.issued) {
       const apexNote = apexRejected.length > 0 ? ` ${apexRejected.length} root domain(s) were rejected.` : "";
       return {
@@ -273,20 +296,55 @@ export async function reconcileAwsStaticDomains(params: {
       return { success: false, retryable: attach.failure.retryable, message: attach.failure.message };
     }
 
-    for (const row of rows.values()) {
+    for (const [name, row] of rows) {
       // No explicit `attachStartedAt`: the phase-clock invariant in
       // setCertState stamps it only if the state actually changes. The old
       // unconditional `attach.inProgress ? nowIso() : undefined` re-stamped on
       // every `attaching` write, which under a repeating sweep means the
       // 90-minute attach deadline never fires.
+      if (attach.inProgress) {
+        await setCertState(
+          row.id,
+          {
+            verificationState: "attaching",
+            verificationMessage:
+              "Certificate issued. The CDN update is in progress — usually 5-20 minutes.",
+          },
+          row.verificationState,
+        );
+        continue;
+      }
+
+      // The CDN is updated. `live` must mean SERVING, so it is gated on the
+      // routing record actually pointing here — otherwise a user with a
+      // certificate attached but no CNAME sees a green "live" for a domain
+      // that serves nothing.
+      const check = await verifyRoutingRecordAws(name, target.distributionDomain);
+
+      // An inconclusive check on an APEX resolves to `live`, never to
+      // awaiting_dns. `verifyFlattenedAlias` returns null on a miss by design
+      // because CloudFront's edges rotate, so for the one configuration the
+      // apex acknowledgement enables, "no overlap" means unknown. Calling it
+      // awaiting_dns would strand a correctly configured apex and time it out
+      // 72 hours later.
+      const treatAsLive =
+        check.outcome === "verified" ||
+        (check.outcome === "inconclusive" && isApexDomain(name));
+
       await setCertState(
         row.id,
-        {
-          verificationState: attach.inProgress ? "attaching" : "live",
-          verificationMessage: attach.inProgress
-            ? "Certificate issued. The CDN update is in progress — usually 5-20 minutes."
-            : null,
-        },
+        treatAsLive
+          ? {
+              verificationState: "live",
+              verificationMessage: check.outcome === "inconclusive" ? check.message : null,
+            }
+          : {
+              // Post-attach awaiting_dns: the certificate is attached and
+              // `status` is already active, which is what distinguishes this
+              // from the pre-issuance wait.
+              verificationState: "awaiting_dns",
+              verificationMessage: check.message,
+            },
         row.verificationState,
       );
     }

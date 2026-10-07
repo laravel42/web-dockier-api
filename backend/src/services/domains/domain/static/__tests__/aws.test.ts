@@ -86,6 +86,23 @@ vi.mock("../../apex-ack.js", () => ({
   listApexAcks: async () => apexAcks,
 }));
 
+// Routing verification is pure node:dns. Mocked so the suite makes no real DNS
+// query, and so each transition can be driven deliberately.
+let routingOutcome: "verified" | "inconclusive" | "missing" | "mismatched" = "verified";
+let validationRecordVisible = false;
+
+vi.mock("../routing.js", () => ({
+  verifyRoutingRecordAws: async (host: string, expected: string) => ({
+    outcome: routingOutcome,
+    serverIp: expected,
+    resolved: routingOutcome === "verified" ? expected : "other.example.net",
+    message: `routing:${routingOutcome}:${host}`,
+  }),
+  isValidationRecordVisible: async () => validationRecordVisible,
+  missingRoutingRecordMessage: (host: string, expected: string) =>
+    `add a record for ${host} at ${expected}`,
+}));
+
 vi.mock("../certs.js", () => ({
   STATIC_CERT_TYPES: ["acm", "gcp_managed"],
   listStaticCertRows: async () => ({ ok: true, rows }),
@@ -169,6 +186,8 @@ beforeEach(() => {
   stateWrites.length = 0;
   deletedRowNames.length = 0;
   apexAcks = [];
+  routingOutcome = "verified";
+  validationRecordVisible = false;
   acmSend.mockReset();
   cfnSend.mockReset();
   acmCtorArgs.length = 0;
@@ -343,6 +362,48 @@ describe("reconcileAwsStaticDomains — attaching an issued certificate", () => 
     expect(res.success).toBe(true);
   });
 
+  it("moves to `provisioning` once the validation record is visible", async () => {
+    // ACM's ValidationStatus stays PENDING_VALIDATION whether or not the user
+    // has published the record, so resolving the record's own name is the only
+    // signal that distinguishes "waiting on you" from "waiting on AWS".
+    validationRecordVisible = true;
+    acmSend.mockImplementation(async (c: { __type: string }) => {
+      if (c.__type === "ListCertificates") return { CertificateSummaryList: [] };
+      if (c.__type === "RequestCertificate") return { CertificateArn: "arn:acm:cert/1" };
+      return describeResponse({ status: "PENDING_VALIDATION", domainName: "a.example.com" });
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    const write = stateWrites.find((w) => w.update.verificationState === "provisioning");
+    expect(write).toBeDefined();
+    expect(String(write!.update.verificationMessage)).toMatch(/visible/i);
+  });
+
+  it("stays on `awaiting_dns` while the validation record is not visible", async () => {
+    validationRecordVisible = false;
+    acmSend.mockImplementation(async (c: { __type: string }) => {
+      if (c.__type === "ListCertificates") return { CertificateSummaryList: [] };
+      if (c.__type === "RequestCertificate") return { CertificateArn: "arn:acm:cert/1" };
+      return describeResponse({ status: "PENDING_VALIDATION", domainName: "a.example.com" });
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(stateWrites.some((w) => w.update.verificationState === "provisioning")).toBe(false);
+    expect(stateWrites.some((w) => w.update.verificationState === "awaiting_dns")).toBe(true);
+  });
+
   it("reports the update as in progress rather than waiting for it", async () => {
     const res = await reconcileAwsStaticDomains({
       tenantId: "t1",
@@ -443,6 +504,68 @@ describe("reconcileAwsStaticDomains — attaching an issued certificate", () => 
     expect(res.success).toBe(true);
     expect(res.anyLive).toBe(true);
     expect(stateWrites.some((w) => w.update.verificationState === "live")).toBe(true);
+  });
+
+  it("withholds `live` when the routing record does not point here", async () => {
+    // `live` must mean SERVING. A certificate attached with no CNAME serves
+    // nothing, and a green "live" there is exactly the kind of silently-wrong
+    // status this work exists to remove.
+    cfnSend.mockRejectedValue(new Error("No updates are to be performed."));
+    routingOutcome = "missing";
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(stateWrites.some((w) => w.update.verificationState === "live")).toBe(false);
+    // Post-attach awaiting_dns: `status` is already active, which is what
+    // distinguishes this from the pre-issuance wait.
+    expect(stateWrites.some((w) => w.update.verificationState === "awaiting_dns")).toBe(true);
+  });
+
+  it("treats an INCONCLUSIVE check on an apex as live — the D1 guard", async () => {
+    // verifyFlattenedAlias returns null on a miss by design, because
+    // CloudFront's edge IPs rotate. For a flattened apex "no overlap" means
+    // UNKNOWN, and calling it awaiting_dns would strand the one configuration
+    // the apex acknowledgement enables, then time it out 72 hours later.
+    apexAcks = ["example.com"];
+    cfnSend.mockRejectedValue(new Error("No updates are to be performed."));
+    routingOutcome = "inconclusive";
+    acmSend.mockImplementation(async (c: { __type: string }) => {
+      if (c.__type === "ListCertificates") return { CertificateSummaryList: [] };
+      if (c.__type === "RequestCertificate") return { CertificateArn: "arn:acm:cert/apex" };
+      return describeResponse({ status: "ISSUED", domainName: "example.com" });
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "example.com" }],
+    });
+
+    const live = stateWrites.find((w) => w.update.verificationState === "live");
+    expect(live).toBeDefined();
+    // Carries the caveat rather than a cleared message.
+    expect(String(live!.update.verificationMessage)).toContain("inconclusive");
+  });
+
+  it("treats an inconclusive check on a SUBDOMAIN as not live", async () => {
+    // The apex rule must not leak to names where a CNAME is perfectly legal.
+    cfnSend.mockRejectedValue(new Error("No updates are to be performed."));
+    routingOutcome = "inconclusive";
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(stateWrites.some((w) => w.update.verificationState === "live")).toBe(false);
   });
 
   it("reuses the existing certificate when the domain set is unchanged", async () => {

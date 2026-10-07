@@ -14,6 +14,8 @@ import {
   configPreviewResponseSchema,
   applyDomainResponseSchema,
   dnsInstructionsResponseSchema,
+  domainAttachmentResponseSchema,
+  resumeDomainResponseSchema,
 } from "./schemas.js";
 import {
   listDomains,
@@ -36,7 +38,10 @@ import {
   verifyDomainDns,
   previewDomainConfig,
   getDomainDnsInstructions,
+  getDomainAttachment,
 } from "./domain/applier.js";
+import { tenantRateLimit } from "../../shared/http/rate-limit.js";
+import { resumeDomainAttachment } from "./domain/resume.js";
 import { enqueueDomainApply, enqueueCertificateIssue } from "./domain/worker.js";
 
 export async function registerDomainsRoutes(app: FastifyInstance) {
@@ -335,8 +340,69 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
     },
   );
 
-  // ─── DNS Instructions ───
+  // ─── Attachment progress ───
 
+  typed.get(
+    "/projects/:projectId/domains/attachment",
+    {
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
+      schema: {
+        tags: ["domains"],
+        summary: "Staged attachment progress for every domain on a project",
+        params: z.object({ projectId: z.uuid() }),
+        response: { 200: domainAttachmentResponseSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await getDomainAttachment({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+      });
+    },
+  );
+
+  const requireManage = app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE);
+  const resumeRateLimit = tenantRateLimit({
+    max: 10,
+    windowMs: 60_000,
+    prefix: "domain-resume",
+  });
+
+  typed.post(
+    "/projects/:projectId/domains/:domainId/resume",
+    {
+      // Composed into one hook because the typed-route helper takes a single
+      // preHandler. The ORDER matters: tenantRateLimit keys on
+      // `request.auth?.tenantId`, so it must run after the permission check
+      // has populated auth, or every caller would share one anonymous bucket.
+      preHandler: async (request, reply) => {
+        // `requireProjectPermission` returns an array of hooks, so they are
+        // run in sequence here.
+        for (const hook of requireManage) {
+          await hook.call(app, request, reply);
+          if (reply.sent) return;
+        }
+        await resumeRateLimit(request, reply);
+      },
+      schema: {
+        tags: ["domains"],
+        summary: "Retry a stalled or failed domain attachment",
+        params: z.object({ projectId: z.uuid(), domainId: z.uuid() }),
+        response: { 200: resumeDomainResponseSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await resumeDomainAttachment({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        domainId: request.params.domainId,
+      });
+    },
+  );
+
+  // ─── DNS Instructions ───
   typed.get(
     "/projects/:projectId/domains/:domainId/dns-instructions",
     {

@@ -60,3 +60,44 @@ export interface SslCertificate {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Who the next move in an attachment belongs to. */
+export type StageOwner = "you" | "dockier" | "aws" | "google";
+export type StageStatus = "done" | "current" | "pending" | "failed";
+
+export interface AttachmentStage {
+  id: string;
+  label: string;
+  /** Absent on a terminal "serving" stage, which is nobody's action. */
+  owner?: StageOwner;
+  status: StageStatus;
+  detail?: string;
+  /** A realistic wait. No stage is presented as instantaneous. */
+  eta?: string;
+}
+
+export interface DomainAttachmentRecord {
+  name: string;
+  type: string;
+  value: string;
+  purpose: string;
+}
+
+export interface DomainAttachmentEntry {
+  domainId: string;
+  domainName: string;
+  verificationState: CertVerificationState;
+  stages: AttachmentStage[];
+  records: DomainAttachmentRecord[];
+  note: string;
+  resumable: boolean;
+}
+
+export interface DomainAttachment {
+  /** `false` for the Dokploy and legacy VPS branches. */
+  supported: boolean;
+  cloud?: "aws" | "gcp";
+  /** An actionable reason the attachment cannot progress at all. */
+  blocker?: string;
+  domains: DomainAttachmentEntry[];
+}

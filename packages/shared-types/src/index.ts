@@ -72,6 +72,12 @@ export type { Command, CommandStatus } from "./command.js";
 
 export type {
   Domain,
+  DomainAttachment,
+  DomainAttachmentEntry,
+  DomainAttachmentRecord,
+  AttachmentStage,
+  StageOwner,
+  StageStatus,
   SslCertificate,
   SslCertificateType,
   SslCertificateStatus,
