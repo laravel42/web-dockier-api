@@ -18,7 +18,7 @@ import { buildAwsStages, buildGcpStages, type AttachmentStage } from "./stages.j
 import type { CertVerificationState } from "../mappers.js";
 import { awsDnsInstructions, reconcileAwsStaticDomains } from "./aws.js";
 import { gcpDnsInstructions, reconcileGcpStaticDomains } from "./gcp.js";
-import { findStaticCertRow } from "./certs.js";
+import { findStaticCertRow, listStaticCertRows, type StaticCertRow } from "./certs.js";
 import { resolveStaticTarget } from "./target.js";
 
 import type { ApplyDomainsResult } from "../mappers.js";
@@ -368,20 +368,33 @@ export async function buildAttachmentView(params: {
 
   const cloud = target ? (target.kind === "gcp-static" ? "gcp" : "aws") : undefined;
 
+  // ONE read for the whole project rather than one per domain. The view polls
+  // every 20s while anything is in flight, so a per-domain query here is a
+  // standing cost of (domains × open tabs) round-trips per minute.
+  //
+  // A failed LIST, like a failed per-domain read before it, marks every domain
+  // `failed` with the failure's message — which is the truthful outcome, since
+  // the per-domain queries would all have hit the same unreachable table.
+  const rowsResult = await listStaticCertRows(projectId);
+  const rowsByHost = new Map<string, StaticCertRow>();
+  if (rowsResult.ok) {
+    for (const row of rowsResult.rows) rowsByHost.set(normalizeHost(row.domainName), row);
+  }
+  const listFailure = rowsResult.ok ? null : rowsResult.failure;
+
   const entries: DomainAttachmentEntry[] = [];
 
   for (const domain of domains) {
     const host = normalizeHost(domain.name);
-    const found = await findStaticCertRow(projectId, host);
+    const row = rowsByHost.get(host) ?? null;
 
     // A failed read is reported on the row rather than rendered as `pending`,
     // which reads as "working on it" and is how a schema-drift failure stayed
     // invisible for so long.
-    const row = found.ok ? found.row : null;
-    const verificationState: CertVerificationState = found.ok
-      ? (row?.verificationState ?? "pending")
-      : "failed";
-    const verificationMessage = found.ok ? (row?.verificationMessage ?? null) : found.failure.message;
+    const verificationState: CertVerificationState = listFailure
+      ? "failed"
+      : (row?.verificationState ?? "pending");
+    const verificationMessage = listFailure ? listFailure.message : (row?.verificationMessage ?? null);
 
     const snapshot = {
       domainName: host,
