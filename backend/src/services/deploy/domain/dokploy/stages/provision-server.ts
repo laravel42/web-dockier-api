@@ -100,7 +100,7 @@ export async function stageProvisionServer(params: {
   // env var for single-server setups. This registers the server in Dokploy
   // and stores the mapping. The server must already have SSH access configured
   // with the key matching DOKPLOY_SSH_KEY_ID.
-  const defaultServerIp = process.env.DOKPLOY_DEFAULT_SERVER_IP;
+  const defaultServerIp = env.DOKPLOY_DEFAULT_SERVER_IP;
   if (defaultServerIp) {
     await log(`[stage:provision-server] Using pre-provisioned server: ${defaultServerIp}`);
     return registerServerInDokploy({

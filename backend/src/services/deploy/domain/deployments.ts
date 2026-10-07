@@ -292,7 +292,7 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
   // specific error if they are unusable.
   const dokployAutoProvision =
     env.DEPLOY_PROVIDER === "dokploy" &&
-    !process.env.DOKPLOY_DEFAULT_SERVER_IP &&
+    !env.DOKPLOY_DEFAULT_SERVER_IP &&
     deployStrategy !== "static";
   if (dokployAutoProvision && !skipPipeline) {
     const creds = await getProviderCredentialsSafe(providerId);

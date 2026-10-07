@@ -1,6 +1,7 @@
 import type { ActivityRow, HeartbeatRow } from "../schemas.js";
 import type { z } from "zod";
 import type { activityEventTypeSchema, heartbeatFrequencySchema, heartbeatGracePeriodSchema, heartbeatStatusSchema } from "../schemas.js";
+import { env } from "../../../shared/config.js";
 
 type ActivityEventType = z.infer<typeof activityEventTypeSchema>;
 type HeartbeatFrequency = z.infer<typeof heartbeatFrequencySchema>;
@@ -51,7 +52,7 @@ export interface HeartbeatResponse {
 }
 
 function buildPingUrl(heartbeatId: string): string {
-  const base = process.env.API_PUBLIC_URL || "https://api.dockier.dev";
+  const base = env.API_PUBLIC_URL || "https://api.dockier.dev";
   return `${base}/heartbeats/${heartbeatId}/ping`;
 }
 

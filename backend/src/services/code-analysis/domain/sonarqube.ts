@@ -6,6 +6,7 @@ import type { ScanFindingInput } from "./scan-analysis.js";
 import { sonarExclusionGlobs } from "./scan-skip-dirs.js";
 import { logger } from "../../../shared/logger.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
+import { env } from "../../../shared/config.js";
 
 export interface SonarConfig {
   baseUrl: string;
@@ -57,8 +58,8 @@ interface SonarApiIssue {
  * only — this function is process-wide and has no tenant in scope.
  */
 export function getSonarConfig(): SonarConfig | null {
-  const baseUrl = process.env.SONARQUBE_URL?.trim() || process.env.SONAR_HOST_URL?.trim();
-  const token = process.env.SONARQUBE_TOKEN?.trim() || process.env.SONAR_TOKEN?.trim();
+  const baseUrl = env.SONARQUBE_URL?.trim() || process.env.SONAR_HOST_URL?.trim();
+  const token = env.SONARQUBE_TOKEN?.trim() || process.env.SONAR_TOKEN?.trim();
   if (!baseUrl || !token) return null;
   return { baseUrl, token };
 }

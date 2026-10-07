@@ -2,6 +2,24 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// getSonarConfig now reads SONARQUBE_URL/SONARQUBE_TOKEN through the validated
+// `env` config object. In production `env` is populated from process.env by
+// initConfig(); the test suite never calls initConfig(), so back these two
+// keys with live getters off process.env. That keeps the existing harness
+// (which mutates process.env.SONARQUBE_*) driving the same reads, and leaves
+// the non-schema SONAR_HOST_URL / SONAR_TOKEN aliases on real process.env.
+vi.mock("../../../../shared/config.js", () => ({
+  env: {
+    get SONARQUBE_URL() {
+      return process.env.SONARQUBE_URL;
+    },
+    get SONARQUBE_TOKEN() {
+      return process.env.SONARQUBE_TOKEN;
+    },
+  },
+}));
+
 import {
   filterDisabledSonarFindings,
   getSonarConfig,
