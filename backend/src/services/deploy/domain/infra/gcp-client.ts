@@ -8,6 +8,7 @@
 
 import { createSign } from "node:crypto";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { withRetry } from "../../../../shared/utils/retry.js";
 
 // ─── Error Types ────────────────────────────────────────────────────
 
@@ -35,6 +36,20 @@ export class GcpApiError extends Error {
   /** Whether this error is transient and may succeed on retry. */
   get isRetryable(): boolean {
     return this.statusCode === 429 || this.statusCode >= 500;
+  }
+}
+
+/**
+ * Internal sentinel used by `GcpClient.request` to drive `withRetry`. A
+ * retryable 429/5xx response is thrown wrapped in this so withRetry retries it,
+ * yet after exhaustion the caller can recover and RETURN the underlying
+ * response — preserving the original loop's "return the last 5xx response"
+ * contract (as opposed to a genuine fetch error, which propagates).
+ */
+class RetryableResponse extends Error {
+  constructor(public readonly response: Response) {
+    super(`GCP API returned ${response.status}`);
+    this.name = "RetryableResponse";
   }
 }
 
@@ -119,35 +134,46 @@ export class GcpClient {
       }
     }
 
-    let lastError: Error | undefined;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const res = await fetch(url, init);
+    // withRetry models the exponential backoff + attempt bookkeeping. The
+    // status-based control flow is preserved by having the inner function
+    // RETURN the response for terminal cases (success, or a 4xx the caller
+    // handles) and THROW for retryable ones:
+    //   - a retryable 429/5xx throws a RetryableResponse sentinel carrying the
+    //     Response, so after exhaustion we can RETURN that last response
+    //     (unchanged contract: an exhausted 429/5xx is returned, not thrown);
+    //   - a genuine fetch/network error throws normally and, on exhaustion,
+    //     propagates (unchanged contract: thrown).
+    // The per-request AbortSignal.timeout stays on the inner fetch; backoffMs
+    // and attempt count match the previous loop (this.baseDelayMs, maxAttempts).
+    try {
+      return await withRetry<Response>(
+        async () => {
+          const res = await fetch(url, init);
 
-        // Don't retry client errors (except 429)
-        if (!res.ok && res.status !== 429 && res.status < 500) {
-          return res; // Let caller handle 4xx
-        }
+          // Don't retry client errors (except 429) — let the caller handle 4xx.
+          if (!res.ok && res.status !== 429 && res.status < 500) {
+            return res;
+          }
 
-        // Retry on 429 or 5xx
-        if (!res.ok && attempt < maxAttempts) {
-          lastError = new GcpApiError(
-            `GCP API returned ${res.status}`,
-            res.status,
-          );
-          await this.backoff(attempt);
-          continue;
-        }
+          // Retry on 429 or 5xx: throw a sentinel carrying the response so an
+          // exhausted retry can still return it.
+          if (!res.ok) {
+            throw new RetryableResponse(res);
+          }
 
-        return res;
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(getErrMsg(err));
-        if (attempt === maxAttempts) throw lastError;
-        await this.backoff(attempt);
-      }
+          return res;
+        },
+        {
+          attempts: maxAttempts,
+          backoffMs: this.baseDelayMs,
+          label: "gcp-request",
+        },
+      );
+    } catch (err: unknown) {
+      // An exhausted 429/5xx is returned (not thrown), matching the old loop.
+      if (err instanceof RetryableResponse) return err.response;
+      throw err instanceof Error ? err : new Error(getErrMsg(err));
     }
-
-    throw lastError ?? new Error("GcpClient.request: unreachable");
   }
 
   /**
@@ -500,13 +526,6 @@ export class GcpClient {
       return false;
     }
   }
-
-  // ─── Helpers ──────────────────────────────────────────────────────
-
-  private async backoff(attempt: number): Promise<void> {
-    const delay = this.baseDelayMs * Math.pow(2, attempt - 1);
-    await new Promise(r => setTimeout(r, delay));
-  }
 }
 
 // ─── Factory Functions ──────────────────────────────────────────────
@@ -536,10 +555,11 @@ export async function getGcpAccessToken(
   signer.update(signInput);
   const signature = signer.sign(saKey.private_key, "base64url");
 
-  // Use raw fetch for the token exchange (no Bearer token needed)
-  const maxRetries = 3;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
+  // Use raw fetch for the token exchange (no Bearer token needed). The per-
+  // request AbortSignal.timeout(30s) stays on the inner fetch — withRetry only
+  // replaces the attempt bookkeeping and backoff, not the per-attempt timeout.
+  return withRetry<string>(
+    async () => {
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -547,33 +567,34 @@ export async function getGcpAccessToken(
         signal: AbortSignal.timeout(30_000),
       });
 
-      // Throw on transient errors so the retry loop catches them
+      // Throw on transient errors so withRetry catches and retries them.
       if (tokenRes.status === 429 || tokenRes.status >= 500) {
         throw new Error(`GCP token exchange failed (transient): ${tokenRes.status}`);
       }
 
-      // Non-retryable errors (400, 401, 403) — credentials are invalid
+      // Non-retryable errors (400, 401, 403) — credentials are invalid.
       if (!tokenRes.ok) {
         const body = await tokenRes.text();
         throw new Error(`GCP token exchange failed: ${tokenRes.status} ${body.slice(0, 200)}`);
       }
 
-      const tokenData = await tokenRes.json() as { access_token?: string };
+      const tokenData = (await tokenRes.json()) as { access_token?: string };
       return tokenData.access_token || "";
-    } catch (err: unknown) {
-      if (attempt === maxRetries) throw err;
-      // Only retry on transient/network errors
-      const msg = getErrMsg(err);
-      const isTimeout = err instanceof Error && err.name === "TimeoutError";
-      if (msg?.includes("(transient)") || isTimeout || !msg?.includes("GCP token exchange failed")) {
-        await new Promise(r => setTimeout(r, 2_000 * Math.pow(2, attempt - 1)));
-        continue;
-      }
-      // Non-retryable auth errors — throw immediately
-      throw err;
-    }
-  }
-  return "";
+    },
+    {
+      attempts: 3,
+      backoffMs: 2_000,
+      label: "gcp-token-exchange",
+      // Same transient predicate as before: retry transient/timeout/network
+      // errors, but not the explicit non-retryable "GCP token exchange failed"
+      // auth error.
+      shouldRetry: (err) => {
+        const msg = getErrMsg(err);
+        const isTimeout = err instanceof Error && err.name === "TimeoutError";
+        return msg?.includes("(transient)") || isTimeout || !msg?.includes("GCP token exchange failed");
+      },
+    },
+  );
 }
 
 /** Extract the GCP project ID from a service account JSON key. */

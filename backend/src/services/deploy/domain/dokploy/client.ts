@@ -41,8 +41,8 @@ import type {
   DokploySSHKey,
 } from "./types.js";
 import { DokployError } from "./types.js";
-import { sleep } from "../../../../shared/utils/time.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { withRetry } from "../../../../shared/utils/retry.js";
 import { env } from "../../../../shared/config.js";
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -502,108 +502,117 @@ export class DokployClient {
   }
 
   private async requestRaw<T>(method: string, url: string, body?: unknown, endpoint?: string): Promise<T> {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      if (attempt > 0) {
-        // Exponential backoff with jitter. Without the random factor,
-        // concurrent deploys that fail against the same Dokploy instance retry
-        // in lockstep and all re-converge on it at 1s/2s/4s, extending the very
-        // outage they're waiting out. Jitter spreads them across the window.
-        const base = RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
-        await sleep(base * (0.5 + Math.random() * 0.5));
+    // withRetry owns the exponential backoff + attempt bookkeeping. The inner
+    // function performs ONE fetch+parse and THROWS a DokployError (with the
+    // right statusCode) on any failure, so the control flow is expressed via
+    // the retry predicate: a 4xx (incl. the 422 non-JSON case) is
+    // non-retryable, a 5xx or a thrown network error is retryable. The
+    // per-attempt AbortController + this.timeout stays on the inner fetch —
+    // that is the request timeout, not something withRetry replaces.
+    try {
+      return await withRetry<T>(
+        () => this.requestOnce<T>(method, url, body, endpoint),
+        {
+          attempts: this.maxRetries + 1,
+          backoffMs: RETRY_BASE_DELAY,
+          label: endpoint || url,
+          // Don't retry client errors (4xx, which includes the 429 and the
+          // non-JSON-2xx→422 cases); retry 5xx and network errors.
+          shouldRetry: (err) =>
+            !(err instanceof DokployError && err.statusCode >= 400 && err.statusCode < 500),
+        },
+      );
+    } catch (err) {
+      // A non-retryable client error is surfaced as-is (its own message/status).
+      if (err instanceof DokployError && err.statusCode >= 400 && err.statusCode < 500) {
+        throw err;
       }
+      // Everything else (exhausted 5xx, exhausted network error) is wrapped
+      // with the attempt count — unchanged exhaustion contract.
+      throw new DokployError(
+        `Dokploy API request failed after ${this.maxRetries + 1} attempts: ${getErrMsg(err)}`,
+        0,
+        endpoint || url,
+        err,
+      );
+    }
+  }
 
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+  /** A single Dokploy request attempt. Throws a DokployError on any failure. */
+  private async requestOnce<T>(method: string, url: string, body?: unknown, endpoint?: string): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        // `finally` rather than a success-path clearTimeout: a rejected fetch
-        // (network error, abort) used to leave the timer pending for the full
-        // timeout on every attempt, keeping the event loop busy and holding a
-        // reference to the controller after the attempt was already over.
+    // `finally` rather than a success-path clearTimeout: a rejected fetch
+    // (network error, abort) used to leave the timer pending for the full
+    // timeout on every attempt, keeping the event loop busy and holding a
+    // reference to the controller after the attempt was already over.
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          // Dokploy authenticates via the `x-api-key` header, not
+          // `Authorization: Bearer`. See https://docs.dokploy.com/docs/api
+          // and https://github.com/Dokploy/dokploy/issues/4024.
+          "x-api-key": this.apiToken,
+          "Content-Type": "application/json",
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        // Read as text first: several Dokploy mutations (server.setup,
+        // saveBuildType, saveEnvironment, deploy, ...) return a 2xx with an
+        // EMPTY body. Calling response.json() on an empty body throws
+        // "Unexpected end of JSON input" — which, inside this retry loop,
+        // turned a server-side SUCCESS into a 4-attempt failure. Treat an
+        // empty/whitespace body as a successful void result.
+        const text = await response.text();
+        if (text.trim() === "") {
+          return undefined as T;
+        }
+
+        let json: { result?: { data?: T } } | T;
         try {
-          const response = await fetch(url, {
-            method,
-            headers: {
-              // Dokploy authenticates via the `x-api-key` header, not
-              // `Authorization: Bearer`. See https://docs.dokploy.com/docs/api
-              // and https://github.com/Dokploy/dokploy/issues/4024.
-              "x-api-key": this.apiToken,
-              "Content-Type": "application/json",
-            },
-            body: body !== undefined ? JSON.stringify(body) : undefined,
-            signal: controller.signal,
-          });
-
-          if (response.ok) {
-            // Read as text first: several Dokploy mutations (server.setup,
-            // saveBuildType, saveEnvironment, deploy, ...) return a 2xx with an
-            // EMPTY body. Calling response.json() on an empty body throws
-            // "Unexpected end of JSON input" — which, inside this retry loop,
-            // turned a server-side SUCCESS into a 4-attempt failure. Treat an
-            // empty/whitespace body as a successful void result.
-            const text = await response.text();
-            if (text.trim() === "") {
-              return undefined as T;
-            }
-
-            let json: { result?: { data?: T } } | T;
-            try {
-              json = JSON.parse(text) as { result?: { data?: T } } | T;
-            } catch {
-              // A malformed body on a 2xx won't fix itself on retry. Use a 4xx
-              // status code so the catch below classifies it as non-retryable
-              // and throws immediately instead of looping.
-              throw new DokployError(
-                `Dokploy API returned a non-JSON body (HTTP ${response.status}): ${text.slice(0, 200)}`,
-                422,
-                endpoint || url,
-              );
-            }
-
-            // tRPC wraps results in { result: { data: ... } }
-            if (json && typeof json === "object" && "result" in json && json.result && typeof json.result === "object" && "data" in json.result) {
-              return json.result.data as T;
-            }
-            return json as T;
-          }
-
-          // Non-retryable client errors (4xx)
-          if (response.status >= 400 && response.status < 500) {
-            const errorBody = await response.text().catch(() => "");
-            throw new DokployError(
-              `Dokploy API error: ${response.status} ${response.statusText} — ${errorBody}`,
-              response.status,
-              endpoint || url,
-            );
-          }
-
-          // Retryable server errors (5xx)
-          lastError = new DokployError(
-            `Dokploy API server error: ${response.status} ${response.statusText}`,
-            response.status,
+          json = JSON.parse(text) as { result?: { data?: T } } | T;
+        } catch {
+          // A malformed body on a 2xx won't fix itself on retry. Use a 4xx
+          // status code so it is classified as non-retryable and throws
+          // immediately instead of looping.
+          throw new DokployError(
+            `Dokploy API returned a non-JSON body (HTTP ${response.status}): ${text.slice(0, 200)}`,
+            422,
             endpoint || url,
           );
-        } finally {
-          clearTimeout(timeoutId);
         }
-      } catch (err) {
-        if (err instanceof DokployError && err.statusCode >= 400 && err.statusCode < 500) {
-          throw err; // Don't retry client errors
-        }
-        lastError = err;
-      }
-    }
 
-    // All retries exhausted
-    const message = getErrMsg(lastError);
-    throw new DokployError(
-      `Dokploy API request failed after ${this.maxRetries + 1} attempts: ${message}`,
-      0,
-      endpoint || url,
-      lastError,
-    );
+        // tRPC wraps results in { result: { data: ... } }
+        if (json && typeof json === "object" && "result" in json && json.result && typeof json.result === "object" && "data" in json.result) {
+          return json.result.data as T;
+        }
+        return json as T;
+      }
+
+      // Non-retryable client errors (4xx)
+      if (response.status >= 400 && response.status < 500) {
+        const errorBody = await response.text().catch(() => "");
+        throw new DokployError(
+          `Dokploy API error: ${response.status} ${response.statusText} — ${errorBody}`,
+          response.status,
+          endpoint || url,
+        );
+      }
+
+      // Retryable server errors (5xx)
+      throw new DokployError(
+        `Dokploy API server error: ${response.status} ${response.statusText}`,
+        response.status,
+        endpoint || url,
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
