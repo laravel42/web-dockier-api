@@ -18,6 +18,7 @@ import { env } from "../config.js";
 import { logger } from "../logger.js";
 import { getPostgresConnectionConfig } from "./postgres.js";
 import { MIGRATION_VERSIONS } from "./migration-manifest.js";
+import { getErrMsg } from "../utils/error-message.js";
 
 export type MigrationState =
   | { status: "ready" }
@@ -69,7 +70,7 @@ async function computeMigrationState(): Promise<MigrationState> {
     // Fails OPEN on purpose. A diagnostic that invents outages is worse than
     // no diagnostic: a role without access to the ledger, or a transient
     // connection failure, must not mark a healthy instance degraded.
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = getErrMsg(err);
     logger.warn({ err: reason }, "[migrations] could not read the migration ledger");
     return { status: "unknown", reason };
   }

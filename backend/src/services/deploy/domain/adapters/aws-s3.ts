@@ -22,6 +22,7 @@ import { getAwsAccountId, ensureS3Bucket, type AwsCredentials } from "../../../.
 import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { NATIVE_STAGE, stageMarker } from "../../../../lib/logging.js";
 import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
  * Every bucket Dockier creates is namespaced `dockier-<account-id>-…`.
@@ -470,7 +471,7 @@ export class AwsS3Adapter implements DeployAdapter {
       // An already-absent bucket is a success, not a failure. Anything else
       // leaves a bucket the tenant keeps paying for, so surface it instead of
       // swallowing it (this used to be an empty catch).
-      const message = e instanceof Error ? e.message : String(e);
+      const message = getErrMsg(e);
       if (/NoSuchBucket|NotFound/i.test(message)) {
         await ctx.appendLog("ℹ Static site bucket already gone");
       } else {

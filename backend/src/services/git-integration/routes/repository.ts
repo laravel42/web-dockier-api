@@ -10,6 +10,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getGitProvider, type RepoStats } from "../domain/providers/git-provider.js";
 import { parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
@@ -461,7 +462,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         }, env.OPENAI_API_KEY, env.OPENAI_MODEL);
       } catch (err: unknown) {
         request.log.error({ err }, "[AI-FixIssue] Pipeline failed");
-        const message = err instanceof Error ? err.message : "AI fix pipeline failed";
+        const message = getErrMsg(err) || "AI fix pipeline failed";
         throw app.httpErrors.badRequest(message);
       }
     },
@@ -499,7 +500,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         return await applyIssueFix(conn, request.body.owner, request.body.repo, request.body.plan as FixIssuePlan);
       } catch (err: unknown) {
         request.log.error({ err }, "[AI-FixIssue] Apply failed");
-        throw app.httpErrors.badRequest(err instanceof Error ? err.message : "Failed to open the pull request");
+        throw app.httpErrors.badRequest(getErrMsg(err) || "Failed to open the pull request");
       }
     },
   );
@@ -552,7 +553,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         }, env.OPENAI_API_KEY, env.OPENAI_MODEL);
       } catch (err: unknown) {
         request.log.error({ err }, "[AI-ReviewPR] Pipeline failed");
-        const message = err instanceof Error ? err.message : "AI review pipeline failed";
+        const message = getErrMsg(err) || "AI review pipeline failed";
         throw app.httpErrors.badRequest(message);
       }
     },
@@ -593,7 +594,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         );
       } catch (err: unknown) {
         request.log.error({ err }, "[AI-ReviewPR] Post failed");
-        throw app.httpErrors.badRequest(err instanceof Error ? err.message : "Failed to post the review");
+        throw app.httpErrors.badRequest(getErrMsg(err) || "Failed to post the review");
       }
     },
   );
