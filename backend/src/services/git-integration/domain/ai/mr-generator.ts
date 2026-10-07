@@ -3,6 +3,7 @@ import type { ConnectionLike } from "../providers/provider-client.js";
 import { generateCodeFix } from "./ai-fix.js";
 import { commitFixToBranch } from "./fix-branch.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
+import { env } from "../../../../shared/config.js";
 
 type CreateMergeRequestInput = {
   owner: string;
@@ -192,7 +193,7 @@ async function createAiFixMergeRequest(
     throw new DomainError(`Could not read ${input.filePath} from ${input.branch}`, "not_found");
   }
 
-  const fix = await generateCodeFix(options.openAiApiKey, options.openAiModel || "gpt-4o-mini", {
+  const fix = await generateCodeFix(options.openAiApiKey, options.openAiModel || env.OPENAI_MODEL, {
     filePath: input.filePath,
     fileContent,
     startLine: input.startLine,

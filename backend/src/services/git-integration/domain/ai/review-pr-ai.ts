@@ -11,6 +11,7 @@ import type { ConnectionLike } from "../providers/provider-client.js";
 import { baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { env } from "../../../../shared/config.js";
 import { callOpenAIChat } from "./openai-client.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -234,7 +235,7 @@ export async function generatePRReview(
   }
 
   // 3. AI review
-  const fixModel = model || "gpt-4o-mini";
+  const fixModel = model || env.OPENAI_MODEL;
   const prompt = `You are a senior code reviewer. Review this pull request thoroughly.
 
 **PR: ${prTitle} (#${prNumber})**
