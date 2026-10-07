@@ -15,6 +15,7 @@ import { resolveStaticCloud } from "./static/cloud.js";
 import { findStaticCertRow, setCertState } from "./static/certs.js";
 import { normalizeHost } from "./static/apex.js";
 import type { CertVerificationState } from "./mappers.js";
+import { nowIso } from "../../../shared/utils/time.js";
 
 export interface ResumeResult {
   success: boolean;
@@ -58,7 +59,7 @@ export async function resumeDomainAttachment(params: {
         // The one place the clock is set EXPLICITLY rather than left to the
         // phase-clock invariant: resume deliberately restarts the budget, and
         // a `pending` row's 30-minute deadline reads this clock.
-        attachStartedAt: new Date().toISOString(),
+        attachStartedAt: nowIso(),
       },
       row.verificationState,
     );
