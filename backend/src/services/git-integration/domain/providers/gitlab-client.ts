@@ -7,6 +7,7 @@
 import type { ConnectionLike } from "./provider-client.js";
 import { authHeaders, baseUrl } from "./provider-client.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
+import { fetchWithTimeout } from "../../../../shared/http/fetch.js";
 
 export class GitLabApiError extends DomainError {
   constructor(
@@ -105,7 +106,7 @@ export async function listCommits(
   const { branch, limit, includeStats } = params;
 
   const statsParam = includeStats ? "&with_stats=true" : "";
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${baseUrl}/api/v4/projects/${project}/repository/commits?ref_name=${encodeURIComponent(branch)}&per_page=${limit}${statsParam}`,
     { headers },
   );
@@ -138,7 +139,7 @@ export async function listIssues(
   const project = encodeProjectPath(params.owner, params.repo);
   const { limit = 10 } = params;
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${baseUrl}/api/v4/projects/${project}/issues?state=opened&per_page=${limit}&order_by=created_at&sort=desc`,
     { headers },
   );
@@ -173,7 +174,7 @@ export async function listPullRequests(
   const project = encodeProjectPath(params.owner, params.repo);
   const { limit = 10 } = params;
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${baseUrl}/api/v4/projects/${project}/merge_requests?state=opened&per_page=${limit}&order_by=created_at&sort=desc`,
     { headers },
   );
@@ -203,7 +204,7 @@ export async function getRepoInfo(
   const headers = getHeaders(connection);
   const project = encodeProjectPath(params.owner, params.repo);
 
-  const res = await fetch(`${baseUrl}/api/v4/projects/${project}?statistics=true`, { headers });
+  const res = await fetchWithTimeout(`${baseUrl}/api/v4/projects/${project}?statistics=true`, { headers });
   assertOk(res, `getRepoInfo ${params.owner}/${params.repo}`);
 
   const data = (await res.json()) as Record<string, unknown>;
@@ -227,7 +228,7 @@ export async function getLanguages(
   const headers = getHeaders(connection);
   const project = encodeProjectPath(params.owner, params.repo);
 
-  const res = await fetch(`${baseUrl}/api/v4/projects/${project}/languages`, { headers });
+  const res = await fetchWithTimeout(`${baseUrl}/api/v4/projects/${project}/languages`, { headers });
   if (!res.ok) return {};
 
   const languageData = (await res.json()) as Record<string, number>;
@@ -260,7 +261,7 @@ async function getProjectMembers(
   const headers = getHeaders(connection);
   const project = encodeProjectPath(owner, repo);
 
-  const res = await fetch(`${baseUrl}/api/v4/projects/${project}/members/all?per_page=100`, { headers });
+  const res = await fetchWithTimeout(`${baseUrl}/api/v4/projects/${project}/members/all?per_page=100`, { headers });
   if (!res.ok) return [];
 
   const data = (await res.json()) as Array<Record<string, unknown>>;
@@ -282,7 +283,7 @@ export async function getContributors(
   const limit = params.limit ?? 20;
 
   const [contribRes, members] = await Promise.all([
-    fetch(`${baseUrl}/api/v4/projects/${project}/repository/contributors?per_page=${limit}`, { headers }),
+    fetchWithTimeout(`${baseUrl}/api/v4/projects/${project}/repository/contributors?per_page=${limit}`, { headers }),
     getProjectMembers(connection, params.owner, params.repo).catch(() => []),
   ]);
   if (!contribRes.ok || contribRes.status === 204) return [];
