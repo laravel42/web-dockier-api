@@ -20,6 +20,9 @@ export const TEMPLATE_ANALYSIS: Record<string, RepoAnalysis> = {
     primaryLanguage: "PHP",
     hasDocker: true,
     hasCi: false,
+    // WordPress needs PHP + MySQL + Apache — it cannot be served as static
+    // files, so the wizard must not offer the Static hosting target.
+    staticCapable: false,
     aiAnalysis: {
       runtime: "php",
       runtimeVersion: "8.3",

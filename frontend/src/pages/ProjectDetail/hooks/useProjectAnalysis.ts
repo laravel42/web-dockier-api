@@ -9,7 +9,11 @@ import type { RepoAnalysis } from "@/components/DeployWizard";
 import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
 
 // ─── Analysis session cache ────────────────────────────────────────
-const analysisCache = new SessionCache<RepoAnalysis>("analysis", 11);
+// v12: the analysis schema gained `staticCapable` (drives hiding the Static
+// deploy target for server-only projects). Bumped so browsers discard cached
+// analyses from before the field existed — a stale entry has no staticCapable,
+// which reads as "uncertain" and wrongly shows the Static card for Laravel etc.
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 12);
 
 
 /**

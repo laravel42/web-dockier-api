@@ -65,6 +65,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
           <StepEnvironment
             state={state}
             templateId={project.sourceType === "template" ? project.template : undefined}
+            analysis={analysis}
             onChange={(env, plan) => setState(prev => ({ ...prev, environment: env, selectedPlan: plan }))}
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
             onStrategyChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}

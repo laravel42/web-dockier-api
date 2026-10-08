@@ -48,7 +48,14 @@ export const SKIP_DIRS = new Set([
   "__pycache__",
 ]);
 
-function hasPayloadCms(repoDir: string): boolean {
+/**
+ * Detect Payload CMS from a cloned repo's package.json on disk.
+ *
+ * This is the deploy-time (native pipeline) signal. The clone-less analysis
+ * path computes the same signal from fetched files and passes it to
+ * {@link getStaticDeployBlockReason} as `opts.hasPayload` instead.
+ */
+export function hasPayloadCms(repoDir: string): boolean {
   try {
     const pkg = JSON.parse(readFileSync(join(repoDir, "package.json"), "utf-8")) as {
       dependencies?: Record<string, string>;
@@ -63,20 +70,26 @@ function hasPayloadCms(repoDir: string): boolean {
 
 /**
  * Returns a user-facing error when the repo cannot be deployed to S3/GCS static hosting.
+ *
+ * This is the single source of truth for "can this repo be served as static
+ * files?" — both the AWS static adapter (at deploy time) and the deploy wizard
+ * (via the clone-less analysis path) rely on it. The Payload signal is an input
+ * (`opts.hasPayload`) rather than a disk read so callers without a clone can
+ * still reach the same decision.
  */
 export function getStaticDeployBlockReason(opts: {
   detectedStack: DetectedStack;
-  repoDir: string;
   techStack: string[];
+  hasPayload?: boolean;
 }): string | null {
-  const { detectedStack, repoDir, techStack } = opts;
+  const { detectedStack, techStack, hasPayload } = opts;
   const stackLower = techStack.map((t) => t.toLowerCase());
 
   if (detectedStack.runtime === "php" || detectedStack.runtime === "python" || detectedStack.runtime === "go") {
     return `${detectedStack.runtime.toUpperCase()} apps need a server runtime (EC2/ECS), not S3 static hosting.`;
   }
 
-  if (hasPayloadCms(repoDir) || stackLower.some((t) => t.includes("payload"))) {
+  if (hasPayload === true || stackLower.some((t) => t.includes("payload"))) {
     return "Payload CMS requires a Node.js server and database — use AWS EC2 or ECS, not S3 + CloudFront.";
   }
 

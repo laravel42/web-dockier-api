@@ -12,6 +12,7 @@ import type { WizardState, RepoAnalysis, Provider } from "./types";
 import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
 import { getPlans } from "./plans";
 import { detectServiceModes } from "./envDetection";
+import { isServerOnly } from "./serverOnly";
 import { useStandardDeploy } from "./useStandardDeploy";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { getErrorMessage } from "@/utils/errors";
@@ -142,6 +143,18 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
       return { ...prev, servicesModes: modes, envDetectionHints: hints, envVars };
     });
+  }, [open, analysis]);
+
+  // ─── Reset stale "static" selection for server-only repos ────────
+  //
+  // If the user picked Static before analysis resolved and analysis then
+  // reports a CONFIDENT server-only verdict, the hidden Static card must not
+  // leave deployStrategy stuck on "static". Only `false` resets — `undefined`
+  // (undecided) leaves the choice untouched.
+
+  useEffect(() => {
+    if (!open || !isServerOnly(analysis)) return;
+    setState((prev) => (prev.deployStrategy === "static" ? { ...prev, deployStrategy: "vps" } : prev));
   }, [open, analysis]);
 
   // ─── Start Deployment ────────────────────────────────────────────

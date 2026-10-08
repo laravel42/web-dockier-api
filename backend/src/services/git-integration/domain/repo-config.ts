@@ -13,8 +13,11 @@
  * `exists`/subdir detection.
  */
 
-import { analyzeRepoFiles, MapRepoFiles, type RepoConfig } from "../../../lib/repo-analyzer/index.js";
+import { analyzeRepoFiles, MapRepoFiles, toDetectedStack, type RepoConfig, type RepoFiles } from "../../../lib/repo-analyzer/index.js";
+import { getStaticDeployBlockReason } from "../../deploy/domain/planning/static-site-builder.js";
 import { fetchRepoFile, getRepoFileTree, type ConnectionLike, type RepoRef } from "./providers/provider-client.js";
+import { logger } from "../../../shared/logger.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 
 /** Conventional monorepo app subdirs the analyzer probes (mirrors detect-subdir). */
 const CANDIDATE_SUBDIRS = [
@@ -75,9 +78,17 @@ export async function buildFetchedRepoFiles(connection: ConnectionLike, ref: Rep
     wanted.map(async (path) => {
       try {
         const content = await fetchRepoFile(connection, ref, path);
-        if (content !== null) contents[path] = content;
-      } catch {
-        // ignore individual fetch failures
+        if (content !== null) {
+          contents[path] = content;
+        } else {
+          // A manifest present in the tree whose content did not come back.
+          // This is the state that used to misclassify a Laravel repo as Node:
+          // exists() is true but read() is null. The analyzer now handles it,
+          // but log it so a future detection gap is visible rather than silent.
+          logger.warn({ path }, "[repo-analysis] manifest in tree but content fetch returned null");
+        }
+      } catch (err) {
+        logger.warn({ err: getErrMsg(err), path }, "[repo-analysis] manifest content fetch failed");
       }
     }),
   );
@@ -176,4 +187,69 @@ export async function analyzeRepoRuntime(connection: ConnectionLike, ref: RepoRe
     injectableStartCommand,
     platformAdapter: config.features.has("astro-platform-adapter") || undefined,
   };
+}
+
+/** Detect Payload CMS from the fetched package.json at the repo root + app subdir. */
+function fetchedHasPayload(files: RepoFiles, subDir: string): boolean {
+  const paths = subDir ? [`${subDir}/package.json`, "package.json"] : ["package.json"];
+  for (const path of paths) {
+    const raw = files.read(path);
+    if (!raw) continue;
+    try {
+      const pkg = JSON.parse(raw) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      if (Object.keys(deps).some((d) => d === "payload" || d.startsWith("@payloadcms/"))) return true;
+    } catch {
+      // ignore malformed package.json
+    }
+  }
+  return false;
+}
+
+/**
+ * Decide whether a repo can be deployed as a static site, from an already-built
+ * file source. Pure (no network/disk), so it is the testable core of
+ * {@link detectStaticCapable}.
+ *
+ * Returns:
+ *   - `true`      → a static deploy is allowed (the gate returned no reason).
+ *   - `false`     → CONFIDENT server-only (the gate returned a block reason).
+ *   - `undefined` → the stack could not be determined (runtime "unknown"); the
+ *     caller treats this as uncertain and shows both deploy targets.
+ *
+ * Derived from the SINGLE source of truth used at deploy time
+ * ({@link getStaticDeployBlockReason}) so the wizard never diverges from it.
+ */
+export function computeStaticCapable(files: RepoFiles): boolean | undefined {
+  const config = analyzeRepoFiles(files);
+  if (config.runtime === "unknown") return undefined;
+
+  const detectedStack = toDetectedStack(config);
+  const hasPayload = fetchedHasPayload(files, config.subDir);
+  return getStaticDeployBlockReason({ detectedStack, techStack: [], hasPayload }) === null;
+}
+
+/**
+ * Clone-less static-capability probe for the deploy wizard. Fetches the repo
+ * over the git provider API (no clone) and runs {@link computeStaticCapable}.
+ *
+ * Best-effort: any fetch/analysis failure resolves to `undefined` (uncertain →
+ * show both deploy targets). Never throws.
+ */
+export async function detectStaticCapable(
+  connection: ConnectionLike,
+  ref: RepoRef,
+): Promise<boolean | undefined> {
+  try {
+    const files = await buildFetchedRepoFiles(connection, ref);
+    return computeStaticCapable(files);
+  } catch (err) {
+    // Swallowed to `undefined` by design (the wizard shows both cards on
+    // uncertainty), but logged so a systematic failure is not invisible.
+    logger.warn({ err: getErrMsg(err) }, "[repo-analysis] static-capability detection failed");
+    return undefined;
+  }
 }

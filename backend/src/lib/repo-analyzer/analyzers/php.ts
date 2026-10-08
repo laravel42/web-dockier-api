@@ -14,15 +14,38 @@ export function analyzePhpProject(files: RepoFiles, appDir: string, config: Repo
   const readApp = (name: string) => files.read(joinPath(appDir, name));
   const existsApp = (name: string) => files.exists(joinPath(appDir, name));
 
-  let composer: PhpComposerPackage;
-  const composerRaw = readApp("composer.json");
-  if (composerRaw === null) return;
-  try {
-    composer = JSON.parse(composerRaw);
-  } catch { return; }
-
+  // This analyzer is only reached when composer.json EXISTS (see
+  // analyzeRepoFiles), so the runtime is PHP regardless of whether we can read
+  // the file's body. Set it from existence, before the content read.
+  //
+  // The clone-less wizard path backs exists() with the git file tree but read()
+  // with a separately-fetched content map, and the two disagree when a tree
+  // entry's content fetch was truncated or timed out. A Laravel repo also ships
+  // package.json, so the node analyzer runs first and sets runtime "node"; if
+  // we bailed here on a null read, the repo would be misreported as Node, the
+  // static gate would allow it, and the wizard would wrongly offer static
+  // hosting. Setting runtime from existence closes that gap and leaves the
+  // native cloned path (where read never returns null for an existing file)
+  // unchanged.
   config.runtime = "php";
   config.packageManager = "composer";
+
+  let composer: PhpComposerPackage;
+  const composerRaw = readApp("composer.json");
+  // Content unavailable (clone-less path): runtime is already "php"; the detail
+  // parsing below needs the body, so stop here with sensible PHP defaults.
+  if (composerRaw === null) {
+    config.phpVersion = "8.4";
+    config.runtimeVersion = "8.4";
+    return;
+  }
+  try {
+    composer = JSON.parse(composerRaw);
+  } catch {
+    config.phpVersion = "8.4";
+    config.runtimeVersion = "8.4";
+    return;
+  }
 
   const phpReq = composer?.require?.["php"];
   if (typeof phpReq === "string") {

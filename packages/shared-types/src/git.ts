@@ -184,6 +184,13 @@ export interface RepoAnalysisResponse {
   primaryLanguage: string;
   hasDocker: boolean;
   hasCi: boolean;
+  /**
+   * Whether the repo can be served as a static site. `false` is a CONFIDENT
+   * server-only verdict (Laravel/Django/SSR/etc.); `undefined` means undecided
+   * → show both deploy targets. Drives the deploy wizard's "Static hosting"
+   * gating.
+   */
+  staticCapable?: boolean;
   aiAnalysis?: RepoAiAnalysis;
   sensitiveData?: SensitiveDataField[];
   dependencies?: RepoDependency[];

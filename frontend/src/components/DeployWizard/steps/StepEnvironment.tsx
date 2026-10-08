@@ -1,6 +1,7 @@
-import type { WizardState } from "../types";
+import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_REGIONS } from "../constants";
 import { getPlans } from "../plans";
+import { isServerOnly } from "../serverOnly";
 import { CircleCheckIcon, FlaskConicalIcon, RocketIcon, ServerIcon, GlobeIcon } from "lucide-react";
 
 /** Per-provider names for the static hosting stack, for accurate labelling. */
@@ -9,65 +10,91 @@ const STATIC_STACK: Record<string, string> = {
   gcp: "Cloud Storage + Cloud CDN",
 };
 
-export default function StepEnvironment({ state, templateId, onChange, onRegionChange, onStrategyChange }: {
+export default function StepEnvironment({ state, templateId, analysis, onChange, onRegionChange, onStrategyChange }: {
   state: WizardState;
   templateId?: string;
+  /**
+   * The repo analysis. Server-only-ness is derived from it via `isServerOnly`,
+   * which uses `staticCapable` when present and falls back to the detected
+   * runtime/framework otherwise (so analyses cached before `staticCapable`
+   * existed are still handled). Never hides Static on genuine uncertainty.
+   */
+  analysis: RepoAnalysis | null;
   onChange: (env: "staging" | "production", plan: number) => void;
   onRegionChange: (region: string) => void;
   onStrategyChange: (strategy: "vps" | "static") => void;
 }) {
   const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, templateId);
   const regions = PROVIDER_REGIONS[state.selectedProvider] || [];
-  const isStatic = state.deployStrategy === "static";
+  const serverOnly = isServerOnly(analysis);
+  const isStatic = state.deployStrategy === "static" && !serverOnly;
   const staticStack = STATIC_STACK[state.selectedProvider] || "object storage + CDN";
+  const framework = analysis?.aiAnalysis?.framework;
+  const frameworkLabel = framework?.trim() ? `a ${framework.trim()} app` : "this stack";
 
   return (
     <div className="space-y-4">
       {/* Deploy target */}
       <div>
         <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Deploy target</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => onStrategyChange("vps")}
-            aria-pressed={!isStatic}
-            className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
-              !isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <ServerIcon className="size-4 text-text-secondary shrink-0" />
-              <span className="text-sm font-semibold text-text">Server</span>
-              {!isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
-            </div>
-            <p className="text-xs/relaxed text-text-muted">
-              Runs your app on a virtual machine. Needed for a backend, server-side rendering, or a database.
-            </p>
-          </button>
 
-          <button
-            type="button"
-            onClick={() => onStrategyChange("static")}
-            aria-pressed={isStatic}
-            className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
-              isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <GlobeIcon className="size-4 text-text-secondary shrink-0" />
-              <span className="text-sm font-semibold text-text">Static hosting</span>
-              {isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
-            </div>
-            <p className="text-xs/relaxed text-text-muted">
-              Uploads your built site to {staticStack}. No server to pay for, served from the edge. Only for sites
-              that build to static files.
-            </p>
-          </button>
-        </div>
+        {serverOnly ? (
+          /* No choice to make — present it as a settled fact, not a card. A
+             selectable-styled card with one option reads as a decision that
+             isn't one. */
+          <div className="flex items-start gap-2 text-sm text-text">
+            <ServerIcon className="size-4 text-text-secondary shrink-0 mt-0.5" />
+            <span>
+              <span className="font-semibold">Server.</span>{" "}
+              <span className="text-text-muted">
+                {frameworkLabel.charAt(0).toUpperCase() + frameworkLabel.slice(1)} needs a server, so static hosting
+                isn&apos;t available — your app runs on a virtual machine.
+              </span>
+            </span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => onStrategyChange("vps")}
+              aria-pressed={!isStatic}
+              className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
+                !isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <ServerIcon className="size-4 text-text-secondary shrink-0" />
+                <span className="text-sm font-semibold text-text">Server</span>
+                {!isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
+              </div>
+              <p className="text-xs/relaxed text-text-muted">
+                Runs your app on a virtual machine. Needed for a backend, server-side rendering, or a database.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onStrategyChange("static")}
+              aria-pressed={isStatic}
+              className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
+                isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <GlobeIcon className="size-4 text-text-secondary shrink-0" />
+                <span className="text-sm font-semibold text-text">Static hosting</span>
+                {isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
+              </div>
+              <p className="text-xs/relaxed text-text-muted">
+                Uploads your built site to {staticStack}. No server to pay for, served from the edge. Only for sites
+                that build to static files.
+              </p>
+            </button>
+          </div>
+        )}
         {isStatic && (
           <p className="mt-2 text-xs/relaxed text-text-muted">
-            Your site is built from source and the output uploaded, so no instance size applies. Apps that need a
-            server process (Laravel, Django, SSR Next/Nuxt/Astro) are rejected before anything is provisioned.
+            Your site is built from source and the output uploaded, so no instance size applies.
           </p>
         )}
       </div>

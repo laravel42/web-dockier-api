@@ -5,6 +5,7 @@ import { suggestDeployOptions } from "./deploy-options.js";
 import { detectServices, type DetectedService } from "./services.js";
 import { detectTechStack, type TechStackItem } from "./tech-stack.js";
 import { scanSensitiveData, type SensitiveField } from "./sensitive-data-scanner.js";
+import { detectStaticCapable } from "./repo-config.js";
 
 export type { SensitiveField } from "./sensitive-data-scanner.js";
 
@@ -74,6 +75,13 @@ export type RepoAnalysisResult = {
   primaryLanguage: string;
   hasDocker: boolean;
   hasCi: boolean;
+  /**
+   * Whether the repo can be deployed as a static site. `false` means CONFIDENT
+   * server-only (Laravel/Django/SSR/etc.); `undefined` means the stack could
+   * not be determined → treat as uncertain. Derived from the deploy-time
+   * static gate so the wizard never diverges from it.
+   */
+  staticCapable?: boolean;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
   _scannersRan: boolean;
@@ -156,6 +164,11 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
   // config/migration files. Runs after the dependency scan so package names feed in.
   const detectedServices = detectServices(files, dependencies);
 
+  // Static-capability from the same gate the deploy pipeline uses. Best-effort:
+  // detectStaticCapable never throws (undefined on failure → wizard shows both
+  // deploy targets).
+  const staticCapable = await detectStaticCapable(connection, ref);
+
   return {
     techStack: mergedTechStack,
     deployOptions: suggestDeployOptions(mergedTechStack, hasDocker, files.length).map((option) => ({
@@ -168,6 +181,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
     primaryLanguage: mergedTechStack.find((item) => item.category === "language" || item.category === "runtime")?.name ?? "",
     hasDocker,
     hasCi,
+    staticCapable,
     dependencies: dependencies.length > 0 ? dependencies : undefined,
     _scannersRan: true,
   };

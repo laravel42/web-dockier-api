@@ -21,7 +21,7 @@ import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, ensureS3Bucket, type AwsCredentials } from "../../../../lib/aws.js";
 import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { NATIVE_STAGE, stageMarker } from "../../../../lib/logging.js";
-import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
+import { installDeps, buildSite, findOutputDir, ensureIndexHtml, getStaticDeployBlockReason, hasPayloadCms, MIME_TYPES, SKIP_DIRS } from "../planning/static-site-builder.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /**
@@ -193,8 +193,8 @@ export class AwsS3Adapter implements DeployAdapter {
     await appendLog(`${stageMarker(NATIVE_STAGE.BUILD_SITE)} ── Build Static Site ──────────────`);
     const blockReason = getStaticDeployBlockReason({
       detectedStack: ctx.detectedStack,
-      repoDir,
       techStack: ctx.event.techStack || [],
+      hasPayload: hasPayloadCms(repoDir),
     });
     if (blockReason) {
       throw new Error(blockReason);
