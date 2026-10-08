@@ -828,3 +828,167 @@ describe("awsDnsInstructions", () => {
   });
 });
 
+
+describe("reconcileAwsStaticDomains — reaping orphaned certificates", () => {
+  /**
+   * Build an ACM mock that owns two certs: the one the reconcile will keep
+   * (`arn:acm:cert/current`) and an orphan from a previous domain set. The
+   * orphan is tagged for this project; the reaper should delete it and leave
+   * the current one.
+   */
+  function mockAcmWithOrphan(options: {
+    orphanTags: Array<{ Key: string; Value: string }>;
+    deleteRejects?: boolean;
+  }) {
+    acmSend.mockImplementation(async (c: { __type: string; input?: Record<string, unknown> }) => {
+      if (c.__type === "RequestCertificate") return { CertificateArn: "arn:acm:cert/current" };
+      if (c.__type === "DescribeCertificate") {
+        return describeResponse({ status: "PENDING_VALIDATION", domainName: "a.example.com" });
+      }
+      if (c.__type === "ListCertificates") {
+        return {
+          CertificateSummaryList: [
+            { CertificateArn: "arn:acm:cert/current", DomainName: "a.example.com" },
+            { CertificateArn: "arn:acm:cert/orphan", DomainName: "old.example.com" },
+          ],
+        };
+      }
+      if (c.__type === "ListTagsForCertificate") {
+        const arn = c.input?.CertificateArn;
+        if (arn === "arn:acm:cert/orphan") return { Tags: options.orphanTags };
+        // The current cert carries this project's tags too.
+        return {
+          Tags: [
+            { Key: "dockier:projectId", Value: "proj-1" },
+            { Key: "dockier:managed", Value: "static-domains" },
+          ],
+        };
+      }
+      if (c.__type === "DeleteCertificate") {
+        if (options.deleteRejects) {
+          const err = new Error("Certificate is in use.");
+          err.name = "ResourceInUseException";
+          throw err;
+        }
+        return {};
+      }
+      return {};
+    });
+  }
+
+  function deleteCalls(): string[] {
+    return acmSend.mock.calls
+      .filter((c) => (c[0] as { __type: string }).__type === "DeleteCertificate")
+      .map((c) => (c[0] as { input: { CertificateArn: string } }).input.CertificateArn);
+  }
+
+  it("deletes a project-tagged orphan and keeps the current certificate", async () => {
+    mockAcmWithOrphan({
+      orphanTags: [
+        { Key: "dockier:projectId", Value: "proj-1" },
+        { Key: "dockier:managed", Value: "static-domains" },
+      ],
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    const deleted = deleteCalls();
+    expect(deleted).toContain("arn:acm:cert/orphan");
+    expect(deleted).not.toContain("arn:acm:cert/current");
+  });
+
+  it("never deletes a cert belonging to another project", async () => {
+    mockAcmWithOrphan({
+      orphanTags: [
+        { Key: "dockier:projectId", Value: "SOME-OTHER-PROJECT" },
+        { Key: "dockier:managed", Value: "static-domains" },
+      ],
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(deleteCalls()).toEqual([]);
+  });
+
+  it("never deletes a cert not tagged as static-domains managed", async () => {
+    // A cert this project owns but that some other feature created.
+    mockAcmWithOrphan({
+      orphanTags: [{ Key: "dockier:projectId", Value: "proj-1" }],
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    expect(deleteCalls()).toEqual([]);
+  });
+
+  it("does not throw when ACM refuses to delete a still-in-use cert", async () => {
+    // Expected during the 5-20 min CloudFront detach window. A later reconcile
+    // reaps it; this pass must not fail.
+    mockAcmWithOrphan({
+      orphanTags: [
+        { Key: "dockier:projectId", Value: "proj-1" },
+        { Key: "dockier:managed", Value: "static-domains" },
+      ],
+      deleteRejects: true,
+    });
+
+    const res = await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [{ id: "d1", name: "a.example.com" }],
+    });
+
+    // The reconcile still succeeds — the reap is best-effort.
+    expect(res.success).toBe(true);
+    expect(deleteCalls()).toContain("arn:acm:cert/orphan");
+  });
+
+  it("reaps everything project-tagged when the last domain is removed", async () => {
+    // Full detach: no cert is kept, so the orphan (and anything else tagged)
+    // becomes a candidate.
+    acmSend.mockImplementation(async (c: { __type: string; input?: Record<string, unknown> }) => {
+      if (c.__type === "ListCertificates") {
+        return {
+          CertificateSummaryList: [
+            { CertificateArn: "arn:acm:cert/orphan", DomainName: "old.example.com" },
+          ],
+        };
+      }
+      if (c.__type === "ListTagsForCertificate") {
+        return {
+          Tags: [
+            { Key: "dockier:projectId", Value: "proj-1" },
+            { Key: "dockier:managed", Value: "static-domains" },
+          ],
+        };
+      }
+      if (c.__type === "DeleteCertificate") return {};
+      return {};
+    });
+
+    await reconcileAwsStaticDomains({
+      tenantId: "t1",
+      projectId: "proj-1",
+      target: TARGET,
+      domains: [], // no domains left
+    });
+
+    expect(deleteCalls()).toContain("arn:acm:cert/orphan");
+  });
+});

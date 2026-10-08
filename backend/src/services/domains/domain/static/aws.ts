@@ -175,6 +175,10 @@ export async function reconcileAwsStaticDomains(params: {
           message: detached.failure.message,
         };
       }
+      // Nothing is kept, so every project cert is now a candidate to reap. The
+      // one just detached may still be in use until CloudFront finishes (5-20
+      // min); it is skipped this pass and reaped on a later reconcile.
+      await reapOrphanedCertificates({ target, projectId, keepArn: "" });
       return {
         success: apexRejected.length === 0,
         retryable: false,
@@ -218,6 +222,13 @@ export async function reconcileAwsStaticDomains(params: {
       await writeFailureToRows(rows.values(), cert.failure);
       return { success: false, retryable: cert.failure.retryable, message: cert.failure.message };
     }
+
+    // Reap any OTHER project certificate now that we know which one is current.
+    // A changed domain set leaves the previous (differently-named) cert behind;
+    // this deletes it. The current cert is kept. Runs on every reconcile — the
+    // sweep's repeated reconciles are what eventually catch a cert still held by
+    // an in-flight CloudFront update.
+    await reapOrphanedCertificates({ target, projectId, keepArn: cert.arn });
 
     // Persist the ARN and each domain's own validation record.
     for (const [name, row] of rows) {
@@ -516,6 +527,77 @@ async function describeCertificateWithRetry(
     if (i < attempts - 1) await new Promise((r) => setTimeout(r, 2000));
   }
   return await describeCertificate(acm, mod, arn);
+}
+
+/**
+ * Delete this project's ACM certificates that are no longer in use.
+ *
+ * Closes the certificate leak: changing a domain set requests a NEW certificate
+ * (ACM certs are immutable in their name list), and nothing used to delete the
+ * old one, so unused certs accumulated in us-east-1 until the account hit its
+ * ACM quota.
+ *
+ * Reaps BY TAG rather than by a stored ARN, deliberately. The orphan sweep runs
+ * `deleteStaticCertRows` before this, dropping `provider_ref`, so the ARN is no
+ * longer on any row — and a tag scan also reaps certs leaked by PAST changes,
+ * not just the one this reconcile caused.
+ *
+ * `keepArn` is the certificate the distribution is now using (empty on a full
+ * detach). Everything else tagged for this project is fair game.
+ *
+ * Best-effort and never throws: a cert ACM refuses to delete because the
+ * distribution still references it (ResourceInUseException, during the 5-20 min
+ * CloudFront propagation window) is simply skipped and reaped on a later
+ * reconcile. Scoped to `dockier:managed=static-domains` so it can never touch a
+ * certificate from another system.
+ */
+async function reapOrphanedCertificates(params: {
+  target: AwsStaticTarget;
+  projectId: string;
+  keepArn: string;
+}): Promise<void> {
+  const { target, projectId, keepArn } = params;
+  const keep = keepArn.trim();
+
+  try {
+    const { acm, mod } = await acmClient(target);
+    const list = await acm.send(
+      new mod.ListCertificatesCommand({
+        CertificateStatuses: ["ISSUED", "PENDING_VALIDATION"],
+      }),
+    );
+
+    for (const summary of list.CertificateSummaryList ?? []) {
+      const arn = summary.CertificateArn;
+      if (!arn || arn === keep) continue;
+
+      const tags = await acm.send(new mod.ListTagsForCertificateCommand({ CertificateArn: arn }));
+      const tagList = tags.Tags ?? [];
+      const ownedByProject = tagList.some(
+        (t) => t.Key === "dockier:projectId" && t.Value === projectId,
+      );
+      const managedByStatic = tagList.some(
+        (t) => t.Key === "dockier:managed" && t.Value === "static-domains",
+      );
+      if (!ownedByProject || !managedByStatic) continue;
+
+      try {
+        await acm.send(new mod.DeleteCertificateCommand({ CertificateArn: arn }));
+        logger.info({ projectId, arn }, "[domains:static:aws] reaped orphaned certificate");
+      } catch (err) {
+        // ResourceInUseException while CloudFront is still detaching is
+        // expected; a later reconcile reaps it. Any other error is logged and
+        // left for next time.
+        logger.warn(
+          { err: getErrMsg(err), projectId, arn },
+          "[domains:static:aws] could not delete orphaned certificate yet",
+        );
+      }
+    }
+  } catch (err) {
+    // The scan itself failing just means we try again next reconcile.
+    logger.warn({ err: getErrMsg(err), projectId }, "[domains:static:aws] certificate reap scan failed");
+  }
 }
 
 /**
