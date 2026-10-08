@@ -75,7 +75,7 @@ export default function ProjectStatsStrip({ stats, statsLoading, statsError, emb
               key={kpi.label}
               className={
                 compact
-                  ? "flex flex-col items-center gap-0.5 border-r border-b border-border/25 px-3 py-2.5 text-center [&:nth-child(3n)]:border-r-0 [&:nth-last-child(-n+3)]:border-b-0"
+                  ? "flex flex-col items-center gap-0.5 border-r border-b border-border/25 px-3 py-2.5 text-center nth-[3n]:border-r-0 nth-last-[-n+3]:border-b-0"
                   : embedded
                     ? "flex flex-col items-center gap-0.5 px-3 py-2.5 text-center"
                     : "flex flex-col items-center gap-0.5 bg-card px-3 py-2.5 text-center"

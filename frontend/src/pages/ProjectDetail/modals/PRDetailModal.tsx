@@ -86,7 +86,7 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
                   readOnly
                   value={pr.body}
                   aria-label="Pull request body (raw markdown)"
-                  className="block w-full min-h-[12rem] resize-none border-0 bg-transparent p-0 font-mono text-xs/relaxed text-text outline-none"
+                  className="block w-full min-h-48 resize-none border-0 bg-transparent p-0 font-mono text-xs/relaxed text-text outline-none"
                 />
               }
             />

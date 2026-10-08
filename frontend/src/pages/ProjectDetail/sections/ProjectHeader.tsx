@@ -162,12 +162,12 @@ export default function ProjectHeader({
       </div>
       <div className="relative flex shrink-0 items-center gap-2">
           {canScan && onScan && (
-            <Button variant="outline" className="min-w-[6.125rem]" onClick={onScan} iconLeft={<ShieldCheckIcon className="size-4" />}>
+            <Button variant="outline" className="min-w-24.5" onClick={onScan} iconLeft={<ShieldCheckIcon className="size-4" />}>
               Scan
             </Button>
           )}
           {canDeploy && (
-            <Button variant="primary" className="min-w-[6.125rem] border border-primary-foreground/20" onClick={onDeploy} iconLeft={<RocketIcon className="size-4" />}>
+            <Button variant="primary" className="min-w-24.5 border border-primary-foreground/20" onClick={onDeploy} iconLeft={<RocketIcon className="size-4" />}>
               Deploy
             </Button>
           )}

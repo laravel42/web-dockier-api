@@ -20,7 +20,7 @@ export function TabPanelHeader({
 }: TabPanelHeaderProps) {
   return (
     <div className="mb-2">
-      <h2 className="!text-[20px] font-semibold text-text">{title}</h2>
+      <h2 className="text-[20px]! font-semibold text-text">{title}</h2>
       {description && (
         <p className="mt-1 text-xs/relaxed text-text-muted">
           {description}

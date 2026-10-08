@@ -82,7 +82,7 @@ function SpecRow({
 }) {
   return (
     <div className={specCellCls}>
-      <span className={`w-[3.75rem] shrink-0 ${fieldLabelCls}`}>{label}</span>
+      <span className={`w-15 shrink-0 ${fieldLabelCls}`}>{label}</span>
       <div className="min-w-0 flex-1 text-ui text-text">{children}</div>
       {action ? <div className="shrink-0 pt-0.5">{action}</div> : null}
     </div>

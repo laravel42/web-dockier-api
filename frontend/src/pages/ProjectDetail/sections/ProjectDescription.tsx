@@ -1222,7 +1222,7 @@ export default function ProjectDescription({
                 <div key={cluster.key} role="presentation" className="contents md:mb-5 md:block md:last:mb-0">
                   <div
                     aria-hidden="true"
-                    className="hidden rounded-md bg-secondary-50/70 px-3 pt-0.5 pb-0.5 text-base font-semibold tracking-wide text-text-muted/70 uppercase md:mt-2.5 md:block"
+                    className="hidden rounded-md bg-secondary-50/70 px-3 py-0.5  text-base font-semibold tracking-wide text-text-muted/70 uppercase md:mt-2.5 md:block"
                   >
                     {cluster.label}
                   </div>

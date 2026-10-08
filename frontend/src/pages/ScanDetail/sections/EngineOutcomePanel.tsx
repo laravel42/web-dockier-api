@@ -81,14 +81,14 @@ export default function EngineOutcomePanel({
   if (!terminal) return null;
   if (loading) {
     return (
-      <div className="mt-6 mb-6 flex items-center gap-2 text-sm text-text-muted">
+      <div className="my-6  flex items-center gap-2 text-sm text-text-muted">
         <Spinner /> Checking engine outcomes…
       </div>
     );
   }
   if (error) {
     return (
-      <p className="mt-6 mb-6 text-sm text-text-muted">
+      <p className="my-6  text-sm text-text-muted">
         Engine outcomes are unavailable — the SAST service did not respond. {error}
       </p>
     );
@@ -100,7 +100,7 @@ export default function EngineOutcomePanel({
   const partial = Boolean(state.summary.partial && failedEngines.length > 0);
 
   return (
-    <section className="mt-6 mb-6 rounded-card border border-border bg-card" aria-labelledby="engine-outcome-h">
+    <section className="my-6  rounded-card border border-border bg-card" aria-labelledby="engine-outcome-h">
       <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
         <h2 id="engine-outcome-h" className="text-sm font-semibold text-text">
           Engine outcomes
