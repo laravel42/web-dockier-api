@@ -78,6 +78,12 @@ export interface RepoAnalysis {
    * → show both deploy targets.
    */
   staticCapable?: boolean;
+  /**
+   * Database engine from a committed `.env.example` (`DB_CONNECTION`), e.g.
+   * "mysql" | "pgsql" | "sqlite". A real file value, preferred over the AI's
+   * guessed env vars when labelling the database service.
+   */
+  detectedDbEngine?: string;
   aiAnalysis?: AIAnalysis;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];

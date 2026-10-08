@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { analyzeSensitiveDataFromText, runRepoAnalysis, type SensitiveColumn } from "../domain/analysis.js";
+import { analyzeSensitiveDataFromText, detectDbEngine, runRepoAnalysis, type SensitiveColumn } from "../domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
 import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
@@ -384,10 +384,20 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const cached = await db.from("analysis_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
       if (cached.data?.result) {
-        const parsed = parseJsonField<Record<string, unknown>>(cached.data.result)!;
+        let parsed = parseJsonField<Record<string, unknown>>(cached.data.result)!;
+        const ref = { owner: request.query.owner, repo: request.query.repo, branch };
+
+        // Backfill `detectedDbEngine` onto an analysis cached before the field
+        // existed, so a stale row stops showing the AI's guessed DB engine.
+        // Cheap (one .env.example fetch); only runs when the key is absent.
+        if (!("detectedDbEngine" in parsed)) {
+          const detectedDbEngine = await detectDbEngine(conn, ref);
+          parsed = { ...parsed, detectedDbEngine };
+          await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
+        }
+
         // If AI analysis was requested but cache doesn't have it, run AI and update cache
         if (request.query.aiType && env.OPENAI_API_KEY && !parsed.aiAnalysis) {
-          const ref = { owner: request.query.owner, repo: request.query.repo, branch };
           const aiResult = await runAiAnalysisForRepo(
             conn,
             ref,

@@ -132,7 +132,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
           });
 
       const serviceTypes = analysis.detectedServices.map((s) => s.type);
-      const detection = detectServiceModes(envVars, serviceTypes);
+      const detection = detectServiceModes(envVars, serviceTypes, analysis.detectedDbEngine);
       const modes: Record<string, "vps" | "managed"> = {};
       const hints: Record<string, string> = {};
       for (const svc of analysis.detectedServices) {
@@ -218,7 +218,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       // After provider selection, detect service modes from analysis
       const serviceTypes = analysis?.detectedServices?.map(s => s.type) || [];
       if (serviceTypes.length > 0) {
-        const detection = detectServiceModes(state.envVars, serviceTypes);
+        const detection = detectServiceModes(state.envVars, serviceTypes, analysis?.detectedDbEngine);
         setState(prev => {
           const newModes = { ...prev.servicesModes };
           const newHints: Record<string, string> = {};

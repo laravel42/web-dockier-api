@@ -23,6 +23,9 @@ export const TEMPLATE_ANALYSIS: Record<string, RepoAnalysis> = {
     // WordPress needs PHP + MySQL + Apache — it cannot be served as static
     // files, so the wizard must not offer the Static hosting target.
     staticCapable: false,
+    // WordPress uses MySQL — pin it so the DB service is labelled correctly
+    // rather than falling back to a guessed engine.
+    detectedDbEngine: "mysql",
     aiAnalysis: {
       runtime: "php",
       runtimeVersion: "8.3",

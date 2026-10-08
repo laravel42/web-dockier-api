@@ -191,6 +191,13 @@ export interface RepoAnalysisResponse {
    * gating.
    */
   staticCapable?: boolean;
+  /**
+   * Database engine parsed from a committed `.env.example` `DB_CONNECTION`
+   * (lowercased, e.g. "mysql" | "pgsql" | "sqlite"). A real file value, not an
+   * AI guess — the wizard prefers it when identifying the database engine.
+   * `undefined` when no `.env.example` declares one.
+   */
+  detectedDbEngine?: string;
   aiAnalysis?: RepoAiAnalysis;
   sensitiveData?: SensitiveDataField[];
   dependencies?: RepoDependency[];

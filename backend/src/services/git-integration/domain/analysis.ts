@@ -82,6 +82,16 @@ export type RepoAnalysisResult = {
    * static gate so the wizard never diverges from it.
    */
   staticCapable?: boolean;
+  /**
+   * The database engine parsed authoritatively from a committed `.env.example`
+   * (`DB_CONNECTION`), e.g. "mysql" | "pgsql" | "sqlite". Lowercased, verbatim.
+   *
+   * This is a FILE value, not an AI guess — Dockier never reads the real `.env`,
+   * so the AI's `envVars` can invent an engine (it tends to default to
+   * Postgres). When present, the wizard prefers this over the guessed env vars.
+   * `undefined` when no `.env.example` exists or it declares no `DB_CONNECTION`.
+   */
+  detectedDbEngine?: string;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
   _scannersRan: boolean;
@@ -142,7 +152,67 @@ const CONFIG_FILES_TO_FETCH = [
   "prisma/schema.prisma",
   "go.mod",
   "Cargo.toml",
+  // Read for its DB_CONNECTION value — an authoritative, local, non-secret
+  // signal for the database engine. The real .env is never read; .env.example
+  // ships committed with the project's intended engine (Laravel: mysql, or
+  // sqlite on Laravel 11+).
+  ".env.example",
 ];
+
+/**
+ * Parse the database engine from a committed `.env.example`'s `DB_CONNECTION`.
+ *
+ * Returns the lowercased value (e.g. "mysql", "pgsql", "sqlite") or `undefined`
+ * when no `.env.example` was fetched or it declares no `DB_CONNECTION`. This is
+ * a real file value, deliberately preferred over the AI's guessed env vars.
+ */
+/**
+ * Fetch `.env.example` and parse its `DB_CONNECTION`, standalone.
+ *
+ * Used to backfill `detectedDbEngine` onto an analysis cached before the field
+ * existed, without re-running the whole analysis. Best-effort: returns
+ * `undefined` on any fetch failure or when no engine is declared.
+ */
+export async function detectDbEngine(
+  connection: ConnectionLike,
+  ref: RepoRef,
+): Promise<string | undefined> {
+  try {
+    const files = await getRepoFileTree(connection, ref);
+    const path = files.find((file) => file.toLowerCase().endsWith(".env.example"));
+    if (!path) return undefined;
+    const content = await fetchRepoFile(connection, ref, path);
+    if (!content) return undefined;
+    return parseDbEngineFromEnvExample({ [path]: content });
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseDbEngineFromEnvExample(configFiles: Record<string, string>): string | undefined {
+  const entry = Object.entries(configFiles).find(([path]) =>
+    path.toLowerCase().endsWith(".env.example"),
+  );
+  if (!entry) return undefined;
+
+  for (const rawLine of entry[1].split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = /^DB_CONNECTION\s*=\s*(.+)$/i.exec(line);
+    if (!match) continue;
+    // Strip a trailing inline comment FIRST, then surrounding quotes — doing it
+    // the other way leaves the closing quote on `"mysql" # comment`.
+    const value = match[1]
+      .trim()
+      .split(/\s+#/)[0]
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .trim()
+      .toLowerCase();
+    return value || undefined;
+  }
+  return undefined;
+}
 
 export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef): Promise<RepoAnalysisResult> {
   const files = await getRepoFileTree(connection, ref);
@@ -168,6 +238,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
   // detectStaticCapable never throws (undefined on failure → wizard shows both
   // deploy targets).
   const staticCapable = await detectStaticCapable(connection, ref);
+  const detectedDbEngine = parseDbEngineFromEnvExample(configFiles);
 
   return {
     techStack: mergedTechStack,
@@ -182,6 +253,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
     hasDocker,
     hasCi,
     staticCapable,
+    detectedDbEngine,
     dependencies: dependencies.length > 0 ? dependencies : undefined,
     _scannersRan: true,
   };

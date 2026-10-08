@@ -130,8 +130,12 @@ const NO_INFRA_DRIVERS: Record<string, Set<string>> = {
 function getRawDriver(
   envVars: Array<{ name: string; value: string }>,
   serviceType: string,
+  detectedDbEngine?: string,
 ): string | null {
   if (serviceType === "database") {
+    // The .env.example value is a real committed file, not an AI guess — prefer
+    // it over DB_CONNECTION from the (model-invented) env list.
+    if (detectedDbEngine) return detectedDbEngine.toLowerCase();
     const v = envVars.find((ev) => /^DB_CONNECTION$/i.test(ev.name));
     return v?.value?.toLowerCase() || null;
   }
@@ -188,8 +192,12 @@ function isSelfHostedValue(value: string): boolean {
 function getDriverName(
   envVars: Array<{ name: string; value: string }>,
   serviceType: string,
+  detectedDbEngine?: string,
 ): string | null {
   if (serviceType === "database") {
+    // The committed .env.example DB_CONNECTION wins over the AI-guessed env var.
+    const engine = detectedDbEngine?.toLowerCase();
+    if (engine) return DB_DRIVER_NAMES[engine] || engine;
     const conn = envVars.find((ev) => /^DB_CONNECTION$/i.test(ev.name));
     if (conn?.value) return DB_DRIVER_NAMES[conn.value.toLowerCase()] || conn.value;
   }
@@ -218,6 +226,7 @@ function getDriverName(
 export function detectServiceModes(
   envVars: Array<{ name: string; value: string }>,
   detectedServiceTypes: string[],
+  detectedDbEngine?: string,
 ): Record<string, EnvDetectionResult> {
   const results: Record<string, EnvDetectionResult> = {};
 
@@ -244,7 +253,7 @@ export function detectServiceModes(
     }
 
     // Check if the driver means "no separate infrastructure needed"
-    const rawDriver = getRawDriver(envVars, serviceType);
+    const rawDriver = getRawDriver(envVars, serviceType, detectedDbEngine);
     const noInfraSet = NO_INFRA_DRIVERS[serviceType];
     if (rawDriver && noInfraSet?.has(rawDriver)) {
       const driverDisplay = rawDriver.charAt(0).toUpperCase() + rawDriver.slice(1);
@@ -255,7 +264,7 @@ export function detectServiceModes(
       continue;
     }
 
-    const driverName = getDriverName(envVars, serviceType);
+    const driverName = getDriverName(envVars, serviceType, detectedDbEngine);
     const driverLabel = driverName ? `${driverName} ` : "";
 
     // Check if any matching var has a value that matches a known managed provider
@@ -276,7 +285,7 @@ export function detectServiceModes(
     if (detectedProvider) {
       results[serviceType] = {
         mode: "managed",
-        hint: `🔗 Detected: ${detectedProvider} (${driverLabel || serviceType}) from your .env`,
+        hint: `🔗 Detected: ${detectedProvider} (${driverLabel || serviceType}) from your repository`,
       };
       continue;
     }
@@ -306,7 +315,7 @@ export function detectServiceModes(
       // But if the host is clearly local, we already caught that above.
       results[serviceType] = {
         mode: "managed",
-        hint: `🔗 ${driverLabel}credentials detected from your .env`,
+        hint: `🔗 ${driverLabel}credentials detected in your repository config`,
       };
     } else {
       results[serviceType] = {

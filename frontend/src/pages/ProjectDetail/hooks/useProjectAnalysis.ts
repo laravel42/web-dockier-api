@@ -9,11 +9,12 @@ import type { RepoAnalysis } from "@/components/DeployWizard";
 import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
 
 // ─── Analysis session cache ────────────────────────────────────────
-// v12: the analysis schema gained `staticCapable` (drives hiding the Static
-// deploy target for server-only projects). Bumped so browsers discard cached
-// analyses from before the field existed — a stale entry has no staticCapable,
-// which reads as "uncertain" and wrongly shows the Static card for Laravel etc.
-const analysisCache = new SessionCache<RepoAnalysis>("analysis", 12);
+// v13: the analysis schema gained `detectedDbEngine` (authoritative DB engine
+// from .env.example, so the wizard stops showing the AI's guessed Postgres for
+// a MySQL project). v12 added `staticCapable`. Bumping discards analyses cached
+// before each field existed, which would otherwise keep showing stale/guessed
+// values.
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 13);
 
 
 /**
