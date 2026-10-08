@@ -156,9 +156,13 @@ export function useScanDetail() {
       if (requestId !== findingsRequestIdRef.current) return;
       setFindingsError(getErrorMessage(err, "Failed to load findings"));
     } finally {
-      if (requestId !== findingsRequestIdRef.current) return;
-      setFindingsLoading(false);
-      setFindingsLoadingMore(false);
+      // A `return` inside `finally` swallows any in-flight exception, so guard
+      // the body with a condition instead. Only clear the loading flags when
+      // this is still the current request — a newer one owns them otherwise.
+      if (requestId === findingsRequestIdRef.current) {
+        setFindingsLoading(false);
+        setFindingsLoadingMore(false);
+      }
     }
   }, []);
 
