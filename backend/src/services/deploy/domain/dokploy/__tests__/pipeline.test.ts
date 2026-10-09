@@ -269,6 +269,21 @@ describe("executeDokployPipeline", () => {
     expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1");
   });
 
+  it("marks infra live BEFORE flipping the deployment to success", async () => {
+    await executeDokployPipeline(basePipelineInput);
+
+    // A client that trusts the deployment "success" status must read a
+    // consistent project row (infra_state already "live") on its first refetch,
+    // so markProjectInfraLive must complete before the success status flip.
+    const infraOrder = mockMarkInfraLive.mock.invocationCallOrder[0];
+    const successOrder = mockUpdateStatus.mock.calls
+      .map((call, i) => ({ call, order: mockUpdateStatus.mock.invocationCallOrder[i] }))
+      .find(({ call }) => call[1] === "success")?.order;
+    expect(infraOrder).toBeDefined();
+    expect(successOrder).toBeDefined();
+    expect(infraOrder).toBeLessThan(successOrder as number);
+  });
+
   it("emits a success notification and clears the favicon cache on success", async () => {
     await executeDokployPipeline(basePipelineInput);
 

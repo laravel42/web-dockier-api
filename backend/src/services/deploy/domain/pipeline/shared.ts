@@ -308,14 +308,24 @@ export async function finalizeDeploy(ctx: {
   if (finalUrl) {
     await waitForAppReady(ctx.deploymentId, finalUrl);
     await ctx.logger.success(`Application URL: ${finalUrl}`);
-    await updateStatus(ctx.deploymentId, "success", { app_url: finalUrl, infra: serializeInfra(infra) });
   } else {
     await ctx.logger.warn("Could not determine app URL — check cloud console");
+  }
+
+  // Mark the project's infra state live BEFORE flipping the deployment to
+  // "success", so a client that trusts the deployment status reads a consistent
+  // project row (infra_state already "live") on its first refetch instead of a
+  // stale "torn_down"/"none". markProjectInfraLive is non-fatal (no-op on
+  // missing projectId, warns on error, never throws), so it cannot block the
+  // success flip. app_url + infra stay atomic with the "success" status below.
+  await markProjectInfraLive(ctx.event.projectId);
+
+  if (finalUrl) {
+    await updateStatus(ctx.deploymentId, "success", { app_url: finalUrl, infra: serializeInfra(infra) });
+  } else {
     await updateStatus(ctx.deploymentId, "success", { infra: serializeInfra(infra) });
   }
 
-  // Infrastructure is now provisioned — mark the project's infra state live.
-  await markProjectInfraLive(ctx.event.projectId);
   await clearRepoFaviconFromAnalysisCache(ctx.event.repo, ctx.event.branch, logger);
 
   // Non-blocking notification

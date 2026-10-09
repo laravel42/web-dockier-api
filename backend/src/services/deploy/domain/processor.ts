@@ -255,11 +255,20 @@ export async function applyDeploymentWebhookUpdate(
   if (payload.deployTarget) lines.push(`target=${payload.deployTarget}`);
   updates.logs = formatLogLine(current?.logs ?? "", lines.join(" "));
 
+  // On success, mark the project's infra state live BEFORE flipping the
+  // deployment row to "success", so a client that trusts the deployment status
+  // reads a consistent project row (infra_state already "live") on its first
+  // refetch instead of a stale "torn_down"/"none". markProjectInfraLive is
+  // non-fatal (no-op on missing projectId, warns on error, never throws), so it
+  // cannot block the shared deployments update below. Only the success case is
+  // reordered; the update itself still runs for every status.
+  if (payload.status === "success" && current?.project_id) {
+    await markProjectInfraLive(current.project_id);
+  }
+
   await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);
 
-  // Infrastructure is now provisioned — mark the project's infra state live.
   if (payload.status === "success") {
-    await markProjectInfraLive(current?.project_id);
     if (current?.repo && current?.branch) {
       await clearRepoFaviconFromAnalysisCache(current.repo, current.branch, logger);
     }

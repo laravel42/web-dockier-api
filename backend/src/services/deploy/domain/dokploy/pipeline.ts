@@ -279,6 +279,14 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     }
 
     // ─── Success ─────────────────────────────────────────────────
+    // Mark the project's infra_state "live" BEFORE flipping the deployment to
+    // "success", so a client that trusts the deployment status reads a
+    // consistent project row (infra_state already "live") on its first refetch
+    // instead of a stale "torn_down"/"none". markProjectInfraLive is non-fatal
+    // (no-op on missing projectId, warns on error, never throws), so it cannot
+    // block the success flip.
+    await markProjectInfraLive(projectId);
+
     // Write the app URL ATOMICALLY with the success status. Writing it after
     // flipping to "success" is a race: clients that poll for a terminal status
     // (the deploy wizard) stop and render as soon as they see "success", so they
@@ -300,7 +308,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // so the UI reports "No infrastructure" and the Tear Down button is
     // disabled (it requires "live") — leaving users unable to destroy resources
     // they just created. Notifications and the favicon cache were missing too.
-    await markProjectInfraLive(projectId);
+    // (infra_state is marked live before the success flip above.)
     await clearRepoFaviconFromAnalysisCache(repo, branch, logger);
     emitDeploySuccessNotification({
       tenantId,

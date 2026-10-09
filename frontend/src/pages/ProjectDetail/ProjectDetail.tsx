@@ -18,7 +18,7 @@ import ReviewPreviewModal, { type GeneratedReview } from "./modals/ReviewPreview
 import type { FixPlan, ReviewComment } from "@/services/git";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectSiteUrl } from "@/hooks/useProjectSiteUrl";
 import { useProjectRepoFavicon } from "@/hooks/useProjectRepoFavicon";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
@@ -50,15 +50,52 @@ export default function ProjectDetail() {
   // explicit nudge to pick up a newly-active custom domain without a reload.
   const [domainRefreshKey, setDomainRefreshKey] = useState(0);
 
+  // Guards for the post-deploy project poll below. `mountedRef` bails the loop
+  // after unmount; `pollRunRef` is an incrementing run-id so a second
+  // deploy-complete supersedes any in-flight poll (only the latest run may act).
+  const mountedRef = useRef(true);
+  const pollRunRef = useRef(0);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   // After a deploy finishes, refresh the deploy list AND re-fetch the core
   // project so infraState-derived fields (site URL, torn-down state) update
   // without a page reload, and bump domainRefreshKey so a newly-active custom
   // domain replaces the generic deploy URL. Order preserved: fetchLastDeploy first.
-  const handleDeployComplete = () => {
+  //
+  // The backend marks infra_state="live" before flipping the deployment to
+  // "success", so a single refetch is normally enough. This bounded poll is
+  // defense-in-depth: it refetches the project up to 5 times, ~1.5s apart,
+  // stopping early as soon as infraState is no longer "torn_down" (ideally
+  // "live"). When the poll settles it bumps domainRefreshKey again so the
+  // custom-domain hook re-reads once infra is live.
+  const handleDeployComplete = useCallback(() => {
     void fetchLastDeploy();
-    void refetchProject();
     setDomainRefreshKey((k) => k + 1);
-  };
+
+    const runId = ++pollRunRef.current;
+    const maxAttempts = 5;
+    const intervalMs = 1500;
+
+    const poll = async () => {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (!mountedRef.current || pollRunRef.current !== runId) return;
+        const fetched = await refetchProject();
+        if (!mountedRef.current || pollRunRef.current !== runId) return;
+        if (fetched && fetched.infraState !== "torn_down") break;
+        if (attempt < maxAttempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
+      }
+      if (!mountedRef.current || pollRunRef.current !== runId) return;
+      // Re-read the primary custom domain now that infra is (likely) live.
+      setDomainRefreshKey((k) => k + 1);
+    };
+
+    void poll();
+  }, [fetchLastDeploy, refetchProject]);
 
   const nameByLogin: Record<string, string> = {};
   for (const c of recentCommits) {

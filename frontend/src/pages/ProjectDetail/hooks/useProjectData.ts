@@ -36,13 +36,23 @@ export function useProjectData() {
   const [branchLoading, setBranchLoading] = useState(false);
   const [branchSearch, setBranchSearch] = useState("");
 
-  // Fetch project (reused for initial load and post-deploy refresh)
-  const refetchProject = useCallback((opts?: { showLoading?: boolean }) => {
+  // Fetch project (reused for initial load and post-deploy refresh).
+  // Resolves with the fetched project so callers (e.g. the post-deploy poll in
+  // ProjectDetail) can inspect `infraState` without relying on stale closure
+  // state. Resolves `null` on error, and returns `undefined` when there is no
+  // projectId to fetch.
+  const refetchProject = useCallback((opts?: { showLoading?: boolean }): Promise<Project | null> | undefined => {
     if (!projectId) return;
     if (opts?.showLoading) setLoading(true);
     return projectsApi.get(projectId)
-      .then((p) => setProject(p))
-      .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load project")))
+      .then((p) => {
+        setProject(p);
+        return p;
+      })
+      .catch((err: unknown) => {
+        setError(getErrorMessage(err, "Failed to load project"));
+        return null;
+      })
       .finally(() => setLoading(false));
   }, [projectId]);
 
