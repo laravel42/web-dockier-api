@@ -7,6 +7,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DokployError } from "../types.js";
+
 // ─── Mocks ─────────────────────────────────────────────────────────
 
 const getServer = vi.fn();
@@ -30,6 +32,11 @@ const deleteServer = vi.fn().mockResolvedValue(undefined);
 const deleteDatabase = vi.fn().mockResolvedValue(undefined);
 const listDomains = vi.fn().mockResolvedValue([]);
 const deleteDomain = vi.fn().mockResolvedValue(undefined);
+// Verify helpers: default to "gone" (false) so a successful delete is confirmed.
+// A test that wants to simulate a delete that did NOT take effect overrides
+// these to return true.
+const applicationExists = vi.fn().mockResolvedValue(false);
+const databaseExists = vi.fn().mockResolvedValue(false);
 
 vi.mock("../client.js", () => ({
   createDokployClient: () => ({
@@ -38,6 +45,8 @@ vi.mock("../client.js", () => ({
     deleteDatabase: (...a: unknown[]) => deleteDatabase(...a),
     listDomains: (...a: unknown[]) => listDomains(...a),
     deleteDomain: (...a: unknown[]) => deleteDomain(...a),
+    applicationExists: (...a: unknown[]) => applicationExists(...a),
+    databaseExists: (...a: unknown[]) => databaseExists(...a),
   }),
 }));
 
@@ -107,6 +116,8 @@ afterEach(() => {
   deleteApplication.mockResolvedValue(undefined);
   deleteServer.mockResolvedValue(undefined);
   deleteDatabase.mockResolvedValue(undefined);
+  applicationExists.mockResolvedValue(false);
+  databaseExists.mockResolvedValue(false);
   terminateEc2Instance.mockResolvedValue(undefined);
   terminateGceInstance.mockResolvedValue(undefined);
   getProviderCredentialsSafe.mockResolvedValue(AWS_CREDS);
@@ -345,13 +356,14 @@ describe("teardownDokployProject — provisioned databases", () => {
 // ─── Idempotency: already-deleted resources ────────────────────────
 
 describe("teardownDokployProject — idempotency", () => {
-  it("treats an already-deleted Dokploy server as removed and clears its mapping", async () => {
+  it("treats a 404 on server removal as already-gone and clears its mapping", async () => {
     // Without this, a resource deleted out-of-band would fail forever and the
     // mapping row could never be cleared — the project would be permanently
-    // stuck in a partial teardown.
+    // stuck in a partial teardown. "Already gone" is now the real 404 status,
+    // NOT any error text mentioning 'not found'.
     getServer.mockResolvedValue(SERVER);
     getApplication.mockResolvedValue(null);
-    deleteServer.mockRejectedValueOnce(new Error("Server not found"));
+    deleteServer.mockRejectedValueOnce(new DokployError("not found", 404, "server.remove"));
 
     const result = await teardownDokployProject("proj-1", "tenant-1");
 
@@ -359,14 +371,32 @@ describe("teardownDokployProject — idempotency", () => {
     expect(deleteServerMapping).toHaveBeenCalled();
   });
 
-  it("keeps a BYO server's mapping when its Dokploy record removal fails (no VM to fall back on)", async () => {
-    // instanceId null = pre-provisioned/BYO server: there is no VM, so "cloud
-    // resources gone" cannot stand in for the record being gone. Deleting the row
-    // here would orphan the Dokploy record exactly like the bug this gating
-    // exists to prevent.
+  it("treats a non-404 server-removal error as a real failure, not already-gone", async () => {
+    // The exact bug: a 400 whose body contains tokens like 'not found' must NOT
+    // be swallowed as success. It is a genuine failure.
     getServer.mockResolvedValue({ ...SERVER, instanceId: null });
     getApplication.mockResolvedValue(null);
-    deleteServer.mockRejectedValueOnce(new Error("Server has active services, please delete them first"));
+    deleteServer.mockRejectedValueOnce(
+      new DokployError("Server has active services, please delete them first", 400, "server.remove"),
+    );
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(result.status).toBe("partial");
+    expect(deleteServerMapping).not.toHaveBeenCalled();
+    // The raw provider error must not leak into the response.
+    const serverStep = result.steps.find((s) => s.resource.includes("managed server"));
+    expect(serverStep?.message).not.toMatch(/dokploy/i);
+    expect(serverStep?.message).not.toMatch(/server\.remove/);
+  });
+
+  it("keeps a BYO server's mapping when its record removal fails (no VM to fall back on)", async () => {
+    // instanceId null = pre-provisioned/BYO server: there is no VM, so "cloud
+    // resources gone" cannot stand in for the record being gone. Deleting the row
+    // here would orphan the record exactly like the bug this gating prevents.
+    getServer.mockResolvedValue({ ...SERVER, instanceId: null });
+    getApplication.mockResolvedValue(null);
+    deleteServer.mockRejectedValueOnce(new DokployError("boom", 500, "server.remove"));
 
     const result = await teardownDokployProject("proj-1", "tenant-1");
 
@@ -386,6 +416,8 @@ describe("teardownDokployProject — idempotency", () => {
   });
 
   it("treats an already-terminated EC2 instance as removed", async () => {
+    // Cloud (non-DokployError) failures still use the text-based "already gone"
+    // match — AWS has no DokployError status to key off.
     getServer.mockResolvedValue(SERVER);
     getApplication.mockResolvedValue(null);
     terminateEc2Instance.mockRejectedValueOnce(new Error("InvalidInstanceID.NotFound: does not exist"));
@@ -407,19 +439,48 @@ describe("teardownDokployProject — idempotency", () => {
     expect(terminateEc2Instance).not.toHaveBeenCalled();
   });
 
-  it("continues removing the server even if application removal fails", async () => {
+  it("SKIPS server removal when the application removal failed", async () => {
+    // The core fix. A still-present application blocks server.remove with
+    // "active services". So a failed app delete must NOT be followed by a
+    // server-remove attempt (which would 400 and leak the raw provider error);
+    // the server is skipped with an honest message, and the app mapping is kept
+    // so a retry can still target it. The VM still terminates — it is billable
+    // and independent of the provider record.
     getServer.mockResolvedValue(SERVER);
     getApplication.mockResolvedValue(APPLICATION);
-    deleteApplication.mockRejectedValueOnce(new Error("app remove failed"));
+    deleteApplication.mockRejectedValueOnce(new DokployError("app remove failed", 500, "application.remove"));
 
     const result = await teardownDokployProject("proj-1", "tenant-1");
 
-    // The VM is gone, so the infrastructure IS destroyed; the leftover Dokploy
-    // application record costs nothing and must not strand the project.
+    // Billable VM gone, but a provider record could not be removed → torn_down
+    // with the "records remain" note (the VM is the thing that matters).
     expect(result.status).toBe("torn_down");
     expect(result.message).toMatch(/could not be removed automatically/i);
-    expect(deleteServer).toHaveBeenCalledWith("srv-abc");
-    // Its mapping is retained since the record itself still exists.
+    // Server removal was NOT attempted, because the app is still attached.
+    expect(deleteServer).not.toHaveBeenCalled();
+    // App mapping retained so a retry can still reach the orphaned app.
+    expect(deleteApplicationMapping).not.toHaveBeenCalled();
+    // The VM was still terminated.
+    expect(terminateEc2Instance).toHaveBeenCalled();
+    // No provider name leaks into any step message.
+    for (const step of result.steps) {
+      expect(step.message).not.toMatch(/dokploy/i);
+    }
+  });
+
+  it("fails the application step when the delete returns OK but the app persists", async () => {
+    // The verify step: a provider delete can return without error while the app
+    // lingers. applicationExists reporting true turns that into an honest failure.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(APPLICATION);
+    deleteApplication.mockResolvedValue(undefined); // "succeeds"
+    applicationExists.mockResolvedValue(true); // but it's still there
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    const appStep = result.steps.find((s) => s.resource.includes("application"));
+    expect(appStep?.success).toBe(false);
+    expect(deleteServer).not.toHaveBeenCalled();
     expect(deleteApplicationMapping).not.toHaveBeenCalled();
   });
 });

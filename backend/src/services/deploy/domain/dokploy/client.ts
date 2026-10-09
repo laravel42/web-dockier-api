@@ -236,6 +236,23 @@ export class DokployClient {
     await this.mutation<unknown>("application.remove", { applicationId });
   }
 
+  /**
+   * Whether an application still exists. Mirrors {@link databaseExists}: the
+   * `.one` query throws (typically 404) once the app is gone, so a throw is
+   * read as "no longer there". Used by teardown to VERIFY a delete actually
+   * took effect before removing the server it is attached to — a delete call
+   * returning without error does not, on its own, prove the app is gone.
+   */
+  async applicationExists(applicationId: string): Promise<boolean> {
+    if (!applicationId) return false;
+    try {
+      const app = await this.getApplication(applicationId);
+      return Boolean(app?.applicationId);
+    } catch {
+      return false;
+    }
+  }
+
   async saveBuildType(params: SaveBuildTypeParams): Promise<void> {
     await this.mutation<unknown>("application.saveBuildType", params);
   }

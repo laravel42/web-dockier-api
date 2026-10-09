@@ -21,6 +21,7 @@ import { logger } from "../../../../shared/logger.js";
 import { getProviderCredentialsSafe, toAwsCredentials, toGcpServiceAccountKey } from "../../../../lib/provider-credentials.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { createDokployClient } from "../dokploy/client.js";
+import { DokployError } from "../dokploy/types.js";
 import {
   getServer,
   getApplication,
@@ -68,7 +69,7 @@ export async function teardownDokployProject(
   if (!server && !application && databases.length === 0) {
     return {
       status: "nothing_to_tear_down",
-      message: "No Dokploy infrastructure found for this project.",
+      message: "No managed infrastructure found for this project.",
       steps: [],
     };
   }
@@ -89,7 +90,7 @@ export async function teardownDokployProject(
       if (!domain.domainId) continue;
       steps.push(
         await runStep(
-          `dokploy domain ${domain.host || domain.domainId}`,
+          `domain ${domain.host || domain.domainId}`,
           () => client.deleteDomain(domain.domainId),
           "record",
         ),
@@ -97,13 +98,19 @@ export async function teardownDokployProject(
     }
   }
 
-  // ─── 2. Remove the Dokploy application ─────────────────────────
+  // ─── 2. Remove the application ─────────────────────────────────
+  //
+  // Verified: the provider's delete can return OK while the app lingers, and a
+  // lingering app blocks the server removal. The verify re-checks that the app
+  // is actually gone and turns a no-op delete into an honest failure.
   let applicationRemoved = true;
   if (application) {
+    const appId = application.dokployApplicationId;
     const step = await runStep(
-      `dokploy application ${application.dokployApplicationId}`,
-      () => client.deleteApplication(application.dokployApplicationId),
+      `application ${appId}`,
+      () => client.deleteApplication(appId),
       "record",
+      () => client.applicationExists(appId),
     );
     steps.push(step);
     applicationRemoved = step.success;
@@ -117,15 +124,16 @@ export async function teardownDokployProject(
   let databasesRemoved = true;
   for (const db of databases) {
     const step = await runStep(
-      `dokploy ${db.engine} service ${db.dokployDatabaseId}`,
+      `${db.engine} service ${db.dokployDatabaseId}`,
       () => client.deleteDatabase(db.engine, db.dokployDatabaseId),
       "record",
+      () => client.databaseExists(db.engine, db.dokployDatabaseId),
     );
     steps.push(step);
     if (!step.success) databasesRemoved = false;
   }
 
-  // ─── 4. Remove the Dokploy remote server ───────────────────────
+  // ─── 4. Remove the remote server ───────────────────────────────
   let serverRemoved = true;
   // Tracks whether the cloud VM is gone. Starts null = "no VM involved", which
   // is distinct from true/false: a BYO/pre-provisioned server (instanceId null)
@@ -134,17 +142,34 @@ export async function teardownDokployProject(
   // removal failed, orphaning it exactly like the bug this gating prevents.
   let vmRemoved: boolean | null = null;
   if (server) {
-    const step = await runStep(
-      `dokploy server ${server.dokployServerId}`,
-      () => client.deleteServer(server.dokployServerId),
-      "record",
-    );
-    steps.push(step);
-    serverRemoved = step.success;
+    // The provider rejects a server removal while it still hosts an application
+    // or a database ("active services"). Only attempt it when those are
+    // actually gone; otherwise report an honest skip rather than firing a call
+    // that is guaranteed to fail and leaking the provider's raw error.
+    if (applicationRemoved && databasesRemoved) {
+      const step = await runStep(
+        `managed server ${server.dokployServerId}`,
+        () => client.deleteServer(server.dokployServerId),
+        "record",
+      );
+      steps.push(step);
+      serverRemoved = step.success;
+    } else {
+      serverRemoved = false;
+      steps.push({
+        resource: `managed server ${server.dokployServerId}`,
+        success: false,
+        message:
+          "skipped — the server still hosts a service that could not be removed; " +
+          "retry the teardown once that is cleared",
+        kind: "record",
+      });
+    }
 
     // ─── 5. Terminate the cloud VM on the tenant's account ───────
-    // Runs even if the Dokploy record removal failed: the VM is the billable
-    // resource, so stopping it is the priority.
+    // Runs even if the server-record removal failed or was skipped: the VM is
+    // the billable resource, so stopping it is the priority and is independent
+    // of the provider-side record.
     if (server.instanceId) {
       const vmStep = await terminateCloudInstance(server.providerId, server.instanceId);
       steps.push(vmStep);
@@ -166,23 +191,23 @@ export async function teardownDokployProject(
   // record that cannot be removed (e.g. its server is already gone, so Dokploy
   // can no longer reach it) would never succeed.
   if (application && applicationRemoved) {
-    steps.push(await runStep("mapping dokploy_applications", () => deleteApplicationMapping(projectId), "mapping"));
+    steps.push(await runStep("application record", () => deleteApplicationMapping(projectId), "mapping"));
   }
   if (databases.length > 0 && databasesRemoved) {
-    steps.push(await runStep("mapping dokploy_databases", () => deleteDatabaseMappings(projectId), "mapping"));
+    steps.push(await runStep("database records", () => deleteDatabaseMappings(projectId), "mapping"));
   }
   // With a VM: drop the row once the VM is gone (the billable resource).
   // Without a VM (BYO server): there is nothing billable, so the row may only be
   // dropped once the Dokploy record itself is gone.
   const serverRowClear = vmRemoved === null ? serverRemoved : vmRemoved;
   if (server && serverRowClear) {
-    steps.push(await runStep("mapping dokploy_servers", () => deleteServerMapping(projectId), "mapping"));
+    steps.push(await runStep("server record", () => deleteServerMapping(projectId), "mapping"));
   }
 
   const failedSteps = steps.filter((s) => !s.success);
   if (failedSteps.length === 0) {
     logger.info({ projectId, steps: steps.length }, "[dokploy-teardown] Torn down");
-    return { status: "torn_down", message: `Tore down ${steps.length} Dokploy resource(s).`, steps };
+    return { status: "torn_down", message: `Tore down ${steps.length} resource(s).`, steps };
   }
 
   const failedNames = failedSteps.map((s) => s.resource);
@@ -202,8 +227,8 @@ export async function teardownDokployProject(
     return {
       status: "torn_down",
       message:
-        `Infrastructure destroyed. Some Dokploy records could not be removed automatically ` +
-        `(${failedNames.join(", ")}) — they hold no cloud resources and cost nothing, but an ` +
+        `Infrastructure destroyed. Some provider records could not be removed automatically ` +
+        `(${failedNames.join(", ")}) — they hold no cloud resources and cost nothing; an ` +
         `administrator may want to clear them.`,
       steps,
     };
@@ -253,31 +278,81 @@ async function terminateCloudInstance(providerId: string, instanceId: string): P
 // ─── Helpers ───────────────────────────────────────────────────────
 
 /**
- * "Already gone" signals from Dokploy/AWS/GCP. Teardown must be idempotent: a
- * resource deleted out-of-band (or by a previous partial teardown) is a SUCCESS,
- * not a failure. Treating it as a failure would keep the mapping row forever and
- * make the project impossible to fully tear down.
+ * "Already gone" signals from the CLOUD provider (AWS/GCP) only. Teardown must
+ * be idempotent: a VM deleted out-of-band is a SUCCESS, not a failure.
+ *
+ * This is deliberately NOT used for the deploy provider's own records — those
+ * use the HTTP status code (`isAlreadyGoneError`) instead. The previous
+ * string-matching version matched the bare token `404` / `not found` ANYWHERE
+ * in a provider error body, so a FAILED `application.remove` whose error merely
+ * mentioned "404" was misread as "already removed": the app was never deleted,
+ * its mapping row was dropped, and the still-attached app then made the server
+ * removal fail. Matching the real status code closes that hole.
  */
-const ALREADY_GONE = /not found|notfound|404|does not exist|no longer exists|already (deleted|terminated)|InvalidInstanceID\.NotFound/i;
+const CLOUD_ALREADY_GONE = /not found|notfound|does not exist|no longer exists|already (deleted|terminated)|InvalidInstanceID\.NotFound/i;
+
+/**
+ * Is this error a genuine "the targeted resource is already gone" signal?
+ *
+ * For a provider API call that is a real 404 on the resource we asked to
+ * delete. For a cloud call it is the provider's not-found text. Crucially, a
+ * 4xx that is NOT 404 (e.g. the 400 "Server has active services") is NOT
+ * "already gone" — it is a real failure that must be reported honestly.
+ */
+function isAlreadyGoneError(err: unknown): boolean {
+  if (err instanceof DokployError) return err.statusCode === 404;
+  return CLOUD_ALREADY_GONE.test(getErrMsg(err));
+}
 
 /**
  * Run a teardown step, capturing success/failure without throwing.
+ *
+ * `verify`, when provided, is called AFTER a seemingly-successful `fn` to
+ * confirm the resource is actually gone — the deploy provider's delete can
+ * return without error while leaving the resource in place. A `verify` that
+ * reports the resource still present turns the step into an honest failure.
  */
 async function runStep(
   resource: string,
   fn: () => Promise<void>,
   kind: DokployTeardownStep["kind"] = "record",
+  verify?: () => Promise<boolean>,
 ): Promise<DokployTeardownStep> {
   try {
     await fn();
+    if (verify) {
+      const stillPresent = await verify();
+      if (stillPresent) {
+        logger.warn({ resource }, "[dokploy-teardown] Delete returned OK but resource is still present");
+        return {
+          resource,
+          success: false,
+          message: "the delete did not take effect — the resource is still present",
+          kind,
+        };
+      }
+    }
     return { resource, success: true, message: "removed", kind };
   } catch (err) {
-    const message = getErrMsg(err);
-    if (ALREADY_GONE.test(message)) {
+    if (isAlreadyGoneError(err)) {
       logger.info({ resource }, "[dokploy-teardown] Resource already gone — treating as removed");
       return { resource, success: true, message: "already removed", kind };
     }
     logger.warn({ err, resource }, "[dokploy-teardown] Step failed");
-    return { resource, success: false, message, kind };
+    return { resource, success: false, message: neutralizeProviderError(err), kind };
   }
+}
+
+/**
+ * Map a raw provider error to a neutral, resource-scoped message for the API
+ * response. The deploy provider's raw error bodies name the provider and expose
+ * internal tRPC paths (e.g. `"path":"server.remove"`); neither may reach an API
+ * consumer. The real error is still logged for operators (see the `logger.warn`
+ * above, which keeps the original `err`).
+ */
+function neutralizeProviderError(err: unknown): string {
+  if (err instanceof DokployError) {
+    return "the deploy provider could not remove this resource; retry the teardown";
+  }
+  return getErrMsg(err);
 }
