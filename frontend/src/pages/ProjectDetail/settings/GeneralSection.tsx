@@ -24,9 +24,10 @@ interface Props {
   analysis?: RepoAnalysis | null;
   canManage: boolean;
   onProjectUpdate?: (project: Project) => void;
+  onInfraRefresh?: () => void | Promise<void>;
 }
 
-export default function GeneralSection({ project, analysis, canManage, onProjectUpdate }: Props) {
+export default function GeneralSection({ project, analysis, canManage, onProjectUpdate, onInfraRefresh }: Props) {
   const fid = useId();
   const [name] = useState(project.name);
   const [noteValue, setNoteValue] = useState(project.settings?.notes ?? "");
@@ -40,7 +41,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
   const {
     infraState, showTeardownModal, tearingDown,
     handleTeardown, openTeardownModal, closeTeardownModal,
-  } = useInfraTeardown(project.id, project.infraState ?? "none");
+  } = useInfraTeardown(project.id, project.infraState ?? "none", onInfraRefresh);
 
   const { saving, saved, save: handleSave } = useSaveAction(
     async () => {

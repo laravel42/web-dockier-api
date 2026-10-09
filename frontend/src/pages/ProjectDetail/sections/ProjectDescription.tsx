@@ -49,6 +49,8 @@ interface Props {
   projectId?: string;
   project: Project;
   onProjectUpdate: (project: Project) => void;
+  /** Re-fetches the shared project (e.g. after infrastructure teardown). */
+  onInfraRefresh?: () => void | Promise<void>;
   /** Commits, contributors, issues and pull requests. */
   activityPanel?: ReactNode;
   /** Recent security scans. */
@@ -882,6 +884,7 @@ export default function ProjectDescription({
   projectId,
   project,
   onProjectUpdate,
+  onInfraRefresh,
   activityPanel,
   securityPanel,
   deploysPanel,
@@ -1170,6 +1173,7 @@ export default function ProjectDescription({
               section={settingsSection}
               analysis={analysis}
               onProjectUpdate={onProjectUpdate}
+              onInfraRefresh={onInfraRefresh}
             />
           );
         }

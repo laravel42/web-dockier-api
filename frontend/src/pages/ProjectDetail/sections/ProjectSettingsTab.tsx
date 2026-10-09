@@ -16,9 +16,10 @@ interface Props {
   section: SettingsSection;
   analysis?: RepoAnalysis | null;
   onProjectUpdate?: (project: Project) => void;
+  onInfraRefresh?: () => void | Promise<void>;
 }
 
-export default function ProjectSettingsTab({ project, section, analysis, onProjectUpdate }: Props) {
+export default function ProjectSettingsTab({ project, section, analysis, onProjectUpdate, onInfraRefresh }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
 
@@ -32,6 +33,7 @@ export default function ProjectSettingsTab({ project, section, analysis, onProje
           analysis={analysis}
           canManage={canManage}
           onProjectUpdate={onProjectUpdate}
+          onInfraRefresh={onInfraRefresh}
         />
       )}
       {section === "deployments" && (

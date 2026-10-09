@@ -9,7 +9,11 @@ import { useConfirmableAction } from "@/hooks/useConfirmableAction";
  *
  * Built on top of `useConfirmableAction` for consistent modal + async patterns.
  */
-export function useInfraTeardown(projectId: string, initialState: string) {
+export function useInfraTeardown(
+  projectId: string,
+  initialState: string,
+  onTeardownComplete?: () => void | Promise<void>,
+) {
   const [infraState, setInfraState] = useState(initialState);
   const toast = useToast();
 
@@ -25,11 +29,15 @@ export function useInfraTeardown(projectId: string, initialState: string) {
       if (res.status === "torn_down") {
         setInfraState("torn_down");
         toast.success(res.message);
+        // Re-fetch the shared project so infraState-derived UI updates in place.
+        await onTeardownComplete?.();
       } else if (res.status === "nothing_to_tear_down") {
         toast.info(res.message);
       } else {
-        // "partial" — treat as an error-level message but not an exception
+        // "partial" — treat as an error-level message but not an exception.
+        // Infra state still changed server-side, so re-fetch the shared project.
         toast.error(res.message);
+        await onTeardownComplete?.();
       }
     },
     { errorFallback: "Failed to tear down infrastructure" },
