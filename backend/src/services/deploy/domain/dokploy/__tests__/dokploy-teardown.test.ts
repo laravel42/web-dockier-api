@@ -483,4 +483,42 @@ describe("teardownDokployProject — idempotency", () => {
     expect(deleteServer).not.toHaveBeenCalled();
     expect(deleteApplicationMapping).not.toHaveBeenCalled();
   });
+
+  it("does NOT trust a 404 on the delete when verify shows the app still present", async () => {
+    // The misrouted-procedure bug: a wrong tRPC path returns a 404 ("procedure
+    // not found") that is indistinguishable from an "entity already gone" 404.
+    // Without verifying, that 404 was swallowed as "already removed", the app
+    // mapping was dropped, and the still-attached app blocked server removal.
+    // With a verify, a 404 is only trusted when the app is actually gone.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(APPLICATION);
+    deleteApplication.mockRejectedValueOnce(new DokployError("not found", 404, "application.delete"));
+    applicationExists.mockResolvedValue(true); // the delete did not take effect
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    const appStep = result.steps.find((s) => s.resource.includes("application"));
+    expect(appStep?.success).toBe(false);
+    // The app is still attached, so the server removal must be skipped and the
+    // app mapping kept so a retry can still target it.
+    expect(deleteServer).not.toHaveBeenCalled();
+    expect(deleteApplicationMapping).not.toHaveBeenCalled();
+    // No provider name leaks into the message.
+    expect(appStep?.message).not.toMatch(/dokploy/i);
+  });
+
+  it("DOES trust a 404 on the delete when verify confirms the app is gone", async () => {
+    // The legitimate idempotent case: the app really was already deleted, so a
+    // 404 plus a verify that confirms it is gone is an honest success.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(APPLICATION);
+    deleteApplication.mockRejectedValueOnce(new DokployError("not found", 404, "application.delete"));
+    applicationExists.mockResolvedValue(false); // genuinely gone
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    const appStep = result.steps.find((s) => s.resource.includes("application"));
+    expect(appStep?.success).toBe(true);
+    expect(deleteApplicationMapping).toHaveBeenCalledWith("proj-1");
+  });
 });

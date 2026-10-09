@@ -233,7 +233,14 @@ export class DokployClient {
   }
 
   async deleteApplication(applicationId: string): Promise<void> {
-    await this.mutation<unknown>("application.remove", { applicationId });
+    // Dokploy's application router names its delete `delete`, NOT `remove` —
+    // servers and databases use `remove`, but the application router does not
+    // have one. Calling `application.remove` hits a non-existent procedure and
+    // returns a tRPC 404 ("procedure not found"), which looks exactly like an
+    // "already gone" entity 404 and gets silently swallowed, so the app is
+    // never actually deleted. Same class of per-router naming quirk as the
+    // `redirects.create` vs `security.create` note on createRedirect.
+    await this.mutation<unknown>("application.delete", { applicationId });
   }
 
   /**

@@ -7,7 +7,7 @@
  * Dokploy application/server records that point at it.
  *
  * This tears down, best-effort and idempotently:
- *   1. The Dokploy application (`application.remove`)
+ *   1. The Dokploy application (`application.delete`)
  *   2. The Dokploy remote server (`server.remove`)
  *   3. The cloud VM on the tenant's account (EC2 terminate / GCE delete)
  *   4. The Dockier mapping rows (`dokploy_applications`, `dokploy_servers`)
@@ -81,7 +81,7 @@ export async function teardownDokployProject(
   //
   // MUST happen before the application: once it is gone its domains can no
   // longer be enumerated. Whether Dokploy cascades domain rows on
-  // `application.remove` is undocumented, and a Traefik host can only be
+  // `application.delete` is undocumented, and a Traefik host can only be
   // claimed by one application — so a domain left behind makes the NEXT deploy's
   // `domain.create` fail on a host that is still held by a deleted app, and the
   // project's custom domain silently never comes back.
@@ -335,6 +335,26 @@ async function runStep(
     return { resource, success: true, message: "removed", kind };
   } catch (err) {
     if (isAlreadyGoneError(err)) {
+      // A 404 from the delete is only trustworthy if the resource is really
+      // gone. The deploy provider returns 404 both for "resource already
+      // deleted" (the idempotent case we want to treat as success) AND for
+      // "procedure not found" when the delete is addressed to the wrong path —
+      // in which case the resource was never touched and still exists. When a
+      // `verify` is available, confirm with it before trusting the 404 so a
+      // misrouted or no-op delete becomes an honest failure instead of
+      // silently dropping the mapping row and orphaning the resource.
+      if (verify) {
+        const stillPresent = await verify();
+        if (stillPresent) {
+          logger.warn({ resource }, "[dokploy-teardown] Delete reported gone but resource is still present");
+          return {
+            resource,
+            success: false,
+            message: "the resource could not be removed; retry the teardown",
+            kind,
+          };
+        }
+      }
       logger.info({ resource }, "[dokploy-teardown] Resource already gone — treating as removed");
       return { resource, success: true, message: "already removed", kind };
     }
