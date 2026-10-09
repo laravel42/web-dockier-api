@@ -29,7 +29,7 @@ import { ChevronLeftIcon } from "lucide-react";
 
 export default function ProjectDetail() {
   const {
-    project, setProject, loading, error, navigate,
+    project, setProject, refetchProject, loading, error, navigate,
     handleUpdateName, nameSaving, nameError,
     showDeployWizard, setShowDeployWizard,
     allProviders, analysis, analysisLoading, analysisError, fetchLastDeploy,
@@ -44,6 +44,14 @@ export default function ProjectDetail() {
     deploysError, scansError, fetchScans, hasLiveDeploy,
     deploysLoaded,
   } = useProjectDetail();
+
+  // After a deploy finishes, refresh the deploy list AND re-fetch the core
+  // project so infraState-derived fields (site URL, torn-down state) update
+  // without a page reload. Order preserved: fetchLastDeploy runs first.
+  const handleDeployComplete = () => {
+    void fetchLastDeploy();
+    void refetchProject();
+  };
 
   const nameByLogin: Record<string, string> = {};
   for (const c of recentCommits) {
@@ -269,7 +277,7 @@ export default function ProjectDetail() {
         analysisLoading={analysisLoading}
         analysisError={analysisError}
         providers={allProviders}
-        onDeployComplete={fetchLastDeploy}
+        onDeployComplete={handleDeployComplete}
       />
 
       <PullLogModal pullLog={pullLog} pullLoading={pullLoading} onClose={() => setPullLog(null)} />

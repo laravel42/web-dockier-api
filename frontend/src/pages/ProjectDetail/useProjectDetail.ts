@@ -43,6 +43,7 @@ export function useProjectDetail() {
     // Core project data
     project: data.project,
     setProject: data.setProject,
+    refetchProject: data.refetchProject,
     loading: data.loading,
     error: data.error,
     navigate,

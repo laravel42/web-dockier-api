@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { projectsApi, gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
@@ -36,15 +36,19 @@ export function useProjectData() {
   const [branchLoading, setBranchLoading] = useState(false);
   const [branchSearch, setBranchSearch] = useState("");
 
-  // Fetch project
-  useEffect(() => {
+  // Fetch project (reused for initial load and post-deploy refresh)
+  const refetchProject = useCallback((opts?: { showLoading?: boolean }) => {
     if (!projectId) return;
-    setLoading(true);
-    projectsApi.get(projectId)
+    if (opts?.showLoading) setLoading(true);
+    return projectsApi.get(projectId)
       .then((p) => setProject(p))
       .catch((err: unknown) => setError(getErrorMessage(err, "Failed to load project")))
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  useEffect(() => {
+    void refetchProject({ showLoading: true });
+  }, [refetchProject]);
 
   // Auto-open deploy wizard from navigation state (handled in composer)
   const openDeployFromNav = !!(location.state as { openDeploy?: boolean })?.openDeploy;
@@ -140,6 +144,7 @@ export function useProjectData() {
     projectId,
     project,
     setProject,
+    refetchProject,
     loading,
     error,
     navigate,
