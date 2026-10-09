@@ -45,12 +45,19 @@ export default function ProjectDetail() {
     deploysLoaded,
   } = useProjectDetail();
 
+  // Bumped after a successful deploy to re-fetch the primary custom domain
+  // (see useProjectSiteUrl) — projectId is stable, so the domain fetch needs an
+  // explicit nudge to pick up a newly-active custom domain without a reload.
+  const [domainRefreshKey, setDomainRefreshKey] = useState(0);
+
   // After a deploy finishes, refresh the deploy list AND re-fetch the core
   // project so infraState-derived fields (site URL, torn-down state) update
-  // without a page reload. Order preserved: fetchLastDeploy runs first.
+  // without a page reload, and bump domainRefreshKey so a newly-active custom
+  // domain replaces the generic deploy URL. Order preserved: fetchLastDeploy first.
   const handleDeployComplete = () => {
     void fetchLastDeploy();
     void refetchProject();
+    setDomainRefreshKey((k) => k + 1);
   };
 
   const nameByLogin: Record<string, string> = {};
@@ -150,6 +157,7 @@ export default function ProjectDetail() {
     project?.id,
     lastSuccessfulDeployUrl,
     project?.infraState === "torn_down",
+    domainRefreshKey,
   );
   const repoFaviconUrl = useProjectRepoFavicon(project ?? undefined);
 
@@ -215,6 +223,7 @@ export default function ProjectDetail() {
         allBadges={allBadges}
         nameByLogin={nameByLogin}
         recentCommits={recentCommits}
+        domainRefreshKey={domainRefreshKey}
       />
 
       <ProjectDescription

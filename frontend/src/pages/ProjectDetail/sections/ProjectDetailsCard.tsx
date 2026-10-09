@@ -32,6 +32,8 @@ interface Props {
   allBadges?: Array<{ name: string; category: string; confidence: number }>;
   nameByLogin?: Record<string, string>;
   recentCommits?: CommitInfo[];
+  /** Bumped after a successful deploy to re-fetch the primary custom domain without a reload. */
+  domainRefreshKey?: number;
 }
 
 /** Short and full SHAs from different sources should still match. */
@@ -200,6 +202,7 @@ export default function ProjectDetailsCard({
   allBadges,
   nameByLogin,
   recentCommits = [],
+  domainRefreshKey,
 }: Props) {
   const isTemplate = project.sourceType === "template";
   const repoKey = project.repository ? getRepoKey(project.repository) : null;
@@ -208,6 +211,7 @@ export default function ProjectDetailsCard({
     project.id,
     deployUrl,
     project.infraState === "torn_down",
+    domainRefreshKey,
   );
   const displayBadges = allBadges && allBadges.length > 0 ? allBadges : badges;
   const hasLanguageBreakdown = Boolean(

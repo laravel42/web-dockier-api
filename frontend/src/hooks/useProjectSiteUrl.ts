@@ -4,11 +4,16 @@ import { domainsApi } from "@/services/domains";
 /**
  * Resolve the public site URL for a project: primary custom domain, else deploy URL.
  * Returns undefined when infrastructure is torn down or no URL is available.
+ *
+ * `refreshKey` forces the custom-domain fetch to re-run when its value changes.
+ * `projectId` is stable across a deploy, so a parent bumps `refreshKey` after a
+ * successful deploy to pick up a newly-active custom domain without a page reload.
  */
 export function useProjectSiteUrl(
   projectId: string | undefined,
   deployUrl?: string,
   infraTornDown = false,
+  refreshKey = 0,
 ): string | undefined {
   const [domainUrl, setDomainUrl] = useState<string | undefined>();
 
@@ -30,7 +35,7 @@ export function useProjectSiteUrl(
     }).catch(() => { /* fall back to deployUrl */ });
 
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   if (infraTornDown) return undefined;
   return domainUrl || deployUrl?.trim() || undefined;
