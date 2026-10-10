@@ -602,8 +602,7 @@ function ActivityDetailModal({
 
   return (
     <Modal open onClose={onClose} title="Event details" size="lg">
-      {/* Pulled up under the heading: this is the title's subtitle, not body copy. */}
-      <p className="-mt-3 mb-4 text-sm text-text-muted">{subtitle}</p>
+      <p className="mb-4 text-sm text-text-muted">{subtitle}</p>
 
       {loading ? (
         <div className="flex items-center justify-center py-10">

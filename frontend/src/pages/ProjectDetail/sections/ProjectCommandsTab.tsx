@@ -13,9 +13,17 @@ import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCw
 import { destructiveReason } from "../destructiveCommand";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
+import DropdownPortal from "@/components/DropdownPortal";
 
 const PAGE_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
+
+// Fixed width of the portaled actions menu (matches the legacy `w-40` = 10rem).
+const MENU_WIDTH = 160;
+// Rough height used only to decide whether to flip the menu above the trigger.
+const MENU_EST_HEIGHT = 180;
+// Keep the menu this far from the viewport edges when clamping/flipping.
+const VIEWPORT_MARGIN = 8;
 
 interface Props {
   project: Project;
@@ -79,10 +87,55 @@ export default function ProjectCommandsTab({ project }: Props) {
 
   const [outputModal, setOutputModal] = useState<Command | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const closeMenu = useCallback(() => setOpenMenuId(null), []);
-  // `menuRef` wraps trigger + menu for outside-click; `menuListRef` is the menu itself.
-  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The actions menu renders in a body portal (fixed position) so a parent's
+  // `overflow` cannot clip it. We track the open trigger element and compute a
+  // right-aligned, flip-up position for it.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const updateMenuPos = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Right-align the narrow menu to the trigger, clamped into the viewport.
+    const left = Math.max(VIEWPORT_MARGIN, rect.right - MENU_WIDTH);
+    // Flip above when there isn't room below the trigger before the viewport bottom.
+    const flipUp = rect.bottom + MENU_EST_HEIGHT > window.innerHeight - VIEWPORT_MARGIN;
+    const top = flipUp ? rect.top - MENU_EST_HEIGHT - 4 : rect.bottom + 4;
+    setMenuPos({ top, left, width: MENU_WIDTH });
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setOpenMenuId(null);
+    setMenuPos(null);
+  }, []);
+
+  // `menuListRef` is the portaled menu container (also used for keyboard nav).
   const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(openMenuId !== null, closeMenu);
+
+  const toggleMenu = useCallback((cmdId: string, el: HTMLButtonElement) => {
+    if (openMenuId === cmdId) {
+      closeMenu();
+      return;
+    }
+    triggerRef.current = el;
+    updateMenuPos();
+    setOpenMenuId(cmdId);
+  }, [openMenuId, closeMenu, updateMenuPos]);
+
+  // Recalculate the portaled menu position on scroll/resize so it tracks the
+  // trigger (the capturing scroll listener catches scrollable ancestors too).
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => updateMenuPos();
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("scroll", handler, true);
+      window.removeEventListener("resize", handler);
+    };
+  }, [openMenuId, updateMenuPos]);
 
   const canRunCommands = hasDeployment && canManage;
 
@@ -129,18 +182,20 @@ export default function ProjectCommandsTab({ project }: Props) {
       .finally(() => setDeployCheckDone(true));
   }, [project.id, canView]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside. The menu lives in a body portal, so
+  // we must ignore clicks on BOTH the trigger button and the portaled menu.
   useEffect(() => {
     if (!openMenuId) return;
 
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenuId(null);
-      }
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuListRef.current?.contains(target)) return;
+      closeMenu();
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openMenuId]);
+  }, [openMenuId, closeMenu, menuListRef]);
 
   // Poll for running commands to update their status in real-time.
   // The pageRef ensures the interval always fetches the current page
@@ -191,7 +246,7 @@ export default function ProjectCommandsTab({ project }: Props) {
   };
 
   const handleRunAgain = async (cmd: Command) => {
-    setOpenMenuId(null);
+    closeMenu();
     setSubmitting(true);
     try {
       await commandsApi.run(project.id, cmd.command);
@@ -214,7 +269,7 @@ export default function ProjectCommandsTab({ project }: Props) {
   };
 
   const handleCopy = (cmd: Command) => {
-    setOpenMenuId(null);
+    closeMenu();
     void navigator.clipboard.writeText(cmd.command);
   };
 
@@ -314,10 +369,10 @@ export default function ProjectCommandsTab({ project }: Props) {
                   </div>
                   <StatusBadge status={cmd.status} />
                   {/* Actions menu */}
-                  <div className="relative" ref={openMenuId === cmd.id ? menuRef : undefined}>
+                  <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setOpenMenuId(openMenuId === cmd.id ? null : cmd.id)}
+                      onClick={(e) => toggleMenu(cmd.id, e.currentTarget)}
                       className="flex size-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-card/60 hover:text-text"
                       aria-label={`Actions for command: ${cmd.command.slice(0, 40)}`}
                       aria-expanded={openMenuId === cmd.id}
@@ -326,58 +381,63 @@ export default function ProjectCommandsTab({ project }: Props) {
                       <EllipsisVerticalIcon className="size-4" />
                     </button>
                     {openMenuId === cmd.id && (
-                      <div
-                        ref={menuListRef}
-                        onKeyDown={onMenuKeyDown}
-                        role="menu"
-                        tabIndex={-1}
-                        aria-label="Command actions"
-                        className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-(--shadow-overlay)"
+                      <DropdownPortal
+                        open
+                        pos={menuPos}
+                        dropdownRef={menuListRef}
+                        className="rounded-lg border border-border bg-card py-1 shadow-(--shadow-overlay)"
                       >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => { setOutputModal(cmd); setOpenMenuId(null); }}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
+                        <div
+                          onKeyDown={onMenuKeyDown}
+                          role="menu"
+                          tabIndex={-1}
+                          aria-label="Command actions"
                         >
-                          <FileTextIcon className="size-3.5" />
-                          View output
-                        </button>
-                        {canManage && hasDeployment && (
                           <button
                             type="button"
                             role="menuitem"
-                            onClick={() => void handleRunAgain(cmd)}
+                            onClick={() => { setOutputModal(cmd); closeMenu(); }}
                             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                           >
-                            <RefreshCwIcon className="size-3.5" />
-                            Run again
+                            <FileTextIcon className="size-3.5" />
+                            View output
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => handleCopy(cmd)}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
-                        >
-                          <CopyIcon className="size-3.5" />
-                          Copy command
-                        </button>
-                        {canManage && (
-                          <>
-                            <div className="my-1 border-t border-border/50" />
+                          {canManage && hasDeployment && (
                             <button
                               type="button"
                               role="menuitem"
-                              onClick={() => { setOpenMenuId(null); setConfirmCmd(cmd); }}
-                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-ink transition-colors hover:bg-danger-surface"
+                              onClick={() => void handleRunAgain(cmd)}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
                             >
-                              <Trash2Icon className="size-3.5" />
-                              Delete
+                              <RefreshCwIcon className="size-3.5" />
+                              Run again
                             </button>
-                          </>
-                        )}
-                      </div>
+                          )}
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => handleCopy(cmd)}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text transition-colors hover:bg-card/60"
+                          >
+                            <CopyIcon className="size-3.5" />
+                            Copy command
+                          </button>
+                          {canManage && (
+                            <>
+                              <div className="my-1 border-t border-border/50" />
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => { closeMenu(); setConfirmCmd(cmd); }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-danger-ink transition-colors hover:bg-danger-surface"
+                              >
+                                <Trash2Icon className="size-3.5" />
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </DropdownPortal>
                     )}
                   </div>
                 </div>
