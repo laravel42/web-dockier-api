@@ -38,6 +38,13 @@ vi.mock("../dokploy-applier.js", () => ({
   previewDomainConfigDokploy: previewDokploy,
 }));
 
+const mockGetServer = vi.fn<(projectId: string) => Promise<{ serverIp: string } | null>>(
+  async () => ({ serverIp: "203.0.113.10" }),
+);
+vi.mock("../../../deploy/domain/dokploy/mappings.js", () => ({
+  getServer: (projectId: string) => mockGetServer(projectId),
+}));
+
 // ─── Static branch ─────────────────────────────────────────────────
 const applyStatic = vi.fn(async () => ({ success: true, message: "static applied", retryable: false }));
 const previewStatic = vi.fn(async () => ({ generatedConfig: "# cdn" }));
@@ -111,6 +118,7 @@ beforeEach(() => {
   vpsErrorMessage = "No active deployment found.";
   vi.clearAllMocks();
   executeOnHost.mockResolvedValue({ output: "DOMAIN_CONFIG_APPLIED", exitCode: 0 });
+  mockGetServer.mockResolvedValue({ serverIp: "203.0.113.10" });
 });
 
 describe("applyDomainConfig — dispatch order", () => {
@@ -276,7 +284,33 @@ describe("getDomainDnsInstructions — supported flag", () => {
     const result = await getDomainDnsInstructions({ ...params, domainName: "www.example.com" });
 
     expect(result.supported).toBe(false);
-    expect(result.message).toMatch(/A record/);
+    expect(result.message).toBe("Deploy this project, then the exact DNS records will appear here.");
+  });
+
+  it("returns an A record for a deployed Dokploy project", async () => {
+    isDokploy = true;
+    mockGetServer.mockResolvedValue({ serverIp: "203.0.113.10" });
+
+    const result = await getDomainDnsInstructions({ ...params, domainName: "www.example.com" });
+
+    expect(result.supported).toBe(true);
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      name: "www.example.com",
+      type: "A",
+      value: "203.0.113.10",
+    });
+  });
+
+  it("is unsupported, with a provider-neutral message, for a Dokploy project with no server yet", async () => {
+    isDokploy = true;
+    mockGetServer.mockResolvedValue(null);
+
+    const result = await getDomainDnsInstructions({ ...params, domainName: "www.example.com" });
+
+    expect(result.supported).toBe(false);
+    expect(result.message).toBe("No server is provisioned for this project yet — deploy the project first.");
+    expect(result.message).not.toMatch(/Dokploy/i);
   });
 
   it("returns the records for a static project", async () => {

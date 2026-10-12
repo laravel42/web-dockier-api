@@ -449,6 +449,31 @@ export async function getDomainDnsInstructions(params: {
 }): Promise<DnsInstructionsResult> {
   const { tenantId, projectId, domainName } = params;
 
+  // Dokploy-deployed projects point an A record at the server IP from the
+  // dokploy_servers mapping (Traefik routes by Host). Mirror the Dokploy block
+  // in verifyDomainDns rather than dead-ending in the fallback.
+  const { isDokployProject } = await import("./dokploy-applier.js");
+  if (await isDokployProject(projectId)) {
+    const { getServer } = await import("../../deploy/domain/dokploy/mappings.js");
+    const serverIp = ((await getServer(projectId))?.serverIp || "").trim();
+    if (!serverIp) {
+      return {
+        supported: false,
+        records: [],
+        note: "",
+        message: "No server is provisioned for this project yet — deploy the project first.",
+      };
+    }
+    return {
+      supported: true,
+      domainName,
+      records: [
+        { name: domainName, type: "A", value: serverIp, purpose: "Point your domain at the server" },
+      ],
+      note: "HTTPS/SSL is issued automatically once your DNS changes propagate.",
+    };
+  }
+
   const staticDeployment = await resolveStaticDeployment(projectId, tenantId);
   if (!staticDeployment) {
     return {
