@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId } from "react";
+import { useState, useEffect, useCallback, useId, useRef } from "react";
 import { domainsApi, type DnsInstructions } from "@/services/domains";
 import type { Domain, SslCertificate } from "@/types";
 import type { Project } from "@/types";
@@ -18,10 +18,18 @@ import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, Hash
 import { settingsBadgeCls } from "@/utils/styles";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
+import DropdownPortal from "@/components/DropdownPortal";
 
 interface Props {
   project: Project;
 }
+
+// Fixed width of the portaled actions menu (matches the legacy `w-40` = 10rem).
+const MENU_WIDTH = 160;
+// Rough height used only to decide whether to flip the menu above the trigger.
+const MENU_EST_HEIGHT = 180;
+// Keep the menu this far from the viewport edges when clamping/flipping.
+const VIEWPORT_MARGIN = 8;
 
 function TabSpinner({ label }: { label: string }) {
   return (
@@ -115,7 +123,7 @@ function DomainRow({
 
   return (
     <>
-    <div className="px-4 py-3">
+    <div className="px-4 py-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-text">{domain.name}</span>
@@ -215,7 +223,7 @@ function DomainRow({
       </div>
     </div>
     {dnsStatus && (
-      <div className={`mx-2 mt-1 mb-2 rounded-md px-3 py-2 text-xs ${
+      <div className={`mx-2 mb-2 rounded-md px-3 py-2 text-xs ${
         dnsStatus.verified
           ? "bg-success-500/10 text-success-500 border border-success-500/30"
           : "bg-warning-surface text-warning-ink border border-warning-line"
@@ -224,7 +232,7 @@ function DomainRow({
       </div>
     )}
     {instructionsOpen && (
-      <div className="mx-4 mb-3 rounded-md border border-border bg-card/40 p-3 ">
+      <div className="mx-2 mb-2 rounded-md border border-border bg-card/40 p-3 ">
         {instructionsError ? (
           <p className="text-xs text-danger-300">{instructionsError}</p>
         ) : !instructions ? (
@@ -368,7 +376,7 @@ function DomainsSection({
       </div>
 
       {!infraLive && (
-        <Alert variant="info" className="m-4 mb-0">
+        <Alert variant="warning" className="m-4 mb-0">
           Add domains now — they activate automatically the next time you deploy.
           DNS setup and HTTPS can't be verified until your app is running.
         </Alert>
@@ -501,9 +509,46 @@ function CertificateRow({
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // The actions menu renders in a body portal (fixed position) so a parent's
+  // `overflow` cannot clip it. Track the trigger and compute a right-aligned,
+  // flip-up position for it.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const updateMenuPos = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const left = Math.max(VIEWPORT_MARGIN, rect.right - MENU_WIDTH);
+    const flipUp = rect.bottom + MENU_EST_HEIGHT > window.innerHeight - VIEWPORT_MARGIN;
+    const top = flipUp ? rect.top - MENU_EST_HEIGHT - 4 : rect.bottom + 4;
+    setMenuPos({ top, left, width: MENU_WIDTH });
+  }, []);
+
+  const closeMenu = useCallback(() => { setMenuOpen(false); setMenuPos(null); }, []);
+  const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
+
+  const toggleMenu = useCallback(() => {
+    setMenuOpen((open) => {
+      if (open) { setMenuPos(null); return false; }
+      updateMenuPos();
+      return true;
+    });
+  }, [updateMenuPos]);
+
+  // Recalculate on scroll/resize so the portaled menu tracks its trigger.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = () => updateMenuPos();
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("scroll", handler, true);
+      window.removeEventListener("resize", handler);
+    };
+  }, [menuOpen, updateMenuPos]);
 
   const typeLabels: Record<SslCertificate["type"], string> = {
     lets_encrypt: "Let's Encrypt",
@@ -531,7 +576,7 @@ function CertificateRow({
   const handleDelete = async () => {
     await domainsApi.deleteCertificate(projectId, cert.id);
     onRefresh();
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const expiresLabel = cert.expiresAt
@@ -556,42 +601,47 @@ function CertificateRow({
         {canManage && (
           <div className="relative">
             <button
+              ref={triggerRef}
               type="button"
-              onClick={() => setMenuOpen(!menuOpen)}
+              onClick={toggleMenu}
               className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
               aria-label="Certificate actions"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
             >
               <EllipsisVerticalIcon className="size-4" />
             </button>
             {menuOpen && (
               <>
                 {/* Mouse-only dismissal; Escape closes this surface as well. */}
-                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div
-                  ref={menuRef}
-                  onKeyDown={onMenuKeyDown}
-                  role="menu"
-                  tabIndex={-1}
-                  aria-label="Certificate actions"
-                  className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1"
+                <div aria-hidden="true" className="fixed inset-0 z-99998" onClick={closeMenu} />
+                <DropdownPortal
+                  open={menuOpen}
+                  pos={menuPos}
+                  dropdownRef={menuRef}
+                  className="w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1"
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { void navigator.clipboard.writeText(cert.id); setMenuOpen(false); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
-                  >
-                    Copy ID
-                  </button>
-                  <div className="my-1 border-t border-border" />
-                  <button
-                    type="button"
-                    onClick={() => { setMenuOpen(false); setConfirmOpen(true); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
+                  <div onKeyDown={onMenuKeyDown} role="menu" tabIndex={-1} aria-label="Certificate actions">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { void navigator.clipboard.writeText(cert.id); closeMenu(); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
+                    >
+                      <HashIcon className="size-3.5" />
+                      Copy ID
+                    </button>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      type="button"
+                      onClick={() => { closeMenu(); setConfirmOpen(true); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors"
+                    >
+                      <Trash2Icon className="size-3.5" />
+                      Delete
+                    </button>
+                  </div>
+                </DropdownPortal>
               </>
             )}
           </div>
