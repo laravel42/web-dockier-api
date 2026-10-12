@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
+import { throwOnError, type PostgrestError } from "../../../shared/supabase/query.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { UsersError } from "./users.js";
 
@@ -64,8 +65,8 @@ export async function updateUserRole(
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
     .eq("status", "active")
-    .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: unknown };
-  if (membershipLookupError) throw new UsersError("Failed to look up membership", "internal");
+    .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: PostgrestError | null };
+  throwOnError(membershipLookupError, UsersError, { internalMsg: "Failed to look up membership" });
 
   // If no active membership exists, create one (user was created without a role)
   if (!targetMembership) {

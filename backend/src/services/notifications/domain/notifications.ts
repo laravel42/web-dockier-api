@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapList, paginatedQuery } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapList, paginatedQuery, deleteOrThrow } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { sendEmailNotification } from "./email-dispatch.js";
 import { notificationMetadataSchema, type NotificationMetadata } from "../schemas.js";
@@ -178,14 +178,15 @@ export async function deleteChannel(channelId: string, tenantId: string) {
     throw new NotificationsError("The in-app channel cannot be removed", "bad_request");
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("notification_channels")
-    .delete()
-    .eq("id", channelId)
-    .eq("organization_id", tenantId)
-    .select("id");
-  throwOnError(error, NotificationsError, { internalMsg: "Failed to delete channel" });
-  if (!data || data.length === 0) throw new NotificationsError("Channel not found", "not_found");
+  await deleteOrThrow(
+    supabaseAdmin
+      .from("notification_channels")
+      .delete({ count: "exact" })
+      .eq("id", channelId)
+      .eq("organization_id", tenantId),
+    NotificationsError,
+    { notFoundMsg: "Channel not found", internalMsg: "Failed to delete channel" },
+  );
 }
 
 // ─── Send ────────────────────────────────────────────────────────────────────

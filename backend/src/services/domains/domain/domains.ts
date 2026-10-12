@@ -32,7 +32,7 @@ export async function getDomainById(params: {
     .eq("project_id", projectId)
     .maybeSingle();
 
-  if (error) throw new DomainsError("Failed to fetch domain", "internal");
+  throwOnError(error, DomainsError, { internalMsg: "Failed to fetch domain" });
   if (!data) return null;
   return rowToDomain(data as DomainRow);
 }
@@ -81,13 +81,15 @@ export async function createDomain(params: {
   // conditions need different messages: one is "you already added this", the
   // other is "another project owns it", and only the second needs the user to
   // go somewhere else to fix it.
-  const { data: sameProject } = await supabaseAdmin
+  const { data: sameProject, error: sameProjectError } = await supabaseAdmin
     .from("domains")
     .select("id")
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .eq("name", name)
     .maybeSingle();
+
+  throwOnError(sameProjectError, DomainsError, { internalMsg: "Failed to check existing domains" });
 
   if (sameProject) {
     throw new DomainsError(`"${name}" is already added to this project.`, "conflict");
@@ -128,11 +130,12 @@ export async function updateDomain(params: {
 
   // If setting as primary, unset all others first
   if (isPrimary) {
-    await supabaseAdmin
+    const { error: unsetError } = await supabaseAdmin
       .from("domains")
       .update({ is_primary: false, updated_at: nowIso() })
       .eq("organization_id", tenantId)
       .eq("project_id", projectId);
+    throwOnError(unsetError, DomainsError, { internalMsg: "Failed to update primary domain" });
   }
 
   const updates: Partial<DomainRow> = { updated_at: nowIso() };
@@ -198,10 +201,11 @@ export async function deleteDomain(params: {
       .maybeSingle();
 
     if (nextDomain) {
-      await supabaseAdmin
+      const { error: promoteError } = await supabaseAdmin
         .from("domains")
         .update({ is_primary: true, updated_at: nowIso() })
         .eq("id", nextDomain.id);
+      throwOnError(promoteError, DomainsError, { internalMsg: "Failed to update primary domain" });
     }
   }
 }

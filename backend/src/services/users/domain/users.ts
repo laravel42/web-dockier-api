@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, normalizePagination, paginatedRows } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, normalizePagination, paginatedRows, type PostgrestError } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { escapePostgrestFilter } from "../../../shared/http/security.js";
@@ -82,13 +82,15 @@ export async function createUser(params: CreateUserParams) {
     }
   }
 
-  const { data: created, error: fetchError } = await supabaseAdmin
+  const { data, error: fetchError } = await supabaseAdmin
     .from("users")
     .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at")
     .eq("id", id)
     .single();
-  if (fetchError) throw new UsersError("Failed to fetch created user", "internal");
-  if (!created) throw new UsersError("Failed to fetch created user", "internal");
+  const created = unwrapQuery(data, fetchError, UsersError, {
+    notFoundMsg: "Failed to fetch created user",
+    internalMsg: "Failed to fetch created user",
+  });
   return rowToUser(created);
 }
 
@@ -231,8 +233,8 @@ export async function removeUser(params: RemoveUserParams) {
     .select("is_owner, roles!left(system_key)")
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
-    .maybeSingle() as { data: { is_owner: boolean; roles: { system_key: string | null } | null } | null; error: unknown };
-  if (membershipErr) throw new UsersError("Failed to check membership", "internal");
+    .maybeSingle() as { data: { is_owner: boolean; roles: { system_key: string | null } | null } | null; error: PostgrestError | null };
+  throwOnError(membershipErr, UsersError, { internalMsg: "Failed to check membership" });
   if (!targetMembership) throw new UsersError("User is not a member of this organization", "not_found");
   if (targetMembership.is_owner) {
     throw new UsersError("Cannot remove the organization owner", "forbidden");
