@@ -63,15 +63,21 @@ export default function App() {
                       }
                     />
                     <Route
+                      path="/security/project/:projectId"
                       element={
                         <PermissionRoute permission="scan:view">
                           <ScanDetail />
                         </PermissionRoute>
                       }
-                    >
-                      <Route path="/security/project/:projectId" />
-                      <Route path="/security/:scanId" />
-                    </Route>
+                    />
+                    <Route
+                      path="/security/:scanId"
+                      element={
+                        <PermissionRoute permission="scan:view">
+                          <ScanDetail />
+                        </PermissionRoute>
+                      }
+                    />
                     <Route
                       path="/deploy"
                       element={

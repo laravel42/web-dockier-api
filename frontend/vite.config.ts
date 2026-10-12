@@ -5,6 +5,12 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   envDir: path.resolve(__dirname, ".."),
+  // Vue's esm-bundler build (pulled in transitively by @codemirror/lang-vue) expects these flags.
+  define: {
+    __VUE_OPTIONS_API__: "true",
+    __VUE_PROD_DEVTOOLS__: "false",
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
