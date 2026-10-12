@@ -284,7 +284,7 @@ describe("previewDomainConfigDokploy", () => {
     const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
 
     expect(generatedConfig).not.toMatch(/proxy_pass|server_name|listen\s+\d/);
-    expect(generatedConfig).toMatch(/Traefik/);
+    expect(generatedConfig).toMatch(/edge proxy/);
   });
 
   it("lists the live domains with scheme, port and certificate type", async () => {
@@ -325,7 +325,7 @@ describe("previewDomainConfigDokploy", () => {
 
     const { generatedConfig } = await previewDomainConfigDokploy({ tenantId: "t1", projectId: "p1" });
 
-    expect(generatedConfig).toMatch(/Could not reach Dokploy/);
+    expect(generatedConfig).toMatch(/Could not reach the platform/);
     expect(generatedConfig).toContain("https://app.example.com → :80");
   });
 

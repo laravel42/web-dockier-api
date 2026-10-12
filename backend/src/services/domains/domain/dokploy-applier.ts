@@ -98,7 +98,7 @@ export async function applyDomainConfigDokploy(params: {
   try {
     const mapping = await getApplication(projectId);
     if (!mapping?.dokployApplicationId) {
-      return { success: true, message: "No Dokploy application yet. Domains will be applied on next deployment." };
+      return { success: true, message: "No application provisioned yet. Domains will be applied on next deployment." };
     }
     const applicationId = mapping.dokployApplicationId;
     const port = resolveDomainPort(mapping);
@@ -253,7 +253,7 @@ export async function previewDomainConfigDokploy(params: {
   const { tenantId, projectId } = params;
 
   const lines: string[] = [
-    "# Routing is managed by Dokploy and served by Traefik.",
+    "# Routing is managed by the platform and served by the edge proxy.",
     "# There is no nginx config for this project — Traefik routes by Host header",
     "# and terminates TLS, forwarding plain HTTP to the container port below.",
     "#",
@@ -263,7 +263,7 @@ export async function previewDomainConfigDokploy(params: {
 
   const mapping = await getApplication(projectId);
   if (!mapping?.dokployApplicationId) {
-    lines.push("No Dokploy application yet — domains are applied on the next deployment.");
+    lines.push("No application provisioned yet — domains are applied on the next deployment.");
     return { generatedConfig: lines.join("\n") };
   }
 
@@ -281,7 +281,7 @@ export async function previewDomainConfigDokploy(params: {
       return { generatedConfig: lines.join("\n") };
     }
 
-    lines.push("Registered domains (live from Dokploy):");
+    lines.push("Registered domains (live):");
     for (const d of existing) {
       const scheme = d.https ? "https" : "http";
       const cert = d.certificateType && d.certificateType !== "none" ? d.certificateType : "none";
@@ -293,7 +293,7 @@ export async function previewDomainConfigDokploy(params: {
     logger.warn({ err: getErrMsg(e), projectId }, "[domains:dokploy] could not read live domains for preview");
     const dbDomains = await listDomains({ tenantId, projectId });
 
-    lines.push("Could not reach Dokploy — showing desired state from Dockier:");
+    lines.push("Could not reach the platform — showing desired state from Dockier:");
     if (dbDomains.length === 0) {
       lines.push("  (no domains configured)");
     }

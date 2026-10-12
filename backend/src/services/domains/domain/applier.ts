@@ -376,7 +376,7 @@ export async function verifyDomainDns(params: {
         const server = await getServer(projectId);
         serverIp = (server?.serverIp || "").trim();
         if (!serverIp) {
-          return { verified: false, message: "No Dokploy server is provisioned for this project yet." };
+          return { verified: false, message: "No server is provisioned for this project yet — deploy the project first." };
         }
       }
     } catch (err) {
@@ -455,7 +455,7 @@ export async function getDomainDnsInstructions(params: {
       supported: false,
       records: [],
       note: "",
-      message: "Point an A record at the server IP shown for this project.",
+      message: "Deploy this project, then the exact DNS records will appear here.",
     };
   }
 

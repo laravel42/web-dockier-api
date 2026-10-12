@@ -12,6 +12,7 @@ import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import ConfirmModal from "@/components/ConfirmModal";
+import Alert from "@/components/ui/Alert";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
@@ -37,11 +38,13 @@ function DomainRow({
   domain,
   projectId,
   canManage,
+  infraLive,
   onRefresh,
 }: {
   domain: Domain;
   projectId: string;
   canManage: boolean;
+  infraLive: boolean;
   onRefresh: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -179,7 +182,8 @@ function DomainRow({
                     type="button"
                     role="menuitem"
                     onClick={handleVerifyDns}
-                    disabled={verifying}
+                    disabled={verifying || !infraLive}
+                    title={!infraLive ? "Deploy the project first" : undefined}
                     className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors disabled:opacity-50"
                   >
                     <CircleCheckIcon className="size-3.5" />
@@ -188,7 +192,9 @@ function DomainRow({
                   <button
                     type="button"
                     onClick={handleToggleInstructions}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-card/60 hover:text-text"
+                    disabled={!infraLive}
+                    title={!infraLive ? "Deploy the project first" : undefined}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-card/60 hover:text-text disabled:opacity-50"
                   >
                     {instructionsOpen ? "Hide DNS records" : "Show DNS records"}
                   </button>
@@ -209,7 +215,7 @@ function DomainRow({
       </div>
     </div>
     {dnsStatus && (
-      <div className={`mx-4 mb-2 rounded-md px-3 py-2 text-xs ${
+      <div className={`mx-2 mt-1 mb-2 rounded-md px-3 py-2 text-xs ${
         dnsStatus.verified
           ? "bg-success-500/10 text-success-500 border border-success-500/30"
           : "bg-warning-surface text-warning-ink border border-warning-line"
@@ -283,11 +289,13 @@ function DomainsSection({
   projectId,
   domains,
   canManage,
+  infraLive,
   onRefresh,
 }: {
   projectId: string;
   domains: Domain[];
   canManage: boolean;
+  infraLive: boolean;
   onRefresh: () => void;
 }) {
   const [newDomain, setNewDomain] = useState("");
@@ -358,6 +366,13 @@ function DomainsSection({
           </p>
         </div>
       </div>
+
+      {!infraLive && (
+        <Alert variant="info" className="m-4 mb-0">
+          Add domains now — they activate automatically the next time you deploy.
+          DNS setup and HTTPS can't be verified until your app is running.
+        </Alert>
+      )}
 
       {/* Add domain form */}
       {canManage && (
@@ -440,6 +455,7 @@ function DomainsSection({
               domain={domain}
               projectId={projectId}
               canManage={canManage}
+              infraLive={infraLive}
               onRefresh={onRefresh}
             />
           ))}
@@ -980,6 +996,7 @@ export default function ProjectDomainsTab({ project }: Props) {
         projectId={project.id}
         domains={domains}
         canManage={canManage}
+        infraLive={project.infraState === "live"}
         onRefresh={fetchData}
       />
 
